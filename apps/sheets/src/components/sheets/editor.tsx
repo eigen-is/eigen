@@ -1,9 +1,9 @@
-import {Workbook, type WorkbookInstance} from '@workspace/fortune-sheet';
-import type {DrivePath} from '@workspace/lib/types/drive';
-import {LoadingState} from '@workspace/ui';
-import {useMemo, useRef} from 'react';
-import {useSheet} from './hooks/use-sheet';
-import {ToolbarLeftItems, ToolbarRightItems} from './toolbar';
+import { Workbook, type WorkbookInstance } from '@workspace/fortune-sheet';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { LoadingState } from '@workspace/ui';
+import { useMemo, useRef } from 'react';
+import { useSheet } from './hooks/use-sheet';
+import { ToolbarLeftItems, ToolbarRightItems } from './toolbar';
 
 type SheetEditorProps = {
     ownerId: string;
@@ -45,10 +45,10 @@ const TOOLBAR_ITEMS = [
     'search',
 ];
 
-export function SheetEditor({ownerId, path, canWrite, onAccessDialogOpen}: SheetEditorProps) {
+export function SheetEditor({ ownerId, path, canWrite, onAccessDialogOpen }: SheetEditorProps) {
     const workbookRef = useRef<WorkbookInstance>(null);
 
-    const {initialData, synced, handleOp, onDataChange, handleRestore} = useSheet(
+    const { initialData, synced, handleOp, onDataChange, handleRestore } = useSheet(
         ownerId,
         path.mountId,
         path.id,
@@ -80,7 +80,7 @@ export function SheetEditor({ownerId, path, canWrite, onAccessDialogOpen}: Sheet
     );
 
     if (!synced || !initialData) {
-        return <LoadingState/>;
+        return <LoadingState />;
     }
 
     return (

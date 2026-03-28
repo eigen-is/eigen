@@ -1,4 +1,4 @@
-import type {DatabaseConfig} from '../core/managed-database';
+import type { DatabaseConfig } from '../core/managed-database';
 import * as schema from './sharedschema';
 
 export const SHARED_DB_CONFIG: DatabaseConfig<typeof schema> = {

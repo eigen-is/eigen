@@ -1,12 +1,12 @@
 'use client';
-import {useDriveAccess} from '@workspace/lib/drive';
-import type {DriveACL, DrivePath} from '@workspace/lib/types/drive';
-import {AvatarIcon} from '@workspace/ui/components/avatar';
-import {Separator} from '@workspace/ui/components/separator';
-import {cn} from '@workspace/ui/lib/utils';
-import {Lock, Unlock, UserRoundPlus} from 'lucide-react';
-import {TooltipButton} from '../toolbar';
-import {UserItem} from '../user-item';
+import { useDriveAccess } from '@workspace/lib/drive';
+import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
+import { AvatarIcon } from '@workspace/ui/components/avatar';
+import { Separator } from '@workspace/ui/components/separator';
+import { cn } from '@workspace/ui/lib/utils';
+import { Lock, Unlock, UserRoundPlus } from 'lucide-react';
+import { TooltipButton } from '../toolbar';
+import { UserItem } from '../user-item';
 
 export type DriveAccessListProps = {
     path: DrivePath;
@@ -14,8 +14,8 @@ export type DriveAccessListProps = {
     onShareClick?: (path: DrivePath) => void;
 };
 
-export function DriveAccessList({path, className, onShareClick}: DriveAccessListProps) {
-    const {allEntries} = useDriveAccess(path);
+export function DriveAccessList({ path, className, onShareClick }: DriveAccessListProps) {
+    const { allEntries } = useDriveAccess(path);
 
     const isPublic = path.visibility !== 'private';
 
@@ -24,7 +24,7 @@ export function DriveAccessList({path, className, onShareClick}: DriveAccessList
             <div className="flex items-center justify-between h-12 border-t border-b">
                 <h3 className="text-base font-medium">People with access</h3>
                 {onShareClick && (
-                    <TooltipButton icon={UserRoundPlus} tooltipText="Edit Access" onClick={() => onShareClick(path)}/>
+                    <TooltipButton icon={UserRoundPlus} tooltipText="Edit Access" onClick={() => onShareClick(path)} />
                 )}
             </div>
 
@@ -33,17 +33,17 @@ export function DriveAccessList({path, className, onShareClick}: DriveAccessList
                     <UserItem
                         key={access.id}
                         email={access.id}
-                        label={access.owner ? 'Owner' : <AccessLabel access={access}/>}
+                        label={access.owner ? 'Owner' : <AccessLabel access={access} />}
                     />
                 ))}
             </div>
-            <Separator/>
+            <Separator />
             <div>
                 <h4 className="text-sm font-medium mb-2">General access</h4>
                 {!isPublic ? (
                     <div className="flex items-center">
                         <AvatarIcon className="w-10 h-10">
-                            <Lock/>
+                            <Lock />
                         </AvatarIcon>
                         <div>
                             <p className="text-sm font-medium">Restricted</p>
@@ -55,7 +55,7 @@ export function DriveAccessList({path, className, onShareClick}: DriveAccessList
                 ) : (
                     <div className="flex items-center">
                         <AvatarIcon className="w-10 h-10">
-                            <Unlock/>
+                            <Unlock />
                         </AvatarIcon>
                         <div>
                             <p className="text-sm font-medium">Unrestricted</p>
@@ -72,7 +72,7 @@ export function DriveAccessList({path, className, onShareClick}: DriveAccessList
     );
 }
 
-function AccessLabel({access}: { access: DriveACL }) {
+function AccessLabel({ access }: { access: DriveACL }) {
     if (access.write) {
         return <span>Editor</span>;
     }

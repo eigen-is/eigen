@@ -1,18 +1,18 @@
-import {useAuth} from '@workspace/lib/auth';
-import {useCalendars, useCreateEvent, useSharedCalendars} from '@workspace/lib/calendar';
-import type {Attendee} from '@workspace/lib/types/calendar';
-import {Button} from '@workspace/ui/components/button';
-import {Checkbox} from '@workspace/ui/components/checkbox';
-import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
-import {Input} from '@workspace/ui/components/input';
-import {Label} from '@workspace/ui/components/label';
-import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@workspace/ui/components/select';
-import {Textarea} from '@workspace/ui/components/textarea';
-import {AlignLeft, Calendar, Clock, MapPin, UsersRound} from 'lucide-react';
-import {useEffect, useMemo, useState} from 'react';
-import {AttendeeEditor} from './attendee-editor';
-import {RecurrencePicker} from './recurrence-picker';
-import {addMinutes, roundToNext15Minutes, TimeSelect, timeToMinutes} from './time-select';
+import { useAuth } from '@workspace/lib/auth';
+import { useCalendars, useCreateEvent, useSharedCalendars } from '@workspace/lib/calendar';
+import type { Attendee } from '@workspace/lib/types/calendar';
+import { Button } from '@workspace/ui/components/button';
+import { Checkbox } from '@workspace/ui/components/checkbox';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { Input } from '@workspace/ui/components/input';
+import { Label } from '@workspace/ui/components/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
+import { Textarea } from '@workspace/ui/components/textarea';
+import { AlignLeft, Calendar, Clock, MapPin, UsersRound } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { AttendeeEditor } from './attendee-editor';
+import { RecurrencePicker } from './recurrence-picker';
+import { addMinutes, roundToNext15Minutes, TimeSelect, timeToMinutes } from './time-select';
 
 type CalendarOption = {
     id: string;
@@ -39,14 +39,14 @@ function toTimeString(date: Date): string {
     return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
-export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalendarId}: CreateEventDialogProps) {
-    const {user} = useAuth();
+export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCalendarId }: CreateEventDialogProps) {
+    const { user } = useAuth();
     const ownerId = user?.id || '';
-    const {data: calendars = []} = useCalendars(ownerId);
-    const {data: sharedCalendars = []} = useSharedCalendars(ownerId);
+    const { data: calendars = [] } = useCalendars(ownerId);
+    const { data: sharedCalendars = [] } = useSharedCalendars(ownerId);
 
     const calendarOptions = useMemo(() => {
-        const options: CalendarOption[] = calendars.map((c) => ({id: c.id, name: c.name, color: c.color, ownerId}));
+        const options: CalendarOption[] = calendars.map((c) => ({ id: c.id, name: c.name, color: c.color, ownerId }));
         for (const sc of sharedCalendars) {
             if (sc.permission === 'write') {
                 options.push({
@@ -156,7 +156,7 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
                 location: location.trim() || null,
                 rrule: rruleString,
                 timezone: allDay ? null : Intl.DateTimeFormat().resolvedOptions().timeZone,
-                data: attendees.length > 0 ? {attendees} : undefined,
+                data: attendees.length > 0 ? { attendees } : undefined,
             });
             onOpenChange(false);
         } finally {
@@ -183,7 +183,7 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
                     </div>
 
                     <div className="flex items-start gap-3">
-                        <Clock className="h-4 w-4 mt-2 text-muted-foreground shrink-0"/>
+                        <Clock className="h-4 w-4 mt-2 text-muted-foreground shrink-0" />
                         <div className="flex-1 space-y-3">
                             {allDay ? (
                                 <div className="flex items-center gap-2">
@@ -212,7 +212,7 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
                                         }}
                                         className="h-8 text-sm"
                                     />
-                                    <TimeSelect value={startTime} onChange={handleStartTimeChange}/>
+                                    <TimeSelect value={startTime} onChange={handleStartTimeChange} />
                                     <span className="text-muted-foreground text-sm">–</span>
                                     <TimeSelect
                                         value={endTime}
@@ -260,7 +260,7 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
                     </div>
 
                     <div className="flex items-start gap-3">
-                        <UsersRound className="h-4 w-4 mt-2.5 text-muted-foreground shrink-0"/>
+                        <UsersRound className="h-4 w-4 mt-2.5 text-muted-foreground shrink-0" />
                         <div className="flex-1">
                             <AttendeeEditor
                                 attendees={attendees}
@@ -271,7 +271,7 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
                     </div>
 
                     <div className="flex items-start gap-3">
-                        <MapPin className="h-4 w-4 mt-2.5 text-muted-foreground shrink-0"/>
+                        <MapPin className="h-4 w-4 mt-2.5 text-muted-foreground shrink-0" />
                         <Input
                             placeholder="Add location"
                             value={location}
@@ -281,7 +281,7 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
                     </div>
 
                     <div className="flex items-start gap-3">
-                        <AlignLeft className="h-4 w-4 mt-2.5 text-muted-foreground shrink-0"/>
+                        <AlignLeft className="h-4 w-4 mt-2.5 text-muted-foreground shrink-0" />
                         <Textarea
                             placeholder="Add description"
                             value={description}
@@ -293,10 +293,10 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
 
                     {calendarOptions.length > 1 && (
                         <div className="flex items-center gap-3">
-                            <Calendar className="h-4 w-4 text-muted-foreground shrink-0"/>
+                            <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
                             <Select value={selectedCalKey} onValueChange={setSelectedCalKey}>
                                 <SelectTrigger className="flex-1">
-                                    <SelectValue placeholder="Select calendar"/>
+                                    <SelectValue placeholder="Select calendar" />
                                 </SelectTrigger>
                                 <SelectContent>
                                     {calendarOptions.map((cal) => (
@@ -304,7 +304,7 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
                                             <div className="flex items-center gap-2">
                                                 <div
                                                     className="h-3 w-3 rounded-full shrink-0"
-                                                    style={{backgroundColor: cal.color}}
+                                                    style={{ backgroundColor: cal.color }}
                                                 />
                                                 {cal.name}
                                             </div>

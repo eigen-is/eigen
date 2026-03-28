@@ -1,10 +1,10 @@
 'use client';
 
 import * as AvatarPrimitive from '@radix-ui/react-avatar';
-import {cn} from '@workspace/ui/lib/utils';
+import { cn } from '@workspace/ui/lib/utils';
 import type * as React from 'react';
 
-function Avatar({className, ...props}: React.ComponentProps<typeof AvatarPrimitive.Root>) {
+function Avatar({ className, ...props }: React.ComponentProps<typeof AvatarPrimitive.Root>) {
     return (
         <AvatarPrimitive.Root
             data-slot="avatar"
@@ -14,7 +14,7 @@ function Avatar({className, ...props}: React.ComponentProps<typeof AvatarPrimiti
     );
 }
 
-function AvatarImage({className, ...props}: React.ComponentProps<typeof AvatarPrimitive.Image>) {
+function AvatarImage({ className, ...props }: React.ComponentProps<typeof AvatarPrimitive.Image>) {
     return (
         <AvatarPrimitive.Image
             data-slot="avatar-image"
@@ -24,7 +24,7 @@ function AvatarImage({className, ...props}: React.ComponentProps<typeof AvatarPr
     );
 }
 
-function AvatarIcon({className, children, ...props}: React.HTMLAttributes<HTMLDivElement>) {
+function AvatarIcon({ className, children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
     return (
         <div data-slot="avatar-icon" className={cn('flex size-full items-center justify-center', className)} {...props}>
             {children}
@@ -32,7 +32,7 @@ function AvatarIcon({className, children, ...props}: React.HTMLAttributes<HTMLDi
     );
 }
 
-function AvatarFallback({className, ...props}: React.ComponentProps<typeof AvatarPrimitive.Fallback>) {
+function AvatarFallback({ className, ...props }: React.ComponentProps<typeof AvatarPrimitive.Fallback>) {
     return (
         <AvatarPrimitive.Fallback
             data-slot="avatar-fallback"
@@ -42,4 +42,4 @@ function AvatarFallback({className, ...props}: React.ComponentProps<typeof Avata
     );
 }
 
-export {Avatar, AvatarFallback, AvatarIcon, AvatarImage};
+export { Avatar, AvatarFallback, AvatarIcon, AvatarImage };

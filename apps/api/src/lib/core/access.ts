@@ -1,5 +1,5 @@
-import {getMemberships, getOrgRole} from '../user';
-import {ApiError} from './errors';
+import { getMemberships, getOrgRole } from '../user';
+import { ApiError } from './errors';
 
 export function requireLocalhost(
     request: Request,

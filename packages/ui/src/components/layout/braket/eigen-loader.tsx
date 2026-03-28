@@ -1,10 +1,10 @@
-import {cn} from '../../../lib/utils.ts';
+import { cn } from '../../../lib/utils.ts';
 
 type EigenLoaderProps = {
     className?: string;
 };
 
-export function EigenLoader({className}: EigenLoaderProps) {
+export function EigenLoader({ className }: EigenLoaderProps) {
     return (
         <svg
             className={cn('inline text-muted-foreground', className)}
@@ -17,7 +17,7 @@ export function EigenLoader({className}: EigenLoaderProps) {
             strokeLinejoin="round"
         >
             <g>
-                <path d="m9 0 -4 7.5 4 7.5"/>
+                <path d="m9 0 -4 7.5 4 7.5" />
                 <animateTransform
                     attributeName="transform"
                     type="translate"
@@ -28,7 +28,7 @@ export function EigenLoader({className}: EigenLoaderProps) {
                 />
             </g>
             <g>
-                <path d="m17 0 4 7.5 -4 7.5"/>
+                <path d="m17 0 4 7.5 -4 7.5" />
                 <animateTransform
                     attributeName="transform"
                     type="translate"

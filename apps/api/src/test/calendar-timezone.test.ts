@@ -423,8 +423,9 @@ describe('Calendar Timezone', () => {
 
                 // Verify the exception was created with correct times
                 const afterEvents = await getEvents(ctx.bob.user.sessionToken, ctx.bob.user.id, bobFrom, bobTo);
-                const exception = findOrFail(afterEvents, (e) =>
-                    e.title === 'TZ RSVP Test' && e.occurrenceDate === postDSTOcc.occurrenceDate,
+                const exception = findOrFail(
+                    afterEvents,
+                    (e) => e.title === 'TZ RSVP Test' && e.occurrenceDate === postDSTOcc.occurrenceDate,
                 );
 
                 // The exception's start time should match the post-DST occurrence time
@@ -454,7 +455,8 @@ describe('Calendar Timezone', () => {
             const events = await getEvents(ctx.alice.user.sessionToken, ctx.alice.user.id, from, to);
             const occurrences = events.filter((e: CalendarEventOccurrence) => e.title === 'TZ Cancel Occ');
             const postDSTOcc = occurrences.find(
-                (e: CalendarEventOccurrence) => e.startTime > Math.floor(new Date('2026-03-29T00:00:00Z').getTime() / 1000),
+                (e: CalendarEventOccurrence) =>
+                    e.startTime > Math.floor(new Date('2026-03-29T00:00:00Z').getTime() / 1000),
             );
 
             if (postDSTOcc) {
@@ -480,7 +482,9 @@ describe('Calendar Timezone', () => {
                 expect(afterOccs.length).toBe(0);
 
                 // Other occurrences still present
-                const remainingOccs = afterEvents.filter((e: CalendarEventOccurrence) => e.title === 'TZ Cancel Occ' && !e.parentEventId);
+                const remainingOccs = afterEvents.filter(
+                    (e: CalendarEventOccurrence) => e.title === 'TZ Cancel Occ' && !e.parentEventId,
+                );
                 expect(remainingOccs.length).toBe(occurrences.length - 1);
             }
         });

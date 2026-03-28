@@ -1,6 +1,6 @@
-import {useBreadcrumb} from '@workspace/lib/drive';
-import type {DrivePath} from '@workspace/lib/types/drive';
-import {Toolbar, TooltipButton} from '@workspace/ui';
+import { useBreadcrumb } from '@workspace/lib/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { Toolbar, TooltipButton } from '@workspace/ui';
 import {
     Breadcrumb,
     BreadcrumbItem,
@@ -9,9 +9,9 @@ import {
     BreadcrumbPage,
     BreadcrumbSeparator,
 } from '@workspace/ui/components/breadcrumb';
-import {Button} from '@workspace/ui/components/button';
-import {ArrowLeft} from 'lucide-react';
-import {Fragment} from 'react';
+import { Button } from '@workspace/ui/components/button';
+import { ArrowLeft } from 'lucide-react';
+import { Fragment } from 'react';
 
 type ViewToolbarProps = {
     path: DrivePath;
@@ -20,8 +20,8 @@ type ViewToolbarProps = {
     onClose: () => void;
 };
 
-export function ViewToolbar({path, canWrite, onEdit, onClose}: ViewToolbarProps) {
-    const {data: breadcrumbPaths = []} = useBreadcrumb(path.ownerId, path.mountId, path.parentId ?? undefined);
+export function ViewToolbar({ path, canWrite, onEdit, onClose }: ViewToolbarProps) {
+    const { data: breadcrumbPaths = [] } = useBreadcrumb(path.ownerId, path.mountId, path.parentId ?? undefined);
 
     return (
         <Toolbar>
@@ -31,7 +31,7 @@ export function ViewToolbar({path, canWrite, onEdit, onClose}: ViewToolbarProps)
                     <BreadcrumbList>
                         {breadcrumbPaths.map((p, index) => (
                             <Fragment key={p.id}>
-                                {index > 0 && <BreadcrumbSeparator/>}
+                                {index > 0 && <BreadcrumbSeparator />}
                                 <BreadcrumbItem>
                                     <BreadcrumbLink onClick={onClose} className="cursor-pointer">
                                         {p.name}
@@ -39,7 +39,7 @@ export function ViewToolbar({path, canWrite, onEdit, onClose}: ViewToolbarProps)
                                 </BreadcrumbItem>
                             </Fragment>
                         ))}
-                        <BreadcrumbSeparator/>
+                        <BreadcrumbSeparator />
                         <BreadcrumbItem>
                             <BreadcrumbPage>{path.name}</BreadcrumbPage>
                         </BreadcrumbItem>
@@ -63,11 +63,11 @@ type EditToolbarProps = {
     children?: React.ReactNode;
 };
 
-export function EditToolbar({onBack, onCancel, onSave, isSaving, children}: EditToolbarProps) {
+export function EditToolbar({ onBack, onCancel, onSave, isSaving, children }: EditToolbarProps) {
     return (
         <Toolbar>
             <div className="flex items-center gap-1">
-                <TooltipButton icon={ArrowLeft} tooltipText="Back to files" onClick={onBack}/>
+                <TooltipButton icon={ArrowLeft} tooltipText="Back to files" onClick={onBack} />
                 {children}
             </div>
             <div className="flex items-center gap-2">

@@ -1,14 +1,14 @@
 import * as fs from 'node:fs';
-import {eq} from 'drizzle-orm';
-import {member, teamMember} from '../../../auth-schema';
-import {auth, getAuthDrizzleDb} from '../auth/auth';
-import {getUserHomePath} from '../config/paths';
-import {ApiError} from '../core';
-import {evictHome} from '../home/get-home';
-import {getEigenDb} from '../share/db';
-import {removeEntriesForTarget} from '../share/registry';
-import {shareRegistry} from '../share/schema';
-import {getUserById} from './user';
+import { eq } from 'drizzle-orm';
+import { member, teamMember } from '../../../auth-schema';
+import { auth, getAuthDrizzleDb } from '../auth/auth';
+import { getUserHomePath } from '../config/paths';
+import { ApiError } from '../core';
+import { evictHome } from '../home/get-home';
+import { getEigenDb } from '../share/db';
+import { removeEntriesForTarget } from '../share/registry';
+import { shareRegistry } from '../share/schema';
+import { getUserById } from './user';
 
 export async function deleteUserCompletely(userId: string, requestHeaders: Headers): Promise<void> {
     const user = await getUserById(userId);
@@ -22,7 +22,7 @@ export async function deleteUserCompletely(userId: string, requestHeaders: Heade
     // 2. Delete user's home directory
     const homePath = getUserHomePath(userId);
     if (fs.existsSync(homePath)) {
-        fs.rmSync(homePath, {recursive: true, force: true});
+        fs.rmSync(homePath, { recursive: true, force: true });
     }
 
     // 3. Clean up share registry — entries FROM this user and TO this user
@@ -38,5 +38,5 @@ export async function deleteUserCompletely(userId: string, requestHeaders: Heade
     authDb.delete(member).where(eq(member.userId, userId)).run();
 
     // 5. Delete user via better-auth (handles sessions, accounts, 2FA)
-    await auth.api.removeUser({body: {userId}, headers: requestHeaders});
+    await auth.api.removeUser({ body: { userId }, headers: requestHeaders });
 }

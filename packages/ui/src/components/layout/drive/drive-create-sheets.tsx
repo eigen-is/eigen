@@ -1,7 +1,7 @@
-import {getSheetUrl} from '@workspace/lib/api';
-import {useCreateSheets} from '@workspace/lib/drive';
-import type {DrivePath} from '@workspace/lib/types/drive';
-import {DriveCreateItemDialog} from './drive-create-folder-item';
+import { getSheetUrl } from '@workspace/lib/api';
+import { useCreateSheets } from '@workspace/lib/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { DriveCreateItemDialog } from './drive-create-folder-item';
 
 export type DriveCreateSheetsProps = {
     path: DrivePath;
@@ -13,13 +13,13 @@ export type DriveCreateSheetsProps = {
 };
 
 export function DriveCreateSheets({
-                                      path,
-                                      open,
-                                      onOpenChange,
-                                      onSave,
-                                      onCancel,
-                                      onAfterAction,
-                                  }: DriveCreateSheetsProps) {
+    path,
+    open,
+    onOpenChange,
+    onSave,
+    onCancel,
+    onAfterAction,
+}: DriveCreateSheetsProps) {
     const createSheetsMutation = useCreateSheets(path.ownerId, path.mountId);
 
     const handleOpenChange = (nextOpen: boolean) => {
@@ -35,7 +35,7 @@ export function DriveCreateSheets({
         onOpenChange(false);
 
         if (onAfterAction) {
-            onAfterAction('create', {name: fileName});
+            onAfterAction('create', { name: fileName });
         }
 
         if (newPath) {

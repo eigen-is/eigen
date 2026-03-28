@@ -1,29 +1,29 @@
-import {useMatch, useNavigate} from '@tanstack/react-router';
-import {usePathInfo, useRootFolder} from '@workspace/lib/drive';
-import {usePeopleTeams} from '@workspace/lib/people';
-import {usePublicConfig} from '@workspace/lib/public';
-import {useTeamMounts} from '@workspace/lib/team';
-import {teamOwnerId} from '@workspace/lib/types';
-import type {DrivePath} from '@workspace/lib/types/drive';
-import type {MountSettings} from '@workspace/lib/types/settings';
-import {SidebarItem, StorageUsage, UserAvatar} from '@workspace/ui';
-import {Button} from '@workspace/ui/components/button';
+import { useMatch, useNavigate } from '@tanstack/react-router';
+import { usePathInfo, useRootFolder } from '@workspace/lib/drive';
+import { usePeopleTeams } from '@workspace/lib/people';
+import { usePublicConfig } from '@workspace/lib/public';
+import { useTeamMounts } from '@workspace/lib/team';
+import { teamOwnerId } from '@workspace/lib/types';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import type { MountSettings } from '@workspace/lib/types/settings';
+import { SidebarItem, StorageUsage, UserAvatar } from '@workspace/ui';
+import { Button } from '@workspace/ui/components/button';
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import {DriveCreateChat} from '@workspace/ui/components/layout/drive/drive-create-chat';
-import {DriveCreateDoc} from '@workspace/ui/components/layout/drive/drive-create-doc';
-import {DriveCreateFolder} from '@workspace/ui/components/layout/drive/drive-create-folder';
-import {DriveCreateSheets} from '@workspace/ui/components/layout/drive/drive-create-sheets';
-import {DriveCreateSlides} from '@workspace/ui/components/layout/drive/drive-create-slides';
-import {DriveCreateStickies} from '@workspace/ui/components/layout/drive/drive-create-stickies';
-import {DriveUploadFiles} from '@workspace/ui/components/layout/drive/drive-upload-files';
-import {SidebarHeader} from '@workspace/ui/components/layout/sidebar/sidebar-header';
-import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
-import {Separator} from '@workspace/ui/components/separator';
+import { DriveCreateChat } from '@workspace/ui/components/layout/drive/drive-create-chat';
+import { DriveCreateDoc } from '@workspace/ui/components/layout/drive/drive-create-doc';
+import { DriveCreateFolder } from '@workspace/ui/components/layout/drive/drive-create-folder';
+import { DriveCreateSheets } from '@workspace/ui/components/layout/drive/drive-create-sheets';
+import { DriveCreateSlides } from '@workspace/ui/components/layout/drive/drive-create-slides';
+import { DriveCreateStickies } from '@workspace/ui/components/layout/drive/drive-create-stickies';
+import { DriveUploadFiles } from '@workspace/ui/components/layout/drive/drive-upload-files';
+import { SidebarHeader } from '@workspace/ui/components/layout/sidebar/sidebar-header';
+import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
+import { Separator } from '@workspace/ui/components/separator';
 import {
     Download,
     FileText,
@@ -38,7 +38,7 @@ import {
     Upload as UploadIcon,
     UsersRound,
 } from 'lucide-react';
-import {useState} from 'react';
+import { useState } from 'react';
 
 interface DriveSidebarProps {
     condensed?: boolean;
@@ -48,19 +48,19 @@ interface DriveSidebarProps {
 }
 
 function TeamMountItem({
-                           ownerId,
-                           mountId,
-                           label,
-                           icon,
-                           condensed,
-                       }: {
+    ownerId,
+    mountId,
+    label,
+    icon,
+    condensed,
+}: {
     ownerId: string;
     mountId: string;
     label: string;
     icon: React.ReactNode;
     condensed: boolean;
 }) {
-    const {data: root} = useRootFolder(ownerId, mountId);
+    const { data: root } = useRootFolder(ownerId, mountId);
     if (!root) return null;
     return (
         <SidebarItem
@@ -73,18 +73,18 @@ function TeamMountItem({
 }
 
 function TeamDriveItems({
-                            teamId,
-                            teamName: _teamName,
-                            icon,
-                            condensed,
-                        }: {
+    teamId,
+    teamName: _teamName,
+    icon,
+    condensed,
+}: {
     teamId: string;
     teamName: string;
     icon: React.ReactNode;
     condensed: boolean;
 }) {
     const ownerId = teamOwnerId(teamId);
-    const {data: mounts} = useTeamMounts(teamId);
+    const { data: mounts } = useTeamMounts(teamId);
 
     const enabledMounts = mounts ? Object.entries(mounts).filter(([, m]: [string, MountSettings]) => m.enabled) : [];
 
@@ -106,7 +106,7 @@ function TeamDriveItems({
     );
 }
 
-export function DriveSidebar({condensed = false, onClose, isMobile = false, rootPath}: DriveSidebarProps) {
+export function DriveSidebar({ condensed = false, onClose, isMobile = false, rootPath }: DriveSidebarProps) {
     // Dialog open states
     const [createFolderOpen, setCreateFolderOpen] = useState(false);
     const [createDocOpen, setCreateDocOpen] = useState(false);
@@ -130,7 +130,7 @@ export function DriveSidebar({condensed = false, onClose, isMobile = false, root
     const currentMountId = routeMatch?.params?.mountId;
 
     // Get path info for the current path
-    const {data: currentPath} = usePathInfo(
+    const { data: currentPath } = usePathInfo(
         currentOwnerId || rootPath?.ownerId || '',
         currentMountId || rootPath?.mountId || 'default',
         currentPathId || rootPath?.id || '',
@@ -140,8 +140,8 @@ export function DriveSidebar({condensed = false, onClose, isMobile = false, root
     const targetPath = currentPath || rootPath;
 
     // Fetch org data for shared drives section
-    const {data: config} = usePublicConfig();
-    const {data: teams} = usePeopleTeams(config?.orgId);
+    const { data: config } = usePublicConfig();
+    const { data: teams } = usePeopleTeams(config?.orgId);
 
     // Handle file input change
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -166,7 +166,7 @@ export function DriveSidebar({condensed = false, onClose, isMobile = false, root
     return (
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
             {/* Mobile header with close button */}
-            {isMobile && <SidebarHeader appName="drive" onClose={onClose}/>}
+            {isMobile && <SidebarHeader appName="drive" onClose={onClose} />}
 
             {/* New button dropdown */}
             <div className="px-3 py-2">
@@ -177,39 +177,39 @@ export function DriveSidebar({condensed = false, onClose, isMobile = false, root
                             size={condensed ? 'icon' : 'default'}
                             className={`${condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}`}
                         >
-                            <Plus className="h-4 w-4"/>
+                            <Plus className="h-4 w-4" />
                             {!condensed && <span>New</span>}
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align={condensed ? 'center' : 'start'}>
                         <DropdownMenuItem onClick={() => setCreateFolderOpen(true)}>
-                            <FolderPlus className="h-4 w-4 mr-2"/>
+                            <FolderPlus className="h-4 w-4 mr-2" />
                             Create folder
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setCreateDocOpen(true)}>
-                            <FileText className="h-4 w-4 mr-2"/>
+                            <FileText className="h-4 w-4 mr-2" />
                             Create doc
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setCreateStickiesOpen(true)}>
-                            <StickyNote className="h-4 w-4 mr-2"/>
+                            <StickyNote className="h-4 w-4 mr-2" />
                             Create stickies
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setCreateChatOpen(true)}>
-                            <MessageSquare className="h-4 w-4 mr-2"/>
+                            <MessageSquare className="h-4 w-4 mr-2" />
                             Create chat
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setCreateSlidesOpen(true)}>
-                            <Presentation className="h-4 w-4 mr-2"/>
+                            <Presentation className="h-4 w-4 mr-2" />
                             Create slides
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setCreateSheetsOpen(true)}>
-                            <Sheet className="h-4 w-4 mr-2"/>
+                            <Sheet className="h-4 w-4 mr-2" />
                             Create sheets
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setUploadOpen(true)}>
-                            <UploadIcon className="h-4 w-4 mr-2"/>
+                            <UploadIcon className="h-4 w-4 mr-2" />
                             Upload file
-                            <input type="file" className="hidden" onChange={handleFileChange}/>
+                            <input type="file" className="hidden" onChange={handleFileChange} />
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
@@ -217,59 +217,59 @@ export function DriveSidebar({condensed = false, onClose, isMobile = false, root
 
             <SidebarSection condensed={condensed}>
                 <SidebarItem
-                    icon={<Home className="h-4 w-4"/>}
+                    icon={<Home className="h-4 w-4" />}
                     to={rootPath ? `/fs/${rootPath.ownerId}/${rootPath.mountId}/${rootPath.id}` : '/'}
                     label="Drive"
                     condensed={condensed}
                 />
 
                 <SidebarItem
-                    icon={<Image className="h-4 w-4"/>}
+                    icon={<Image className="h-4 w-4" />}
                     to="/mime/image"
                     label="All images"
                     condensed={condensed}
                 />
                 <SidebarItem
-                    icon={<FileText className="h-4 w-4"/>}
+                    icon={<FileText className="h-4 w-4" />}
                     to="/mime/application-eigendoc"
                     label="All docs"
                     condensed={condensed}
                 />
                 <SidebarItem
-                    icon={<StickyNote className="h-4 w-4"/>}
+                    icon={<StickyNote className="h-4 w-4" />}
                     to="/mime/application-eigenstickies"
                     label="All stickies"
                     condensed={condensed}
                 />
                 <SidebarItem
-                    icon={<MessageSquare className="h-4 w-4"/>}
+                    icon={<MessageSquare className="h-4 w-4" />}
                     to="/mime/application-eigenchat"
                     label="All chats"
                     condensed={condensed}
                 />
                 <SidebarItem
-                    icon={<Presentation className="h-4 w-4"/>}
+                    icon={<Presentation className="h-4 w-4" />}
                     to="/mime/application-eigenslides"
                     label="All slides"
                     condensed={condensed}
                 />
                 <SidebarItem
-                    icon={<Sheet className="h-4 w-4"/>}
+                    icon={<Sheet className="h-4 w-4" />}
                     to="/mime/application-eigensheets"
                     label="All sheets"
                     condensed={condensed}
                 />
             </SidebarSection>
-            <Separator/>
+            <Separator />
             <SidebarSection condensed={condensed}>
                 <SidebarItem
-                    icon={<UsersRound className="h-4 w-4"/>}
+                    icon={<UsersRound className="h-4 w-4" />}
                     to="/shared/by-me"
                     label="Shared by me"
                     condensed={condensed}
                 />
                 <SidebarItem
-                    icon={<Download className="h-4 w-4"/>}
+                    icon={<Download className="h-4 w-4" />}
                     to="/shared/with-me"
                     label="Shared with me"
                     condensed={condensed}
@@ -278,14 +278,14 @@ export function DriveSidebar({condensed = false, onClose, isMobile = false, root
 
             {config && teams && teams.length > 0 && (
                 <>
-                    <Separator/>
+                    <Separator />
                     <SidebarSection condensed={condensed} title={condensed ? undefined : 'Shared Drives'}>
                         {teams.map((team) => (
                             <TeamDriveItems
                                 key={team.id}
                                 teamId={team.id}
                                 teamName={team.name}
-                                icon={<UserAvatar email={teamOwnerId(team.id)} className="h-4 w-4"/>}
+                                icon={<UserAvatar email={teamOwnerId(team.id)} className="h-4 w-4" />}
                                 condensed={condensed}
                             />
                         ))}
@@ -294,7 +294,7 @@ export function DriveSidebar({condensed = false, onClose, isMobile = false, root
             )}
 
             {/* Storage usage indicator at the bottom of sidebar */}
-            <StorageUsage className="mt-auto" condensed={condensed}/>
+            <StorageUsage className="mt-auto" condensed={condensed} />
 
             {/* Create Folder Dialog */}
             {targetPath && (
@@ -302,8 +302,7 @@ export function DriveSidebar({condensed = false, onClose, isMobile = false, root
                     path={targetPath}
                     open={createFolderOpen}
                     onOpenChange={setCreateFolderOpen}
-                    onSave={() => {
-                    }}
+                    onSave={() => {}}
                     onCancel={() => setCreateFolderOpen(false)}
                     onAfterAction={handleAfterAction}
                 />
@@ -315,8 +314,7 @@ export function DriveSidebar({condensed = false, onClose, isMobile = false, root
                     path={targetPath}
                     open={createDocOpen}
                     onOpenChange={setCreateDocOpen}
-                    onSave={() => {
-                    }}
+                    onSave={() => {}}
                     onCancel={() => setCreateDocOpen(false)}
                     onAfterAction={handleAfterAction}
                 />
@@ -328,8 +326,7 @@ export function DriveSidebar({condensed = false, onClose, isMobile = false, root
                     path={targetPath}
                     open={createStickiesOpen}
                     onOpenChange={setCreateStickiesOpen}
-                    onSave={() => {
-                    }}
+                    onSave={() => {}}
                     onAfterAction={handleAfterAction}
                 />
             )}
@@ -340,8 +337,7 @@ export function DriveSidebar({condensed = false, onClose, isMobile = false, root
                     path={targetPath}
                     open={createChatOpen}
                     onOpenChange={setCreateChatOpen}
-                    onSave={() => {
-                    }}
+                    onSave={() => {}}
                     onCancel={() => setCreateChatOpen(false)}
                     onAfterAction={handleAfterAction}
                 />
@@ -353,8 +349,7 @@ export function DriveSidebar({condensed = false, onClose, isMobile = false, root
                     path={targetPath}
                     open={createSlidesOpen}
                     onOpenChange={setCreateSlidesOpen}
-                    onSave={() => {
-                    }}
+                    onSave={() => {}}
                     onAfterAction={handleAfterAction}
                 />
             )}
@@ -365,8 +360,7 @@ export function DriveSidebar({condensed = false, onClose, isMobile = false, root
                     path={targetPath}
                     open={createSheetsOpen}
                     onOpenChange={setCreateSheetsOpen}
-                    onSave={() => {
-                    }}
+                    onSave={() => {}}
                     onAfterAction={handleAfterAction}
                 />
             )}

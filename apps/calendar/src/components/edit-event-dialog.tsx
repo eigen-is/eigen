@@ -1,4 +1,4 @@
-import {useAuth} from '@workspace/lib/auth';
+import { useAuth } from '@workspace/lib/auth';
 import {
     useCalendars,
     useCreateEvent,
@@ -13,22 +13,22 @@ import type {
     CreateEventInput,
     SharedCalendar,
 } from '@workspace/lib/types/calendar';
-import {Button} from '@workspace/ui/components/button';
-import {Checkbox} from '@workspace/ui/components/checkbox';
-import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
-import {Input} from '@workspace/ui/components/input';
-import {Label} from '@workspace/ui/components/label';
-import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@workspace/ui/components/select';
-import {Textarea} from '@workspace/ui/components/textarea';
-import {AlignLeft, Calendar, Clock, MapPin, UsersRound} from 'lucide-react';
-import {useEffect, useMemo, useState} from 'react';
-import {RRule} from 'rrule';
-import {AttendeeEditor, AttendeeList} from './attendee-editor';
-import {occurrenceDateToString, parseOccurrenceDate} from './calendar-utils';
-import {RecurrencePicker} from './recurrence-picker';
-import type {RecurringAction} from './recurring-action-dialog';
-import {RecurringActionDialog} from './recurring-action-dialog';
-import {addMinutes, roundToNext15Minutes, TimeSelect} from './time-select';
+import { Button } from '@workspace/ui/components/button';
+import { Checkbox } from '@workspace/ui/components/checkbox';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { Input } from '@workspace/ui/components/input';
+import { Label } from '@workspace/ui/components/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
+import { Textarea } from '@workspace/ui/components/textarea';
+import { AlignLeft, Calendar, Clock, MapPin, UsersRound } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { RRule } from 'rrule';
+import { AttendeeEditor, AttendeeList } from './attendee-editor';
+import { occurrenceDateToString, parseOccurrenceDate } from './calendar-utils';
+import { RecurrencePicker } from './recurrence-picker';
+import type { RecurringAction } from './recurring-action-dialog';
+import { RecurringActionDialog } from './recurring-action-dialog';
+import { addMinutes, roundToNext15Minutes, TimeSelect } from './time-select';
 
 type CalendarOption = {
     id: string;
@@ -71,24 +71,24 @@ function truncateRRule(rruleStr: string, beforeDate: Date): string {
 }
 
 export function EditEventDialog({
-                                    open,
-                                    onOpenChange,
-                                    event,
-                                    ownerUserId,
-                                    calendars: calendarsProp,
-                                    sharedCalendars: sharedCalendarsProp,
-                                }: EditEventDialogProps) {
-    const {user} = useAuth();
+    open,
+    onOpenChange,
+    event,
+    ownerUserId,
+    calendars: calendarsProp,
+    sharedCalendars: sharedCalendarsProp,
+}: EditEventDialogProps) {
+    const { user } = useAuth();
     const ownerId = user?.id || '';
     const eventOwnerId = ownerUserId || ownerId;
 
-    const {data: fetchedCalendars = []} = useCalendars(ownerId);
-    const {data: fetchedSharedCalendars = []} = useSharedCalendars(ownerId);
+    const { data: fetchedCalendars = [] } = useCalendars(ownerId);
+    const { data: fetchedSharedCalendars = [] } = useSharedCalendars(ownerId);
     const calendars = calendarsProp || fetchedCalendars;
     const sharedCalendars = sharedCalendarsProp || fetchedSharedCalendars;
 
     const calendarOptions = useMemo(() => {
-        const options: CalendarOption[] = calendars.map((c) => ({id: c.id, name: c.name, color: c.color, ownerId}));
+        const options: CalendarOption[] = calendars.map((c) => ({ id: c.id, name: c.name, color: c.color, ownerId }));
         for (const sc of sharedCalendars) {
             if (sc.permission === 'write') {
                 options.push({
@@ -139,8 +139,8 @@ export function EditEventDialog({
                 currentCal
                     ? `${currentCal.ownerId}:${currentCal.id}`
                     : calendarOptions[0]
-                        ? `${calendarOptions[0].ownerId}:${calendarOptions[0].id}`
-                        : '',
+                      ? `${calendarOptions[0].ownerId}:${calendarOptions[0].id}`
+                      : '',
             );
 
             if (event.allDay) {
@@ -182,7 +182,7 @@ export function EditEventDialog({
             startTimestamp = Math.floor(sd.getTime() / 1000);
             endTimestamp = Math.floor(ed.getTime() / 1000);
         }
-        return {startTimestamp, endTimestamp};
+        return { startTimestamp, endTimestamp };
     };
 
     const handleSaveClick = () => {
@@ -206,14 +206,14 @@ export function EditEventDialog({
             location: updates.location,
             rrule: updates.rrule,
         });
-        await deleteEventOnSource.mutateAsync({id: event.parentEventId || event.id, calendarId: event.calendarId});
+        await deleteEventOnSource.mutateAsync({ id: event.parentEventId || event.id, calendarId: event.calendarId });
     };
 
     const doSave = async (action: RecurringAction) => {
         setIsLoading(true);
         try {
-            const {startTimestamp, endTimestamp} = buildTimestamps();
-            const data = {...event.data, attendees: attendees.length > 0 ? attendees : undefined};
+            const { startTimestamp, endTimestamp } = buildTimestamps();
+            const data = { ...event.data, attendees: attendees.length > 0 ? attendees : undefined };
             const timezone = allDay ? null : (event.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
             const updates = {
                 title: title.trim(),
@@ -231,7 +231,7 @@ export function EditEventDialog({
                 await moveEvent(updates);
             } else if (action === 'all') {
                 const targetId = event.parentEventId || event.id;
-                await updateEvent.mutateAsync({id: targetId, calendarId: event.calendarId, ...updates});
+                await updateEvent.mutateAsync({ id: targetId, calendarId: event.calendarId, ...updates });
             } else if (action === 'this') {
                 await createEvent.mutateAsync({
                     calendarId: event.calendarId,
@@ -246,7 +246,7 @@ export function EditEventDialog({
                 const occDate = parseOccurrenceDate(event.occurrenceDate);
                 if (event.rrule) {
                     const truncated = truncateRRule(event.rrule, occDate);
-                    await updateEvent.mutateAsync({id: parentId, calendarId: event.calendarId, rrule: truncated});
+                    await updateEvent.mutateAsync({ id: parentId, calendarId: event.calendarId, rrule: truncated });
                 }
                 await createEvent.mutateAsync({
                     calendarId: event.calendarId,
@@ -286,7 +286,7 @@ export function EditEventDialog({
                         </div>
 
                         <div className="flex items-start gap-3">
-                            <Clock className="h-4 w-4 mt-2 text-muted-foreground shrink-0"/>
+                            <Clock className="h-4 w-4 mt-2 text-muted-foreground shrink-0" />
                             <div className="flex-1 space-y-3">
                                 {allDay ? (
                                     <div className="flex items-center gap-2">
@@ -315,7 +315,7 @@ export function EditEventDialog({
                                             }}
                                             className="h-8 text-sm"
                                         />
-                                        <TimeSelect value={startTime} onChange={handleStartTimeChange}/>
+                                        <TimeSelect value={startTime} onChange={handleStartTimeChange} />
                                         <span className="text-muted-foreground text-sm">–</span>
                                         <TimeSelect
                                             value={endTime}
@@ -364,7 +364,7 @@ export function EditEventDialog({
                         {isLinkedEvent ? (
                             event.data?.attendees?.length ? (
                                 <div className="flex items-start gap-3">
-                                    <UsersRound className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0"/>
+                                    <UsersRound className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
                                     <div className="flex-1">
                                         <AttendeeList
                                             attendees={event.data.attendees}
@@ -375,7 +375,7 @@ export function EditEventDialog({
                             ) : null
                         ) : (
                             <div className="flex items-start gap-3">
-                                <UsersRound className="h-4 w-4 mt-2.5 text-muted-foreground shrink-0"/>
+                                <UsersRound className="h-4 w-4 mt-2.5 text-muted-foreground shrink-0" />
                                 <div className="flex-1">
                                     <AttendeeEditor
                                         attendees={attendees}
@@ -387,7 +387,7 @@ export function EditEventDialog({
                         )}
 
                         <div className="flex items-start gap-3">
-                            <MapPin className="h-4 w-4 mt-2.5 text-muted-foreground shrink-0"/>
+                            <MapPin className="h-4 w-4 mt-2.5 text-muted-foreground shrink-0" />
                             <Input
                                 placeholder="Location"
                                 value={location}
@@ -397,7 +397,7 @@ export function EditEventDialog({
                         </div>
 
                         <div className="flex items-start gap-3">
-                            <AlignLeft className="h-4 w-4 mt-2.5 text-muted-foreground shrink-0"/>
+                            <AlignLeft className="h-4 w-4 mt-2.5 text-muted-foreground shrink-0" />
                             <Textarea
                                 placeholder="Description"
                                 value={description}
@@ -409,10 +409,10 @@ export function EditEventDialog({
 
                         {calendarOptions.length > 1 && (
                             <div className="flex items-center gap-3">
-                                <Calendar className="h-4 w-4 text-muted-foreground shrink-0"/>
+                                <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
                                 <Select value={selectedCalKey} onValueChange={setSelectedCalKey}>
                                     <SelectTrigger className="flex-1">
-                                        <SelectValue placeholder="Select calendar"/>
+                                        <SelectValue placeholder="Select calendar" />
                                     </SelectTrigger>
                                     <SelectContent>
                                         {calendarOptions.map((cal) => (
@@ -423,7 +423,7 @@ export function EditEventDialog({
                                                 <div className="flex items-center gap-2">
                                                     <div
                                                         className="h-3 w-3 rounded-full shrink-0"
-                                                        style={{backgroundColor: cal.color}}
+                                                        style={{ backgroundColor: cal.color }}
                                                     />
                                                     {cal.name}
                                                 </div>

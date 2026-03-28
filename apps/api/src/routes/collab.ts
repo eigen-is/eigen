@@ -1,14 +1,14 @@
-import type {User} from 'better-auth/types';
-import type {ServerWebSocket} from 'bun';
-import {Elysia, t} from 'elysia';
-import {getCommentIndex} from '../lib/chat/comment-index.ts';
+import type { User } from 'better-auth/types';
+import type { ServerWebSocket } from 'bun';
+import { Elysia, t } from 'elysia';
+import { getCommentIndex } from '../lib/chat/comment-index.ts';
 import type CollabDocument from '../lib/collab/collabDocument.ts';
-import {ApiError} from '../lib/core/errors.ts';
-import {getSharedDrive} from '../lib/drive';
+import { ApiError } from '../lib/core/errors.ts';
+import { getSharedDrive } from '../lib/drive';
 import type Drive from '../lib/drive/drive.ts';
 import type SharedDrive from '../lib/drive/sharedDrive.ts';
-import {keepWebSocketAlive} from '../utils/websockets.ts';
-import {betterAuth} from './auth';
+import { keepWebSocketAlive } from '../utils/websockets.ts';
+import { betterAuth } from './auth';
 
 type CollabWsData = {
     user?: User;
@@ -32,39 +32,39 @@ export const collabRouter = new Elysia({
 
     .get(
         '/collab/:ownerId/:mountId/:pathId/info',
-        async ({params, user}) => {
+        async ({ params, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
             const canRead = await drive.canRead(params.mountId, params.pathId, user);
             const canWrite = await drive.canWrite(params.mountId, params.pathId, user);
 
             if (!canRead) {
-                return {canRead, canWrite, path: null, folderContents: null};
+                return { canRead, canWrite, path: null, folderContents: null };
             }
 
             const path = await drive.getPath(params.mountId, params.pathId);
             const folderContents = await drive.getFolderContents(params.mountId, params.pathId);
 
-            return {canRead, canWrite, path, folderContents};
+            return { canRead, canWrite, path, folderContents };
         },
-        {auth: true},
+        { auth: true },
     )
 
     .get(
         '/collab/:ownerId/:mountId/:pathId/revisions',
-        async ({params, user}) => {
+        async ({ params, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
             if (!(await drive.canRead(params.mountId, params.pathId, user))) {
                 throw new ApiError(403, 'No read permission');
             }
             const document = await drive.getCollabDocument(params.mountId, params.pathId);
-            return {revisions: document.getRevisions()};
+            return { revisions: document.getRevisions() };
         },
-        {auth: true},
+        { auth: true },
     )
 
     .get(
         '/collab/:ownerId/:mountId/:pathId/revisions/:revisionId',
-        async ({params, user}) => {
+        async ({ params, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
             if (!(await drive.canRead(params.mountId, params.pathId, user))) {
                 throw new ApiError(403, 'No read permission');
@@ -79,7 +79,7 @@ export const collabRouter = new Elysia({
                 throw new ApiError(404, 'Revision not found');
             }
             return new Response(Buffer.from(state), {
-                headers: {'Content-Type': 'application/octet-stream'},
+                headers: { 'Content-Type': 'application/octet-stream' },
             });
         },
         {
@@ -88,34 +88,34 @@ export const collabRouter = new Elysia({
                 ownerId: t.String(),
                 mountId: t.String(),
                 pathId: t.String(),
-                revisionId: t.String({pattern: '^[0-9]+$'}),
+                revisionId: t.String({ pattern: '^[0-9]+$' }),
             }),
         },
     )
 
     .get(
         '/collab/:ownerId/:mountId/:pathId/comments',
-        async ({params, user}) => {
+        async ({ params, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
             const index = await getCommentIndex(drive, params.mountId, params.pathId);
             return await index.list();
         },
-        {auth: true},
+        { auth: true },
     )
 
     .get(
         '/collab/:ownerId/:mountId/:pathId/comments/unresolved-count',
-        async ({params, user}) => {
+        async ({ params, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
             const index = await getCommentIndex(drive, params.mountId, params.pathId);
-            return {count: await index.unresolvedCount()};
+            return { count: await index.unresolvedCount() };
         },
-        {auth: true},
+        { auth: true },
     )
 
     .patch(
         '/collab/:ownerId/:mountId/:pathId/comments/:chatName/status',
-        async ({params, body, user}) => {
+        async ({ params, body, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
             if (!(await drive.canWrite(params.mountId, params.pathId, user))) {
                 throw new ApiError(403, 'No write permission');
@@ -126,10 +126,10 @@ export const collabRouter = new Elysia({
             } else {
                 await index.reopen(params.chatName);
             }
-            return {success: true};
+            return { success: true };
         },
         {
-            body: t.Object({status: t.Union([t.Literal('resolved'), t.Literal('open')])}),
+            body: t.Object({ status: t.Union([t.Literal('resolved'), t.Literal('open')]) }),
             auth: true,
         },
     )
@@ -151,7 +151,7 @@ export const collabRouter = new Elysia({
                 return;
             }
 
-            const {ownerId, mountId, pathId} = data.params;
+            const { ownerId, mountId, pathId } = data.params;
 
             const drive = await getSharedDrive(ownerId, user);
             if (!drive || !(await drive.canRead(mountId, pathId, user))) {
@@ -201,7 +201,7 @@ export const collabRouter = new Elysia({
 
             try {
                 const update = message instanceof Uint8Array ? message : new Uint8Array(message as Buffer);
-                const {mountId, pathId} = data.params;
+                const { mountId, pathId } = data.params;
 
                 // drive is cached at open; fallback to fresh lookup if message arrives before open completes
                 const drive = data.drive ?? (await getSharedDrive(data.params.ownerId, user));

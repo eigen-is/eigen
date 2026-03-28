@@ -1,4 +1,4 @@
-import type {DatabaseConfig} from '../core/managed-database';
+import type { DatabaseConfig } from '../core/managed-database';
 import * as schema from './schema';
 
 export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {

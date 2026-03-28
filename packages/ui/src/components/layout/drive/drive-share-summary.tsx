@@ -1,9 +1,9 @@
-import {type DriveAccessItem, useDriveAccess} from '@workspace/lib/drive';
-import type {DrivePath} from '@workspace/lib/types/drive';
-import {UserAvatar} from '@workspace/ui/components/layout/user-avatar';
-import {Tooltip, TooltipContent, TooltipTrigger} from '@workspace/ui/components/tooltip';
-import {cn} from '@workspace/ui/lib/utils';
-import {Unlock, UserRoundPlus} from 'lucide-react';
+import { type DriveAccessItem, useDriveAccess } from '@workspace/lib/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { UserAvatar } from '@workspace/ui/components/layout/user-avatar';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
+import { cn } from '@workspace/ui/lib/utils';
+import { Unlock, UserRoundPlus } from 'lucide-react';
 
 export type DriveShareSummaryProps = {
     path: DrivePath;
@@ -13,12 +13,12 @@ export type DriveShareSummaryProps = {
 };
 
 export function DriveShareSummary({
-                                      path,
-                                      onClick,
-                                      showIconOnHover = true,
-                                      ancestorBreadcrumb,
-                                  }: DriveShareSummaryProps) {
-    const {allEntries} = useDriveAccess(path, undefined, ancestorBreadcrumb);
+    path,
+    onClick,
+    showIconOnHover = true,
+    ancestorBreadcrumb,
+}: DriveShareSummaryProps) {
+    const { allEntries } = useDriveAccess(path, undefined, ancestorBreadcrumb);
 
     const hasEntries = allEntries.length > 1;
     const isPublic = path.visibility !== 'private';
@@ -39,9 +39,9 @@ export function DriveShareSummary({
                             <TooltipTrigger asChild>
                                 <span
                                     className="-ml-4 h-6 w-6 rounded-full flex items-center justify-center bg-muted position-relative"
-                                    style={{zIndex: 1}}
+                                    style={{ zIndex: 1 }}
                                 >
-                                    <Unlock className="h-3 w-3 text-primary"/>
+                                    <Unlock className="h-3 w-3 text-primary" />
                                 </span>
                             </TooltipTrigger>
                             <TooltipContent>Anyone with the link can access</TooltipContent>
@@ -53,7 +53,7 @@ export function DriveShareSummary({
                             email={access.id}
                             size="sm"
                             className="-ml-4 position-relative"
-                            style={{zIndex: (isPublic ? 2 : 1) + index}}
+                            style={{ zIndex: (isPublic ? 2 : 1) + index }}
                             tooltip={true}
                         />
                     ))}
@@ -66,7 +66,7 @@ export function DriveShareSummary({
             ) : (
                 showIconOnHover && (
                     <div className="invisible group-hover:visible">
-                        <UserRoundPlus className="h-4 w-4 text-muted-foreground"/>
+                        <UserRoundPlus className="h-4 w-4 text-muted-foreground" />
                     </div>
                 )
             )}

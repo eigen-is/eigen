@@ -27,7 +27,10 @@ describe('Editor', () => {
         return { status: res.status, data: await res.json() };
     }
 
-    async function editorPut(pathId: string, body: Record<string, unknown>): Promise<{ status: number; data: EditorSaveResult }> {
+    async function editorPut(
+        pathId: string,
+        body: Record<string, unknown>,
+    ): Promise<{ status: number; data: EditorSaveResult }> {
         const res = await authedRequest(
             ctx.alice.user.sessionToken,
             `/editor/${ctx.alice.user.id}/${mountId}/${pathId}/content`,

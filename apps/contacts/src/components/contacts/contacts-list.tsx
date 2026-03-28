@@ -1,9 +1,9 @@
-import {useAuth} from '@workspace/lib/auth';
-import {useContacts} from '@workspace/lib/contacts';
-import type {Contact} from '@workspace/lib/types/contact';
-import type {Label} from '@workspace/lib/types/label';
-import {EmptyState, ErrorState, LoadingState} from '@workspace/ui';
-import {Button} from '@workspace/ui/components/button';
+import { useAuth } from '@workspace/lib/auth';
+import { useContacts } from '@workspace/lib/contacts';
+import type { Contact } from '@workspace/lib/types/contact';
+import type { Label } from '@workspace/lib/types/label';
+import { EmptyState, ErrorState, LoadingState } from '@workspace/ui';
+import { Button } from '@workspace/ui/components/button';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -11,17 +11,17 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import {ContextMenuAnchor, useContextMenu} from '@workspace/ui/components/layout/context-menu';
-import {LabelAssignSubMenu} from '@workspace/ui/components/layout/labels/label-assign-sub-menu';
-import {SearchBar} from '@workspace/ui/components/layout/search-bar/search-bar';
-import {UserItem} from '@workspace/ui/components/layout/user-item';
-import {useKeyboardListNavigation} from '@workspace/ui/hooks/use-keyboard-list-navigation';
-import {useListDrag} from '@workspace/ui/hooks/use-list-drag';
-import {useListSelection} from '@workspace/ui/hooks/use-list-selection';
-import {Toolbar} from '@workspace/ui/index';
-import {cn} from '@workspace/ui/lib/utils';
-import {ArrowUpDown, Pencil, Trash2} from 'lucide-react';
-import {useMemo, useRef} from 'react';
+import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
+import { LabelAssignSubMenu } from '@workspace/ui/components/layout/labels/label-assign-sub-menu';
+import { SearchBar } from '@workspace/ui/components/layout/search-bar/search-bar';
+import { UserItem } from '@workspace/ui/components/layout/user-item';
+import { useKeyboardListNavigation } from '@workspace/ui/hooks/use-keyboard-list-navigation';
+import { useListDrag } from '@workspace/ui/hooks/use-list-drag';
+import { useListSelection } from '@workspace/ui/hooks/use-list-selection';
+import { Toolbar } from '@workspace/ui/index';
+import { cn } from '@workspace/ui/lib/utils';
+import { ArrowUpDown, Pencil, Trash2 } from 'lucide-react';
+import { useMemo, useRef } from 'react';
 
 type ContactsListToolbarProps = {
     searchQuery: string;
@@ -30,7 +30,7 @@ type ContactsListToolbarProps = {
     onSortChange: (sort: 'firstName' | 'lastName') => void;
 };
 
-export function ContactsListToolbar({searchQuery, onSearchChange, onSortChange}: ContactsListToolbarProps) {
+export function ContactsListToolbar({ searchQuery, onSearchChange, onSortChange }: ContactsListToolbarProps) {
     return (
         <Toolbar>
             <SearchBar
@@ -43,7 +43,7 @@ export function ContactsListToolbar({searchQuery, onSearchChange, onSortChange}:
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
-                        <ArrowUpDown className="h-4 w-4"/>
+                        <ArrowUpDown className="h-4 w-4" />
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
@@ -69,22 +69,22 @@ type ContactsListProps = {
 };
 
 export function ContactsList({
-                                 filterType = 'filter',
-                                 filterId = 'all',
-                                 searchQuery,
-                                 sortBy,
-                                 activeContactId,
-                                 labels = [],
-                                 onEdit,
-                                 onDelete,
-                                 onToggleLabel,
-                                 onRowClick,
-                             }: ContactsListProps) {
-    const {user} = useAuth();
+    filterType = 'filter',
+    filterId = 'all',
+    searchQuery,
+    sortBy,
+    activeContactId,
+    labels = [],
+    onEdit,
+    onDelete,
+    onToggleLabel,
+    onRowClick,
+}: ContactsListProps) {
+    const { user } = useAuth();
     const listRef = useRef<HTMLDivElement>(null);
     const contextMenu = useContextMenu<Contact>();
 
-    const {data: contacts = [], isLoading, error} = useContacts();
+    const { data: contacts = [], isLoading, error } = useContacts();
 
     const filteredContacts = useMemo(() => {
         if (!contacts.length) return [];
@@ -113,9 +113,9 @@ export function ContactsList({
         );
     }, [sortedContacts, searchQuery]);
 
-    const selection = useListSelection({items: searchedContacts, getId: (c) => c.id});
+    const selection = useListSelection({ items: searchedContacts, getId: (c) => c.id });
 
-    const {selectedIndex, handleKeyDown} = useKeyboardListNavigation({
+    const { selectedIndex, handleKeyDown } = useKeyboardListNavigation({
         items: searchedContacts,
         activeId: activeContactId,
         getId: (c) => c.id,
@@ -124,7 +124,7 @@ export function ContactsList({
         selection,
     });
 
-    const drag = useListDrag({selection, getId: (c) => c.id, dragType: 'contact'});
+    const drag = useListDrag({ selection, getId: (c) => c.id, dragType: 'contact' });
 
     const handleContextMenu = (e: React.MouseEvent, contact: Contact) => {
         if (!selection.isSelected(contact.id)) {
@@ -155,16 +155,16 @@ export function ContactsList({
     }, [searchedContacts, sortBy]);
 
     if (error) {
-        return <ErrorState message="An error occurred while loading contacts." detail={error.message}/>;
+        return <ErrorState message="An error occurred while loading contacts." detail={error.message} />;
     }
 
     return (
         <div className="w-full flex flex-col flex-1 overflow-hidden">
             <div className="flex-1 overflow-y-auto outline-none" ref={listRef} onKeyDown={handleKeyDown}>
                 {isLoading ? (
-                    <LoadingState/>
+                    <LoadingState />
                 ) : groupedContacts.length === 0 ? (
-                    <EmptyState message="No contacts found."/>
+                    <EmptyState message="No contacts found." />
                 ) : (
                     <div>
                         {groupedContacts.map(([letter, contacts]) => (
@@ -181,7 +181,7 @@ export function ContactsList({
                                                 className={cn(
                                                     'flex items-center gap-3 px-6 py-3 eigen-list-item',
                                                     (activeContactId === contact.id || selectedIndex === flatIndex) &&
-                                                    'eigen-list-item-active',
+                                                        'eigen-list-item-active',
                                                     selection.isSelected(contact.id) && 'eigen-list-item-selected',
                                                 )}
                                                 onClick={(e) => {
@@ -224,7 +224,7 @@ export function ContactsList({
                                 contextMenu.close();
                             }}
                         >
-                            <Pencil className="h-4 w-4 mr-2"/> Edit
+                            <Pencil className="h-4 w-4 mr-2" /> Edit
                         </DropdownMenuItem>
                     )}
                     {onDelete && !hasMe && contextItems.length > 0 && (
@@ -234,7 +234,7 @@ export function ContactsList({
                                 contextMenu.close();
                             }}
                         >
-                            <Trash2 className="h-4 w-4 mr-2"/>
+                            <Trash2 className="h-4 w-4 mr-2" />
                             {isSingleSelect ? 'Delete' : `Delete ${contextItems.length} contacts`}
                         </DropdownMenuItem>
                     )}
@@ -253,7 +253,7 @@ export function ContactsList({
                             );
                             return (
                                 <>
-                                    <DropdownMenuSeparator/>
+                                    <DropdownMenuSeparator />
                                     <LabelAssignSubMenu
                                         labels={labels}
                                         assignedLabelIds={assignedToAll}

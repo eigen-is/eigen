@@ -1,19 +1,19 @@
-import {createFileRoute} from '@tanstack/react-router';
-import {useCollabDocumentInfo} from '@workspace/lib/collab';
-import {AccessDenied, LoadingState} from '@workspace/ui';
-import {useLayout} from '@workspace/ui/components/layout/app/layout-context';
-import {DriveAccessDialog} from '@workspace/ui/components/layout/drive/drive-access-dialog';
-import {useCallback, useEffect, useMemo, useState} from 'react';
-import {CollaborativeEditor} from '../components/docs/editor';
+import { createFileRoute } from '@tanstack/react-router';
+import { useCollabDocumentInfo } from '@workspace/lib/collab';
+import { AccessDenied, LoadingState } from '@workspace/ui';
+import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
+import { DriveAccessDialog } from '@workspace/ui/components/layout/drive/drive-access-dialog';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { CollaborativeEditor } from '../components/docs/editor';
 
 export const Route = createFileRoute('/_auth/doc/$ownerId/$mountId/$pathId')({
     component: CollaborativeTextEditor,
 });
 
 function CollaborativeTextEditor() {
-    const {ownerId, mountId, pathId} = Route.useParams();
-    const {data: docInfo, isLoading} = useCollabDocumentInfo(ownerId, mountId, pathId);
-    const {setDocumentTitle} = useLayout();
+    const { ownerId, mountId, pathId } = Route.useParams();
+    const { data: docInfo, isLoading } = useCollabDocumentInfo(ownerId, mountId, pathId);
+    const { setDocumentTitle } = useLayout();
     const [accessDialogOpen, setAccessDialogOpen] = useState(false);
 
     useEffect(() => {
@@ -35,11 +35,11 @@ function CollaborativeTextEditor() {
     }, [docInfo?.folderContents]);
 
     if (isLoading) {
-        return <LoadingState/>;
+        return <LoadingState />;
     }
 
     if (!docInfo?.canRead || !docInfo.path) {
-        return <AccessDenied/>;
+        return <AccessDenied />;
     }
 
     return (
@@ -53,7 +53,7 @@ function CollaborativeTextEditor() {
                     onAccessDialogOpen={handleAccessDialogOpen}
                 />
             </div>
-            <DriveAccessDialog open={accessDialogOpen} onOpenChange={setAccessDialogOpen} path={docInfo.path}/>
+            <DriveAccessDialog open={accessDialogOpen} onOpenChange={setAccessDialogOpen} path={docInfo.path} />
         </>
     );
 }

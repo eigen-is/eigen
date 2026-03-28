@@ -1,8 +1,8 @@
-import {execFile} from 'node:child_process';
+import { execFile } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {promisify} from 'node:util';
-import {isExiftoolExtension} from '@workspace/lib/constants';
+import { promisify } from 'node:util';
+import { isExiftoolExtension } from '@workspace/lib/constants';
 
 const execFileAsync = promisify(execFile);
 
@@ -18,7 +18,7 @@ async function getExiftoolPath(): Promise<string> {
 
     // Try system exiftool first, fall back to vendored
     try {
-        const {stdout} = await execFileAsync('exiftool', ['-ver']);
+        const { stdout } = await execFileAsync('exiftool', ['-ver']);
         if (stdout.trim()) {
             cachedExiftoolPath = 'exiftool';
             return cachedExiftoolPath;
@@ -27,7 +27,7 @@ async function getExiftoolPath(): Promise<string> {
         /* not installed system-wide */
     }
 
-    const {exiftool} = await import('exiftool-vendored');
+    const { exiftool } = await import('exiftool-vendored');
     cachedExiftoolPath = await exiftool.exiftoolPath();
     return cachedExiftoolPath;
 }
@@ -40,7 +40,7 @@ export async function extractEmbeddedPreview(filePath: string, tmpDir: string, p
         // Try PreviewImage (largest), then JpgFromRaw, then ThumbnailImage
         for (const tag of ['-PreviewImage', '-JpgFromRaw', '-ThumbnailImage']) {
             try {
-                const {stdout} = await execFileAsync(bin, ['-b', tag, filePath], {
+                const { stdout } = await execFileAsync(bin, ['-b', tag, filePath], {
                     encoding: 'buffer',
                     maxBuffer: 20 * 1024 * 1024,
                 });
@@ -64,6 +64,5 @@ export async function cleanupExtract(extractPath: string): Promise<void> {
         if (fs.existsSync(extractPath)) {
             fs.unlinkSync(extractPath);
         }
-    } catch {
-    }
+    } catch {}
 }

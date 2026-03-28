@@ -1,5 +1,5 @@
-import {Button} from './../../button';
-import {Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle} from './../../dialog';
+import { Button } from './../../button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './../../dialog';
 
 export type ConfirmDialogProps = {
     open: boolean;
@@ -12,14 +12,14 @@ export type ConfirmDialogProps = {
 };
 
 export function ConfirmDialog({
-                                  open,
-                                  onOpenChange,
-                                  title,
-                                  description,
-                                  onConfirm,
-                                  cancelText = 'Cancel',
-                                  confirmText = 'Confirm',
-                              }: ConfirmDialogProps) {
+    open,
+    onOpenChange,
+    title,
+    description,
+    onConfirm,
+    cancelText = 'Cancel',
+    confirmText = 'Confirm',
+}: ConfirmDialogProps) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent>

@@ -1,14 +1,14 @@
-import {useNavigate} from '@tanstack/react-router';
-import {openDocument} from '@workspace/lib/api';
-import {useAuth} from '@workspace/lib/auth';
-import {DEFAULT_MOUNT_ID, useMimeContent, usePathInfo} from '@workspace/lib/drive';
-import {type DrivePath, isDocumentType} from '@workspace/lib/types/drive';
-import {useContext} from 'react';
-import {useLayout} from '../app/layout-context';
-import {NotFound} from '../app/not-found';
-import {DriveLayout} from './drive-layout';
-import type {EigenDocAppConfig} from './eigendoc-config';
-import {EigenDocDriveContext} from './eigendoc-root';
+import { useNavigate } from '@tanstack/react-router';
+import { openDocument } from '@workspace/lib/api';
+import { useAuth } from '@workspace/lib/auth';
+import { DEFAULT_MOUNT_ID, useMimeContent, usePathInfo } from '@workspace/lib/drive';
+import { type DrivePath, isDocumentType } from '@workspace/lib/types/drive';
+import { useContext } from 'react';
+import { useLayout } from '../app/layout-context';
+import { NotFound } from '../app/not-found';
+import { DriveLayout } from './drive-layout';
+import type { EigenDocAppConfig } from './eigendoc-config';
+import { EigenDocDriveContext } from './eigendoc-root';
 
 type EigenDocListViewProps = {
     config: EigenDocAppConfig;
@@ -16,13 +16,13 @@ type EigenDocListViewProps = {
     mid?: string;
 };
 
-export function EigenDocListView({config, pid, mid}: EigenDocListViewProps) {
-    const {rootPath} = useContext(EigenDocDriveContext);
+export function EigenDocListView({ config, pid, mid }: EigenDocListViewProps) {
+    const { rootPath } = useContext(EigenDocDriveContext);
     const navigate = useNavigate();
-    const {user} = useAuth();
+    const { user } = useAuth();
     const ownerId = user!.id;
-    const {data: selectedPath = null} = usePathInfo(ownerId, mid || DEFAULT_MOUNT_ID, pid);
-    const {isMobile} = useLayout();
+    const { data: selectedPath = null } = usePathInfo(ownerId, mid || DEFAULT_MOUNT_ID, pid);
+    const { isMobile } = useLayout();
 
     const {
         data: folderContents = [],
@@ -34,12 +34,12 @@ export function EigenDocListView({config, pid, mid}: EigenDocListViewProps) {
         if (isMobile && isDocumentType(path.type)) {
             openDocument(path);
         } else {
-            navigate({to: '/', search: {pid: path.id, mid: path.mountId}});
+            navigate({ to: '/', search: { pid: path.id, mid: path.mountId } });
         }
     };
 
     if (isFolderContentLoadingError) {
-        return <NotFound/>;
+        return <NotFound />;
     }
 
     return (
@@ -53,8 +53,8 @@ export function EigenDocListView({config, pid, mid}: EigenDocListViewProps) {
             error={isFolderContentLoadingError}
             onRowSelect={onRowSelect}
             onRowActivate={openDocument}
-            onBackToList={() => navigate({to: '/'})}
-            onAfterAction={() => navigate({to: '/'})}
+            onBackToList={() => navigate({ to: '/' })}
+            onAfterAction={() => navigate({ to: '/' })}
             allowDelete={true}
             allowShare={true}
             allowCreateFolder={false}

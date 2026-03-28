@@ -1,11 +1,11 @@
-import type {LocalFilesystem} from './local-filesystem';
+import type { LocalFilesystem } from './local-filesystem';
 
 export type DeepPartial<T> = {
     [K in keyof T]?: T[K] extends Record<string, unknown> ? DeepPartial<T[K]> : T[K];
 };
 
 function deepMerge<T extends Record<string, unknown>>(target: T, source: DeepPartial<T>): T {
-    const result = {...target};
+    const result = { ...target };
     for (const key of Object.keys(source) as (keyof T)[]) {
         const sourceVal = source[key];
         const targetVal = result[key];
@@ -37,7 +37,7 @@ export class JsonStore<T extends Record<string, unknown>> {
         private filename: string,
         private defaults: T,
     ) {
-        this.data = {...defaults};
+        this.data = { ...defaults };
     }
 
     async load(): Promise<void> {
@@ -47,7 +47,7 @@ export class JsonStore<T extends Record<string, unknown>> {
                 this.data = deepMerge(this.defaults, (await file.json()) as DeepPartial<T>);
             }
         } catch {
-            this.data = {...this.defaults};
+            this.data = { ...this.defaults };
         }
     }
 

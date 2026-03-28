@@ -1,12 +1,12 @@
-import {useSortable} from '@dnd-kit/sortable';
-import {CSS} from '@dnd-kit/utilities';
-import {lightenColor} from '@workspace/lib/constants';
-import {Card, CardContent} from '@workspace/ui/components/card';
-import {isLightColor} from '@workspace/ui/components/layout/media/color-picker';
-import {useMemo, useState} from 'react';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { lightenColor } from '@workspace/lib/constants';
+import { Card, CardContent } from '@workspace/ui/components/card';
+import { isLightColor } from '@workspace/ui/components/layout/media/color-picker';
+import { useMemo, useState } from 'react';
 import type * as Y from 'yjs';
-import {CardDialog} from './card-dialog';
-import type {CardItem} from './types';
+import { CardDialog } from './card-dialog';
+import type { CardItem } from './types';
 
 function hashRotation(id: string): number {
     let hash = 0;
@@ -25,19 +25,19 @@ type CardProps = {
 };
 
 export function StickyCard({
-                               card,
-                               canWrite = true,
-                               isMobile: _isMobile,
-                               yjsDoc,
-                               ownerId,
-                               mountId,
-                               onContextMenu,
-                           }: CardProps) {
+    card,
+    canWrite = true,
+    isMobile: _isMobile,
+    yjsDoc,
+    ownerId,
+    mountId,
+    onContextMenu,
+}: CardProps) {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
 
-    const {attributes, listeners, setNodeRef, transform, transition, isDragging} = useSortable({
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
         id: card.id,
-        data: {type: 'task', task: card},
+        data: { type: 'task', task: card },
         disabled: !canWrite,
     });
 
@@ -64,14 +64,14 @@ export function StickyCard({
                     backgroundColor: card.color ? lightenColor(card.color, 0.25) : undefined,
                     color: card.color ? (isLightColor(card.color) ? '#000' : '#fff') : undefined,
                 }}
-                {...(canWrite ? {...attributes, ...listeners} : {})}
+                {...(canWrite ? { ...attributes, ...listeners } : {})}
                 onClick={handleClick}
                 onContextMenu={onContextMenu ? (e) => onContextMenu(e, card) : undefined}
             >
                 <CardContent className={`p-3 text-sm ${isDragging && !card.color ? 'bg-accent' : ''}`}>
                     {card.title}
                     {card.description && (
-                        <p className="text-xs mt-1 line-clamp-2" style={{opacity: 0.7}}>
+                        <p className="text-xs mt-1 line-clamp-2" style={{ opacity: 0.7 }}>
                             {card.description}
                         </p>
                     )}

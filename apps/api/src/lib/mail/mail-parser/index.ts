@@ -1,4 +1,3 @@
-// Re-export the types from the index.d.ts file
 export type {
     ParsedMail,
     Attachment,
@@ -8,11 +7,12 @@ export type {
     EmailAddress,
     Headers,
     HeaderLines,
-    StructuredHeader
-} from './index.d';
+    HeaderValue,
+    StructuredHeader,
+    MessageText,
+    MailParserOptions,
+} from './mail-parser';
 
-// Import the default export from simple-parser.js and re-export it as simpleParser
-// @ts-ignore - Ignoring the lack of type definitions for the simple-parser module
-import simpleParserDefault from './simple-parser';
-
-export const simpleParser = simpleParserDefault;
+export { default as MailParser } from './mail-parser';
+export { default as simpleParser } from './simple-parser';
+export type { Source, SimpleParserOptions } from './simple-parser';

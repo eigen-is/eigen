@@ -1,4 +1,4 @@
-export {reconcileSharesForNewTeamMember, reconcileSharesForNewUser} from './reconciliation';
+export { reconcileSharesForNewTeamMember, reconcileSharesForNewUser } from './reconciliation';
 export {
     addRegistryEntry,
     getEntriesForTarget,

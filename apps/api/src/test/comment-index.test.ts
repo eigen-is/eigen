@@ -1,6 +1,15 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { ChatMessage, CommentEntry, DrivePath } from '@workspace/lib/types';
-import { assertJson, authedRequest, chatPost, driveGet, drivePost, drivePut, findOrFail, getTestContext } from './setup';
+import {
+    assertJson,
+    authedRequest,
+    chatPost,
+    driveGet,
+    drivePost,
+    drivePut,
+    findOrFail,
+    getTestContext,
+} from './setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 const BOB_EMAIL = 'bob@test.eigen.is';
@@ -38,13 +47,24 @@ describe('Comment Index', () => {
         const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root');
 
         // Create a doc — CollabDocument.create() creates comments.db + chat/ folder
-        const doc = await drivePost<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `folder/${root.id}/doc`, {
-            fileName: 'comment-test-doc',
-        });
+        const doc = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${root.id}/doc`,
+            {
+                fileName: 'comment-test-doc',
+            },
+        );
         docId = doc.id;
 
         // Get the auto-created chat/ folder inside the doc
-        const contents = await driveGet<DrivePath[]>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `folder/${docId}`);
+        const contents = await driveGet<DrivePath[]>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${docId}`,
+        );
         chatFolderId = findOrFail(contents, (p: DrivePath) => p.name === 'chat').id;
     });
 
@@ -134,9 +154,15 @@ describe('Comment Index', () => {
             );
 
             // Post a message mentioning Bob
-            await chatPost<ChatMessage>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `${chat.id}/messages`, {
-                content: `Hey ${BOB_EMAIL} check this out`,
-            });
+            await chatPost<ChatMessage>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                mountId,
+                `${chat.id}/messages`,
+                {
+                    content: `Hey ${BOB_EMAIL} check this out`,
+                },
+            );
         });
 
         test('comment list includes mentions array with mentioned emails', async () => {
@@ -167,9 +193,15 @@ describe('Comment Index', () => {
             const mentionChat = findOrFail(chats, (c: DrivePath) => c.name === 'mention-test.eigenchat');
 
             // Post another message mentioning Bob again
-            await chatPost<ChatMessage>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `${mentionChat.id}/messages`, {
-                content: `${BOB_EMAIL} please see above`,
-            });
+            await chatPost<ChatMessage>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                mountId,
+                `${mentionChat.id}/messages`,
+                {
+                    content: `${BOB_EMAIL} please see above`,
+                },
+            );
 
             const res = await collabGet(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, docId, 'comments');
             const comments = await assertJson<CommentEntry[]>(res);
@@ -192,9 +224,15 @@ describe('Comment Index', () => {
             );
             chatName = 'resolve-test.eigenchat';
 
-            await chatPost<ChatMessage>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `${chat.id}/messages`, {
-                content: 'Comment to resolve',
-            });
+            await chatPost<ChatMessage>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                mountId,
+                `${chat.id}/messages`,
+                {
+                    content: 'Comment to resolve',
+                },
+            );
         });
 
         test('resolve sets status and resolvedBy', async () => {
@@ -286,12 +324,24 @@ describe('Comment Index', () => {
             editChatId = chat.id;
 
             // Post two messages
-            await chatPost<ChatMessage>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `${editChatId}/messages`, {
-                content: 'original message',
-            });
-            await chatPost<ChatMessage>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `${editChatId}/messages`, {
-                content: 'second message',
-            });
+            await chatPost<ChatMessage>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                mountId,
+                `${editChatId}/messages`,
+                {
+                    content: 'original message',
+                },
+            );
+            await chatPost<ChatMessage>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                mountId,
+                `${editChatId}/messages`,
+                {
+                    content: 'second message',
+                },
+            );
         });
 
         test('edit updates snippet', async () => {
@@ -390,9 +440,15 @@ describe('Comment Index', () => {
                     `folder/${chatFolder.id}/chat`,
                     { fileName: name },
                 );
-                await chatPost<ChatMessage>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `${chat.id}/messages`, {
-                    content: `Message in ${name}`,
-                });
+                await chatPost<ChatMessage>(
+                    ctx.alice.user.sessionToken,
+                    ctx.alice.user.id,
+                    mountId,
+                    `${chat.id}/messages`,
+                    {
+                        content: `Message in ${name}`,
+                    },
+                );
             }
         });
 
@@ -456,11 +512,17 @@ describe('Comment Index', () => {
             });
 
             // Post a whisper — should NOT create a comment index entry
-            await chatPost<ChatMessage>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `${chat.id}/messages`, {
-                content: 'secret',
-                type: 'whisper',
-                whisperTo: BOB_EMAIL,
-            });
+            await chatPost<ChatMessage>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                mountId,
+                `${chat.id}/messages`,
+                {
+                    content: 'secret',
+                    type: 'whisper',
+                    whisperTo: BOB_EMAIL,
+                },
+            );
         });
 
         test('whisper does not create comment entry', async () => {
@@ -483,9 +545,15 @@ describe('Comment Index', () => {
             );
 
             // Post message — should not throw or affect any index
-            await chatPost<ChatMessage>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `${chat.id}/messages`, {
-                content: 'standalone message',
-            });
+            await chatPost<ChatMessage>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                mountId,
+                `${chat.id}/messages`,
+                {
+                    content: 'standalone message',
+                },
+            );
 
             // Verify the message was posted successfully
             const messages = await authedRequest(
@@ -529,9 +597,15 @@ describe('Comment Index', () => {
 
             // Post a very long message
             const longContent = 'A'.repeat(500);
-            await chatPost<ChatMessage>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `${chat.id}/messages`, {
-                content: longContent,
-            });
+            await chatPost<ChatMessage>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                mountId,
+                `${chat.id}/messages`,
+                {
+                    content: longContent,
+                },
+            );
         });
 
         test('snippet is truncated to 100 chars', async () => {
@@ -570,9 +644,15 @@ describe('Comment Index', () => {
                 `folder/${chatFolder.id}/chat`,
                 { fileName: 'perm-chat' },
             );
-            await chatPost<ChatMessage>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `${chat.id}/messages`, {
-                content: 'test message',
-            });
+            await chatPost<ChatMessage>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                mountId,
+                `${chat.id}/messages`,
+                {
+                    content: 'test message',
+                },
+            );
         });
 
         test('user without access gets 403 on list', async () => {
@@ -693,9 +773,15 @@ describe('Comment Index', () => {
             );
 
             // Mention both Bob and Charlie in one message
-            await chatPost<ChatMessage>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `${chat.id}/messages`, {
-                content: `Hey ${BOB_EMAIL} and charlie@test.eigen.is please review`,
-            });
+            await chatPost<ChatMessage>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                mountId,
+                `${chat.id}/messages`,
+                {
+                    content: `Hey ${BOB_EMAIL} and charlie@test.eigen.is please review`,
+                },
+            );
         });
 
         test('mentions array contains both emails', async () => {
@@ -749,9 +835,15 @@ describe('Comment Index', () => {
             );
 
             // Mention Bob with uppercase email
-            await chatPost<ChatMessage>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `${chat.id}/messages`, {
-                content: 'Hey BOB@TEST.EIGEN.IS check this',
-            });
+            await chatPost<ChatMessage>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                mountId,
+                `${chat.id}/messages`,
+                {
+                    content: 'Hey BOB@TEST.EIGEN.IS check this',
+                },
+            );
         });
 
         test('mention is stored lowercase', async () => {

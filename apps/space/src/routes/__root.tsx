@@ -1,19 +1,19 @@
-import {createRootRouteWithContext, Outlet} from '@tanstack/react-router';
-import {type AuthContextType, useAuth} from '@workspace/lib/auth';
-import {AppShell} from '@workspace/ui/components/layout/app/app-shell.tsx';
-import {SpaceSidebar} from '../components/space/space-sidebar';
+import { createRootRouteWithContext, Outlet } from '@tanstack/react-router';
+import { type AuthContextType, useAuth } from '@workspace/lib/auth';
+import { AppShell } from '@workspace/ui/components/layout/app/app-shell.tsx';
+import { SpaceSidebar } from '../components/space/space-sidebar';
 
 type MyRouterContext = {
     auth: AuthContextType;
 };
 
 function SpaceRoot() {
-    const {user} = useAuth();
+    const { user } = useAuth();
 
     if (!user) {
         return (
             <AppShell appName="space" rootRoute={Route}>
-                <Outlet/>
+                <Outlet />
             </AppShell>
         );
     }
@@ -22,12 +22,12 @@ function SpaceRoot() {
         <AppShell
             appName="space"
             rootRoute={Route}
-            sidebar={({condensed, isMobile, onClose}) => (
-                <SpaceSidebar condensed={condensed} isMobile={isMobile} onClose={onClose}/>
+            sidebar={({ condensed, isMobile, onClose }) => (
+                <SpaceSidebar condensed={condensed} isMobile={isMobile} onClose={onClose} />
             )}
         >
             <div className="flex-1 overflow-auto">
-                <Outlet/>
+                <Outlet />
             </div>
         </AppShell>
     );

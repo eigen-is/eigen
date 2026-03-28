@@ -1,10 +1,10 @@
-import {useAuth} from '@workspace/lib/auth';
-import {Button} from '@workspace/ui/components/button';
-import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
-import {Input} from '@workspace/ui/components/input';
-import {Label} from '@workspace/ui/components/label';
-import {useState} from 'react';
-import type {ColumnItem} from './types';
+import { useAuth } from '@workspace/lib/auth';
+import { Button } from '@workspace/ui/components/button';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { Input } from '@workspace/ui/components/input';
+import { Label } from '@workspace/ui/components/label';
+import { useState } from 'react';
+import type { ColumnItem } from './types';
 
 type AddColumnDialogProps = {
     isOpen: boolean;
@@ -12,9 +12,9 @@ type AddColumnDialogProps = {
     onAddColumn: (column: Omit<ColumnItem, 'id' | 'taskIds'>) => void;
 };
 
-export function AddColumnDialog({isOpen, onClose, onAddColumn}: AddColumnDialogProps) {
+export function AddColumnDialog({ isOpen, onClose, onAddColumn }: AddColumnDialogProps) {
     const [title, setTitle] = useState('');
-    const {user} = useAuth();
+    const { user } = useAuth();
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();

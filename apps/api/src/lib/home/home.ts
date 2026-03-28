@@ -1,10 +1,10 @@
 import * as path from 'node:path';
-import type {SSEvent} from '@workspace/lib/types/sse';
-import type {User} from 'better-auth/types';
-import {createAsyncSingleton} from '../../utils/singleton';
-import type {Calendar} from '../calendar/calendar';
-import {resolveUserQuotas} from '../config/quota';
-import type {Contacts} from '../contacts/contacts';
+import type { SSEvent } from '@workspace/lib/types/sse';
+import type { User } from 'better-auth/types';
+import { createAsyncSingleton } from '../../utils/singleton';
+import type { Calendar } from '../calendar/calendar';
+import { resolveUserQuotas } from '../config/quota';
+import type { Contacts } from '../contacts/contacts';
 import {
     type DatabaseConfig,
     type JsonStore,
@@ -13,9 +13,9 @@ import {
     openLocalDatabase,
     type SchemaType,
 } from '../core';
-import type {Drive} from '../drive';
+import type { Drive } from '../drive';
 import type Maildir from '../mail/maildir';
-import type {NotificationCenter} from '../notification-center/notification-center';
+import type { NotificationCenter } from '../notification-center/notification-center';
 
 export type HomeSettings = Record<string, unknown>;
 
@@ -151,8 +151,8 @@ export class Home {
         const mailAndContactsUsed = (mail || 0) + (contacts || 0);
 
         return {
-            mailAndContacts: {used: mailAndContactsUsed, max: quotas.mailAndContactsMax},
-            drive: {default: {used: driveDefault, max: quotas.mountMax}},
+            mailAndContacts: { used: mailAndContactsUsed, max: quotas.mailAndContactsMax },
+            drive: { default: { used: driveDefault, max: quotas.mountMax } },
             total: {
                 used: mailAndContactsUsed + driveDefault,
                 max: quotas.mailAndContactsMax + quotas.mountMax,

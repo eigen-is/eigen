@@ -1,6 +1,6 @@
-import type {EigenClipboardData} from '../../types/clipboard';
-import type {DrivePath} from '../../types/drive';
-import {getDriveDownloadUrl} from '../api';
+import type { EigenClipboardData } from '../../types/clipboard';
+import type { DrivePath } from '../../types/drive';
+import { getDriveDownloadUrl } from '../api';
 
 export const EIGEN_CLIPBOARD_MIME = 'application/eigen-clipboard';
 const HTML_MARKER = 'data-eigen-clipboard';
@@ -48,10 +48,10 @@ export async function writeEigenClipboardAsync(data: EigenClipboardData, plainTe
     const encoded = encodeURIComponent(json);
     const html = `<span ${HTML_MARKER}="${encoded}"></span>`;
     const items: Record<string, Blob> = {
-        'text/html': new Blob([html], {type: 'text/html'}),
+        'text/html': new Blob([html], { type: 'text/html' }),
     };
     if (plainText) {
-        items['text/plain'] = new Blob([plainText], {type: 'text/plain'});
+        items['text/plain'] = new Blob([plainText], { type: 'text/plain' });
     }
     await navigator.clipboard.write([new ClipboardItem(items)]);
 }
@@ -73,11 +73,11 @@ export async function reUploadImage(
 ): Promise<{ mediaName: string; pathId: string; parentId: string } | null> {
     try {
         const downloadUrl = getDriveDownloadUrl(sourceOwnerId, sourceMountId, sourcePathId);
-        const response = await fetch(downloadUrl, {credentials: 'include'});
+        const response = await fetch(downloadUrl, { credentials: 'include' });
         if (!response.ok) return null;
         const blob = await response.blob();
-        const file = new File([blob], fileName, {type: blob.type || 'image/png'});
-        const result = await uploadFn({parentId: mediaFolderId, file});
+        const file = new File([blob], fileName, { type: blob.type || 'image/png' });
+        const result = await uploadFn({ parentId: mediaFolderId, file });
         if (result) {
             return {
                 mediaName: result.name,

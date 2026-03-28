@@ -1,16 +1,16 @@
-import type {DrivePath} from '@workspace/lib/types/drive';
-import type {User} from 'better-auth/types';
-import type {ServerWebSocket} from 'bun';
-import {desc, eq, gt, lt, lte} from 'drizzle-orm';
-import type {BunSQLiteDatabase} from 'drizzle-orm/bun-sqlite';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import type { User } from 'better-auth/types';
+import type { ServerWebSocket } from 'bun';
+import { desc, eq, gt, lt, lte } from 'drizzle-orm';
+import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import * as decoding from 'lib0/decoding';
 import * as encoding from 'lib0/encoding';
 import * as awarenessProtocol from 'y-protocols/awareness';
 import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
-import type {ManagedDatabase} from '../core';
-import type {Drive} from '../drive';
-import {COLLAB_DB_CONFIG} from './db-config';
+import type { ManagedDatabase } from '../core';
+import type { Drive } from '../drive';
+import { COLLAB_DB_CONFIG } from './db-config';
 import * as schema from './schema.ts';
 
 const MESSAGE_SYNC = 0;
@@ -93,7 +93,7 @@ class DbProvider {
 
             this.db.transaction((tx) => {
                 const lastUpdate = tx
-                    .select({id: schema.docUpdates.id})
+                    .select({ id: schema.docUpdates.id })
                     .from(schema.docUpdates)
                     .orderBy(desc(schema.docUpdates.id))
                     .limit(1)
@@ -111,7 +111,7 @@ class DbProvider {
                 tx.delete(schema.docUpdates).where(lte(schema.docUpdates.id, lastUpdate.id)).run();
 
                 const allSnapshots = tx
-                    .select({id: schema.docSnapshots.id})
+                    .select({ id: schema.docSnapshots.id })
                     .from(schema.docSnapshots)
                     .orderBy(desc(schema.docSnapshots.id))
                     .all();
@@ -141,7 +141,7 @@ class DbProvider {
 
     getRevisionState(revisionId: number): Uint8Array | null {
         const snapshot = this.db
-            .select({stateData: schema.docSnapshots.stateData})
+            .select({ stateData: schema.docSnapshots.stateData })
             .from(schema.docSnapshots)
             .where(eq(schema.docSnapshots.id, revisionId))
             .get();
@@ -212,7 +212,7 @@ export default class CollabDocument {
         this.awareness.on(
             'update',
             (
-                {added, updated, removed}: { added: number[]; updated: number[]; removed: number[] },
+                { added, updated, removed }: { added: number[]; updated: number[]; removed: number[] },
                 origin: unknown,
             ) => {
                 const changedClients = added.concat(updated, removed);

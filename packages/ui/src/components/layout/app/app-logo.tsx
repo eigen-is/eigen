@@ -1,15 +1,15 @@
-import {Link} from '@tanstack/react-router';
-import {getSpaceAppUrl} from '@workspace/lib/api';
-import {cn} from '../../../lib/utils.ts';
-import {Bar} from '../braket/bar.tsx';
-import {Ket} from '../braket/ket.tsx';
+import { Link } from '@tanstack/react-router';
+import { getSpaceAppUrl } from '@workspace/lib/api';
+import { cn } from '../../../lib/utils.ts';
+import { Bar } from '../braket/bar.tsx';
+import { Ket } from '../braket/ket.tsx';
 
 type AppLogoProps = {
     appName?: string;
     className?: string;
 };
 
-export function AppLogo({appName = 'mail', className}: AppLogoProps) {
+export function AppLogo({ appName = 'mail', className }: AppLogoProps) {
     const isSpace = appName.toLowerCase() === 'space';
 
     return (
@@ -24,11 +24,11 @@ export function AppLogo({appName = 'mail', className}: AppLogoProps) {
                 </a>
             )}
             <span className="text-white">
-                <Bar/>
+                <Bar />
                 <Link to="/" className="hover:opacity-75 transition-opacity">
                     {appName.toLowerCase()}
                 </Link>
-                <Ket/>
+                <Ket />
             </span>
         </div>
     );

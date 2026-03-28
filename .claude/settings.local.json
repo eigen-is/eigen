@@ -145,7 +145,11 @@
       "Bash(bunx --bun @biomejs/biome check --write --unsafe apps/api/src/test/)",
       "Bash(diffstat)",
       "Bash(for t:*)",
-      "Bash(echo \"=== $t ===\")"
+      "Bash(echo \"=== $t ===\")",
+      "Bash(sort -t: -k3 -u)",
+      "Bash(bunx --bun @biomejs/biome lint --write apps/api/src/lib/mail/)",
+      "Bash(bunx --bun @biomejs/biome lint --write --unsafe apps/api/src/lib/mail/)",
+      "Bash(bunx --bun @biomejs/biome lint apps/api/src/lib/mail/)"
     ]
   },
   "enabledPlugins": {

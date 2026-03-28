@@ -1,11 +1,11 @@
-import {chatApi} from '@workspace/lib/api';
-import {useChatRoom, useCreateChat} from '@workspace/lib/chat';
-import {useMediaResolver} from '@workspace/lib/drive';
-import {ChatMessageInput, ChatMessageList} from '@workspace/ui';
-import {Button} from '@workspace/ui/components/button';
-import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
-import {Textarea} from '@workspace/ui/components/textarea';
-import {useState} from 'react';
+import { chatApi } from '@workspace/lib/api';
+import { useChatRoom, useCreateChat } from '@workspace/lib/chat';
+import { useMediaResolver } from '@workspace/lib/drive';
+import { ChatMessageInput, ChatMessageList } from '@workspace/ui';
+import { Button } from '@workspace/ui/components/button';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { Textarea } from '@workspace/ui/components/textarea';
+import { useState } from 'react';
 
 type CreateCommentDialogProps = {
     open: boolean;
@@ -18,14 +18,14 @@ type CreateCommentDialogProps = {
 };
 
 export function CreateCommentDialog({
-                                        open,
-                                        onOpenChange,
-                                        ownerId,
-                                        mountId,
-                                        chatFolderId,
-                                        selectedText,
-                                        onCommentCreated,
-                                    }: CreateCommentDialogProps) {
+    open,
+    onOpenChange,
+    ownerId,
+    mountId,
+    chatFolderId,
+    selectedText,
+    onCommentCreated,
+}: CreateCommentDialogProps) {
     const [comment, setComment] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const createChat = useCreateChat(ownerId, mountId);
@@ -36,12 +36,12 @@ export function CreateCommentDialog({
 
         try {
             const fileName = `comment-${Date.now()}`;
-            const result = await createChat.mutateAsync({parentId: chatFolderId, fileName});
+            const result = await createChat.mutateAsync({ parentId: chatFolderId, fileName });
             const chatPath = result as { id: string; name: string } | undefined;
 
             if (chatPath?.id) {
                 // Direct API call: chatId is only known after creation, so usePostMessage can't be used here
-                await chatApi({ownerId})({mountId})({chatId: chatPath.id}).messages.post({
+                await chatApi({ ownerId })({ mountId })({ chatId: chatPath.id }).messages.post({
                     content: comment.trim(),
                 });
                 onCommentCreated(chatPath.name);
@@ -102,8 +102,8 @@ type ViewCommentDialogProps = {
     chatName: string;
 };
 
-export function ViewCommentDialog({open, onOpenChange, ownerId, mountId, chatName}: ViewCommentDialogProps) {
-    const {resolveChatId} = useMediaResolver();
+export function ViewCommentDialog({ open, onOpenChange, ownerId, mountId, chatName }: ViewCommentDialogProps) {
+    const { resolveChatId } = useMediaResolver();
     const chatId = resolveChatId(chatName);
     const chat = useChatRoom(ownerId, mountId, chatId || '');
 

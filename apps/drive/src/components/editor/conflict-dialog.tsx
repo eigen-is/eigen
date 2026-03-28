@@ -1,5 +1,5 @@
-import {Button} from '@workspace/ui/components/button';
-import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
+import { Button } from '@workspace/ui/components/button';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 
 type ConflictDialogProps = {
     open: boolean;
@@ -9,7 +9,7 @@ type ConflictDialogProps = {
     onDownload: () => void;
 };
 
-export function ConflictDialog({open, onOpenChange, onOverwrite, onReload, onDownload}: ConflictDialogProps) {
+export function ConflictDialog({ open, onOpenChange, onOverwrite, onReload, onDownload }: ConflictDialogProps) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent>

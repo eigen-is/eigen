@@ -1,5 +1,10 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import type { CalendarEvent, CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
+import type {
+    CalendarEvent,
+    CalendarEventOccurrence,
+    CalendarItem,
+    SharedCalendar,
+} from '@workspace/lib/types/calendar';
 import { getServerConfig } from '../lib/config/server-config';
 import { assertJson, authedRequest, findOrFail, getTestContext } from './setup';
 
@@ -299,7 +304,10 @@ describe('Regression: Team calendar permission enforcement', () => {
     test('team calendar defaults to read permission for members', async () => {
         const sharedRes = await authedRequest(ctx.bob.user.sessionToken, `/calendar/${ctx.bob.user.id}/shared`);
         const shared = await assertJson<SharedCalendar[]>(sharedRes);
-        const teamCal = findOrFail(shared, (s) => s.ownerUserId === `team_${permTeamId}` && s.calendarId === permTeamCalId);
+        const teamCal = findOrFail(
+            shared,
+            (s) => s.ownerUserId === `team_${permTeamId}` && s.calendarId === permTeamCalId,
+        );
         expect(teamCal.permission).toBe('read');
     });
 
@@ -344,7 +352,10 @@ describe('Regression: Team calendar permission enforcement', () => {
         // Bob should now have write permission in shared list
         const sharedRes = await authedRequest(ctx.bob.user.sessionToken, `/calendar/${ctx.bob.user.id}/shared`);
         const shared = await assertJson<SharedCalendar[]>(sharedRes);
-        const teamCal = findOrFail(shared, (s) => s.ownerUserId === `team_${permTeamId}` && s.calendarId === permTeamCalId);
+        const teamCal = findOrFail(
+            shared,
+            (s) => s.ownerUserId === `team_${permTeamId}` && s.calendarId === permTeamCalId,
+        );
         expect(teamCal.permission).toBe('write');
 
         // Bob can now create events

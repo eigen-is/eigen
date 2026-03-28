@@ -1,20 +1,20 @@
-import {getDriveDownloadUrl, getDriveThumbnailUrl} from '@workspace/lib/api';
-import {useContacts} from '@workspace/lib/contacts';
-import {formatTime} from '@workspace/lib/date';
-import {useFolderLookup} from '@workspace/lib/drive';
-import {usePublicUser} from '@workspace/lib/public';
-import type {ChatMessage} from '@workspace/lib/types/chat';
-import type {Contact} from '@workspace/lib/types/contact';
-import {EMAIL_FIND_REGEX} from '@workspace/lib/validation';
-import {UserItem} from '@workspace/ui/components/layout/user-item';
-import {Paperclip} from 'lucide-react';
-import {type ReactNode, useCallback, useEffect, useRef} from 'react';
-import {HoverCard, HoverCardContent, HoverCardTrigger} from '../../../components/hover-card';
-import {cn} from '../../../lib/utils';
-import {LoadingState} from '../app/loading-state';
-import {EigenLoader} from '../braket/eigen-loader.tsx';
-import {usePreview} from '../preview-provider';
-import {UserAvatar} from '../user-avatar';
+import { getDriveDownloadUrl, getDriveThumbnailUrl } from '@workspace/lib/api';
+import { useContacts } from '@workspace/lib/contacts';
+import { formatTime } from '@workspace/lib/date';
+import { useFolderLookup } from '@workspace/lib/drive';
+import { usePublicUser } from '@workspace/lib/public';
+import type { ChatMessage } from '@workspace/lib/types/chat';
+import type { Contact } from '@workspace/lib/types/contact';
+import { EMAIL_FIND_REGEX } from '@workspace/lib/validation';
+import { UserItem } from '@workspace/ui/components/layout/user-item';
+import { Paperclip } from 'lucide-react';
+import { type ReactNode, useCallback, useEffect, useRef } from 'react';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '../../../components/hover-card';
+import { cn } from '../../../lib/utils';
+import { LoadingState } from '../app/loading-state';
+import { EigenLoader } from '../braket/eigen-loader.tsx';
+import { usePreview } from '../preview-provider';
+import { UserAvatar } from '../user-avatar';
 
 type ChatMessageListProps = {
     messages: ChatMessage[];
@@ -37,19 +37,19 @@ function isSameAuthorAndClose(prev: ChatMessage, curr: ChatMessage): boolean {
 }
 
 function AttachmentChip({
-                            fileName,
-                            ownerId,
-                            mountId,
-                            mediaFolderId,
-                        }: {
+    fileName,
+    ownerId,
+    mountId,
+    mediaFolderId,
+}: {
     fileName: string;
     ownerId: string;
     mountId: string;
     mediaFolderId: string;
 }) {
-    const {findByName} = useFolderLookup(ownerId, mountId, mediaFolderId);
+    const { findByName } = useFolderLookup(ownerId, mountId, mediaFolderId);
     const fileInfo = findByName(fileName);
-    const {openPreview} = usePreview();
+    const { openPreview } = usePreview();
 
     const name = fileInfo?.details?.originalName || fileInfo?.name || fileName;
     const downloadUrl = fileInfo ? getDriveDownloadUrl(ownerId, mountId, fileInfo.id) : '#';
@@ -72,18 +72,18 @@ function AttachmentChip({
             onClick={handleClick}
         >
             {thumbnailUrl && isImage ? (
-                <img src={thumbnailUrl} alt={name} className="h-10 w-10 object-cover rounded-l-md"/>
+                <img src={thumbnailUrl} alt={name} className="h-10 w-10 object-cover rounded-l-md" />
             ) : null}
             <div className="flex items-center gap-1.5 px-2.5 py-1.5">
-                {!thumbnailUrl && <Paperclip className="h-3 w-3 text-muted-foreground shrink-0"/>}
+                {!thumbnailUrl && <Paperclip className="h-3 w-3 text-muted-foreground shrink-0" />}
                 <span className="truncate max-w-[200px]">{name}</span>
             </div>
         </a>
     );
 }
 
-function InlineEmail({email}: { email: string }) {
-    const {data} = usePublicUser(email);
+function InlineEmail({ email }: { email: string }) {
+    const { data } = usePublicUser(email);
     const name = data?.name || email.split('@')[0];
     return (
         <HoverCard>
@@ -91,7 +91,7 @@ function InlineEmail({email}: { email: string }) {
                 <span className="text-primary cursor-default font-medium underline hover:no-underline">{name}</span>
             </HoverCardTrigger>
             <HoverCardContent className="w-auto p-3">
-                <UserItem email={email} mailLink/>
+                <UserItem email={email} mailLink />
             </HoverCardContent>
         </HoverCard>
     );
@@ -108,17 +108,17 @@ function tokenize(text: string): RichToken[] {
 
     let match: RegExpExecArray | null;
     while ((match = emailRegex.exec(text)) !== null) {
-        tokens.push({index: match.index, end: match.index + match[0].length, type: 'email', value: match[0]});
+        tokens.push({ index: match.index, end: match.index + match[0].length, type: 'email', value: match[0] });
     }
     while ((match = urlRegex.exec(text)) !== null) {
-        tokens.push({index: match.index, end: match.index + match[0].length, type: 'url', value: match[0]});
+        tokens.push({ index: match.index, end: match.index + match[0].length, type: 'url', value: match[0] });
     }
 
     tokens.sort((a, b) => a.index - b.index);
     return tokens;
 }
 
-function RichContent({text, className}: { text: string; className?: string }) {
+function RichContent({ text, className }: { text: string; className?: string }) {
     const parts: ReactNode[] = [];
     const tokens = tokenize(text);
 
@@ -129,7 +129,7 @@ function RichContent({text, className}: { text: string; className?: string }) {
             parts.push(text.slice(lastIdx, token.index));
         }
         if (token.type === 'email') {
-            parts.push(<InlineEmail key={token.index} email={token.value}/>);
+            parts.push(<InlineEmail key={token.index} email={token.value} />);
         } else {
             parts.push(
                 <a
@@ -151,14 +151,14 @@ function RichContent({text, className}: { text: string; className?: string }) {
     return <p className={className}>{parts}</p>;
 }
 
-function InspectCard({target}: { target: string }) {
-    const {data: contacts = []} = useContacts();
+function InspectCard({ target }: { target: string }) {
+    const { data: contacts = [] } = useContacts();
     const contact = (contacts as Contact[]).find((c) => c.email?.some((e) => e.toLowerCase() === target.toLowerCase()));
 
     return (
         <div className="flex gap-4 p-4 rounded-lg border bg-card max-w-sm">
             <div className="shrink-0">
-                <UserItem email={target} mailLink={true}/>
+                <UserItem email={target} mailLink={true} />
             </div>
             <div className="flex-1 min-w-0 space-y-1">
                 {contact?.company && (
@@ -176,17 +176,17 @@ function InspectCard({target}: { target: string }) {
 }
 
 export function ChatMessageList({
-                                    messages,
-                                    isLoading,
-                                    ownerId,
-                                    mountId,
-                                    mediaFolderId,
-                                    className,
-                                    emptyMessage = 'No messages yet. Start the conversation!',
-                                    hasOlderMessages,
-                                    isFetchingOlderMessages,
-                                    onLoadMore,
-                                }: ChatMessageListProps) {
+    messages,
+    isLoading,
+    ownerId,
+    mountId,
+    mediaFolderId,
+    className,
+    emptyMessage = 'No messages yet. Start the conversation!',
+    hasOlderMessages,
+    isFetchingOlderMessages,
+    onLoadMore,
+}: ChatMessageListProps) {
     const scrollRef = useRef<HTMLDivElement>(null);
     const lastMessageIdRef = useRef('');
     const isInitialLoadRef = useRef(true);
@@ -238,12 +238,12 @@ export function ChatMessageList({
     useEffect(() => {
         const container = scrollRef.current;
         if (!container) return;
-        container.addEventListener('scroll', handleScroll, {passive: true});
+        container.addEventListener('scroll', handleScroll, { passive: true });
         return () => container.removeEventListener('scroll', handleScroll);
     }, [handleScroll]);
 
     if (isLoading) {
-        return <LoadingState/>;
+        return <LoadingState />;
     }
 
     if (messages.length === 0) {
@@ -258,7 +258,7 @@ export function ChatMessageList({
         <div ref={scrollRef} className={cn('flex-1 overflow-y-auto', className)}>
             {isFetchingOlderMessages && (
                 <div className="flex justify-center py-3">
-                    <EigenLoader/>
+                    <EigenLoader />
                 </div>
             )}
             {messages.map((message, i) => {
@@ -279,14 +279,14 @@ export function ChatMessageList({
                         const target = message.content.slice(8);
                         return (
                             <div key={message.id} className="flex gap-3 px-5 py-2">
-                                <div className="w-9 shrink-0"/>
-                                <InspectCard target={target}/>
+                                <div className="w-9 shrink-0" />
+                                <InspectCard target={target} />
                             </div>
                         );
                     }
                     return (
                         <div key={message.id} className="flex gap-3 px-5 py-2">
-                            <div className="w-9 shrink-0"/>
+                            <div className="w-9 shrink-0" />
                             <p className="text-sm text-muted-foreground italic whitespace-pre-wrap">
                                 {message.content}
                             </p>
@@ -430,7 +430,7 @@ export function ChatMessageList({
                     </div>
                 );
             })}
-            <div className="h-3"/>
+            <div className="h-3" />
         </div>
     );
 }

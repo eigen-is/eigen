@@ -1,6 +1,6 @@
-import {createFileRoute, useNavigate} from '@tanstack/react-router';
-import {openDocument} from '@workspace/lib/api';
-import {useFolderContent, usePathInfo} from '@workspace/lib/drive';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { openDocument } from '@workspace/lib/api';
+import { useFolderContent, usePathInfo } from '@workspace/lib/drive';
 import {
     type DrivePath,
     type DriveSearchParams,
@@ -8,36 +8,36 @@ import {
     isFolderType,
     isInlineEditable,
 } from '@workspace/lib/types/drive';
-import {LoadingState, NotFound} from '@workspace/ui';
-import {useLayout} from '@workspace/ui/components/layout/app/layout-context.tsx';
-import {DriveLayout} from '@workspace/ui/components/layout/drive/drive-layout';
-import {usePreview} from '@workspace/ui/components/layout/preview-provider';
-import {useContext, useEffect} from 'react';
-import {DriveContext} from './__root';
+import { LoadingState, NotFound } from '@workspace/ui';
+import { useLayout } from '@workspace/ui/components/layout/app/layout-context.tsx';
+import { DriveLayout } from '@workspace/ui/components/layout/drive/drive-layout';
+import { usePreview } from '@workspace/ui/components/layout/preview-provider';
+import { useContext, useEffect } from 'react';
+import { DriveContext } from './__root';
 
 export const Route = createFileRoute('/_auth/fs/$ownerId/$mountId/$pathId')({
     component: DriveRoute,
     validateSearch: (search: Record<string, unknown>) => {
         const pid = typeof search.pid === 'string' ? search.pid : undefined;
         const uid = typeof search.uid === 'string' ? search.uid : undefined;
-        return {pid, uid} as DriveSearchParams;
+        return { pid, uid } as DriveSearchParams;
     },
 });
 
 function DriveRoute() {
-    const {ownerId, mountId, pathId} = Route.useParams();
-    const {pid} = Route.useSearch();
+    const { ownerId, mountId, pathId } = Route.useParams();
+    const { pid } = Route.useSearch();
     const navigate = useNavigate();
-    const {isMobile} = useLayout();
-    const {rootPath} = useContext(DriveContext);
-    const {openPreview, updatePreview, isPreviewOpen} = usePreview();
+    const { isMobile } = useLayout();
+    const { rootPath } = useContext(DriveContext);
+    const { openPreview, updatePreview, isPreviewOpen } = usePreview();
 
     // If pathId is "root", navigate to the actual root folder ID when available
     useEffect(() => {
         if (pathId === 'root' && rootPath) {
             navigate({
                 to: Route.fullPath,
-                params: {ownerId: rootPath.ownerId, mountId: rootPath.mountId, pathId: rootPath.id},
+                params: { ownerId: rootPath.ownerId, mountId: rootPath.mountId, pathId: rootPath.id },
             });
         }
     }, [pathId, rootPath, navigate, ownerId]);
@@ -51,8 +51,8 @@ function DriveRoute() {
         isLoading: isFolderContentLoading,
         error: isFolderContentLoadingError,
     } = useFolderContent(ownerId, mountId, skipDataFetch ? '' : pathId);
-    const {data: selectedPath = null} = usePathInfo(ownerId, mountId, pid);
-    const {data: currentPath = null} = usePathInfo(ownerId, mountId, pathId);
+    const { data: selectedPath = null } = usePathInfo(ownerId, mountId, pid);
+    const { data: currentPath = null } = usePathInfo(ownerId, mountId, pathId);
 
     // Handle row click to show path details
     const onRowSelect = (path: DrivePath) => {
@@ -65,14 +65,14 @@ function DriveRoute() {
         } else if (currentPath?.parentId === path.id) {
             navigate({
                 to: Route.fullPath,
-                params: {ownerId, mountId, pathId: path.id},
-                search: {pid: undefined},
+                params: { ownerId, mountId, pathId: path.id },
+                search: { pid: undefined },
             });
         } else {
             navigate({
                 to: Route.fullPath,
-                params: {ownerId, mountId, pathId},
-                search: {pid: path.id},
+                params: { ownerId, mountId, pathId },
+                search: { pid: path.id },
             });
         }
     };
@@ -85,15 +85,15 @@ function DriveRoute() {
         if (path.type === 'folder') {
             navigate({
                 to: Route.fullPath,
-                params: {ownerId, mountId, pathId: path.id},
-                search: {pid: undefined},
+                params: { ownerId, mountId, pathId: path.id },
+                search: { pid: undefined },
             });
         } else if (isDocumentType(path.type)) {
             openDocument(path);
         } else if (isInlineEditable(path.mimeType, path.name)) {
             navigate({
                 to: '/edit/$ownerId/$mountId/$pathId',
-                params: {ownerId: path.ownerId, mountId: path.mountId, pathId: path.id},
+                params: { ownerId: path.ownerId, mountId: path.mountId, pathId: path.id },
             });
         } else {
             openPreview(path, folderContents);
@@ -104,8 +104,8 @@ function DriveRoute() {
     const handleBackToList = () => {
         navigate({
             to: Route.fullPath,
-            params: {ownerId, mountId, pathId},
-            search: {pid: undefined},
+            params: { ownerId, mountId, pathId },
+            search: { pid: undefined },
         });
     };
 
@@ -115,19 +115,19 @@ function DriveRoute() {
         if (actionType === 'delete' && pid === data.id) {
             navigate({
                 to: Route.fullPath,
-                params: {ownerId, mountId, pathId: pathId},
-                search: {pid: undefined},
+                params: { ownerId, mountId, pathId: pathId },
+                search: { pid: undefined },
             });
         }
     };
 
     // Show loading state while resolving root folder ID
     if (pathId === 'root' && !rootPath) {
-        return <LoadingState/>;
+        return <LoadingState />;
     }
 
     if (isFolderContentLoadingError) {
-        return <NotFound/>;
+        return <NotFound />;
     }
 
     return (

@@ -1,6 +1,6 @@
-import type {User} from 'better-auth/types';
-import {ApiError} from '../core/errors';
-import {getHome} from '../home';
+import type { User } from 'better-auth/types';
+import { ApiError } from '../core/errors';
+import { getHome } from '../home';
 import type Drive from './drive';
 import SharedDrive from './sharedDrive';
 

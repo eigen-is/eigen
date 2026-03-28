@@ -1,15 +1,15 @@
-import {zodResolver} from '@hookform/resolvers/zod';
-import {validatePasswordStrength} from '@workspace/lib/validation';
-import {Button} from '@workspace/ui/components/button';
-import {Checkbox} from '@workspace/ui/components/checkbox';
-import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage} from '@workspace/ui/components/form';
-import {Input} from '@workspace/ui/components/input';
-import {Label} from '@workspace/ui/components/label';
-import {Progress} from '@workspace/ui/components/progress';
-import {InfoIcon} from 'lucide-react';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { validatePasswordStrength } from '@workspace/lib/validation';
+import { Button } from '@workspace/ui/components/button';
+import { Checkbox } from '@workspace/ui/components/checkbox';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
+import { Input } from '@workspace/ui/components/input';
+import { Label } from '@workspace/ui/components/label';
+import { Progress } from '@workspace/ui/components/progress';
+import { InfoIcon } from 'lucide-react';
 import * as React from 'react';
-import {useForm} from 'react-hook-form';
-import {z} from 'zod';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
 
 const getPasswordStrengthColor = (strength: number): string => {
     if (strength < 0.4) return 'bg-destructive';
@@ -36,8 +36,8 @@ const formSchema = z
     });
 
 export function ChangePassword({
-                                   onPasswordChange,
-                               }: {
+    onPasswordChange,
+}: {
     onPasswordChange: (data: {
         currentPassword: string;
         newPassword: string;
@@ -77,7 +77,7 @@ export function ChangePassword({
                     <FormField
                         control={form.control}
                         name="currentPassword"
-                        render={({field}) => (
+                        render={({ field }) => (
                             <FormItem>
                                 <FormLabel>Current Password</FormLabel>
                                 <FormControl>
@@ -88,7 +88,7 @@ export function ChangePassword({
                                         {...field}
                                     />
                                 </FormControl>
-                                <FormMessage/>
+                                <FormMessage />
                             </FormItem>
                         )}
                     />
@@ -96,7 +96,7 @@ export function ChangePassword({
                     <FormField
                         control={form.control}
                         name="newPassword"
-                        render={({field}) => (
+                        render={({ field }) => (
                             <FormItem>
                                 <FormLabel>New Password</FormLabel>
                                 <FormControl>
@@ -123,7 +123,7 @@ export function ChangePassword({
                                         />
                                     </div>
                                 )}
-                                <FormMessage/>
+                                <FormMessage />
                             </FormItem>
                         )}
                     />
@@ -131,7 +131,7 @@ export function ChangePassword({
                     <FormField
                         control={form.control}
                         name="confirmPassword"
-                        render={({field}) => (
+                        render={({ field }) => (
                             <FormItem>
                                 <FormLabel>Confirm New Password</FormLabel>
                                 <FormControl>
@@ -142,7 +142,7 @@ export function ChangePassword({
                                         {...field}
                                     />
                                 </FormControl>
-                                <FormMessage/>
+                                <FormMessage />
                             </FormItem>
                         )}
                     />
@@ -150,7 +150,7 @@ export function ChangePassword({
                     <FormField
                         control={form.control}
                         name="revokeOtherSessions"
-                        render={({field}) => (
+                        render={({ field }) => (
                             <FormItem className="flex items-center">
                                 <FormControl>
                                     <Checkbox
@@ -162,13 +162,13 @@ export function ChangePassword({
                                 <Label htmlFor="revokeOtherSessions" className="cursor-pointer">
                                     Log out of all other devices
                                 </Label>
-                                <FormMessage/>
+                                <FormMessage />
                             </FormItem>
                         )}
                     />
 
                     <div className="flex items-start gap-2 text-sm text-muted-foreground">
-                        <InfoIcon className="h-4 w-4 mt-0.5 flex-shrink-0"/>
+                        <InfoIcon className="h-4 w-4 mt-0.5 flex-shrink-0" />
                         <p>Choose a strong password and don't reuse it for other accounts.</p>
                     </div>
 

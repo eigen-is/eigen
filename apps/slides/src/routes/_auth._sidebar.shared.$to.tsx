@@ -1,5 +1,5 @@
-import {createFileRoute, useNavigate} from '@tanstack/react-router';
-import {EigenDocSharedView, eigenDocValidateSearch, SLIDES_CONFIG} from '@workspace/ui/components/layout/drive';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { EigenDocSharedView, eigenDocValidateSearch, SLIDES_CONFIG } from '@workspace/ui/components/layout/drive';
 
 export const Route = createFileRoute('/_auth/_sidebar/shared/$to')({
     component: SharedRoute,
@@ -7,8 +7,8 @@ export const Route = createFileRoute('/_auth/_sidebar/shared/$to')({
 });
 
 function SharedRoute() {
-    const {to} = Route.useParams();
-    const {pid, uid, mid} = Route.useSearch();
+    const { to } = Route.useParams();
+    const { pid, uid, mid } = Route.useSearch();
     const navigate = useNavigate();
     return (
         <EigenDocSharedView
@@ -17,8 +17,8 @@ function SharedRoute() {
             pid={pid}
             uid={uid}
             mid={mid}
-            onNavigate={(search) => navigate({to: Route.fullPath, params: {to}, search})}
-            onNavigateBack={() => navigate({to: Route.fullPath, params: {to}})}
+            onNavigate={(search) => navigate({ to: Route.fullPath, params: { to }, search })}
+            onNavigateBack={() => navigate({ to: Route.fullPath, params: { to } })}
         />
     );
 }

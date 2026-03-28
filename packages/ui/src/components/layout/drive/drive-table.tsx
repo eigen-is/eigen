@@ -5,23 +5,23 @@ import {
     isInlineEditable,
     stripEigenExtension,
 } from '@workspace/lib/types';
-import {DropdownMenuItem, DropdownMenuSeparator} from '@workspace/ui/components/dropdown-menu';
-import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from '@workspace/ui/components/table';
-import {cn} from '@workspace/ui/lib/utils';
-import {formatDistanceToNow} from 'date-fns';
-import {ArrowRight, ChevronLeft, Download, Pencil, Trash2, UserRoundPlus} from 'lucide-react';
+import { DropdownMenuItem, DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@workspace/ui/components/table';
+import { cn } from '@workspace/ui/lib/utils';
+import { formatDistanceToNow } from 'date-fns';
+import { ArrowRight, ChevronLeft, Download, Pencil, Trash2, UserRoundPlus } from 'lucide-react';
 import type React from 'react';
-import {useCallback, useMemo, useRef, useState} from 'react';
-import {useKeyboardListNavigation} from '../../../hooks/use-keyboard-list-navigation';
-import {useListDrag} from '../../../hooks/use-list-drag';
-import {useListSelection} from '../../../hooks/use-list-selection';
-import {ContextMenuAnchor, useContextMenu} from '../context-menu';
-import {DriveShareSummary} from './drive-share-summary';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { useKeyboardListNavigation } from '../../../hooks/use-keyboard-list-navigation';
+import { useListDrag } from '../../../hooks/use-list-drag';
+import { useListSelection } from '../../../hooks/use-list-selection';
+import { ContextMenuAnchor, useContextMenu } from '../context-menu';
+import { DriveShareSummary } from './drive-share-summary';
 
 export function defaultDriveSort(a: DrivePath, b: DrivePath): number {
     if (a.type === 'folder' && b.type !== 'folder') return -1;
     if (a.type !== 'folder' && b.type === 'folder') return 1;
-    return a.name.localeCompare(b.name, undefined, {sensitivity: 'base'});
+    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
 }
 
 export type DriveTableProps = {
@@ -44,22 +44,22 @@ export type DriveTableProps = {
 };
 
 export function DriveTable({
-                               items = [],
-                               currentPath,
-                               activeItemId,
-                               onItemClick,
-                               onItemOpen,
-                               getFileIcon,
-                               onShareClick,
-                               onDownload,
-                               onDelete,
-                               onRename,
-                               onMove,
-                               onQuickLook,
-                               sortFn = defaultDriveSort,
-                               allowDelete = false,
-                               ancestorBreadcrumb,
-                           }: DriveTableProps) {
+    items = [],
+    currentPath,
+    activeItemId,
+    onItemClick,
+    onItemOpen,
+    getFileIcon,
+    onShareClick,
+    onDownload,
+    onDelete,
+    onRename,
+    onMove,
+    onQuickLook,
+    sortFn = defaultDriveSort,
+    allowDelete = false,
+    ancestorBreadcrumb,
+}: DriveTableProps) {
     const tableRef = useRef<HTMLTableElement>(null);
     const [hasFocus, setHasFocus] = useState(false);
     const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
@@ -112,9 +112,9 @@ export function DriveTable({
         [allItems, onQuickLook],
     );
 
-    const selection = useListSelection({items: allItems, getId: (item) => item.id});
+    const selection = useListSelection({ items: allItems, getId: (item) => item.id });
 
-    const {selectedIndex, handleKeyDown} = useKeyboardListNavigation<DrivePath>({
+    const { selectedIndex, handleKeyDown } = useKeyboardListNavigation<DrivePath>({
         items: allItems,
         activeId: activeItemId,
         getId: (item) => item.id,
@@ -126,7 +126,7 @@ export function DriveTable({
         selection,
     });
 
-    const drag = useListDrag({selection, getId: (item) => item.id, dragType: 'drive-item'});
+    const drag = useListDrag({ selection, getId: (item) => item.id, dragType: 'drive-item' });
 
     const contextMenu = useContextMenu<DrivePath>();
 
@@ -172,10 +172,10 @@ export function DriveTable({
                             className={cn(
                                 'eigen-list-item',
                                 (activeItemId === currentPath.parentId || selectedIndex === 0) &&
-                                'eigen-list-item-active',
+                                    'eigen-list-item-active',
                                 currentPath.parentId &&
-                                selection.isSelected(currentPath.parentId) &&
-                                'eigen-list-item-selected',
+                                    selection.isSelected(currentPath.parentId) &&
+                                    'eigen-list-item-selected',
                             )}
                             onClick={(e) => {
                                 const parentId = currentPath.parentId || '';
@@ -187,7 +187,7 @@ export function DriveTable({
                         >
                             <TableCell className="font-medium">
                                 <div className="flex items-center">
-                                    <ChevronLeft className="h-4 w-4 mr-2 text-muted-foreground"/>
+                                    <ChevronLeft className="h-4 w-4 mr-2 text-muted-foreground" />
                                     <span>..</span>
                                 </div>
                             </TableCell>
@@ -205,7 +205,7 @@ export function DriveTable({
                                 className={cn(
                                     'eigen-list-item',
                                     (activeItemId === item.id || selectedIndex === adjustedIndex) &&
-                                    'eigen-list-item-active',
+                                        'eigen-list-item-active',
                                     selection.isSelected(item.id) && 'eigen-list-item-selected',
                                     dragOverItemId === item.id && isValidFolderDrop(item) && 'bg-accent',
                                 )}
@@ -226,8 +226,7 @@ export function DriveTable({
                                 onDragEnter={() => {
                                     if (drag.isDragging) setDragOverItemId(item.id);
                                 }}
-                                onDragLeave={() => {
-                                }}
+                                onDragLeave={() => {}}
                                 onDrop={(e) => {
                                     e.preventDefault();
                                     setDragOverItemId(null);
@@ -244,8 +243,8 @@ export function DriveTable({
                                             className: 'h-4 w-4 mr-2 text-muted-foreground flex-shrink-0',
                                             ...(isFolderType(item.type)
                                                 ? {
-                                                    fill: 'var(--app-drive-light-color)',
-                                                }
+                                                      fill: 'var(--app-drive-light-color)',
+                                                  }
                                                 : {}),
                                         })}
                                         <span className="truncate max-w-[calc(100%-1.5rem)]">
@@ -263,7 +262,7 @@ export function DriveTable({
                                 </TableCell>
                                 <TableCell className="hidden sm:table-cell">
                                     {item.updatedAt
-                                        ? formatDistanceToNow(new Date(item.updatedAt), {addSuffix: true})
+                                        ? formatDistanceToNow(new Date(item.updatedAt), { addSuffix: true })
                                         : 'Unknown'}
                                 </TableCell>
                             </TableRow>
@@ -285,7 +284,7 @@ export function DriveTable({
                             }}
                             className="flex items-center"
                         >
-                            <ArrowRight className="h-4 w-4 mr-2"/>
+                            <ArrowRight className="h-4 w-4 mr-2" />
                             Open
                         </DropdownMenuItem>
                     )}
@@ -297,7 +296,7 @@ export function DriveTable({
                         }}
                         className="flex items-center"
                     >
-                        <Download className="h-4 w-4 mr-2"/>
+                        <Download className="h-4 w-4 mr-2" />
                         Download
                     </DropdownMenuItem>
                 )}
@@ -310,7 +309,7 @@ export function DriveTable({
                         }}
                         className="flex items-center"
                     >
-                        <UserRoundPlus className="h-4 w-4 mr-2"/>
+                        <UserRoundPlus className="h-4 w-4 mr-2" />
                         Edit access
                     </DropdownMenuItem>
                 )}
@@ -322,14 +321,14 @@ export function DriveTable({
                         }}
                         className="flex items-center"
                     >
-                        <Pencil className="h-4 w-4 mr-2"/>
+                        <Pencil className="h-4 w-4 mr-2" />
                         Rename
                     </DropdownMenuItem>
                 )}
 
                 {allowDelete && contextItems.length > 0 && (
                     <>
-                        {isSingleSelect && (onDownload || onShareClick || onRename) && <DropdownMenuSeparator/>}
+                        {isSingleSelect && (onDownload || onShareClick || onRename) && <DropdownMenuSeparator />}
                         <DropdownMenuItem
                             onClick={() => {
                                 onDelete?.(contextItems);
@@ -337,7 +336,7 @@ export function DriveTable({
                             }}
                             className="flex items-center"
                         >
-                            <Trash2 className="h-4 w-4 mr-2"/>
+                            <Trash2 className="h-4 w-4 mr-2" />
                             {isSingleSelect ? 'Delete' : `Delete ${contextItems.length} items`}
                         </DropdownMenuItem>
                     </>

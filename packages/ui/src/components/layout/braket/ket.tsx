@@ -1,11 +1,11 @@
-import {cn} from '../../../lib/utils.ts';
+import { cn } from '../../../lib/utils.ts';
 
 interface BraProps {
     className?: string;
     style?: React.CSSProperties;
 }
 
-export function Ket({className, style, ...props}: BraProps) {
+export function Ket({ className, style, ...props }: BraProps) {
     return (
         <svg
             className={cn('inline align-baseline overflow-visible', className)}
@@ -19,7 +19,7 @@ export function Ket({className, style, ...props}: BraProps) {
             strokeLinecap="round"
             strokeLinejoin="round"
         >
-            <path d="m3 0 4 7.5 -4 7.5"/>
+            <path d="m3 0 4 7.5 -4 7.5" />
         </svg>
     );
 }

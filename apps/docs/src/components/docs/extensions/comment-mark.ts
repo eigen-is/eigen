@@ -1,5 +1,5 @@
-import {Mark, mergeAttributes} from '@tiptap/core';
-import {Plugin, PluginKey} from '@tiptap/pm/state';
+import { Mark, mergeAttributes } from '@tiptap/core';
+import { Plugin, PluginKey } from '@tiptap/pm/state';
 
 export type CommentMarkOptions = {
     HTMLAttributes: Record<string, unknown>;
@@ -32,17 +32,17 @@ export const CommentMark = Mark.create<CommentMarkOptions>({
                 parseHTML: (element: HTMLElement) => element.getAttribute('data-chat-name'),
                 renderHTML: (attributes: Record<string, unknown>) => {
                     if (!attributes.chatName) return {};
-                    return {'data-chat-name': attributes.chatName};
+                    return { 'data-chat-name': attributes.chatName };
                 },
             },
         };
     },
 
     parseHTML() {
-        return [{tag: 'span[data-chat-name]'}];
+        return [{ tag: 'span[data-chat-name]' }];
     },
 
-    renderHTML({HTMLAttributes}) {
+    renderHTML({ HTMLAttributes }) {
         return [
             'span',
             mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, {
@@ -56,14 +56,14 @@ export const CommentMark = Mark.create<CommentMarkOptions>({
         return {
             setComment:
                 (chatName: string) =>
-                    ({commands}) => {
-                        return commands.setMark(this.name, {chatName});
-                    },
+                ({ commands }) => {
+                    return commands.setMark(this.name, { chatName });
+                },
             unsetComment:
                 () =>
-                    ({commands}) => {
-                        return commands.unsetMark(this.name);
-                    },
+                ({ commands }) => {
+                    return commands.unsetMark(this.name);
+                },
         };
     },
 

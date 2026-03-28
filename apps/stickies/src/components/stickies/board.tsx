@@ -1,11 +1,11 @@
-import {DndContext, DragOverlay, PointerSensor, useSensor, useSensors} from '@dnd-kit/core';
-import {horizontalListSortingStrategy, SortableContext} from '@dnd-kit/sortable';
-import {useHotkey} from '@tanstack/react-hotkeys';
-import {EIGEN_STICKIES_COLORS, lightenColor} from '@workspace/lib/constants';
-import {MediaResolverProvider} from '@workspace/lib/drive';
-import {useIsMobile} from '@workspace/lib/media';
-import type {DrivePath} from '@workspace/lib/types/drive';
-import {Card, CardContent} from '@workspace/ui/components/card';
+import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { horizontalListSortingStrategy, SortableContext } from '@dnd-kit/sortable';
+import { useHotkey } from '@tanstack/react-hotkeys';
+import { EIGEN_STICKIES_COLORS, lightenColor } from '@workspace/lib/constants';
+import { MediaResolverProvider } from '@workspace/lib/drive';
+import { useIsMobile } from '@workspace/lib/media';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { Card, CardContent } from '@workspace/ui/components/card';
 import {
     DropdownMenuItem,
     DropdownMenuSeparator,
@@ -13,21 +13,21 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import {ContextMenuAnchor, useContextMenu} from '@workspace/ui/components/layout/context-menu';
-import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
-import {isLightColor} from '@workspace/ui/components/layout/media/color-picker';
-import {Check, CircleOff, Palette, Pencil, Trash2} from 'lucide-react';
-import {useCallback, useState} from 'react';
+import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
+import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
+import { isLightColor } from '@workspace/ui/components/layout/media/color-picker';
+import { Check, CircleOff, Palette, Pencil, Trash2 } from 'lucide-react';
+import { useCallback, useState } from 'react';
 import * as Y from 'yjs';
-import {AddCardDialog} from './add-card-dialog';
-import {AddColumnDialog} from './add-column-dialog';
-import {CardSettingsDialog} from './card-settings-dialog';
-import {Column} from './column';
-import {ColumnSettingsDialog} from './column-settings-dialog';
-import {useBoard} from './hooks/use-board';
-import {useDragAndDrop} from './hooks/use-drag-and-drop';
-import {Toolbar} from './toolbar';
-import type {CardItem, ColumnItem} from './types';
+import { AddCardDialog } from './add-card-dialog';
+import { AddColumnDialog } from './add-column-dialog';
+import { CardSettingsDialog } from './card-settings-dialog';
+import { Column } from './column';
+import { ColumnSettingsDialog } from './column-settings-dialog';
+import { useBoard } from './hooks/use-board';
+import { useDragAndDrop } from './hooks/use-drag-and-drop';
+import { Toolbar } from './toolbar';
+import type { CardItem, ColumnItem } from './types';
 
 function jsonToYType(value: unknown): unknown {
     if (Array.isArray(value)) {
@@ -53,7 +53,7 @@ type StickiesBoardProps = {
     onAccessDialogOpen: () => void;
 };
 
-export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDialogOpen}: StickiesBoardProps) {
+export function StickiesBoard({ ownerId, path, canWrite, chatFolderId, onAccessDialogOpen }: StickiesBoardProps) {
     const {
         board,
         selectedColumnId,
@@ -68,7 +68,7 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
         undoManager,
     } = useBoard(ownerId, path.mountId, path.id, chatFolderId);
 
-    const {dragState, handleDragStart, handleDragEnd} = useDragAndDrop({board, yjsDoc});
+    const { dragState, handleDragStart, handleDragEnd } = useDragAndDrop({ board, yjsDoc });
 
     useHotkey(
         'Mod+Z',
@@ -76,7 +76,7 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
             e.preventDefault();
             undoManager?.undo();
         },
-        {enabled: canWrite && !!undoManager},
+        { enabled: canWrite && !!undoManager },
     );
 
     useHotkey(
@@ -85,7 +85,7 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
             e.preventDefault();
             undoManager?.redo();
         },
-        {enabled: canWrite && !!undoManager},
+        { enabled: canWrite && !!undoManager },
     );
 
     useHotkey(
@@ -94,7 +94,7 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
             e.preventDefault();
             undoManager?.redo();
         },
-        {enabled: canWrite && !!undoManager},
+        { enabled: canWrite && !!undoManager },
     );
 
     const isMobile = useIsMobile();
@@ -178,7 +178,7 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
 
     const sensors = useSensors(
         useSensor(PointerSensor, {
-            activationConstraint: {distance: 5},
+            activationConstraint: { distance: 5 },
         }),
     );
 
@@ -198,7 +198,7 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
                     <CardContent className={`p-3 text-sm ${!card.color ? 'bg-accent' : ''}`}>
                         {card.title}
                         {card.description && (
-                            <p className="text-xs mt-1 line-clamp-2" style={{opacity: 0.7}}>
+                            <p className="text-xs mt-1 line-clamp-2" style={{ opacity: 0.7 }}>
                                 {card.description}
                             </p>
                         )}
@@ -252,13 +252,13 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
                         style={
                             board.columnOrder.length > 0
                                 ? {
-                                    padding: 0,
-                                    scrollSnapType: 'x mandatory',
-                                    scrollBehavior: 'smooth',
-                                }
+                                      padding: 0,
+                                      scrollSnapType: 'x mandatory',
+                                      scrollBehavior: 'smooth',
+                                  }
                                 : {
-                                    visibility: 'hidden',
-                                }
+                                      visibility: 'hidden',
+                                  }
                         }
                     >
                         <DndContext
@@ -267,7 +267,7 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
                             onDragEnd={handleDragEnd}
                             autoScroll={{
                                 enabled: true,
-                                threshold: {x: 0.2, y: 0.2},
+                                threshold: { x: 0.2, y: 0.2 },
                                 acceleration: 10,
                                 interval: 10,
                                 layoutShiftCompensation: false,
@@ -334,11 +334,11 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
 
                         <ContextMenuAnchor contextMenu={cardContextMenu}>
                             <DropdownMenuItem onClick={handleCardContextEdit}>
-                                <Pencil className="h-4 w-4 mr-2"/> Edit
+                                <Pencil className="h-4 w-4 mr-2" /> Edit
                             </DropdownMenuItem>
                             <DropdownMenuSub>
                                 <DropdownMenuSubTrigger>
-                                    <Palette className="h-4 w-4 mr-2"/> Color
+                                    <Palette className="h-4 w-4 mr-2" /> Color
                                 </DropdownMenuSubTrigger>
                                 <DropdownMenuSubContent>
                                     <div className="flex gap-1 p-2">
@@ -347,20 +347,20 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
                                             title="No color"
                                             onClick={() => handleCardContextColor('')}
                                         >
-                                            <CircleOff className="h-2.5 w-2.5 text-muted-foreground"/>
+                                            <CircleOff className="h-2.5 w-2.5 text-muted-foreground" />
                                         </button>
                                         {EIGEN_STICKIES_COLORS[0].map((c) => (
                                             <button
                                                 key={c.value}
                                                 className="h-4 w-4 rounded-full border border-border/50 hover:scale-125 transition-transform flex items-center justify-center"
-                                                style={{backgroundColor: c.value}}
+                                                style={{ backgroundColor: c.value }}
                                                 title={c.label}
                                                 onClick={() => handleCardContextColor(c.value)}
                                             >
                                                 {cardContextMenu.item?.color === c.value && (
                                                     <Check
                                                         className="h-2 w-2"
-                                                        style={{color: isLightColor(c.value) ? '#000' : '#fff'}}
+                                                        style={{ color: isLightColor(c.value) ? '#000' : '#fff' }}
                                                     />
                                                 )}
                                             </button>
@@ -368,9 +368,9 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
                                     </div>
                                 </DropdownMenuSubContent>
                             </DropdownMenuSub>
-                            <DropdownMenuSeparator/>
+                            <DropdownMenuSeparator />
                             <DropdownMenuItem variant="destructive" onClick={handleCardContextDelete}>
-                                <Trash2 className="h-4 w-4 mr-2"/> Delete
+                                <Trash2 className="h-4 w-4 mr-2" /> Delete
                             </DropdownMenuItem>
                         </ContextMenuAnchor>
 

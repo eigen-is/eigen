@@ -1,6 +1,6 @@
-import {getMailMessageDownloadUrl} from '@workspace/lib/api';
-import {useAuth} from '@workspace/lib/auth';
-import type {MaildirMailbox} from '@workspace/lib/types/mail';
+import { getMailMessageDownloadUrl } from '@workspace/lib/api';
+import { useAuth } from '@workspace/lib/auth';
+import type { MaildirMailbox } from '@workspace/lib/types/mail';
 import {
     DropdownMenuItem,
     DropdownMenuSeparator,
@@ -8,8 +8,8 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import {ucfirst} from '@workspace/ui/lib/utils';
-import {AlertTriangle, Archive, Download, Forward, Printer, Reply, ReplyAll, Trash2} from 'lucide-react';
+import { ucfirst } from '@workspace/ui/lib/utils';
+import { AlertTriangle, Archive, Download, Forward, Printer, Reply, ReplyAll, Trash2 } from 'lucide-react';
 
 type EmailContextMenuProps = {
     messageIds: string[];
@@ -28,21 +28,21 @@ type EmailContextMenuProps = {
 };
 
 export function EmailContextMenu({
-                                     messageIds,
-                                     isSingleSelect,
-                                     mailboxes = [],
-                                     currentMailboxId = '',
-                                     onReply,
-                                     onReplyAll,
-                                     onForward,
-                                     onArchive,
-                                     onReportSpam,
-                                     onDelete,
-                                     onMoveToFolder,
-                                     onClose,
-                                     onPrint,
-                                 }: EmailContextMenuProps) {
-    const {user} = useAuth();
+    messageIds,
+    isSingleSelect,
+    mailboxes = [],
+    currentMailboxId = '',
+    onReply,
+    onReplyAll,
+    onForward,
+    onArchive,
+    onReportSpam,
+    onDelete,
+    onMoveToFolder,
+    onClose,
+    onPrint,
+}: EmailContextMenuProps) {
+    const { user } = useAuth();
     const firstId = messageIds[0] || '';
 
     return (
@@ -55,10 +55,10 @@ export function EmailContextMenu({
                             onClose();
                         }}
                     >
-                        <Printer className="mr-2"/>
+                        <Printer className="mr-2" />
                         Print
                     </DropdownMenuItem>
-                    <DropdownMenuSeparator/>
+                    <DropdownMenuSeparator />
                 </>
             )}
 
@@ -70,7 +70,7 @@ export function EmailContextMenu({
                             onClose();
                         }}
                     >
-                        <Reply className="mr-2"/>
+                        <Reply className="mr-2" />
                         Reply
                     </DropdownMenuItem>
                     <DropdownMenuItem
@@ -79,7 +79,7 @@ export function EmailContextMenu({
                             onClose();
                         }}
                     >
-                        <ReplyAll className="mr-2"/>
+                        <ReplyAll className="mr-2" />
                         Reply All
                     </DropdownMenuItem>
                     <DropdownMenuItem
@@ -88,10 +88,10 @@ export function EmailContextMenu({
                             onClose();
                         }}
                     >
-                        <Forward className="mr-2"/>
+                        <Forward className="mr-2" />
                         Forward
                     </DropdownMenuItem>
-                    <DropdownMenuSeparator/>
+                    <DropdownMenuSeparator />
                 </>
             )}
 
@@ -101,7 +101,7 @@ export function EmailContextMenu({
                     onClose();
                 }}
             >
-                <Archive className="mr-2"/>
+                <Archive className="mr-2" />
                 {isSingleSelect ? 'Archive' : `Archive ${messageIds.length} emails`}
             </DropdownMenuItem>
             <DropdownMenuItem
@@ -110,7 +110,7 @@ export function EmailContextMenu({
                     onClose();
                 }}
             >
-                <AlertTriangle className="mr-2"/>
+                <AlertTriangle className="mr-2" />
                 Report Spam
             </DropdownMenuItem>
             <DropdownMenuItem
@@ -119,11 +119,11 @@ export function EmailContextMenu({
                     onClose();
                 }}
             >
-                <Trash2 className="mr-2"/>
+                <Trash2 className="mr-2" />
                 {isSingleSelect ? 'Delete' : `Delete ${messageIds.length} emails`}
             </DropdownMenuItem>
 
-            <DropdownMenuSeparator/>
+            <DropdownMenuSeparator />
 
             {isSingleSelect && (
                 <>
@@ -135,10 +135,10 @@ export function EmailContextMenu({
                             onClose();
                         }}
                     >
-                        <Download className="mr-2"/>
+                        <Download className="mr-2" />
                         Download
                     </DropdownMenuItem>
-                    <DropdownMenuSeparator/>
+                    <DropdownMenuSeparator />
                 </>
             )}
 

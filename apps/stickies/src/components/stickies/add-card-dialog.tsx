@@ -1,13 +1,13 @@
-import {useAuth} from '@workspace/lib/auth';
-import {EIGEN_STICKIES_COLORS} from '@workspace/lib/constants';
-import {Button} from '@workspace/ui/components/button';
-import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
-import {Input} from '@workspace/ui/components/input';
-import {Label} from '@workspace/ui/components/label';
-import {ColorPicker} from '@workspace/ui/components/layout/media/color-picker';
-import {Textarea} from '@workspace/ui/components/textarea';
-import {useState} from 'react';
-import type {CardItem} from './types';
+import { useAuth } from '@workspace/lib/auth';
+import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
+import { Button } from '@workspace/ui/components/button';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { Input } from '@workspace/ui/components/input';
+import { Label } from '@workspace/ui/components/label';
+import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker';
+import { Textarea } from '@workspace/ui/components/textarea';
+import { useState } from 'react';
+import type { CardItem } from './types';
 
 type AddCardDialogProps = {
     isOpen: boolean;
@@ -16,12 +16,12 @@ type AddCardDialogProps = {
     columnId: string | null;
 };
 
-export function AddCardDialog({isOpen, onClose, onAddCard, columnId}: AddCardDialogProps) {
+export function AddCardDialog({ isOpen, onClose, onAddCard, columnId }: AddCardDialogProps) {
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [color, setColor] = useState(EIGEN_STICKIES_COLORS[0][1].value);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const {user} = useAuth();
+    const { user } = useAuth();
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -76,7 +76,7 @@ export function AddCardDialog({isOpen, onClose, onAddCard, columnId}: AddCardDia
                         </div>
                         <div className="grid gap-2">
                             <Label>Color</Label>
-                            <ColorPicker value={color} onChange={setColor} colors={EIGEN_STICKIES_COLORS} columns={8}/>
+                            <ColorPicker value={color} onChange={setColor} colors={EIGEN_STICKIES_COLORS} columns={8} />
                         </div>
                     </div>
                     <DialogFooter>

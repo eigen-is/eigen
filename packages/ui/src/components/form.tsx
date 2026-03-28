@@ -1,9 +1,9 @@
 'use client';
 
 import type * as LabelPrimitive from '@radix-ui/react-label';
-import {Slot} from '@radix-ui/react-slot';
-import {Label} from '@workspace/ui/components/label';
-import {cn} from '@workspace/ui/lib/utils';
+import { Slot } from '@radix-ui/react-slot';
+import { Label } from '@workspace/ui/components/label';
+import { cn } from '@workspace/ui/lib/utils';
 import * as React from 'react';
 import {
     Controller,
@@ -30,10 +30,10 @@ const FormField = <
     TFieldValues extends FieldValues = FieldValues,
     TName extends FieldPath<TFieldValues> = FieldPath<TFieldValues>,
 >({
-                        ...props
-                    }: ControllerProps<TFieldValues, TName>) => {
+    ...props
+}: ControllerProps<TFieldValues, TName>) => {
     return (
-        <FormFieldContext.Provider value={{name: props.name}}>
+        <FormFieldContext.Provider value={{ name: props.name }}>
             <Controller {...props} />
         </FormFieldContext.Provider>
     );
@@ -42,15 +42,15 @@ const FormField = <
 const useFormField = () => {
     const fieldContext = React.useContext(FormFieldContext);
     const itemContext = React.useContext(FormItemContext);
-    const {getFieldState} = useFormContext();
-    const formState = useFormState({name: fieldContext.name});
+    const { getFieldState } = useFormContext();
+    const formState = useFormState({ name: fieldContext.name });
     const fieldState = getFieldState(fieldContext.name, formState);
 
     if (!fieldContext) {
         throw new Error('useFormField should be used within <FormField>');
     }
 
-    const {id} = itemContext;
+    const { id } = itemContext;
 
     return {
         id,
@@ -68,18 +68,18 @@ type FormItemContextValue = {
 
 const FormItemContext = React.createContext<FormItemContextValue>({} as FormItemContextValue);
 
-function FormItem({className, ...props}: React.ComponentProps<'div'>) {
+function FormItem({ className, ...props }: React.ComponentProps<'div'>) {
     const id = React.useId();
 
     return (
-        <FormItemContext.Provider value={{id}}>
+        <FormItemContext.Provider value={{ id }}>
             <div data-slot="form-item" className={cn('grid gap-2', className)} {...props} />
         </FormItemContext.Provider>
     );
 }
 
-function FormLabel({className, ...props}: React.ComponentProps<typeof LabelPrimitive.Root>) {
-    const {error, formItemId} = useFormField();
+function FormLabel({ className, ...props }: React.ComponentProps<typeof LabelPrimitive.Root>) {
+    const { error, formItemId } = useFormField();
 
     return (
         <Label
@@ -92,8 +92,8 @@ function FormLabel({className, ...props}: React.ComponentProps<typeof LabelPrimi
     );
 }
 
-function FormControl({...props}: React.ComponentProps<typeof Slot>) {
-    const {error, formItemId, formDescriptionId, formMessageId} = useFormField();
+function FormControl({ ...props }: React.ComponentProps<typeof Slot>) {
+    const { error, formItemId, formDescriptionId, formMessageId } = useFormField();
 
     return (
         <Slot
@@ -106,8 +106,8 @@ function FormControl({...props}: React.ComponentProps<typeof Slot>) {
     );
 }
 
-function FormDescription({className, ...props}: React.ComponentProps<'p'>) {
-    const {formDescriptionId} = useFormField();
+function FormDescription({ className, ...props }: React.ComponentProps<'p'>) {
+    const { formDescriptionId } = useFormField();
 
     return (
         <p
@@ -119,8 +119,8 @@ function FormDescription({className, ...props}: React.ComponentProps<'p'>) {
     );
 }
 
-function FormMessage({className, ...props}: React.ComponentProps<'p'>) {
-    const {error, formMessageId} = useFormField();
+function FormMessage({ className, ...props }: React.ComponentProps<'p'>) {
+    const { error, formMessageId } = useFormField();
     const body = error ? String(error?.message ?? '') : props.children;
 
     if (!body) {
@@ -134,4 +134,4 @@ function FormMessage({className, ...props}: React.ComponentProps<'p'>) {
     );
 }
 
-export {Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage, useFormField};
+export { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage, useFormField };

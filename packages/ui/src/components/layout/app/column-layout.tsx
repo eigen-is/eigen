@@ -1,13 +1,13 @@
-import {ArrowLeft} from 'lucide-react';
-import {createContext, type ReactNode, useContext} from 'react';
-import {Button} from '../../button.tsx';
-import {useLayout} from './layout-context.tsx';
+import { ArrowLeft } from 'lucide-react';
+import { createContext, type ReactNode, useContext } from 'react';
+import { Button } from '../../button.tsx';
+import { useLayout } from './layout-context.tsx';
 
 type ColumnContextType = {
     mobileColumn: string | null;
 };
 
-const ColumnContext = createContext<ColumnContextType>({mobileColumn: null});
+const ColumnContext = createContext<ColumnContextType>({ mobileColumn: null });
 
 type ColumnProps = {
     id: string;
@@ -18,17 +18,17 @@ type ColumnProps = {
     className?: string;
 };
 
-function Column({id, width, toolbar, onBack, children, className}: ColumnProps) {
-    const {isMobile} = useLayout();
-    const {mobileColumn} = useContext(ColumnContext);
+function Column({ id, width, toolbar, onBack, children, className }: ColumnProps) {
+    const { isMobile } = useLayout();
+    const { mobileColumn } = useContext(ColumnContext);
 
     if (isMobile && mobileColumn !== null && mobileColumn !== id) return null;
 
     const style = isMobile
-        ? {width: '100%', flex: '1 1 auto'}
+        ? { width: '100%', flex: '1 1 auto' }
         : width === 'flex'
-            ? {flex: '1 1 auto', minWidth: 0}
-            : {width, flexShrink: 0};
+          ? { flex: '1 1 auto', minWidth: 0 }
+          : { width, flexShrink: 0 };
 
     return (
         <div className={`h-full flex flex-col overflow-hidden ${className || ''}`} style={style}>
@@ -37,9 +37,9 @@ function Column({id, width, toolbar, onBack, children, className}: ColumnProps) 
                     {isMobile && onBack && (
                         <>
                             <Button variant="ghost" size="icon" className="h-8 w-8 mr-1" onClick={onBack}>
-                                <ArrowLeft className="h-4 w-4"/>
+                                <ArrowLeft className="h-4 w-4" />
                             </Button>
-                            <div className="h-6 w-[1px] bg-border mx-1"/>
+                            <div className="h-6 w-[1px] bg-border mx-1" />
                         </>
                     )}
                     {toolbar}
@@ -55,15 +55,15 @@ type ColumnLayoutProps = {
     children: ReactNode;
 };
 
-function ColumnLayout({mobileColumn, children}: ColumnLayoutProps) {
-    const {isMobile} = useLayout();
+function ColumnLayout({ mobileColumn, children }: ColumnLayoutProps) {
+    const { isMobile } = useLayout();
 
     return (
-        <ColumnContext.Provider value={{mobileColumn: isMobile ? (mobileColumn ?? null) : null}}>
+        <ColumnContext.Provider value={{ mobileColumn: isMobile ? (mobileColumn ?? null) : null }}>
             <div className="flex flex-1 h-full overflow-hidden">{children}</div>
         </ColumnContext.Provider>
     );
 }
 
-export type {ColumnProps};
-export {Column, ColumnLayout};
+export type { ColumnProps };
+export { Column, ColumnLayout };

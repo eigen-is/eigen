@@ -1,11 +1,11 @@
-import {useHotkey} from '@tanstack/react-hotkeys';
-import {getDocumentUrl, getInlineEditUrl} from '@workspace/lib/api';
-import {useTextPreview} from '@workspace/lib/drive';
-import type {DrivePath} from '@workspace/lib/types/drive';
-import {isDocumentType, isInlineEditable} from '@workspace/lib/types/drive';
-import {ChevronLeft, ChevronRight, Download, ExternalLink, Loader2, X} from 'lucide-react';
-import type {PreviewMode} from '../preview-provider/preview-provider';
-import {getFileIcon} from './file-icon-helper';
+import { useHotkey } from '@tanstack/react-hotkeys';
+import { getDocumentUrl, getInlineEditUrl } from '@workspace/lib/api';
+import { useTextPreview } from '@workspace/lib/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { isDocumentType, isInlineEditable } from '@workspace/lib/types/drive';
+import { ChevronLeft, ChevronRight, Download, ExternalLink, Loader2, X } from 'lucide-react';
+import type { PreviewMode } from '../preview-provider/preview-provider';
+import { getFileIcon } from './file-icon-helper';
 
 type FilePreviewProps = {
     previewMode: PreviewMode;
@@ -24,41 +24,41 @@ type FilePreviewProps = {
 };
 
 export function FilePreview({
-                                previewMode,
-                                previewUrl,
-                                thumbnailUrl,
-                                embedUrl,
-                                downloadUrl,
-                                fileName,
-                                aspectRatio,
-                                hasPrev,
-                                hasNext,
-                                path,
-                                onClose,
-                                onPrev,
-                                onNext,
-                            }: FilePreviewProps) {
-    useHotkey('Escape', () => onClose(), {enabled: true});
+    previewMode,
+    previewUrl,
+    thumbnailUrl,
+    embedUrl,
+    downloadUrl,
+    fileName,
+    aspectRatio,
+    hasPrev,
+    hasNext,
+    path,
+    onClose,
+    onPrev,
+    onNext,
+}: FilePreviewProps) {
+    useHotkey('Escape', () => onClose(), { enabled: true });
     useHotkey(
         'ArrowLeft',
         () => {
             if (hasPrev) onPrev();
         },
-        {enabled: true},
+        { enabled: true },
     );
     useHotkey(
         'ArrowRight',
         () => {
             if (hasNext) onNext();
         },
-        {enabled: true},
+        { enabled: true },
     );
 
     const openUrl = isDocumentType(path.type)
         ? getDocumentUrl(path) || undefined
         : isInlineEditable(path.mimeType, path.name)
-            ? getInlineEditUrl(path.ownerId, path.mountId, path.id)
-            : undefined;
+          ? getInlineEditUrl(path.ownerId, path.mountId, path.id)
+          : undefined;
 
     return (
         <div className="fixed inset-0 z-[100] bg-black/80 flex flex-col animate-in fade-in" onClick={onClose}>
@@ -72,13 +72,13 @@ export function FilePreview({
                 </div>
                 <div className="flex items-center gap-1">
                     <NavButton onClick={onPrev} disabled={!hasPrev} title="Previous (←)">
-                        <ChevronLeft className="size-4"/>
+                        <ChevronLeft className="size-4" />
                     </NavButton>
                     <NavButton onClick={onNext} disabled={!hasNext} title="Next (→)">
-                        <ChevronRight className="size-4"/>
+                        <ChevronRight className="size-4" />
                     </NavButton>
                     <NavButton onClick={onClose} title="Close (Esc)">
-                        <X className="size-4"/>
+                        <X className="size-4" />
                     </NavButton>
                 </div>
             </div>
@@ -87,12 +87,12 @@ export function FilePreview({
             <div
                 className="flex-1 flex items-center justify-center overflow-hidden min-h-0"
                 onClick={onClose}
-                style={{cursor: 'zoom-out'}}
+                style={{ cursor: 'zoom-out' }}
             >
                 <div
                     className="max-w-[90vw] max-h-[calc(100vh-7rem)] flex items-center justify-center"
                     onClick={(e) => e.stopPropagation()}
-                    style={{cursor: 'default'}}
+                    style={{ cursor: 'default' }}
                 >
                     {previewMode === 'image' && (
                         <ProgressiveImage
@@ -108,22 +108,22 @@ export function FilePreview({
                             controls
                             autoPlay
                             className="max-w-full max-h-[calc(100vh-7rem)] rounded"
-                            style={aspectRatio ? {aspectRatio: `${aspectRatio}`} : undefined}
+                            style={aspectRatio ? { aspectRatio: `${aspectRatio}` } : undefined}
                         />
                     )}
                     {previewMode === 'audio' && (
                         <div className="bg-background rounded-lg p-8 flex flex-col items-center gap-4">
                             <span className="text-sm text-muted-foreground">{fileName}</span>
-                            <audio src={embedUrl} controls autoPlay className="w-80"/>
+                            <audio src={embedUrl} controls autoPlay className="w-80" />
                         </div>
                     )}
                     {previewMode === 'pdf' && (
-                        <iframe src={embedUrl} className="w-[80vw] h-[calc(100vh-7rem)] rounded bg-background"/>
+                        <iframe src={embedUrl} className="w-[80vw] h-[calc(100vh-7rem)] rounded bg-background" />
                     )}
-                    {previewMode === 'text' && <TextPreviewContent path={path}/>}
+                    {previewMode === 'text' && <TextPreviewContent path={path} />}
                     {previewMode === 'fallback' && (
                         <div className="flex flex-col items-center gap-4 text-white">
-                            {getFileIcon(path.mimeType, path.type, {className: 'size-16 text-muted-foreground'})}
+                            {getFileIcon(path.mimeType, path.type, { className: 'size-16 text-muted-foreground' })}
                             <span className="text-lg font-medium">{fileName}</span>
                             <span className="text-sm text-muted-foreground">No preview available</span>
                         </div>
@@ -138,13 +138,13 @@ export function FilePreview({
             >
                 {openUrl && (
                     <FooterButton href={openUrl}>
-                        <ExternalLink className="size-3.5"/>
+                        <ExternalLink className="size-3.5" />
                         Open
                     </FooterButton>
                 )}
                 {downloadUrl && (
                     <FooterButton href={downloadUrl} download>
-                        <Download className="size-3.5"/>
+                        <Download className="size-3.5" />
                         Download
                     </FooterButton>
                 )}
@@ -153,13 +153,13 @@ export function FilePreview({
     );
 }
 
-function TextPreviewContent({path}: { path: DrivePath }) {
-    const {data, isLoading} = useTextPreview(path.ownerId, path.mountId, path.id, true);
+function TextPreviewContent({ path }: { path: DrivePath }) {
+    const { data, isLoading } = useTextPreview(path.ownerId, path.mountId, path.id, true);
 
     if (isLoading) {
         return (
             <div className="flex items-center justify-center w-[80vw] h-[calc(100vh-7rem)]">
-                <Loader2 className="size-6 text-white animate-spin"/>
+                <Loader2 className="size-6 text-white animate-spin" />
             </div>
         );
     }
@@ -174,17 +174,17 @@ function TextPreviewContent({path}: { path: DrivePath }) {
 
     return (
         <div className="w-[80vw] h-[calc(100vh-7rem)] overflow-auto rounded bg-background">
-            <div className="eigen-prose p-8 max-w-[52rem] mx-auto" dangerouslySetInnerHTML={{__html: data.body}}/>
+            <div className="eigen-prose p-8 max-w-[52rem] mx-auto" dangerouslySetInnerHTML={{ __html: data.body }} />
         </div>
     );
 }
 
 function NavButton({
-                       onClick,
-                       disabled,
-                       title,
-                       children,
-                   }: {
+    onClick,
+    disabled,
+    title,
+    children,
+}: {
     onClick: () => void;
     disabled?: boolean;
     title: string;
@@ -203,11 +203,11 @@ function NavButton({
 }
 
 function ProgressiveImage({
-                              thumbnailUrl,
-                              previewUrl,
-                              alt,
-                              aspectRatio,
-                          }: {
+    thumbnailUrl,
+    previewUrl,
+    alt,
+    aspectRatio,
+}: {
     thumbnailUrl?: string;
     previewUrl: string;
     alt: string;
@@ -218,24 +218,24 @@ function ProgressiveImage({
     // reach the close handler instead of being swallowed by stopPropagation.
     const style: React.CSSProperties = aspectRatio
         ? {
-            width: `min(90vw, calc((100vh - 7rem) * ${aspectRatio}))`,
-            height: `min(calc(100vh - 7rem), calc(90vw / ${aspectRatio}))`,
-        }
-        : {width: '90vw', height: 'calc(100vh - 7rem)'};
+              width: `min(90vw, calc((100vh - 7rem) * ${aspectRatio}))`,
+              height: `min(calc(100vh - 7rem), calc(90vw / ${aspectRatio}))`,
+          }
+        : { width: '90vw', height: 'calc(100vh - 7rem)' };
 
     if (!thumbnailUrl) {
-        return <img src={previewUrl} alt={alt} className="rounded object-contain" style={style}/>;
+        return <img src={previewUrl} alt={alt} className="rounded object-contain" style={style} />;
     }
 
     return (
         <div className="relative" style={style}>
-            <img src={thumbnailUrl} alt={alt} className="w-full h-full rounded object-contain"/>
-            <img src={previewUrl} alt={alt} className="absolute inset-0 w-full h-full rounded object-contain"/>
+            <img src={thumbnailUrl} alt={alt} className="w-full h-full rounded object-contain" />
+            <img src={previewUrl} alt={alt} className="absolute inset-0 w-full h-full rounded object-contain" />
         </div>
     );
 }
 
-function FooterButton({href, download, children}: { href: string; download?: boolean; children: React.ReactNode }) {
+function FooterButton({ href, download, children }: { href: string; download?: boolean; children: React.ReactNode }) {
     return (
         <a
             href={href}

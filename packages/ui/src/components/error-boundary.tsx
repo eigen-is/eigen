@@ -1,4 +1,4 @@
-import React, {type ReactNode} from 'react';
+import React, { type ReactNode } from 'react';
 
 type ErrorBoundaryProps = {
     children: ReactNode;
@@ -11,10 +11,10 @@ type ErrorBoundaryState = {
 
 // React requires class components for error boundaries — no hooks equivalent exists.
 export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-    state: ErrorBoundaryState = {hasError: false};
+    state: ErrorBoundaryState = { hasError: false };
 
     static getDerivedStateFromError(): ErrorBoundaryState {
-        return {hasError: true};
+        return { hasError: true };
     }
 
     componentDidCatch(error: Error, info: React.ErrorInfo) {
@@ -23,7 +23,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 
     render() {
         if (this.state.hasError) {
-            return this.props.fallback ?? <ErrorFallback/>;
+            return this.props.fallback ?? <ErrorFallback />;
         }
         return this.props.children;
     }
