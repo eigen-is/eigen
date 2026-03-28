@@ -207,3 +207,22 @@ export type DriveContextType = {
     rootPath: DrivePath | null;
     mountId: string;
 };
+
+export type InviteResult = {
+    alreadyHasAccess: boolean;
+    targetPathId: string;
+};
+
+export type EditorContent = {
+    editMode: string;
+    content: string;
+    frontmatter: string | null;
+    mimeType: string;
+    updatedAt: string | Date;
+};
+
+export type EditorSaveResult = {
+    conflict: boolean;
+    updatedAt?: string;
+    currentUpdatedAt?: string;
+};

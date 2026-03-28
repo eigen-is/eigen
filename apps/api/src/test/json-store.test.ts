@@ -1,8 +1,8 @@
-import {describe, expect, test} from 'bun:test';
-import {mkdirSync, readFileSync, writeFileSync} from 'fs';
-import {join} from 'path';
-import {JsonStore, LocalFilesystem} from '../lib/core';
-import {TEST_DATA_DIR} from './setup';
+import { describe, expect, test } from 'bun:test';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { JsonStore, LocalFilesystem } from '../lib/core';
+import { TEST_DATA_DIR } from './setup';
 
 const TEST_DIR = join(TEST_DATA_DIR, 'json-store');
 
@@ -32,27 +32,27 @@ const defaults: TestConfig = {
 
 function createStore(subdir: string) {
     const dir = join(TEST_DIR, subdir);
-    mkdirSync(dir, {recursive: true});
+    mkdirSync(dir, { recursive: true });
     const fs = new LocalFilesystem(dir);
-    return {fs, store: new JsonStore<TestConfig>(fs, 'config.json', defaults)};
+    return { fs, store: new JsonStore<TestConfig>(fs, 'config.json', defaults) };
 }
 
 describe('JsonStore', () => {
     test('returns defaults before load when file does not exist', () => {
-        const {store} = createStore('no-file');
+        const { store } = createStore('no-file');
         expect(store.get()).toEqual(defaults);
     });
 
     test('load returns defaults when file does not exist', async () => {
-        const {store} = createStore('load-missing');
+        const { store } = createStore('load-missing');
         await store.load();
         expect(store.get()).toEqual(defaults);
     });
 
     test('set writes and persists data', async () => {
-        const {store} = createStore('set-basic');
+        const { store } = createStore('set-basic');
         await store.load();
-        await store.set({name: 'updated'});
+        await store.set({ name: 'updated' });
         expect(store.get().name).toBe('updated');
         expect(store.get().count).toBe(0);
 
@@ -63,10 +63,10 @@ describe('JsonStore', () => {
     });
 
     test('set deep-merges nested objects', async () => {
-        const {store} = createStore('deep-merge');
+        const { store } = createStore('deep-merge');
         await store.load();
 
-        await store.set({nested: {enabled: false}});
+        await store.set({ nested: { enabled: false } });
         const result = store.get();
         expect(result.nested.enabled).toBe(false);
         expect(result.nested.deep.value).toBe(42);
@@ -74,29 +74,29 @@ describe('JsonStore', () => {
     });
 
     test('set replaces arrays (no merge)', async () => {
-        const {store} = createStore('array-replace');
+        const { store } = createStore('array-replace');
         await store.load();
 
-        await store.set({nested: {tags: ['a', 'b']}});
+        await store.set({ nested: { tags: ['a', 'b'] } });
         expect(store.get().nested.tags).toEqual(['a', 'b']);
 
-        await store.set({nested: {tags: ['c']}});
+        await store.set({ nested: { tags: ['c'] } });
         expect(store.get().nested.tags).toEqual(['c']);
     });
 
     test('set deep-merges deeply nested objects', async () => {
-        const {store} = createStore('deep-nested');
+        const { store } = createStore('deep-nested');
         await store.load();
 
-        await store.set({nested: {deep: {value: 99}}});
+        await store.set({ nested: { deep: { value: 99 } } });
         expect(store.get().nested.deep.value).toBe(99);
         expect(store.get().nested.enabled).toBe(true);
     });
 
     test('load reads existing file and merges with defaults', async () => {
         const dir = join(TEST_DIR, 'load-existing');
-        mkdirSync(dir, {recursive: true});
-        writeFileSync(join(dir, 'config.json'), JSON.stringify({name: 'from-disk', extra: 'ignored'}));
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(join(dir, 'config.json'), JSON.stringify({ name: 'from-disk', extra: 'ignored' }));
 
         const fs = new LocalFilesystem(dir);
         const store = new JsonStore<TestConfig>(fs, 'config.json', defaults);
@@ -109,7 +109,7 @@ describe('JsonStore', () => {
 
     test('load falls back to defaults on corrupt JSON', async () => {
         const dir = join(TEST_DIR, 'corrupt');
-        mkdirSync(dir, {recursive: true});
+        mkdirSync(dir, { recursive: true });
         writeFileSync(join(dir, 'config.json'), '{invalid json!!!');
 
         const fs = new LocalFilesystem(dir);
@@ -120,21 +120,21 @@ describe('JsonStore', () => {
     });
 
     test('atomic write: no .tmp file left after save', async () => {
-        const {store, fs} = createStore('atomic');
+        const { store, fs } = createStore('atomic');
         await store.load();
-        await store.set({name: 'atomic-test'});
+        await store.set({ name: 'atomic-test' });
 
         expect(await fs.file('config.json').exists()).toBe(true);
         expect(await fs.file('config.json.tmp').exists()).toBe(false);
     });
 
     test('multiple sets accumulate changes', async () => {
-        const {store} = createStore('multi-set');
+        const { store } = createStore('multi-set');
         await store.load();
 
-        await store.set({name: 'first'});
-        await store.set({count: 5});
-        await store.set({nested: {enabled: false}});
+        await store.set({ name: 'first' });
+        await store.set({ count: 5 });
+        await store.set({ nested: { enabled: false } });
 
         const result = store.get();
         expect(result.name).toBe('first');
@@ -145,12 +145,12 @@ describe('JsonStore', () => {
 
     test('second instance reads what first instance wrote', async () => {
         const dir = join(TEST_DIR, 'two-instances');
-        mkdirSync(dir, {recursive: true});
+        mkdirSync(dir, { recursive: true });
         const fs = new LocalFilesystem(dir);
 
         const store1 = new JsonStore<TestConfig>(fs, 'config.json', defaults);
         await store1.load();
-        await store1.set({name: 'written-by-1', nested: {deep: {value: 7}}});
+        await store1.set({ name: 'written-by-1', nested: { deep: { value: 7 } } });
 
         const store2 = new JsonStore<TestConfig>(fs, 'config.json', defaults);
         await store2.load();

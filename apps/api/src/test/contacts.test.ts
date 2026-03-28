@@ -1,5 +1,7 @@
-import {beforeAll, describe, expect, test} from 'bun:test';
-import {authedRequest, getTestContext} from './setup';
+import { beforeAll, describe, expect, test } from 'bun:test';
+import type { Contact } from '@workspace/lib/types/contact';
+import type { Label } from '@workspace/lib/types/label';
+import { assertJson, authedRequest, findOrFail, getTestContext } from './setup';
 
 describe('Contacts', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -10,92 +12,97 @@ describe('Contacts', () => {
     beforeAll(async () => {
         ctx = await getTestContext();
 
-        const res = await authedRequest(ctx.alice.user.sessionToken,
-            `/contacts/${ctx.alice.user.id}/contacts`);
-        const data = await res.json() as any[];
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/contacts/${ctx.alice.user.id}/contacts`);
+        const data = await assertJson<Contact[]>(res);
         initialContactCount = data.length;
     });
 
     describe('Contact CRUD', () => {
         test('create contact', async () => {
-            const res = await authedRequest(ctx.alice.user.sessionToken,
-                `/contacts/${ctx.alice.user.id}/contacts`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        firstName: '  Charlie  ',
-                        lastName: '  Test  ',
-                        email: ['charlie@test.eigen.is'],
-                        phone: ['+1234567890'],
-                        company: 'Eigen',
-                        jobTitle: 'Tester',
-                    }),
-                });
+            const res = await authedRequest(ctx.alice.user.sessionToken, `/contacts/${ctx.alice.user.id}/contacts`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    firstName: '  Charlie  ',
+                    lastName: '  Test  ',
+                    email: ['charlie@test.eigen.is'],
+                    phone: ['+1234567890'],
+                    company: 'Eigen',
+                    jobTitle: 'Tester',
+                }),
+            });
             expect(res.status).toBe(200);
 
-            const listRes = await authedRequest(ctx.alice.user.sessionToken,
-                `/contacts/${ctx.alice.user.id}/contacts`);
-            const all = await listRes.json() as any[];
-            const charlie = all.find(c => c.firstName === 'Charlie');
-            expect(charlie).toBeDefined();
+            const listRes = await authedRequest(ctx.alice.user.sessionToken, `/contacts/${ctx.alice.user.id}/contacts`);
+            const all = await assertJson<Contact[]>(listRes);
+            const charlie = findOrFail(all, (c) => c.firstName === 'Charlie');
             expect(charlie.firstName).toBe('Charlie');
             expect(charlie.lastName).toBe('Test');
             contactId = charlie.id;
         });
 
         test('list contacts includes new contact', async () => {
-            const res = await authedRequest(ctx.alice.user.sessionToken,
-                `/contacts/${ctx.alice.user.id}/contacts`);
-            const data = await res.json() as any[];
+            const res = await authedRequest(ctx.alice.user.sessionToken, `/contacts/${ctx.alice.user.id}/contacts`);
+            const data = await assertJson<Contact[]>(res);
             expect(Array.isArray(data)).toBe(true);
             expect(data.length).toBe(initialContactCount + 1);
-            const contact = data.find(c => c.firstName === 'Charlie');
-            expect(contact).toBeDefined();
+            const contact = findOrFail(data, (c) => c.firstName === 'Charlie');
             expect(contact.lastName).toBe('Test');
         });
 
         test('get contact by id', async () => {
-            const res = await authedRequest(ctx.alice.user.sessionToken,
-                `/contacts/${ctx.alice.user.id}/contacts/${contactId}`);
-            const data = await res.json() as any;
-            expect(data).toBeDefined();
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/contacts/${ctx.alice.user.id}/contacts/${contactId}`,
+            );
+            const data = await assertJson<Contact>(res);
             expect(data.firstName).toBe('Charlie');
         });
 
         test('update contact', async () => {
-            const res = await authedRequest(ctx.alice.user.sessionToken,
-                `/contacts/${ctx.alice.user.id}/contacts/${contactId}`, {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/contacts/${ctx.alice.user.id}/contacts/${contactId}`,
+                {
                     method: 'PUT',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         firstName: 'Charlie',
                         lastName: 'Updated',
                         email: ['charlie@test.eigen.is'],
                         phone: [],
                     }),
-                });
+                },
+            );
             expect(res.status).toBe(200);
 
-            const getRes = await authedRequest(ctx.alice.user.sessionToken,
-                `/contacts/${ctx.alice.user.id}/contacts/${contactId}`);
-            const updated = await getRes.json() as any;
+            const getRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/contacts/${ctx.alice.user.id}/contacts/${contactId}`,
+            );
+            const updated = await assertJson<Contact>(getRes);
             expect(updated.lastName).toBe('Updated');
         });
 
         test('delete contact', async () => {
-            const res = await authedRequest(ctx.alice.user.sessionToken,
-                `/contacts/${ctx.alice.user.id}/contacts/${contactId}`, {method: 'DELETE'});
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/contacts/${ctx.alice.user.id}/contacts/${contactId}`,
+                { method: 'DELETE' },
+            );
             expect(res.status).toBe(200);
 
-            const listRes = await authedRequest(ctx.alice.user.sessionToken,
-                `/contacts/${ctx.alice.user.id}/contacts`);
-            const contacts = await listRes.json() as any[];
-            expect(contacts.find((c: any) => c.id === contactId)).toBeUndefined();
+            const listRes = await authedRequest(ctx.alice.user.sessionToken, `/contacts/${ctx.alice.user.id}/contacts`);
+            const contacts = await assertJson<Contact[]>(listRes);
+            expect(contacts.find((c) => c.id === contactId)).toBeUndefined();
         });
 
         test('delete contact is idempotent for non-existing contact', async () => {
-            const res = await authedRequest(ctx.alice.user.sessionToken,
-                `/contacts/${ctx.alice.user.id}/contacts/${contactId}`, {method: 'DELETE'});
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/contacts/${ctx.alice.user.id}/contacts/${contactId}`,
+                { method: 'DELETE' },
+            );
             expect(res.status).toBe(200);
         });
     });
@@ -104,19 +111,17 @@ describe('Contacts', () => {
         let initialLabelCount: number;
 
         beforeAll(async () => {
-            const res = await authedRequest(ctx.alice.user.sessionToken,
-                `/contacts/${ctx.alice.user.id}/labels`);
-            const data = await res.json() as any[];
+            const res = await authedRequest(ctx.alice.user.sessionToken, `/contacts/${ctx.alice.user.id}/labels`);
+            const data = await assertJson<Label[]>(res);
             initialLabelCount = data.length;
         });
 
         test('create label', async () => {
-            const res = await authedRequest(ctx.alice.user.sessionToken,
-                `/contacts/${ctx.alice.user.id}/labels`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({name: 'VIP', color: '#ff0000'}),
-                });
+            const res = await authedRequest(ctx.alice.user.sessionToken, `/contacts/${ctx.alice.user.id}/labels`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'VIP', color: '#ff0000' }),
+            });
             expect(res.status).toBe(200);
             const raw = await res.text();
             labelId = raw.replace(/^"|"$/g, '');
@@ -124,97 +129,97 @@ describe('Contacts', () => {
         });
 
         test('list labels includes new label', async () => {
-            const res = await authedRequest(ctx.alice.user.sessionToken,
-                `/contacts/${ctx.alice.user.id}/labels`);
-            const data = await res.json() as any[];
+            const res = await authedRequest(ctx.alice.user.sessionToken, `/contacts/${ctx.alice.user.id}/labels`);
+            const data = await assertJson<Label[]>(res);
             expect(Array.isArray(data)).toBe(true);
             expect(data.length).toBe(initialLabelCount + 1);
-            const label = data.find((l: any) => l.name === 'VIP');
-            expect(label).toBeDefined();
+            findOrFail(data, (l) => l.name === 'VIP');
         });
 
         test('update label', async () => {
-            const res = await authedRequest(ctx.alice.user.sessionToken,
-                `/contacts/${ctx.alice.user.id}/labels/${labelId}`, {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/contacts/${ctx.alice.user.id}/labels/${labelId}`,
+                {
                     method: 'PUT',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({name: 'VIP Updated', color: '#00ff00'}),
-                });
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: 'VIP Updated', color: '#00ff00' }),
+                },
+            );
             expect(res.status).toBe(200);
-            const data = await res.json() as any;
+            const data = await assertJson<Label>(res);
             expect(data.name).toBe('VIP Updated');
             expect(data.color).toBe('#00ff00');
         });
 
         test('list labels reflects updated label', async () => {
-            const res = await authedRequest(ctx.alice.user.sessionToken,
-                `/contacts/${ctx.alice.user.id}/labels`);
-            const data = await res.json() as any[];
-            const label = data.find((l: any) => l.id === labelId);
-            expect(label).toBeDefined();
+            const res = await authedRequest(ctx.alice.user.sessionToken, `/contacts/${ctx.alice.user.id}/labels`);
+            const data = await assertJson<Label[]>(res);
+            const label = findOrFail(data, (l) => l.id === labelId);
             expect(label.name).toBe('VIP Updated');
             expect(label.color).toBe('#00ff00');
         });
 
         test('delete label', async () => {
-            const res = await authedRequest(ctx.alice.user.sessionToken,
-                `/contacts/${ctx.alice.user.id}/labels/${labelId}`, {method: 'DELETE'});
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/contacts/${ctx.alice.user.id}/labels/${labelId}`,
+                { method: 'DELETE' },
+            );
             expect(res.status).toBe(200);
         });
 
         test('deleted label is removed from labels list', async () => {
-            const res = await authedRequest(ctx.alice.user.sessionToken,
-                `/contacts/${ctx.alice.user.id}/labels`);
-            const data = await res.json() as any[];
-            expect(data.find((l: any) => l.id === labelId)).toBeUndefined();
+            const res = await authedRequest(ctx.alice.user.sessionToken, `/contacts/${ctx.alice.user.id}/labels`);
+            const data = await assertJson<Label[]>(res);
+            expect(data.find((l) => l.id === labelId)).toBeUndefined();
         });
     });
 
     describe('Cross-user isolation', () => {
         test('Bob contacts are separate from Alice', async () => {
-            const aliceRes = await authedRequest(ctx.alice.user.sessionToken,
-                `/contacts/${ctx.alice.user.id}/contacts`);
-            const aliceContacts = await aliceRes.json() as any[];
+            const aliceRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/contacts/${ctx.alice.user.id}/contacts`,
+            );
+            const aliceContacts = await assertJson<Contact[]>(aliceRes);
 
-            const bobRes = await authedRequest(ctx.bob.user.sessionToken,
-                `/contacts/${ctx.bob.user.id}/contacts`);
-            const bobContacts = await bobRes.json() as any[];
+            const bobRes = await authedRequest(ctx.bob.user.sessionToken, `/contacts/${ctx.bob.user.id}/contacts`);
+            const bobContacts = await assertJson<Contact[]>(bobRes);
 
-            const aliceIds = new Set(aliceContacts.map((c: any) => c.id));
-            const bobIds = new Set(bobContacts.map((c: any) => c.id));
-            const overlap = [...aliceIds].filter(id => bobIds.has(id));
+            const aliceIds = new Set(aliceContacts.map((c) => c.id));
+            const bobIds = new Set(bobContacts.map((c) => c.id));
+            const overlap = [...aliceIds].filter((id) => bobIds.has(id));
             expect(overlap.length).toBe(0);
         });
 
         test('ownerId spoofing is rejected with 403', async () => {
-            const spoofRes = await authedRequest(ctx.bob.user.sessionToken,
-                `/contacts/${ctx.alice.user.id}/contacts`);
+            const spoofRes = await authedRequest(ctx.bob.user.sessionToken, `/contacts/${ctx.alice.user.id}/contacts`);
             expect(spoofRes.status).toBe(403);
         });
     });
 
     describe('Me endpoint', () => {
         test('Alice can get her own profile', async () => {
-            const res = await authedRequest(ctx.alice.user.sessionToken,
-                `/contacts/${ctx.alice.user.id}/me`);
-            const data = await res.json() as any;
-            expect(data).toBeDefined();
+            const res = await authedRequest(ctx.alice.user.sessionToken, `/contacts/${ctx.alice.user.id}/me`);
+            const data = await assertJson<Contact>(res);
             expect(data.eigenId).toBe(ctx.alice.user.id);
         });
 
         test('ownerId spoofing on me endpoint is rejected with 403', async () => {
-            const res = await authedRequest(ctx.bob.user.sessionToken,
-                `/contacts/${ctx.alice.user.id}/me`);
+            const res = await authedRequest(ctx.bob.user.sessionToken, `/contacts/${ctx.alice.user.id}/me`);
             expect(res.status).toBe(403);
         });
 
         test('cannot delete own profile contact', async () => {
-            const meRes = await authedRequest(ctx.alice.user.sessionToken,
-                `/contacts/${ctx.alice.user.id}/me`);
-            const me = await meRes.json() as any;
+            const meRes = await authedRequest(ctx.alice.user.sessionToken, `/contacts/${ctx.alice.user.id}/me`);
+            const me = await assertJson<Contact>(meRes);
 
-            const deleteRes = await authedRequest(ctx.alice.user.sessionToken,
-                `/contacts/${ctx.alice.user.id}/contacts/${me.id}`, {method: 'DELETE'});
+            const deleteRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/contacts/${ctx.alice.user.id}/contacts/${me.id}`,
+                { method: 'DELETE' },
+            );
 
             expect(deleteRes.status).toBe(400);
             expect(await deleteRes.text()).toContain('You cannot delete yourself');

@@ -140,7 +140,12 @@
       "Bash(bunx --bun @biomejs/biome lint --max-diagnostics=500 .)",
       "Bash(bunx --bun @biomejs/biome lint --max-diagnostics=10 .)",
       "Bash(bunx --bun @biomejs/biome lint --max-diagnostics=100 .)",
-      "Bash(bunx --bun @biomejs/biome lint .)"
+      "Bash(bunx --bun @biomejs/biome lint .)",
+      "Bash(bunx --bun @biomejs/biome lint --max-diagnostics=5000 apps/api/src/test/)",
+      "Bash(bunx --bun @biomejs/biome check --write --unsafe apps/api/src/test/)",
+      "Bash(diffstat)",
+      "Bash(for t:*)",
+      "Bash(echo \"=== $t ===\")"
     ]
   },
   "enabledPlugins": {

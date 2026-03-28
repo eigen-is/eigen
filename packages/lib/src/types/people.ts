@@ -14,3 +14,10 @@ export type OrgTeam = {
     createdAt: Date;
     updatedAt?: Date;
 };
+
+export type FullOrganization = {
+    name: string;
+    slug: string;
+    members: OrgMember[];
+    teams: OrgTeam[];
+};
