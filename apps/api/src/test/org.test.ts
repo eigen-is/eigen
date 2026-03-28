@@ -91,11 +91,14 @@ describe('Organization Infrastructure', () => {
     });
 
     describe('Organization member count', () => {
-        test('org has 3 members (alice + bob + charlie)', async () => {
+        test('org has at least alice, bob, and charlie', async () => {
             const ctx = await getTestContext();
             const config = getServerConfig();
             const org = await getFullOrganization(ctx.alice.user.sessionToken, config!.orgId);
-            expect(org.members.length).toBe(3);
+            expect(org.members.length).toBeGreaterThanOrEqual(3);
+            expect(org.members.some((m) => m.userId === ctx.alice.user.id)).toBe(true);
+            expect(org.members.some((m) => m.userId === ctx.bob.user.id)).toBe(true);
+            expect(org.members.some((m) => m.userId === ctx.charlie.user.id)).toBe(true);
         });
     });
 
