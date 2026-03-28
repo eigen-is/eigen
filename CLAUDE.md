@@ -45,16 +45,18 @@ docs/           # Architecture documentation
 ```bash
 bun run serve          # All apps + API
 bun serve:mail         # Single app + API
+bun run lint           # Lint + format check (biome)
+bun run lint:fix       # Auto-fix lint + format issues
 bun run typecheck      # Type check all packages
 bun run test           # API integration tests
-bun run check          # typecheck + test
+bun run check          # lint + typecheck + test
 ```
 
 ### Critical Rules
 
 - **No migrations or backward compatibility** — data is throwaway during dev. Prefer clean schemas
-- **Always run `bun run typecheck` and `bun run test`** after changes. When multiple agents run in parallel,
-  only the main agent should run typecheck/test — concurrent runs cause deadlocks
+- **Always run `bun run check`** (lint + typecheck + test) after changes. When multiple agents run in parallel,
+  only the main agent should run check — concurrent runs cause deadlocks
 - **English everywhere** — code, comments, docs
 - **No JSDoc** — code should be self-documenting, minimal comments
 - **`type` over `interface`** — except when methods are needed
