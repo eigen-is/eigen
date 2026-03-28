@@ -153,7 +153,9 @@
       "Bash(find /Users/reinder/Documents/GitHub/eigen -maxdepth 2 \\\\\\(-name .github -type d -o -name .gitlab-ci.yml -o -name *.yml -path */.github/workflows/* \\\\\\))",
       "Bash(bash)",
       "Bash(bunx:*)",
-      "Bash(echo \"Updated $f\")"
+      "Bash(echo \"Updated $f\")",
+      "Bash(chmod:*)",
+      "Bash(./.githooks/pre-commit 2>&1)"
     ]
   },
   "enabledPlugins": {

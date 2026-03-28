@@ -1,0 +1,5 @@
+#!/bin/sh
+# Auto-fix lint + format on staged files before committing
+bunx --bun @biomejs/biome check --staged --write --no-errors-on-unmatched --colors=off
+# Re-stage any files that biome fixed
+git update-index --again

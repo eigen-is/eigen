@@ -2,6 +2,7 @@
   "name": "eigen",
   "private": true,
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks",
     "serve": "bun --filter '*' dev",
     "serve:index": "bun --filter '@apps/api' --filter './apps/index' dev",
     "serve:mail": "bun --filter '@apps/api' --filter './apps/mail' dev",
