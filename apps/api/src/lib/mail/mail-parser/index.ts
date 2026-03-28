@@ -1,18 +1,18 @@
 export type {
-    ParsedMail,
+    AddressObject,
     Attachment,
     AttachmentCommon,
     AttachmentStream,
-    AddressObject,
     EmailAddress,
-    Headers,
     HeaderLines,
+    Headers,
     HeaderValue,
-    StructuredHeader,
-    MessageText,
     MailParserOptions,
+    MessageText,
+    ParsedMail,
+    StructuredHeader,
 } from './mail-parser';
 
 export { default as MailParser } from './mail-parser';
+export type { SimpleParserOptions, Source } from './simple-parser';
 export { default as simpleParser } from './simple-parser';
-export type { Source, SimpleParserOptions } from './simple-parser';

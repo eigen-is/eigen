@@ -1,9 +1,9 @@
-import Headers from './headers';
+import pathlib from 'node:path';
+import { PassThrough, type Transform } from 'node:stream';
+import libbase64 from 'libbase64';
 import libmime from 'libmime';
 import libqp from 'libqp';
-import libbase64 from 'libbase64';
-import { PassThrough, type Transform } from 'node:stream';
-import pathlib from 'node:path';
+import Headers from './headers';
 
 type MimeNodeConfig = {
     Iconv?: unknown;

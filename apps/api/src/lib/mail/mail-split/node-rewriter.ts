@@ -116,8 +116,7 @@ class NodeRewriter extends Transform {
                     this.push(node);
                     if ((node as unknown as RewriteData).type === 'body') {
                         const nodeData = node as unknown as RewriteData;
-                        lastByte =
-                            nodeData.value?.length ? nodeData.value[nodeData.value.length - 1] : null;
+                        lastByte = nodeData.value?.length ? nodeData.value[nodeData.value.length - 1] : null;
                     }
                 }
             }
@@ -155,8 +154,7 @@ class NodeRewriter extends Transform {
                     this.push(node);
                     if ((node as unknown as RewriteData).type === 'body') {
                         const nodeData = node as unknown as RewriteData;
-                        lastByte =
-                            nodeData.value?.length ? nodeData.value[nodeData.value.length - 1] : null;
+                        lastByte = nodeData.value?.length ? nodeData.value[nodeData.value.length - 1] : null;
                     }
                 }
             }

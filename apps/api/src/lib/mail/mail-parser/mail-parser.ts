@@ -1,17 +1,18 @@
 /// <reference path="../mail-modules.d.ts" />
-import { Transform, type TransformCallback, type TransformOptions } from 'node:stream';
+
 import type { Readable } from 'node:stream';
+import { Transform, type TransformCallback, type TransformOptions } from 'node:stream';
+import encodingJapanese from 'encoding-japanese';
+import he from 'he';
+import { htmlToText } from 'html-to-text';
+import iconv from 'iconv-lite';
 import libmime from 'libmime';
+import LinkifyIt from 'linkify-it';
 import addressparser from 'nodemailer/lib/addressparser';
 import punycode from 'punycode.js';
-import iconv from 'iconv-lite';
-import { htmlToText } from 'html-to-text';
-import he from 'he';
-import LinkifyIt from 'linkify-it';
 import tlds from 'tlds';
-import encodingJapanese from 'encoding-japanese';
-import Splitter from '../mail-split/message-splitter';
 import FlowedDecoder from '../mail-split/flowed-decoder';
+import Splitter from '../mail-split/message-splitter';
 import StreamHash from './stream-hash';
 
 const linkify = new LinkifyIt();
