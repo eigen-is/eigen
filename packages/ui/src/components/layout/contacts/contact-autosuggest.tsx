@@ -1,8 +1,8 @@
-import {KeyboardEvent, useCallback, useRef, useState} from 'react';
 import {Input} from '@workspace/ui/components/input';
-import {useContactSuggestions} from './use-contact-suggestions';
-import {ContactAutosuggestProps, ContactSuggestion} from './types';
+import {type KeyboardEvent, useCallback, useRef, useState} from 'react';
 import {UserItem} from '../user-item';
+import type {ContactAutosuggestProps, ContactSuggestion} from './types';
+import {useContactSuggestions} from './use-contact-suggestions';
 
 export function ContactAutosuggest({
                                        initialValue = '',
@@ -21,7 +21,7 @@ export function ContactAutosuggest({
                                        name,
                                        required,
                                        inputRef: externalInputRef,
-                                       onSubmit
+                                       onSubmit,
                                    }: ContactAutosuggestProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [selectedIndex, setSelectedIndex] = useState(0);
@@ -32,71 +32,77 @@ export function ContactAutosuggest({
     const [internalValue, setInternalValue] = useState(initialValue);
     const inputValue = controlledValue !== undefined ? controlledValue : internalValue;
 
-    const {suggestions, isLoading} = useContactSuggestions(
-        inputValue,
-        onlyEigenIsMails
-    );
+    const {suggestions, isLoading} = useContactSuggestions(inputValue, onlyEigenIsMails);
 
     const displayedSuggestions = suggestions.slice(0, maxSuggestions);
 
-    const handleSelect = useCallback((suggestion: ContactSuggestion) => {
-        const formattedContact = `${suggestion.displayName} <${suggestion.email}>`;
+    const handleSelect = useCallback(
+        (suggestion: ContactSuggestion) => {
+            const formattedContact = `${suggestion.displayName} <${suggestion.email}>`;
 
-        let newValue: string;
-        if (appendMode) {
-            newValue = inputValue
-                ? [...inputValue.trim().split(',').slice(0, -1), formattedContact].join(', ') + ', '
-                : formattedContact;
-        } else {
-            newValue = formattedContact;
-        }
+            let newValue: string;
+            if (appendMode) {
+                newValue = inputValue
+                    ? `${[...inputValue.trim().split(',').slice(0, -1), formattedContact].join(', ')}, `
+                    : formattedContact;
+            } else {
+                newValue = formattedContact;
+            }
 
-        setInternalValue(newValue);
-        setSelectedIndex(0);
-        onChange?.(newValue);
+            setInternalValue(newValue);
+            setSelectedIndex(0);
+            onChange?.(newValue);
 
-        setIsOpen(appendMode);
-        inputRef.current?.focus();
-    }, [inputValue, onChange, appendMode]);
+            setIsOpen(appendMode);
+            inputRef.current?.focus();
+        },
+        [inputValue, onChange, appendMode],
+    );
 
-    const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-        const newValue = e.target.value;
-        setInternalValue(newValue);
-        onChange?.(newValue);
-    }, [onChange]);
+    const handleInputChange = useCallback(
+        (e: React.ChangeEvent<HTMLInputElement>) => {
+            const newValue = e.target.value;
+            setInternalValue(newValue);
+            onChange?.(newValue);
+        },
+        [onChange],
+    );
 
-    const handleKeyDown = useCallback((e: KeyboardEvent<HTMLInputElement>) => {
-        if (!isOpen || displayedSuggestions.length === 0) return;
+    const handleKeyDown = useCallback(
+        (e: KeyboardEvent<HTMLInputElement>) => {
+            if (!isOpen || displayedSuggestions.length === 0) return;
 
-        switch (e.key) {
-            case 'ArrowDown':
-                e.preventDefault();
-                setSelectedIndex(prev => prev < displayedSuggestions.length - 1 ? prev + 1 : prev);
-                break;
+            switch (e.key) {
+                case 'ArrowDown':
+                    e.preventDefault();
+                    setSelectedIndex((prev) => (prev < displayedSuggestions.length - 1 ? prev + 1 : prev));
+                    break;
 
-            case 'ArrowUp':
-                e.preventDefault();
-                setSelectedIndex(prev => prev > 0 ? prev - 1 : 0);
-                break;
+                case 'ArrowUp':
+                    e.preventDefault();
+                    setSelectedIndex((prev) => (prev > 0 ? prev - 1 : 0));
+                    break;
 
-            case 'Enter':
-            case 'Tab':
-                e.preventDefault();
-                if (displayedSuggestions[selectedIndex]) {
-                    handleSelect(displayedSuggestions[selectedIndex]);
-                }
-                break;
+                case 'Enter':
+                case 'Tab':
+                    e.preventDefault();
+                    if (displayedSuggestions[selectedIndex]) {
+                        handleSelect(displayedSuggestions[selectedIndex]);
+                    }
+                    break;
 
-            case 'Escape':
-                e.preventDefault();
-                setIsOpen(false);
-                break;
-        }
-    }, [isOpen, displayedSuggestions, selectedIndex, handleSelect]);
+                case 'Escape':
+                    e.preventDefault();
+                    setIsOpen(false);
+                    break;
+            }
+        },
+        [isOpen, displayedSuggestions, selectedIndex, handleSelect],
+    );
 
     // Handle Enter key for onSubmit
     const handleKeyDownSubmit = (event: React.KeyboardEvent<HTMLInputElement>) => {
-        if (event.key === "Enter" && onSubmit) {
+        if (event.key === 'Enter' && onSubmit) {
             console.log('Submitting value:', inputValue);
             onSubmit(inputValue);
         }
@@ -108,8 +114,10 @@ export function ContactAutosuggest({
 
     const handleBlur = useCallback(() => {
         setTimeout(() => {
-            if (!suggestionsRef.current?.contains(document.activeElement) &&
-                inputRef.current !== document.activeElement) {
+            if (
+                !suggestionsRef.current?.contains(document.activeElement) &&
+                inputRef.current !== document.activeElement
+            ) {
                 setIsOpen(false);
             }
         }, 300);
@@ -120,7 +128,7 @@ export function ContactAutosuggest({
             <Input
                 id={id}
                 name={name}
-                ref={elm => {
+                ref={(elm) => {
                     // Handle both internal ref and external ref if provided
                     if (typeof externalInputRef === 'function') {
                         externalInputRef(elm);
@@ -150,26 +158,18 @@ export function ContactAutosuggest({
                 <ul
                     ref={suggestionsRef}
                     className={`absolute z-10 w-full bg-background mt-1 border rounded-md shadow-lg overflow-y-auto max-h-60 ${suggestionsClassName}`}
-                    role="listbox"
                     tabIndex={-1}
                 >
                     {displayedSuggestions.map((suggestion, index) => (
                         <li
                             key={suggestion.id}
                             className={`px-3 py-2 eigen-list-item ${
-                                index === selectedIndex
-                                    ? 'eigen-list-item-active'
-                                    : ''
+                                index === selectedIndex ? 'eigen-list-item-active' : ''
                             }`}
                             onClick={() => handleSelect(suggestion)}
-                            role="option"
                             aria-selected={index === selectedIndex}
                         >
-                            <UserItem
-                                name={suggestion.displayName}
-                                email={suggestion.email}
-                                userId={suggestion.id}
-                            />
+                            <UserItem name={suggestion.displayName} email={suggestion.email} userId={suggestion.id}/>
                         </li>
                     ))}
                 </ul>

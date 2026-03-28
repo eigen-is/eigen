@@ -1,6 +1,6 @@
-import {sql} from 'drizzle-orm';
-import {integer, primaryKey, sqliteTable, text} from 'drizzle-orm/sqlite-core';
-import type {DriveACL, DrivePathDetails, DrivePathType, DriveVisibility} from '@workspace/lib/types/drive';
+import type { DriveACL, DrivePathDetails, DrivePathType, DriveVisibility } from '@workspace/lib/types/drive';
+import { sql } from 'drizzle-orm';
+import { integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 export const paths = sqliteTable('paths', {
     id: text('id').primaryKey(),
@@ -12,29 +12,37 @@ export const paths = sqliteTable('paths', {
     mimeType: text('mimeType').notNull(),
     size: integer('size').default(0),
     thumbnail: text('thumbnail'),
-    acl: text('acl', {mode: 'json'}).$type<DriveACL[] | null>(),
+    acl: text('acl', { mode: 'json' }).$type<DriveACL[] | null>(),
     visibility: text('visibility').$type<DriveVisibility>().default('private'),
     sharingRestricted: integer('sharingRestricted').notNull().default(0),
-    details: text('details', {mode: 'json'}).$type<DrivePathDetails>(),
+    details: text('details', { mode: 'json' }).$type<DrivePathDetails>(),
     hash: text('hash'),
-    createdAt: integer('createdAt', {mode: 'timestamp'}).default(sql`(unixepoch())`),
-    updatedAt: integer('updatedAt', {mode: 'timestamp'}).default(sql`(unixepoch())`),
+    createdAt: integer('createdAt', { mode: 'timestamp' }).default(sql`(unixepoch())`),
+    updatedAt: integer('updatedAt', { mode: 'timestamp' }).default(sql`(unixepoch())`),
 });
 
 export const labels = sqliteTable('labels', {
     id: text('id').primaryKey(),
     name: text('name').notNull(),
     color: text('color').notNull(),
-    createdAt: integer('createdAt', {mode: 'timestamp'}).default(sql`(unixepoch())`),
-    updatedAt: integer('updatedAt', {mode: 'timestamp'}).default(sql`(unixepoch())`),
+    createdAt: integer('createdAt', { mode: 'timestamp' }).default(sql`(unixepoch())`),
+    updatedAt: integer('updatedAt', { mode: 'timestamp' }).default(sql`(unixepoch())`),
 });
 
-export const pathsToLabels = sqliteTable('paths_to_labels', {
-    pathId: text('pathId').notNull().references(() => paths.id, {onDelete: 'cascade'}),
-    labelId: text('labelId').notNull().references(() => labels.id, {onDelete: 'cascade'}),
-}, (table) => ({
-    pk: primaryKey({columns: [table.pathId, table.labelId]}),
-}));
+export const pathsToLabels = sqliteTable(
+    'paths_to_labels',
+    {
+        pathId: text('pathId')
+            .notNull()
+            .references(() => paths.id, { onDelete: 'cascade' }),
+        labelId: text('labelId')
+            .notNull()
+            .references(() => labels.id, { onDelete: 'cascade' }),
+    },
+    (table) => ({
+        pk: primaryKey({ columns: [table.pathId, table.labelId] }),
+    }),
+);
 
 export type MountSchema = {
     paths: typeof paths;

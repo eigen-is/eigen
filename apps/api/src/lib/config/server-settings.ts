@@ -1,9 +1,9 @@
-import {getServerDataPath} from './paths';
-import {type DeepPartial, JsonStore, LocalFilesystem} from '../core';
-import {getStorageType, isSetupCompleted} from './server-config';
-import type {ServerSettings} from '@workspace/lib/types/settings';
+import type { ServerSettings } from '@workspace/lib/types/settings';
+import { type DeepPartial, JsonStore, LocalFilesystem } from '../core';
+import { getServerDataPath } from './paths';
+import { getStorageType, isSetupCompleted } from './server-config';
 
-export {mapStorageType} from '@workspace/lib/types/settings';
+export { mapStorageType } from '@workspace/lib/types/settings';
 
 const serverFs = new LocalFilesystem(getServerDataPath());
 const settingsStore = new JsonStore<ServerSettings>(serverFs, 'settings.json', {
@@ -29,7 +29,7 @@ async function ensureLoaded() {
         if (!exists && isSetupCompleted()) {
             const configType = getStorageType();
             if (configType !== 'local-fullnames') {
-                await settingsStore.set({defaults: {mount: {storageType: configType}}});
+                await settingsStore.set({ defaults: { mount: { storageType: configType } } });
             }
         }
         loaded = true;

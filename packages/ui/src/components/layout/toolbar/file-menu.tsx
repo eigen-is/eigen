@@ -1,6 +1,10 @@
-import {type ComponentType, type ReactNode, useState} from 'react';
-import {FileText, Folder, History, Mail, Pencil, Trash2, UserRoundPlus} from 'lucide-react';
 import {formatForDisplay} from '@tanstack/react-hotkeys';
+import {useNavigate} from '@tanstack/react-router';
+import {useAuth} from '@workspace/lib/auth';
+import {fetchRevisionState, useCollabRevisions} from '@workspace/lib/collab';
+import {formatDateTime} from '@workspace/lib/date';
+import {useRootFolder} from '@workspace/lib/drive';
+import type {DrivePath} from '@workspace/lib/types/drive';
 import {Button} from '@workspace/ui/components/button';
 import {
     DropdownMenu,
@@ -13,15 +17,11 @@ import {
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import {ConfirmDialog} from '@workspace/ui/components/layout/delete/confirm-dialog';
-import {useNavigate} from '@tanstack/react-router';
-import {useAuth} from '@workspace/lib/auth';
-import {useRootFolder} from '@workspace/lib/drive';
-import {fetchRevisionState, useCollabRevisions} from '@workspace/lib/collab';
-import {formatDateTime} from '@workspace/lib/date';
+import {FileText, Folder, History, Mail, Pencil, Trash2, UserRoundPlus} from 'lucide-react';
+import {type ComponentType, type ReactNode, useState} from 'react';
 import {DriveDeleteItem} from '../drive/drive-delete-item';
 import {DriveEmailCollaborators} from '../drive/drive-email-collaborators';
 import {DriveRenameItem} from '../drive/drive-rename-item';
-import type {DrivePath} from '@workspace/lib/types/drive';
 
 type FileMenuProps = {
     path: DrivePath;
@@ -31,9 +31,17 @@ type FileMenuProps = {
     createLabel: string;
     CreateDialog: ComponentType<{ path: DrivePath; open: boolean; onOpenChange: (open: boolean) => void }>;
     children?: ReactNode;
-}
+};
 
-export function FileMenu({path, canWrite, onAccessDialogOpen, onRestore, createLabel, CreateDialog, children}: FileMenuProps) {
+export function FileMenu({
+                             path,
+                             canWrite,
+                             onAccessDialogOpen,
+                             onRestore,
+                             createLabel,
+                             CreateDialog,
+                             children,
+                         }: FileMenuProps) {
     const [createOpen, setCreateOpen] = useState(false);
     const [renameOpen, setRenameOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
@@ -92,16 +100,22 @@ export function FileMenu({path, canWrite, onAccessDialogOpen, onRestore, createL
                                 <History className="h-4 w-4 mr-2"/> Version history
                             </DropdownMenuSubTrigger>
                             <DropdownMenuSubContent className="max-h-64 overflow-y-auto min-w-[240px]">
-                                {revisions && revisions.length > 0 ? revisions.map((rev) => (
-                                    <DropdownMenuItem
-                                        key={rev.id}
-                                        className="flex items-center justify-between gap-4"
-                                        onClick={() => handleRevisionClick(rev.id)}
-                                    >
-                                        <span>{rev.createdAt ? formatDateTime(new Date(rev.createdAt)) : `Revision #${rev.id}`}</span>
-                                        <span className="text-xs text-muted-foreground">Restore</span>
-                                    </DropdownMenuItem>
-                                )) : (
+                                {revisions && revisions.length > 0 ? (
+                                    revisions.map((rev) => (
+                                        <DropdownMenuItem
+                                            key={rev.id}
+                                            className="flex items-center justify-between gap-4"
+                                            onClick={() => handleRevisionClick(rev.id)}
+                                        >
+                                            <span>
+                                                {rev.createdAt
+                                                    ? formatDateTime(new Date(rev.createdAt))
+                                                    : `Revision #${rev.id}`}
+                                            </span>
+                                            <span className="text-xs text-muted-foreground">Restore</span>
+                                        </DropdownMenuItem>
+                                    ))
+                                ) : (
                                     <DropdownMenuItem disabled>No revisions yet</DropdownMenuItem>
                                 )}
                             </DropdownMenuSubContent>
@@ -119,9 +133,7 @@ export function FileMenu({path, canWrite, onAccessDialogOpen, onRestore, createL
                 </DropdownMenuContent>
             </DropdownMenu>
 
-            {rootFolder && (
-                <CreateDialog path={rootFolder} open={createOpen} onOpenChange={setCreateOpen}/>
-            )}
+            {rootFolder && <CreateDialog path={rootFolder} open={createOpen} onOpenChange={setCreateOpen}/>}
             <DriveRenameItem path={path} open={renameOpen} onOpenChange={setRenameOpen}/>
             <DriveEmailCollaborators path={path} open={emailOpen} onOpenChange={setEmailOpen}/>
             <DriveDeleteItem

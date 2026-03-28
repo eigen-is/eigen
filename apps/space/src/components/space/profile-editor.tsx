@@ -1,35 +1,35 @@
-import {z} from 'zod';
-import {useForm} from 'react-hook-form';
-import {zodResolver} from '@hookform/resolvers/zod';
-import {useEffect, useRef, useState} from 'react';
-import {Camera, InfoIcon} from 'lucide-react';
-import {useMeContact, useUpdateContact} from '@workspace/lib/contacts';
-import {useAuth} from '@workspace/lib/auth';
-import {useUpload} from '@workspace/ui/components/layout/upload-provider/upload-provider';
-import {uploadWithProgress} from "@workspace/ui/components/layout/upload-provider/upload-with-progress";
-import {getContactsAvatarUploadUrl} from "@workspace/lib/api";
-import {ErrorState, LoadingState, UserAvatar} from "@workspace/ui";
-import {Button} from "@workspace/ui/components/button";
-import {Input} from "@workspace/ui/components/input";
-import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage} from "@workspace/ui/components/form";
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useNavigate } from '@tanstack/react-router';
+import { getContactsAvatarUploadUrl } from '@workspace/lib/api';
+import { useAuth } from '@workspace/lib/auth';
+import { useMeContact, useUpdateContact } from '@workspace/lib/contacts';
+import { ErrorState, LoadingState, UserAvatar } from '@workspace/ui';
+import { Button } from '@workspace/ui/components/button';
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
-    DropdownMenuTrigger
-} from "@workspace/ui/components/dropdown-menu";
-import {useNavigate} from '@tanstack/react-router';
+    DropdownMenuTrigger,
+} from '@workspace/ui/components/dropdown-menu';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
+import { Input } from '@workspace/ui/components/input';
+import { useUpload } from '@workspace/ui/components/layout/upload-provider/upload-provider';
+import { uploadWithProgress } from '@workspace/ui/components/layout/upload-provider/upload-with-progress';
+import { Camera, InfoIcon } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
 
 const formSchema = z.object({
-    firstName: z.string().min(1, "First name is required"),
+    firstName: z.string().min(1, 'First name is required'),
     lastName: z.string().optional(),
 });
 
 export type ProfileFormValues = z.infer<typeof formSchema>;
 
 export function ProfileEditor() {
-    const {user} = useAuth();
-    const {data: contact, isLoading, error: fetchError} = useMeContact();
+    const { user } = useAuth();
+    const { data: contact, isLoading, error: fetchError } = useMeContact();
     const [avatar, setAvatar] = useState<string | null>(null);
     const [submitError, setSubmitError] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -41,8 +41,8 @@ export function ProfileEditor() {
     const form = useForm<ProfileFormValues>({
         resolver: zodResolver(formSchema),
         defaultValues: {
-            firstName: "",
-            lastName: "",
+            firstName: '',
+            lastName: '',
         },
     });
 
@@ -50,8 +50,8 @@ export function ProfileEditor() {
         if (contact && !initializedRef.current) {
             initializedRef.current = true;
             form.reset({
-                firstName: contact.firstName || "",
-                lastName: contact.lastName || "",
+                firstName: contact.firstName || '',
+                lastName: contact.lastName || '',
             });
             setAvatar(contact.avatar || null);
         }
@@ -66,15 +66,15 @@ export function ProfileEditor() {
             const updateData = {
                 ...contact,
                 firstName: data.firstName,
-                lastName: data.lastName || "",
-                avatar: avatar || ""
+                lastName: data.lastName || '',
+                avatar: avatar || '',
             };
 
             await updateContactMutation.mutateAsync(updateData);
 
             setSubmitError(null);
 
-            await navigate({to: '/'});
+            await navigate({ to: '/' });
         } catch (err) {
             console.error('Error updating profile:', err);
             setSubmitError('Failed to update your profile. Please try again.');
@@ -82,14 +82,15 @@ export function ProfileEditor() {
     });
 
     if (isLoading && !contact) {
-        return <LoadingState/>;
+        return <LoadingState />;
     }
 
     if (fetchError && !contact) {
-        return <ErrorState message="Failed to load your profile information."/>;
+        return <ErrorState message="Failed to load your profile information." />;
     }
 
-    return (<>
+    return (
+        <>
             {submitError && (
                 <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 text-destructive rounded-md">
                     {submitError}
@@ -101,9 +102,9 @@ export function ProfileEditor() {
                     <div className="flex justify-center mb-8">
                         <div className="h-32 w-32 relative group">
                             <UserAvatar
-                                name={contact ? `${contact.firstName} ${contact.lastName}` : ""}
+                                name={contact ? `${contact.firstName} ${contact.lastName}` : ''}
                                 email={contact?.email?.[0]}
-                                imageUrl={avatar || ""}
+                                imageUrl={avatar || ''}
                                 className="h-full w-full"
                                 size="lg"
                             />
@@ -135,9 +136,8 @@ export function ProfileEditor() {
                                                 onError: (err) => {
                                                     uploadHandler.error();
                                                     console.error('Upload error:', err);
-                                                }
+                                                },
                                             });
-
                                         } catch (err: unknown) {
                                             console.error('Error uploading file:', err);
                                             uploadHandler.error();
@@ -155,19 +155,23 @@ export function ProfileEditor() {
                                         variant="secondary"
                                         className="absolute bottom-1 right-1 rounded-full h-8 w-8 shadow-md opacity-80 hover:opacity-100"
                                     >
-                                        <Camera className="h-4 w-4"/>
+                                        <Camera className="h-4 w-4" />
                                     </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                    <DropdownMenuItem onSelect={() => {
-                                        fileInputRef.current?.click();
-                                    }}>
+                                    <DropdownMenuItem
+                                        onSelect={() => {
+                                            fileInputRef.current?.click();
+                                        }}
+                                    >
                                         Upload from files
                                     </DropdownMenuItem>
                                     {avatar && (
-                                        <DropdownMenuItem onSelect={() => {
-                                            setAvatar(null);
-                                        }}>
+                                        <DropdownMenuItem
+                                            onSelect={() => {
+                                                setAvatar(null);
+                                            }}
+                                        >
                                             Remove avatar
                                         </DropdownMenuItem>
                                     )}
@@ -180,13 +184,13 @@ export function ProfileEditor() {
                         <FormField
                             control={form.control}
                             name="firstName"
-                            render={({field}) => (
+                            render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>First Name</FormLabel>
                                     <FormControl>
                                         <Input placeholder="Enter your first name" {...field} />
                                     </FormControl>
-                                    <FormMessage/>
+                                    <FormMessage />
                                 </FormItem>
                             )}
                         />
@@ -194,33 +198,32 @@ export function ProfileEditor() {
                         <FormField
                             control={form.control}
                             name="lastName"
-                            render={({field}) => (
+                            render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>Last Name</FormLabel>
                                     <FormControl>
                                         <Input placeholder="Enter your last name" {...field} />
                                     </FormControl>
-                                    <FormMessage/>
+                                    <FormMessage />
                                 </FormItem>
                             )}
                         />
                     </div>
                     <div className="bg-accent border text-accent-foreground rounded-md p-4">
                         <div className="flex">
-                            <InfoIcon className="h-5 w-5 text-primary mr-2"/>
+                            <InfoIcon className="h-5 w-5 text-primary mr-2" />
                             <div>
                                 <h3 className="font-medium">Important</h3>
                                 <p className="text-sm">
-                                    Your profile picture and name are public information visible to other users.
-                                    These details may appear in shared workspaces, messages, and documents throughout
-                                    eigen.
+                                    Your profile picture and name are public information visible to other users. These
+                                    details may appear in shared workspaces, messages, and documents throughout eigen.
                                 </p>
                             </div>
                         </div>
                     </div>
                     <div className="flex justify-end">
                         <Button type="submit" disabled={updateContactMutation.isPending} className="w-full sm:w-auto">
-                            {updateContactMutation.isPending ? "Saving..." : "Save Changes"}
+                            {updateContactMutation.isPending ? 'Saving...' : 'Save Changes'}
                         </Button>
                     </div>
                 </form>

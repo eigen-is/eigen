@@ -1,7 +1,7 @@
-import {ChevronLeft, ChevronRight} from 'lucide-react';
 import {Button} from '@workspace/ui/components/button';
-import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@workspace/ui/components/select';
 import {Toolbar} from '@workspace/ui/components/layout/toolbar';
+import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@workspace/ui/components/select';
+import {ChevronLeft, ChevronRight} from 'lucide-react';
 import type {ViewMode} from './calendar-utils';
 
 type CalendarToolbarProps = {
@@ -11,7 +11,7 @@ type CalendarToolbarProps = {
     onToday: () => void;
     onPrev: () => void;
     onNext: () => void;
-}
+};
 
 function formatTitle(date: Date, viewMode: ViewMode): string {
     if (viewMode === 'month') {
@@ -56,9 +56,7 @@ export function CalendarToolbar({
                         <ChevronRight className="h-4 w-4"/>
                     </Button>
                 </div>
-                <h2 className="text-lg font-semibold whitespace-nowrap">
-                    {formatTitle(currentDate, viewMode)}
-                </h2>
+                <h2 className="text-lg font-semibold whitespace-nowrap">{formatTitle(currentDate, viewMode)}</h2>
             </div>
 
             <div className="flex items-center gap-2">

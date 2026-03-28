@@ -1,24 +1,24 @@
-import type {QueryClient} from '@tanstack/react-query';
-import type {SSEvent} from '@workspace/lib/types/sse';
-import {SSEventType} from '@workspace/lib/types/sse';
+import type { QueryClient } from '@tanstack/react-query';
+import type { SSEvent } from '@workspace/lib/types/sse';
+import { SSEventType } from '@workspace/lib/types/sse';
+import { invalidateHomeSize } from '../home';
 import {
     invalidateDraftUpdated,
     invalidateMailDeleted,
     invalidateMailFlagsChanged,
     invalidateMailMoved,
     invalidateMailReadChanged,
-    invalidateMailReceived
+    invalidateMailReceived,
 } from './hooks/use-emails';
-import {invalidateMailboxes} from './hooks/use-mailboxes';
-import {invalidateHomeSize} from '../home';
+import { invalidateMailboxes } from './hooks/use-mailboxes';
 
-const normalizeMailbox = (mailbox: string) => mailbox === '' ? 'inbox' : mailbox;
+const normalizeMailbox = (mailbox: string) => (mailbox === '' ? 'inbox' : mailbox);
 
 export function handleMailSSEvent(event: SSEvent, queryClient: QueryClient, userId: string): boolean {
     if (!event?.type?.startsWith('mail:')) return false;
     if (!('mail' in event)) return false;
 
-    const {mail} = event;
+    const { mail } = event;
     const mailbox = normalizeMailbox(mail.mailbox);
 
     switch (event.type) {

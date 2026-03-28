@@ -1,15 +1,16 @@
-import {AlertOctagon, AlertTriangle, Archive, File, Inbox, Send, Trash2} from 'lucide-react';
-import {MaildirMailbox} from "@workspace/lib/types/mail";
-import {SidebarItem} from '@workspace/ui/components/layout/sidebar/sidebar-item';
+import type {MaildirMailbox} from '@workspace/lib/types/mail';
+import {EigenLoader, StorageUsage} from '@workspace/ui';
 import {DroppableSidebarItem} from '@workspace/ui/components/layout/sidebar/droppable-sidebar-item';
-import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import {SidebarHeader} from '@workspace/ui/components/layout/sidebar/sidebar-header';
-import React, {useMemo} from 'react';
-import {EigenLoader, StorageUsage} from "@workspace/ui";
-import {EmailComposeButton} from "./email-compose-button";
+import {SidebarItem} from '@workspace/ui/components/layout/sidebar/sidebar-item';
+import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
+import {AlertOctagon, AlertTriangle, Archive, File, Inbox, Send, Trash2} from 'lucide-react';
+import type React from 'react';
+import {useMemo} from 'react';
+import {EmailComposeButton} from './email-compose-button';
 
 // Map of special mailbox flags to their icons and display names
-const standardMailboxes: Record<string, { icon: React.ComponentType<{ className?: string }>, name: string }> = {
+const standardMailboxes: Record<string, { icon: React.ComponentType<{ className?: string }>; name: string }> = {
     '\\Inbox': {icon: Inbox, name: 'Inbox'},
     '\\Drafts': {icon: File, name: 'Drafts'},
     '\\Sent': {icon: Send, name: 'Sent'},
@@ -21,65 +22,65 @@ const standardMailboxes: Record<string, { icon: React.ComponentType<{ className?
 // Default mailboxes to display if API call fails
 const defaultMailboxes = [
     {
-        path: "INBOX",
-        name: "Inbox",
+        path: 'INBOX',
+        name: 'Inbox',
         icon: <Inbox className="h-4 w-4"/>,
-        href: "/box/inbox",
+        href: '/box/inbox',
         unread: 0,
         flags: ['\\HasNoChildren', '\\Inbox'],
-        isStandard: true
+        isStandard: true,
     },
     {
-        path: "Drafts",
-        name: "Drafts",
+        path: 'Drafts',
+        name: 'Drafts',
         icon: <File className="h-4 w-4"/>,
-        href: "/box/drafts",
+        href: '/box/drafts',
         unread: 0,
         flags: ['\\HasNoChildren', '\\Drafts'],
-        isStandard: true
+        isStandard: true,
     },
     {
-        path: "Sent",
-        name: "Sent",
+        path: 'Sent',
+        name: 'Sent',
         icon: <Send className="h-4 w-4"/>,
-        href: "/box/sent",
+        href: '/box/sent',
         unread: 0,
         flags: ['\\HasNoChildren', '\\Sent'],
-        isStandard: true
+        isStandard: true,
     },
     {
-        path: "Junk",
-        name: "Spam",
+        path: 'Junk',
+        name: 'Spam',
         icon: <AlertTriangle className="h-4 w-4"/>,
-        href: "/box/junk",
+        href: '/box/junk',
         unread: 0,
         flags: ['\\HasNoChildren', '\\Junk'],
-        isStandard: true
+        isStandard: true,
     },
     {
-        path: "Trash",
-        name: "Trash",
+        path: 'Trash',
+        name: 'Trash',
         icon: <Trash2 className="h-4 w-4"/>,
-        href: "/box/trash",
+        href: '/box/trash',
         unread: 0,
         flags: ['\\HasNoChildren', '\\Trash'],
-        isStandard: true
+        isStandard: true,
     },
     {
-        path: "Archive",
-        name: "Archive",
+        path: 'Archive',
+        name: 'Archive',
         icon: <Archive className="h-4 w-4"/>,
-        href: "/box/archive",
+        href: '/box/archive',
         unread: 0,
         flags: ['\\HasNoChildren', '\\Archive'],
-        isStandard: true
+        isStandard: true,
     },
 ];
 
 // Helper function to get the standard mailbox flag
 function getStandardMailboxFlag(flags: string[] = []): string | null {
     const standardFlags = Object.keys(standardMailboxes);
-    return flags.find(flag => standardFlags.includes(flag)) || null;
+    return flags.find((flag) => standardFlags.includes(flag)) || null;
 }
 
 type AppSidebarProps = {
@@ -90,7 +91,7 @@ type AppSidebarProps = {
     isLoading?: boolean;
     error?: Error | null;
     onMoveToFolder?: (emailIds: string[], folderId: string) => void;
-}
+};
 
 export function EmailSidebar({
                                  condensed = false,
@@ -101,10 +102,9 @@ export function EmailSidebar({
                                  error = null,
                                  onMoveToFolder,
                              }: AppSidebarProps) {
-
     // Memoize the processed mailboxes to avoid unnecessary recalculations
     const standardMailboxList = useMemo(() => {
-        const processedMailboxes = mailboxes.map(mailbox => {
+        const processedMailboxes = mailboxes.map((mailbox) => {
             const path = mailbox.path || '';
             const name = mailbox.name || path;
             const flags = mailbox.flags || [];
@@ -113,7 +113,7 @@ export function EmailSidebar({
             const standardFlag = getStandardMailboxFlag(flags);
 
             // Get icon component based on standard flag or use default
-            let icon;
+            let icon: React.ReactNode;
             if (standardFlag && standardMailboxes[standardFlag]) {
                 const IconComponent = standardMailboxes[standardFlag].icon;
                 icon = <IconComponent className="h-4 w-4"/>;
@@ -126,7 +126,7 @@ export function EmailSidebar({
                 name: standardFlag ? standardMailboxes[standardFlag].name : name,
                 href: `/box/${path.toLowerCase() || 'inbox'}`,
                 icon,
-                isStandard: !!standardFlag
+                isStandard: !!standardFlag,
             };
         });
 
@@ -134,20 +134,20 @@ export function EmailSidebar({
         const displayMailboxes = isLoading || error ? defaultMailboxes : processedMailboxes;
 
         // Separate standard mailboxes from custom mailboxes
-        const standardMailboxListFetched = displayMailboxes.filter(mailbox => mailbox.isStandard);
+        const standardMailboxListFetched = displayMailboxes.filter((mailbox) => mailbox.isStandard);
 
         // order standard mailboxes, similar to the order of defaultMailboxes
-        const standardMailboxList = defaultMailboxes.map(defaultMailbox =>
-            standardMailboxListFetched.filter(mailbox => mailbox.name.toLowerCase() === defaultMailbox.name.toLowerCase())
-        ).flat();
-
+        const standardMailboxList = defaultMailboxes.flatMap((defaultMailbox) =>
+            standardMailboxListFetched.filter(
+                (mailbox) => mailbox.name.toLowerCase() === defaultMailbox.name.toLowerCase(),
+            ),
+        );
 
         return standardMailboxList;
     }, [mailboxes, isLoading, error]);
 
     return (
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
-
             {isMobile && <SidebarHeader appName="mail" onClose={onClose}/>}
 
             <div className="px-3 py-2">
@@ -155,15 +155,14 @@ export function EmailSidebar({
             </div>
 
             <SidebarSection condensed={condensed}>
-
-
                 {isLoading ? (
                     <div className="flex items-center justify-center py-4">
                         <EigenLoader/>
                     </div>
                 ) : (
                     standardMailboxList.map((item) => {
-                        const folderId = item.path === '' || item.path?.toLowerCase() === 'inbox' ? '' : (item.path || '');
+                        const folderId =
+                            item.path === '' || item.path?.toLowerCase() === 'inbox' ? '' : item.path || '';
                         if (onMoveToFolder) {
                             return (
                                 <DroppableSidebarItem
@@ -191,10 +190,7 @@ export function EmailSidebar({
             </SidebarSection>
 
             {/* Storage usage indicator at the bottom of sidebar */}
-            <StorageUsage
-                className="mt-auto"
-                condensed={condensed}
-            />
+            <StorageUsage className="mt-auto" condensed={condensed}/>
         </div>
     );
 }

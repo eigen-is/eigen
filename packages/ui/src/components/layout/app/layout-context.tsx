@@ -10,7 +10,7 @@ export type LayoutContextType = {
     sidebarMode: 'collapsible' | 'hidden' | 'none';
     isMobile: boolean;
     isTablet: boolean;
-}
+};
 
 export const LayoutContext = createContext<LayoutContextType>({
     appName: '',

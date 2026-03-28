@@ -1,181 +1,192 @@
-"use client"
+'use client';
 
-import {useCallback, useEffect, useRef, useState} from "react"
-import {UserItem} from "../user-item"
-import type {DriveACL, DrivePath, DriveVisibility} from "@workspace/lib/types/drive"
-import {cn} from "@workspace/ui/lib/utils"
-import {type DirectAccessItem, useDriveAccess, useIsEffectiveOwner} from "@workspace/lib/drive"
-import {Lock, Plus, Unlock, Users} from "lucide-react"
-import {AvatarIcon} from "@workspace/ui/components/avatar"
-import {Separator} from "@workspace/ui/components/separator"
-import {Button} from "@workspace/ui/components/button"
-import {DialogFooter} from "@workspace/ui/components/dialog"
-import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "@workspace/ui/components/select"
+import {type DirectAccessItem, useDriveAccess, useIsEffectiveOwner} from '@workspace/lib/drive';
+import {usePeopleTeams} from '@workspace/lib/people';
+import {usePublicConfig} from '@workspace/lib/public';
+import {teamOwnerId} from '@workspace/lib/types';
+import type {DriveACL, DrivePath, DriveVisibility} from '@workspace/lib/types/drive';
+import {validateEmailAddress} from '@workspace/lib/validation';
+import {AvatarIcon} from '@workspace/ui/components/avatar';
+import {Button} from '@workspace/ui/components/button';
+import {Checkbox} from '@workspace/ui/components/checkbox';
+import {DialogFooter} from '@workspace/ui/components/dialog';
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
-    DropdownMenuTrigger
-} from "@workspace/ui/components/dropdown-menu"
-import {ContactAutosuggest} from "../contacts/contact-autosuggest"
-import {ContactSuggestion} from "../contacts/types"
-import {validateEmailAddress} from "@workspace/lib/validation"
-import {usePublicConfig} from "@workspace/lib/public"
-import {usePeopleTeams} from "@workspace/lib/people"
-import {teamOwnerId} from "@workspace/lib/types"
-import {Checkbox} from "@workspace/ui/components/checkbox"
+    DropdownMenuTrigger,
+} from '@workspace/ui/components/dropdown-menu';
+import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@workspace/ui/components/select';
+import {Separator} from '@workspace/ui/components/separator';
+import {cn} from '@workspace/ui/lib/utils';
+import {Lock, Plus, Unlock, Users} from 'lucide-react';
+import {useCallback, useEffect, useRef, useState} from 'react';
+import {ContactAutosuggest} from '../contacts/contact-autosuggest';
+import type {ContactSuggestion} from '../contacts/types';
+import {UserItem} from '../user-item';
 
 export type DriveAccessListEditProps = {
-    path: DrivePath
-    onSave: (updatedAcl: DriveACL[], visibility: DriveVisibility, sharingRestricted?: boolean) => void
-    onCancel?: () => void
-    className?: string
-}
+    path: DrivePath;
+    onSave: (updatedAcl: DriveACL[], visibility: DriveVisibility, sharingRestricted?: boolean) => void;
+    onCancel?: () => void;
+    className?: string;
+};
 
-export function DriveAccessListEdit({
-                                        path,
-                                        onSave,
-                                        onCancel,
-                                        className,
-                                    }: DriveAccessListEditProps) {
-    const [pendingChanges, setPendingChanges] = useState(false)
-    const [newContactInput, setNewContactInput] = useState("")
-    const inputRef = useRef<HTMLInputElement>(null)
+export function DriveAccessListEdit({path, onSave, onCancel, className}: DriveAccessListEditProps) {
+    const [pendingChanges, setPendingChanges] = useState(false);
+    const [newContactInput, setNewContactInput] = useState('');
+    const inputRef = useRef<HTMLInputElement>(null);
 
-    const [directListOverride, setDirectListOverride] = useState<DirectAccessItem[] | undefined>()
+    const [directListOverride, setDirectListOverride] = useState<DirectAccessItem[] | undefined>();
 
-    const {
-        baseDirectList,
-        directList,
-        inheritedList
-    } = useDriveAccess(path, directListOverride)
+    const {baseDirectList, directList, inheritedList} = useDriveAccess(path, directListOverride);
 
-    const [visibility, setVisibility] = useState<DriveVisibility>(path.visibility ?? 'private')
-    const [sharingRestricted, setSharingRestricted] = useState(path.sharingRestricted ?? false)
+    const [visibility, setVisibility] = useState<DriveVisibility>(path.visibility ?? 'private');
+    const [sharingRestricted, setSharingRestricted] = useState(path.sharingRestricted ?? false);
 
     // Fetch org and teams for the team sharing picker
-    const {data: config} = usePublicConfig()
-    const {data: teams} = usePeopleTeams(config?.orgId)
+    const {data: config} = usePublicConfig();
+    const {data: teams} = usePeopleTeams(config?.orgId);
 
-    const isEffectiveOwner = useIsEffectiveOwner(path.ownerId)
+    const isEffectiveOwner = useIsEffectiveOwner(path.ownerId);
 
     useEffect(() => {
-        setDirectListOverride(undefined)
-        setVisibility(path.visibility ?? 'private')
-        setSharingRestricted(path.sharingRestricted ?? false)
-    }, [path])
+        setDirectListOverride(undefined);
+        setVisibility(path.visibility ?? 'private');
+        setSharingRestricted(path.sharingRestricted ?? false);
+    }, [path]);
 
-    const handleAddUser = useCallback((suggestion: ContactSuggestion) => {
-        if (directList.some((item: DirectAccessItem) => item.id.toLowerCase() === suggestion.email.toLowerCase())) {
-            return
-        }
-
-        const newUser: DirectAccessItem = {
-            id: suggestion.email.toLowerCase(),
-            read: true,
-            write: true,
-            owner: false
-        }
-
-        setDirectListOverride(prevList => [...(prevList || baseDirectList), newUser])
-        setPendingChanges(true)
-        setNewContactInput("")
-    }, [directList])
-
-    const processContactInput = useCallback((value: string) => {
-        const emailMatch = value.match(/<(.+)>/)
-        let email: string
-        let displayName: string
-
-        if (emailMatch) {
-            email = emailMatch[1]
-            displayName = value.split('<')[0].trim()
-        } else {
-            const isEmail = validateEmailAddress(value)
-            if (isEmail) {
-                email = value.trim().toLowerCase();
-                displayName = email.split('@')[0];
-            } else {
-                return false;
+    const handleAddUser = useCallback(
+        (suggestion: ContactSuggestion) => {
+            if (directList.some((item: DirectAccessItem) => item.id.toLowerCase() === suggestion.email.toLowerCase())) {
+                return;
             }
-        }
 
-        if (directList.some((item: DirectAccessItem) => item.id.toLowerCase() === email.toLowerCase())) {
-            return false;
-        }
+            const newUser: DirectAccessItem = {
+                id: suggestion.email.toLowerCase(),
+                read: true,
+                write: true,
+                owner: false,
+            };
 
-        const suggestion: ContactSuggestion = {
-            id: email.toLowerCase(),
-            email: email.toLowerCase(),
-            displayName: displayName,
-            allEmails: [email.toLowerCase()]
-        }
+            setDirectListOverride((prevList) => [...(prevList || baseDirectList), newUser]);
+            setPendingChanges(true);
+            setNewContactInput('');
+        },
+        [directList],
+    );
 
-        handleAddUser(suggestion)
-        return true
-    }, [directList, handleAddUser])
+    const processContactInput = useCallback(
+        (value: string) => {
+            const emailMatch = value.match(/<(.+)>/);
+            let email: string;
+            let displayName: string;
 
-    const handleContactSelected = useCallback((value: string) => {
-        if (value.includes('<') && value.includes('>')) {
-            const added = processContactInput(value)
-            if (added) {
-                setNewContactInput("")
+            if (emailMatch) {
+                email = emailMatch[1];
+                displayName = value.split('<')[0].trim();
             } else {
-                setNewContactInput(value)
-            }
-        } else {
-            setNewContactInput(value)
-        }
-    }, [processContactInput])
-
-    const handleAddContactClick = useCallback(() => {
-        if (!newContactInput) return
-        const added = processContactInput(newContactInput)
-        if (added) {
-            setNewContactInput("")
-        }
-    }, [newContactInput, processContactInput])
-
-    const handleAddTeam = useCallback((teamId: string) => {
-        const id = teamOwnerId(teamId)
-        if (directList.some((item: DirectAccessItem) => item.id === id)) return
-        setDirectListOverride(prev => [...(prev || baseDirectList), {
-            id,
-            read: true,
-            write: true,
-            owner: false,
-        }])
-        setPendingChanges(true)
-    }, [directList])
-
-    const handlePermissionChange = useCallback((id: string, permission: string) => {
-        setDirectListOverride(prev => (prev || baseDirectList).map((item: DirectAccessItem) => {
-            if (item.id === id) {
-                if (permission === "remove") {
-                    return {...item, read: false, write: false}
-                } else if (permission === "editor") {
-                    return {...item, read: true, write: true}
-                } else if (permission === "viewer") {
-                    return {...item, read: true, write: false}
+                const isEmail = validateEmailAddress(value);
+                if (isEmail) {
+                    email = value.trim().toLowerCase();
+                    displayName = email.split('@')[0];
+                } else {
+                    return false;
                 }
             }
-            return item
-        }))
-        setPendingChanges(true)
-    }, [baseDirectList])
+
+            if (directList.some((item: DirectAccessItem) => item.id.toLowerCase() === email.toLowerCase())) {
+                return false;
+            }
+
+            const suggestion: ContactSuggestion = {
+                id: email.toLowerCase(),
+                email: email.toLowerCase(),
+                displayName: displayName,
+                allEmails: [email.toLowerCase()],
+            };
+
+            handleAddUser(suggestion);
+            return true;
+        },
+        [directList, handleAddUser],
+    );
+
+    const handleContactSelected = useCallback(
+        (value: string) => {
+            if (value.includes('<') && value.includes('>')) {
+                const added = processContactInput(value);
+                if (added) {
+                    setNewContactInput('');
+                } else {
+                    setNewContactInput(value);
+                }
+            } else {
+                setNewContactInput(value);
+            }
+        },
+        [processContactInput],
+    );
+
+    const handleAddContactClick = useCallback(() => {
+        if (!newContactInput) return;
+        const added = processContactInput(newContactInput);
+        if (added) {
+            setNewContactInput('');
+        }
+    }, [newContactInput, processContactInput]);
+
+    const handleAddTeam = useCallback(
+        (teamId: string) => {
+            const id = teamOwnerId(teamId);
+            if (directList.some((item: DirectAccessItem) => item.id === id)) return;
+            setDirectListOverride((prev) => [
+                ...(prev || baseDirectList),
+                {
+                    id,
+                    read: true,
+                    write: true,
+                    owner: false,
+                },
+            ]);
+            setPendingChanges(true);
+        },
+        [directList],
+    );
+
+    const handlePermissionChange = useCallback(
+        (id: string, permission: string) => {
+            setDirectListOverride((prev) =>
+                (prev || baseDirectList).map((item: DirectAccessItem) => {
+                    if (item.id === id) {
+                        if (permission === 'remove') {
+                            return {...item, read: false, write: false};
+                        } else if (permission === 'editor') {
+                            return {...item, read: true, write: true};
+                        } else if (permission === 'viewer') {
+                            return {...item, read: true, write: false};
+                        }
+                    }
+                    return item;
+                }),
+            );
+            setPendingChanges(true);
+        },
+        [baseDirectList],
+    );
 
     const handleVisibilityChange = useCallback((newVisibility: DriveVisibility) => {
-        setVisibility(newVisibility)
-        setPendingChanges(true)
-    }, [])
+        setVisibility(newVisibility);
+        setPendingChanges(true);
+    }, []);
 
-    const handleSharingRestrictedChange = useCallback((checked: boolean | "indeterminate") => {
-        setSharingRestricted(!checked)
-        setPendingChanges(true)
-    }, [])
+    const handleSharingRestrictedChange = useCallback((checked: boolean | 'indeterminate') => {
+        setSharingRestricted(!checked);
+        setPendingChanges(true);
+    }, []);
 
     const handleSave = useCallback(() => {
-        const updatedAcl: DriveACL[] = []
+        const updatedAcl: DriveACL[] = [];
 
         for (const item of directList) {
             if (!item.owner && (item.read || item.write)) {
@@ -183,16 +194,15 @@ export function DriveAccessListEdit({
                     id: item.id,
                     read: item.read,
                     write: item.write,
-                })
+                });
             }
         }
 
-        onSave(updatedAcl, visibility, isEffectiveOwner ? sharingRestricted : undefined)
-    }, [directList, visibility, sharingRestricted, isEffectiveOwner, onSave])
+        onSave(updatedAcl, visibility, isEffectiveOwner ? sharingRestricted : undefined);
+    }, [directList, visibility, sharingRestricted, isEffectiveOwner, onSave]);
 
     return (
-        <div className={cn("space-y-4", className)}>
-
+        <div className={cn('space-y-4', className)}>
             <div>
                 <div className="flex mt-2">
                     <div className="flex-1 relative">
@@ -228,12 +238,10 @@ export function DriveAccessListEdit({
                         <div key={access.id} className="flex items-center justify-between">
                             <UserItem email={access.id}/>
                             {access.owner ? (
-                                <span className="text-xs text-muted-foreground w-28 text-right">
-                                Owner
-                            </span>
+                                <span className="text-xs text-muted-foreground w-28 text-right">Owner</span>
                             ) : (
                                 <Select
-                                    defaultValue={access.write ? "editor" : "viewer"}
+                                    defaultValue={access.write ? 'editor' : 'viewer'}
                                     onValueChange={(value) => handlePermissionChange(access.id, value)}
                                 >
                                     <SelectTrigger className="h-7 w-28">
@@ -247,21 +255,18 @@ export function DriveAccessListEdit({
                                 </Select>
                             )}
                         </div>
-                    )
+                    );
                 })}
 
-                {inheritedList.map((access: any) => {
+                {inheritedList.map((access) => {
                     return (
                         <div key={access.id} className="flex items-center justify-between">
-                            <UserItem
-                                email={access.id}
-                                label={<>(inherited from /{access.sourceFolderName})</>}
-                            />
+                            <UserItem email={access.id} label={<>(inherited from /{access.sourceFolderName})</>}/>
                             <span className="text-xs text-muted-foreground w-28 text-right">
-                            {access.write ? "Editor" : "Viewer"}
-                        </span>
+                                {access.write ? 'Editor' : 'Viewer'}
+                            </span>
                         </div>
-                    )
+                    );
                 })}
             </div>
 
@@ -271,26 +276,30 @@ export function DriveAccessListEdit({
                 <h4 className="text-sm font-medium mb-2">General access</h4>
                 <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center">
-                        <AvatarIcon className="w-8 h-8 cursor-pointer"
-                                    onClick={() => handleVisibilityChange(visibility === 'private' ? 'public-read' : 'private')}>
+                        <AvatarIcon
+                            className="w-8 h-8 cursor-pointer"
+                            onClick={() => handleVisibilityChange(visibility === 'private' ? 'public-read' : 'private')}
+                        >
                             {visibility !== 'private' ? <Unlock/> : <Lock/>}
                         </AvatarIcon>
                         <div className="ml-3">
                             <p className="text-sm font-medium">
-                                {visibility !== 'private' ? "Unrestricted" : "Restricted"}
+                                {visibility !== 'private' ? 'Unrestricted' : 'Restricted'}
                             </p>
                             <p className="text-xs text-muted-foreground">
                                 {visibility !== 'private'
-                                    ? "Anyone with the link can access"
-                                    : "Only people with access can open with the link"}
+                                    ? 'Anyone with the link can access'
+                                    : 'Only people with access can open with the link'}
                             </p>
                         </div>
                     </div>
 
                     {visibility !== 'private' && (
                         <Select
-                            value={visibility === 'public-write' ? "editor" : "viewer"}
-                            onValueChange={(v) => handleVisibilityChange(v === 'editor' ? 'public-write' : 'public-read')}
+                            value={visibility === 'public-write' ? 'editor' : 'viewer'}
+                            onValueChange={(v) =>
+                                handleVisibilityChange(v === 'editor' ? 'public-write' : 'public-read')
+                            }
                         >
                             <SelectTrigger className="h-7 w-28">
                                 <SelectValue/>
@@ -306,10 +315,7 @@ export function DriveAccessListEdit({
                 {isEffectiveOwner && (
                     <label className="flex items-center cursor-pointer">
                         <div className="w-8 h-8 flex items-center justify-center shrink-0">
-                            <Checkbox
-                                checked={!sharingRestricted}
-                                onCheckedChange={handleSharingRestrictedChange}
-                            />
+                            <Checkbox checked={!sharingRestricted} onCheckedChange={handleSharingRestrictedChange}/>
                         </div>
                         <div className="ml-3">
                             <p className="text-sm">Editors can share</p>
@@ -351,13 +357,10 @@ export function DriveAccessListEdit({
                         Cancel
                     </Button>
                 )}
-                <Button
-                    onClick={handleSave}
-                    disabled={!pendingChanges}
-                >
-                    {pendingChanges ? "Save" : "Done"}
+                <Button onClick={handleSave} disabled={!pendingChanges}>
+                    {pendingChanges ? 'Save' : 'Done'}
                 </Button>
             </DialogFooter>
         </div>
-    )
+    );
 }

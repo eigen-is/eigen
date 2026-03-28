@@ -1,6 +1,6 @@
-import type {QueryClient} from '@tanstack/react-query';
-import type {SSEvent} from '@workspace/lib/types/sse';
-import {SSEventType} from '@workspace/lib/types/sse';
+import type { QueryClient } from '@tanstack/react-query';
+import type { SSEvent } from '@workspace/lib/types/sse';
+import { SSEventType } from '@workspace/lib/types/sse';
 import {
     invalidateCalendarCreated,
     invalidateCalendarDeleted,

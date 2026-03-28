@@ -1,13 +1,9 @@
-import type {User} from 'better-auth/types';
-import {type DriveACL, type DrivePath, isCollabType} from '@workspace/lib/types/drive';
 import {parseOwnerId} from '@workspace/lib/types';
+import {type DriveACL, type DrivePath, isCollabType} from '@workspace/lib/types/drive';
+import type {User} from 'better-auth/types';
 import type {Memberships} from '../user/';
 
-export function canReadFromAncestors(
-    ancestors: DrivePath[],
-    user: User,
-    memberships: Memberships,
-): boolean {
+export function canReadFromAncestors(ancestors: DrivePath[], user: User, memberships: Memberships): boolean {
     for (const path of ancestors) {
         if (path.ownerId === user.id) return true;
 
@@ -26,11 +22,7 @@ export function canReadFromAncestors(
     return false;
 }
 
-export function canWriteFromAncestors(
-    ancestors: DrivePath[],
-    user: User,
-    memberships: Memberships,
-): boolean {
+export function canWriteFromAncestors(ancestors: DrivePath[], user: User, memberships: Memberships): boolean {
     for (const path of ancestors) {
         if (path.ownerId === user.id) return true;
 
@@ -53,7 +45,7 @@ export function matchesACL(
     acl: DriveACL[],
     user: User,
     memberships: Memberships,
-    permission: 'read' | 'write'
+    permission: 'read' | 'write',
 ): boolean {
     for (const entry of acl) {
         const hasPermission = permission === 'read' ? entry.read : entry.write;
@@ -77,7 +69,7 @@ export function normalizeACL(acl: DriveACL[] | null): DriveACL[] | null {
         return null;
     }
 
-    return acl.map(a => {
+    return acl.map((a) => {
         const parsed = parseOwnerId(a.id);
         return {
             ...a,
@@ -92,9 +84,7 @@ export function normalizeACL(acl: DriveACL[] | null): DriveACL[] | null {
  * are not inside a container.
  * `ancestors` should be ordered root-first (as returned by `getBreadcrumb`).
  */
-export function findContainerFromAncestors(
-    ancestors: DrivePath[],
-): DrivePath | null {
+export function findContainerFromAncestors(ancestors: DrivePath[]): DrivePath | null {
     let container: DrivePath | null = null;
 
     for (const path of ancestors) {
@@ -115,8 +105,8 @@ export function filterRedundantACL(
     acl: DriveACL[],
     path: DrivePath,
     ancestors: DrivePath[],
-): { filtered: DriveACL[], removed: DriveACL[] } {
-    const inherited = new Map<string, { read: boolean, write: boolean }>();
+): { filtered: DriveACL[]; removed: DriveACL[] } {
+    const inherited = new Map<string, { read: boolean; write: boolean }>();
 
     // ancestors excludes the path itself, so every entry is a parent/grandparent
     for (const ancestor of ancestors) {
@@ -141,7 +131,13 @@ export function filterRedundantACL(
         const entryParsed = parseOwnerId(entry.id);
 
         // Team ACL on a path owned by the same team is always redundant
-        if (entryParsed && ownerParsed && ownerParsed.type === 'team' && entryParsed.type === 'team' && entryParsed.id === ownerParsed.id) {
+        if (
+            entryParsed &&
+            ownerParsed &&
+            ownerParsed.type === 'team' &&
+            entryParsed.type === 'team' &&
+            entryParsed.id === ownerParsed.id
+        ) {
             isRedundant = true;
         }
 

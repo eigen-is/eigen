@@ -1,12 +1,12 @@
-import {createRootRouteWithContext, Outlet} from '@tanstack/react-router'
-import {AuthContextType, useAuth} from "@workspace/lib/auth";
-import {AppShell} from "@workspace/ui/components/layout/app/app-shell.tsx";
-import {ChatSidebar} from "../components/chat/chat-sidebar";
+import {createRootRouteWithContext, Outlet} from '@tanstack/react-router';
+import {type AuthContextType, useAuth} from '@workspace/lib/auth';
 import {DEFAULT_MOUNT_ID, useRootFolder} from '@workspace/lib/drive';
+import {AppShell} from '@workspace/ui/components/layout/app/app-shell.tsx';
+import {ChatSidebar} from '../components/chat/chat-sidebar';
 
 type MyRouterContext = {
-    auth: AuthContextType
-}
+    auth: AuthContextType;
+};
 
 function ChatRoot() {
     const {user} = useAuth();

@@ -8,46 +8,54 @@ type ImageResizeHandlesProps = {
     children: React.ReactNode;
     selected?: boolean;
     editable?: boolean;
-}
+};
 
-export function ImageResizeHandles({width, aspectRatio, maxWidth, onResize, children, selected = false, editable = true}: ImageResizeHandlesProps) {
+export function ImageResizeHandles({
+                                       width,
+                                       aspectRatio,
+                                       maxWidth,
+                                       onResize,
+                                       children,
+                                       selected = false,
+                                       editable = true,
+                                   }: ImageResizeHandlesProps) {
     const [localWidth, setLocalWidth] = useState<number | null>(null);
 
-    const handleResizeStart = useCallback((e: React.MouseEvent, direction: string) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (!aspectRatio) return;
+    const handleResizeStart = useCallback(
+        (e: React.MouseEvent, direction: string) => {
+            e.preventDefault();
+            e.stopPropagation();
+            if (!aspectRatio) return;
 
-        const startX = e.clientX;
-        const startWidth = width || 300;
-        let currentWidth = startWidth;
+            const startX = e.clientX;
+            const startWidth = width || 300;
+            let currentWidth = startWidth;
 
-        const handleMouseMove = (moveEvent: MouseEvent) => {
-            const deltaX = moveEvent.clientX - startX;
-            const isLeft = direction === 'w' || direction === 'nw' || direction === 'sw';
-            const effectiveDelta = isLeft ? -deltaX : deltaX;
-            currentWidth = Math.min(maxWidth, Math.max(100, startWidth + effectiveDelta));
-            setLocalWidth(Math.round(currentWidth));
-        };
+            const handleMouseMove = (moveEvent: MouseEvent) => {
+                const deltaX = moveEvent.clientX - startX;
+                const isLeft = direction === 'w' || direction === 'nw' || direction === 'sw';
+                const effectiveDelta = isLeft ? -deltaX : deltaX;
+                currentWidth = Math.min(maxWidth, Math.max(100, startWidth + effectiveDelta));
+                setLocalWidth(Math.round(currentWidth));
+            };
 
-        const handleMouseUp = () => {
-            setLocalWidth(null);
-            onResize(Math.round(currentWidth));
-            document.removeEventListener('mousemove', handleMouseMove);
-            document.removeEventListener('mouseup', handleMouseUp);
-        };
+            const handleMouseUp = () => {
+                setLocalWidth(null);
+                onResize(Math.round(currentWidth));
+                document.removeEventListener('mousemove', handleMouseMove);
+                document.removeEventListener('mouseup', handleMouseUp);
+            };
 
-        document.addEventListener('mousemove', handleMouseMove);
-        document.addEventListener('mouseup', handleMouseUp);
-    }, [width, aspectRatio, maxWidth, onResize]);
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
+        },
+        [width, aspectRatio, maxWidth, onResize],
+    );
 
     const displayWidth = localWidth ?? width;
 
     return (
-        <div
-            className="relative inline-block group"
-            style={{width: displayWidth ? `${displayWidth}px` : undefined}}
-        >
+        <div className="relative inline-block group" style={{width: displayWidth ? `${displayWidth}px` : undefined}}>
             {children}
             {selected && editable && (
                 <>

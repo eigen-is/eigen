@@ -1,35 +1,41 @@
-import {useEffect, useMemo, useState} from 'react';
-import {AlignLeft, Calendar, Clock, MapPin, UsersRound} from 'lucide-react';
-import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
-import {Button} from '@workspace/ui/components/button';
-import {Input} from '@workspace/ui/components/input';
-import {Textarea} from '@workspace/ui/components/textarea';
-import {Label} from '@workspace/ui/components/label';
-import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@workspace/ui/components/select';
-import {Checkbox} from '@workspace/ui/components/checkbox';
+import {useAuth} from '@workspace/lib/auth';
 import {
     useCalendars,
     useCreateEvent,
     useDeleteEvent,
     useSharedCalendars,
-    useUpdateEvent
+    useUpdateEvent,
 } from '@workspace/lib/calendar';
-import {useAuth} from '@workspace/lib/auth';
-import type {Attendee, CalendarEventOccurrence, CalendarItem, SharedCalendar} from '@workspace/lib/types/calendar';
+import type {
+    Attendee,
+    CalendarEventOccurrence,
+    CalendarItem,
+    CreateEventInput,
+    SharedCalendar,
+} from '@workspace/lib/types/calendar';
+import {Button} from '@workspace/ui/components/button';
+import {Checkbox} from '@workspace/ui/components/checkbox';
+import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
+import {Input} from '@workspace/ui/components/input';
+import {Label} from '@workspace/ui/components/label';
+import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@workspace/ui/components/select';
+import {Textarea} from '@workspace/ui/components/textarea';
+import {AlignLeft, Calendar, Clock, MapPin, UsersRound} from 'lucide-react';
+import {useEffect, useMemo, useState} from 'react';
 import {RRule} from 'rrule';
+import {AttendeeEditor, AttendeeList} from './attendee-editor';
+import {occurrenceDateToString, parseOccurrenceDate} from './calendar-utils';
 import {RecurrencePicker} from './recurrence-picker';
-import {addMinutes, roundToNext15Minutes, TimeSelect} from './time-select';
 import type {RecurringAction} from './recurring-action-dialog';
 import {RecurringActionDialog} from './recurring-action-dialog';
-import {occurrenceDateToString, parseOccurrenceDate} from './calendar-utils';
-import {AttendeeEditor, AttendeeList} from './attendee-editor';
+import {addMinutes, roundToNext15Minutes, TimeSelect} from './time-select';
 
 type CalendarOption = {
     id: string;
     name: string;
     color: string;
     ownerId: string;
-}
+};
 
 type EditEventDialogProps = {
     open: boolean;
@@ -38,7 +44,7 @@ type EditEventDialogProps = {
     ownerUserId?: string;
     calendars?: CalendarItem[];
     sharedCalendars?: SharedCalendar[];
-}
+};
 
 function toLocalDateString(date: Date): string {
     const y = date.getFullYear();
@@ -64,7 +70,14 @@ function truncateRRule(rruleStr: string, beforeDate: Date): string {
     return result.replace(/^RRULE:/, '');
 }
 
-export function EditEventDialog({open, onOpenChange, event, ownerUserId, calendars: calendarsProp, sharedCalendars: sharedCalendarsProp}: EditEventDialogProps) {
+export function EditEventDialog({
+                                    open,
+                                    onOpenChange,
+                                    event,
+                                    ownerUserId,
+                                    calendars: calendarsProp,
+                                    sharedCalendars: sharedCalendarsProp,
+                                }: EditEventDialogProps) {
     const {user} = useAuth();
     const ownerId = user?.id || '';
     const eventOwnerId = ownerUserId || ownerId;
@@ -75,10 +88,15 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId, calenda
     const sharedCalendars = sharedCalendarsProp || fetchedSharedCalendars;
 
     const calendarOptions = useMemo(() => {
-        const options: CalendarOption[] = calendars.map(c => ({id: c.id, name: c.name, color: c.color, ownerId}));
+        const options: CalendarOption[] = calendars.map((c) => ({id: c.id, name: c.name, color: c.color, ownerId}));
         for (const sc of sharedCalendars) {
             if (sc.permission === 'write') {
-                options.push({id: sc.calendarId, name: sc.calendarName, color: sc.color || sc.calendarColor, ownerId: sc.ownerUserId});
+                options.push({
+                    id: sc.calendarId,
+                    name: sc.calendarName,
+                    color: sc.color || sc.calendarColor,
+                    ownerId: sc.ownerUserId,
+                });
             }
         }
         return options;
@@ -98,8 +116,10 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId, calenda
     const [isLoading, setIsLoading] = useState(false);
     const [showRecurringDialog, setShowRecurringDialog] = useState(false);
 
-    const selectedCal = calendarOptions.find(c => `${c.ownerId}:${c.id}` === selectedCalKey);
-    const calendarChanged = event ? (selectedCal?.id !== event.calendarId || selectedCal?.ownerId !== eventOwnerId) : false;
+    const selectedCal = calendarOptions.find((c) => `${c.ownerId}:${c.id}` === selectedCalKey);
+    const calendarChanged = event
+        ? selectedCal?.id !== event.calendarId || selectedCal?.ownerId !== eventOwnerId
+        : false;
 
     const updateEvent = useUpdateEvent(eventOwnerId);
     const createEvent = useCreateEvent(selectedCal?.ownerId || eventOwnerId);
@@ -114,8 +134,14 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId, calenda
             setRruleString(event.rrule);
             setAttendees(event.data?.attendees || []);
 
-            const currentCal = calendarOptions.find(c => c.id === event.calendarId && c.ownerId === eventOwnerId);
-            setSelectedCalKey(currentCal ? `${currentCal.ownerId}:${currentCal.id}` : calendarOptions[0] ? `${calendarOptions[0].ownerId}:${calendarOptions[0].id}` : '');
+            const currentCal = calendarOptions.find((c) => c.id === event.calendarId && c.ownerId === eventOwnerId);
+            setSelectedCalKey(
+                currentCal
+                    ? `${currentCal.ownerId}:${currentCal.id}`
+                    : calendarOptions[0]
+                        ? `${calendarOptions[0].ownerId}:${calendarOptions[0].id}`
+                        : '',
+            );
 
             if (event.allDay) {
                 const sd = new Date(event.startTime * 1000);
@@ -145,8 +171,8 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId, calenda
         let endTimestamp: number;
 
         if (allDay) {
-            const sd = new Date(startDate + 'T00:00:00Z');
-            const ed = new Date(endDate + 'T00:00:00Z');
+            const sd = new Date(`${startDate}T00:00:00Z`);
+            const ed = new Date(`${endDate}T00:00:00Z`);
             ed.setUTCDate(ed.getUTCDate() + 1);
             startTimestamp = Math.floor(sd.getTime() / 1000);
             endTimestamp = Math.floor(ed.getTime() / 1000);
@@ -168,7 +194,7 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId, calenda
         }
     };
 
-    const moveEvent = async (updates: Record<string, any>) => {
+    const moveEvent = async (updates: Omit<CreateEventInput, 'calendarId'>) => {
         if (!selectedCal) return;
         await createEvent.mutateAsync({
             calendarId: selectedCal.id,
@@ -198,7 +224,7 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId, calenda
                 location: location.trim() || null,
                 rrule: rruleString,
                 timezone,
-                data: Object.values(data).some(v => v !== undefined) ? data : null,
+                data: Object.values(data).some((v) => v !== undefined) ? data : null,
             };
 
             if (calendarChanged) {
@@ -264,23 +290,39 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId, calenda
                             <div className="flex-1 space-y-3">
                                 {allDay ? (
                                     <div className="flex items-center gap-2">
-                                        <Input type="date" value={startDate}
-                                               onChange={(e) => setStartDate(e.target.value)} className="flex-1 h-8 text-sm"/>
+                                        <Input
+                                            type="date"
+                                            value={startDate}
+                                            onChange={(e) => setStartDate(e.target.value)}
+                                            className="flex-1 h-8 text-sm"
+                                        />
                                         <span className="text-muted-foreground text-sm">to</span>
-                                        <Input type="date" value={endDate}
-                                               onChange={(e) => setEndDate(e.target.value)} className="flex-1 h-8 text-sm"/>
+                                        <Input
+                                            type="date"
+                                            value={endDate}
+                                            onChange={(e) => setEndDate(e.target.value)}
+                                            className="flex-1 h-8 text-sm"
+                                        />
                                     </div>
                                 ) : (
                                     <div className="flex items-center gap-2">
-                                        <Input type="date" value={startDate}
-                                               onChange={(e) => {
-                                                   setStartDate(e.target.value);
-                                                   setEndDate(e.target.value);
-                                               }}
-                                               className="h-8 text-sm"/>
+                                        <Input
+                                            type="date"
+                                            value={startDate}
+                                            onChange={(e) => {
+                                                setStartDate(e.target.value);
+                                                setEndDate(e.target.value);
+                                            }}
+                                            className="h-8 text-sm"
+                                        />
                                         <TimeSelect value={startTime} onChange={handleStartTimeChange}/>
                                         <span className="text-muted-foreground text-sm">–</span>
-                                        <TimeSelect value={endTime} onChange={setEndTime} referenceTime={startTime} minTime={addMinutes(startTime, 15)}/>
+                                        <TimeSelect
+                                            value={endTime}
+                                            onChange={setEndTime}
+                                            referenceTime={startTime}
+                                            minTime={addMinutes(startTime, 15)}
+                                        />
                                     </div>
                                 )}
 
@@ -308,7 +350,11 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId, calenda
                                     />
                                     {!allDay && (
                                         <span className="text-xs text-muted-foreground ml-auto">
-                                            {(event.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone).split('/').pop()?.replace(/_/g, ' ')} time zone
+                                            {(event.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone)
+                                                .split('/')
+                                                .pop()
+                                                ?.replace(/_/g, ' ')}{' '}
+                                            time zone
                                         </span>
                                     )}
                                 </div>
@@ -320,7 +366,10 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId, calenda
                                 <div className="flex items-start gap-3">
                                     <UsersRound className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0"/>
                                     <div className="flex-1">
-                                        <AttendeeList attendees={event.data.attendees} organizer={event.data.organizer}/>
+                                        <AttendeeList
+                                            attendees={event.data.attendees}
+                                            organizer={event.data.organizer}
+                                        />
                                     </div>
                                 </div>
                             ) : null
@@ -367,10 +416,15 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId, calenda
                                     </SelectTrigger>
                                     <SelectContent>
                                         {calendarOptions.map((cal) => (
-                                            <SelectItem key={`${cal.ownerId}:${cal.id}`} value={`${cal.ownerId}:${cal.id}`}>
+                                            <SelectItem
+                                                key={`${cal.ownerId}:${cal.id}`}
+                                                value={`${cal.ownerId}:${cal.id}`}
+                                            >
                                                 <div className="flex items-center gap-2">
-                                                    <div className="h-3 w-3 rounded-full shrink-0"
-                                                         style={{backgroundColor: cal.color}}/>
+                                                    <div
+                                                        className="h-3 w-3 rounded-full shrink-0"
+                                                        style={{backgroundColor: cal.color}}
+                                                    />
                                                     {cal.name}
                                                 </div>
                                             </SelectItem>

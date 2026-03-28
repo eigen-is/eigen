@@ -1,3 +1,29 @@
+import {useMatch, useNavigate} from '@tanstack/react-router';
+import {usePathInfo, useRootFolder} from '@workspace/lib/drive';
+import {usePeopleTeams} from '@workspace/lib/people';
+import {usePublicConfig} from '@workspace/lib/public';
+import {useTeamMounts} from '@workspace/lib/team';
+import {teamOwnerId} from '@workspace/lib/types';
+import type {DrivePath} from '@workspace/lib/types/drive';
+import type {MountSettings} from '@workspace/lib/types/settings';
+import {SidebarItem, StorageUsage, UserAvatar} from '@workspace/ui';
+import {Button} from '@workspace/ui/components/button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@workspace/ui/components/dropdown-menu';
+import {DriveCreateChat} from '@workspace/ui/components/layout/drive/drive-create-chat';
+import {DriveCreateDoc} from '@workspace/ui/components/layout/drive/drive-create-doc';
+import {DriveCreateFolder} from '@workspace/ui/components/layout/drive/drive-create-folder';
+import {DriveCreateSheets} from '@workspace/ui/components/layout/drive/drive-create-sheets';
+import {DriveCreateSlides} from '@workspace/ui/components/layout/drive/drive-create-slides';
+import {DriveCreateStickies} from '@workspace/ui/components/layout/drive/drive-create-stickies';
+import {DriveUploadFiles} from '@workspace/ui/components/layout/drive/drive-upload-files';
+import {SidebarHeader} from '@workspace/ui/components/layout/sidebar/sidebar-header';
+import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
+import {Separator} from '@workspace/ui/components/separator';
 import {
     Download,
     FileText,
@@ -12,33 +38,7 @@ import {
     Upload as UploadIcon,
     UsersRound,
 } from 'lucide-react';
-import {Button} from "@workspace/ui/components/button";
-import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
-import {SidebarHeader} from '@workspace/ui/components/layout/sidebar/sidebar-header';
-import {SidebarItem, StorageUsage, UserAvatar} from "@workspace/ui";
-import {Separator} from '@workspace/ui/components/separator';
-import {DrivePath} from '@workspace/lib/types/drive';
 import {useState} from 'react';
-import {useMatch, useNavigate} from '@tanstack/react-router';
-import {usePathInfo, useRootFolder} from '@workspace/lib/drive';
-import {usePublicConfig} from '@workspace/lib/public';
-import {usePeopleTeams} from '@workspace/lib/people';
-import {useTeamMounts} from '@workspace/lib/team';
-import {teamOwnerId} from '@workspace/lib/types';
-import type {MountSettings} from '@workspace/lib/types/settings';
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger
-} from '@workspace/ui/components/dropdown-menu';
-import {DriveCreateFolder} from '@workspace/ui/components/layout/drive/drive-create-folder';
-import {DriveCreateDoc} from '@workspace/ui/components/layout/drive/drive-create-doc';
-import {DriveCreateStickies} from '@workspace/ui/components/layout/drive/drive-create-stickies';
-import {DriveCreateChat} from '@workspace/ui/components/layout/drive/drive-create-chat';
-import {DriveCreateSlides} from '@workspace/ui/components/layout/drive/drive-create-slides';
-import {DriveCreateSheets} from '@workspace/ui/components/layout/drive/drive-create-sheets';
-import {DriveUploadFiles} from '@workspace/ui/components/layout/drive/drive-upload-files';
 
 interface DriveSidebarProps {
     condensed?: boolean;
@@ -47,8 +47,18 @@ interface DriveSidebarProps {
     rootPath: DrivePath | null;
 }
 
-function TeamMountItem({ownerId, mountId, label, icon, condensed}: {
-    ownerId: string; mountId: string; label: string; icon: React.ReactNode; condensed: boolean
+function TeamMountItem({
+                           ownerId,
+                           mountId,
+                           label,
+                           icon,
+                           condensed,
+                       }: {
+    ownerId: string;
+    mountId: string;
+    label: string;
+    icon: React.ReactNode;
+    condensed: boolean;
 }) {
     const {data: root} = useRootFolder(ownerId, mountId);
     if (!root) return null;
@@ -62,15 +72,21 @@ function TeamMountItem({ownerId, mountId, label, icon, condensed}: {
     );
 }
 
-function TeamDriveItems({teamId, teamName, icon, condensed}: {
-    teamId: string; teamName: string; icon: React.ReactNode; condensed: boolean
+function TeamDriveItems({
+                            teamId,
+                            teamName: _teamName,
+                            icon,
+                            condensed,
+                        }: {
+    teamId: string;
+    teamName: string;
+    icon: React.ReactNode;
+    condensed: boolean;
 }) {
     const ownerId = teamOwnerId(teamId);
     const {data: mounts} = useTeamMounts(teamId);
 
-    const enabledMounts = mounts
-        ? Object.entries(mounts).filter(([, m]: [string, MountSettings]) => m.enabled)
-        : [];
+    const enabledMounts = mounts ? Object.entries(mounts).filter(([, m]: [string, MountSettings]) => m.enabled) : [];
 
     if (enabledMounts.length === 0) return null;
 
@@ -90,12 +106,7 @@ function TeamDriveItems({teamId, teamName, icon, condensed}: {
     );
 }
 
-export function DriveSidebar({
-                                 condensed = false,
-                                 onClose,
-                                 isMobile = false,
-                                 rootPath,
-                             }: DriveSidebarProps) {
+export function DriveSidebar({condensed = false, onClose, isMobile = false, rootPath}: DriveSidebarProps) {
     // Dialog open states
     const [createFolderOpen, setCreateFolderOpen] = useState(false);
     const [createDocOpen, setCreateDocOpen] = useState(false);
@@ -120,9 +131,9 @@ export function DriveSidebar({
 
     // Get path info for the current path
     const {data: currentPath} = usePathInfo(
-        currentOwnerId || (rootPath?.ownerId || ''),
-        currentMountId || (rootPath?.mountId || 'default'),
-        currentPathId || (rootPath?.id || '')
+        currentOwnerId || rootPath?.ownerId || '',
+        currentMountId || rootPath?.mountId || 'default',
+        currentPathId || rootPath?.id || '',
     );
 
     // Determine which path to use for operations (current or root)
@@ -148,7 +159,7 @@ export function DriveSidebar({
                 ownerId: targetPath?.ownerId || '',
                 mountId: targetPath?.mountId || 'default',
                 pathId: targetPath?.id || '',
-            }
+            },
         });
     };
 
@@ -163,14 +174,14 @@ export function DriveSidebar({
                     <DropdownMenuTrigger asChild>
                         <Button
                             variant="default"
-                            size={condensed ? "icon" : "default"}
+                            size={condensed ? 'icon' : 'default'}
                             className={`${condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}`}
                         >
                             <Plus className="h-4 w-4"/>
                             {!condensed && <span>New</span>}
                         </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align={condensed ? "center" : "start"}>
+                    <DropdownMenuContent align={condensed ? 'center' : 'start'}>
                         <DropdownMenuItem onClick={() => setCreateFolderOpen(true)}>
                             <FolderPlus className="h-4 w-4 mr-2"/>
                             Create folder
@@ -198,19 +209,13 @@ export function DriveSidebar({
                         <DropdownMenuItem onClick={() => setUploadOpen(true)}>
                             <UploadIcon className="h-4 w-4 mr-2"/>
                             Upload file
-                            <input
-                                type="file"
-                                className="hidden"
-                                onChange={handleFileChange}
-                            />
+                            <input type="file" className="hidden" onChange={handleFileChange}/>
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
             </div>
 
-            <SidebarSection
-                condensed={condensed}
-            >
+            <SidebarSection condensed={condensed}>
                 <SidebarItem
                     icon={<Home className="h-4 w-4"/>}
                     to={rootPath ? `/fs/${rootPath.ownerId}/${rootPath.mountId}/${rootPath.id}` : '/'}
@@ -254,12 +259,9 @@ export function DriveSidebar({
                     label="All sheets"
                     condensed={condensed}
                 />
-
             </SidebarSection>
             <Separator/>
-            <SidebarSection
-                condensed={condensed}
-            >
+            <SidebarSection condensed={condensed}>
                 <SidebarItem
                     icon={<UsersRound className="h-4 w-4"/>}
                     to="/shared/by-me"
@@ -277,7 +279,7 @@ export function DriveSidebar({
             {config && teams && teams.length > 0 && (
                 <>
                     <Separator/>
-                    <SidebarSection condensed={condensed} title={condensed ? undefined : "Shared Drives"}>
+                    <SidebarSection condensed={condensed} title={condensed ? undefined : 'Shared Drives'}>
                         {teams.map((team) => (
                             <TeamDriveItems
                                 key={team.id}
@@ -292,10 +294,7 @@ export function DriveSidebar({
             )}
 
             {/* Storage usage indicator at the bottom of sidebar */}
-            <StorageUsage
-                className="mt-auto"
-                condensed={condensed}
-            />
+            <StorageUsage className="mt-auto" condensed={condensed}/>
 
             {/* Create Folder Dialog */}
             {targetPath && (

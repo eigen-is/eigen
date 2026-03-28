@@ -1,5 +1,5 @@
-import {KeyboardEvent, RefObject, useEffect, useRef, useState} from 'react';
-import type {UseListSelectionReturn} from './use-list-selection';
+import { type KeyboardEvent, type RefObject, useEffect, useRef, useState } from 'react';
+import type { UseListSelectionReturn } from './use-list-selection';
 
 type UseKeyboardListNavigationOptions<T> = {
     items: T[];
@@ -12,20 +12,20 @@ type UseKeyboardListNavigationOptions<T> = {
     onDelete?: (item: T) => void;
     shouldNotify?: (item: T, index: number) => boolean;
     selection?: UseListSelectionReturn<T>;
-}
+};
 
 export function useKeyboardListNavigation<T>({
-                                                 items,
-                                                 activeId,
-                                                 getId,
-                                                 onSelect,
-                                                 containerRef,
-                                                 itemSelector = '.eigen-list-item',
-                                                 onDelete,
-                                                 shouldNotify,
-                                                 selection,
-                                                 onQuickLook,
-                                             }: UseKeyboardListNavigationOptions<T>) {
+    items,
+    activeId,
+    getId,
+    onSelect,
+    containerRef,
+    itemSelector = '.eigen-list-item',
+    onDelete,
+    shouldNotify,
+    selection,
+    onQuickLook,
+}: UseKeyboardListNavigationOptions<T>) {
     const [selectedIndex, setSelectedIndex] = useState(-1);
     const getIdRef = useRef(getId);
     useEffect(() => {
@@ -34,7 +34,7 @@ export function useKeyboardListNavigation<T>({
 
     useEffect(() => {
         if (activeId && items.length > 0) {
-            const index = items.findIndex(item => getIdRef.current(item) === activeId);
+            const index = items.findIndex((item) => getIdRef.current(item) === activeId);
             if (index !== -1) {
                 setSelectedIndex(index);
             }
@@ -46,7 +46,7 @@ export function useKeyboardListNavigation<T>({
     useEffect(() => {
         const timer = setTimeout(() => {
             if (containerRef.current && !containerRef.current.contains(document.activeElement)) {
-                containerRef.current.focus({preventScroll: true});
+                containerRef.current.focus({ preventScroll: true });
             }
         }, 100);
         return () => clearTimeout(timer);
@@ -58,7 +58,7 @@ export function useKeyboardListNavigation<T>({
             if (listItems[index]) {
                 listItems[index].scrollIntoView({
                     behavior: 'smooth',
-                    block: 'nearest'
+                    block: 'nearest',
                 });
             }
         }
@@ -95,7 +95,7 @@ export function useKeyboardListNavigation<T>({
         switch (e.key) {
             case 'ArrowDown':
                 e.preventDefault();
-                setSelectedIndex(prev => {
+                setSelectedIndex((prev) => {
                     const newIndex = Math.min(prev + 1, items.length - 1);
                     if (newIndex >= 0 && newIndex !== prev) {
                         updateSelection(items[newIndex], e);
@@ -108,7 +108,7 @@ export function useKeyboardListNavigation<T>({
 
             case 'ArrowUp':
                 e.preventDefault();
-                setSelectedIndex(prev => {
+                setSelectedIndex((prev) => {
                     const newIndex = Math.max(prev - 1, 0);
                     if (newIndex >= 0 && newIndex !== prev) {
                         updateSelection(items[newIndex], e);
@@ -169,5 +169,5 @@ export function useKeyboardListNavigation<T>({
         }
     };
 
-    return {selectedIndex, setSelectedIndex, handleKeyDown};
+    return { selectedIndex, setSelectedIndex, handleKeyDown };
 }

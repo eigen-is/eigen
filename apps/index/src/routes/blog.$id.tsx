@@ -1,6 +1,6 @@
-import {createFileRoute, Link, useParams} from '@tanstack/react-router'
-import {getBlogPost} from '../data/blog-posts';
+import {createFileRoute, Link, useParams} from '@tanstack/react-router';
 import {BlogPost} from '../components/BlogPost';
+import {getBlogPost} from '../data/blog-posts';
 
 export const Route = createFileRoute('/blog/$id')({
     component: BlogPostComponent,
@@ -51,7 +51,7 @@ export const Route = createFileRoute('/blog/$id')({
             ],
         };
     },
-})
+});
 
 function BlogPostComponent() {
     const {id} = useParams({from: '/blog/$id'});

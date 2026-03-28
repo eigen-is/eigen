@@ -1,6 +1,6 @@
 import {createAsyncSingleton} from '../../utils/singleton';
-import {openLocalDatabase} from '../core';
 import {getServerDataPath} from '../config/paths';
+import {openLocalDatabase} from '../core';
 import {SHARE_REGISTRY_DB_CONFIG} from './db-config';
 
 const getDb = createAsyncSingleton(async () => {

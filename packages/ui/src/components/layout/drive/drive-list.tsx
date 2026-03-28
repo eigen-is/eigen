@@ -1,34 +1,34 @@
-import {Fragment, useRef, useState} from 'react';
-import {Button} from "@workspace/ui/components/button";
-import {LoadingState} from "../app/loading-state";
-import {ErrorState} from "../app/error-state";
-import {EmptyState} from "../app/empty-state";
-import {FileText, FolderPlus, MessageSquare, Plus, Presentation, Sheet, StickyNote, UploadIcon} from "lucide-react";
-import {DriveTable, getFileIcon} from "@workspace/ui/components/layout/drive";
-import {type DrivePath} from "@workspace/lib/types/drive";
-import {cn} from "@workspace/ui/lib/utils";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger
-} from "@workspace/ui/components/dropdown-menu";
-import {
-    ContextMenu,
-    ContextMenuContent,
-    ContextMenuItem,
-    ContextMenuTrigger
-} from "@workspace/ui/components/context-menu";
+import {useBreadcrumb} from '@workspace/lib/drive';
+import type {DrivePath} from '@workspace/lib/types/drive';
 import {
     Breadcrumb,
     BreadcrumbItem,
     BreadcrumbLink,
     BreadcrumbList,
     BreadcrumbPage,
-    BreadcrumbSeparator
-} from "@workspace/ui/components/breadcrumb";
-import {useBreadcrumb} from "@workspace/lib/drive";
-import {useLayout} from "../app/layout-context.tsx";
+    BreadcrumbSeparator,
+} from '@workspace/ui/components/breadcrumb';
+import {Button} from '@workspace/ui/components/button';
+import {
+    ContextMenu,
+    ContextMenuContent,
+    ContextMenuItem,
+    ContextMenuTrigger,
+} from '@workspace/ui/components/context-menu';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@workspace/ui/components/dropdown-menu';
+import {DriveTable, getFileIcon} from '@workspace/ui/components/layout/drive';
+import {cn} from '@workspace/ui/lib/utils';
+import {FileText, FolderPlus, MessageSquare, Plus, Presentation, Sheet, StickyNote, UploadIcon} from 'lucide-react';
+import {Fragment, useRef, useState} from 'react';
+import {EmptyState} from '../app/empty-state';
+import {ErrorState} from '../app/error-state';
+import {useLayout} from '../app/layout-context.tsx';
+import {LoadingState} from '../app/loading-state';
 
 type CreateCallbacks = {
     onCreateFolder?: () => void;
@@ -40,20 +40,19 @@ type CreateCallbacks = {
     onCreateSheets?: () => void;
 };
 
-const CREATE_MENU_DEFS: {key: keyof CreateCallbacks; icon: typeof FolderPlus; label: string; buttonLabel: string}[] = [
-    {key: 'onCreateFolder', icon: FolderPlus, label: 'Create folder', buttonLabel: 'New folder'},
-    {key: 'onUploadFile', icon: UploadIcon, label: 'Upload file', buttonLabel: 'Upload'},
-    {key: 'onCreateDoc', icon: FileText, label: 'Create document', buttonLabel: 'New document'},
-    {key: 'onCreateStickies', icon: StickyNote, label: 'Create stickies', buttonLabel: 'New stickies'},
-    {key: 'onCreateChat', icon: MessageSquare, label: 'Create chat', buttonLabel: 'New chat'},
-    {key: 'onCreateSlides', icon: Presentation, label: 'Create slides', buttonLabel: 'New slides'},
-    {key: 'onCreateSheets', icon: Sheet, label: 'Create sheets', buttonLabel: 'New sheets'},
-];
+const CREATE_MENU_DEFS: { key: keyof CreateCallbacks; icon: typeof FolderPlus; label: string; buttonLabel: string }[] =
+    [
+        {key: 'onCreateFolder', icon: FolderPlus, label: 'Create folder', buttonLabel: 'New folder'},
+        {key: 'onUploadFile', icon: UploadIcon, label: 'Upload file', buttonLabel: 'Upload'},
+        {key: 'onCreateDoc', icon: FileText, label: 'Create document', buttonLabel: 'New document'},
+        {key: 'onCreateStickies', icon: StickyNote, label: 'Create stickies', buttonLabel: 'New stickies'},
+        {key: 'onCreateChat', icon: MessageSquare, label: 'Create chat', buttonLabel: 'New chat'},
+        {key: 'onCreateSlides', icon: Presentation, label: 'Create slides', buttonLabel: 'New slides'},
+        {key: 'onCreateSheets', icon: Sheet, label: 'Create sheets', buttonLabel: 'New sheets'},
+    ];
 
 function getCreateMenuItems(cb: CreateCallbacks) {
-    return CREATE_MENU_DEFS
-        .filter(def => cb[def.key])
-        .map(def => ({...def, onSelect: cb[def.key]!}));
+    return CREATE_MENU_DEFS.filter((def) => cb[def.key]).map((def) => ({...def, onSelect: cb[def.key]!}));
 }
 
 type DriveListToolbarProps = CreateCallbacks & {
@@ -64,7 +63,7 @@ type DriveListToolbarProps = CreateCallbacks & {
     onRowSelect?: (path: DrivePath) => void;
     onRowActivate?: (path: DrivePath) => void;
     activeRowId?: string;
-}
+};
 
 export function DriveListToolbar({
                                      ownerId,
@@ -93,59 +92,69 @@ export function DriveListToolbar({
         }
     };
 
-    const createItems = getCreateMenuItems({onCreateFolder, onUploadFile, onCreateDoc, onCreateStickies, onCreateChat, onCreateSlides, onCreateSheets});
+    const createItems = getCreateMenuItems({
+        onCreateFolder,
+        onUploadFile,
+        onCreateDoc,
+        onCreateStickies,
+        onCreateChat,
+        onCreateSlides,
+        onCreateSheets,
+    });
 
-    const newItemButton = createItems.length === 0 ? null : createItems.length === 1 ? (
-        <Button size="default" onClick={createItems[0].onSelect}>
-            <Plus/>
-            <span className="mr-2">{createItems[0].buttonLabel}</span>
-        </Button>
-    ) : (
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-                <Button size="default">
-                    <Plus/>
-                    <span className="mr-2">New</span>
-                </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-                {createItems.map(({key, icon: Icon, label, onSelect}) => (
-                    <DropdownMenuItem key={key} onClick={onSelect}>
-                        <Icon className="h-4 w-4 mr-2"/>{label}
-                    </DropdownMenuItem>
-                ))}
-            </DropdownMenuContent>
-        </DropdownMenu>
-    );
+    const newItemButton =
+        createItems.length === 0 ? null : createItems.length === 1 ? (
+            <Button size="default" onClick={createItems[0].onSelect}>
+                <Plus/>
+                <span className="mr-2">{createItems[0].buttonLabel}</span>
+            </Button>
+        ) : (
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button size="default">
+                        <Plus/>
+                        <span className="mr-2">New</span>
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                    {createItems.map(({key, icon: Icon, label, onSelect}) => (
+                        <DropdownMenuItem key={key} onClick={onSelect}>
+                            <Icon className="h-4 w-4 mr-2"/>
+                            {label}
+                        </DropdownMenuItem>
+                    ))}
+                </DropdownMenuContent>
+            </DropdownMenu>
+        );
 
     return (
         <div className="flex items-center justify-between w-full">
-            {showBreadcrumb ? <Breadcrumb className="overflow-hidden">
-                <BreadcrumbList>
-                    {breadcrumbPaths.map((path, index) => (
-                        <Fragment key={path.id}>
-                            {index > 0 && <BreadcrumbSeparator/>}
-                            <BreadcrumbItem>
-                                {index === breadcrumbPaths.length - 1 ? (
-                                    <BreadcrumbPage className="flex items-center">
-                                        {path.name}
-                                    </BreadcrumbPage>
-                                ) : (
-                                    <BreadcrumbLink
-                                        onClick={() => handleBreadcrumbClick(path)}
-                                        className="flex items-center cursor-pointer"
-                                    >
-                                        {path.name}
-                                    </BreadcrumbLink>
-                                )}
-                            </BreadcrumbItem>
-                        </Fragment>
-                    ))}
-                </BreadcrumbList>
-            </Breadcrumb> : <div className="flex-1"/>}
-            <div className="flex gap-1">
-                {isMobile && newItemButton}
-            </div>
+            {showBreadcrumb ? (
+                <Breadcrumb className="overflow-hidden">
+                    <BreadcrumbList>
+                        {breadcrumbPaths.map((path, index) => (
+                            <Fragment key={path.id}>
+                                {index > 0 && <BreadcrumbSeparator/>}
+                                <BreadcrumbItem>
+                                    {index === breadcrumbPaths.length - 1 ? (
+                                        <BreadcrumbPage className="flex items-center">{path.name}</BreadcrumbPage>
+                                    ) : (
+                                        <BreadcrumbLink
+                                            onClick={() => handleBreadcrumbClick(path)}
+                                            className="flex items-center cursor-pointer"
+                                        >
+                                            {path.name}
+                                        </BreadcrumbLink>
+                                    )}
+                                </BreadcrumbItem>
+                            </Fragment>
+                        ))}
+                    </BreadcrumbList>
+                </Breadcrumb>
+            ) : (
+                <div className="flex-1"/>
+            )}
+            <div className="flex gap-1">{isMobile && newItemButton}</div>
         </div>
     );
 }
@@ -173,7 +182,7 @@ type DriveListProps = CreateCallbacks & {
     onMove?: (item: DrivePath, targetItemId: string) => void;
     onQuickLook?: (path: DrivePath) => void;
     sortFn?: (a: DrivePath, b: DrivePath) => number;
-}
+};
 
 export function DriveList({
                               items = [],
@@ -208,7 +217,7 @@ export function DriveList({
     const {data: breadcrumbPaths} = useBreadcrumb(ownerId, mountId, pathId);
     const [isDragging, setIsDragging] = useState(false);
     const dragCounter = useRef(0);
-// Handle row click with two different behaviors
+    // Handle row click with two different behaviors
     const handleRowClick = (path: DrivePath) => {
         if (path.id === activeRowId && onRowActivate) {
             // If the item is already selected, activate it
@@ -277,7 +286,15 @@ export function DriveList({
         }
     };
 
-    const createItems = getCreateMenuItems({onCreateFolder, onUploadFile, onCreateDoc, onCreateStickies, onCreateChat, onCreateSlides, onCreateSheets});
+    const createItems = getCreateMenuItems({
+        onCreateFolder,
+        onUploadFile,
+        onCreateDoc,
+        onCreateStickies,
+        onCreateChat,
+        onCreateSlides,
+        onCreateSheets,
+    });
 
     if (isLoading) {
         return <LoadingState/>;
@@ -289,10 +306,7 @@ export function DriveList({
 
     const contentDiv = (
         <div
-            className={cn(
-                "h-full flex flex-col relative border-r",
-                isDragging && "bg-secondary/30"
-            )}
+            className={cn('h-full flex flex-col relative border-r', isDragging && 'bg-secondary/30')}
             onDragOver={handleDragOver}
             onDragEnter={handleDragEnter}
             onDragLeave={handleDragLeave}
@@ -328,9 +342,7 @@ export function DriveList({
                 sortFn={sortFn}
             />
 
-            {items.length === 0 && (
-                <EmptyState/>
-            )}
+            {items.length === 0 && <EmptyState/>}
         </div>
     );
 
@@ -338,13 +350,12 @@ export function DriveList({
 
     return (
         <ContextMenu>
-            <ContextMenuTrigger asChild>
-                {contentDiv}
-            </ContextMenuTrigger>
+            <ContextMenuTrigger asChild>{contentDiv}</ContextMenuTrigger>
             <ContextMenuContent>
                 {createItems.map(({key, icon: Icon, label, onSelect}) => (
                     <ContextMenuItem key={key} onSelect={onSelect}>
-                        <Icon className="h-4 w-4 mr-2"/>{label}
+                        <Icon className="h-4 w-4 mr-2"/>
+                        {label}
                     </ContextMenuItem>
                 ))}
             </ContextMenuContent>

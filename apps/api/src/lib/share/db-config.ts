@@ -8,7 +8,8 @@ export const SHARE_REGISTRY_DB_CONFIG: DatabaseConfig<typeof schema> = {
     migrations: [
         {
             version: 1,
-            up: (db) => db.exec(`
+            up: (db) =>
+                db.exec(`
                 CREATE TABLE IF NOT EXISTS share_registry
                 (
                     fromUserId

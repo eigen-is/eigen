@@ -1,15 +1,15 @@
-import ReactDOM from 'react-dom/client'
-import {SetupWizard} from './components/setup-wizard'
+import ReactDOM from 'react-dom/client';
+import { SetupWizard } from './components/setup-wizard';
 
-import '@workspace/ui/globals.css'
+import '@workspace/ui/globals.css';
 
 function App() {
-    return <SetupWizard/>
+    return <SetupWizard />;
 }
 
-const rootElement = document.getElementById('app')!
+const rootElement = document.getElementById('app')!;
 
 if (!rootElement.innerHTML) {
-    const root = ReactDOM.createRoot(rootElement)
-    root.render(<App/>)
+    const root = ReactDOM.createRoot(rootElement);
+    root.render(<App />);
 }

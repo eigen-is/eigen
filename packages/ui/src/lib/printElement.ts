@@ -14,9 +14,9 @@ export function printDocument(): boolean {
 
 // source: <https://stackoverflow.com/a/70304461/508029>
 export function printElement(el: HTMLElement) {
-    let cloned = el.cloneNode(true) as HTMLElement;
+    const cloned = el.cloneNode(true) as HTMLElement;
     document.body.appendChild(cloned);
-    cloned.classList.add("printable");
+    cloned.classList.add('printable');
     // Delay to allow the browser to finish layout recalculation of the cloned element before printing
     setTimeout(() => {
         window.print();

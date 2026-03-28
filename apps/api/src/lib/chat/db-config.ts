@@ -8,7 +8,8 @@ export const CHAT_ROOM_DB_CONFIG: DatabaseConfig<typeof schema> = {
     migrations: [
         {
             version: 1,
-            up: (db) => db.exec(`
+            up: (db) =>
+                db.exec(`
                 CREATE TABLE IF NOT EXISTS messages (
                     id TEXT PRIMARY KEY,
                     authorId TEXT NOT NULL,
@@ -30,7 +31,7 @@ export const CHAT_ROOM_DB_CONFIG: DatabaseConfig<typeof schema> = {
                 CREATE INDEX IF NOT EXISTS idx_messages_createdAt ON messages(createdAt);
                 CREATE INDEX IF NOT EXISTS idx_messages_replyTo ON messages(replyTo);
                 CREATE INDEX IF NOT EXISTS idx_messages_authorId ON messages(authorId);
-            `)
-        }
-    ]
+            `),
+        },
+    ],
 };

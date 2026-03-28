@@ -3,7 +3,7 @@ import {useEffect, useMemo} from 'react';
 type CommandHelp = {
     cmd: string;
     desc: string;
-}
+};
 
 type ChatSlashSuggestProps = {
     query: string;
@@ -12,7 +12,7 @@ type ChatSlashSuggestProps = {
     visible: boolean;
     selectedIndex: number;
     onItemsChange: (count: number, commands: string[]) => void;
-}
+};
 
 export function ChatSlashSuggest({
                                      query,
@@ -20,7 +20,7 @@ export function ChatSlashSuggest({
                                      onSelect,
                                      visible,
                                      selectedIndex,
-                                     onItemsChange
+                                     onItemsChange,
                                  }: ChatSlashSuggestProps) {
     const items = useMemo(() => {
         if (!visible || !query) return [];
@@ -31,9 +31,9 @@ export function ChatSlashSuggest({
 
         for (const help of commandsHelp) {
             const primaryCmd = help.cmd.split(',')[0].split(' ')[0].trim();
-            const allCmds = help.cmd.split(',').map(c => c.trim().split(' ')[0]);
+            const allCmds = help.cmd.split(',').map((c) => c.trim().split(' ')[0]);
 
-            if (allCmds.some(c => c.toLowerCase().startsWith(q))) {
+            if (allCmds.some((c) => c.toLowerCase().startsWith(q))) {
                 if (!seen.has(primaryCmd)) {
                     seen.add(primaryCmd);
                     results.push({cmd: help.cmd, desc: help.desc});
@@ -44,7 +44,7 @@ export function ChatSlashSuggest({
         return results.slice(0, 8);
     }, [visible, query, commandsHelp]);
 
-    const cmds = useMemo(() => items.map(i => i.cmd.split(',')[0].split(' ')[0].trim()), [items]);
+    const cmds = useMemo(() => items.map((i) => i.cmd.split(',')[0].split(' ')[0].trim()), [items]);
 
     useEffect(() => {
         onItemsChange(items.length, cmds);
@@ -72,4 +72,3 @@ export function ChatSlashSuggest({
         </ul>
     );
 }
-

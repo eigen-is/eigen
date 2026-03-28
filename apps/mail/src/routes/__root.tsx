@@ -1,13 +1,13 @@
-import {createRootRouteWithContext, Outlet} from '@tanstack/react-router'
-import {AuthContextType, useAuth} from "@workspace/lib/auth";
-import {AppShell} from "@workspace/ui/components/layout/app/app-shell.tsx";
-import {EmailSidebar} from "../components/mail/email-sidebar";
+import {createRootRouteWithContext, Outlet} from '@tanstack/react-router';
+import {type AuthContextType, useAuth} from '@workspace/lib/auth';
 import {useEmailById, useMailboxes, useMoveEmail} from '@workspace/lib/mail';
 import type {Email} from '@workspace/lib/types/mail';
+import {AppShell} from '@workspace/ui/components/layout/app/app-shell.tsx';
+import {EmailSidebar} from '../components/mail/email-sidebar';
 
 type MyRouterContext = {
-    auth: AuthContextType
-}
+    auth: AuthContextType;
+};
 
 function MailRoot() {
     const {user} = useAuth();
@@ -29,8 +29,8 @@ function AuthenticatedMailRoot() {
     const getEmailById = useEmailById();
 
     const handleMoveByDrop = async (emailIds: string[], folderId: string) => {
-        const emails = (await Promise.all(emailIds.map(id => getEmailById(id)))).filter((e): e is Email => !!e);
-        await Promise.allSettled(emails.map(email => moveMail.mutateAsync({email, mailbox: folderId})));
+        const emails = (await Promise.all(emailIds.map((id) => getEmailById(id)))).filter((e): e is Email => !!e);
+        await Promise.allSettled(emails.map((email) => moveMail.mutateAsync({email, mailbox: folderId})));
     };
 
     return (

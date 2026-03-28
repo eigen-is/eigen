@@ -1,7 +1,7 @@
-import {randomUUID} from 'crypto';
-import {MaxFileSizeExceededError, parseMultipartRequest} from '@mjackson/multipart-parser';
-import type {Mount} from '../mount';
-import {ApiError} from '../core';
+import { randomUUID } from 'node:crypto';
+import { MaxFileSizeExceededError, parseMultipartRequest } from '@mjackson/multipart-parser';
+import { ApiError } from '../core';
+import type { Mount } from '../mount';
 
 export type StreamResult = {
     tempId: string;
@@ -14,17 +14,17 @@ export type StreamResult = {
 export async function streamFilesToTemp(
     mount: Mount,
     request: Request,
-    maxSizePerFile: number
+    maxSizePerFile: number,
 ): Promise<StreamResult[]> {
     const results: StreamResult[] = [];
 
     try {
-        for await (const part of parseMultipartRequest(request, {maxFileSize: maxSizePerFile})) {
+        for await (const part of parseMultipartRequest(request, { maxFileSize: maxSizePerFile })) {
             if (!part.isFile || !part.filename) continue;
 
             const tempId = randomUUID();
             const tempPath = mount.getTempPath(tempId);
-            const writer = Bun.file(tempPath).writer({highWaterMark: 256 * 1024});
+            const writer = Bun.file(tempPath).writer({ highWaterMark: 256 * 1024 });
             const hasher = new Bun.CryptoHasher('sha256');
 
             try {

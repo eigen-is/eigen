@@ -1,26 +1,31 @@
-import {type CommandProps, mergeAttributes, Node} from '@tiptap/core';
-import type {NodeViewProps} from '@tiptap/react';
-import {NodeViewWrapper, ReactNodeViewRenderer} from '@tiptap/react';
-import {useCallback, useRef, useState} from 'react';
-import {AlignCenter, AlignLeft, AlignRight} from 'lucide-react';
-import {TooltipButton} from '@workspace/ui';
-import {ImageResizeHandles} from '@workspace/ui/components/layout/media/image-resize-handles';
-import {useMediaResolver} from '@workspace/lib/drive';
+import { type CommandProps, mergeAttributes, Node } from '@tiptap/core';
+import type { NodeViewProps } from '@tiptap/react';
+import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react';
+import { useMediaResolver } from '@workspace/lib/drive';
+import { TooltipButton } from '@workspace/ui';
+import { ImageResizeHandles } from '@workspace/ui/components/layout/media/image-resize-handles';
+import { AlignCenter, AlignLeft, AlignRight } from 'lucide-react';
+import { useCallback, useRef, useState } from 'react';
 
 declare module '@tiptap/core' {
     interface Commands<ReturnType> {
         resizableImage: {
-            setResizableImage: (options: {mediaName: string; alt?: string; title?: string; width?: number}) => ReturnType;
+            setResizableImage: (options: {
+                mediaName: string;
+                alt?: string;
+                title?: string;
+                width?: number;
+            }) => ReturnType;
         };
     }
 }
 
-function ResizableImageView({node, updateAttributes, selected, editor}: NodeViewProps) {
+function ResizableImageView({ node, updateAttributes, selected, editor }: NodeViewProps) {
     const imageRef = useRef<HTMLImageElement>(null);
     const wrapperRef = useRef<HTMLDivElement>(null);
     const [aspectRatio, setAspectRatio] = useState<number | null>(null);
 
-    const {resolveMediaUrl} = useMediaResolver();
+    const { resolveMediaUrl } = useMediaResolver();
 
     const width = node.attrs.width;
     const alignment = node.attrs.alignment || 'center';
@@ -42,7 +47,7 @@ function ResizableImageView({node, updateAttributes, selected, editor}: NodeView
             const naturalWidth = imageRef.current.naturalWidth;
             const maxWidth = getMaxWidth();
             if (!node.attrs.width && naturalWidth > maxWidth) {
-                updateAttributes({width: Math.round(maxWidth)});
+                updateAttributes({ width: Math.round(maxWidth) });
             }
         }
     }, [aspectRatio, getMaxWidth, node.attrs.width, updateAttributes]);
@@ -55,13 +60,13 @@ function ResizableImageView({node, updateAttributes, selected, editor}: NodeView
             className={`flex ${alignment === 'center' ? 'justify-center' : alignment === 'right' ? 'justify-end' : 'justify-start'}`}
             data-drag-handle=""
             draggable={isEditable}
-            style={{cursor: isEditable ? 'grab' : undefined}}
+            style={{ cursor: isEditable ? 'grab' : undefined }}
         >
             <ImageResizeHandles
                 width={width}
                 aspectRatio={aspectRatio}
                 maxWidth={getMaxWidth()}
-                onResize={(w) => updateAttributes({width: w})}
+                onResize={(w) => updateAttributes({ width: w })}
                 selected={selected}
                 editable={isEditable}
             >
@@ -85,7 +90,7 @@ function ResizableImageView({node, updateAttributes, selected, editor}: NodeView
                             active={alignment === 'left'}
                             preventFocusLoss
                             className="h-7 w-7"
-                            onClick={() => updateAttributes({alignment: 'left'})}
+                            onClick={() => updateAttributes({ alignment: 'left' })}
                         />
                         <TooltipButton
                             icon={AlignCenter}
@@ -93,7 +98,7 @@ function ResizableImageView({node, updateAttributes, selected, editor}: NodeView
                             active={alignment === 'center'}
                             preventFocusLoss
                             className="h-7 w-7"
-                            onClick={() => updateAttributes({alignment: 'center'})}
+                            onClick={() => updateAttributes({ alignment: 'center' })}
                         />
                         <TooltipButton
                             icon={AlignRight}
@@ -101,7 +106,7 @@ function ResizableImageView({node, updateAttributes, selected, editor}: NodeView
                             active={alignment === 'right'}
                             preventFocusLoss
                             className="h-7 w-7"
-                            onClick={() => updateAttributes({alignment: 'right'})}
+                            onClick={() => updateAttributes({ alignment: 'right' })}
                         />
                     </div>
                 )}
@@ -121,29 +126,29 @@ export const ResizableImage = Node.create({
 
     addAttributes() {
         return {
-            mediaName: {default: null},
-            src: {default: null},
-            alt: {default: null},
-            title: {default: null},
+            mediaName: { default: null },
+            src: { default: null },
+            alt: { default: null },
+            title: { default: null },
             width: {
                 default: null,
                 parseHTML: (element: HTMLElement) => {
                     const attr = element.getAttribute('width');
                     if (attr) return parseInt(attr, 10) || null;
                     const styleWidth = element.style.width;
-                    if (styleWidth && styleWidth.endsWith('px')) return parseInt(styleWidth, 10) || null;
+                    if (styleWidth?.endsWith('px')) return parseInt(styleWidth, 10) || null;
                     return null;
                 },
             },
-            alignment: {default: 'center'},
+            alignment: { default: 'center' },
         };
     },
 
     parseHTML() {
-        return [{tag: 'img[data-media-name]'}, {tag: 'img[src]'}];
+        return [{ tag: 'img[data-media-name]' }, { tag: 'img[src]' }];
     },
 
-    renderHTML({HTMLAttributes}) {
+    renderHTML({ HTMLAttributes }) {
         return ['img', mergeAttributes(HTMLAttributes)];
     },
 
@@ -153,12 +158,14 @@ export const ResizableImage = Node.create({
 
     addCommands() {
         return {
-            setResizableImage: (options) => ({commands}: CommandProps) => {
-                return commands.insertContent({
-                    type: this.name,
-                    attrs: options,
-                });
-            },
+            setResizableImage:
+                (options) =>
+                ({ commands }: CommandProps) => {
+                    return commands.insertContent({
+                        type: this.name,
+                        attrs: options,
+                    });
+                },
         };
     },
 });

@@ -1,22 +1,21 @@
+import * as path from 'node:path';
+import type {SSEvent} from '@workspace/lib/types/sse';
 import type {User} from 'better-auth/types';
-import * as path from 'path';
-
+import {createAsyncSingleton} from '../../utils/singleton';
+import type {Calendar} from '../calendar/calendar';
+import {resolveUserQuotas} from '../config/quota';
+import type {Contacts} from '../contacts/contacts';
 import {
     type DatabaseConfig,
     type JsonStore,
-    LocalFilesystem,
-    ManagedDatabase,
+    type LocalFilesystem,
+    type ManagedDatabase,
     openLocalDatabase,
-    type SchemaType
+    type SchemaType,
 } from '../core';
-import type {Contacts} from '../contacts/contacts';
-import type Maildir from '../mail/maildir';
-import type {Calendar} from '../calendar/calendar';
-import type {NotificationCenter} from '../notification-center/notification-center';
-import type {SSEvent} from '@workspace/lib/types/sse';
-import {createAsyncSingleton} from '../../utils/singleton';
 import type {Drive} from '../drive';
-import {resolveUserQuotas} from '../config/quota';
+import type Maildir from '../mail/maildir';
+import type {NotificationCenter} from '../notification-center/notification-center';
 
 export type HomeSettings = Record<string, unknown>;
 
@@ -43,7 +42,7 @@ export class Home {
         return this._destructing;
     }
 
-    private managedDatabases: Map<string, () => Promise<ManagedDatabase<any>>> = new Map();
+    private managedDatabases: Map<string, () => Promise<ManagedDatabase<SchemaType>>> = new Map();
     private sseListeners: ((event: SSEvent) => void)[] = [];
     private cleanUp: (() => void) | null = null;
 
@@ -109,10 +108,13 @@ export class Home {
         if (this.timeout) {
             clearTimeout(this.timeout);
         }
-        this.timeout = setTimeout(() => {
-            console.log(`[Home] Idle timeout for ${this.user.id}, destructing`);
-            this.destruct().finally(() => this.cleanUp?.());
-        }, 1000 * 60 * 5);
+        this.timeout = setTimeout(
+            () => {
+                console.log(`[Home] Idle timeout for ${this.user.id}, destructing`);
+                this.destruct().finally(() => this.cleanUp?.());
+            },
+            1000 * 60 * 5,
+        );
         return this;
     }
 
@@ -123,7 +125,7 @@ export class Home {
 
     public async getLocalDatabase<S extends SchemaType>(
         config: DatabaseConfig<S>,
-        relativePath: string
+        relativePath: string,
     ): Promise<ManagedDatabase<S>> {
         const absolutePath = path.join(this.homeDir, relativePath);
         return this.getManagedDatabase(relativePath, () => openLocalDatabase(config, absolutePath));
@@ -134,14 +136,14 @@ export class Home {
     }
 
     public unsubscribeSSE(listener: (event: SSEvent) => void) {
-        this.sseListeners = this.sseListeners.filter(l => l !== listener);
+        this.sseListeners = this.sseListeners.filter((l) => l !== listener);
     }
 
     public async size(teamIds: string[] = []) {
         const [mail, contacts, driveDefault] = await Promise.all([
             this._mail?.size(),
             this._contacts?.size(),
-            this._drive.size('default')
+            this._drive.size('default'),
         ]);
 
         const mountConfig = this._drive.getMountConfig('default');
@@ -209,7 +211,7 @@ export class Home {
 
     private async getManagedDatabase<S extends SchemaType>(
         key: string,
-        factory: () => Promise<ManagedDatabase<S>>
+        factory: () => Promise<ManagedDatabase<S>>,
     ): Promise<ManagedDatabase<S>> {
         if (!this.managedDatabases.has(key)) {
             this.managedDatabases.set(key, createAsyncSingleton(factory));

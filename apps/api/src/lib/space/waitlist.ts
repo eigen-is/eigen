@@ -1,5 +1,5 @@
-import {validateEmailAddress} from '@workspace/lib/validation';
-import {sendMail} from '../core/mailer';
+import { validateEmailAddress } from '@workspace/lib/validation';
+import { sendMail } from '../core/mailer';
 
 export async function waitlist(email: string, notes: string) {
     email = email.trim().toLowerCase();
@@ -12,7 +12,7 @@ export async function waitlist(email: string, notes: string) {
 
     // TODO: make recipient configurable via server settings
     return sendMail({
-        to: [{name: '', address: 'reinder@infi.nl'}],
+        to: [{ name: '', address: 'reinder@infi.nl' }],
         subject: 'New Eigen Waitlist Signup',
         text: `New waitlist signup:\n\nEmail: <${email}>\nNotes: ${notes}\n\nTime: ${time}`,
         html: `<h2>New Waitlist Signup</h2>

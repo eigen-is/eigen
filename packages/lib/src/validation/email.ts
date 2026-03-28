@@ -6,8 +6,7 @@ export function validateEmailAddress(value: string): boolean {
 }
 
 export function validateEmailTarget(value: string, context: string): string | null {
-    if (!value || !value.trim()) return `${context} target cannot be empty`;
+    if (!value?.trim()) return `${context} target cannot be empty`;
     if (!validateEmailAddress(value)) return `'${value}' is not a valid email address`;
     return null;
 }
-

@@ -1,9 +1,9 @@
-import {type QueryClient, useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
-import {getMailComposeUrl, mailApi} from '@workspace/lib/api.ts';
-import type {Email, EmailSummary} from "@workspace/lib/types/mail";
-import {useAuth} from '@workspace/lib/auth';
-import {AppError, onMutationError} from '../../api-error';
-import {invalidateMailboxes} from './use-mailboxes';
+import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { getMailComposeUrl, mailApi } from '@workspace/lib/api.ts';
+import { useAuth } from '@workspace/lib/auth';
+import type { Email, EmailSummary } from '@workspace/lib/types/mail';
+import { AppError, onMutationError } from '../../api-error';
+import { invalidateMailboxes } from './use-mailboxes';
 
 export const emailKeys = {
     all: ['emails'] as const,
@@ -12,19 +12,20 @@ export const emailKeys = {
     // toLowerCase() ensures query key consistency: sidebar URLs are lowercase (e.g. /box/sent)
     // but SSE events use canonical case (e.g. 'Sent'). Without normalization, SSE invalidation
     // would miss the cached query key, causing silent cache staleness.
-    list: (ownerId: string, mailbox: string) => [...emailKeys.lists(ownerId), {mailbox: mailbox.toLowerCase()}] as const,
+    list: (ownerId: string, mailbox: string) =>
+        [...emailKeys.lists(ownerId), { mailbox: mailbox.toLowerCase() }] as const,
     details: (ownerId: string) => [...emailKeys.owner(ownerId), 'detail'] as const,
     detail: (ownerId: string, id: string) => [...emailKeys.details(ownerId), id] as const,
 };
 
 export function useEmails(mailboxPath: string) {
-    const {user} = useAuth();
+    const { user } = useAuth();
     const ownerId = user?.id || '';
 
     return useQuery({
         queryKey: emailKeys.list(ownerId, mailboxPath),
         queryFn: async (): Promise<EmailSummary[]> => {
-            const response = await mailApi({ownerId}).mailbox({mailboxPath: mailboxPath.toLowerCase()}).get();
+            const response = await mailApi({ ownerId }).mailbox({ mailboxPath: mailboxPath.toLowerCase() }).get();
             return (response.data || []) as EmailSummary[];
         },
         staleTime: 1 * 60 * 1000,
@@ -33,14 +34,14 @@ export function useEmails(mailboxPath: string) {
 }
 
 export function useEmail(messageId: string | undefined) {
-    const {user} = useAuth();
+    const { user } = useAuth();
     const ownerId = user?.id || '';
 
     return useQuery({
         queryKey: emailKeys.detail(ownerId, messageId || ''),
         queryFn: async () => {
             if (!messageId) return null;
-            const response = await mailApi({ownerId}).message({id: messageId}).get();
+            const response = await mailApi({ ownerId }).message({ id: messageId }).get();
             return response.data || null;
         },
         enabled: !!messageId && !!ownerId,
@@ -50,7 +51,7 @@ export function useEmail(messageId: string | undefined) {
 
 export function useEmailById() {
     const queryClient = useQueryClient();
-    const {user} = useAuth();
+    const { user } = useAuth();
     const ownerId = user?.id || '';
 
     return async (messageId: string): Promise<Email | null> => {
@@ -59,7 +60,7 @@ export function useEmailById() {
             return await queryClient.fetchQuery({
                 queryKey: emailKeys.detail(ownerId, messageId),
                 queryFn: async () => {
-                    const response = await mailApi({ownerId}).message({id: messageId}).get();
+                    const response = await mailApi({ ownerId }).message({ id: messageId }).get();
                     return response.data || null;
                 },
                 staleTime: Infinity,
@@ -72,16 +73,16 @@ export function useEmailById() {
 
 export function useDeleteEmail() {
     const queryClient = useQueryClient();
-    const {user} = useAuth();
+    const { user } = useAuth();
     const ownerId = user?.id || '';
 
     return useMutation({
         mutationFn: async (email: Email) => {
             if (email.mailbox === 'Trash') {
-                const response = await mailApi({ownerId}).message({id: email.id}).delete();
+                const response = await mailApi({ ownerId }).message({ id: email.id }).delete();
                 if (response.error) throw new AppError(response);
             } else {
-                const response = await mailApi({ownerId}).message["move-to-trash"].put({messageId: email.id});
+                const response = await mailApi({ ownerId }).message['move-to-trash'].put({ messageId: email.id });
                 if (response.error) throw new AppError(response);
             }
             return email;
@@ -100,16 +101,16 @@ export function useDeleteEmail() {
 
 export function useToggleReadEmail() {
     const queryClient = useQueryClient();
-    const {user} = useAuth();
+    const { user } = useAuth();
     const ownerId = user?.id || '';
 
     return useMutation({
-        mutationFn: async ({email, isRead}: { email: Email, isRead: boolean }) => {
+        mutationFn: async ({ email, isRead }: { email: Email; isRead: boolean }) => {
             if (isRead === email.isRead) {
                 return email;
             }
-            const response = await mailApi({ownerId}).message({id: email.id}).read.put({
-                read: isRead
+            const response = await mailApi({ ownerId }).message({ id: email.id }).read.put({
+                read: isRead,
             });
             if (response.error) throw new AppError(response);
             return email;
@@ -124,16 +125,16 @@ export function useToggleReadEmail() {
 
 export function useToggleFlaggedEmail() {
     const queryClient = useQueryClient();
-    const {user} = useAuth();
+    const { user } = useAuth();
     const ownerId = user?.id || '';
 
     return useMutation({
-        mutationFn: async ({email, isFlagged}: { email: Email, isFlagged: boolean }) => {
+        mutationFn: async ({ email, isFlagged }: { email: Email; isFlagged: boolean }) => {
             if (isFlagged === email.isFlagged) {
                 return email;
             }
-            const response = await mailApi({ownerId}).message({id: email.id}).flagged.put({
-                flagged: isFlagged
+            const response = await mailApi({ ownerId }).message({ id: email.id }).flagged.put({
+                flagged: isFlagged,
             });
             if (response.error) throw new AppError(response);
             return email;
@@ -145,14 +146,14 @@ export function useToggleFlaggedEmail() {
 
 export function useMoveEmail() {
     const queryClient = useQueryClient();
-    const {user} = useAuth();
+    const { user } = useAuth();
     const ownerId = user?.id || '';
 
     return useMutation({
-        mutationFn: async ({email, mailbox}: { email: Email, mailbox: string }) => {
-            const response = await mailApi({ownerId}).message.move.put({
+        mutationFn: async ({ email, mailbox }: { email: Email; mailbox: string }) => {
+            const response = await mailApi({ ownerId }).message.move.put({
                 messageId: email.id,
-                targetMailbox: mailbox
+                targetMailbox: mailbox,
             });
             if (response.error) throw new AppError(response);
             return email;
@@ -167,39 +168,60 @@ export function useMoveEmail() {
 
 export function useOpenWriteEmailTo() {
     return (address: string) => {
-        window.location.href = getMailComposeUrl(address)
-    }
+        window.location.href = getMailComposeUrl(address);
+    };
 }
 
 // Invalidation functions (ownerId-scoped, used from mutation onSuccess)
 export function invalidateMailReceived(queryClient: QueryClient, ownerId: string, mailbox: string = 'inbox'): void {
-    queryClient.invalidateQueries({queryKey: emailKeys.list(ownerId, mailbox)});
+    queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, mailbox) });
 }
 
-export function invalidateMailDeleted(queryClient: QueryClient, ownerId: string, messageId: string, mailbox: string): void {
-    queryClient.removeQueries({queryKey: emailKeys.detail(ownerId, messageId)});
-    queryClient.invalidateQueries({queryKey: emailKeys.list(ownerId, mailbox)});
+export function invalidateMailDeleted(
+    queryClient: QueryClient,
+    ownerId: string,
+    messageId: string,
+    mailbox: string,
+): void {
+    queryClient.removeQueries({ queryKey: emailKeys.detail(ownerId, messageId) });
+    queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, mailbox) });
 }
 
-export function invalidateMailMoved(queryClient: QueryClient, ownerId: string, messageId: string, fromMailbox: string, toMailbox: string | null | undefined): void {
-    queryClient.invalidateQueries({queryKey: emailKeys.detail(ownerId, messageId)});
-    queryClient.invalidateQueries({queryKey: emailKeys.list(ownerId, fromMailbox)});
+export function invalidateMailMoved(
+    queryClient: QueryClient,
+    ownerId: string,
+    messageId: string,
+    fromMailbox: string,
+    toMailbox: string | null | undefined,
+): void {
+    queryClient.invalidateQueries({ queryKey: emailKeys.detail(ownerId, messageId) });
+    queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, fromMailbox) });
     if (toMailbox) {
-        queryClient.invalidateQueries({queryKey: emailKeys.list(ownerId, toMailbox)});
+        queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, toMailbox) });
     }
 }
 
-export function invalidateMailReadChanged(queryClient: QueryClient, ownerId: string, messageId: string, mailbox: string): void {
-    queryClient.invalidateQueries({queryKey: emailKeys.detail(ownerId, messageId)});
-    queryClient.invalidateQueries({queryKey: emailKeys.list(ownerId, mailbox)});
+export function invalidateMailReadChanged(
+    queryClient: QueryClient,
+    ownerId: string,
+    messageId: string,
+    mailbox: string,
+): void {
+    queryClient.invalidateQueries({ queryKey: emailKeys.detail(ownerId, messageId) });
+    queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, mailbox) });
 }
 
-export function invalidateMailFlagsChanged(queryClient: QueryClient, ownerId: string, messageId: string, mailbox: string): void {
-    queryClient.invalidateQueries({queryKey: emailKeys.detail(ownerId, messageId)});
-    queryClient.invalidateQueries({queryKey: emailKeys.list(ownerId, mailbox)});
+export function invalidateMailFlagsChanged(
+    queryClient: QueryClient,
+    ownerId: string,
+    messageId: string,
+    mailbox: string,
+): void {
+    queryClient.invalidateQueries({ queryKey: emailKeys.detail(ownerId, messageId) });
+    queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, mailbox) });
 }
 
 export function invalidateDraftUpdated(queryClient: QueryClient, ownerId: string, messageId: string): void {
-    queryClient.invalidateQueries({queryKey: emailKeys.list(ownerId, 'Drafts')});
-    queryClient.invalidateQueries({queryKey: emailKeys.detail(ownerId, messageId)});
+    queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, 'Drafts') });
+    queryClient.invalidateQueries({ queryKey: emailKeys.detail(ownerId, messageId) });
 }

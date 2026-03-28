@@ -1,9 +1,9 @@
-import {useEffect, useRef} from 'react';
 import {createFileRoute, Outlet, redirect} from '@tanstack/react-router';
-import {usePeopleMembers} from '@workspace/lib/people';
 import {authClient, useAuth} from '@workspace/lib/auth';
+import {usePeopleMembers} from '@workspace/lib/people';
 import {usePublicConfig} from '@workspace/lib/public';
 import {AccessDenied, EmptyState, LoadingState} from '@workspace/ui';
+import {useEffect, useRef} from 'react';
 
 export const Route = createFileRoute('/_auth')({
     beforeLoad: ({context, location}) => {
@@ -40,7 +40,7 @@ function AuthGuard() {
         return <EmptyState message="No organization found."/>;
     }
 
-    const currentMember = members.find(m => m.userId === user?.id);
+    const currentMember = members.find((m) => m.userId === user?.id);
 
     if (!currentMember || currentMember.role === 'member') {
         return <AccessDenied message="You need admin or owner privileges to access People management."/>;

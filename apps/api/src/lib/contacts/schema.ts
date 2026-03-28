@@ -1,6 +1,6 @@
-import {relations, sql} from 'drizzle-orm';
-import {integer, primaryKey, sqliteTable, text} from 'drizzle-orm/sqlite-core';
-import {type Contact} from '@workspace/lib/types/contact';
+import type { Contact } from '@workspace/lib/types/contact';
+import { relations, sql } from 'drizzle-orm';
+import { integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 // Contacts table
 export const contacts = sqliteTable('contacts', {
@@ -9,9 +9,11 @@ export const contacts = sqliteTable('contacts', {
     lastName: text('lastName').notNull(),
     eigenId: text('eigenId').notNull(),
     avatar: text('avatar'),
-    data: text('data', {mode: 'json'}).$type<Omit<Contact, 'id' | 'firstName' | 'lastName' | 'eigenId' | 'labels' | 'avatar'>>(),
-    createdAt: integer('createdAt', {mode: 'timestamp'}).default(sql`(unixepoch())`),
-    updatedAt: integer('updatedAt', {mode: 'timestamp'}).default(sql`(unixepoch())`),
+    data: text('data', { mode: 'json' }).$type<
+        Omit<Contact, 'id' | 'firstName' | 'lastName' | 'eigenId' | 'labels' | 'avatar'>
+    >(),
+    createdAt: integer('createdAt', { mode: 'timestamp' }).default(sql`(unixepoch())`),
+    updatedAt: integer('updatedAt', { mode: 'timestamp' }).default(sql`(unixepoch())`),
 });
 
 // Labels table
@@ -19,28 +21,36 @@ export const labels = sqliteTable('labels', {
     id: text('id').primaryKey(),
     name: text('name').notNull(),
     color: text('color').notNull(),
-    createdAt: integer('createdAt', {mode: 'timestamp'}).default(sql`(unixepoch())`),
-    updatedAt: integer('updatedAt', {mode: 'timestamp'}).default(sql`(unixepoch())`),
+    createdAt: integer('createdAt', { mode: 'timestamp' }).default(sql`(unixepoch())`),
+    updatedAt: integer('updatedAt', { mode: 'timestamp' }).default(sql`(unixepoch())`),
 });
 
 // Junction table for contacts and labels
-export const contactsToLabels = sqliteTable('contacts_to_labels', {
-    contactId: text('contactId').notNull().references(() => contacts.id, {onDelete: 'cascade'}),
-    labelId: text('labelId').notNull().references(() => labels.id, {onDelete: 'cascade'}),
-}, (table) => ({
-    pk: primaryKey({columns: [table.contactId, table.labelId]}),
-}));
+export const contactsToLabels = sqliteTable(
+    'contacts_to_labels',
+    {
+        contactId: text('contactId')
+            .notNull()
+            .references(() => contacts.id, { onDelete: 'cascade' }),
+        labelId: text('labelId')
+            .notNull()
+            .references(() => labels.id, { onDelete: 'cascade' }),
+    },
+    (table) => ({
+        pk: primaryKey({ columns: [table.contactId, table.labelId] }),
+    }),
+);
 
 // Establish relations
-export const contactsRelations = relations(contacts, ({many}) => ({
+export const contactsRelations = relations(contacts, ({ many }) => ({
     labels: many(contactsToLabels),
 }));
 
-export const labelsRelations = relations(labels, ({many}) => ({
+export const labelsRelations = relations(labels, ({ many }) => ({
     contacts: many(contactsToLabels),
 }));
 
-export const contactsToLabelsRelations = relations(contactsToLabels, ({one}) => ({
+export const contactsToLabelsRelations = relations(contactsToLabels, ({ one }) => ({
     contact: one(contacts, {
         fields: [contactsToLabels.contactId],
         references: [contacts.id],

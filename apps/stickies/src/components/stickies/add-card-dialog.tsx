@@ -1,20 +1,20 @@
-import {useState} from 'react';
-import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
+import {useAuth} from '@workspace/lib/auth';
+import {EIGEN_STICKIES_COLORS} from '@workspace/lib/constants';
 import {Button} from '@workspace/ui/components/button';
+import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
 import {Input} from '@workspace/ui/components/input';
-import {Textarea} from '@workspace/ui/components/textarea';
 import {Label} from '@workspace/ui/components/label';
 import {ColorPicker} from '@workspace/ui/components/layout/media/color-picker';
-import {CardItem} from './types';
-import {useAuth} from '@workspace/lib/auth';
-import {EIGEN_STICKIES_COLORS} from "@workspace/lib/constants";
+import {Textarea} from '@workspace/ui/components/textarea';
+import {useState} from 'react';
+import type {CardItem} from './types';
 
 type AddCardDialogProps = {
     isOpen: boolean;
     onClose: () => void;
     onAddCard: (card: Omit<CardItem, 'id' | 'createdAt' | 'chatName'>) => void | Promise<void>;
     columnId: string | null;
-}
+};
 
 export function AddCardDialog({isOpen, onClose, onAddCard, columnId}: AddCardDialogProps) {
     const [title, setTitle] = useState('');

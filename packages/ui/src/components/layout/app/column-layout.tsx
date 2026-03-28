@@ -1,11 +1,11 @@
-import {createContext, ReactNode, useContext} from 'react';
 import {ArrowLeft} from 'lucide-react';
+import {createContext, type ReactNode, useContext} from 'react';
 import {Button} from '../../button.tsx';
 import {useLayout} from './layout-context.tsx';
 
 type ColumnContextType = {
     mobileColumn: string | null;
-}
+};
 
 const ColumnContext = createContext<ColumnContextType>({mobileColumn: null});
 
@@ -16,7 +16,7 @@ type ColumnProps = {
     onBack?: () => void;
     children: ReactNode;
     className?: string;
-}
+};
 
 function Column({id, width, toolbar, onBack, children, className}: ColumnProps) {
     const {isMobile} = useLayout();
@@ -45,9 +45,7 @@ function Column({id, width, toolbar, onBack, children, className}: ColumnProps) 
                     {toolbar}
                 </div>
             )}
-            <div className="flex-1 overflow-hidden">
-                {children}
-            </div>
+            <div className="flex-1 overflow-hidden">{children}</div>
         </div>
     );
 }
@@ -55,19 +53,17 @@ function Column({id, width, toolbar, onBack, children, className}: ColumnProps) 
 type ColumnLayoutProps = {
     mobileColumn?: string;
     children: ReactNode;
-}
+};
 
 function ColumnLayout({mobileColumn, children}: ColumnLayoutProps) {
     const {isMobile} = useLayout();
 
     return (
         <ColumnContext.Provider value={{mobileColumn: isMobile ? (mobileColumn ?? null) : null}}>
-            <div className="flex flex-1 h-full overflow-hidden">
-                {children}
-            </div>
+            <div className="flex flex-1 h-full overflow-hidden">{children}</div>
         </ColumnContext.Provider>
     );
 }
 
-export {ColumnLayout, Column};
 export type {ColumnProps};
+export {Column, ColumnLayout};

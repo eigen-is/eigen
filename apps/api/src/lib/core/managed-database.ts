@@ -1,8 +1,8 @@
 import type Database from 'bun:sqlite';
-import {Database as BunDatabase} from 'bun:sqlite';
-import {type BunSQLiteDatabase, drizzle} from 'drizzle-orm/bun-sqlite';
+import { Database as BunDatabase } from 'bun:sqlite';
 import * as fs from 'node:fs';
-import * as path from 'path';
+import * as path from 'node:path';
+import { type BunSQLiteDatabase, drizzle } from 'drizzle-orm/bun-sqlite';
 
 export type SchemaType = Record<string, unknown>;
 
@@ -33,11 +33,7 @@ export class ManagedDatabase<S extends SchemaType> {
     private syncTimer: Timer | null = null;
     private lastSyncedChanges = 0;
 
-    constructor(
-        config: DatabaseConfig<S>,
-        localPath: string,
-        callbacks: SyncCallbacks = {}
-    ) {
+    constructor(config: DatabaseConfig<S>, localPath: string, callbacks: SyncCallbacks = {}) {
         this.config = config;
         this.localPath = localPath;
         this.callbacks = callbacks;
@@ -50,10 +46,10 @@ export class ManagedDatabase<S extends SchemaType> {
 
         const dir = path.dirname(this.localPath);
         if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, {recursive: true});
+            fs.mkdirSync(dir, { recursive: true });
         }
 
-        this.rawDb = new BunDatabase(this.localPath, {create: true});
+        this.rawDb = new BunDatabase(this.localPath, { create: true });
         this.rawDb.run('PRAGMA journal_mode = WAL;');
         this.rawDb.run('PRAGMA foreign_keys = ON;');
         this.rawDb.run('PRAGMA busy_timeout = 5000;');
@@ -68,7 +64,7 @@ export class ManagedDatabase<S extends SchemaType> {
 
         await this.runMigrations();
 
-        this.drizzleDb = drizzle(this.rawDb, {schema: this.config.schema}) as BunSQLiteDatabase<S>;
+        this.drizzleDb = drizzle(this.rawDb, { schema: this.config.schema }) as BunSQLiteDatabase<S>;
         this.lastSyncedChanges = 0;
 
         if (this.callbacks.onSync && autoSyncMs > 0) {
@@ -85,7 +81,7 @@ export class ManagedDatabase<S extends SchemaType> {
         let currentVersion = row?.version ?? 0;
 
         const pending = this.config.migrations
-            .filter(m => m.version > currentVersion)
+            .filter((m) => m.version > currentVersion)
             .sort((a, b) => a.version - b.version);
 
         for (const migration of pending) {
@@ -160,7 +156,7 @@ export class ManagedDatabase<S extends SchemaType> {
 
 export async function openLocalDatabase<S extends SchemaType>(
     config: DatabaseConfig<S>,
-    absolutePath: string
+    absolutePath: string,
 ): Promise<ManagedDatabase<S>> {
     const db = new ManagedDatabase(config, absolutePath);
     await db.open();

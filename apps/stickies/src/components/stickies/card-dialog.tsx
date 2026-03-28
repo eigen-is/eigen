@@ -1,14 +1,14 @@
-import {useState} from 'react';
-import {Dialog, DialogContent, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
-import {CardItem} from './types';
-import {Separator} from '@workspace/ui/components/separator';
-import {Pencil} from 'lucide-react';
-import {TooltipButton} from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
-import {CardSettingsDialog} from './card-settings-dialog';
-import {ChatMessageInput, ChatMessageList} from '@workspace/ui';
 import {useChatRoom} from '@workspace/lib/chat';
 import {useMediaResolver} from '@workspace/lib/drive';
-import * as Y from 'yjs';
+import {ChatMessageInput, ChatMessageList} from '@workspace/ui';
+import {Dialog, DialogContent, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
+import {TooltipButton} from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
+import {Separator} from '@workspace/ui/components/separator';
+import {Pencil} from 'lucide-react';
+import {useState} from 'react';
+import type * as Y from 'yjs';
+import {CardSettingsDialog} from './card-settings-dialog';
+import type {CardItem} from './types';
 
 type CardDialogProps = {
     isOpen: boolean;
@@ -18,9 +18,9 @@ type CardDialogProps = {
     yjsDoc: Y.Doc | null;
     ownerId: string;
     mountId: string;
-}
+};
 
-function CardChat({ownerId, mountId, chatName}: {ownerId: string; mountId: string; chatName: string}) {
+function CardChat({ownerId, mountId, chatName}: { ownerId: string; mountId: string; chatName: string }) {
     const {resolveChatId} = useMediaResolver();
     const chatId = resolveChatId(chatName);
 
@@ -29,7 +29,7 @@ function CardChat({ownerId, mountId, chatName}: {ownerId: string; mountId: strin
     return <CardChatInner ownerId={ownerId} mountId={mountId} chatId={chatId}/>;
 }
 
-function CardChatInner({ownerId, mountId, chatId}: {ownerId: string; mountId: string; chatId: string}) {
+function CardChatInner({ownerId, mountId, chatId}: { ownerId: string; mountId: string; chatId: string }) {
     const chat = useChatRoom(ownerId, mountId, chatId);
 
     return (
@@ -90,9 +90,7 @@ export function CardDialog({isOpen, onClose, card, canWrite = true, yjsDoc, owne
                     {card.chatName ? (
                         <CardChat ownerId={ownerId} mountId={mountId} chatName={card.chatName}/>
                     ) : (
-                        <div className="px-4 pb-4 text-sm text-muted-foreground">
-                            No chat available for this card.
-                        </div>
+                        <div className="px-4 pb-4 text-sm text-muted-foreground">No chat available for this card.</div>
                     )}
                 </DialogContent>
             </Dialog>

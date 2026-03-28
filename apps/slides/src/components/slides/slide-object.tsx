@@ -1,8 +1,5 @@
-import {memo, useEffect, useRef} from 'react';
-import {ArrowDownToLine, ArrowUpToLine, ChevronDown, ChevronUp, Copy, Trash2,} from 'lucide-react';
-import {BORDER_RADIUS_ROUND, pxToPercent, SLIDE_BASE_HEIGHT, SLIDE_BASE_WIDTH, SlideObject} from './types';
-import {getFontFamily} from '@workspace/lib/constants/fonts';
-import {useMediaResolver} from '@workspace/lib/drive';
+import { getFontFamily } from '@workspace/lib/constants/fonts';
+import { useMediaResolver } from '@workspace/lib/drive';
 import {
     ContextMenu,
     ContextMenuContent,
@@ -10,6 +7,9 @@ import {
     ContextMenuSeparator,
     ContextMenuTrigger,
 } from '@workspace/ui/components/context-menu';
+import { ArrowDownToLine, ArrowUpToLine, ChevronDown, ChevronUp, Copy, Trash2 } from 'lucide-react';
+import { memo, useEffect, useRef } from 'react';
+import { BORDER_RADIUS_ROUND, pxToPercent, SLIDE_BASE_HEIGHT, SLIDE_BASE_WIDTH, type SlideObject } from './types';
 
 function pxToPercentHeight(val: number): string {
     return `${(val / SLIDE_BASE_HEIGHT) * 100}cqh`;
@@ -28,11 +28,15 @@ export function getObjectPositionStyle(obj: SlideObject): React.CSSProperties {
         transform: obj.rotation ? `rotate(${obj.rotation}deg)` : undefined,
         transformOrigin: 'center center',
         backgroundColor: obj.type === 'text' && obj.backgroundColor ? obj.backgroundColor : undefined,
-        ...(obj.borderWidth && obj.borderColor ? {border: `${pxToPercentHeight(obj.borderWidth)} solid ${obj.borderColor}`} : {}),
-        ...(obj.borderRadius ? {
-            borderRadius: obj.borderRadius >= BORDER_RADIUS_ROUND ? '50%' : pxToPercentWidth(obj.borderRadius),
-            overflow: 'hidden' as const
-        } : {}),
+        ...(obj.borderWidth && obj.borderColor
+            ? { border: `${pxToPercentHeight(obj.borderWidth)} solid ${obj.borderColor}` }
+            : {}),
+        ...(obj.borderRadius
+            ? {
+                  borderRadius: obj.borderRadius >= BORDER_RADIUS_ROUND ? '50%' : pxToPercentWidth(obj.borderRadius),
+                  overflow: 'hidden' as const,
+              }
+            : {}),
     };
 }
 
@@ -56,28 +60,38 @@ export function getVerticalAlignStyle(verticalAlign: string | undefined): React.
     };
 }
 
-export function ReadOnlySlideObject({obj}: { obj: SlideObject }) {
-    const {resolveMediaUrl} = useMediaResolver();
-    const vAlign = obj.type === 'text' ? (obj.verticalAlign || 'top') : undefined;
+export function ReadOnlySlideObject({ obj }: { obj: SlideObject }) {
+    const { resolveMediaUrl } = useMediaResolver();
+    const vAlign = obj.type === 'text' ? obj.verticalAlign || 'top' : undefined;
     return (
         <div className="absolute" style={getObjectPositionStyle(obj)}>
             {obj.type === 'text' && (
                 <div className="w-full h-full flex" style={getVerticalAlignStyle(vAlign)}>
                     <p className="whitespace-pre-wrap break-words w-full" style={getTextStyle(obj)}>
-                        {obj.highlightColor
-                            ? <span style={{
-                                backgroundColor: obj.highlightColor,
-                                boxDecorationBreak: 'clone',
-                                WebkitBoxDecorationBreak: 'clone'
-                            }}>{obj.text}</span>
-                            : obj.text
-                        }
+                        {obj.highlightColor ? (
+                            <span
+                                style={{
+                                    backgroundColor: obj.highlightColor,
+                                    boxDecorationBreak: 'clone',
+                                    WebkitBoxDecorationBreak: 'clone',
+                                }}
+                            >
+                                {obj.text}
+                            </span>
+                        ) : (
+                            obj.text
+                        )}
                     </p>
                 </div>
             )}
             {obj.type === 'image' && (
-                <img src={resolveMediaUrl(obj.mediaName) || ''} className="w-full h-full" style={{objectFit: obj.objectFit}} draggable={false}
-                     alt=""/>
+                <img
+                    src={resolveMediaUrl(obj.mediaName) || ''}
+                    className="w-full h-full"
+                    style={{ objectFit: obj.objectFit }}
+                    draggable={false}
+                    alt=""
+                />
             )}
         </div>
     );
@@ -94,46 +108,54 @@ type SlideObjectViewProps = {
     onStopEditing: () => void;
     onUpdate: (objId: string, updates: Partial<SlideObject>) => void;
     onDragStart: (e: React.MouseEvent, objId: string, mode: 'move', x: number, y: number, w: number, h: number) => void;
-    onResizeStart: (e: React.MouseEvent, objId: string, mode: string, x: number, y: number, w: number, h: number) => void;
+    onResizeStart: (
+        e: React.MouseEvent,
+        objId: string,
+        mode: string,
+        x: number,
+        y: number,
+        w: number,
+        h: number,
+    ) => void;
     onCopy?: (objId: string) => void;
     onDelete?: (objId: string) => void;
     onMoveUp?: (objId: string) => void;
     onMoveDown?: (objId: string) => void;
     onMoveToFront?: (objId: string) => void;
     onMoveToBack?: (objId: string) => void;
-}
+};
 
 const HANDLE_POSITIONS = [
-    {mode: 'resize-nw', className: '-top-1.5 -left-1.5 cursor-nwse-resize'},
-    {mode: 'resize-ne', className: '-top-1.5 -right-1.5 cursor-nesw-resize'},
-    {mode: 'resize-sw', className: '-bottom-1.5 -left-1.5 cursor-nesw-resize'},
-    {mode: 'resize-se', className: '-bottom-1.5 -right-1.5 cursor-nwse-resize'},
-    {mode: 'resize-n', className: '-top-1.5 left-1/2 -translate-x-1/2 cursor-ns-resize'},
-    {mode: 'resize-s', className: '-bottom-1.5 left-1/2 -translate-x-1/2 cursor-ns-resize'},
-    {mode: 'resize-w', className: 'top-1/2 -left-1.5 -translate-y-1/2 cursor-ew-resize'},
-    {mode: 'resize-e', className: 'top-1/2 -right-1.5 -translate-y-1/2 cursor-ew-resize'},
+    { mode: 'resize-nw', className: '-top-1.5 -left-1.5 cursor-nwse-resize' },
+    { mode: 'resize-ne', className: '-top-1.5 -right-1.5 cursor-nesw-resize' },
+    { mode: 'resize-sw', className: '-bottom-1.5 -left-1.5 cursor-nesw-resize' },
+    { mode: 'resize-se', className: '-bottom-1.5 -right-1.5 cursor-nwse-resize' },
+    { mode: 'resize-n', className: '-top-1.5 left-1/2 -translate-x-1/2 cursor-ns-resize' },
+    { mode: 'resize-s', className: '-bottom-1.5 left-1/2 -translate-x-1/2 cursor-ns-resize' },
+    { mode: 'resize-w', className: 'top-1/2 -left-1.5 -translate-y-1/2 cursor-ew-resize' },
+    { mode: 'resize-e', className: 'top-1/2 -right-1.5 -translate-y-1/2 cursor-ew-resize' },
 ] as const;
 
 export const SlideObjectView = memo(function SlideObjectView({
-                                                                 obj,
-                                                                 selected,
-                                                                 editing,
-                                                                 editable,
-                                                                 isMultiSelected,
-                                                                 onSelect,
-                                                                 onStartEditing,
-                                                                 onStopEditing,
-                                                                 onUpdate,
-                                                                 onDragStart,
-                                                                 onResizeStart,
-                                                                 onCopy,
-                                                                 onDelete,
-                                                                 onMoveUp,
-                                                                 onMoveDown,
-                                                                 onMoveToFront,
-                                                                 onMoveToBack,
-                                                             }: SlideObjectViewProps) {
-    const {resolveMediaUrl} = useMediaResolver();
+    obj,
+    selected,
+    editing,
+    editable,
+    isMultiSelected,
+    onSelect,
+    onStartEditing,
+    onStopEditing,
+    onUpdate,
+    onDragStart,
+    onResizeStart,
+    onCopy,
+    onDelete,
+    onMoveUp,
+    onMoveDown,
+    onMoveToFront,
+    onMoveToBack,
+}: SlideObjectViewProps) {
+    const { resolveMediaUrl } = useMediaResolver();
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     useEffect(() => {
@@ -166,7 +188,7 @@ export const SlideObjectView = memo(function SlideObjectView({
     };
 
     const textStyle = obj.type === 'text' ? getTextStyle(obj) : undefined;
-    const verticalAlign = obj.type === 'text' ? (obj.verticalAlign || 'top') : undefined;
+    const verticalAlign = obj.type === 'text' ? obj.verticalAlign || 'top' : undefined;
 
     const objectDiv = (
         <div
@@ -181,14 +203,19 @@ export const SlideObjectView = memo(function SlideObjectView({
                     style={getVerticalAlignStyle(verticalAlign)}
                 >
                     <p className="whitespace-pre-wrap break-words w-full" style={textStyle}>
-                        {obj.highlightColor
-                            ? <span style={{
-                                backgroundColor: obj.highlightColor,
-                                boxDecorationBreak: 'clone',
-                                WebkitBoxDecorationBreak: 'clone'
-                            }}>{obj.text}</span>
-                            : obj.text
-                        }
+                        {obj.highlightColor ? (
+                            <span
+                                style={{
+                                    backgroundColor: obj.highlightColor,
+                                    boxDecorationBreak: 'clone',
+                                    WebkitBoxDecorationBreak: 'clone',
+                                }}
+                            >
+                                {obj.text}
+                            </span>
+                        ) : (
+                            obj.text
+                        )}
                     </p>
                 </div>
             )}
@@ -198,10 +225,10 @@ export const SlideObjectView = memo(function SlideObjectView({
                     <textarea
                         ref={textareaRef}
                         className="w-full resize-none bg-transparent border-none outline-none whitespace-pre-wrap break-words p-0"
-                        style={{...textStyle, height: 'auto', maxHeight: '100%'}}
+                        style={{ ...textStyle, height: 'auto', maxHeight: '100%' }}
                         rows={1}
                         value={obj.text}
-                        onChange={(e) => onUpdate(obj.id, {text: e.target.value})}
+                        onChange={(e) => onUpdate(obj.id, { text: e.target.value })}
                         onBlur={onStopEditing}
                         onKeyDown={(e) => {
                             if (e.key === 'Escape') onStopEditing();
@@ -216,22 +243,25 @@ export const SlideObjectView = memo(function SlideObjectView({
                 <img
                     src={resolveMediaUrl(obj.mediaName) || ''}
                     className="w-full h-full select-none pointer-events-none"
-                    style={{objectFit: obj.objectFit}}
+                    style={{ objectFit: obj.objectFit }}
                     draggable={false}
                     alt=""
                 />
             )}
 
-            {selected && editable && !editing && HANDLE_POSITIONS.map(({mode, className}) => (
-                <div
-                    key={mode}
-                    className={`absolute h-3 w-3 bg-white border border-blue-500 rounded-sm ${className}`}
-                    onMouseDown={(e) => {
-                        e.stopPropagation();
-                        onResizeStart(e, obj.id, mode, obj.x, obj.y, obj.w, obj.h);
-                    }}
-                />
-            ))}
+            {selected &&
+                editable &&
+                !editing &&
+                HANDLE_POSITIONS.map(({ mode, className }) => (
+                    <div
+                        key={mode}
+                        className={`absolute h-3 w-3 bg-white border border-blue-500 rounded-sm ${className}`}
+                        onMouseDown={(e) => {
+                            e.stopPropagation();
+                            onResizeStart(e, obj.id, mode, obj.x, obj.y, obj.w, obj.h);
+                        }}
+                    />
+                ))}
         </div>
     );
 
@@ -239,29 +269,27 @@ export const SlideObjectView = memo(function SlideObjectView({
 
     return (
         <ContextMenu>
-            <ContextMenuTrigger asChild>
-                {objectDiv}
-            </ContextMenuTrigger>
+            <ContextMenuTrigger asChild>{objectDiv}</ContextMenuTrigger>
             <ContextMenuContent>
                 <ContextMenuItem onClick={() => onCopy?.(obj.id)}>
-                    <Copy className="h-4 w-4 mr-2"/> Copy
+                    <Copy className="h-4 w-4 mr-2" /> Copy
                 </ContextMenuItem>
-                <ContextMenuSeparator/>
+                <ContextMenuSeparator />
                 <ContextMenuItem onClick={() => onMoveUp?.(obj.id)}>
-                    <ChevronUp className="h-4 w-4 mr-2"/> Move up
+                    <ChevronUp className="h-4 w-4 mr-2" /> Move up
                 </ContextMenuItem>
                 <ContextMenuItem onClick={() => onMoveDown?.(obj.id)}>
-                    <ChevronDown className="h-4 w-4 mr-2"/> Move down
+                    <ChevronDown className="h-4 w-4 mr-2" /> Move down
                 </ContextMenuItem>
                 <ContextMenuItem onClick={() => onMoveToFront?.(obj.id)}>
-                    <ArrowUpToLine className="h-4 w-4 mr-2"/> Bring to front
+                    <ArrowUpToLine className="h-4 w-4 mr-2" /> Bring to front
                 </ContextMenuItem>
                 <ContextMenuItem onClick={() => onMoveToBack?.(obj.id)}>
-                    <ArrowDownToLine className="h-4 w-4 mr-2"/> Send to back
+                    <ArrowDownToLine className="h-4 w-4 mr-2" /> Send to back
                 </ContextMenuItem>
-                <ContextMenuSeparator/>
+                <ContextMenuSeparator />
                 <ContextMenuItem variant="destructive" onClick={() => onDelete?.(obj.id)}>
-                    <Trash2 className="h-4 w-4 mr-2"/> Delete
+                    <Trash2 className="h-4 w-4 mr-2" /> Delete
                 </ContextMenuItem>
             </ContextMenuContent>
         </ContextMenu>

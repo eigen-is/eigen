@@ -1,17 +1,20 @@
 import {validateCommand} from '../../validation';
-import {EMOTE_COMMANDS, resolveEmoteKey, getEmoteCommand, isEmoteCommand} from './emotes';
+import {EMOTE_COMMANDS, getEmoteCommand, isEmoteCommand, resolveEmoteKey} from './emotes';
 
-export {resolveEmoteKey, getEmoteCommand, isEmoteCommand};
+export {getEmoteCommand, isEmoteCommand, resolveEmoteKey};
 
 // All valid slash command strings
 export const SLASH_COMMANDS = [
     '/help',
-    '/inspect', '/look', '/finger',
+    '/inspect',
+    '/look',
+    '/finger',
     '/me',
     '/invite',
-    '/whisper', '/tell',
+    '/whisper',
+    '/tell',
     '/reply',
-    ...EMOTE_COMMANDS.flatMap(c => [`/${c.key}`, ...(c.aliases ?? []).map(a => `/${a}`)]),
+    ...EMOTE_COMMANDS.flatMap((c) => [`/${c.key}`, ...(c.aliases ?? []).map((a) => `/${a}`)]),
 ];
 
 // Help entries for the suggestion popup — priority commands first, then emotes alphabetically
@@ -22,21 +25,22 @@ export const COMMANDS_HELP = [
     {cmd: '/invite [User]', desc: 'Invite user to the room'},
     {cmd: '/inspect, /look, /finger [User]', desc: 'Inspect a user'},
     {cmd: '/me [action]', desc: 'Perform a custom emote'},
-    ...[...EMOTE_COMMANDS].sort((a, b) => a.key.localeCompare(b.key)).map(c => ({
-        cmd: c.aliases
-            ? `/${c.key}, ${c.aliases.map(a => `/${a}`).join(', ')}`
-            : `/${c.key}`,
-        desc: c.desc,
-    })),
+    ...[...EMOTE_COMMANDS]
+        .sort((a, b) => a.key.localeCompare(b.key))
+        .map((c) => ({
+            cmd: c.aliases ? `/${c.key}, ${c.aliases.map((a) => `/${a}`).join(', ')}` : `/${c.key}`,
+            desc: c.desc,
+        })),
 ];
 
 // Set of emote commands that do NOT need a space appended after selection
 // (they can be sent immediately without arguments)
 const noSpaceCommands = new Set([
     '/help',
-    ...EMOTE_COMMANDS
-        .filter(c => !c.requiresTarget)
-        .flatMap(c => [`/${c.key}`, ...(c.aliases ?? []).map(a => `/${a}`)]),
+    ...EMOTE_COMMANDS.filter((c) => !c.requiresTarget).flatMap((c) => [
+        `/${c.key}`,
+        ...(c.aliases ?? []).map((a) => `/${a}`),
+    ]),
 ]);
 
 export function commandNeedsSpace(command: string): boolean {

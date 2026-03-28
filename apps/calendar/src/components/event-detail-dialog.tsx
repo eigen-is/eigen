@@ -1,4 +1,10 @@
-import {useState} from 'react';
+import {useAuth} from '@workspace/lib/auth';
+import {useCreateEvent, useDeleteEvent, useRsvp, useUpdateEvent} from '@workspace/lib/calendar';
+import type {CalendarEventOccurrence, CalendarItem, SharedCalendar} from '@workspace/lib/types/calendar';
+import {Button} from '@workspace/ui/components/button';
+import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
+import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
+import {UserName} from '@workspace/ui/components/layout/user-name';
 import {
     AlignLeft,
     Calendar,
@@ -10,22 +16,16 @@ import {
     Repeat,
     Trash2,
     UsersRound,
-    X as XIcon
+    X as XIcon,
 } from 'lucide-react';
-import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
-import {Button} from '@workspace/ui/components/button';
-import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
-import {useCreateEvent, useDeleteEvent, useRsvp, useUpdateEvent} from '@workspace/lib/calendar';
-import {useAuth} from '@workspace/lib/auth';
-import type {CalendarEventOccurrence, CalendarItem, SharedCalendar} from '@workspace/lib/types/calendar';
+import {useState} from 'react';
 import {RRule} from 'rrule';
+import {AttendeeList} from './attendee-editor';
+import {occurrenceDateToString, parseOccurrenceDate} from './calendar-utils';
+import {EditEventDialog} from './edit-event-dialog';
 import {rruleToText} from './recurrence-picker';
 import type {RecurringAction} from './recurring-action-dialog';
 import {RecurringActionDialog} from './recurring-action-dialog';
-import {occurrenceDateToString, parseOccurrenceDate} from './calendar-utils';
-import {UserName} from '@workspace/ui/components/layout/user-name';
-import {EditEventDialog} from './edit-event-dialog';
-import {AttendeeList} from './attendee-editor';
 
 type EventDetailDialogProps = {
     open: boolean;
@@ -33,7 +33,7 @@ type EventDetailDialogProps = {
     event: CalendarEventOccurrence | null;
     calendar?: CalendarItem | null;
     sharedCalendar?: SharedCalendar | null;
-}
+};
 
 function formatTime(timestamp: number, allDay: boolean): string {
     if (allDay) {
@@ -117,7 +117,7 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
     const canEdit = !isShared || sharedCalendar?.permission === 'write';
     const isLinkedEvent = !!event.data?.organizer;
     const myAttendeeStatus = event.data?.attendees?.find(
-        a => a.email.toLowerCase() === user?.email?.toLowerCase()
+        (a) => a.email.toLowerCase() === user?.email?.toLowerCase(),
     )?.status;
     const hasAttendees = (event.data?.attendees?.length ?? 0) > 0;
 
@@ -149,7 +149,11 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
             } else {
                 if (action === 'this') {
                     if (isException) {
-                        await updateEvent.mutateAsync({id: event.id, calendarId: event.calendarId, status: 'cancelled'});
+                        await updateEvent.mutateAsync({
+                            id: event.id,
+                            calendarId: event.calendarId,
+                            status: 'cancelled',
+                        });
                     } else if (isRecurring) {
                         await createEvent.mutateAsync({
                             calendarId: event.calendarId,
@@ -233,7 +237,17 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
 
     return (
         <>
-            <Dialog open={open && !showDeleteDialog && !showRecurringDeleteDialog && !showRecurringDeleteConfirm && !editOpen && !showRsvpScopeDialog} onOpenChange={onOpenChange}>
+            <Dialog
+                open={
+                    open &&
+                    !showDeleteDialog &&
+                    !showRecurringDeleteDialog &&
+                    !showRecurringDeleteConfirm &&
+                    !editOpen &&
+                    !showRsvpScopeDialog
+                }
+                onOpenChange={onOpenChange}
+            >
                 <DialogContent size="md">
                     <DialogHeader>
                         <DialogTitle className="text-xl">{event.title}</DialogTitle>
@@ -277,7 +291,10 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
                             <div className="flex items-start gap-3 text-sm">
                                 <UsersRound className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0"/>
                                 <div className="flex-1">
-                                    <AttendeeList attendees={event.data!.attendees!} organizer={event.data?.organizer}/>
+                                    <AttendeeList
+                                        attendees={event.data!.attendees!}
+                                        organizer={event.data?.organizer}
+                                    />
                                 </div>
                             </div>
                         )}
@@ -286,7 +303,7 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
                             <div className="pt-3 mt-3 border-t">
                                 <div className="text-sm font-medium mb-2">RSVP</div>
                                 <div className="flex gap-2">
-                                    {(['accepted', 'tentative', 'declined'] as const).map(status => (
+                                    {(['accepted', 'tentative', 'declined'] as const).map((status) => (
                                         <Button
                                             key={status}
                                             size="sm"
@@ -296,15 +313,31 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
                                                     setPendingRsvpStatus(status);
                                                     setShowRsvpScopeDialog(true);
                                                 } else {
-                                                    rsvp.mutate({calendarId: event.calendarId, eventId: event.id, status});
+                                                    rsvp.mutate({
+                                                        calendarId: event.calendarId,
+                                                        eventId: event.id,
+                                                        status,
+                                                    });
                                                     onOpenChange(false);
                                                 }
                                             }}
                                             className="gap-1"
                                         >
-                                            {status === 'accepted' && <><Check className="h-3 w-3"/> Accept</>}
-                                            {status === 'tentative' && <><HelpCircle className="h-3 w-3"/> Maybe</>}
-                                            {status === 'declined' && <><XIcon className="h-3 w-3"/> Decline</>}
+                                            {status === 'accepted' && (
+                                                <>
+                                                    <Check className="h-3 w-3"/> Accept
+                                                </>
+                                            )}
+                                            {status === 'tentative' && (
+                                                <>
+                                                    <HelpCircle className="h-3 w-3"/> Maybe
+                                                </>
+                                            )}
+                                            {status === 'declined' && (
+                                                <>
+                                                    <XIcon className="h-3 w-3"/> Decline
+                                                </>
+                                            )}
                                         </Button>
                                     ))}
                                 </div>
@@ -317,8 +350,9 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
                                 <div className="text-sm text-muted-foreground">
                                     {calendarName}
                                     {isShared && sharedCalendar && !isLinkedEvent && (
-                                        <div className="text-xs">Created by: <UserName
-                                            userId={event.createByUserId || undefined}/></div>
+                                        <div className="text-xs">
+                                            Created by: <UserName userId={event.createByUserId || undefined}/>
+                                        </div>
                                     )}
                                 </div>
                             </div>

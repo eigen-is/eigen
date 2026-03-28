@@ -1,17 +1,17 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
-import {ContactsList, ContactsListToolbar} from '../components/contacts/contacts-list';
-import {ContactDetail, ContactDetailToolbar} from '../components/contacts/contact-detail';
 import {useContacts, useDeleteContact, useLabels, useUpdateContact} from '@workspace/lib/contacts';
-import {type Contact} from '@workspace/lib/types/contact';
+import type {Contact} from '@workspace/lib/types/contact';
 import {EmptyState, LoadingState} from '@workspace/ui';
-import {LabelFilterHeader} from "@workspace/ui/components/layout/labels/label-filter-header";
-import {Column, ColumnLayout} from "@workspace/ui/components/layout/app/column-layout.tsx";
-import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog";
+import {Column, ColumnLayout} from '@workspace/ui/components/layout/app/column-layout.tsx';
+import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
+import {LabelFilterHeader} from '@workspace/ui/components/layout/labels/label-filter-header';
 import {useEffect, useState} from 'react';
+import {ContactDetail, ContactDetailToolbar} from '../components/contacts/contact-detail';
+import {ContactsList, ContactsListToolbar} from '../components/contacts/contacts-list';
 
 export type ContactsSearchParams = {
     contactId?: string;
-}
+};
 
 export const Route = createFileRoute('/_auth/$filterType/$filterId')({
     component: ContactsRoute,
@@ -38,7 +38,7 @@ function ContactsRoute() {
     const deleteDialogOpen = deleteTargets.length > 0;
 
     const handleConfirmDelete = async () => {
-        await Promise.allSettled(deleteTargets.map(c => deleteMutation.mutateAsync(c.id)));
+        await Promise.allSettled(deleteTargets.map((c) => deleteMutation.mutateAsync(c.id)));
         setDeleteTargets([]);
         navigate({
             to: Route.fullPath,
@@ -63,7 +63,7 @@ function ContactsRoute() {
         });
     };
 
-    const contact = contactsLoading ? undefined : contacts.find(c => c.id === contactId);
+    const contact = contactsLoading ? undefined : contacts.find((c) => c.id === contactId);
 
     useEffect(() => {
         if (!contactsLoading && contactId && !contact) {
@@ -99,65 +99,59 @@ function ContactsRoute() {
 
     return (
         <>
-        <ColumnLayout mobileColumn={contactId ? 'detail' : 'list'}>
-            <Column id="list" width="350px" toolbar={listToolbar}>
-                <div className="flex h-full flex-col border-r overflow-y-auto">
-                    {filterType === 'label' && (
-                        <LabelFilterHeader
+            <ColumnLayout mobileColumn={contactId ? 'detail' : 'list'}>
+                <Column id="list" width="350px" toolbar={listToolbar}>
+                    <div className="flex h-full flex-col border-r overflow-y-auto">
+                        {filterType === 'label' && <LabelFilterHeader labels={labels} labelId={filterId}/>}
+                        <ContactsList
+                            filterType={filterType}
+                            filterId={filterId}
+                            searchQuery={searchQuery}
+                            sortBy={sortBy}
+                            activeContactId={contactId}
                             labels={labels}
-                            labelId={filterId}
+                            onRowClick={handleRowClick}
+                            onEdit={(contact) => {
+                                navigate({
+                                    to: '/edit/$filterType/$filterId',
+                                    params: {filterType, filterId},
+                                    search: {contactId: contact.id},
+                                });
+                            }}
+                            onDelete={(selectedContacts) => {
+                                setDeleteTargets(selectedContacts);
+                            }}
+                            onToggleLabel={async (selectedContacts, labelId) => {
+                                const allHaveLabel = selectedContacts.every((c) => (c.labels || []).includes(labelId));
+                                await Promise.allSettled(
+                                    selectedContacts.map((c) => {
+                                        const currentLabels = c.labels || [];
+                                        if (allHaveLabel) {
+                                            return updateContactMutation.mutateAsync({
+                                                ...c,
+                                                labels: currentLabels.filter((id) => id !== labelId),
+                                            });
+                                        } else if (!currentLabels.includes(labelId)) {
+                                            return updateContactMutation.mutateAsync({
+                                                ...c,
+                                                labels: [...currentLabels, labelId],
+                                            });
+                                        }
+                                        return Promise.resolve();
+                                    }),
+                                );
+                            }}
                         />
+                    </div>
+                </Column>
+                <Column id="detail" width="flex" onBack={handleBackToList} toolbar={detailToolbar}>
+                    {contact ? (
+                        <ContactDetail contact={contact} onDelete={(_id) => setDeleteTargets([contact])}/>
+                    ) : (
+                        <EmptyState message="Select a contact to view details"/>
                     )}
-                    <ContactsList
-                        filterType={filterType}
-                        filterId={filterId}
-                        searchQuery={searchQuery}
-                        sortBy={sortBy}
-                        activeContactId={contactId}
-                        labels={labels}
-                        onRowClick={handleRowClick}
-                        onEdit={(contact) => {
-                            navigate({
-                                to: '/edit/$filterType/$filterId',
-                                params: {filterType, filterId},
-                                search: {contactId: contact.id},
-                            });
-                        }}
-                        onDelete={(selectedContacts) => {
-                            setDeleteTargets(selectedContacts);
-                        }}
-                        onToggleLabel={async (selectedContacts, labelId) => {
-                            const allHaveLabel = selectedContacts.every(c => (c.labels || []).includes(labelId));
-                            await Promise.allSettled(selectedContacts.map(c => {
-                                const currentLabels = c.labels || [];
-                                if (allHaveLabel) {
-                                    return updateContactMutation.mutateAsync({
-                                        ...c,
-                                        labels: currentLabels.filter(id => id !== labelId)
-                                    });
-                                } else if (!currentLabels.includes(labelId)) {
-                                    return updateContactMutation.mutateAsync({
-                                        ...c,
-                                        labels: [...currentLabels, labelId]
-                                    });
-                                }
-                                return Promise.resolve();
-                            }));
-                        }}
-                    />
-                </div>
-            </Column>
-            <Column id="detail" width="flex" onBack={handleBackToList} toolbar={detailToolbar}>
-                {contact ? (
-                    <ContactDetail
-                        contact={contact}
-                        onDelete={(id) => setDeleteTargets([contact])}
-                    />
-                ) : (
-                    <EmptyState message="Select a contact to view details"/>
-                )}
-            </Column>
-        </ColumnLayout>
+                </Column>
+            </ColumnLayout>
 
             <DeleteDialog
                 open={deleteDialogOpen}
@@ -165,8 +159,16 @@ function ContactsRoute() {
                     if (!open) setDeleteTargets([]);
                 }}
                 title="Delete Contact"
-                description={deleteTargets.length > 1 ? `Are you sure you want to delete ${deleteTargets.length} contacts` : "Are you sure you want to delete"}
-                itemName={deleteTargets.length === 1 ? `${deleteTargets[0].firstName} ${deleteTargets[0].lastName}` : undefined}
+                description={
+                    deleteTargets.length > 1
+                        ? `Are you sure you want to delete ${deleteTargets.length} contacts`
+                        : 'Are you sure you want to delete'
+                }
+                itemName={
+                    deleteTargets.length === 1
+                        ? `${deleteTargets[0].firstName} ${deleteTargets[0].lastName}`
+                        : undefined
+                }
                 onDelete={handleConfirmDelete}
             />
         </>

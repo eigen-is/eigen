@@ -1,8 +1,8 @@
-import {type QueryClient, useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
-import {settingsApi} from '@workspace/lib/api';
-import type {ServerSettings} from '@workspace/lib/types/settings';
-import {AppError, onMutationError} from '../../api-error';
-import {toast} from 'sonner';
+import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { settingsApi } from '@workspace/lib/api';
+import type { ServerSettings } from '@workspace/lib/types/settings';
+import { toast } from 'sonner';
+import { AppError, onMutationError } from '../../api-error';
 
 export const settingsKeys = {
     all: ['settings'] as const,
@@ -38,5 +38,5 @@ export function useUpdateServerSettings() {
 }
 
 export function invalidateServerSettings(queryClient: QueryClient): void {
-    queryClient.invalidateQueries({queryKey: settingsKeys.server()});
+    queryClient.invalidateQueries({ queryKey: settingsKeys.server() });
 }

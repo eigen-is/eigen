@@ -1,10 +1,9 @@
-import {betterAuth} from "better-auth";
+import {apiKey} from '@better-auth/api-key';
+import {betterAuth} from 'better-auth';
+import {drizzleAdapter} from 'better-auth/adapters/drizzle';
+import {admin, organization, twoFactor} from 'better-auth/plugins';
+import type {User} from 'better-auth/types';
 import {drizzle} from 'drizzle-orm/bun-sqlite';
-import {drizzleAdapter} from "better-auth/adapters/drizzle";
-import {getServerDataPath} from "../config/paths";
-import {getServerConfig} from "../config/server-config";
-import {admin, organization, twoFactor} from "better-auth/plugins"
-import {apiKey} from "@better-auth/api-key"
 import {
     account as accountScheme,
     apikey as apikeyScheme,
@@ -12,38 +11,40 @@ import {
     member as memberScheme,
     organization as organizationScheme,
     session as sessionScheme,
-    team as teamScheme,
     teamMember as teamMemberScheme,
+    team as teamScheme,
     twoFactor as twoFactorScheme,
     user as userScheme,
-    verification as verificationScheme
+    verification as verificationScheme,
 } from '../../../auth-schema.ts';
-import type {User} from "better-auth/types";
-import {ApiError} from "../core";
-import {sendMail} from "../core/mailer";
-import {reconcileSharesForNewTeamMember, reconcileSharesForNewUser} from "../share";
+import {getServerDataPath} from '../config/paths';
+import {getServerConfig} from '../config/server-config';
+import {ApiError} from '../core';
+import {sendMail} from '../core/mailer';
+import {reconcileSharesForNewTeamMember, reconcileSharesForNewUser} from '../share';
 
 export const trustedOrigins = [
-    "http://localhost",
-    "http://localhost:3000",
-    "http://localhost:3001",
-    "http://localhost:3002",
-    "http://localhost:3003",
-    "http://localhost:3004",
-    "http://localhost:3005",
-    "http://localhost:3006",
-    "http://localhost:3007",
-    "http://localhost:3008",
-    "http://localhost:3009",
-    "http://localhost:3010",
-    "http://localhost:3011",
-    "http://localhost:3012",
-    "http://localhost:3013",
-    "https://eigen.is"];
+    'http://localhost',
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://localhost:3002',
+    'http://localhost:3003',
+    'http://localhost:3004',
+    'http://localhost:3005',
+    'http://localhost:3006',
+    'http://localhost:3007',
+    'http://localhost:3008',
+    'http://localhost:3009',
+    'http://localhost:3010',
+    'http://localhost:3011',
+    'http://localhost:3012',
+    'http://localhost:3013',
+    'https://eigen.is',
+];
 
 export const auth = betterAuth({
     database: drizzleAdapter(drizzle(getServerDataPath('users3.db')), {
-        provider: "sqlite",
+        provider: 'sqlite',
         schema: {
             user: userScheme,
             session: sessionScheme,
@@ -69,11 +70,11 @@ export const auth = betterAuth({
         },
     },
     emailAndPassword: {
-        enabled: true
+        enabled: true,
     },
     plugins: [
         twoFactor({
-            issuer: "eigen",
+            issuer: 'eigen',
             otpOptions: {
                 async sendOTP({user, otp}) {
                     const ok = await sendMail({
@@ -92,19 +93,16 @@ export const auth = betterAuth({
             },
             organizationHooks: {
                 afterAddTeamMember: async ({teamMember}) => {
-                    await reconcileSharesForNewTeamMember(
-                        teamMember.userId,
-                        teamMember.teamId,
-                    );
+                    await reconcileSharesForNewTeamMember(teamMember.userId, teamMember.teamId);
                 },
             },
         }),
         apiKey(),
     ],
     trustedOrigins,
-    appName: "eigen",
-    baseURL: process.env["API_URL"],
-    basePath: "/auth",
+    appName: 'eigen',
+    baseURL: process.env['API_URL'],
+    basePath: '/auth',
     // Falls back to random UUID before setup is completed — intentional since sessions don't
     // need to persist across restarts during the pre-setup phase.
     secret: getServerConfig()?.secret || crypto.randomUUID(),
@@ -125,7 +123,10 @@ export async function authAddUserToDefaultOrg(user: User): Promise<void> {
             },
         });
     } catch (error) {
-        throw new ApiError(500, `Failed to auto-join user ${user.id} to default org: ${error instanceof Error ? error.message : String(error)}`);
+        throw new ApiError(
+            500,
+            `Failed to auto-join user ${user.id} to default org: ${error instanceof Error ? error.message : String(error)}`,
+        );
     }
 }
 

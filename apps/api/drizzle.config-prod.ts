@@ -1,9 +1,9 @@
-import {defineConfig} from "drizzle-kit";
+import {defineConfig} from 'drizzle-kit';
 
 export default defineConfig({
-    dialect: "sqlite",
-    schema: "./auth-schema.ts",
+    dialect: 'sqlite',
+    schema: './auth-schema.ts',
     dbCredentials: {
-        url: "../../../../eigen/api/data/users3.db",
+        url: '../../../../eigen/api/data/users3.db',
     },
 });

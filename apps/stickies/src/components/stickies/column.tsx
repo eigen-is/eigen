@@ -1,10 +1,10 @@
 import {SortableContext, useSortable, verticalListSortingStrategy} from '@dnd-kit/sortable';
 import {CSS} from '@dnd-kit/utilities';
-import {StickyCard} from './card';
-import {CardItem, ColumnItem} from './types';
-import {Pencil, Plus} from 'lucide-react';
 import {TooltipButton} from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
-import * as Y from 'yjs';
+import {Pencil, Plus} from 'lucide-react';
+import type * as Y from 'yjs';
+import {StickyCard} from './card';
+import type {CardItem, ColumnItem} from './types';
 
 type ColumnProps = {
     column: ColumnItem;
@@ -18,7 +18,7 @@ type ColumnProps = {
     yjsDoc: Y.Doc | null;
     ownerId: string;
     mountId: string;
-}
+};
 
 export function Column({
                            column,
@@ -31,22 +31,15 @@ export function Column({
                            isMobile,
                            yjsDoc,
                            ownerId,
-                           mountId
+                           mountId,
                        }: ColumnProps) {
-    const {
-        attributes,
-        listeners,
-        setNodeRef,
-        transform,
-        transition,
-        isDragging,
-    } = useSortable({
+    const {attributes, listeners, setNodeRef, transform, transition, isDragging} = useSortable({
         id: column.id,
         data: {type: 'column', column},
         disabled: !canWrite,
     });
 
-    const cardIds = cards.map(c => c.id);
+    const cardIds = cards.map((c) => c.id);
     const columnWidth = isMobile ? 'w-[92vw] min-w-[92vw]' : 'w-[280px] min-w-[280px]';
     const columnMargin = isMobile ? 'mx-[4vw]' : 'mx-1.5';
 

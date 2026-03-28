@@ -1,9 +1,9 @@
-import type {DriveACL, DrivePath} from '@workspace/lib/types/drive';
 import {parseOwnerId} from '@workspace/lib/types';
-import {getUserByEmail} from '../user/';
+import type {DriveACL, DrivePath} from '@workspace/lib/types/drive';
 import {getHome} from '../home';
-import {getTeamMembers} from "../team";
 import {addRegistryEntry} from '../share';
+import {getTeamMembers} from '../team';
+import {getUserByEmail} from '../user/';
 
 export async function resolveACLUserIds(ownerId: string, acls: DriveACL[]): Promise<Set<string>> {
     const ids = new Set<string>();
@@ -59,7 +59,12 @@ export async function resolveACLToEmails(acls: DriveACL[]): Promise<Map<string, 
     return members;
 }
 
-export async function propagateACLChange(path: DrivePath, oldACL: DriveACL[] | null, newACL: DriveACL[] | null, actorEmail?: string): Promise<void> {
+export async function propagateACLChange(
+    path: DrivePath,
+    oldACL: DriveACL[] | null,
+    newACL: DriveACL[] | null,
+    actorEmail?: string,
+): Promise<void> {
     const ids = await resolveACLUserIds(path.ownerId, [...(oldACL || []), ...(newACL || [])]);
 
     for (const id of ids) {

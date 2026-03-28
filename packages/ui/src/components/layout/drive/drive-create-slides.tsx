@@ -1,7 +1,7 @@
-import type {DrivePath} from "@workspace/lib/types/drive";
-import {useCreateSlides} from "@workspace/lib/drive";
-import {getSlideUrl} from "@workspace/lib/api";
-import {DriveCreateItemDialog} from "./drive-create-folder-item";
+import {getSlideUrl} from '@workspace/lib/api';
+import {useCreateSlides} from '@workspace/lib/drive';
+import type {DrivePath} from '@workspace/lib/types/drive';
+import {DriveCreateItemDialog} from './drive-create-folder-item';
 
 export type DriveCreateSlidesProps = {
     path: DrivePath;
@@ -9,8 +9,8 @@ export type DriveCreateSlidesProps = {
     onOpenChange: (open: boolean) => void;
     onSave?: (newPath: string) => void;
     onCancel?: () => void;
-    onAfterAction?: (actionType: string, data: any) => void;
-}
+    onAfterAction?: (actionType: string, data: Record<string, unknown>) => void;
+};
 
 export function DriveCreateSlides({
                                       path,

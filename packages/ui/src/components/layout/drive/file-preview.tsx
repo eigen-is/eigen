@@ -1,11 +1,11 @@
-import {useHotkey} from "@tanstack/react-hotkeys";
-import {ChevronLeft, ChevronRight, Download, ExternalLink, Loader2, X} from "lucide-react";
-import type {DrivePath} from "@workspace/lib/types/drive";
-import {isDocumentType, isInlineEditable} from "@workspace/lib/types/drive";
-import {getDocumentUrl, getInlineEditUrl} from "@workspace/lib/api";
-import {useTextPreview} from "@workspace/lib/drive";
-import {getFileIcon} from "./file-icon-helper";
-import type {PreviewMode} from "../preview-provider/preview-provider";
+import {useHotkey} from '@tanstack/react-hotkeys';
+import {getDocumentUrl, getInlineEditUrl} from '@workspace/lib/api';
+import {useTextPreview} from '@workspace/lib/drive';
+import type {DrivePath} from '@workspace/lib/types/drive';
+import {isDocumentType, isInlineEditable} from '@workspace/lib/types/drive';
+import {ChevronLeft, ChevronRight, Download, ExternalLink, Loader2, X} from 'lucide-react';
+import type {PreviewMode} from '../preview-provider/preview-provider';
+import {getFileIcon} from './file-icon-helper';
 
 type FilePreviewProps = {
     previewMode: PreviewMode;
@@ -24,17 +24,35 @@ type FilePreviewProps = {
 };
 
 export function FilePreview({
-                                previewMode, previewUrl, thumbnailUrl, embedUrl, downloadUrl,
-                                fileName, aspectRatio, hasPrev, hasNext, path,
-                                onClose, onPrev, onNext,
+                                previewMode,
+                                previewUrl,
+                                thumbnailUrl,
+                                embedUrl,
+                                downloadUrl,
+                                fileName,
+                                aspectRatio,
+                                hasPrev,
+                                hasNext,
+                                path,
+                                onClose,
+                                onPrev,
+                                onNext,
                             }: FilePreviewProps) {
     useHotkey('Escape', () => onClose(), {enabled: true});
-    useHotkey('ArrowLeft', () => {
-        if (hasPrev) onPrev();
-    }, {enabled: true});
-    useHotkey('ArrowRight', () => {
-        if (hasNext) onNext();
-    }, {enabled: true});
+    useHotkey(
+        'ArrowLeft',
+        () => {
+            if (hasPrev) onPrev();
+        },
+        {enabled: true},
+    );
+    useHotkey(
+        'ArrowRight',
+        () => {
+            if (hasNext) onNext();
+        },
+        {enabled: true},
+    );
 
     const openUrl = isDocumentType(path.type)
         ? getDocumentUrl(path) || undefined
@@ -43,10 +61,7 @@ export function FilePreview({
             : undefined;
 
     return (
-        <div
-            className="fixed inset-0 z-[100] bg-black/80 flex flex-col animate-in fade-in"
-            onClick={onClose}
-        >
+        <div className="fixed inset-0 z-[100] bg-black/80 flex flex-col animate-in fade-in" onClick={onClose}>
             {/* Header */}
             <div
                 className="flex items-center justify-between px-4 py-2 bg-black/40 text-white shrink-0"
@@ -72,12 +87,12 @@ export function FilePreview({
             <div
                 className="flex-1 flex items-center justify-center overflow-hidden min-h-0"
                 onClick={onClose}
-                style={{cursor: "zoom-out"}}
+                style={{cursor: 'zoom-out'}}
             >
                 <div
                     className="max-w-[90vw] max-h-[calc(100vh-7rem)] flex items-center justify-center"
                     onClick={(e) => e.stopPropagation()}
-                    style={{cursor: "default"}}
+                    style={{cursor: 'default'}}
                 >
                     {previewMode === 'image' && (
                         <ProgressiveImage
@@ -103,17 +118,12 @@ export function FilePreview({
                         </div>
                     )}
                     {previewMode === 'pdf' && (
-                        <iframe
-                            src={embedUrl}
-                            className="w-[80vw] h-[calc(100vh-7rem)] rounded bg-background"
-                        />
+                        <iframe src={embedUrl} className="w-[80vw] h-[calc(100vh-7rem)] rounded bg-background"/>
                     )}
-                    {previewMode === 'text' && (
-                        <TextPreviewContent path={path}/>
-                    )}
+                    {previewMode === 'text' && <TextPreviewContent path={path}/>}
                     {previewMode === 'fallback' && (
                         <div className="flex flex-col items-center gap-4 text-white">
-                            {getFileIcon(path.mimeType, path.type, {className: "size-16 text-muted-foreground"})}
+                            {getFileIcon(path.mimeType, path.type, {className: 'size-16 text-muted-foreground'})}
                             <span className="text-lg font-medium">{fileName}</span>
                             <span className="text-sm text-muted-foreground">No preview available</span>
                         </div>
@@ -169,8 +179,16 @@ function TextPreviewContent({path}: { path: DrivePath }) {
     );
 }
 
-function NavButton({onClick, disabled, title, children}: {
-    onClick: () => void; disabled?: boolean; title: string; children: React.ReactNode;
+function NavButton({
+                       onClick,
+                       disabled,
+                       title,
+                       children,
+                   }: {
+    onClick: () => void;
+    disabled?: boolean;
+    title: string;
+    children: React.ReactNode;
 }) {
     return (
         <button
@@ -184,8 +202,16 @@ function NavButton({onClick, disabled, title, children}: {
     );
 }
 
-function ProgressiveImage({thumbnailUrl, previewUrl, alt, aspectRatio}: {
-    thumbnailUrl?: string; previewUrl: string; alt: string; aspectRatio?: number;
+function ProgressiveImage({
+                              thumbnailUrl,
+                              previewUrl,
+                              alt,
+                              aspectRatio,
+                          }: {
+    thumbnailUrl?: string;
+    previewUrl: string;
+    alt: string;
+    aspectRatio?: number;
 }) {
     // Use CSS min() to compute "object-fit: contain" dimensions so the element
     // matches the visible image area exactly — clicks beside a portrait image
@@ -198,35 +224,18 @@ function ProgressiveImage({thumbnailUrl, previewUrl, alt, aspectRatio}: {
         : {width: '90vw', height: 'calc(100vh - 7rem)'};
 
     if (!thumbnailUrl) {
-        return (
-            <img
-                src={previewUrl}
-                alt={alt}
-                className="rounded object-contain"
-                style={style}
-            />
-        );
+        return <img src={previewUrl} alt={alt} className="rounded object-contain" style={style}/>;
     }
 
     return (
         <div className="relative" style={style}>
-            <img
-                src={thumbnailUrl}
-                alt={alt}
-                className="w-full h-full rounded object-contain"
-            />
-            <img
-                src={previewUrl}
-                alt={alt}
-                className="absolute inset-0 w-full h-full rounded object-contain"
-            />
+            <img src={thumbnailUrl} alt={alt} className="w-full h-full rounded object-contain"/>
+            <img src={previewUrl} alt={alt} className="absolute inset-0 w-full h-full rounded object-contain"/>
         </div>
     );
 }
 
-function FooterButton({href, download, children}: {
-    href: string; download?: boolean; children: React.ReactNode;
-}) {
+function FooterButton({href, download, children}: { href: string; download?: boolean; children: React.ReactNode }) {
     return (
         <a
             href={href}

@@ -1,5 +1,5 @@
-import {useState} from 'react';
-import {MediaPreview} from './MediaPreview';
+import { useState } from 'react';
+import { MediaPreview } from './MediaPreview';
 
 interface MediaItemProps {
     src: string;
@@ -9,7 +9,7 @@ interface MediaItemProps {
     poster?: string;
 }
 
-function MediaItem({src, type, caption, thumbnail, poster}: MediaItemProps) {
+function MediaItem({ src, type, caption, thumbnail, poster }: MediaItemProps) {
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
     const thumbnailSrc = thumbnail || src;
@@ -29,45 +29,27 @@ function MediaItem({src, type, caption, thumbnail, poster}: MediaItemProps) {
                     {type === 'video' && (
                         <div className="relative w-full h-full">
                             {posterSrc ? (
-                                <img
-                                    src={posterSrc}
-                                    alt={caption || ''}
-                                    className="w-full h-full object-cover"
-                                />
+                                <img src={posterSrc} alt={caption || ''} className="w-full h-full object-cover" />
                             ) : (
-                                <video
-                                    src={src}
-                                    className="w-full h-full object-cover"
-                                    muted
-                                    preload="metadata"
-                                />
+                                <video src={src} className="w-full h-full object-cover" muted preload="metadata" />
                             )}
-                            <div
-                                className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors">
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors">
                                 <svg
                                     className="w-16 h-16 text-white opacity-80 group-hover:opacity-100 transition-opacity"
                                     fill="currentColor"
                                     viewBox="0 0 20 20"
                                 >
-                                    <path
-                                        d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"/>
+                                    <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
                                 </svg>
                             </div>
                         </div>
                     )}
                 </div>
-                {caption && (
-                    <p className="mt-2 text-sm text-muted-foreground text-center">{caption}</p>
-                )}
+                {caption && <p className="mt-2 text-sm text-muted-foreground text-center">{caption}</p>}
             </div>
 
             {isPreviewOpen && (
-                <MediaPreview
-                    src={src}
-                    type={type}
-                    caption={caption}
-                    onClose={() => setIsPreviewOpen(false)}
-                />
+                <MediaPreview src={src} type={type} caption={caption} onClose={() => setIsPreviewOpen(false)} />
             )}
         </>
     );
@@ -78,7 +60,7 @@ interface MediaGridProps {
     items?: MediaItemProps[];
 }
 
-export function MediaGrid({columns = '2', items = []}: MediaGridProps) {
+export function MediaGrid({ columns = '2', items = [] }: MediaGridProps) {
     if (items.length === 0) {
         return null;
     }
@@ -104,11 +86,7 @@ export function MediaGrid({columns = '2', items = []}: MediaGridProps) {
     };
     const gridCols = gridColsMap[columns] || 'grid-cols-1 md:grid-cols-2';
 
-    return (
-        <div className={`grid ${gridCols} gap-6 my-8`}>
-            {mediaElements}
-        </div>
-    );
+    return <div className={`grid ${gridCols} gap-6 my-8`}>{mediaElements}</div>;
 }
 
 export function Media(props: MediaItemProps) {

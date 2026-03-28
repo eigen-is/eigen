@@ -1,2 +1,2 @@
-export * from './delete-dialog';
 export * from './confirm-dialog';
+export * from './delete-dialog';

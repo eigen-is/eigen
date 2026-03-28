@@ -1,19 +1,19 @@
-import {createFileRoute, useNavigate} from '@tanstack/react-router'
-import {useCallback, useMemo, useState} from 'react';
-import {Column, ColumnLayout} from "@workspace/ui/components/layout";
-import {useAllSharedCalendarEvents, useCalendars, useEvents, useSharedCalendars} from '@workspace/lib/calendar';
+import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {useAuth} from '@workspace/lib/auth';
+import {useAllSharedCalendarEvents, useCalendars, useEvents, useSharedCalendars} from '@workspace/lib/calendar';
+import {LoadingState} from '@workspace/ui';
+import {Column, ColumnLayout} from '@workspace/ui/components/layout';
+import {useCallback, useMemo, useState} from 'react';
 import {CalendarToolbar} from '../components/calendar-toolbar';
-import {MonthView} from '../components/month-view';
-import {WeekView} from '../components/week-view';
-import {CreateEventDialog} from '../components/create-event-dialog';
 import type {ViewMode} from '../components/calendar-utils';
 import {getMonthRange, getWeekRange} from '../components/calendar-utils';
-import {LoadingState} from '@workspace/ui';
+import {CreateEventDialog} from '../components/create-event-dialog';
+import {MonthView} from '../components/month-view';
+import {WeekView} from '../components/week-view';
 
 export const Route = createFileRoute('/_auth/view/$mode/$from/$to')({
     component: CalendarView,
-})
+});
 
 function CalendarView() {
     const {mode, from: fromStr, to: toStr} = Route.useParams();
@@ -44,20 +44,23 @@ function CalendarView() {
     const {data: sharedEvents = []} = useAllSharedCalendarEvents(sharedCalendars, from, to);
 
     const visibleCalendarIds = useMemo(() => {
-        return new Set(calendars.filter(c => c.visible).map(c => c.id));
+        return new Set(calendars.filter((c) => c.visible).map((c) => c.id));
     }, [calendars]);
 
     const allEvents = useMemo(() => {
-        const filtered = ownEvents.filter(e => visibleCalendarIds.has(e.calendarId));
+        const filtered = ownEvents.filter((e) => visibleCalendarIds.has(e.calendarId));
         return [...filtered, ...sharedEvents];
     }, [ownEvents, visibleCalendarIds, sharedEvents]);
 
-    const navigateToRange = useCallback((newMode: ViewMode, newFrom: number, newTo: number) => {
-        navigate({
-            to: '/view/$mode/$from/$to',
-            params: {mode: newMode, from: String(newFrom), to: String(newTo)},
-        });
-    }, [navigate]);
+    const navigateToRange = useCallback(
+        (newMode: ViewMode, newFrom: number, newTo: number) => {
+            navigate({
+                to: '/view/$mode/$from/$to',
+                params: {mode: newMode, from: String(newFrom), to: String(newTo)},
+            });
+        },
+        [navigate],
+    );
 
     const handleToday = useCallback(() => {
         const range = viewMode === 'month' ? getMonthRange(new Date()) : getWeekRange(new Date());
@@ -86,17 +89,20 @@ function CalendarView() {
         navigateToRange(viewMode, range.from, range.to);
     }, [currentDate, viewMode, navigateToRange]);
 
-    const handleViewModeChange = useCallback((newMode: ViewMode) => {
-        const range = newMode === 'month' ? getMonthRange(currentDate) : getWeekRange(currentDate);
-        navigateToRange(newMode, range.from, range.to);
-    }, [currentDate, navigateToRange]);
+    const handleViewModeChange = useCallback(
+        (newMode: ViewMode) => {
+            const range = newMode === 'month' ? getMonthRange(currentDate) : getWeekRange(currentDate);
+            navigateToRange(newMode, range.from, range.to);
+        },
+        [currentDate, navigateToRange],
+    );
 
     const handleDayClick = useCallback((date: Date) => {
         setCreateEventDate(date);
         setCreateEventOpen(true);
     }, []);
 
-    const defaultCalendarId = calendars.find(c => c.isDefault)?.id || calendars[0]?.id;
+    const defaultCalendarId = calendars.find((c) => c.isDefault)?.id || calendars[0]?.id;
 
     return (
         <ColumnLayout>

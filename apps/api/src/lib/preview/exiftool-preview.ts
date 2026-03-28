@@ -1,6 +1,6 @@
-import * as path from 'path';
-import * as fs from 'node:fs';
 import {execFile} from 'node:child_process';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import {promisify} from 'node:util';
 import {isExiftoolExtension} from '@workspace/lib/constants';
 
@@ -23,7 +23,8 @@ async function getExiftoolPath(): Promise<string> {
             cachedExiftoolPath = 'exiftool';
             return cachedExiftoolPath;
         }
-    } catch { /* not installed system-wide */
+    } catch {
+        /* not installed system-wide */
     }
 
     const {exiftool} = await import('exiftool-vendored');
@@ -47,7 +48,8 @@ export async function extractEmbeddedPreview(filePath: string, tmpDir: string, p
                     fs.writeFileSync(extractPath, stdout);
                     return extractPath;
                 }
-            } catch { /* tag not present, try next */
+            } catch {
+                /* tag not present, try next */
             }
         }
 

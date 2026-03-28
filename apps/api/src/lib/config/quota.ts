@@ -1,25 +1,22 @@
-import type {MountConfig} from '@workspace/lib/types';
-import {getServerSettings} from './server-settings';
-import {getHome} from '../home';
-import type {TeamHome} from '../home/team-home';
-import {teamOwnerId} from '@workspace/lib/types';
+import type { MountConfig } from '@workspace/lib/types';
+import { teamOwnerId } from '@workspace/lib/types';
+import { getHome } from '../home';
+import type { TeamHome } from '../home/team-home';
+import { getServerSettings } from './server-settings';
 
 export type ResolvedQuotas = {
     mailAndContactsMax: number;
     mountMax: number;
 };
 
-export async function resolveUserQuotas(
-    mountConfig: MountConfig,
-    teamIds: string[],
-): Promise<ResolvedQuotas> {
+export async function resolveUserQuotas(mountConfig: MountConfig, teamIds: string[]): Promise<ResolvedQuotas> {
     const settings = getServerSettings();
 
     const mailCandidates = [settings.quotas.mailAndContactsMaxMB];
     const mountCandidates = [mountConfig.maxSizeMB ?? settings.quotas.defaultMountMaxSizeMB];
 
     for (const teamId of teamIds) {
-        const teamHome = await getHome(teamOwnerId(teamId)) as TeamHome;
+        const teamHome = (await getHome(teamOwnerId(teamId))) as TeamHome;
         const ts = teamHome.settings.get();
         if (ts.memberOverrides?.mailAndContactsMaxMB != null) {
             mailCandidates.push(ts.memberOverrides.mailAndContactsMaxMB);

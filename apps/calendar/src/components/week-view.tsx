@@ -1,5 +1,7 @@
-import {useMemo, useState} from 'react';
-import type {CalendarEventOccurrence, CalendarItem, SharedCalendar} from '@workspace/lib/types/calendar';
+import { useAuth } from '@workspace/lib/auth';
+import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
+import { cn } from '@workspace/ui/lib/utils';
+import { useMemo, useState } from 'react';
 import {
     formatEventTime,
     getCalendarColor,
@@ -10,9 +12,7 @@ import {
     isToday,
     WEEKDAY_HEADERS,
 } from './calendar-utils';
-import {cn} from '@workspace/ui/lib/utils';
-import {useAuth} from '@workspace/lib/auth';
-import {EventDetailDialog} from './event-detail-dialog';
+import { EventDetailDialog } from './event-detail-dialog';
 
 type WeekViewProps = {
     currentDate: Date;
@@ -20,14 +20,14 @@ type WeekViewProps = {
     calendars: CalendarItem[];
     sharedCalendars?: SharedCalendar[];
     onDayClick?: (date: Date) => void;
-}
+};
 
-export function WeekView({currentDate, events, calendars, sharedCalendars, onDayClick}: WeekViewProps) {
-    const {user} = useAuth();
+export function WeekView({ currentDate, events, calendars, sharedCalendars, onDayClick }: WeekViewProps) {
+    const { user } = useAuth();
     const [selectedEvent, setSelectedEvent] = useState<CalendarEventOccurrence | null>(null);
     const [detailOpen, setDetailOpen] = useState(false);
 
-    const {startDate, endDate} = useMemo(() => getWeekRange(currentDate), [currentDate]);
+    const { startDate, endDate } = useMemo(() => getWeekRange(currentDate), [currentDate]);
     const days = useMemo(() => getDaysInRange(startDate, endDate), [startDate, endDate]);
 
     const handleEventClick = (event: CalendarEventOccurrence, e: React.MouseEvent) => {
@@ -36,13 +36,12 @@ export function WeekView({currentDate, events, calendars, sharedCalendars, onDay
         setDetailOpen(true);
     };
 
-    const selectedCalendar = selectedEvent
-        ? calendars.find(c => c.id === selectedEvent.calendarId) || null
-        : null;
+    const selectedCalendar = selectedEvent ? calendars.find((c) => c.id === selectedEvent.calendarId) || null : null;
 
-    const selectedSharedCalendar = selectedEvent && !selectedCalendar
-        ? sharedCalendars?.find(s => s.calendarId === selectedEvent.calendarId) || null
-        : null;
+    const selectedSharedCalendar =
+        selectedEvent && !selectedCalendar
+            ? sharedCalendars?.find((s) => s.calendarId === selectedEvent.calendarId) || null
+            : null;
 
     return (
         <>
@@ -52,13 +51,13 @@ export function WeekView({currentDate, events, calendars, sharedCalendars, onDay
                         const today = isToday(day);
                         return (
                             <div key={idx} className="text-center py-2 border-r last:border-r-0">
-                                <div className="text-xs font-medium text-muted-foreground">
-                                    {WEEKDAY_HEADERS[idx]}
-                                </div>
-                                <div className={cn(
-                                    'text-lg font-semibold mt-0.5 w-8 h-8 flex items-center justify-center rounded-full mx-auto',
-                                    today && 'bg-primary text-primary-foreground'
-                                )}>
+                                <div className="text-xs font-medium text-muted-foreground">{WEEKDAY_HEADERS[idx]}</div>
+                                <div
+                                    className={cn(
+                                        'text-lg font-semibold mt-0.5 w-8 h-8 flex items-center justify-center rounded-full mx-auto',
+                                        today && 'bg-primary text-primary-foreground',
+                                    )}
+                                >
                                     {day.getDate()}
                                 </div>
                             </div>
@@ -69,8 +68,10 @@ export function WeekView({currentDate, events, calendars, sharedCalendars, onDay
                 <div className="flex-1 grid grid-cols-7 overflow-auto">
                     {days.map((day, dayIdx) => {
                         const dayEvents = getEventsForDay(events, day);
-                        const allDayEvents = dayEvents.filter(e => e.allDay);
-                        const timedEvents = dayEvents.filter(e => !e.allDay).sort((a, b) => a.startTime - b.startTime);
+                        const allDayEvents = dayEvents.filter((e) => e.allDay);
+                        const timedEvents = dayEvents
+                            .filter((e) => !e.allDay)
+                            .sort((a, b) => a.startTime - b.startTime);
 
                         return (
                             <div
@@ -86,11 +87,16 @@ export function WeekView({currentDate, events, calendars, sharedCalendars, onDay
                                             <div
                                                 key={`${event.id}-${event.occurrenceDate}-${idx}`}
                                                 className={cn(
-                                                    "text-xs leading-tight px-1.5 py-1 rounded text-white truncate cursor-pointer hover:opacity-80",
-                                                    inviteStatus === 'pending' && 'border border-dashed bg-transparent !text-foreground',
+                                                    'text-xs leading-tight px-1.5 py-1 rounded text-white truncate cursor-pointer hover:opacity-80',
+                                                    inviteStatus === 'pending' &&
+                                                        'border border-dashed bg-transparent !text-foreground',
                                                     inviteStatus === 'declined' && 'opacity-40',
                                                 )}
-                                                style={inviteStatus === 'pending' ? {borderColor: color, color} : {backgroundColor: color}}
+                                                style={
+                                                    inviteStatus === 'pending'
+                                                        ? { borderColor: color, color }
+                                                        : { backgroundColor: color }
+                                                }
                                                 onClick={(e) => handleEventClick(event, e)}
                                                 title={event.title}
                                             >
@@ -100,7 +106,7 @@ export function WeekView({currentDate, events, calendars, sharedCalendars, onDay
                                     })}
 
                                     {allDayEvents.length > 0 && timedEvents.length > 0 && (
-                                        <div className="border-b my-1"/>
+                                        <div className="border-b my-1" />
                                     )}
 
                                     {timedEvents.map((event, idx) => {
@@ -110,21 +116,33 @@ export function WeekView({currentDate, events, calendars, sharedCalendars, onDay
                                             <div
                                                 key={`${event.id}-${event.occurrenceDate}-${idx}`}
                                                 className={cn(
-                                                    "text-sm leading-tight flex items-start gap-1.5 py-0.5 px-0.5 cursor-pointer hover:bg-accent rounded",
+                                                    'text-sm leading-tight flex items-start gap-1.5 py-0.5 px-0.5 cursor-pointer hover:bg-accent rounded',
                                                     inviteStatus === 'declined' && 'opacity-40',
                                                 )}
                                                 onClick={(e) => handleEventClick(event, e)}
                                                 title={event.title}
                                             >
-                                                <div className={cn(
-                                                    "h-2 w-2 rounded-full shrink-0 mt-1.5",
-                                                    inviteStatus === 'pending' && 'ring-1 ring-current bg-transparent',
-                                                )} style={{backgroundColor: inviteStatus === 'pending' ? 'transparent' : color, color}}/>
+                                                <div
+                                                    className={cn(
+                                                        'h-2 w-2 rounded-full shrink-0 mt-1.5',
+                                                        inviteStatus === 'pending' &&
+                                                            'ring-1 ring-current bg-transparent',
+                                                    )}
+                                                    style={{
+                                                        backgroundColor:
+                                                            inviteStatus === 'pending' ? 'transparent' : color,
+                                                        color,
+                                                    }}
+                                                />
                                                 <div className="min-w-0">
-                                                    <div className="text-muted-foreground text-sm">{formatEventTime(event)}</div>
+                                                    <div className="text-muted-foreground text-sm">
+                                                        {formatEventTime(event)}
+                                                    </div>
                                                     <div className="truncate font-medium">{event.title}</div>
                                                     {event.location && (
-                                                        <div className="text-muted-foreground text-sm truncate">{event.location}</div>
+                                                        <div className="text-muted-foreground text-sm truncate">
+                                                            {event.location}
+                                                        </div>
                                                     )}
                                                 </div>
                                             </div>

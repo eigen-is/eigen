@@ -1,21 +1,26 @@
-import {useCallback, useRef, useState} from 'react';
-import {Plus, Users} from 'lucide-react';
-import {Button} from '@workspace/ui/components/button';
-import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@workspace/ui/components/select';
-import {Separator} from '@workspace/ui/components/separator';
-import {ContactAutosuggest} from '@workspace/ui/components/layout/contacts/contact-autosuggest';
-import {UserItem} from '@workspace/ui/components/layout/user-item';
-import {DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger} from '@workspace/ui/components/dropdown-menu';
-import {validateEmailAddress} from '@workspace/lib/validation';
-import {usePublicConfig} from '@workspace/lib/public';
 import {usePeopleTeams} from '@workspace/lib/people';
+import {usePublicConfig} from '@workspace/lib/public';
 import {teamOwnerId} from '@workspace/lib/types';
 import type {CalendarShare} from '@workspace/lib/types/calendar';
+import {validateEmailAddress} from '@workspace/lib/validation';
+import {Button} from '@workspace/ui/components/button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@workspace/ui/components/dropdown-menu';
+import {ContactAutosuggest} from '@workspace/ui/components/layout/contacts/contact-autosuggest';
+import {UserItem} from '@workspace/ui/components/layout/user-item';
+import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@workspace/ui/components/select';
+import {Separator} from '@workspace/ui/components/separator';
+import {Plus, Users} from 'lucide-react';
+import {useCallback, useRef, useState} from 'react';
 
 type CalendarShareEditorProps = {
     shares: CalendarShare[] | null;
     onChange: (shares: CalendarShare[] | null) => void;
-}
+};
 
 export function CalendarShareEditor({shares, onChange}: CalendarShareEditorProps) {
     const [newContactInput, setNewContactInput] = useState('');
@@ -25,39 +30,48 @@ export function CalendarShareEditor({shares, onChange}: CalendarShareEditorProps
     const {data: config} = usePublicConfig();
     const {data: teams} = usePeopleTeams(config?.orgId);
 
-    const addShare = useCallback((targetId: string, permission: CalendarShare['permission'] = 'read') => {
-        if (currentShares.some(s => s.targetId.toLowerCase() === targetId.toLowerCase())) return;
-        onChange([...currentShares, {targetId, permission}]);
-    }, [currentShares, onChange]);
+    const addShare = useCallback(
+        (targetId: string, permission: CalendarShare['permission'] = 'read') => {
+            if (currentShares.some((s) => s.targetId.toLowerCase() === targetId.toLowerCase())) return;
+            onChange([...currentShares, {targetId, permission}]);
+        },
+        [currentShares, onChange],
+    );
 
-    const processContactInput = useCallback((value: string) => {
-        const emailMatch = value.match(/<(.+)>/);
-        let email: string;
+    const processContactInput = useCallback(
+        (value: string) => {
+            const emailMatch = value.match(/<(.+)>/);
+            let email: string;
 
-        if (emailMatch) {
-            email = emailMatch[1];
-        } else {
-            const isEmail = validateEmailAddress(value);
-            if (isEmail) {
-                email = value.trim().toLowerCase();
+            if (emailMatch) {
+                email = emailMatch[1];
             } else {
-                return false;
+                const isEmail = validateEmailAddress(value);
+                if (isEmail) {
+                    email = value.trim().toLowerCase();
+                } else {
+                    return false;
+                }
             }
-        }
 
-        addShare(email.toLowerCase());
-        return true;
-    }, [addShare]);
+            addShare(email.toLowerCase());
+            return true;
+        },
+        [addShare],
+    );
 
-    const handleContactSelected = useCallback((value: string) => {
-        if (value.includes('<') && value.includes('>')) {
-            const added = processContactInput(value);
-            if (added) setNewContactInput('');
-            else setNewContactInput(value);
-        } else {
-            setNewContactInput(value);
-        }
-    }, [processContactInput]);
+    const handleContactSelected = useCallback(
+        (value: string) => {
+            if (value.includes('<') && value.includes('>')) {
+                const added = processContactInput(value);
+                if (added) setNewContactInput('');
+                else setNewContactInput(value);
+            } else {
+                setNewContactInput(value);
+            }
+        },
+        [processContactInput],
+    );
 
     const handleAddContactClick = useCallback(() => {
         if (!newContactInput) return;
@@ -65,19 +79,27 @@ export function CalendarShareEditor({shares, onChange}: CalendarShareEditorProps
         if (added) setNewContactInput('');
     }, [newContactInput, processContactInput]);
 
-    const handlePermissionChange = useCallback((targetId: string, permission: string) => {
-        if (permission === 'remove') {
-            onChange(currentShares.filter(s => s.targetId !== targetId));
-        } else {
-            onChange(currentShares.map(s =>
-                s.targetId === targetId ? {...s, permission: permission as CalendarShare['permission']} : s
-            ));
-        }
-    }, [currentShares, onChange]);
+    const handlePermissionChange = useCallback(
+        (targetId: string, permission: string) => {
+            if (permission === 'remove') {
+                onChange(currentShares.filter((s) => s.targetId !== targetId));
+            } else {
+                onChange(
+                    currentShares.map((s) =>
+                        s.targetId === targetId ? {...s, permission: permission as CalendarShare['permission']} : s,
+                    ),
+                );
+            }
+        },
+        [currentShares, onChange],
+    );
 
-    const handleAddTeam = useCallback((teamId: string) => {
-        addShare(teamOwnerId(teamId));
-    }, [addShare]);
+    const handleAddTeam = useCallback(
+        (teamId: string) => {
+            addShare(teamOwnerId(teamId));
+        },
+        [addShare],
+    );
 
     return (
         <div className="space-y-3">
@@ -95,8 +117,13 @@ export function CalendarShareEditor({shares, onChange}: CalendarShareEditorProps
                         onSubmit={handleAddContactClick}
                     />
                 </div>
-                <Button size="icon" variant="outline" className="ml-2" onClick={handleAddContactClick}
-                        disabled={!newContactInput}>
+                <Button
+                    size="icon"
+                    variant="outline"
+                    className="ml-2"
+                    onClick={handleAddContactClick}
+                    disabled={!newContactInput}
+                >
                     <Plus className="h-4 w-4"/>
                 </Button>
             </div>
@@ -141,7 +168,7 @@ export function CalendarShareEditor({shares, onChange}: CalendarShareEditorProps
                                 <DropdownMenuItem
                                     key={team.id}
                                     onClick={() => handleAddTeam(team.id)}
-                                    disabled={currentShares.some(s => s.targetId === teamOwnerId(team.id))}
+                                    disabled={currentShares.some((s) => s.targetId === teamOwnerId(team.id))}
                                 >
                                     <Users className="h-4 w-4 mr-2"/>
                                     {team.name}

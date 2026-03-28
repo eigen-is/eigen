@@ -1,34 +1,34 @@
-import {useMemo, useState} from 'react';
-import {CalendarPlus, Check, Pencil, Plus} from 'lucide-react';
-import {Button} from '@workspace/ui/components/button';
-import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
-import {SidebarHeader} from '@workspace/ui/components/layout/sidebar/sidebar-header';
-import {Separator} from '@workspace/ui/components/separator';
-import {EigenLoader, StorageUsage, TooltipButton} from '@workspace/ui';
-import {useCalendars, useSharedCalendars, useUpdateCalendar, useUpdateSharedCalendar} from '@workspace/lib/calendar';
 import {useAuth} from '@workspace/lib/auth';
-import type {CalendarItem, SharedCalendar} from '@workspace/lib/types/calendar';
-import {usePublicConfig} from '@workspace/lib/public';
+import {useCalendars, useSharedCalendars, useUpdateCalendar, useUpdateSharedCalendar} from '@workspace/lib/calendar';
 import {usePeopleTeams} from '@workspace/lib/people';
+import {usePublicConfig} from '@workspace/lib/public';
 import {parseOwnerId} from '@workspace/lib/types';
-import {CalendarConfigDialog} from './calendar-config-dialog';
-import {SharedCalendarConfigDialog} from './shared-calendar-config-dialog';
-import {CreateEventDialog} from './create-event-dialog';
+import type {CalendarItem, SharedCalendar} from '@workspace/lib/types/calendar';
+import {EigenLoader, StorageUsage, TooltipButton} from '@workspace/ui';
+import {Button} from '@workspace/ui/components/button';
+import {SidebarHeader} from '@workspace/ui/components/layout/sidebar/sidebar-header';
+import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
+import {Separator} from '@workspace/ui/components/separator';
 import {cn} from '@workspace/ui/lib/utils';
+import {CalendarPlus, Check, Pencil, Plus} from 'lucide-react';
+import {useMemo, useState} from 'react';
+import {CalendarConfigDialog} from './calendar-config-dialog';
+import {CreateEventDialog} from './create-event-dialog';
+import {SharedCalendarConfigDialog} from './shared-calendar-config-dialog';
 
 type CalendarSidebarProps = {
     condensed?: boolean;
     isMobile?: boolean;
     onClose?: () => void;
-}
+};
 
-function CalendarCheckbox({color, checked, onChange}: {color: string; checked: boolean; onChange: () => void}) {
+function CalendarCheckbox({color, checked, onChange}: { color: string; checked: boolean; onChange: () => void }) {
     return (
         <button
             type="button"
             className={cn(
                 'h-4 w-4 rounded-sm border-2 flex items-center justify-center shrink-0 transition-colors',
-                checked ? 'border-transparent' : 'border-muted-foreground/40'
+                checked ? 'border-transparent' : 'border-muted-foreground/40',
             )}
             style={{backgroundColor: checked ? color : 'transparent'}}
             onClick={(e) => {
@@ -42,23 +42,26 @@ function CalendarCheckbox({color, checked, onChange}: {color: string; checked: b
     );
 }
 
-function SharedCalendarItem({sc, condensed, onToggle, onEdit}: {
-    sc: SharedCalendar; condensed: boolean;
-    onToggle: () => void; onEdit: () => void;
+function SharedCalendarItem({
+                                sc,
+                                condensed,
+                                onToggle,
+                                onEdit,
+                            }: {
+    sc: SharedCalendar;
+    condensed: boolean;
+    onToggle: () => void;
+    onEdit: () => void;
     label?: string;
 }) {
     return (
         <div
             className={cn(
                 'flex items-center gap-2 px-3 py-1.5 rounded-md group relative',
-                !condensed && 'pr-8 hover:bg-accent'
+                !condensed && 'pr-8 hover:bg-accent',
             )}
         >
-            <CalendarCheckbox
-                color={sc.color || sc.calendarColor}
-                checked={sc.visible}
-                onChange={onToggle}
-            />
+            <CalendarCheckbox color={sc.color || sc.calendarColor} checked={sc.visible} onChange={onToggle}/>
             {!condensed && (
                 <>
                     <span className="text-sm truncate flex-1">{sc.calendarName}</span>
@@ -77,11 +80,7 @@ function SharedCalendarItem({sc, condensed, onToggle, onEdit}: {
     );
 }
 
-export function CalendarSidebar({
-    condensed = false,
-    isMobile = false,
-    onClose,
-}: CalendarSidebarProps) {
+export function CalendarSidebar({condensed = false, isMobile = false, onClose}: CalendarSidebarProps) {
     const {user} = useAuth();
     const ownerId = user?.id || '';
     const {data: calendars = [], isLoading: calendarsLoading} = useCalendars(ownerId);
@@ -115,7 +114,7 @@ export function CalendarSidebar({
 
     const getTeamName = (ownerUserId: string) => {
         const parsed = parseOwnerId(ownerUserId);
-        return teams?.find(t => t.id === parsed.id)?.name || ownerUserId;
+        return teams?.find((t) => t.id === parsed.id)?.name || ownerUserId;
     };
 
     const handleEditCalendar = (cal: CalendarItem) => {
@@ -151,16 +150,11 @@ export function CalendarSidebar({
 
             <div className="overflow-auto flex-1">
                 <SidebarSection condensed={condensed}>
-                    <div className={cn(
-                        'flex items-center mb-1',
-                        condensed ? 'justify-center' : 'justify-between'
-                    )}>
-                        {!condensed && <h3 className="text-sm font-semibold text-foreground px-3 select-none">My Calendars</h3>}
-                        <TooltipButton
-                            icon={Plus}
-                            tooltipText="Add new calendar"
-                            onClick={handleCreateCalendar}
-                        />
+                    <div className={cn('flex items-center mb-1', condensed ? 'justify-center' : 'justify-between')}>
+                        {!condensed && (
+                            <h3 className="text-sm font-semibold text-foreground px-3 select-none">My Calendars</h3>
+                        )}
+                        <TooltipButton icon={Plus} tooltipText="Add new calendar" onClick={handleCreateCalendar}/>
                     </div>
 
                     {calendarsLoading ? (
@@ -172,7 +166,7 @@ export function CalendarSidebar({
                                     key={cal.id}
                                     className={cn(
                                         'flex items-center gap-2 px-3 py-1.5 rounded-md group relative',
-                                        !condensed && 'pr-8 hover:bg-accent'
+                                        !condensed && 'pr-8 hover:bg-accent',
                                     )}
                                 >
                                     <CalendarCheckbox
@@ -204,11 +198,17 @@ export function CalendarSidebar({
                     <>
                         <Separator/>
                         <SidebarSection condensed={condensed}>
-                            <div className={cn(
-                                'flex items-center mb-1',
-                                condensed ? 'justify-center' : 'justify-between'
-                            )}>
-                                {!condensed && <h3 className="text-sm font-semibold text-foreground px-3 select-none">Shared with me</h3>}
+                            <div
+                                className={cn(
+                                    'flex items-center mb-1',
+                                    condensed ? 'justify-center' : 'justify-between',
+                                )}
+                            >
+                                {!condensed && (
+                                    <h3 className="text-sm font-semibold text-foreground px-3 select-none">
+                                        Shared with me
+                                    </h3>
+                                )}
                             </div>
 
                             {sharedLoading ? (
@@ -220,7 +220,9 @@ export function CalendarSidebar({
                                             key={sc.id}
                                             sc={sc}
                                             condensed={condensed}
-                                            onToggle={() => updateSharedCalendar.mutate({id: sc.id, visible: !sc.visible})}
+                                            onToggle={() =>
+                                                updateSharedCalendar.mutate({id: sc.id, visible: !sc.visible})
+                                            }
                                             onEdit={() => handleEditSharedCalendar(sc)}
                                         />
                                     ))}
@@ -234,11 +236,17 @@ export function CalendarSidebar({
                     <>
                         <Separator/>
                         <SidebarSection condensed={condensed}>
-                            <div className={cn(
-                                'flex items-center mb-1',
-                                condensed ? 'justify-center' : 'justify-between'
-                            )}>
-                                {!condensed && <h3 className="text-sm font-semibold text-foreground px-3 select-none">Team Calendars</h3>}
+                            <div
+                                className={cn(
+                                    'flex items-center mb-1',
+                                    condensed ? 'justify-center' : 'justify-between',
+                                )}
+                            >
+                                {!condensed && (
+                                    <h3 className="text-sm font-semibold text-foreground px-3 select-none">
+                                        Team Calendars
+                                    </h3>
+                                )}
                             </div>
 
                             {sharedLoading ? (
@@ -252,7 +260,9 @@ export function CalendarSidebar({
                                                 key={sc.id}
                                                 sc={display}
                                                 condensed={condensed}
-                                                onToggle={() => updateSharedCalendar.mutate({id: sc.id, visible: !sc.visible})}
+                                                onToggle={() =>
+                                                    updateSharedCalendar.mutate({id: sc.id, visible: !sc.visible})
+                                                }
                                                 onEdit={() => handleEditSharedCalendar(display)}
                                             />
                                         );
@@ -285,10 +295,7 @@ export function CalendarSidebar({
                 sharedCalendar={configSharedCalendar}
             />
 
-            <CreateEventDialog
-                open={createEventOpen}
-                onOpenChange={setCreateEventOpen}
-            />
+            <CreateEventDialog open={createEventOpen} onOpenChange={setCreateEventOpen}/>
         </div>
     );
 }

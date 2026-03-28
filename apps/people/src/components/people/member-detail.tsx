@@ -1,23 +1,22 @@
-import {useState} from 'react';
-import {UserAvatar} from '@workspace/ui/components/layout/user-avatar';
-import {Badge} from '@workspace/ui/components/badge';
-import {Button} from '@workspace/ui/components/button';
-import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@workspace/ui/components/select';
-import {KeyRound, Trash2} from 'lucide-react';
-import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
-import {TooltipButton} from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
-import {useDeleteUser, useRemoveMember, useUpdateMemberRole} from '@workspace/lib/people';
-import {useNavigate} from '@tanstack/react-router';
-import {ResetPasswordDialog} from './reset-password-dialog';
-
-import type {OrgMember} from '@workspace/lib/types/people';
+import { useNavigate } from '@tanstack/react-router';
+import { useDeleteUser, useRemoveMember, useUpdateMemberRole } from '@workspace/lib/people';
+import type { OrgMember } from '@workspace/lib/types/people';
+import { Badge } from '@workspace/ui/components/badge';
+import { Button } from '@workspace/ui/components/button';
+import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
+import { UserAvatar } from '@workspace/ui/components/layout/user-avatar';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
+import { KeyRound, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import { ResetPasswordDialog } from './reset-password-dialog';
 
 interface MemberDetailToolbarProps {
     member: OrgMember;
     organizationId?: string;
 }
 
-export function MemberDetailToolbar({member, organizationId}: MemberDetailToolbarProps) {
+export function MemberDetailToolbar({ member, organizationId }: MemberDetailToolbarProps) {
     const [showRemove, setShowRemove] = useState(false);
     const [showResetPassword, setShowResetPassword] = useState(false);
     const removeMember = useRemoveMember(organizationId);
@@ -25,15 +24,15 @@ export function MemberDetailToolbar({member, organizationId}: MemberDetailToolba
 
     const handleRemove = async () => {
         await removeMember.mutateAsync(member.id);
-        navigate({to: '/members', search: {}});
+        navigate({ to: '/members', search: {} });
     };
 
     if (member.role === 'owner') return null;
 
     return (
         <div className="flex items-center gap-1 ml-auto">
-            <TooltipButton icon={KeyRound} tooltipText="Reset password" onClick={() => setShowResetPassword(true)}/>
-            <TooltipButton icon={Trash2} tooltipText="Remove from organization" onClick={() => setShowRemove(true)}/>
+            <TooltipButton icon={KeyRound} tooltipText="Reset password" onClick={() => setShowResetPassword(true)} />
+            <TooltipButton icon={Trash2} tooltipText="Remove from organization" onClick={() => setShowRemove(true)} />
             <ResetPasswordDialog
                 open={showResetPassword}
                 onOpenChange={setShowResetPassword}
@@ -56,25 +55,25 @@ interface MemberDetailProps {
     organizationId?: string;
 }
 
-export function MemberDetail({member, organizationId}: MemberDetailProps) {
+export function MemberDetail({ member, organizationId }: MemberDetailProps) {
     const [showDelete, setShowDelete] = useState(false);
     const updateRole = useUpdateMemberRole(organizationId);
     const deleteUser = useDeleteUser(organizationId);
     const navigate = useNavigate();
 
     const handleRoleChange = async (newRole: 'admin' | 'member' | 'owner') => {
-        await updateRole.mutateAsync({memberId: member.id, role: newRole});
+        await updateRole.mutateAsync({ memberId: member.id, role: newRole });
     };
 
     const handleDelete = async () => {
         await deleteUser.mutateAsync(member.userId);
-        navigate({to: '/members', search: {}});
+        navigate({ to: '/members', search: {} });
     };
 
     return (
         <div className="p-6 space-y-6">
             <div className="flex items-start gap-4">
-                <UserAvatar email={member.email} imageUrl={member.image ?? undefined} size="lg"/>
+                <UserAvatar email={member.email} imageUrl={member.image ?? undefined} size="lg" />
                 <div className="min-w-0 flex-1">
                     <h2 className="text-xl font-semibold truncate">{member.name}</h2>
                     <p className="text-muted-foreground truncate">{member.email}</p>
@@ -87,9 +86,13 @@ export function MemberDetail({member, organizationId}: MemberDetailProps) {
                     {member.role === 'owner' ? (
                         <Badge variant="default">owner</Badge>
                     ) : (
-                        <Select value={member.role} onValueChange={(v) => handleRoleChange(v as 'admin' | 'member' | 'owner')} disabled={updateRole.isPending}>
+                        <Select
+                            value={member.role}
+                            onValueChange={(v) => handleRoleChange(v as 'admin' | 'member' | 'owner')}
+                            disabled={updateRole.isPending}
+                        >
                             <SelectTrigger className="w-40">
-                                <SelectValue/>
+                                <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="admin">Admin</SelectItem>

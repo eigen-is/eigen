@@ -1,5 +1,5 @@
-import {Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,} from "./../../dialog";
-import {Button} from "./../../button";
+import {Button} from './../../button';
+import {Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle} from './../../dialog';
 
 export type ConfirmDialogProps = {
     open: boolean;
@@ -9,7 +9,7 @@ export type ConfirmDialogProps = {
     onConfirm: () => void;
     cancelText?: string;
     confirmText?: string;
-}
+};
 
 export function ConfirmDialog({
                                   open,
@@ -17,8 +17,8 @@ export function ConfirmDialog({
                                   title,
                                   description,
                                   onConfirm,
-                                  cancelText = "Cancel",
-                                  confirmText = "Confirm"
+                                  cancelText = 'Cancel',
+                                  confirmText = 'Confirm',
                               }: ConfirmDialogProps) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -31,9 +31,7 @@ export function ConfirmDialog({
                     <Button variant="outline" onClick={() => onOpenChange(false)}>
                         {cancelText}
                     </Button>
-                    <Button onClick={onConfirm}>
-                        {confirmText}
-                    </Button>
+                    <Button onClick={onConfirm}>{confirmText}</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

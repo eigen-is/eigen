@@ -1,5 +1,5 @@
-import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from "@workspace/ui/components/dialog";
-import {Button} from "@workspace/ui/components/button";
+import {Button} from '@workspace/ui/components/button';
+import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
 
 type ConflictDialogProps = {
     open: boolean;
@@ -20,8 +20,12 @@ export function ConflictDialog({open, onOpenChange, onOverwrite, onReload, onDow
                     This file was modified since you opened it. What would you like to do?
                 </p>
                 <DialogFooter>
-                    <Button variant="outline" onClick={onDownload}>Download your version</Button>
-                    <Button variant="outline" onClick={onReload}>Reload server version</Button>
+                    <Button variant="outline" onClick={onDownload}>
+                        Download your version
+                    </Button>
+                    <Button variant="outline" onClick={onReload}>
+                        Reload server version
+                    </Button>
                     <Button onClick={onOverwrite}>Overwrite</Button>
                 </DialogFooter>
             </DialogContent>

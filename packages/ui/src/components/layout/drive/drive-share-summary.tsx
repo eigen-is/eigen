@@ -1,16 +1,16 @@
-import {Unlock, UserRoundPlus} from "lucide-react";
-import {cn} from "@workspace/ui/lib/utils";
-import {type DrivePath} from "@workspace/lib/types/drive";
-import {Tooltip, TooltipContent, TooltipTrigger} from "@workspace/ui/components/tooltip";
-import {type DriveAccessItem, useDriveAccess} from "@workspace/lib/drive";
-import {UserAvatar} from "@workspace/ui/components/layout/user-avatar";
+import {type DriveAccessItem, useDriveAccess} from '@workspace/lib/drive';
+import type {DrivePath} from '@workspace/lib/types/drive';
+import {UserAvatar} from '@workspace/ui/components/layout/user-avatar';
+import {Tooltip, TooltipContent, TooltipTrigger} from '@workspace/ui/components/tooltip';
+import {cn} from '@workspace/ui/lib/utils';
+import {Unlock, UserRoundPlus} from 'lucide-react';
 
 export type DriveShareSummaryProps = {
     path: DrivePath;
     onClick?: () => void;
     showIconOnHover?: boolean;
     ancestorBreadcrumb?: DrivePath[];
-}
+};
 
 export function DriveShareSummary({
                                       path,
@@ -26,9 +26,7 @@ export function DriveShareSummary({
 
     return (
         <div
-            className={cn(
-                "flex items-center gap-1 cursor-pointer",
-            )}
+            className={cn('flex items-center gap-1 cursor-pointer')}
             onClick={(e) => {
                 e.stopPropagation();
                 onClick?.();
@@ -49,7 +47,7 @@ export function DriveShareSummary({
                             <TooltipContent>Anyone with the link can access</TooltipContent>
                         </Tooltip>
                     )}
-                    {allEntries.slice(0, isPublic ? 3 : 4).map((access: DriveAccessItem, index: number) =>
+                    {allEntries.slice(0, isPublic ? 3 : 4).map((access: DriveAccessItem, index: number) => (
                         <UserAvatar
                             key={access.id}
                             email={access.id}
@@ -58,7 +56,7 @@ export function DriveShareSummary({
                             style={{zIndex: (isPublic ? 2 : 1) + index}}
                             tooltip={true}
                         />
-                    )}
+                    ))}
                     {allEntries.length > (isPublic ? 3 : 4) && (
                         <span className="text-xs text-muted-foreground ml-1">
                             +{allEntries.length - (isPublic ? 3 : 4)}

@@ -8,7 +8,8 @@ export const MAIL_DB_CONFIG: DatabaseConfig<typeof schema> = {
     migrations: [
         {
             version: 1,
-            up: (db) => db.exec(`
+            up: (db) =>
+                db.exec(`
                 CREATE TABLE IF NOT EXISTS emails (
                     id TEXT PRIMARY KEY,
                     filename TEXT NOT NULL,
@@ -45,7 +46,7 @@ export const MAIL_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     FOREIGN KEY (emailId) REFERENCES emails(id) ON DELETE CASCADE,
                     FOREIGN KEY (labelId) REFERENCES email_labels(id) ON DELETE CASCADE
                 );
-            `)
-        }
-    ]
+            `),
+        },
+    ],
 };

@@ -1,14 +1,14 @@
-import {createContext, type ReactNode, useContext, useMemo} from 'react';
-import {useFolderLookup} from './hooks/use-drive';
-import {getDrivePreviewUrl} from '../api';
-import type {DrivePath} from '../../types/drive';
+import { createContext, type ReactNode, useContext, useMemo } from 'react';
+import type { DrivePath } from '../../types/drive';
+import { getDrivePreviewUrl } from '../api';
+import { useFolderLookup } from './hooks/use-drive';
 
 type MediaResolverValue = {
     resolveMediaUrl: (name: string) => string | null;
     resolveMediaPath: (name: string) => DrivePath | undefined;
     resolveChatId: (name: string) => string | null;
     mediaFolderId: string | null;
-}
+};
 
 const MediaResolverContext = createContext<MediaResolverValue>({
     resolveMediaUrl: () => null,
@@ -21,7 +21,13 @@ export function useMediaResolver() {
     return useContext(MediaResolverContext);
 }
 
-export function MediaResolverProvider({ownerId, mountId, mediaFolderId, chatFolderId, children}: {
+export function MediaResolverProvider({
+    ownerId,
+    mountId,
+    mediaFolderId,
+    chatFolderId,
+    children,
+}: {
     ownerId: string;
     mountId: string;
     mediaFolderId: string | null;
@@ -31,15 +37,18 @@ export function MediaResolverProvider({ownerId, mountId, mediaFolderId, chatFold
     const media = useFolderLookup(ownerId, mountId, mediaFolderId);
     const chat = useFolderLookup(ownerId, mountId, chatFolderId);
 
-    const value = useMemo<MediaResolverValue>(() => ({
-        resolveMediaUrl: (name: string) => {
-            const file = media.findByName(name);
-            return file ? getDrivePreviewUrl(ownerId, mountId, file.id) : null;
-        },
-        resolveMediaPath: (name: string) => media.findByName(name),
-        resolveChatId: (name: string) => chat.findByName(name)?.id ?? null,
-        mediaFolderId,
-    }), [media, chat, ownerId, mountId, mediaFolderId]);
+    const value = useMemo<MediaResolverValue>(
+        () => ({
+            resolveMediaUrl: (name: string) => {
+                const file = media.findByName(name);
+                return file ? getDrivePreviewUrl(ownerId, mountId, file.id) : null;
+            },
+            resolveMediaPath: (name: string) => media.findByName(name),
+            resolveChatId: (name: string) => chat.findByName(name)?.id ?? null,
+            mediaFolderId,
+        }),
+        [media, chat, ownerId, mountId, mediaFolderId],
+    );
 
     return <MediaResolverContext value={value}>{children}</MediaResolverContext>;
 }

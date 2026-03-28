@@ -1,20 +1,24 @@
-import {ChevronDown} from 'lucide-react';
 import {EIGEN_FONTS, getFontFamily} from '@workspace/lib/constants/fonts';
-import {DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,} from '../../dropdown-menu';
+import {ChevronDown} from 'lucide-react';
 import {Button} from '../../button';
+import {DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger} from '../../dropdown-menu';
 
 type FontPickerProps = {
     value: string;
     onChange: (fontName: string) => void;
     className?: string;
-}
+};
 
 export function FontPicker({value, onChange, className}: FontPickerProps) {
     return (
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className={className ?? "h-8 px-2 gap-1"}
-                        onMouseDown={(e) => e.preventDefault()}>
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    className={className ?? 'h-8 px-2 gap-1'}
+                    onMouseDown={(e) => e.preventDefault()}
+                >
                     <span className="text-xs whitespace-nowrap">{value}</span>
                     <ChevronDown className="h-3 w-3"/>
                 </Button>

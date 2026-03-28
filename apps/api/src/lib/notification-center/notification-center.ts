@@ -1,12 +1,12 @@
-import type {BunSQLiteDatabase} from 'drizzle-orm/bun-sqlite';
-import {desc, eq, sql} from 'drizzle-orm';
-import {v4 as uuidv4} from 'uuid';
-import type {Notification} from '@workspace/lib/types/notification';
-import type {Home} from '../home';
-import type {ManagedDatabase} from '../core';
+import type { Notification } from '@workspace/lib/types/notification';
+import { desc, eq, sql } from 'drizzle-orm';
+import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
+import { v4 as uuidv4 } from 'uuid';
+import type { ManagedDatabase } from '../core';
+import type { Home } from '../home';
+import { NOTIFICATION_CENTER_DB_CONFIG } from './db-config';
 import * as schema from './schema';
-import {NOTIFICATION_CENTER_DB_CONFIG} from './db-config';
-import {buildNotificationCreatedEvent} from './sse-events';
+import { buildNotificationCreatedEvent } from './sse-events';
 
 type PersistInput = {
     type: string;
@@ -41,7 +41,7 @@ export class NotificationCenter {
     async init(): Promise<void> {
         this.managedDb = await this.home.getLocalDatabase(
             NOTIFICATION_CENTER_DB_CONFIG,
-            'eigen.notifications/notifications.db'
+            'eigen.notifications/notifications.db',
         );
         this.db = this.managedDb.db;
     }
@@ -66,7 +66,9 @@ export class NotificationCenter {
             createdAt: now,
         };
 
-        this.db.insert(schema.notifications).values(row)
+        this.db
+            .insert(schema.notifications)
+            .values(row)
             .onConflictDoUpdate({
                 target: schema.notifications.tag,
                 set: {
@@ -75,7 +77,7 @@ export class NotificationCenter {
                     title: row.title,
                     body: row.body,
                     read: false,
-                    createdAt: now
+                    createdAt: now,
                 },
             })
             .run();
@@ -93,16 +95,14 @@ export class NotificationCenter {
             ${Math.floor(before.getTime() / 1000)}`) as typeof query;
         }
 
-        const rows = query
-            .orderBy(desc(schema.notifications.createdAt))
-            .limit(limit)
-            .all();
+        const rows = query.orderBy(desc(schema.notifications.createdAt)).limit(limit).all();
 
         return rows.map(toNotification);
     }
 
     unreadCount(): number {
-        const result = this.db.select({count: sql<number>`count(*)`})
+        const result = this.db
+            .select({ count: sql<number>`count(*)` })
             .from(schema.notifications)
             .where(eq(schema.notifications.read, false))
             .get();
@@ -110,22 +110,14 @@ export class NotificationCenter {
     }
 
     markRead(id: string): void {
-        this.db.update(schema.notifications)
-            .set({read: true})
-            .where(eq(schema.notifications.id, id))
-            .run();
+        this.db.update(schema.notifications).set({ read: true }).where(eq(schema.notifications.id, id)).run();
     }
 
     markAllRead(): void {
-        this.db.update(schema.notifications)
-            .set({read: true})
-            .where(eq(schema.notifications.read, false))
-            .run();
+        this.db.update(schema.notifications).set({ read: true }).where(eq(schema.notifications.read, false)).run();
     }
 
     dismiss(id: string): void {
-        this.db.delete(schema.notifications)
-            .where(eq(schema.notifications.id, id))
-            .run();
+        this.db.delete(schema.notifications).where(eq(schema.notifications.id, id)).run();
     }
 }

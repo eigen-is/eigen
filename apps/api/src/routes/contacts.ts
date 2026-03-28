@@ -1,15 +1,15 @@
-import {Elysia, t} from "elysia";
-import {betterAuth} from "./auth";
-import {getContacts} from "../lib/contacts/contacts";
-import {enforceAvatarUpload} from "../lib/config/enforcement";
-import {requireSelf} from "../lib/core/access";
+import {Elysia, t} from 'elysia';
+import {enforceAvatarUpload} from '../lib/config/enforcement';
+import {getContacts} from '../lib/contacts/contacts';
+import {requireSelf} from '../lib/core/access';
+import {betterAuth} from './auth';
 
 const AddressSchema = t.Object({
     street: t.Optional(t.String()),
     city: t.Optional(t.String()),
     state: t.Optional(t.String()),
     zipCode: t.Optional(t.String()),
-    country: t.Optional(t.String())
+    country: t.Optional(t.String()),
 });
 
 const ContactSchema = t.Object({
@@ -25,90 +25,138 @@ const ContactSchema = t.Object({
     notes: t.Optional(t.String()),
     avatar: t.Optional(t.String()),
     labels: t.Optional(t.Array(t.String())),
-    eigenId: t.Optional(t.String())
+    eigenId: t.Optional(t.String()),
 });
 
 const LabelSchema = t.Object({
     id: t.Optional(t.String()),
     name: t.String(),
-    color: t.String()
+    color: t.String(),
 });
 
 // All contacts routes require ownerId === user.id (contacts are personal-only, no shared access)
-export const contactsRouter = new Elysia({name: "contacts"})
+export const contactsRouter = new Elysia({name: 'contacts'})
     .use(betterAuth)
-    .get("/contacts/:ownerId/contacts", async ({params, user}) => {
-        requireSelf(params.ownerId, user.id);
-        return await (await getContacts(user)).getContacts();
-    }, {auth: true})
-    .get("/contacts/:ownerId/contacts/:id", async ({params, user}) => {
-        requireSelf(params.ownerId, user.id);
-        return await (await getContacts(user)).getContactById(params.id);
-    }, {auth: true})
-    .post("/contacts/:ownerId/contacts", async ({params, body, user}) => {
-        requireSelf(params.ownerId, user.id);
-        return await (await getContacts(user)).addContact(body);
-    }, {
-        body: ContactSchema,
-        auth: true
-    })
-    .put("/contacts/:ownerId/contacts/:id", async ({params, body, user}) => {
-        requireSelf(params.ownerId, user.id);
-        return await (await getContacts(user)).updateContact(params.id, body);
-    }, {
-        body: ContactSchema,
-        auth: true
-    })
-    .delete("/contacts/:ownerId/contacts/:id", async ({params, user}) => {
-        requireSelf(params.ownerId, user.id);
-        return await (await getContacts(user)).deleteContact(params.id);
-    }, {auth: true})
-    .get("/contacts/:ownerId/labels", async ({params, user}) => {
-        requireSelf(params.ownerId, user.id);
-        return await (await getContacts(user)).getLabels();
-    }, {auth: true})
-    .post("/contacts/:ownerId/labels", async ({params, body, user}) => {
-        requireSelf(params.ownerId, user.id);
-        return await (await getContacts(user)).addLabel(body);
-    }, {
-        body: LabelSchema,
-        auth: true
-    })
-    .put("/contacts/:ownerId/labels/:id", async ({params, body, user}) => {
-        requireSelf(params.ownerId, user.id);
-        return await (await getContacts(user)).updateLabel(params.id, body);
-    }, {
-        body: LabelSchema,
-        auth: true
-    })
-    .delete("/contacts/:ownerId/labels/:id", async ({params, user}) => {
-        requireSelf(params.ownerId, user.id);
-        return await (await getContacts(user)).deleteLabel(params.id);
-    }, {auth: true})
-    .post("/contacts/:ownerId/avatar", async ({params, body, user}) => {
-        requireSelf(params.ownerId, user.id);
-        await enforceAvatarUpload(user.id, body.file.size);
-        return await (await getContacts(user)).uploadAvatar(body.file);
-    }, {
-        body: t.Object({
-            file: t.File({format: 'image/*'})
-        }),
-        auth: true
-    })
-    .get("/contacts/:ownerId/avatar/:filename", async ({params, user, set}) => {
-        requireSelf(params.ownerId, user.id);
-        try {
-            const data = await (await getContacts(user)).downloadAvatar(params.filename);
-            set.headers['Cache-Control'] = 'public, max-age=900';
-            set.headers['Expires'] = new Date(Date.now() + 900000).toUTCString();
-            set.headers['Content-Type'] = 'image/webp';
-            return new Response(data);
-        } catch (e) {
-            set.status = 404;
-            return null;
-        }
-    }, {auth: true})
-    .get("/contacts/:ownerId/me", async ({params, user}) => {
-        requireSelf(params.ownerId, user.id);
-        return await (await getContacts(user)).getMe();
-    }, {auth: true})
+    .get(
+        '/contacts/:ownerId/contacts',
+        async ({params, user}) => {
+            requireSelf(params.ownerId, user.id);
+            return await (await getContacts(user)).getContacts();
+        },
+        {auth: true},
+    )
+    .get(
+        '/contacts/:ownerId/contacts/:id',
+        async ({params, user}) => {
+            requireSelf(params.ownerId, user.id);
+            return await (await getContacts(user)).getContactById(params.id);
+        },
+        {auth: true},
+    )
+    .post(
+        '/contacts/:ownerId/contacts',
+        async ({params, body, user}) => {
+            requireSelf(params.ownerId, user.id);
+            return await (await getContacts(user)).addContact(body);
+        },
+        {
+            body: ContactSchema,
+            auth: true,
+        },
+    )
+    .put(
+        '/contacts/:ownerId/contacts/:id',
+        async ({params, body, user}) => {
+            requireSelf(params.ownerId, user.id);
+            return await (await getContacts(user)).updateContact(params.id, body);
+        },
+        {
+            body: ContactSchema,
+            auth: true,
+        },
+    )
+    .delete(
+        '/contacts/:ownerId/contacts/:id',
+        async ({params, user}) => {
+            requireSelf(params.ownerId, user.id);
+            return await (await getContacts(user)).deleteContact(params.id);
+        },
+        {auth: true},
+    )
+    .get(
+        '/contacts/:ownerId/labels',
+        async ({params, user}) => {
+            requireSelf(params.ownerId, user.id);
+            return await (await getContacts(user)).getLabels();
+        },
+        {auth: true},
+    )
+    .post(
+        '/contacts/:ownerId/labels',
+        async ({params, body, user}) => {
+            requireSelf(params.ownerId, user.id);
+            return await (await getContacts(user)).addLabel(body);
+        },
+        {
+            body: LabelSchema,
+            auth: true,
+        },
+    )
+    .put(
+        '/contacts/:ownerId/labels/:id',
+        async ({params, body, user}) => {
+            requireSelf(params.ownerId, user.id);
+            return await (await getContacts(user)).updateLabel(params.id, body);
+        },
+        {
+            body: LabelSchema,
+            auth: true,
+        },
+    )
+    .delete(
+        '/contacts/:ownerId/labels/:id',
+        async ({params, user}) => {
+            requireSelf(params.ownerId, user.id);
+            return await (await getContacts(user)).deleteLabel(params.id);
+        },
+        {auth: true},
+    )
+    .post(
+        '/contacts/:ownerId/avatar',
+        async ({params, body, user}) => {
+            requireSelf(params.ownerId, user.id);
+            await enforceAvatarUpload(user.id, body.file.size);
+            return await (await getContacts(user)).uploadAvatar(body.file);
+        },
+        {
+            body: t.Object({
+                file: t.File({format: 'image/*'}),
+            }),
+            auth: true,
+        },
+    )
+    .get(
+        '/contacts/:ownerId/avatar/:filename',
+        async ({params, user, set}) => {
+            requireSelf(params.ownerId, user.id);
+            try {
+                const data = await (await getContacts(user)).downloadAvatar(params.filename);
+                set.headers['Cache-Control'] = 'public, max-age=900';
+                set.headers['Expires'] = new Date(Date.now() + 900000).toUTCString();
+                set.headers['Content-Type'] = 'image/webp';
+                return new Response(data);
+            } catch (_e) {
+                set.status = 404;
+                return null;
+            }
+        },
+        {auth: true},
+    )
+    .get(
+        '/contacts/:ownerId/me',
+        async ({params, user}) => {
+            requireSelf(params.ownerId, user.id);
+            return await (await getContacts(user)).getMe();
+        },
+        {auth: true},
+    );

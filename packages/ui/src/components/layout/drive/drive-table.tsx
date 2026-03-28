@@ -1,15 +1,22 @@
-import React, {useCallback, useMemo, useRef, useState} from "react";
-import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from "@workspace/ui/components/table";
-import {cn} from "@workspace/ui/lib/utils";
-import {formatDistanceToNow} from "date-fns";
-import {DEFAULT_MOUNT_ID, DrivePath, isFolderType, isInlineEditable, stripEigenExtension} from "@workspace/lib/types";
-import {DriveShareSummary} from "./drive-share-summary";
-import {ArrowRight, ChevronLeft, Download, Pencil, Trash2, UserRoundPlus} from "lucide-react";
-import {DropdownMenuItem, DropdownMenuSeparator} from "@workspace/ui/components/dropdown-menu";
-import {ContextMenuAnchor, useContextMenu} from "../context-menu";
-import {useKeyboardListNavigation} from "../../../hooks/use-keyboard-list-navigation";
-import {useListSelection} from "../../../hooks/use-list-selection";
-import {useListDrag} from "../../../hooks/use-list-drag";
+import {
+    DEFAULT_MOUNT_ID,
+    type DrivePath,
+    isFolderType,
+    isInlineEditable,
+    stripEigenExtension,
+} from '@workspace/lib/types';
+import {DropdownMenuItem, DropdownMenuSeparator} from '@workspace/ui/components/dropdown-menu';
+import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from '@workspace/ui/components/table';
+import {cn} from '@workspace/ui/lib/utils';
+import {formatDistanceToNow} from 'date-fns';
+import {ArrowRight, ChevronLeft, Download, Pencil, Trash2, UserRoundPlus} from 'lucide-react';
+import type React from 'react';
+import {useCallback, useMemo, useRef, useState} from 'react';
+import {useKeyboardListNavigation} from '../../../hooks/use-keyboard-list-navigation';
+import {useListDrag} from '../../../hooks/use-list-drag';
+import {useListSelection} from '../../../hooks/use-list-selection';
+import {ContextMenuAnchor, useContextMenu} from '../context-menu';
+import {DriveShareSummary} from './drive-share-summary';
 
 export function defaultDriveSort(a: DrivePath, b: DrivePath): number {
     if (a.type === 'folder' && b.type !== 'folder') return -1;
@@ -23,7 +30,7 @@ export type DriveTableProps = {
     activeItemId?: string;
     onItemClick?: (item: DrivePath) => void;
     onItemOpen?: (item: DrivePath) => void;
-    getFileIcon?: (mimeType: string, type: string, props?: any) => React.ReactNode;
+    getFileIcon?: (mimeType: string, type: string, props?: Record<string, unknown>) => React.ReactNode;
     onShareClick?: (item: DrivePath) => void;
     onDownload?: (item: DrivePath) => void;
     onDelete?: (items: DrivePath[]) => void;
@@ -34,7 +41,7 @@ export type DriveTableProps = {
     allowDelete?: boolean;
     allowDownload?: boolean;
     ancestorBreadcrumb?: DrivePath[];
-}
+};
 
 export function DriveTable({
                                items = [],
@@ -53,7 +60,6 @@ export function DriveTable({
                                allowDelete = false,
                                ancestorBreadcrumb,
                            }: DriveTableProps) {
-
     const tableRef = useRef<HTMLTableElement>(null);
     const [hasFocus, setHasFocus] = useState(false);
     const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
@@ -83,22 +89,28 @@ export function DriveTable({
                 sharingRestricted: false,
                 details: null,
                 createdAt: new Date(),
-                updatedAt: new Date()
+                updatedAt: new Date(),
             });
         }
         return result;
     }, [sortedItems, hasParentItem, currentPath]);
 
-    const handleItemSelect = useCallback((id: string) => {
-        const item = allItems.find(i => i.id === id);
-        if (item) onItemClick?.(item);
-    }, [allItems, onItemClick]);
+    const handleItemSelect = useCallback(
+        (id: string) => {
+            const item = allItems.find((i) => i.id === id);
+            if (item) onItemClick?.(item);
+        },
+        [allItems, onItemClick],
+    );
 
-    const handleQuickLook = useCallback((id: string) => {
-        if (!onQuickLook) return;
-        const item = allItems.find(i => i.id === id);
-        if (item) onQuickLook(item);
-    }, [allItems, onQuickLook]);
+    const handleQuickLook = useCallback(
+        (id: string) => {
+            if (!onQuickLook) return;
+            const item = allItems.find((i) => i.id === id);
+            if (item) onQuickLook(item);
+        },
+        [allItems, onQuickLook],
+    );
 
     const selection = useListSelection({items: allItems, getId: (item) => item.id});
 
@@ -126,13 +138,15 @@ export function DriveTable({
     };
 
     const contextItems = contextMenu.item
-        ? (selection.selectedCount > 1 ? selection.selectedItems : [contextMenu.item])
+        ? selection.selectedCount > 1
+            ? selection.selectedItems
+            : [contextMenu.item]
         : [];
     const isSingleSelect = contextItems.length === 1;
 
     const isValidFolderDrop = (targetItem: DrivePath) => {
         if (targetItem.type !== 'folder') return false;
-        return !drag.draggedItems.some(d => d.id === targetItem.id);
+        return !drag.draggedItems.some((d) => d.id === targetItem.id);
     };
 
     return (
@@ -143,7 +157,7 @@ export function DriveTable({
                 onFocus={() => setHasFocus(true)}
                 onBlur={() => setHasFocus(false)}
                 onKeyDown={handleKeyDown}
-                className={cn("eigen-table focus:outline-none", hasFocus && "eigen-table-focused")}
+                className={cn('eigen-table focus:outline-none', hasFocus && 'eigen-table-focused')}
             >
                 <TableHeader>
                     <TableRow>
@@ -156,9 +170,12 @@ export function DriveTable({
                     {hasParentItem && currentPath && (
                         <TableRow
                             className={cn(
-                                "eigen-list-item",
-                                (activeItemId === currentPath.parentId || selectedIndex === 0) && "eigen-list-item-active",
-                                currentPath.parentId && selection.isSelected(currentPath.parentId) && "eigen-list-item-selected"
+                                'eigen-list-item',
+                                (activeItemId === currentPath.parentId || selectedIndex === 0) &&
+                                'eigen-list-item-active',
+                                currentPath.parentId &&
+                                selection.isSelected(currentPath.parentId) &&
+                                'eigen-list-item-selected',
                             )}
                             onClick={(e) => {
                                 const parentId = currentPath.parentId || '';
@@ -186,10 +203,11 @@ export function DriveTable({
                             <TableRow
                                 key={item.id}
                                 className={cn(
-                                    "eigen-list-item",
-                                    (activeItemId === item.id || selectedIndex === adjustedIndex) && "eigen-list-item-active",
-                                    selection.isSelected(item.id) && "eigen-list-item-selected",
-                                    dragOverItemId === item.id && isValidFolderDrop(item) && "bg-accent"
+                                    'eigen-list-item',
+                                    (activeItemId === item.id || selectedIndex === adjustedIndex) &&
+                                    'eigen-list-item-active',
+                                    selection.isSelected(item.id) && 'eigen-list-item-selected',
+                                    dragOverItemId === item.id && isValidFolderDrop(item) && 'bg-accent',
                                 )}
                                 onClick={(e) => {
                                     selection.handleItemClick(item.id, e);
@@ -214,24 +232,25 @@ export function DriveTable({
                                     e.preventDefault();
                                     setDragOverItemId(null);
                                     if (isValidFolderDrop(item) && onMove) {
-                                        drag.draggedItems.forEach(d => onMove(d, item.id));
+                                        drag.draggedItems.forEach((d) => {
+                                            onMove(d, item.id);
+                                        });
                                     }
                                 }}
                             >
                                 <TableCell>
                                     <div className="flex items-center max-w-full overflow-hidden">
-                                        {getFileIcon && getFileIcon(
-                                            item.mimeType,
-                                            item.type,
-                                            {
-                                                className: "h-4 w-4 mr-2 text-muted-foreground flex-shrink-0",
-                                                ...(isFolderType(item.type) ? {
-                                                    fill: "var(--app-drive-light-color)"
-                                                } : {})
-                                            }
-                                        )}
-                                        <span
-                                            className="truncate max-w-[calc(100%-1.5rem)]">{stripEigenExtension(item.name)}</span>
+                                        {getFileIcon?.(item.mimeType, item.type, {
+                                            className: 'h-4 w-4 mr-2 text-muted-foreground flex-shrink-0',
+                                            ...(isFolderType(item.type)
+                                                ? {
+                                                    fill: 'var(--app-drive-light-color)',
+                                                }
+                                                : {}),
+                                        })}
+                                        <span className="truncate max-w-[calc(100%-1.5rem)]">
+                                            {stripEigenExtension(item.name)}
+                                        </span>
                                     </div>
                                 </TableCell>
                                 <TableCell className="hidden sm:table-cell group">
@@ -243,9 +262,9 @@ export function DriveTable({
                                     />
                                 </TableCell>
                                 <TableCell className="hidden sm:table-cell">
-                                    {item.updatedAt ?
-                                        formatDistanceToNow(new Date(item.updatedAt), {addSuffix: true}) :
-                                        'Unknown'}
+                                    {item.updatedAt
+                                        ? formatDistanceToNow(new Date(item.updatedAt), {addSuffix: true})
+                                        : 'Unknown'}
                                 </TableCell>
                             </TableRow>
                         );
@@ -254,7 +273,11 @@ export function DriveTable({
             </Table>
 
             <ContextMenuAnchor contextMenu={contextMenu} className="w-48">
-                    {isSingleSelect && contextMenu.item && (contextMenu.item.type !== 'file' || isInlineEditable(contextMenu.item.mimeType, contextMenu.item.name)) && onItemOpen && (
+                {isSingleSelect &&
+                    contextMenu.item &&
+                    (contextMenu.item.type !== 'file' ||
+                        isInlineEditable(contextMenu.item.mimeType, contextMenu.item.name)) &&
+                    onItemOpen && (
                         <DropdownMenuItem
                             onClick={() => {
                                 onItemOpen?.(contextMenu.item!);
@@ -266,59 +289,59 @@ export function DriveTable({
                             Open
                         </DropdownMenuItem>
                     )}
-                    {isSingleSelect && onDownload && contextMenu.item?.type === 'file' && (
-                        <DropdownMenuItem
-                            onClick={() => {
-                                onDownload?.(contextMenu.item!);
-                                contextMenu.close();
-                            }}
-                            className="flex items-center"
-                        >
-                            <Download className="h-4 w-4 mr-2"/>
-                            Download
-                        </DropdownMenuItem>
-                    )}
+                {isSingleSelect && onDownload && contextMenu.item?.type === 'file' && (
+                    <DropdownMenuItem
+                        onClick={() => {
+                            onDownload?.(contextMenu.item!);
+                            contextMenu.close();
+                        }}
+                        className="flex items-center"
+                    >
+                        <Download className="h-4 w-4 mr-2"/>
+                        Download
+                    </DropdownMenuItem>
+                )}
 
-                    {isSingleSelect && onShareClick && (
-                        <DropdownMenuItem
-                            onClick={() => {
-                                onShareClick?.(contextMenu.item!);
-                                contextMenu.close();
-                            }}
-                            className="flex items-center"
-                        >
-                            <UserRoundPlus className="h-4 w-4 mr-2"/>
-                            Edit access
-                        </DropdownMenuItem>
-                    )}
-                    {isSingleSelect && onRename && (
-                        <DropdownMenuItem
-                            onClick={() => {
-                                onRename?.(contextMenu.item!);
-                                contextMenu.close();
-                            }}
-                            className="flex items-center"
-                        >
-                            <Pencil className="h-4 w-4 mr-2"/>
-                            Rename
-                        </DropdownMenuItem>
-                    )}
+                {isSingleSelect && onShareClick && (
+                    <DropdownMenuItem
+                        onClick={() => {
+                            onShareClick?.(contextMenu.item!);
+                            contextMenu.close();
+                        }}
+                        className="flex items-center"
+                    >
+                        <UserRoundPlus className="h-4 w-4 mr-2"/>
+                        Edit access
+                    </DropdownMenuItem>
+                )}
+                {isSingleSelect && onRename && (
+                    <DropdownMenuItem
+                        onClick={() => {
+                            onRename?.(contextMenu.item!);
+                            contextMenu.close();
+                        }}
+                        className="flex items-center"
+                    >
+                        <Pencil className="h-4 w-4 mr-2"/>
+                        Rename
+                    </DropdownMenuItem>
+                )}
 
-                    {allowDelete && contextItems.length > 0 && (
-                        <>
-                            {isSingleSelect && (onDownload || onShareClick || onRename) && <DropdownMenuSeparator/>}
-                            <DropdownMenuItem
-                                onClick={() => {
-                                    onDelete?.(contextItems);
-                                    contextMenu.close();
-                                }}
-                                className="flex items-center"
-                            >
-                                <Trash2 className="h-4 w-4 mr-2"/>
-                                {isSingleSelect ? 'Delete' : `Delete ${contextItems.length} items`}
-                            </DropdownMenuItem>
-                        </>
-                    )}
+                {allowDelete && contextItems.length > 0 && (
+                    <>
+                        {isSingleSelect && (onDownload || onShareClick || onRename) && <DropdownMenuSeparator/>}
+                        <DropdownMenuItem
+                            onClick={() => {
+                                onDelete?.(contextItems);
+                                contextMenu.close();
+                            }}
+                            className="flex items-center"
+                        >
+                            <Trash2 className="h-4 w-4 mr-2"/>
+                            {isSingleSelect ? 'Delete' : `Delete ${contextItems.length} items`}
+                        </DropdownMenuItem>
+                    </>
+                )}
             </ContextMenuAnchor>
         </div>
     );

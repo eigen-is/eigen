@@ -1,13 +1,12 @@
-import {useState} from 'react';
-import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
-import {Button} from '@workspace/ui/components/button';
-import {Input} from '@workspace/ui/components/input';
-import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@workspace/ui/components/select';
-import {InputGroup, InputGroupAddon, InputGroupInput, InputGroupText} from '@workspace/ui/components/input-group';
-import {Field, FieldContent, FieldGroup, FieldLabel} from '@workspace/ui/components/field';
 import {useCreateUser} from '@workspace/lib/people';
 import {usePublicConfig} from '@workspace/lib/public';
-
+import {Button} from '@workspace/ui/components/button';
+import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
+import {Field, FieldContent, FieldGroup, FieldLabel} from '@workspace/ui/components/field';
+import {Input} from '@workspace/ui/components/input';
+import {InputGroup, InputGroupAddon, InputGroupInput, InputGroupText} from '@workspace/ui/components/input-group';
+import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@workspace/ui/components/select';
+import {useState} from 'react';
 
 interface CreateUserDialogProps {
     open: boolean;
@@ -25,7 +24,7 @@ export function CreateUserDialog({open, onOpenChange}: CreateUserDialogProps) {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        const email = username.toLowerCase().split('@')[0] + '@' + (config?.domain ?? 'eigen.is');
+        const email = `${username.toLowerCase().split('@')[0]}@${config?.domain ?? 'eigen.is'}`;
         if (!name || !username || !password) return;
 
         await createUser.mutateAsync({name, email, password, role});
@@ -47,7 +46,7 @@ export function CreateUserDialog({open, onOpenChange}: CreateUserDialogProps) {
                         <Field>
                             <FieldLabel htmlFor="name">Name</FieldLabel>
                             <FieldContent>
-                                <Input id="name" value={name} onChange={e => setName(e.target.value)} required/>
+                                <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required/>
                             </FieldContent>
                         </Field>
 
@@ -55,8 +54,12 @@ export function CreateUserDialog({open, onOpenChange}: CreateUserDialogProps) {
                             <FieldLabel htmlFor="username">Username</FieldLabel>
                             <FieldContent>
                                 <InputGroup>
-                                    <InputGroupInput id="username" value={username}
-                                                     onChange={e => setUsername(e.target.value)} required/>
+                                    <InputGroupInput
+                                        id="username"
+                                        value={username}
+                                        onChange={(e) => setUsername(e.target.value)}
+                                        required
+                                    />
                                     <InputGroupAddon align="inline-end">
                                         <InputGroupText>@{config?.domain ?? 'eigen.is'}</InputGroupText>
                                     </InputGroupAddon>
@@ -67,9 +70,14 @@ export function CreateUserDialog({open, onOpenChange}: CreateUserDialogProps) {
                         <Field>
                             <FieldLabel htmlFor="password">Password</FieldLabel>
                             <FieldContent>
-                                <Input id="password" type="password" value={password}
-                                       onChange={e => setPassword(e.target.value)}
-                                       minLength={8} required/>
+                                <Input
+                                    id="password"
+                                    type="password"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    minLength={8}
+                                    required
+                                />
                             </FieldContent>
                         </Field>
 
@@ -88,9 +96,11 @@ export function CreateUserDialog({open, onOpenChange}: CreateUserDialogProps) {
                             </FieldContent>
                         </Field>
                     </FieldGroup>
-                    
+
                     <DialogFooter>
-                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                            Cancel
+                        </Button>
                         <Button type="submit" disabled={createUser.isPending}>
                             {createUser.isPending ? 'Creating...' : 'Create'}
                         </Button>

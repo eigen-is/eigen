@@ -1,10 +1,10 @@
 import {createFileRoute} from '@tanstack/react-router';
 import {useCollabDocumentInfo} from '@workspace/lib/collab';
-import {useCallback, useEffect, useMemo, useState} from 'react';
-import {useLayout} from '@workspace/ui/components/layout/app/layout-context';
 import {AccessDenied, LoadingState} from '@workspace/ui';
-import {SheetEditor} from '../components/sheets/editor';
+import {useLayout} from '@workspace/ui/components/layout/app/layout-context';
 import {DriveAccessDialog} from '@workspace/ui/components/layout/drive/drive-access-dialog';
+import {useCallback, useEffect, useMemo, useState} from 'react';
+import {SheetEditor} from '../components/sheets/editor';
 
 export const Route = createFileRoute('/_auth/sheet/$ownerId/$mountId/$pathId')({
     component: SheetView,
@@ -22,10 +22,16 @@ function SheetView() {
         return () => setDocumentTitle('');
     }, [docInfo?.path?.name, setDocumentTitle]);
 
-    const path = useMemo(() => docInfo?.path ? {
-        ...docInfo.path,
-        mountId,
-    } : null, [docInfo?.path, mountId]);
+    const path = useMemo(
+        () =>
+            docInfo?.path
+                ? {
+                    ...docInfo.path,
+                    mountId,
+                }
+                : null,
+        [docInfo?.path, mountId],
+    );
 
     const canWrite = docInfo?.canWrite ?? false;
 
@@ -42,11 +48,7 @@ function SheetView() {
                 canWrite={canWrite}
                 onAccessDialogOpen={handleAccessDialogOpen}
             />
-            <DriveAccessDialog
-                path={path}
-                open={accessDialogOpen}
-                onOpenChange={setAccessDialogOpen}
-            />
+            <DriveAccessDialog path={path} open={accessDialogOpen} onOpenChange={setAccessDialogOpen}/>
         </>
     );
 }

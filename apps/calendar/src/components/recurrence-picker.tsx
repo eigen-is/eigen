@@ -1,12 +1,12 @@
-import {useMemo} from 'react';
-import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@workspace/ui/components/select';
-import {RRule, Frequency} from 'rrule';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
+import { useMemo } from 'react';
+import { Frequency, RRule } from 'rrule';
 
 type RecurrencePickerProps = {
     value: string | null;
     onChange: (rrule: string | null) => void;
     startDate: Date;
-}
+};
 
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -27,11 +27,11 @@ function getOrdinal(n: number): string {
     return 'last';
 }
 
-export function RecurrencePicker({value, onChange, startDate}: RecurrencePickerProps) {
+export function RecurrencePicker({ value, onChange, startDate }: RecurrencePickerProps) {
     const weekdayIdx = getWeekdayIndex(startDate);
     const weekOfMonth = getWeekOfMonth(startDate);
     const dayName = DAY_NAMES[weekdayIdx];
-    const monthName = startDate.toLocaleString('en', {month: 'long'});
+    const monthName = startDate.toLocaleString('en', { month: 'long' });
     const dayOfMonth = startDate.getDate();
 
     const presets = useMemo(() => {
@@ -44,23 +44,30 @@ export function RecurrencePicker({value, onChange, startDate}: RecurrencePickerP
             },
             {
                 label: 'Daily',
-                value: new RRule({freq: Frequency.DAILY}).toString(),
+                value: new RRule({ freq: Frequency.DAILY }).toString(),
             },
             {
                 label: `Weekly on ${dayName}`,
-                value: new RRule({freq: Frequency.WEEKLY, byweekday: [byDay]}).toString(),
+                value: new RRule({ freq: Frequency.WEEKLY, byweekday: [byDay] }).toString(),
             },
             {
                 label: `Monthly on the ${getOrdinal(weekOfMonth)} ${dayName}`,
-                value: new RRule({freq: Frequency.MONTHLY, byweekday: [byDay.nth(weekOfMonth)]}).toString(),
+                value: new RRule({ freq: Frequency.MONTHLY, byweekday: [byDay.nth(weekOfMonth)] }).toString(),
             },
             {
                 label: `Annually on ${monthName} ${dayOfMonth}`,
-                value: new RRule({freq: Frequency.YEARLY, bymonth: [startDate.getMonth() + 1], bymonthday: [dayOfMonth]}).toString(),
+                value: new RRule({
+                    freq: Frequency.YEARLY,
+                    bymonth: [startDate.getMonth() + 1],
+                    bymonthday: [dayOfMonth],
+                }).toString(),
             },
             {
                 label: 'Every weekday (Monday to Friday)',
-                value: new RRule({freq: Frequency.WEEKLY, byweekday: [RRule.MO, RRule.TU, RRule.WE, RRule.TH, RRule.FR]}).toString(),
+                value: new RRule({
+                    freq: Frequency.WEEKLY,
+                    byweekday: [RRule.MO, RRule.TU, RRule.WE, RRule.TH, RRule.FR],
+                }).toString(),
             },
         ];
     }, [weekdayIdx, weekOfMonth, dayName, monthName, dayOfMonth, startDate]);
@@ -77,7 +84,7 @@ export function RecurrencePicker({value, onChange, startDate}: RecurrencePickerP
         }
     }, [value]);
 
-    const matchedPreset = presets.find(p => p.value === currentValue);
+    const matchedPreset = presets.find((p) => p.value === currentValue);
     const selectValue = matchedPreset ? currentValue : 'custom';
 
     return (
@@ -94,7 +101,7 @@ export function RecurrencePicker({value, onChange, startDate}: RecurrencePickerP
             >
                 <SelectTrigger className="flex-1">
                     <SelectValue placeholder="Does not repeat">
-                        {matchedPreset ? matchedPreset.label : (rruleText ? `Custom: ${rruleText}` : 'Does not repeat')}
+                        {matchedPreset ? matchedPreset.label : rruleText ? `Custom: ${rruleText}` : 'Does not repeat'}
                     </SelectValue>
                 </SelectTrigger>
                 <SelectContent>

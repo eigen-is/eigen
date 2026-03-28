@@ -1,9 +1,9 @@
-import {defineConfig, mergeConfig, type UserConfig} from 'vite'
-import react from '@vitejs/plugin-react'
-import {tanstackRouter} from '@tanstack/router-plugin/vite'
-import tailwindcss from '@tailwindcss/vite'
-import viteTsConfigPaths from 'vite-tsconfig-paths'
-import path from 'path'
+import path from 'node:path';
+import tailwindcss from '@tailwindcss/vite';
+import { tanstackRouter } from '@tanstack/router-plugin/vite';
+import react from '@vitejs/plugin-react';
+import { defineConfig, mergeConfig, type UserConfig } from 'vite';
+import viteTsConfigPaths from 'vite-tsconfig-paths';
 
 const APP_PORTS: Record<string, number> = {
     index: 3000,
@@ -20,11 +20,11 @@ const APP_PORTS: Record<string, number> = {
     setup: 3011,
     slides: 3012,
     sheets: 3013,
-}
+};
 
 export function createAppConfig(appName: string, extraConfig?: UserConfig) {
-    const port = APP_PORTS[appName] ?? 3000
-    const basePath = appName === 'index' ? '/' : `/${appName}`
+    const port = APP_PORTS[appName] ?? 3000;
+    const basePath = appName === 'index' ? '/' : `/${appName}`;
 
     const baseConfig: UserConfig = {
         base: basePath,
@@ -78,7 +78,7 @@ export function createAppConfig(appName: string, extraConfig?: UserConfig) {
                 },
             },
         },
-    }
+    };
 
-    return defineConfig(extraConfig ? mergeConfig(baseConfig, extraConfig) : baseConfig)
+    return defineConfig(extraConfig ? mergeConfig(baseConfig, extraConfig) : baseConfig);
 }

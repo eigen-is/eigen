@@ -1,13 +1,13 @@
-import {useState} from 'react';
+import type {Label} from '@workspace/lib/types/label';
+import {TooltipButton} from '@workspace/ui';
 import {Pencil, Plus} from 'lucide-react';
-import {cn} from "../../../lib/utils";
-import {LabelDialog} from './label-dialog';
-import {LabelManagerProps} from './types';
+import {useState} from 'react';
+import {cn} from '../../../lib/utils';
 import {SidebarItem} from '../sidebar';
 import {DroppableSidebarItem} from '../sidebar/droppable-sidebar-item';
-import {TooltipButton} from "@workspace/ui";
+import {LabelDialog} from './label-dialog';
 import {useLabels} from './label-provider';
-import type {Label} from "@workspace/lib/types/label";
+import type {LabelManagerProps} from './types';
 
 export function LabelManager({
                                  labels,
@@ -67,18 +67,11 @@ export function LabelManager({
     };
 
     return (
-        <div className={cn("py-2", className)}>
-            <div className={cn(
-                "flex items-center mb-2",
-                condensed ? "justify-center" : "justify-between"
-            )}>
+        <div className={cn('py-2', className)}>
+            <div className={cn('flex items-center mb-2', condensed ? 'justify-center' : 'justify-between')}>
                 {!condensed && <h3 className="text-sm font-semibold text-foreground px-3 select-none">Labels</h3>}
                 <div className="flex items-center gap-1">
-                    <TooltipButton
-                        icon={Plus}
-                        tooltipText="Add new label"
-                        onClick={handleAddLabel}
-                    />
+                    <TooltipButton icon={Plus} tooltipText="Add new label" onClick={handleAddLabel}/>
                 </div>
             </div>
 
@@ -101,7 +94,7 @@ export function LabelManager({
                         colorDot: label.color,
                         to: getLabelPath(label),
                         condensed,
-                        className: !condensed ? "pr-8 relative group" : "",
+                        className: !condensed ? 'pr-8 relative group' : '',
                     };
 
                     if (dropAcceptTypes && onItemDrop) {

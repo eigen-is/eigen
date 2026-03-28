@@ -44,7 +44,7 @@ export class JsonStore<T extends Record<string, unknown>> {
         try {
             const file = this.fs.file(this.filename);
             if (await file.exists()) {
-                this.data = deepMerge(this.defaults, await file.json() as DeepPartial<T>);
+                this.data = deepMerge(this.defaults, (await file.json()) as DeepPartial<T>);
             }
         } catch {
             this.data = {...this.defaults};

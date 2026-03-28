@@ -1,8 +1,6 @@
-import {useState} from "react"
-import {zodResolver} from "@hookform/resolvers/zod"
-import {useForm} from "react-hook-form"
-import {z} from "zod"
-import {Button} from "@workspace/ui/components/button"
+import {zodResolver} from '@hookform/resolvers/zod';
+import {Button} from '@workspace/ui/components/button';
+import {Card, CardContent} from '@workspace/ui/components/card';
 import {
     Form,
     FormControl,
@@ -10,23 +8,28 @@ import {
     FormField,
     FormItem,
     FormLabel,
-    FormMessage
-} from "@workspace/ui/components/form"
-import {Input} from "@workspace/ui/components/input"
-import {Check, Copy, InfoIcon} from "lucide-react"
-import {Card, CardContent} from "@workspace/ui/components/card"
-import {Separator} from "@workspace/ui/components/separator"
-import QRCode from "react-qr-code"
+    FormMessage,
+} from '@workspace/ui/components/form';
+import {Input} from '@workspace/ui/components/input';
+import {Separator} from '@workspace/ui/components/separator';
+import {Check, Copy, InfoIcon} from 'lucide-react';
+import {useState} from 'react';
+import {useForm} from 'react-hook-form';
+import QRCode from 'react-qr-code';
+import {z} from 'zod';
 
 const passwordFormSchema = z.object({
-    password: z.string().min(1, "Password is required"),
+    password: z.string().min(1, 'Password is required'),
 });
 
 const verificationFormSchema = z.object({
-    verificationCode: z.string().min(6, "Verification code must be 6 digits").max(6, "Verification code must be 6 digits"),
+    verificationCode: z
+        .string()
+        .min(6, 'Verification code must be 6 digits')
+        .max(6, 'Verification code must be 6 digits'),
 });
 
-type SetupStep = "password" | "qrcode" | "verification" | "recoverycodes";
+type SetupStep = 'password' | 'qrcode' | 'verification' | 'recoverycodes';
 
 type TwoFactorSetupProps = {
     onInitialize2FA: (password: string) => Promise<void>;
@@ -38,7 +41,7 @@ type TwoFactorSetupProps = {
     backupCodes: string[];
     currentStep: SetupStep;
     setCurrentStep: (step: SetupStep) => void;
-}
+};
 
 export function TwoFactorSetup({
                                    onInitialize2FA,
@@ -49,23 +52,23 @@ export function TwoFactorSetup({
                                    secretKey,
                                    backupCodes,
                                    currentStep,
-                                   setCurrentStep
+                                   setCurrentStep,
                                }: TwoFactorSetupProps) {
-    const [isLoading, setIsLoading] = useState<boolean>(false)
-    const [isCopied, setIsCopied] = useState<boolean>(false)
-    const [codesCopied, setCodesCopied] = useState<boolean>(false)
+    const [isLoading, setIsLoading] = useState<boolean>(false);
+    const [isCopied, setIsCopied] = useState<boolean>(false);
+    const [codesCopied, setCodesCopied] = useState<boolean>(false);
 
     const passwordForm = useForm<z.infer<typeof passwordFormSchema>>({
         resolver: zodResolver(passwordFormSchema),
         defaultValues: {
-            password: "",
+            password: '',
         },
     });
 
     const verificationForm = useForm<z.infer<typeof verificationFormSchema>>({
         resolver: zodResolver(verificationFormSchema),
         defaultValues: {
-            verificationCode: "",
+            verificationCode: '',
         },
     });
 
@@ -89,7 +92,7 @@ export function TwoFactorSetup({
             setIsLoading(true);
             await onInitialize2FA(values.password);
         } catch (error) {
-            console.error("Error initializing two-factor authentication:", error);
+            console.error('Error initializing two-factor authentication:', error);
         } finally {
             setIsLoading(false);
         }
@@ -100,10 +103,10 @@ export function TwoFactorSetup({
             setIsLoading(true);
             const success = await onVerifyTotp(values.verificationCode);
             if (success) {
-                setCurrentStep("recoverycodes");
+                setCurrentStep('recoverycodes');
             }
         } catch (error) {
-            console.error("Error verifying two-factor authentication:", error);
+            console.error('Error verifying two-factor authentication:', error);
         } finally {
             setIsLoading(false);
         }
@@ -119,7 +122,7 @@ export function TwoFactorSetup({
 
             <Separator/>
 
-            {currentStep === "password" && (
+            {currentStep === 'password' && (
                 <Form {...passwordForm}>
                     <form onSubmit={passwordForm.handleSubmit(onPasswordSubmit)} className="space-y-6">
                         <div className="bg-accent border text-accent-foreground rounded-md p-4">
@@ -128,8 +131,8 @@ export function TwoFactorSetup({
                                 <div>
                                     <h3 className="font-medium">Important</h3>
                                     <p className="text-sm">
-                                        Two-factor authentication adds an extra layer of security to your account.
-                                        Once enabled, you'll need both your password and a verification code from your
+                                        Two-factor authentication adds an extra layer of security to your account. Once
+                                        enabled, you'll need both your password and a verification code from your
                                         authentication app to sign in.
                                     </p>
                                 </div>
@@ -157,14 +160,14 @@ export function TwoFactorSetup({
 
                         <div className="flex justify-end gap-3">
                             <Button type="submit" disabled={isLoading}>
-                                {isLoading ? "Setting up..." : "Enable Two-Factor Authentication"}
+                                {isLoading ? 'Setting up...' : 'Enable Two-Factor Authentication'}
                             </Button>
                         </div>
                     </form>
                 </Form>
             )}
 
-            {currentStep === "qrcode" && totpUri && (
+            {currentStep === 'qrcode' && totpUri && (
                 <div className="space-y-6">
                     <div className="bg-accent border text-accent-foreground rounded-md p-4">
                         <div className="flex">
@@ -181,9 +184,7 @@ export function TwoFactorSetup({
 
                     <div className="space-y-4">
                         <h3 className="text-lg font-medium">Step 1: Scan QR code</h3>
-                        <p className="text-sm text-muted-foreground">
-                            Scan this QR code with your authentication app.
-                        </p>
+                        <p className="text-sm text-muted-foreground">Scan this QR code with your authentication app.</p>
 
                         <Card className="border-dashed">
                             <CardContent className="flex items-center justify-center p-6">
@@ -201,37 +202,23 @@ export function TwoFactorSetup({
                         </p>
 
                         <div className="flex items-center space-x-2">
-                            <Input
-                                value={secretKey}
-                                readOnly
-                                className="font-mono"
-                            />
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                onClick={copyToClipboard}
-                                title="Copy to clipboard"
-                            >
+                            <Input value={secretKey} readOnly className="font-mono"/>
+                            <Button variant="outline" size="icon" onClick={copyToClipboard} title="Copy to clipboard">
                                 {isCopied ? <Check className="h-4 w-4"/> : <Copy className="h-4 w-4"/>}
                             </Button>
                         </div>
                     </div>
 
                     <div className="flex justify-between">
-                        <Button
-                            variant="outline"
-                            onClick={onBack}
-                        >
+                        <Button variant="outline" onClick={onBack}>
                             Back
                         </Button>
-                        <Button onClick={() => setCurrentStep("verification")}>
-                            Continue
-                        </Button>
+                        <Button onClick={() => setCurrentStep('verification')}>Continue</Button>
                     </div>
                 </div>
             )}
 
-            {currentStep === "verification" && (
+            {currentStep === 'verification' && (
                 <Form {...verificationForm}>
                     <form onSubmit={verificationForm.handleSubmit(onVerificationSubmit)} className="space-y-6">
                         <div className="bg-accent border text-accent-foreground rounded-md p-4">
@@ -271,22 +258,18 @@ export function TwoFactorSetup({
                         />
 
                         <div className="flex justify-between gap-3">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={onBack}
-                            >
+                            <Button type="button" variant="outline" onClick={onBack}>
                                 Back
                             </Button>
                             <Button type="submit" disabled={isLoading}>
-                                {isLoading ? "Verifying..." : "Verify and Enable"}
+                                {isLoading ? 'Verifying...' : 'Verify and Enable'}
                             </Button>
                         </div>
                     </form>
                 </Form>
             )}
 
-            {currentStep === "recoverycodes" && (
+            {currentStep === 'recoverycodes' && (
                 <div className="space-y-6">
                     <div className="bg-accent border text-accent-foreground rounded-md p-4">
                         <div className="flex">
@@ -294,8 +277,8 @@ export function TwoFactorSetup({
                             <div>
                                 <h3 className="font-medium">Save your recovery codes</h3>
                                 <p className="text-sm">
-                                    Save these codes in a safe place. If you lose access to your authenticator app,
-                                    you can use one of these codes to sign in. Each code can only be used once.
+                                    Save these codes in a safe place. If you lose access to your authenticator app, you
+                                    can use one of these codes to sign in. Each code can only be used once.
                                 </p>
                             </div>
                         </div>
@@ -313,15 +296,17 @@ export function TwoFactorSetup({
                         </CardContent>
                     </Card>
 
-                    <Button
-                        variant="outline"
-                        className="w-full"
-                        onClick={copyBackupCodes}
-                    >
+                    <Button variant="outline" className="w-full" onClick={copyBackupCodes}>
                         {codesCopied ? (
-                            <><Check className="h-4 w-4 mr-2"/>Copied!</>
+                            <>
+                                <Check className="h-4 w-4 mr-2"/>
+                                Copied!
+                            </>
                         ) : (
-                            <><Copy className="h-4 w-4 mr-2"/>Copy all codes</>
+                            <>
+                                <Copy className="h-4 w-4 mr-2"/>
+                                Copy all codes
+                            </>
                         )}
                     </Button>
 

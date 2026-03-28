@@ -1,4 +1,4 @@
-import {createFileRoute, redirect} from '@tanstack/react-router'
+import {createFileRoute, redirect} from '@tanstack/react-router';
 
 export const Route = createFileRoute('/')({
     beforeLoad: ({context}) => {
@@ -11,8 +11,8 @@ export const Route = createFileRoute('/')({
             params: {
                 ownerId: userId,
                 mountId: 'default',
-                pathId: 'root'
-            }
+                pathId: 'root',
+            },
         });
     },
-})
+});

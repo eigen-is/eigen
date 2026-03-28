@@ -5,11 +5,18 @@ export class AppError extends Error {
 
     constructor(response: { error: { status: number; value: unknown } | null; status: number }) {
         const value = response.error?.value;
-        const message = typeof value === 'string' ? value
-            : (value && typeof value === 'object' && 'message' in value) ? String((value as {
-                    message: unknown
-                }).message)
-                : String(value ?? 'Unknown error');
+        const message =
+            typeof value === 'string'
+                ? value
+                : value && typeof value === 'object' && 'message' in value
+                    ? String(
+                        (
+                            value as {
+                                message: unknown;
+                            }
+                        ).message,
+                    )
+                    : String(value ?? 'Unknown error');
         super(message);
         this.status = response.error?.status ?? response.status;
     }

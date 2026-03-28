@@ -1,13 +1,13 @@
-import {useEffect, useState} from 'react';
-import {formatForDisplay} from '@tanstack/react-hotkeys';
-import {ImagePlus, Play, Plus, Redo, Type, Undo, UserRoundPlus} from 'lucide-react';
-import {Toolbar as SharedToolbar, TooltipButton} from '@workspace/ui';
-import {DocumentModeButton} from '@workspace/ui/components/layout/toolbar/document-mode-button';
-import {FileMenu} from '@workspace/ui/components/layout/toolbar/file-menu';
-import {DriveCreateSlides} from '@workspace/ui/components/layout/drive/drive-create-slides';
-import {useMediaQuery} from '@workspace/lib/media';
-import * as Y from 'yjs';
-import type {DrivePath} from '@workspace/lib/types/drive';
+import { formatForDisplay } from '@tanstack/react-hotkeys';
+import { useMediaQuery } from '@workspace/lib/media';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { Toolbar as SharedToolbar, TooltipButton } from '@workspace/ui';
+import { DriveCreateSlides } from '@workspace/ui/components/layout/drive/drive-create-slides';
+import { DocumentModeButton } from '@workspace/ui/components/layout/toolbar/document-mode-button';
+import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
+import { ImagePlus, Play, Plus, Redo, Type, Undo, UserRoundPlus } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import type * as Y from 'yjs';
 
 type ToolbarProps = {
     canWrite: boolean;
@@ -19,25 +19,25 @@ type ToolbarProps = {
     onAddImage: () => void;
     onAddSlide: () => void;
     onPresent: () => void;
-}
+};
 
 export function Toolbar({
-                            canWrite,
-                            undoManager,
-                            onAccessDialogOpen,
-                            onRestore,
-                            path,
-                            onAddText,
-                            onAddImage,
-                            onAddSlide,
-                            onPresent
-                        }: ToolbarProps) {
+    canWrite,
+    undoManager,
+    onAccessDialogOpen,
+    onRestore,
+    path,
+    onAddText,
+    onAddImage,
+    onAddSlide,
+    onPresent,
+}: ToolbarProps) {
     const [canUndo, setCanUndo] = useState(false);
     const [canRedo, setCanRedo] = useState(false);
     const isMobile = useMediaQuery('(max-width: 1200px)');
 
     useEffect(() => {
-        if (!undoManager || !undoManager.undoStack || !canWrite) {
+        if (!undoManager?.undoStack || !canWrite) {
             setCanUndo(false);
             setCanRedo(false);
             return;
@@ -89,18 +89,18 @@ export function Toolbar({
             <div className="flex items-center">
                 {canWrite && !isMobile && (
                     <>
-                        <TooltipButton icon={Plus} tooltipText="Add slide" onClick={onAddSlide}/>
-                        <TooltipButton icon={Type} tooltipText="Add text" onClick={onAddText}/>
-                        <TooltipButton icon={ImagePlus} tooltipText="Add image" onClick={onAddImage}/>
+                        <TooltipButton icon={Plus} tooltipText="Add slide" onClick={onAddSlide} />
+                        <TooltipButton icon={Type} tooltipText="Add text" onClick={onAddText} />
+                        <TooltipButton icon={ImagePlus} tooltipText="Add image" onClick={onAddImage} />
                     </>
                 )}
-                <TooltipButton icon={Play} tooltipText="Present" onClick={onPresent}/>
+                <TooltipButton icon={Play} tooltipText="Present" onClick={onPresent} />
             </div>
             <div className="flex items-center">
                 {canWrite ? (
-                    <TooltipButton icon={UserRoundPlus} tooltipText="Share" onClick={onAccessDialogOpen}/>
+                    <TooltipButton icon={UserRoundPlus} tooltipText="Share" onClick={onAccessDialogOpen} />
                 ) : (
-                    <DocumentModeButton canWrite={canWrite}/>
+                    <DocumentModeButton canWrite={canWrite} />
                 )}
             </div>
         </SharedToolbar>

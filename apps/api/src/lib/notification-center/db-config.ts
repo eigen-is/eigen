@@ -8,7 +8,8 @@ export const NOTIFICATION_CENTER_DB_CONFIG: DatabaseConfig<typeof schema> = {
     migrations: [
         {
             version: 1,
-            up: (db) => db.exec(`
+            up: (db) =>
+                db.exec(`
                 CREATE TABLE IF NOT EXISTS notifications (
                     id TEXT PRIMARY KEY,
                     type TEXT NOT NULL,
@@ -22,7 +23,7 @@ export const NOTIFICATION_CENTER_DB_CONFIG: DatabaseConfig<typeof schema> = {
 
                 CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read);
                 CREATE INDEX IF NOT EXISTS idx_notifications_createdAt ON notifications(createdAt);
-            `)
-        }
-    ]
+            `),
+        },
+    ],
 };

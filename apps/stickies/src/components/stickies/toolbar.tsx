@@ -1,8 +1,9 @@
-import {useEffect, useState} from 'react';
-import {formatForDisplay} from '@tanstack/react-hotkeys';
-import {Check, Plus, Redo, Undo, UserRoundPlus} from 'lucide-react';
-import {Button} from '@workspace/ui/components/button';
-import {Separator} from '@workspace/ui/components/separator';
+import { formatForDisplay } from '@tanstack/react-hotkeys';
+import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
+import { useMediaQuery } from '@workspace/lib/media';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { TooltipButton } from '@workspace/ui';
+import { Button } from '@workspace/ui/components/button';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -10,15 +11,14 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import {TooltipButton} from '@workspace/ui';
-import {isLightColor} from '@workspace/ui/components/layout/media/color-picker';
-import {DocumentModeButton} from '@workspace/ui/components/layout/toolbar/document-mode-button';
-import {FileMenu} from '@workspace/ui/components/layout/toolbar/file-menu';
-import {DriveCreateStickies} from '@workspace/ui/components/layout/drive/drive-create-stickies';
-import {useMediaQuery} from '@workspace/lib/media';
-import * as Y from 'yjs';
-import {EIGEN_STICKIES_COLORS} from '@workspace/lib/constants';
-import type {DrivePath} from '@workspace/lib/types/drive';
+import { DriveCreateStickies } from '@workspace/ui/components/layout/drive/drive-create-stickies';
+import { isLightColor } from '@workspace/ui/components/layout/media/color-picker';
+import { DocumentModeButton } from '@workspace/ui/components/layout/toolbar/document-mode-button';
+import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
+import { Separator } from '@workspace/ui/components/separator';
+import { Check, Plus, Redo, Undo, UserRoundPlus } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import type * as Y from 'yjs';
 
 type ToolbarProps = {
     canWrite: boolean;
@@ -29,24 +29,24 @@ type ToolbarProps = {
     path: DrivePath;
     colorFilter: Set<string>;
     onColorFilterChange: (filter: Set<string>) => void;
-}
+};
 
 export function Toolbar({
-                            canWrite,
-                            undoManager,
-                            onAccessDialogOpen,
-                            onRestore,
-                            onAddColumn,
-                            path,
-                            colorFilter,
-                            onColorFilterChange
-                        }: ToolbarProps) {
+    canWrite,
+    undoManager,
+    onAccessDialogOpen,
+    onRestore,
+    onAddColumn,
+    path,
+    colorFilter,
+    onColorFilterChange,
+}: ToolbarProps) {
     const [canUndo, setCanUndo] = useState(false);
     const [canRedo, setCanRedo] = useState(false);
     const isMobile = useMediaQuery('(max-width: 1200px)');
 
     useEffect(() => {
-        if (!undoManager || !undoManager.undoStack || !canWrite) {
+        if (!undoManager?.undoStack || !canWrite) {
             setCanUndo(false);
             setCanRedo(false);
             return;
@@ -84,21 +84,21 @@ export function Toolbar({
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="start">
                             <DropdownMenuItem onClick={() => undoManager?.undo?.()} disabled={!canUndo}>
-                                <Undo className="h-4 w-4 mr-2"/> Undo
+                                <Undo className="h-4 w-4 mr-2" /> Undo
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => undoManager?.redo?.()} disabled={!canRedo}>
-                                <Redo className="h-4 w-4 mr-2"/> Redo
+                                <Redo className="h-4 w-4 mr-2" /> Redo
                             </DropdownMenuItem>
-                            <DropdownMenuSeparator/>
+                            <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={onAddColumn}>
-                                <Plus className="h-4 w-4 mr-2"/> Add column
+                                <Plus className="h-4 w-4 mr-2" /> Add column
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
                 )}
                 {canWrite && !isMobile && (
                     <>
-                        <Separator orientation="vertical" className="h-4"/>
+                        <Separator orientation="vertical" className="h-4" />
                         <TooltipButton
                             icon={Undo}
                             tooltipText={`Undo (${formatForDisplay('Mod+Z')})`}
@@ -111,12 +111,8 @@ export function Toolbar({
                             onClick={() => undoManager?.redo?.()}
                             disabled={!canRedo}
                         />
-                        <Separator orientation="vertical" className="h-4"/>
-                        <TooltipButton
-                            icon={Plus}
-                            tooltipText="Add column"
-                            onClick={onAddColumn}
-                        />
+                        <Separator orientation="vertical" className="h-4" />
+                        <TooltipButton icon={Plus} tooltipText="Add column" onClick={onAddColumn} />
                     </>
                 )}
             </div>
@@ -128,7 +124,7 @@ export function Toolbar({
                         <button
                             key={c.value}
                             className={`h-4 w-4 rounded-full border border-border/50 transition-transform hover:scale-125 flex items-center justify-center ${active ? 'ring-2 ring-ring ring-offset-1' : ''}`}
-                            style={{backgroundColor: c.value}}
+                            style={{ backgroundColor: c.value }}
                             title={c.label}
                             onClick={() => {
                                 const next = new Set(colorFilter);
@@ -138,15 +134,18 @@ export function Toolbar({
                             }}
                         >
                             {active && (
-                                <Check className="h-2 w-2"
-                                       style={{color: isLightColor(c.value) ? '#000' : '#fff'}}/>
+                                <Check className="h-2 w-2" style={{ color: isLightColor(c.value) ? '#000' : '#fff' }} />
                             )}
                         </button>
                     );
                 })}
                 {colorFilter.size > 0 && (
-                    <Button variant="ghost" size="sm" className="h-5 text-xs px-1.5"
-                            onClick={() => onColorFilterChange(new Set())}>
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-5 text-xs px-1.5"
+                        onClick={() => onColorFilterChange(new Set())}
+                    >
                         Reset
                     </Button>
                 )}
@@ -154,9 +153,9 @@ export function Toolbar({
 
             <div className="flex items-center gap-1">
                 {canWrite ? (
-                    <TooltipButton icon={UserRoundPlus} tooltipText="Share" onClick={onAccessDialogOpen}/>
+                    <TooltipButton icon={UserRoundPlus} tooltipText="Share" onClick={onAccessDialogOpen} />
                 ) : (
-                    <DocumentModeButton canWrite={canWrite}/>
+                    <DocumentModeButton canWrite={canWrite} />
                 )}
             </div>
         </div>

@@ -1,3 +1,3 @@
-import {createAppConfig} from '../../vite.shared.config'
+import { createAppConfig } from '../../vite.shared.config';
 
-export default createAppConfig('contacts')
+export default createAppConfig('contacts');

@@ -1,21 +1,21 @@
-import {useState} from 'react';
-import * as Y from 'yjs';
-import {DragEndEvent, DragStartEvent} from '@dnd-kit/core';
-import {BoardData, CardItem, ColumnItem} from '../types';
-import {normalizeBoard} from '../normalize-board';
+import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
+import { useState } from 'react';
+import type * as Y from 'yjs';
+import { normalizeBoard } from '../normalize-board';
+import type { BoardData, CardItem, ColumnItem } from '../types';
 
 type DragState = {
     activeId: string | null;
     activeType: 'task' | 'column' | null;
     activeItem: CardItem | ColumnItem | null;
-}
+};
 
 type UseDragAndDropProps = {
     board: BoardData;
     yjsDoc: Y.Doc | null;
-}
+};
 
-export const useDragAndDrop = ({board, yjsDoc}: UseDragAndDropProps) => {
+export const useDragAndDrop = ({ board, yjsDoc }: UseDragAndDropProps) => {
     const [dragState, setDragState] = useState<DragState>({
         activeId: null,
         activeType: null,
@@ -29,19 +29,19 @@ export const useDragAndDrop = ({board, yjsDoc}: UseDragAndDropProps) => {
         return null;
     };
 
-    const resetDragState = () => setDragState({activeId: null, activeType: null, activeItem: null});
+    const resetDragState = () => setDragState({ activeId: null, activeType: null, activeItem: null });
 
     const handleDragStart = (event: DragStartEvent) => {
         const activeId = event.active.id as string;
         if (activeId in board.tasks) {
-            setDragState({activeId, activeType: 'task', activeItem: board.tasks[activeId]});
+            setDragState({ activeId, activeType: 'task', activeItem: board.tasks[activeId] });
         } else if (activeId in board.columns) {
-            setDragState({activeId, activeType: 'column', activeItem: board.columns[activeId]});
+            setDragState({ activeId, activeType: 'column', activeItem: board.columns[activeId] });
         }
     };
 
     const handleDragEnd = (event: DragEndEvent) => {
-        const {active, over} = event;
+        const { active, over } = event;
         if (!over || !yjsDoc) {
             resetDragState();
             return;
@@ -71,8 +71,8 @@ export const useDragAndDrop = ({board, yjsDoc}: UseDragAndDropProps) => {
                     const sourceColumnValue = columnsMap.get(sourceColumnId);
                     const destColumnValue = columnsMap.get(overId);
                     if (sourceColumnValue && destColumnValue) {
-                        const sourceTaskIds = (sourceColumnValue as Y.Map<any>).get('taskIds') as Y.Array<any>;
-                        const destTaskIds = (destColumnValue as Y.Map<any>).get('taskIds') as Y.Array<any>;
+                        const sourceTaskIds = (sourceColumnValue as Y.Map<unknown>).get('taskIds') as Y.Array<string>;
+                        const destTaskIds = (destColumnValue as Y.Map<unknown>).get('taskIds') as Y.Array<string>;
                         const sourceArray = sourceTaskIds.toArray() as string[];
                         const taskIndex = sourceArray.indexOf(activeId);
                         if (taskIndex !== -1) {
@@ -86,8 +86,10 @@ export const useDragAndDrop = ({board, yjsDoc}: UseDragAndDropProps) => {
                         const sourceColumnValue = columnsMap.get(sourceColumnId);
                         const overColumnValue = columnsMap.get(overColumnId);
                         if (sourceColumnValue && overColumnValue) {
-                            const sourceTaskIds = (sourceColumnValue as Y.Map<any>).get('taskIds') as Y.Array<any>;
-                            const overTaskIds = (overColumnValue as Y.Map<any>).get('taskIds') as Y.Array<any>;
+                            const sourceTaskIds = (sourceColumnValue as Y.Map<unknown>).get(
+                                'taskIds',
+                            ) as Y.Array<string>;
+                            const overTaskIds = (overColumnValue as Y.Map<unknown>).get('taskIds') as Y.Array<string>;
                             const sourceArray = sourceTaskIds.toArray() as string[];
                             const overArray = overTaskIds.toArray() as string[];
                             const sourceIndex = sourceArray.indexOf(activeId);

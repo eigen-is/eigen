@@ -1,21 +1,20 @@
-import {useState} from 'react';
-import {Input} from '@workspace/ui/components/input';
-import {Button} from '@workspace/ui/components/button';
-import {Label} from '@workspace/ui/components/label';
-import {Separator} from '@workspace/ui/components/separator';
-import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@workspace/ui/components/select';
-import {LoadingState} from '@workspace/ui';
 import {
     useCheckS3Connection,
     useServerS3Config,
     useServerSettings,
     useUpdateServerS3Config,
-    useUpdateServerSettings
+    useUpdateServerSettings,
 } from '@workspace/lib/settings';
-
-import type {ServerSettings} from '@workspace/lib/types/settings';
-import type {S3Config} from '@workspace/lib/types';
-import {AlertTriangle, CheckCircle2, Loader2, Wifi} from 'lucide-react';
+import type { S3Config } from '@workspace/lib/types';
+import type { ServerSettings } from '@workspace/lib/types/settings';
+import { LoadingState } from '@workspace/ui';
+import { Button } from '@workspace/ui/components/button';
+import { Input } from '@workspace/ui/components/input';
+import { Label } from '@workspace/ui/components/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
+import { Separator } from '@workspace/ui/components/separator';
+import { AlertTriangle, CheckCircle2, Loader2, Wifi } from 'lucide-react';
+import { useState } from 'react';
 
 type SettingsDraft = {
     quotas?: Partial<ServerSettings['quotas']>;
@@ -31,9 +30,9 @@ const EMPTY_S3: S3Config = {
 };
 
 export function ServerSettingsPage() {
-    const {data: settings, isLoading} = useServerSettings();
+    const { data: settings, isLoading } = useServerSettings();
     const updateSettings = useUpdateServerSettings();
-    const {data: s3Config} = useServerS3Config();
+    const { data: s3Config } = useServerS3Config();
     const updateS3Config = useUpdateServerS3Config();
     const s3Check = useCheckS3Connection();
 
@@ -41,29 +40,29 @@ export function ServerSettingsPage() {
     const [dirty, setDirty] = useState(false);
     const [s3Draft, setS3Draft] = useState<S3Config | null>(null);
     const [s3Dirty, setS3Dirty] = useState(false);
-    const [s3CheckResult, setS3CheckResult] = useState<{ok: boolean; message: string} | null>(null);
+    const [s3CheckResult, setS3CheckResult] = useState<{ ok: boolean; message: string } | null>(null);
     const [s3Checking, setS3Checking] = useState(false);
 
     if (isLoading || !settings) {
-        return <LoadingState/>;
+        return <LoadingState />;
     }
 
     const current = {
-        quotas: {...settings.quotas, ...draft.quotas},
+        quotas: { ...settings.quotas, ...draft.quotas },
         defaults: {
-            mount: {...settings.defaults.mount, ...draft.defaults?.mount},
+            mount: { ...settings.defaults.mount, ...draft.defaults?.mount },
         },
     };
 
     const updateQuota = (key: keyof ServerSettings['quotas'], value: number) => {
-        if (isNaN(value) || value < 0) return;
+        if (Number.isNaN(value) || value < 0) return;
         setDirty(true);
-        setDraft(prev => ({...prev, quotas: {...prev.quotas, [key]: value}}));
+        setDraft((prev) => ({ ...prev, quotas: { ...prev.quotas, [key]: value } }));
     };
 
     const updateStorageType = (value: ServerSettings['defaults']['mount']['storageType']) => {
         setDirty(true);
-        setDraft(prev => ({...prev, defaults: {mount: {storageType: value}}}));
+        setDraft((prev) => ({ ...prev, defaults: { mount: { storageType: value } } }));
     };
 
     const handleSave = async () => {
@@ -84,7 +83,7 @@ export function ServerSettingsPage() {
 
     const updateS3Field = (field: keyof S3Config, value: string) => {
         setS3Dirty(true);
-        setS3Draft(prev => ({...(prev ?? s3Config ?? EMPTY_S3), [field]: value}));
+        setS3Draft((prev) => ({ ...(prev ?? s3Config ?? EMPTY_S3), [field]: value }));
         setS3CheckResult(null);
     };
 
@@ -96,7 +95,7 @@ export function ServerSettingsPage() {
             const result = await s3Check.mutateAsync(currentS3);
             setS3CheckResult(result);
         } catch {
-            setS3CheckResult({ok: false, message: 'Connection check failed'});
+            setS3CheckResult({ ok: false, message: 'Connection check failed' });
         } finally {
             setS3Checking(false);
         }
@@ -129,7 +128,7 @@ export function ServerSettingsPage() {
                             type="number"
                             min={10}
                             value={current.quotas.mailAndContactsMaxMB}
-                            onChange={e => updateQuota('mailAndContactsMaxMB', e.target.valueAsNumber)}
+                            onChange={(e) => updateQuota('mailAndContactsMaxMB', e.target.valueAsNumber)}
                         />
                     </div>
                     <div className="space-y-1.5">
@@ -138,7 +137,7 @@ export function ServerSettingsPage() {
                             type="number"
                             min={10}
                             value={current.quotas.defaultMountMaxSizeMB}
-                            onChange={e => updateQuota('defaultMountMaxSizeMB', e.target.valueAsNumber)}
+                            onChange={(e) => updateQuota('defaultMountMaxSizeMB', e.target.valueAsNumber)}
                         />
                     </div>
                     <div className="space-y-1.5">
@@ -147,7 +146,7 @@ export function ServerSettingsPage() {
                             type="number"
                             min={1}
                             value={current.quotas.maxUploadSizeMB}
-                            onChange={e => updateQuota('maxUploadSizeMB', e.target.valueAsNumber)}
+                            onChange={(e) => updateQuota('maxUploadSizeMB', e.target.valueAsNumber)}
                         />
                     </div>
                     <div className="space-y-1.5">
@@ -156,13 +155,13 @@ export function ServerSettingsPage() {
                             type="number"
                             min={1}
                             value={current.quotas.maxBatchUploadSizeMB}
-                            onChange={e => updateQuota('maxBatchUploadSizeMB', e.target.valueAsNumber)}
+                            onChange={(e) => updateQuota('maxBatchUploadSizeMB', e.target.valueAsNumber)}
                         />
                     </div>
                 </div>
             </div>
 
-            <Separator/>
+            <Separator />
 
             <div className="space-y-4">
                 <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Defaults</h3>
@@ -171,10 +170,12 @@ export function ServerSettingsPage() {
                     <Label>Default Storage Type</Label>
                     <Select
                         value={current.defaults.mount.storageType}
-                        onValueChange={v => updateStorageType(v as ServerSettings['defaults']['mount']['storageType'])}
+                        onValueChange={(v) =>
+                            updateStorageType(v as ServerSettings['defaults']['mount']['storageType'])
+                        }
                     >
                         <SelectTrigger className="w-48">
-                            <SelectValue/>
+                            <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
                             <SelectItem value="local-id">Local (ID-based)</SelectItem>
@@ -193,7 +194,7 @@ export function ServerSettingsPage() {
                                 <Label>Endpoint</Label>
                                 <Input
                                     value={currentS3.endpoint}
-                                    onChange={e => updateS3Field('endpoint', e.target.value)}
+                                    onChange={(e) => updateS3Field('endpoint', e.target.value)}
                                     placeholder="https://s3.amazonaws.com"
                                 />
                             </div>
@@ -201,7 +202,7 @@ export function ServerSettingsPage() {
                                 <Label>Bucket</Label>
                                 <Input
                                     value={currentS3.bucket}
-                                    onChange={e => updateS3Field('bucket', e.target.value)}
+                                    onChange={(e) => updateS3Field('bucket', e.target.value)}
                                     placeholder="my-bucket"
                                 />
                             </div>
@@ -209,7 +210,7 @@ export function ServerSettingsPage() {
                                 <Label>Prefix</Label>
                                 <Input
                                     value={currentS3.prefix}
-                                    onChange={e => updateS3Field('prefix', e.target.value)}
+                                    onChange={(e) => updateS3Field('prefix', e.target.value)}
                                     placeholder="optional/path"
                                 />
                             </div>
@@ -217,7 +218,7 @@ export function ServerSettingsPage() {
                                 <Label>Region</Label>
                                 <Input
                                     value={currentS3.region ?? ''}
-                                    onChange={e => updateS3Field('region', e.target.value)}
+                                    onChange={(e) => updateS3Field('region', e.target.value)}
                                     placeholder="us-east-1"
                                 />
                             </div>
@@ -225,7 +226,7 @@ export function ServerSettingsPage() {
                                 <Label>Access Key ID</Label>
                                 <Input
                                     value={currentS3.accessKeyId}
-                                    onChange={e => updateS3Field('accessKeyId', e.target.value)}
+                                    onChange={(e) => updateS3Field('accessKeyId', e.target.value)}
                                     placeholder="AKIA..."
                                 />
                             </div>
@@ -234,7 +235,7 @@ export function ServerSettingsPage() {
                                 <Input
                                     type="password"
                                     value={currentS3.secretAccessKey}
-                                    onChange={e => updateS3Field('secretAccessKey', e.target.value)}
+                                    onChange={(e) => updateS3Field('secretAccessKey', e.target.value)}
                                     placeholder="••••••••"
                                 />
                             </div>
@@ -249,19 +250,21 @@ export function ServerSettingsPage() {
                                 disabled={!s3Valid || s3Checking}
                             >
                                 {s3Checking ? (
-                                    <Loader2 className="h-4 w-4 mr-1 animate-spin"/>
+                                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
                                 ) : (
-                                    <Wifi className="h-4 w-4 mr-1"/>
+                                    <Wifi className="h-4 w-4 mr-1" />
                                 )}
                                 Test Connection
                             </Button>
 
                             {s3CheckResult && (
-                                <span className={`text-sm flex items-center gap-1 ${s3CheckResult.ok ? 'text-green-600' : 'text-destructive'}`}>
+                                <span
+                                    className={`text-sm flex items-center gap-1 ${s3CheckResult.ok ? 'text-green-600' : 'text-destructive'}`}
+                                >
                                     {s3CheckResult.ok ? (
-                                        <CheckCircle2 className="h-4 w-4"/>
+                                        <CheckCircle2 className="h-4 w-4" />
                                     ) : (
-                                        <AlertTriangle className="h-4 w-4"/>
+                                        <AlertTriangle className="h-4 w-4" />
                                     )}
                                     {s3CheckResult.message}
                                 </span>
@@ -270,8 +273,14 @@ export function ServerSettingsPage() {
 
                         {s3Dirty && (
                             <div className="flex items-center justify-end gap-2 pt-2">
-                                <Button variant="outline" size="sm" onClick={handleResetS3}>Reset</Button>
-                                <Button size="sm" onClick={handleSaveS3} disabled={!s3Valid || updateS3Config.isPending}>
+                                <Button variant="outline" size="sm" onClick={handleResetS3}>
+                                    Reset
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    onClick={handleSaveS3}
+                                    disabled={!s3Valid || updateS3Config.isPending}
+                                >
                                     {updateS3Config.isPending ? 'Saving...' : 'Save S3 Config'}
                                 </Button>
                             </div>
@@ -282,9 +291,11 @@ export function ServerSettingsPage() {
 
             {dirty && (
                 <>
-                    <Separator/>
+                    <Separator />
                     <div className="flex items-center justify-end gap-2">
-                        <Button variant="outline" onClick={handleReset}>Reset</Button>
+                        <Button variant="outline" onClick={handleReset}>
+                            Reset
+                        </Button>
                         <Button onClick={handleSave} disabled={updateSettings.isPending}>
                             {updateSettings.isPending ? 'Saving...' : 'Save Changes'}
                         </Button>

@@ -1,8 +1,8 @@
+import { createRouter, RouterProvider } from '@tanstack/react-router';
+import { useAuth } from '@workspace/lib/auth';
+import { EigenApp } from '@workspace/ui/components/layout/app/eigen-app.tsx';
 import ReactDOM from 'react-dom/client';
-import {createRouter, RouterProvider} from '@tanstack/react-router';
-import {routeTree} from './routeTree.gen';
-import {useAuth} from '@workspace/lib/auth';
-import {EigenApp} from "@workspace/ui/components/layout/app/eigen-app.tsx";
+import { routeTree } from './routeTree.gen';
 
 import '@workspace/ui/globals.css';
 import './../css/globals.css';
@@ -19,26 +19,26 @@ const router = createRouter({
 
 declare module '@tanstack/react-router' {
     interface Register {
-        router: typeof router
+        router: typeof router;
     }
 }
 
 function InnerApp() {
-    const auth = useAuth()
-    return <RouterProvider router={router} context={{auth}}/>
+    const auth = useAuth();
+    return <RouterProvider router={router} context={{ auth }} />;
 }
 
 function App() {
     return (
         <EigenApp>
-            <InnerApp/>
+            <InnerApp />
         </EigenApp>
-    )
+    );
 }
 
-const rootElement = document.getElementById('app')!
+const rootElement = document.getElementById('app')!;
 
 if (!rootElement.innerHTML) {
     const root = ReactDOM.createRoot(rootElement);
-    root.render(<App/>);
+    root.render(<App />);
 }

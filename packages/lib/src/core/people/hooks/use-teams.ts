@@ -1,15 +1,15 @@
-import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
-import {authClient} from '../../auth/hooks/use-auth-client';
-import {peopleKeys} from './keys.ts';
-import type {OrgTeam} from '@workspace/lib/types/people';
-import {onMutationError} from '../../api-error';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { OrgTeam } from '@workspace/lib/types/people';
+import { onMutationError } from '../../api-error';
+import { authClient } from '../../auth/hooks/use-auth-client';
+import { peopleKeys } from './keys.ts';
 
 export function usePeopleTeams(organizationId?: string) {
     return useQuery({
         queryKey: peopleKeys.teams(organizationId ?? ''),
         queryFn: async (): Promise<OrgTeam[]> => {
-            const {data} = await authClient.organization.listTeams({
-                query: {organizationId: organizationId!},
+            const { data } = await authClient.organization.listTeams({
+                query: { organizationId: organizationId! },
             });
             if (!data) return [];
             return data.map((t) => ({
@@ -28,8 +28,8 @@ export function useTeamMembers(organizationId?: string, teamId?: string) {
     return useQuery({
         queryKey: peopleKeys.teamMembers(organizationId ?? '', teamId ?? ''),
         queryFn: async () => {
-            const {data} = await authClient.organization.listTeamMembers({
-                query: {teamId: teamId!},
+            const { data } = await authClient.organization.listTeamMembers({
+                query: { teamId: teamId! },
             });
             return data ?? [];
         },
@@ -42,7 +42,7 @@ export function useCreateTeam(organizationId?: string) {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (name: string) => {
-            const {data, error} = await authClient.organization.createTeam({
+            const { data, error } = await authClient.organization.createTeam({
                 name,
                 organizationId,
             });
@@ -50,7 +50,7 @@ export function useCreateTeam(organizationId?: string) {
             return data;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({queryKey: peopleKeys.teams(organizationId ?? '')});
+            queryClient.invalidateQueries({ queryKey: peopleKeys.teams(organizationId ?? '') });
         },
         onError: onMutationError,
     });
@@ -60,7 +60,7 @@ export function useRemoveTeam(organizationId?: string) {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (teamId: string) => {
-            const {data, error} = await authClient.organization.removeTeam({
+            const { data, error } = await authClient.organization.removeTeam({
                 teamId,
                 organizationId,
             });
@@ -68,7 +68,7 @@ export function useRemoveTeam(organizationId?: string) {
             return data;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({queryKey: peopleKeys.teams(organizationId ?? '')});
+            queryClient.invalidateQueries({ queryKey: peopleKeys.teams(organizationId ?? '') });
         },
         onError: onMutationError,
     });
@@ -77,8 +77,8 @@ export function useRemoveTeam(organizationId?: string) {
 export function useAddTeamMember(organizationId?: string) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({teamId, userId}: { teamId: string; userId: string }) => {
-            const {data, error} = await authClient.organization.addTeamMember({
+        mutationFn: async ({ teamId, userId }: { teamId: string; userId: string }) => {
+            const { data, error } = await authClient.organization.addTeamMember({
                 teamId,
                 userId,
             });
@@ -86,7 +86,7 @@ export function useAddTeamMember(organizationId?: string) {
             return data;
         },
         onSuccess: (_data, variables) => {
-            queryClient.invalidateQueries({queryKey: peopleKeys.teamMembers(organizationId ?? '', variables.teamId)});
+            queryClient.invalidateQueries({ queryKey: peopleKeys.teamMembers(organizationId ?? '', variables.teamId) });
         },
         onError: onMutationError,
     });
@@ -95,8 +95,8 @@ export function useAddTeamMember(organizationId?: string) {
 export function useRemoveTeamMember(organizationId?: string) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({teamId, userId}: { teamId: string; userId: string }) => {
-            const {data, error} = await authClient.organization.removeTeamMember({
+        mutationFn: async ({ teamId, userId }: { teamId: string; userId: string }) => {
+            const { data, error } = await authClient.organization.removeTeamMember({
                 teamId,
                 userId,
             });
@@ -104,7 +104,7 @@ export function useRemoveTeamMember(organizationId?: string) {
             return data;
         },
         onSuccess: (_data, variables) => {
-            queryClient.invalidateQueries({queryKey: peopleKeys.teamMembers(organizationId ?? '', variables.teamId)});
+            queryClient.invalidateQueries({ queryKey: peopleKeys.teamMembers(organizationId ?? '', variables.teamId) });
         },
         onError: onMutationError,
     });
@@ -113,16 +113,16 @@ export function useRemoveTeamMember(organizationId?: string) {
 export function useUpdateTeam(organizationId?: string) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({teamId, name}: { teamId: string; name: string }) => {
-            const {data, error} = await authClient.organization.updateTeam({
+        mutationFn: async ({ teamId, name }: { teamId: string; name: string }) => {
+            const { data, error } = await authClient.organization.updateTeam({
                 teamId,
-                data: {name},
+                data: { name },
             });
             if (error) throw new Error(String(error));
             return data;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({queryKey: peopleKeys.teams(organizationId ?? '')});
+            queryClient.invalidateQueries({ queryKey: peopleKeys.teams(organizationId ?? '') });
         },
         onError: onMutationError,
     });

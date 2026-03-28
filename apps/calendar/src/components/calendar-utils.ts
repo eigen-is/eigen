@@ -2,7 +2,7 @@ import type {CalendarEventOccurrence, CalendarItem, SharedCalendar} from '@works
 
 export type ViewMode = 'month' | 'week';
 
-export function getMonthRange(date: Date): {from: number; to: number; startDate: Date; endDate: Date} {
+export function getMonthRange(date: Date): { from: number; to: number; startDate: Date; endDate: Date } {
     const year = date.getFullYear();
     const month = date.getMonth();
 
@@ -19,13 +19,17 @@ export function getMonthRange(date: Date): {from: number; to: number; startDate:
         endDate.setDate(endDate.getDate() + (7 - endDay));
     }
 
-    const from = Math.floor(new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate()).getTime() / 1000);
-    const to = Math.floor(new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59).getTime() / 1000);
+    const from = Math.floor(
+        new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate()).getTime() / 1000,
+    );
+    const to = Math.floor(
+        new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59).getTime() / 1000,
+    );
 
     return {from, to, startDate, endDate};
 }
 
-export function getWeekRange(date: Date): {from: number; to: number; startDate: Date; endDate: Date} {
+export function getWeekRange(date: Date): { from: number; to: number; startDate: Date; endDate: Date } {
     const d = new Date(date);
     const day = d.getDay();
     const diff = day === 0 ? 6 : day - 1;
@@ -54,9 +58,7 @@ export function getDaysInRange(startDate: Date, endDate: Date): Date[] {
 }
 
 export function isSameDay(a: Date, b: Date): boolean {
-    return a.getFullYear() === b.getFullYear() &&
-        a.getMonth() === b.getMonth() &&
-        a.getDate() === b.getDate();
+    return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 }
 
 export function isToday(date: Date): boolean {
@@ -64,11 +66,11 @@ export function isToday(date: Date): boolean {
 }
 
 export function getEventsForDay(events: CalendarEventOccurrence[], day: Date): CalendarEventOccurrence[] {
-    return events.filter(e => {
+    return events.filter((e) => {
         if (e.allDay) {
             const dayUtcMs = Date.UTC(day.getFullYear(), day.getMonth(), day.getDate());
             const dayEndUtcMs = dayUtcMs + 86400000;
-            return (e.startTime * 1000) < dayEndUtcMs && (e.endTime * 1000) > dayUtcMs;
+            return e.startTime * 1000 < dayEndUtcMs && e.endTime * 1000 > dayUtcMs;
         }
         const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime() / 1000;
         const dayEnd = dayStart + 86400;
@@ -94,12 +96,16 @@ export function formatEventTime(event: CalendarEventOccurrence): string {
     return `${hour}:${String(m).padStart(2, '0')} ${ampm}`;
 }
 
-export function getCalendarColor(event: CalendarEventOccurrence, calendars: CalendarItem[], sharedCalendars?: SharedCalendar[]): string {
+export function getCalendarColor(
+    event: CalendarEventOccurrence,
+    calendars: CalendarItem[],
+    sharedCalendars?: SharedCalendar[],
+): string {
     if (event.data?.color) return event.data.color;
-    const cal = calendars.find(c => c.id === event.calendarId);
+    const cal = calendars.find((c) => c.id === event.calendarId);
     if (cal) return cal.color;
     if (sharedCalendars) {
-        const sc = sharedCalendars.find(s => s.calendarId === event.calendarId);
+        const sc = sharedCalendars.find((s) => s.calendarId === event.calendarId);
         if (sc) return sc.color || sc.calendarColor;
     }
     return '#4285f4';
@@ -107,7 +113,7 @@ export function getCalendarColor(event: CalendarEventOccurrence, calendars: Cale
 
 export function getInviteStatus(event: CalendarEventOccurrence, userEmail?: string): 'pending' | 'declined' | null {
     if (!event.data?.organizer || !userEmail) return null;
-    const attendee = event.data.attendees?.find(a => a.email.toLowerCase() === userEmail.toLowerCase());
+    const attendee = event.data.attendees?.find((a) => a.email.toLowerCase() === userEmail.toLowerCase());
     if (!attendee) return null;
     if (attendee.status === 'declined') return 'declined';
     if (attendee.status === 'pending') return 'pending';
@@ -119,7 +125,7 @@ export const WEEKDAY_HEADERS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN']
 export function parseOccurrenceDate(value: unknown): Date {
     if (value instanceof Date) return value;
     const str = String(value);
-    if (str.length === 10) return new Date(str + 'T00:00:00Z');
+    if (str.length === 10) return new Date(`${str}T00:00:00Z`);
     return new Date(str);
 }
 

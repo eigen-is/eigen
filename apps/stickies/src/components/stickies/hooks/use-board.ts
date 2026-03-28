@@ -1,23 +1,24 @@
-import {useCallback, useEffect, useRef, useState} from 'react';
+import { getCollabWebSocketUrl } from '@workspace/lib/api';
+import { useAuth } from '@workspace/lib/auth';
+import { useCreateChat } from '@workspace/lib/chat';
+import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
+import { nanoid } from 'nanoid';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
+import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
-import {WebsocketProvider} from 'y-websocket';
-import {BoardData, CardItem, ColumnItem} from '../types';
-import {nanoid} from 'nanoid';
-import {normalizeBoard} from '../normalize-board';
-import {getCollabWebSocketUrl} from '@workspace/lib/api';
-import {useAuth} from '@workspace/lib/auth';
-import {useCreateChat} from '@workspace/lib/chat';
-import {toast} from 'sonner';
-import {EIGEN_STICKIES_COLORS} from "@workspace/lib/constants";
+import { normalizeBoard } from '../normalize-board';
+import type { BoardData, CardItem, ColumnItem } from '../types';
 
 const DEFAULT_COLUMNS = ['To Do', 'In Progress', 'Done'];
 const WELCOME_CARD = {
     title: 'Welcome to stickies!',
-    description: 'Drag this sticky to another column to get started. You can add more stickies with the "Add a sticky" button.',
+    description:
+        'Drag this sticky to another column to get started. You can add more stickies with the "Add a sticky" button.',
 };
 
 export const useBoard = (ownerId: string, mountId: string, pathId: string, chatFolderId: string | null) => {
-    const [board, setBoard] = useState<BoardData>({tasks: {}, columns: {}, columnOrder: []});
+    const [board, setBoard] = useState<BoardData>({ tasks: {}, columns: {}, columnOrder: [] });
     const [selectedColumnId, setSelectedColumnId] = useState<string | null>(null);
     const [isAddCardDialogOpen, setIsAddCardDialogOpen] = useState(false);
     const [isAddColumnDialogOpen, setIsAddColumnDialogOpen] = useState(false);
@@ -26,7 +27,7 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
     const providerRef = useRef<WebsocketProvider | null>(null);
     const undoManager = useRef<Y.UndoManager | null>(null);
 
-    const {user} = useAuth();
+    const { user } = useAuth();
     const createChat = useCreateChat(ownerId, mountId);
     const createChatRef = useRef(createChat);
     createChatRef.current = createChat;
@@ -39,57 +40,60 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         try {
             const result = await createChatRef.current.mutateAsync({
                 parentId: folderId,
-                fileName: `task-${nanoid(10)}`
+                fileName: `task-${nanoid(10)}`,
             });
             return result?.name;
-        } catch (e) {
+        } catch (_e) {
             toast.error('Failed to create chat for card');
             return undefined;
         }
     }, []);
 
-    const initializeDefaultBoard = useCallback(async (doc: Y.Doc, userEmail: string) => {
-        const columnsMap = doc.getMap('columns');
-        if (columnsMap.size > 0) return;
+    const initializeDefaultBoard = useCallback(
+        async (doc: Y.Doc, userEmail: string) => {
+            const columnsMap = doc.getMap('columns');
+            if (columnsMap.size > 0) return;
 
-        const chatName = await createCardChat();
+            const chatName = await createCardChat();
 
-        if (columnsMap.size > 0) return;
-        const now = Date.now();
+            if (columnsMap.size > 0) return;
+            const now = Date.now();
 
-        doc.transact(() => {
-            const tasksMap = doc.getMap('tasks');
-            const columnOrderArray = doc.getArray('columnOrder');
+            doc.transact(() => {
+                const tasksMap = doc.getMap('tasks');
+                const columnOrderArray = doc.getArray('columnOrder');
 
-            const taskId = `task-${nanoid(10)}`;
-            const taskYMap = new Y.Map();
-            taskYMap.set('id', taskId);
-            taskYMap.set('title', WELCOME_CARD.title);
-            taskYMap.set('description', WELCOME_CARD.description);
-            taskYMap.set('creator', userEmail);
-            taskYMap.set('createdAt', now);
-            taskYMap.set('color', EIGEN_STICKIES_COLORS[0][1].value);
-            if (chatName) taskYMap.set('chatName', chatName);
-            tasksMap.set(taskId, taskYMap);
+                const taskId = `task-${nanoid(10)}`;
+                const taskYMap = new Y.Map();
+                taskYMap.set('id', taskId);
+                taskYMap.set('title', WELCOME_CARD.title);
+                taskYMap.set('description', WELCOME_CARD.description);
+                taskYMap.set('creator', userEmail);
+                taskYMap.set('createdAt', now);
+                taskYMap.set('color', EIGEN_STICKIES_COLORS[0][1].value);
+                if (chatName) taskYMap.set('chatName', chatName);
+                tasksMap.set(taskId, taskYMap);
 
-            const columnIds: string[] = [];
-            for (const [index, title] of DEFAULT_COLUMNS.entries()) {
-                const columnId = `column-${nanoid(10)}`;
-                columnIds.push(columnId);
-                const columnYMap = new Y.Map();
-                columnYMap.set('id', columnId);
-                columnYMap.set('title', title);
-                const taskIds = new Y.Array();
-                if (index === 0) taskIds.push([taskId]);
-                columnYMap.set('taskIds', taskIds);
-                columnYMap.set('creator', userEmail);
-                columnYMap.set('createdAt', now);
-                columnsMap.set(columnId, columnYMap);
-            }
+                const columnIds: string[] = [];
+                for (const [index, title] of DEFAULT_COLUMNS.entries()) {
+                    const columnId = `column-${nanoid(10)}`;
+                    columnIds.push(columnId);
+                    const columnYMap = new Y.Map();
+                    columnYMap.set('id', columnId);
+                    columnYMap.set('title', title);
+                    const taskIds = new Y.Array();
+                    if (index === 0) taskIds.push([taskId]);
+                    columnYMap.set('taskIds', taskIds);
+                    columnYMap.set('creator', userEmail);
+                    columnYMap.set('createdAt', now);
+                    columnsMap.set(columnId, columnYMap);
+                }
 
-            columnOrderArray.insert(0, columnIds);
-        });
-    }, [createCardChat]);
+                columnOrderArray.insert(0, columnIds);
+            });
+        },
+        [createCardChat],
+    );
 
     useEffect(() => {
         const doc = new Y.Doc();
@@ -115,27 +119,27 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
                 columnOrder: columnOrderArray.toArray() as string[],
             };
             for (const [taskId, taskMapValue] of tasksMap) {
-                const taskMap = taskMapValue as Y.Map<any>;
+                const taskMap = taskMapValue as Y.Map<unknown>;
                 newState.tasks[taskId] = {
                     id: taskId,
-                    title: taskMap.get('title') || '',
-                    description: taskMap.get('description') || '',
-                    color: taskMap.get('color') || '',
-                    creator: taskMap.get('creator') || '',
-                    createdAt: taskMap.get('createdAt') || Date.now(),
-                    chatName: taskMap.get('chatName') || undefined,
+                    title: (taskMap.get('title') as string) || '',
+                    description: (taskMap.get('description') as string) || '',
+                    color: (taskMap.get('color') as string) || '',
+                    creator: (taskMap.get('creator') as string) || '',
+                    createdAt: (taskMap.get('createdAt') as number) || Date.now(),
+                    chatName: (taskMap.get('chatName') as string | undefined) || undefined,
                 };
             }
             for (const [columnId, columnMapValue] of columnsMap) {
-                const columnMap = columnMapValue as Y.Map<any>;
-                const taskIdsArray = columnMap.get('taskIds') as Y.Array<any>;
-                const taskIds = taskIdsArray ? taskIdsArray.toArray() as string[] : [];
+                const columnMap = columnMapValue as Y.Map<unknown>;
+                const taskIdsArray = columnMap.get('taskIds') as Y.Array<string>;
+                const taskIds = taskIdsArray ? (taskIdsArray.toArray() as string[]) : [];
                 newState.columns[columnId] = {
                     id: columnId,
-                    title: columnMap.get('title') || '',
+                    title: (columnMap.get('title') as string) || '',
                     taskIds,
-                    creator: columnMap.get('creator') || '',
-                    createdAt: columnMap.get('createdAt') || Date.now(),
+                    creator: (columnMap.get('creator') as string) || '',
+                    createdAt: (columnMap.get('createdAt') as number) || Date.now(),
                 };
             }
             setBoard(newState);
@@ -152,8 +156,9 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
                 initialized = true;
                 normalizeBoard(doc);
                 if (columnsMap.size === 0) {
-                    initializeDefaultBoard(doc, user?.email || 'user@localhost')
-                        .catch(e => toast.error('Failed to initialize board'));
+                    initializeDefaultBoard(doc, user?.email || 'user@localhost').catch((_e) =>
+                        toast.error('Failed to initialize board'),
+                    );
                 }
             }
         });
@@ -189,8 +194,8 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
             tasksMap.set(taskId, newTaskMap);
             const columnMapValue = columnsMap.get(selectedColumnId);
             if (columnMapValue) {
-                const columnMap = columnMapValue as Y.Map<any>;
-                const taskIdsArray = columnMap.get('taskIds') as Y.Array<any>;
+                const columnMap = columnMapValue as Y.Map<unknown>;
+                const taskIdsArray = columnMap.get('taskIds') as Y.Array<string>;
                 if (taskIdsArray) taskIdsArray.push([taskId]);
             }
         });

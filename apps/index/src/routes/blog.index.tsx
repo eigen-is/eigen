@@ -1,6 +1,6 @@
-import {createFileRoute, Link} from '@tanstack/react-router'
-import {getAllBlogPosts, getLatestBlogPost} from '../data/blog-posts';
+import {createFileRoute, Link} from '@tanstack/react-router';
 import {BlogPost} from '../components/BlogPost';
+import {getAllBlogPosts, getLatestBlogPost} from '../data/blog-posts';
 
 export const Route = createFileRoute('/blog/')({
     component: BlogOverviewComponent,
@@ -11,7 +11,8 @@ export const Route = createFileRoute('/blog/')({
             },
             {
                 name: 'description',
-                content: 'Read about the development of eigen, a minimal and secure workspace in the cloud where you control your own data.',
+                content:
+                    'Read about the development of eigen, a minimal and secure workspace in the cloud where you control your own data.',
             },
             {
                 property: 'og:title',
@@ -19,7 +20,8 @@ export const Route = createFileRoute('/blog/')({
             },
             {
                 property: 'og:description',
-                content: 'Read about the development of eigen, a minimal and secure workspace in the cloud where you control your own data.',
+                content:
+                    'Read about the development of eigen, a minimal and secure workspace in the cloud where you control your own data.',
             },
             {
                 property: 'og:type',
@@ -31,7 +33,7 @@ export const Route = createFileRoute('/blog/')({
             },
         ],
     }),
-})
+});
 
 function BlogOverviewComponent() {
     const latestPost = getLatestBlogPost();
@@ -47,22 +49,16 @@ function BlogOverviewComponent() {
                     </Link>
                 </div>
 
-                {latestPost && (
-                    <BlogPost post={latestPost}/>
-                )}
+                {latestPost && <BlogPost post={latestPost}/>}
 
                 {otherPosts.length > 0 && (
                     <div className="mt-16 pt-8 border-t border-border">
                         <h2 className="text-2xl font-bold mb-6">Other Posts</h2>
                         <div className="space-y-8">
-                            {otherPosts.map(post => (
+                            {otherPosts.map((post) => (
                                 <article key={post.id}>
                                     <h3 className="text-xl font-semibold mb-1">
-                                        <Link
-                                            to="/blog/$id"
-                                            params={{id: post.id}}
-                                            className="hover:text-blue-600"
-                                        >
+                                        <Link to="/blog/$id" params={{id: post.id}} className="hover:text-blue-600">
                                             {post.title}
                                         </Link>
                                     </h3>

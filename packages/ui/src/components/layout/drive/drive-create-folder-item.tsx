@@ -1,10 +1,10 @@
-import {useEffect, useState} from "react";
-import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,} from "@workspace/ui/components/dialog";
-import {Input} from "@workspace/ui/components/input";
-import {Label} from "@workspace/ui/components/label";
-import {Button} from "@workspace/ui/components/button";
-import {useBreadcrumb} from "@workspace/lib/drive";
-import {DrivePath} from "@workspace/lib/types/drive";
+import {useBreadcrumb} from '@workspace/lib/drive';
+import type {DrivePath} from '@workspace/lib/types/drive';
+import {Button} from '@workspace/ui/components/button';
+import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
+import {Input} from '@workspace/ui/components/input';
+import {Label} from '@workspace/ui/components/label';
+import {useEffect, useState} from 'react';
 
 interface DriveCreateItemDialogProps {
     open: boolean;
@@ -26,7 +26,7 @@ export function DriveCreateItemDialog({
                                           type,
                                           path,
                                           title,
-                                          defaultValue = "",
+                                          defaultValue = '',
                                           confirmLabel,
                                       }: DriveCreateItemDialogProps) {
     const [itemName, setItemName] = useState(defaultValue);
@@ -40,7 +40,7 @@ export function DriveCreateItemDialog({
     const handleCreateItem = () => {
         if (itemName.trim() && !isPending) {
             onCreateItem(itemName);
-            setItemName("");
+            setItemName('');
         }
     };
 
@@ -56,7 +56,9 @@ export function DriveCreateItemDialog({
                     <DialogTitle>{title || `New ${type.toLowerCase()}`}</DialogTitle>
                 </DialogHeader>
                 <div className="py-4">
-                    <Label htmlFor="itemName" className="mb-3">{type} name</Label>
+                    <Label htmlFor="itemName" className="mb-3">
+                        {type} name
+                    </Label>
                     <Input
                         id="itemName"
                         value={itemName}
@@ -65,7 +67,7 @@ export function DriveCreateItemDialog({
                         className="mt-2"
                         autoFocus
                         onKeyDown={(e) => {
-                            if (e.key === "Enter" && itemName.trim() && !isPending) {
+                            if (e.key === 'Enter' && itemName.trim() && !isPending) {
                                 e.preventDefault();
                                 handleCreateItem();
                             }
@@ -74,9 +76,7 @@ export function DriveCreateItemDialog({
                     <div className="mt-4 mb-4">
                         <Label className="mb-1">Location</Label>
                         <span className="text-sm text-muted-foreground truncate block">
-                           {breadcrumbPaths.map((path) =>
-                               path.name || "Drive"
-                           ).join(' > ')}
+                            {breadcrumbPaths.map((path) => path.name || 'Drive').join(' > ')}
                         </span>
                     </div>
                 </div>
@@ -84,11 +84,8 @@ export function DriveCreateItemDialog({
                     <Button variant="outline" onClick={handleCancel}>
                         Cancel
                     </Button>
-                    <Button
-                        onClick={handleCreateItem}
-                        disabled={!itemName.trim() || isPending}
-                    >
-                        {isPending ? (confirmLabel ? `${confirmLabel}...` : "Creating...") : (confirmLabel || "Create")}
+                    <Button onClick={handleCreateItem} disabled={!itemName.trim() || isPending}>
+                        {isPending ? (confirmLabel ? `${confirmLabel}...` : 'Creating...') : confirmLabel || 'Create'}
                     </Button>
                 </DialogFooter>
             </DialogContent>

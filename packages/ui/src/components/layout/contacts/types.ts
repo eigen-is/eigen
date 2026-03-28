@@ -1,5 +1,5 @@
 // TypeScript interfaces for the contact autosuggest component
-import {Ref} from 'react';
+import type { Ref } from 'react';
 
 export type ContactAutosuggestProps = {
     initialValue?: string;
@@ -19,11 +19,11 @@ export type ContactAutosuggestProps = {
     required?: boolean;
     inputRef?: Ref<HTMLInputElement>;
     onSubmit?: (value: string) => void;
-}
+};
 
 export type ContactSuggestion = {
     id: string;
     displayName: string;
     email: string;
     allEmails: string[];
-}
+};

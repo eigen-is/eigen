@@ -25,7 +25,7 @@ export type AddressObject = {
 };
 
 export type Attachment = {
-    type: "attachment";
+    type: 'attachment';
     content: unknown;
     contentType: string;
     contentDisposition: string;
@@ -56,7 +56,7 @@ export type ParsedMail = {
     replyTo?: AddressObject | undefined;
     messageId?: string | undefined;
     inReplyTo?: string | undefined;
-    priority?: "normal" | "low" | "high" | undefined;
+    priority?: 'normal' | 'low' | 'high' | undefined;
 };
 
 export type EmailSummary = {
@@ -84,7 +84,7 @@ export type MaildirMailbox = {
     flags: string[];
     total: number;
     unread: number;
-}
+};
 
 export type EmailDraft = Omit<Email, 'to' | 'cc' | 'bcc'> & {
     to?: AddressObject;

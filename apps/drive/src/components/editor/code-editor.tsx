@@ -1,72 +1,114 @@
-import {forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState} from 'react';
+import {defaultKeymap, history, historyKeymap, redo, undo} from '@codemirror/commands';
+import {css} from '@codemirror/lang-css';
+import {html} from '@codemirror/lang-html';
+import {javascript} from '@codemirror/lang-javascript';
+import {json} from '@codemirror/lang-json';
+import {markdown as markdownLang} from '@codemirror/lang-markdown';
+import {php} from '@codemirror/lang-php';
+import {python} from '@codemirror/lang-python';
+import {rust} from '@codemirror/lang-rust';
+import {sql} from '@codemirror/lang-sql';
+import {xml} from '@codemirror/lang-xml';
+import {yaml} from '@codemirror/lang-yaml';
+import {bracketMatching, defaultHighlightStyle, syntaxHighlighting} from '@codemirror/language';
+import {EditorState} from '@codemirror/state';
+import {oneDark} from '@codemirror/theme-one-dark';
 import {
     drawSelection,
     EditorView,
     highlightActiveLine,
     highlightActiveLineGutter,
     keymap,
-    lineNumbers
+    lineNumbers,
 } from '@codemirror/view';
-import {EditorState} from '@codemirror/state';
-import {defaultKeymap, history, historyKeymap, redo, undo} from '@codemirror/commands';
-import {bracketMatching, defaultHighlightStyle, syntaxHighlighting} from '@codemirror/language';
-import {oneDark} from '@codemirror/theme-one-dark';
-import {json} from '@codemirror/lang-json';
-import {yaml} from '@codemirror/lang-yaml';
-import {xml} from '@codemirror/lang-xml';
-import {html} from '@codemirror/lang-html';
-import {css} from '@codemirror/lang-css';
-import {markdown as markdownLang} from '@codemirror/lang-markdown';
-import {javascript} from '@codemirror/lang-javascript';
-import {python} from '@codemirror/lang-python';
-import {rust} from '@codemirror/lang-rust';
-import {sql} from '@codemirror/lang-sql';
-import {php} from '@codemirror/lang-php';
-import {Redo, Undo} from 'lucide-react';
-import {TooltipButton} from "@workspace/ui";
+import {TooltipButton} from '@workspace/ui';
 import {Column} from '@workspace/ui/components/layout/app/column-layout';
+import {Redo, Undo} from 'lucide-react';
+import {forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState} from 'react';
 import {ConflictDialog} from './conflict-dialog';
 import {EditToolbar} from './editor-toolbar';
 import {useEditorSave} from './use-editor-save';
 
 function getLanguageExtension(language: string | null) {
     switch (language) {
-        case 'json': return json();
-        case 'yaml': return yaml();
-        case 'xml': return xml();
-        case 'html': return html();
-        case 'css': return css();
-        case 'markdown': return markdownLang();
-        case 'javascript': return javascript();
-        case 'typescript': return javascript({typescript: true});
-        case 'jsx': return javascript({jsx: true});
-        case 'tsx': return javascript({jsx: true, typescript: true});
-        case 'python': return python();
-        case 'rust': return rust();
-        case 'sql': return sql();
-        case 'php': return php();
-        default: return [];
+        case 'json':
+            return json();
+        case 'yaml':
+            return yaml();
+        case 'xml':
+            return xml();
+        case 'html':
+            return html();
+        case 'css':
+            return css();
+        case 'markdown':
+            return markdownLang();
+        case 'javascript':
+            return javascript();
+        case 'typescript':
+            return javascript({typescript: true});
+        case 'jsx':
+            return javascript({jsx: true});
+        case 'tsx':
+            return javascript({jsx: true, typescript: true});
+        case 'python':
+            return python();
+        case 'rust':
+            return rust();
+        case 'sql':
+            return sql();
+        case 'php':
+            return php();
+        default:
+            return [];
     }
 }
 
 export function getLanguageFromName(name: string): string | null {
     const ext = name.slice(name.lastIndexOf('.')).toLowerCase();
     switch (ext) {
-        case '.json': return 'json';
-        case '.yaml': case '.yml': return 'yaml';
-        case '.xml': return 'xml';
-        case '.html': case '.htm': case '.svelte': case '.vue': case '.astro': return 'html';
-        case '.css': return 'css';
-        case '.md': case '.markdown': return 'markdown';
-        case '.js': case '.mjs': case '.cjs': return 'javascript';
-        case '.jsx': return 'jsx';
-        case '.ts': case '.mts': case '.cts': return 'typescript';
-        case '.tsx': return 'tsx';
-        case '.py': return 'python';
-        case '.rs': return 'rust';
-        case '.sql': case '.graphql': case '.gql': return 'sql';
-        case '.php': return 'php';
-        default: return null;
+        case '.json':
+            return 'json';
+        case '.yaml':
+        case '.yml':
+            return 'yaml';
+        case '.xml':
+            return 'xml';
+        case '.html':
+        case '.htm':
+        case '.svelte':
+        case '.vue':
+        case '.astro':
+            return 'html';
+        case '.css':
+            return 'css';
+        case '.md':
+        case '.markdown':
+            return 'markdown';
+        case '.js':
+        case '.mjs':
+        case '.cjs':
+            return 'javascript';
+        case '.jsx':
+            return 'jsx';
+        case '.ts':
+        case '.mts':
+        case '.cts':
+            return 'typescript';
+        case '.tsx':
+            return 'tsx';
+        case '.py':
+            return 'python';
+        case '.rs':
+            return 'rust';
+        case '.sql':
+        case '.graphql':
+        case '.gql':
+            return 'sql';
+        case '.php':
+            return 'php';
+        default:
+            return null;
     }
 }
 
@@ -110,19 +152,20 @@ function cmBaseExtensions(language: string | null, isDark: boolean) {
     ];
 }
 
-
-
 export type CodeEditorViewHandle = {
     undo: () => void;
     redo: () => void;
 };
 
 // Shared editable CodeMirror view
-export const CodeEditorView = forwardRef<CodeEditorViewHandle, {
-    content: string;
-    language: string | null;
-    onChange?: (value: string) => void;
-}>(function CodeEditorView({content, language, onChange}, ref) {
+export const CodeEditorView = forwardRef<
+    CodeEditorViewHandle,
+    {
+        content: string;
+        language: string | null;
+        onChange?: (value: string) => void;
+    }
+>(function CodeEditorView({content, language, onChange}, ref) {
     const containerRef = useRef<HTMLDivElement>(null);
     const viewRef = useRef<EditorView | null>(null);
     const isDark = useDarkMode();
@@ -136,9 +179,11 @@ export const CodeEditorView = forwardRef<CodeEditorViewHandle, {
         if (!containerRef.current) return;
         const extensions = [...cmBaseExtensions(language, isDark)];
         if (onChange) {
-            extensions.push(EditorView.updateListener.of(update => {
-                if (update.docChanged) onChange(update.state.doc.toString());
-            }));
+            extensions.push(
+                EditorView.updateListener.of((update) => {
+                    if (update.docChanged) onChange(update.state.doc.toString());
+                }),
+            );
         }
         const state = EditorState.create({doc: content, extensions});
         const view = new EditorView({state, parent: containerRef.current});
@@ -163,20 +208,39 @@ type CodeEditorProps = {
     onReload: () => void;
 };
 
-export function CodeEditor({content, updatedAt, ownerId, mountId, pathId, fileName, onBack, onCancel, onSaved, onReload}: CodeEditorProps) {
+export function CodeEditor({
+                               content,
+                               updatedAt,
+                               ownerId,
+                               mountId,
+                               pathId,
+                               fileName,
+                               onBack,
+                               onCancel,
+                               onSaved,
+                               onReload,
+                           }: CodeEditorProps) {
     const contentRef = useRef(content);
     const editorViewRef = useRef<CodeEditorViewHandle>(null);
     const language = getLanguageFromName(fileName);
 
     const getContent = useCallback(() => contentRef.current, []);
 
-    const {saveState, showConflict, setShowConflict, markDirty, doSave, confirmClose} =
-        useEditorSave({ownerId, mountId, pathId, updatedAt, getContent});
+    const {saveState, showConflict, setShowConflict, markDirty, doSave, confirmClose} = useEditorSave({
+        ownerId,
+        mountId,
+        pathId,
+        updatedAt,
+        getContent,
+    });
 
-    const handleChange = useCallback((value: string) => {
-        contentRef.current = value;
-        markDirty();
-    }, [markDirty]);
+    const handleChange = useCallback(
+        (value: string) => {
+            contentRef.current = value;
+            markDirty();
+        },
+        [markDirty],
+    );
 
     const handleDownload = () => {
         const blob = new Blob([contentRef.current], {type: 'text/plain'});
@@ -195,7 +259,12 @@ export function CodeEditor({content, updatedAt, ownerId, mountId, pathId, fileNa
     };
 
     const toolbar = (
-        <EditToolbar onBack={() => confirmClose(onBack)} onCancel={onCancel} onSave={handleSave} isSaving={saveState === 'saving'}>
+        <EditToolbar
+            onBack={() => confirmClose(onBack)}
+            onCancel={onCancel}
+            onSave={handleSave}
+            isSaving={saveState === 'saving'}
+        >
             <TooltipButton icon={Undo} tooltipText="Undo" onClick={() => editorViewRef.current?.undo()}/>
             <TooltipButton icon={Redo} tooltipText="Redo" onClick={() => editorViewRef.current?.redo()}/>
         </EditToolbar>
@@ -209,8 +278,14 @@ export function CodeEditor({content, updatedAt, ownerId, mountId, pathId, fileNa
             <ConflictDialog
                 open={showConflict}
                 onOpenChange={setShowConflict}
-                onOverwrite={() => { setShowConflict(false); doSave(true); }}
-                onReload={() => { setShowConflict(false); onReload(); }}
+                onOverwrite={() => {
+                    setShowConflict(false);
+                    doSave(true);
+                }}
+                onReload={() => {
+                    setShowConflict(false);
+                    onReload();
+                }}
                 onDownload={handleDownload}
             />
         </Column>

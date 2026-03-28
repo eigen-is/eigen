@@ -1,7 +1,7 @@
-import type {DrivePath} from "@workspace/lib/types/drive";
-import {useCreateChat} from "@workspace/lib/chat";
-import {getChatRoomUrl} from "@workspace/lib/api";
-import {DriveCreateItemDialog} from "./drive-create-folder-item";
+import {getChatRoomUrl} from '@workspace/lib/api';
+import {useCreateChat} from '@workspace/lib/chat';
+import type {DrivePath} from '@workspace/lib/types/drive';
+import {DriveCreateItemDialog} from './drive-create-folder-item';
 
 export type DriveCreateChatProps = {
     path: DrivePath;
@@ -9,17 +9,10 @@ export type DriveCreateChatProps = {
     onOpenChange: (open: boolean) => void;
     onSave?: (newPath: string) => void;
     onCancel?: () => void;
-    onAfterAction?: (actionType: string, data: any) => void;
-}
+    onAfterAction?: (actionType: string, data: Record<string, unknown>) => void;
+};
 
-export function DriveCreateChat({
-                                    path,
-                                    open,
-                                    onOpenChange,
-                                    onSave,
-                                    onCancel,
-                                    onAfterAction,
-                                }: DriveCreateChatProps) {
+export function DriveCreateChat({path, open, onOpenChange, onSave, onCancel, onAfterAction}: DriveCreateChatProps) {
     const createChatMutation = useCreateChat(path.ownerId, path.mountId);
 
     const handleOpenChange = (nextOpen: boolean) => {
