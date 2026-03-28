@@ -45,11 +45,26 @@
       "./src/components/*.tsx",
       "./src/components/*.ts"
     ],
+    "./components/layout": "./src/components/layout/index.ts",
     "./components/layout/*": [
       "./src/components/layout/*.tsx",
-      "./src/components/layout/*.ts",
-      "./src/components/layout/*/index.ts"
+      "./src/components/layout/*.ts"
     ],
+    "./components/layout/app": "./src/components/layout/app/index.ts",
+    "./components/layout/braket": "./src/components/layout/braket/index.ts",
+    "./components/layout/chat": "./src/components/layout/chat/index.ts",
+    "./components/layout/contacts": "./src/components/layout/contacts/index.ts",
+    "./components/layout/context-menu": "./src/components/layout/context-menu/index.ts",
+    "./components/layout/delete": "./src/components/layout/delete/index.ts",
+    "./components/layout/drive": "./src/components/layout/drive/index.ts",
+    "./components/layout/home": "./src/components/layout/home/index.ts",
+    "./components/layout/labels": "./src/components/layout/labels/index.ts",
+    "./components/layout/pages": "./src/components/layout/pages/index.ts",
+    "./components/layout/preview-provider": "./src/components/layout/preview-provider/index.ts",
+    "./components/layout/properties-panel": "./src/components/layout/properties-panel/index.ts",
+    "./components/layout/sse-provider": "./src/components/layout/sse-provider/index.ts",
+    "./components/layout/toolbar": "./src/components/layout/toolbar/index.ts",
+    "./components/layout/upload-provider": "./src/components/layout/upload-provider/index.ts",
     "./hooks/*": "./src/hooks/*.ts"
   }
 }
