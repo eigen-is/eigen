@@ -1,9 +1,9 @@
 import type {Attendee, CalendarEvent} from '@workspace/lib/types/calendar';
 import {SSEventType} from '@workspace/lib/types/sse';
-import {getUserByEmail} from '../user/';
 import type {Home} from '../home';
 import {getHome} from '../home';
 import {addRegistryEntry} from '../share';
+import {getUserByEmail} from '../user/';
 import {buildCalendarEvent} from './sse-events';
 
 type InviteUser = { id: string; email: string; name?: string | null };
@@ -15,12 +15,12 @@ export async function propagateInvitation(
     oldAttendees: Attendee[],
     newAttendees: Attendee[],
 ): Promise<void> {
-    const oldEmails = new Set(oldAttendees.map(a => a.email.toLowerCase()));
-    const newEmails = new Set(newAttendees.map(a => a.email.toLowerCase()));
+    const oldEmails = new Set(oldAttendees.map((a) => a.email.toLowerCase()));
+    const newEmails = new Set(newAttendees.map((a) => a.email.toLowerCase()));
 
-    const added = newAttendees.filter(a => !oldEmails.has(a.email.toLowerCase()));
-    const removed = oldAttendees.filter(a => !newEmails.has(a.email.toLowerCase()));
-    const existing = newAttendees.filter(a => oldEmails.has(a.email.toLowerCase()));
+    const added = newAttendees.filter((a) => !oldEmails.has(a.email.toLowerCase()));
+    const removed = oldAttendees.filter((a) => !newEmails.has(a.email.toLowerCase()));
+    const existing = newAttendees.filter((a) => oldEmails.has(a.email.toLowerCase()));
 
     const organizerEmail = user.email.toLowerCase();
 
@@ -133,10 +133,7 @@ export async function propagateRsvp(
     organizerHome.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_RSVP, organizerHome.user.id));
 }
 
-export async function propagateCancellation(
-    organizerHome: Home,
-    event: CalendarEvent,
-): Promise<void> {
+export async function propagateCancellation(organizerHome: Home, event: CalendarEvent): Promise<void> {
     const attendees = event.data?.attendees || [];
     for (const attendee of attendees) {
         try {

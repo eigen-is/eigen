@@ -11,6 +11,10 @@
     "includes": [
       "**",
       "!**/*.gen.ts",
+      "!packages/fortune-sheet",
+      "!apps/api/src/lib/mail/mail-parser",
+      "!apps/api/src/lib/mail/mail-split",
+      "!apps/api/src/test",
       "!!dist",
       "!!coverage",
       "!!node_modules"
@@ -26,7 +30,21 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true
+      "recommended": true,
+      "style": {
+        "noNonNullAssertion": "off",
+        "noDescendingSpecificity": "off"
+      },
+      "complexity": {
+        "useLiteralKeys": "off"
+      },
+      "suspicious": {
+        "noAssignInExpressions": "off",
+        "noDocumentCookie": "off"
+      },
+      "a11y": {
+        "recommended": false
+      }
     }
   },
   "javascript": {

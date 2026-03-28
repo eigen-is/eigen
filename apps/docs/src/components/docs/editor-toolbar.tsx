@@ -1,6 +1,32 @@
-import {useRef, useState} from "react";
 import {formatForDisplay} from '@tanstack/react-hotkeys';
-import {Editor} from "@tiptap/react";
+import type {Editor} from '@tiptap/react';
+import {EIGEN_FONTS, getFontFamily} from '@workspace/lib/constants/fonts';
+import {useMediaQuery} from '@workspace/lib/media';
+import type {DrivePath} from '@workspace/lib/types/drive';
+import {Toolbar, TooltipButton} from '@workspace/ui';
+import {Button} from '@workspace/ui/components/button';
+import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
+    DropdownMenuTrigger,
+} from '@workspace/ui/components/dropdown-menu';
+import {Input} from '@workspace/ui/components/input';
+import {Label} from '@workspace/ui/components/label';
+import {DriveCreateDoc} from '@workspace/ui/components/layout/drive/drive-create-doc';
+import {ColorPicker} from '@workspace/ui/components/layout/media/color-picker';
+import {FontPicker} from '@workspace/ui/components/layout/media/font-picker';
+import {DocumentModeButton} from '@workspace/ui/components/layout/toolbar/document-mode-button';
+import {FileMenu} from '@workspace/ui/components/layout/toolbar/file-menu';
+import {Popover, PopoverContent, PopoverTrigger} from '@workspace/ui/components/popover';
+import {Separator} from '@workspace/ui/components/separator';
+import {Tooltip, TooltipContent, TooltipTrigger} from '@workspace/ui/components/tooltip';
+import {printDocument} from '@workspace/ui/lib/printElement';
 import {
     AlignCenter,
     AlignLeft,
@@ -37,36 +63,10 @@ import {
     Underline,
     Undo,
     UserRoundPlus,
-} from "lucide-react";
-import {Button} from "@workspace/ui/components/button";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuSub,
-    DropdownMenuSubContent,
-    DropdownMenuSubTrigger,
-    DropdownMenuTrigger,
-} from "@workspace/ui/components/dropdown-menu";
-import {Separator} from "@workspace/ui/components/separator";
-import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,} from "@workspace/ui/components/dialog";
-import {Input} from "@workspace/ui/components/input";
-import {Tooltip, TooltipContent, TooltipTrigger} from "@workspace/ui/components/tooltip";
-import {Popover, PopoverContent, PopoverTrigger} from "@workspace/ui/components/popover";
-import {Toolbar, TooltipButton} from "@workspace/ui";
-import {ColorPicker} from "@workspace/ui/components/layout/media/color-picker";
-import {FontPicker} from "@workspace/ui/components/layout/media/font-picker";
-import {EIGEN_FONTS, getFontFamily} from "@workspace/lib/constants/fonts";
-import {printDocument} from "@workspace/ui/lib/printElement";
-import {DocumentModeButton} from "@workspace/ui/components/layout/toolbar/document-mode-button";
-import {FileMenu} from "@workspace/ui/components/layout/toolbar/file-menu";
-import {DriveCreateDoc} from "@workspace/ui/components/layout/drive/drive-create-doc";
-import type {DrivePath} from "@workspace/lib/types/drive";
-import {useMediaQuery} from "@workspace/lib/media";
-import {Label} from "@workspace/ui/components/label";
-import {yDocToProsemirrorJSON} from "y-prosemirror";
-import * as Y from "yjs";
+} from 'lucide-react';
+import {useRef, useState} from 'react';
+import {yDocToProsemirrorJSON} from 'y-prosemirror';
+import * as Y from 'yjs';
 
 type EditorToolbarProps = {
     editor: Editor;
@@ -75,12 +75,18 @@ type EditorToolbarProps = {
     path: DrivePath;
     onAddComment?: () => void;
     onImageUpload?: (file: File) => void;
-}
-
+};
 
 const ToolbarSeparator = () => <Separator orientation="vertical" className="h-6 mx-1" />;
 
-export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onAddComment, onImageUpload}: EditorToolbarProps) => {
+export const EditorToolbar = ({
+                                  editor,
+                                  path,
+                                  canWrite,
+                                  onAccessDialogOpen,
+                                  onAddComment,
+                                  onImageUpload,
+                              }: EditorToolbarProps) => {
     const [linkUrl, setLinkUrl] = useState('');
     const [linkDialogOpen, setLinkDialogOpen] = useState(false);
     const [textColorOpen, setTextColorOpen] = useState(false);
@@ -153,15 +159,19 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onAdd
                     <>
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" >Edit</Button>
+                                <Button variant="ghost">Edit</Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="start">
-                                <DropdownMenuItem onClick={() => editor.chain().focus().undo().run()}
-                                                  disabled={!editor.can().undo()}>
+                                <DropdownMenuItem
+                                    onClick={() => editor.chain().focus().undo().run()}
+                                    disabled={!editor.can().undo()}
+                                >
                                     <Undo className="h-4 w-4 mr-2"/> Undo
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => editor.chain().focus().redo().run()}
-                                                  disabled={!editor.can().redo()}>
+                                <DropdownMenuItem
+                                    onClick={() => editor.chain().focus().redo().run()}
+                                    disabled={!editor.can().redo()}
+                                >
                                     <Redo className="h-4 w-4 mr-2"/> Redo
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
@@ -169,26 +179,32 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onAdd
 
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" >Format</Button>
+                                <Button variant="ghost">Format</Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="start">
                                 <DropdownMenuSub>
-                                    <DropdownMenuSubTrigger><Type
-                                        className="h-4 w-4 mr-2"/> Font</DropdownMenuSubTrigger>
+                                    <DropdownMenuSubTrigger>
+                                        <Type className="h-4 w-4 mr-2"/> Font
+                                    </DropdownMenuSubTrigger>
                                     <DropdownMenuSubContent>
                                         {EIGEN_FONTS.map((font) => (
                                             <DropdownMenuItem
                                                 key={font.name}
-                                                onClick={() => editor.chain().focus().setFontFamily(getFontFamily(font.name)).run()}
+                                                onClick={() =>
+                                                    editor.chain().focus().setFontFamily(getFontFamily(font.name)).run()
+                                                }
                                             >
-                                                <span style={{fontFamily: getFontFamily(font.name)}}>{font.name}</span>
+                                                <span style={{fontFamily: getFontFamily(font.name)}}>
+                                                    {font.name}
+                                                </span>
                                             </DropdownMenuItem>
                                         ))}
                                     </DropdownMenuSubContent>
                                 </DropdownMenuSub>
                                 <DropdownMenuSub>
-                                    <DropdownMenuSubTrigger><Type
-                                        className="h-4 w-4 mr-2"/> Text</DropdownMenuSubTrigger>
+                                    <DropdownMenuSubTrigger>
+                                        <Type className="h-4 w-4 mr-2"/> Text
+                                    </DropdownMenuSubTrigger>
                                     <DropdownMenuSubContent>
                                         <DropdownMenuItem onClick={() => editor.chain().focus().toggleBold().run()}>
                                             <Bold className="h-4 w-4 mr-2"/> Bold
@@ -197,7 +213,8 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onAdd
                                             <Italic className="h-4 w-4 mr-2"/> Italic
                                         </DropdownMenuItem>
                                         <DropdownMenuItem
-                                            onClick={() => editor.chain().focus().toggleUnderline().run()}>
+                                            onClick={() => editor.chain().focus().toggleUnderline().run()}
+                                        >
                                             <Underline className="h-4 w-4 mr-2"/> Underline
                                         </DropdownMenuItem>
                                         <DropdownMenuItem onClick={() => editor.chain().focus().toggleStrike().run()}>
@@ -207,41 +224,49 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onAdd
                                 </DropdownMenuSub>
                                 <DropdownMenuSeparator/>
                                 <DropdownMenuSub>
-                                    <DropdownMenuSubTrigger><Heading2
-                                        className="h-4 w-4 mr-2"/> Heading</DropdownMenuSubTrigger>
+                                    <DropdownMenuSubTrigger>
+                                        <Heading2 className="h-4 w-4 mr-2"/> Heading
+                                    </DropdownMenuSubTrigger>
                                     <DropdownMenuSubContent>
                                         <DropdownMenuItem onClick={() => editor.chain().focus().setParagraph().run()}>
                                             <Pilcrow className="mr-2 h-4 w-4"/> Normal text
                                         </DropdownMenuItem>
                                         <DropdownMenuItem
-                                            onClick={() => editor.chain().focus().toggleHeading({level: 1}).run()}>
+                                            onClick={() => editor.chain().focus().toggleHeading({level: 1}).run()}
+                                        >
                                             <Heading1 className="mr-2 h-4 w-4"/> Heading 1
                                         </DropdownMenuItem>
                                         <DropdownMenuItem
-                                            onClick={() => editor.chain().focus().toggleHeading({level: 2}).run()}>
+                                            onClick={() => editor.chain().focus().toggleHeading({level: 2}).run()}
+                                        >
                                             <Heading2 className="mr-2 h-4 w-4"/> Heading 2
                                         </DropdownMenuItem>
                                         <DropdownMenuItem
-                                            onClick={() => editor.chain().focus().toggleHeading({level: 3}).run()}>
+                                            onClick={() => editor.chain().focus().toggleHeading({level: 3}).run()}
+                                        >
                                             <Heading3 className="mr-2 h-4 w-4"/> Heading 3
                                         </DropdownMenuItem>
                                         <DropdownMenuItem
-                                            onClick={() => editor.chain().focus().toggleHeading({level: 4}).run()}>
+                                            onClick={() => editor.chain().focus().toggleHeading({level: 4}).run()}
+                                        >
                                             <Heading4 className="mr-2 h-4 w-4"/> Heading 4
                                         </DropdownMenuItem>
                                     </DropdownMenuSubContent>
                                 </DropdownMenuSub>
                                 <DropdownMenuSeparator/>
                                 <DropdownMenuSub>
-                                    <DropdownMenuSubTrigger><List
-                                        className="h-4 w-4 mr-2"/> Lists</DropdownMenuSubTrigger>
+                                    <DropdownMenuSubTrigger>
+                                        <List className="h-4 w-4 mr-2"/> Lists
+                                    </DropdownMenuSubTrigger>
                                     <DropdownMenuSubContent>
                                         <DropdownMenuItem
-                                            onClick={() => editor.chain().focus().toggleBulletList().run()}>
+                                            onClick={() => editor.chain().focus().toggleBulletList().run()}
+                                        >
                                             <List className="h-4 w-4 mr-2"/> Bulleted
                                         </DropdownMenuItem>
                                         <DropdownMenuItem
-                                            onClick={() => editor.chain().focus().toggleOrderedList().run()}>
+                                            onClick={() => editor.chain().focus().toggleOrderedList().run()}
+                                        >
                                             <ListOrdered className="h-4 w-4 mr-2"/> Numbered
                                         </DropdownMenuItem>
                                         <DropdownMenuItem onClick={() => editor.chain().focus().toggleTaskList().run()}>
@@ -258,7 +283,7 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onAdd
 
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" >Insert</Button>
+                                <Button variant="ghost">Insert</Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="start">
                                 <DropdownMenuItem onClick={handleLinkOperation}>
@@ -272,11 +297,19 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onAdd
                                 <DropdownMenuItem onClick={() => editor.chain().focus().setHorizontalRule().run()}>
                                     <Minus className="h-4 w-4 mr-2"/> Horizontal rule
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => editor.chain().focus().insertTable({
-                                    rows: 3,
-                                    cols: 3,
-                                    withHeaderRow: true
-                                }).run()}>
+                                <DropdownMenuItem
+                                    onClick={() =>
+                                        editor
+                                            .chain()
+                                            .focus()
+                                            .insertTable({
+                                                rows: 3,
+                                                cols: 3,
+                                                withHeaderRow: true,
+                                            })
+                                            .run()
+                                    }
+                                >
                                     <Table className="h-4 w-4 mr-2"/> Table
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => editor.chain().focus().toggleCodeBlock().run()}>
@@ -302,12 +335,11 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onAdd
                         />
                     </div>
                 )}
-                </div>
-
+            </div>
 
             {/* Bottom row: Formatting toolbar (desktop only) */}
-            {canWrite && !isMobile && (<div className="flex">
-
+            {canWrite && !isMobile && (
+                <div className="flex">
                     <ToolbarSeparator />
 
                     {/* Font family selector */}
@@ -325,8 +357,12 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onAdd
                     {/* Heading / paragraph selector */}
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-8 px-2 gap-1"
-                                    onMouseDown={(e) => e.preventDefault()}>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 px-2 gap-1"
+                                onMouseDown={(e) => e.preventDefault()}
+                            >
                                 <span className="text-xs whitespace-nowrap">{activeHeadingLabel}</span>
                                 <ChevronDown className="h-3 w-3"/>
                             </Button>
@@ -337,17 +373,20 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onAdd
                             </DropdownMenuItem>
                             <Separator className="my-1" />
                             <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({level: 1}).run()}>
-                                <Heading1 className="mr-2 h-4 w-4" /> <span className="text-xl font-bold">Heading 1</span>
+                                <Heading1 className="mr-2 h-4 w-4"/>{' '}
+                                <span className="text-xl font-bold">Heading 1</span>
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({level: 2}).run()}>
-                                <Heading2 className="mr-2 h-4 w-4" /> <span className="text-lg font-semibold">Heading 2</span>
+                                <Heading2 className="mr-2 h-4 w-4"/>{' '}
+                                <span className="text-lg font-semibold">Heading 2</span>
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({level: 3}).run()}>
-                                <Heading3 className="mr-2 h-4 w-4" /> <span className="text-base font-semibold">Heading 3</span>
+                                <Heading3 className="mr-2 h-4 w-4"/>{' '}
+                                <span className="text-base font-semibold">Heading 3</span>
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({level: 4}).run()}>
-                                <Heading4 className="mr-2 h-4 w-4"/> <span
-                                className="text-sm font-semibold">Heading 4</span>
+                                <Heading4 className="mr-2 h-4 w-4"/>{' '}
+                                <span className="text-sm font-semibold">Heading 4</span>
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
@@ -412,14 +451,23 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onAdd
                     {/* Text color */}
                     <Popover open={textColorOpen} onOpenChange={setTextColorOpen}>
                         <PopoverTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8"
-                                    onMouseDown={(e) => e.preventDefault()}>
+                            <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8"
+                                onMouseDown={(e) => e.preventDefault()}
+                            >
                                 <Tooltip>
                                     <TooltipTrigger asChild>
                                         <div className="flex flex-col items-center">
                                             <Baseline className="h-4 w-4" />
-                                            <div className="h-0.5 w-4 rounded-full mt-px"
-                                                 style={{backgroundColor: editor.getAttributes('textStyle').color || 'currentColor'}}/>
+                                            <div
+                                                className="h-0.5 w-4 rounded-full mt-px"
+                                                style={{
+                                                    backgroundColor:
+                                                        editor.getAttributes('textStyle').color || 'currentColor',
+                                                }}
+                                            />
                                         </div>
                                     </TooltipTrigger>
                                     <TooltipContent>Text color</TooltipContent>
@@ -446,9 +494,12 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onAdd
                     {/* Highlight color */}
                     <Popover open={highlightColorOpen} onOpenChange={setHighlightColorOpen}>
                         <PopoverTrigger asChild>
-                            <Button variant={editor.isActive('highlight') ? "secondary" : "ghost"}
-                                    size="icon" className="h-8 w-8"
-                                    onMouseDown={(e) => e.preventDefault()}>
+                            <Button
+                                variant={editor.isActive('highlight') ? 'secondary' : 'ghost'}
+                                size="icon"
+                                className="h-8 w-8"
+                                onMouseDown={(e) => e.preventDefault()}
+                            >
                                 <Tooltip>
                                     <TooltipTrigger asChild>
                                         <Highlighter className="h-4 w-4" />
@@ -459,7 +510,9 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onAdd
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-3" align="start">
                             <ColorPicker
-                                value={editor.isActive('highlight') ? (editor.getAttributes('highlight').color || '') : ''}
+                                value={
+                                    editor.isActive('highlight') ? editor.getAttributes('highlight').color || '' : ''
+                                }
                                 resetLabel="None"
                                 preventFocusLoss
                                 onChange={(color) => {
@@ -577,9 +630,12 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onAdd
                         {/* Table */}
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button variant={editor.isActive('table') ? "secondary" : "ghost"}
-                                        size="icon" className="h-8 w-8"
-                                        onMouseDown={(e) => e.preventDefault()}>
+                                <Button
+                                    variant={editor.isActive('table') ? 'secondary' : 'ghost'}
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    onMouseDown={(e) => e.preventDefault()}
+                                >
                                     <Tooltip>
                                         <TooltipTrigger asChild>
                                             <Table className="h-4 w-4" />
@@ -590,7 +646,15 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onAdd
                             </DropdownMenuTrigger>
                             <DropdownMenuContent>
                                 {!editor.isActive('table') ? (
-                                    <DropdownMenuItem onClick={() => editor.chain().focus().insertTable({rows: 3, cols: 3, withHeaderRow: true}).run()}>
+                                    <DropdownMenuItem
+                                        onClick={() =>
+                                            editor
+                                                .chain()
+                                                .focus()
+                                                .insertTable({rows: 3, cols: 3, withHeaderRow: true})
+                                                .run()
+                                        }
+                                    >
                                         Insert 3×3 table
                                     </DropdownMenuItem>
                                 ) : (
@@ -598,7 +662,9 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onAdd
                                         <DropdownMenuItem onClick={() => editor.chain().focus().addColumnAfter().run()}>
                                             Add column after
                                         </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => editor.chain().focus().addColumnBefore().run()}>
+                                        <DropdownMenuItem
+                                            onClick={() => editor.chain().focus().addColumnBefore().run()}
+                                        >
                                             Add column before
                                         </DropdownMenuItem>
                                         <DropdownMenuItem onClick={() => editor.chain().focus().deleteColumn().run()}>
@@ -615,7 +681,9 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onAdd
                                             Delete row
                                         </DropdownMenuItem>
                                         <DropdownMenuSeparator />
-                                        <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeaderRow().run()}>
+                                        <DropdownMenuItem
+                                            onClick={() => editor.chain().focus().toggleHeaderRow().run()}
+                                        >
                                             Toggle header row
                                         </DropdownMenuItem>
                                         <DropdownMenuItem onClick={() => editor.chain().focus().mergeCells().run()}>
@@ -625,8 +693,10 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onAdd
                                             Split cell
                                         </DropdownMenuItem>
                                         <DropdownMenuSeparator />
-                                        <DropdownMenuItem onClick={() => editor.chain().focus().deleteTable().run()}
-                                                          className="text-destructive">
+                                        <DropdownMenuItem
+                                            onClick={() => editor.chain().focus().deleteTable().run()}
+                                            className="text-destructive"
+                                        >
                                             Delete table
                                         </DropdownMenuItem>
                                     </>
@@ -663,13 +733,7 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onAdd
                 )}
             </div>
             {/* Hidden file input for image uploads */}
-            <input
-                ref={imageInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleImageSelect}
-            />
+            <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageSelect}/>
 
             <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
                 <DialogContent size="sm">
@@ -684,7 +748,7 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onAdd
                                 autoFocus
                                 placeholder="https://example.com"
                                 value={linkUrl}
-                                onChange={e => setLinkUrl(e.target.value)}
+                                onChange={(e) => setLinkUrl(e.target.value)}
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter') {
                                         e.preventDefault();
@@ -695,8 +759,12 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onAdd
                         </div>
                     </div>
                     <DialogFooter>
-                        <Button type="button" variant="outline" onClick={() => setLinkDialogOpen(false)}>Cancel</Button>
-                        <Button type="button" onClick={applyLink}>Add Link</Button>
+                        <Button type="button" variant="outline" onClick={() => setLinkDialogOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button type="button" onClick={applyLink}>
+                            Add Link
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
@@ -705,4 +773,3 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onAdd
 };
 
 export default EditorToolbar;
-

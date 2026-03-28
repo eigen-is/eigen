@@ -1,7 +1,7 @@
 import {createRootRouteWithContext, Outlet, useLocation} from '@tanstack/react-router';
-import {AuthContextType} from '@workspace/lib/auth';
-import {usePublicConfig} from '@workspace/lib/public';
+import type {AuthContextType} from '@workspace/lib/auth';
 import {useAddTeamMember, usePeopleTeams} from '@workspace/lib/people';
+import {usePublicConfig} from '@workspace/lib/public';
 import {AppShell} from '@workspace/ui/components/layout/app/app-shell.tsx';
 import {PeopleSidebar} from '../components/people/people-sidebar';
 

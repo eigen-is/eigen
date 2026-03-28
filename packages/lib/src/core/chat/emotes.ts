@@ -4,7 +4,7 @@ type EmoteCommandDef = {
     desc: string;
     canTarget?: boolean;
     requiresTarget?: boolean;
-}
+};
 
 export const EMOTE_COMMANDS: EmoteCommandDef[] = [
     {key: 'afk', desc: 'Away from keyboard'},
@@ -119,7 +119,7 @@ export function resolveEmoteKey(command: string): string | null {
 }
 
 export function getEmoteCommand(key: string) {
-    return EMOTE_COMMANDS.find(c => c.key === key);
+    return EMOTE_COMMANDS.find((c) => c.key === key);
 }
 
 export function isEmoteCommand(command: string): boolean {

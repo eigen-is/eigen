@@ -1,6 +1,6 @@
-import {Check, RotateCcw} from 'lucide-react';
+import {EIGEN_ACCENT_COLOR_ROW, EIGEN_COLORS, type EigenColor} from '@workspace/lib/constants';
 import {cn} from '@workspace/ui/lib/utils';
-import {EIGEN_ACCENT_COLOR_ROW, EIGEN_COLORS, EigenColor} from '@workspace/lib/constants';
+import {Check, RotateCcw} from 'lucide-react';
 
 type ColorPickerProps = {
     value: string;
@@ -10,17 +10,21 @@ type ColorPickerProps = {
     resetLabel?: string;
     showReset?: boolean;
     preventFocusLoss?: boolean;
-}
+};
 
-const DEFAULT_COLORS = [EIGEN_ACCENT_COLOR_ROW, 0, 1, 2, 4, 6, 8, 10].map(ri =>  [0,2,3,4,5,6,7,8,9,10,11,12,13,15].map( ci => EIGEN_COLORS[ci][ri]));
+const DEFAULT_COLORS = [EIGEN_ACCENT_COLOR_ROW, 0, 1, 2, 4, 6, 8, 10].map((ri) =>
+    [0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15].map((ci) => EIGEN_COLORS[ci][ri]),
+);
 const DEFAULT_COLUMNS = DEFAULT_COLORS[0].length;
-DEFAULT_COLORS.unshift(Array.from({ length: DEFAULT_COLUMNS }, (_, i) => i).map(i => {
-    const b =  (Math.sqrt(i / (DEFAULT_COLUMNS-1)) * 255 | 0).toString(16).padStart(2, '0');
-    return   {
-    label: 'test',
-    value: `#${b}${b}${b}`
-   };
-}));
+DEFAULT_COLORS.unshift(
+    Array.from({length: DEFAULT_COLUMNS}, (_, i) => i).map((i) => {
+        const b = ((Math.sqrt(i / (DEFAULT_COLUMNS - 1)) * 255) | 0).toString(16).padStart(2, '0');
+        return {
+            label: 'test',
+            value: `#${b}${b}${b}`,
+        };
+    }),
+);
 
 export function ColorPicker({
                                 value,
@@ -29,7 +33,7 @@ export function ColorPicker({
                                 columns = DEFAULT_COLUMNS,
                                 resetLabel = 'Reset',
                                 showReset = true,
-                                preventFocusLoss
+                                preventFocusLoss,
                             }: ColorPickerProps) {
     const normalizedValue = value.toLowerCase();
 
@@ -70,8 +74,10 @@ export function ColorPicker({
                             onMouseDown={stopFocus}
                         >
                             {normalizedValue === color.value.toLowerCase() && (
-                                <Check className="h-2 w-2"
-                                       style={{color: isLightColor(color.value) ? '#000' : '#fff'}}/>
+                                <Check
+                                    className="h-2 w-2"
+                                    style={{color: isLightColor(color.value) ? '#000' : '#fff'}}
+                                />
                             )}
                         </button>
                     ))}
@@ -89,6 +95,5 @@ function isLightColor(hex: string): boolean {
     return luminance > 0.5;
 }
 
-export {DEFAULT_COLORS, isLightColor};
 export type {ColorPickerProps};
-
+export {DEFAULT_COLORS, isLightColor};

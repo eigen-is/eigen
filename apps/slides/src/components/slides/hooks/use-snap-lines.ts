@@ -1,12 +1,12 @@
-import {useMemo} from 'react';
-import {SLIDE_BASE_HEIGHT, SLIDE_BASE_WIDTH, SlideObject} from '../types';
+import { useMemo } from 'react';
+import { SLIDE_BASE_HEIGHT, SLIDE_BASE_WIDTH, type SlideObject } from '../types';
 
 const SNAP_THRESHOLD = 15;
 
 export type SnapLine = {
     orientation: 'horizontal' | 'vertical';
     position: number;
-}
+};
 
 type SnapResult = {
     x: number;
@@ -14,9 +14,9 @@ type SnapResult = {
     w: number;
     h: number;
     lines: SnapLine[];
-}
+};
 
-type Rect = {x: number; y: number; w: number; h: number};
+type Rect = { x: number; y: number; w: number; h: number };
 
 function getEdges(r: Rect) {
     return {
@@ -32,7 +32,7 @@ function getEdges(r: Rect) {
 export function computeSnapLines(
     objects: SlideObject[],
     excludeIds: Set<string>,
-): {vSnaps: number[]; hSnaps: number[]} {
+): { vSnaps: number[]; hSnaps: number[] } {
     const vSnaps: number[] = [0, SLIDE_BASE_WIDTH / 2, SLIDE_BASE_WIDTH];
     const hSnaps: number[] = [0, SLIDE_BASE_HEIGHT / 2, SLIDE_BASE_HEIGHT];
 
@@ -43,18 +43,13 @@ export function computeSnapLines(
         hSnaps.push(e.top, e.bottom, e.cy);
     }
 
-    return {vSnaps, hSnaps};
+    return { vSnaps, hSnaps };
 }
 
-export function snapRect(
-    rect: Rect,
-    vSnaps: number[],
-    hSnaps: number[],
-    mode: string,
-): SnapResult {
+export function snapRect(rect: Rect, vSnaps: number[], hSnaps: number[], mode: string): SnapResult {
     const edges = getEdges(rect);
     const lines: SnapLine[] = [];
-    let {x, y, w, h} = rect;
+    let { x, y, w, h } = rect;
 
     if (mode === 'move') {
         let bestDx = Infinity;
@@ -84,11 +79,11 @@ export function snapRect(
 
         if (bestDx !== Infinity) {
             x = snapX;
-            const snappedEdges = getEdges({x, y, w, h});
+            const snappedEdges = getEdges({ x, y, w, h });
             for (const vs of vSnaps) {
                 for (const edge of [snappedEdges.left, snappedEdges.right, snappedEdges.cx]) {
                     if (Math.abs(edge - vs) < 0.1) {
-                        lines.push({orientation: 'vertical', position: vs});
+                        lines.push({ orientation: 'vertical', position: vs });
                     }
                 }
             }
@@ -96,11 +91,11 @@ export function snapRect(
 
         if (bestDy !== Infinity) {
             y = snapY;
-            const snappedEdges = getEdges({x, y, w, h});
+            const snappedEdges = getEdges({ x, y, w, h });
             for (const hs of hSnaps) {
                 for (const edge of [snappedEdges.top, snappedEdges.bottom, snappedEdges.cy]) {
                     if (Math.abs(edge - hs) < 0.1) {
-                        lines.push({orientation: 'horizontal', position: hs});
+                        lines.push({ orientation: 'horizontal', position: hs });
                     }
                 }
             }
@@ -117,7 +112,7 @@ export function snapRect(
                 const d = Math.abs(right - vs);
                 if (d < SNAP_THRESHOLD) {
                     w = vs - x;
-                    lines.push({orientation: 'vertical', position: vs});
+                    lines.push({ orientation: 'vertical', position: vs });
                     break;
                 }
             }
@@ -128,7 +123,7 @@ export function snapRect(
                 if (d < SNAP_THRESHOLD) {
                     w = w + (x - vs);
                     x = vs;
-                    lines.push({orientation: 'vertical', position: vs});
+                    lines.push({ orientation: 'vertical', position: vs });
                     break;
                 }
             }
@@ -139,7 +134,7 @@ export function snapRect(
                 const d = Math.abs(bottom - hs);
                 if (d < SNAP_THRESHOLD) {
                     h = hs - y;
-                    lines.push({orientation: 'horizontal', position: hs});
+                    lines.push({ orientation: 'horizontal', position: hs });
                     break;
                 }
             }
@@ -150,21 +145,21 @@ export function snapRect(
                 if (d < SNAP_THRESHOLD) {
                     h = h + (y - hs);
                     y = hs;
-                    lines.push({orientation: 'horizontal', position: hs});
+                    lines.push({ orientation: 'horizontal', position: hs });
                     break;
                 }
             }
         }
     }
 
-    return {x, y, w, h, lines};
+    return { x, y, w, h, lines };
 }
 
 export function useSnapTargets(objects: SlideObject[], excludeIds: string[]) {
     const excludeKey = excludeIds.join(',');
     return useMemo(() => {
-        if (excludeIds.length === 0) return {vSnaps: [] as number[], hSnaps: [] as number[]};
+        if (excludeIds.length === 0) return { vSnaps: [] as number[], hSnaps: [] as number[] };
         return computeSnapLines(objects, new Set(excludeIds));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [objects, excludeKey]);
 }

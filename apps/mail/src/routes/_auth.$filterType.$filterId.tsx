@@ -1,28 +1,28 @@
 import {createFileRoute} from '@tanstack/react-router';
-import {EmailDetail, EmailDetailToolbar} from "../components/mail/email-detail";
-import {EmailDraft, EmailDraftToolbar} from "../components/mail/email-draft";
 import {useEmail, useEmails, useMailboxes} from '@workspace/lib/mail';
-import {EmailList, EmailListToolbar} from "../components/mail/email-list";
-import type {Email, EmailDraft as EmailDraftType} from "@workspace/lib/types/mail";
+import type {Email, EmailDraft as EmailDraftType} from '@workspace/lib/types/mail';
+import {EmptyState} from '@workspace/ui';
+import {Column, ColumnLayout} from '@workspace/ui/components/layout/app/column-layout.tsx';
+import {useLayout} from '@workspace/ui/components/layout/app/layout-context.tsx';
+import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
 import {useEffect, useState} from 'react';
-import {EmptyState} from "@workspace/ui";
-import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog";
-import {Column, ColumnLayout} from "@workspace/ui/components/layout/app/column-layout.tsx";
-import {useLayout} from "@workspace/ui/components/layout/app/layout-context.tsx";
-import {useMailActions} from "../components/mail/hooks/use-mail-actions";
+import {EmailDetail, EmailDetailToolbar} from '../components/mail/email-detail';
+import {EmailDraft, EmailDraftToolbar} from '../components/mail/email-draft';
+import {EmailList, EmailListToolbar} from '../components/mail/email-list';
+import {useMailActions} from '../components/mail/hooks/use-mail-actions';
 
 export type MailSearchParams = {
     mailId?: string;
     mode?: string;
     to?: string;
-}
+};
 
 export const Route = createFileRoute('/_auth/$filterType/$filterId')({
     component: MailRoute,
     validateSearch: (search: Record<string, unknown>) => {
         const mailId = typeof search.mailId === 'string' ? search.mailId : undefined;
         const to = typeof search.to === 'string' ? search.to.toLowerCase() : undefined;
-        const mode = (!mailId && typeof search.mode === 'string') ? search.mode : undefined;
+        const mode = !mailId && typeof search.mode === 'string' ? search.mode : undefined;
 
         return {mailId, mode, to} as MailSearchParams;
     },
@@ -43,9 +43,9 @@ function MailRoute() {
 
     const actions = useMailActions();
 
-    const selectedEmailInData = emails.find(m => m.id === selectedEmail?.id);
+    const selectedEmailInData = emails.find((m) => m.id === selectedEmail?.id);
     const displayEmails = selectedEmailInData
-        ? emails.map(m => m.id === selectedEmail?.id ? {...m, isRead: true} : m)
+        ? emails.map((m) => (m.id === selectedEmail?.id ? {...m, isRead: true} : m))
         : emails;
 
     const handleDeleteEmail = async (mail: Email) => {
@@ -79,15 +79,10 @@ function MailRoute() {
     }, [mailId, mode]);
 
     const listWidth = isTablet ? '320px' : '400px';
-    const showDetail = !!(selectedEmail || mode === "compose");
-    const isDraft = mode === "compose" || selectedEmail?.isDraft;
+    const showDetail = !!(selectedEmail || mode === 'compose');
+    const isDraft = mode === 'compose' || selectedEmail?.isDraft;
 
-    const listToolbar = (
-        <EmailListToolbar
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-        />
-    );
+    const listToolbar = <EmailListToolbar searchQuery={searchQuery} onSearchChange={setSearchQuery}/>;
 
     const detailToolbar = isDraft ? (
         <EmailDraftToolbar
@@ -117,10 +112,14 @@ function MailRoute() {
                     setDeleteDialogOpen(open);
                     if (!open) setPendingDeleteEmails([]);
                 }}
-                title={pendingDeleteEmails.length === 1 ? "Delete Email" : `Delete ${pendingDeleteEmails.length} Emails`}
-                description={pendingDeleteEmails.length === 1
-                    ? "Are you sure you want to permanently delete this email"
-                    : `Are you sure you want to permanently delete ${pendingDeleteEmails.length} emails`}
+                title={
+                    pendingDeleteEmails.length === 1 ? 'Delete Email' : `Delete ${pendingDeleteEmails.length} Emails`
+                }
+                description={
+                    pendingDeleteEmails.length === 1
+                        ? 'Are you sure you want to permanently delete this email'
+                        : `Are you sure you want to permanently delete ${pendingDeleteEmails.length} emails`
+                }
                 itemName={pendingDeleteEmails.length === 1 ? pendingDeleteEmails[0]?.subject || undefined : undefined}
                 onDelete={confirmDeleteEmails}
             />
@@ -145,8 +144,12 @@ function MailRoute() {
                         />
                     </div>
                 </Column>
-                <Column id="detail" width="flex" onBack={isDraft ? undefined : actions.navigateToList}
-                        toolbar={detailToolbar}>
+                <Column
+                    id="detail"
+                    width="flex"
+                    onBack={isDraft ? undefined : actions.navigateToList}
+                    toolbar={detailToolbar}
+                >
                     {showDetail ? (
                         isDraft ? (
                             <EmailDraft
@@ -157,10 +160,7 @@ function MailRoute() {
                                 to={to}
                             />
                         ) : (
-                            <EmailDetail
-                                email={selectedEmail}
-                                toggleMailRead={actions.handleToggleMailRead}
-                            />
+                            <EmailDetail email={selectedEmail} toggleMailRead={actions.handleToggleMailRead}/>
                         )
                     ) : (
                         <EmptyState message="Select an email to view details"/>

@@ -1,12 +1,59 @@
 const CODE_EXTENSIONS = new Set([
-    '.json', '.yaml', '.yml', '.xml', '.html', '.htm', '.css', '.csv',
-    '.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.cts',
-    '.py', '.rs', '.go', '.rb', '.php', '.java', '.c', '.cpp', '.h', '.hpp',
-    '.swift', '.kt', '.scala', '.sql', '.graphql', '.gql',
-    '.sh', '.bash', '.zsh', '.fish', '.conf', '.cfg', '.ini', '.toml',
-    '.env', '.gitignore', '.dockerignore', '.editorconfig',
-    '.log', '.diff', '.patch', '.svelte', '.vue', '.astro', '.dockerfile',
-    '.r', '.lua', '.zig', '.dart',
+    '.json',
+    '.yaml',
+    '.yml',
+    '.xml',
+    '.html',
+    '.htm',
+    '.css',
+    '.csv',
+    '.js',
+    '.jsx',
+    '.mjs',
+    '.cjs',
+    '.ts',
+    '.tsx',
+    '.mts',
+    '.cts',
+    '.py',
+    '.rs',
+    '.go',
+    '.rb',
+    '.php',
+    '.java',
+    '.c',
+    '.cpp',
+    '.h',
+    '.hpp',
+    '.swift',
+    '.kt',
+    '.scala',
+    '.sql',
+    '.graphql',
+    '.gql',
+    '.sh',
+    '.bash',
+    '.zsh',
+    '.fish',
+    '.conf',
+    '.cfg',
+    '.ini',
+    '.toml',
+    '.env',
+    '.gitignore',
+    '.dockerignore',
+    '.editorconfig',
+    '.log',
+    '.diff',
+    '.patch',
+    '.svelte',
+    '.vue',
+    '.astro',
+    '.dockerfile',
+    '.r',
+    '.lua',
+    '.zig',
+    '.dart',
 ]);
 
 const CODE_MIMES = [
@@ -21,8 +68,22 @@ const CODE_MIMES = [
 ];
 
 const EXIFTOOL_EXTENSIONS = new Set([
-    '.cr2', '.cr3', '.nef', '.arw', '.dng', '.orf', '.rw2', '.raf', '.pef', '.srw', '.rwl',
-    '.psd', '.psb', '.ai', '.heic', '.heif',
+    '.cr2',
+    '.cr3',
+    '.nef',
+    '.arw',
+    '.dng',
+    '.orf',
+    '.rw2',
+    '.raf',
+    '.pef',
+    '.srw',
+    '.rwl',
+    '.psd',
+    '.psb',
+    '.ai',
+    '.heic',
+    '.heif',
 ]);
 
 export type TextPreviewMode = 'markdown' | 'plaintext' | 'code';
@@ -35,7 +96,7 @@ export function getTextPreviewMode(mimeType: string, fileName: string): TextPrev
     const ext = getExtension(fileName);
     if (mimeType === 'text/markdown' || ext === '.md' || ext === '.markdown') return 'markdown';
     if (mimeType === 'text/plain' || ext === '.txt') return 'plaintext';
-    if (CODE_MIMES.some(prefix => mimeType.startsWith(prefix))) return 'code';
+    if (CODE_MIMES.some((prefix) => mimeType.startsWith(prefix))) return 'code';
     if (CODE_EXTENSIONS.has(ext)) return 'code';
     return null;
 }

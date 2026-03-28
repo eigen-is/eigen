@@ -1,20 +1,21 @@
-import React, {useEffect, useRef} from "react";
-import {cn} from "../../lib/utils";
+import type React from 'react';
+import { useEffect, useRef } from 'react';
+import { cn } from '../../lib/utils';
 
 type ShadowContentProps = {
     content: string;
     className?: string;
-    contentType?: "html" | "text";
-}
+    contentType?: 'html' | 'text';
+};
 
 // HTML content is sanitized server-side using DOMPurify before storage.
 // Shadow DOM provides style isolation; script isolation is handled by BE sanitization.
 export function ShadowContent({
-                                  content,
-                                  className,
-                                  contentType = "html",
-                                  ...props
-                              }: ShadowContentProps & React.HTMLAttributes<HTMLDivElement>) {
+    content,
+    className,
+    contentType = 'html',
+    ...props
+}: ShadowContentProps & React.HTMLAttributes<HTMLDivElement>) {
     const shadowHostRef = useRef<HTMLDivElement>(null);
     const shadowRootRef = useRef<ShadowRoot | null>(null);
 
@@ -23,27 +24,27 @@ export function ShadowContent({
         if (!hostElement) return;
 
         if (shadowRootRef.current) {
-            shadowRootRef.current.innerHTML = "";
+            shadowRootRef.current.innerHTML = '';
         } else {
-            shadowRootRef.current = hostElement.attachShadow({mode: "closed", clonable: true} as ShadowRootInit);
+            shadowRootRef.current = hostElement.attachShadow({ mode: 'closed', clonable: true } as ShadowRootInit);
         }
 
         const shadowRoot = shadowRootRef.current;
 
         // Create container for content
-        const contentContainer = document.createElement("div");
-        contentContainer.className = "shadow-content-container";
+        const contentContainer = document.createElement('div');
+        contentContainer.className = 'shadow-content-container';
 
         // Add content based on type
-        if (contentType === "html") {
+        if (contentType === 'html') {
             contentContainer.innerHTML = content;
         } else {
             contentContainer.textContent = content;
-            contentContainer.style.whiteSpace = "pre-wrap";
+            contentContainer.style.whiteSpace = 'pre-wrap';
         }
 
         // Add some base styles to maintain readability
-        const styleElement = document.createElement("style");
+        const styleElement = document.createElement('style');
         styleElement.textContent = `
       .shadow-content-container {
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -61,14 +62,7 @@ export function ShadowContent({
         // Append style and content to shadow DOM
         shadowRoot.appendChild(styleElement);
         shadowRoot.appendChild(contentContainer);
-
     }, [content, contentType]);
 
-    return (
-        <div
-            ref={shadowHostRef}
-            className={cn("shadow-host", className)}
-            {...props}
-        />
-    );
+    return <div ref={shadowHostRef} className={cn('shadow-host', className)} {...props} />;
 }

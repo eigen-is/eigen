@@ -1,8 +1,9 @@
-import {useState} from "react"
-import {zodResolver} from "@hookform/resolvers/zod"
-import {useForm} from "react-hook-form"
-import {z} from "zod"
-import {Button} from "@workspace/ui/components/button"
+import { zodResolver } from '@hookform/resolvers/zod';
+import { getRouteApi } from '@tanstack/react-router';
+import { authClient } from '@workspace/lib/auth';
+import { Button } from '@workspace/ui/components/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@workspace/ui/components/card';
+import { Checkbox } from '@workspace/ui/components/checkbox';
 import {
     Form,
     FormControl,
@@ -10,44 +11,43 @@ import {
     FormField,
     FormItem,
     FormLabel,
-    FormMessage
-} from "@workspace/ui/components/form"
-import {Input} from "@workspace/ui/components/input"
-import {Card, CardContent, CardDescription, CardHeader, CardTitle} from "@workspace/ui/components/card"
-import {authClient} from "@workspace/lib/auth"
-import {toast} from "sonner"
-import {Checkbox} from "@workspace/ui/components/checkbox"
-import {Bar} from "@workspace/ui/components/layout/braket/bar"
-import {Ket} from "@workspace/ui/components/layout/braket/ket"
-import {useApp} from "@workspace/ui/components/layout/app/layout-context"
-import {getRouteApi} from "@tanstack/react-router"
+    FormMessage,
+} from '@workspace/ui/components/form';
+import { Input } from '@workspace/ui/components/input';
+import { useApp } from '@workspace/ui/components/layout/app/layout-context';
+import { Bar } from '@workspace/ui/components/layout/braket/bar';
+import { Ket } from '@workspace/ui/components/layout/braket/ket';
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { toast } from 'sonner';
+import { z } from 'zod';
 
 const totpSchema = z.object({
-    code: z.string().min(6, "Code must be 6 digits").max(6, "Code must be 6 digits"),
+    code: z.string().min(6, 'Code must be 6 digits').max(6, 'Code must be 6 digits'),
     trustDevice: z.boolean(),
 });
 
 const backupSchema = z.object({
-    code: z.string().min(1, "Backup code is required"),
+    code: z.string().min(1, 'Backup code is required'),
     trustDevice: z.boolean(),
 });
 
 const route = getRouteApi('/login-2fa');
 
 export default function LoginFa2Page() {
-    const {appName} = useApp();
-    const {redirect} = route.useSearch();
-    const [mode, setMode] = useState<"totp" | "backup">("totp");
+    const { appName } = useApp();
+    const { redirect } = route.useSearch();
+    const [mode, setMode] = useState<'totp' | 'backup'>('totp');
     const [isLoading, setIsLoading] = useState(false);
 
     const totpForm = useForm<z.infer<typeof totpSchema>>({
         resolver: zodResolver(totpSchema),
-        defaultValues: {code: "", trustDevice: false},
+        defaultValues: { code: '', trustDevice: false },
     });
 
     const backupForm = useForm<z.infer<typeof backupSchema>>({
         resolver: zodResolver(backupSchema),
-        defaultValues: {code: "", trustDevice: false},
+        defaultValues: { code: '', trustDevice: false },
     });
 
     async function handleVerify(
@@ -58,13 +58,13 @@ export default function LoginFa2Page() {
             setIsLoading(true);
             const result = await apiCall();
             if (result.data) {
-                toast.success("Verification successful");
+                toast.success('Verification successful');
                 window.location.href = redirect || '/';
             } else {
                 toast.error(result.error?.message || fallbackError);
             }
         } catch {
-            toast.error("Verification failed");
+            toast.error('Verification failed');
         } finally {
             setIsLoading(false);
         }
@@ -72,15 +72,15 @@ export default function LoginFa2Page() {
 
     async function onTotpSubmit(values: z.infer<typeof totpSchema>) {
         await handleVerify(
-            () => authClient.twoFactor.verifyTotp({code: values.code, trustDevice: values.trustDevice}),
-            "Invalid verification code",
+            () => authClient.twoFactor.verifyTotp({ code: values.code, trustDevice: values.trustDevice }),
+            'Invalid verification code',
         );
     }
 
     async function onBackupSubmit(values: z.infer<typeof backupSchema>) {
         await handleVerify(
-            () => authClient.twoFactor.verifyBackupCode({code: values.code, trustDevice: values.trustDevice}),
-            "Invalid backup code",
+            () => authClient.twoFactor.verifyBackupCode({ code: values.code, trustDevice: values.trustDevice }),
+            'Invalid backup code',
         );
     }
 
@@ -90,20 +90,22 @@ export default function LoginFa2Page() {
                 <CardHeader className="text-center">
                     <CardTitle className="text-2xl text-app">
                         <span className="font-bold">eigen</span>
-                        <span className="font-normal"><Bar/>{appName}<Ket/></span>
+                        <span className="font-normal">
+                            <Bar />
+                            {appName}
+                            <Ket />
+                        </span>
                     </CardTitle>
-                    <CardDescription>
-                        Your account is protected with two-factor authentication
-                    </CardDescription>
+                    <CardDescription>Your account is protected with two-factor authentication</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {mode === "totp" ? (
+                    {mode === 'totp' ? (
                         <Form {...totpForm}>
                             <form onSubmit={totpForm.handleSubmit(onTotpSubmit)} className="space-y-6">
                                 <FormField
                                     control={totpForm.control}
                                     name="code"
-                                    render={({field}) => (
+                                    render={({ field }) => (
                                         <FormItem>
                                             <FormLabel>Verification Code</FormLabel>
                                             <FormControl>
@@ -120,7 +122,7 @@ export default function LoginFa2Page() {
                                             <FormDescription>
                                                 Enter the code from your authenticator app
                                             </FormDescription>
-                                            <FormMessage/>
+                                            <FormMessage />
                                         </FormItem>
                                     )}
                                 />
@@ -128,13 +130,10 @@ export default function LoginFa2Page() {
                                 <FormField
                                     control={totpForm.control}
                                     name="trustDevice"
-                                    render={({field}) => (
+                                    render={({ field }) => (
                                         <FormItem className="flex flex-row items-start space-x-3 space-y-0">
                                             <FormControl>
-                                                <Checkbox
-                                                    checked={field.value}
-                                                    onCheckedChange={field.onChange}
-                                                />
+                                                <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                                             </FormControl>
                                             <div className="space-y-1 leading-none">
                                                 <FormLabel>Trust this device</FormLabel>
@@ -147,14 +146,14 @@ export default function LoginFa2Page() {
                                 />
 
                                 <Button type="submit" className="w-full" disabled={isLoading}>
-                                    {isLoading ? "Verifying..." : "Verify"}
+                                    {isLoading ? 'Verifying...' : 'Verify'}
                                 </Button>
 
                                 <div className="text-center">
                                     <button
                                         type="button"
                                         className="text-sm text-muted-foreground hover:text-foreground underline"
-                                        onClick={() => setMode("backup")}
+                                        onClick={() => setMode('backup')}
                                     >
                                         Use a backup code instead
                                     </button>
@@ -167,7 +166,7 @@ export default function LoginFa2Page() {
                                 <FormField
                                     control={backupForm.control}
                                     name="code"
-                                    render={({field}) => (
+                                    render={({ field }) => (
                                         <FormItem>
                                             <FormLabel>Backup Code</FormLabel>
                                             <FormControl>
@@ -178,10 +177,8 @@ export default function LoginFa2Page() {
                                                     autoFocus
                                                 />
                                             </FormControl>
-                                            <FormDescription>
-                                                Enter one of your saved recovery codes
-                                            </FormDescription>
-                                            <FormMessage/>
+                                            <FormDescription>Enter one of your saved recovery codes</FormDescription>
+                                            <FormMessage />
                                         </FormItem>
                                     )}
                                 />
@@ -189,13 +186,10 @@ export default function LoginFa2Page() {
                                 <FormField
                                     control={backupForm.control}
                                     name="trustDevice"
-                                    render={({field}) => (
+                                    render={({ field }) => (
                                         <FormItem className="flex flex-row items-start space-x-3 space-y-0">
                                             <FormControl>
-                                                <Checkbox
-                                                    checked={field.value}
-                                                    onCheckedChange={field.onChange}
-                                                />
+                                                <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                                             </FormControl>
                                             <div className="space-y-1 leading-none">
                                                 <FormLabel>Trust this device</FormLabel>
@@ -208,14 +202,14 @@ export default function LoginFa2Page() {
                                 />
 
                                 <Button type="submit" className="w-full" disabled={isLoading}>
-                                    {isLoading ? "Verifying..." : "Verify with backup code"}
+                                    {isLoading ? 'Verifying...' : 'Verify with backup code'}
                                 </Button>
 
                                 <div className="text-center">
                                     <button
                                         type="button"
                                         className="text-sm text-muted-foreground hover:text-foreground underline"
-                                        onClick={() => setMode("totp")}
+                                        onClick={() => setMode('totp')}
                                     >
                                         Use authenticator app instead
                                     </button>

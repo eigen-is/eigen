@@ -1,10 +1,10 @@
-import {useState} from 'react';
-import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
-import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
 import {Button} from '@workspace/ui/components/button';
+import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
 import {Input} from '@workspace/ui/components/input';
 import {Label} from '@workspace/ui/components/label';
-import * as Y from 'yjs';
+import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
+import {useState} from 'react';
+import type * as Y from 'yjs';
 
 type ColumnSettingsDialogProps = {
     isOpen: boolean;
@@ -14,7 +14,7 @@ type ColumnSettingsDialogProps = {
     cardCount?: number;
     canWrite?: boolean;
     yjsDoc: Y.Doc | null;
-}
+};
 
 export function ColumnSettingsDialog({
                                          isOpen,
@@ -23,7 +23,7 @@ export function ColumnSettingsDialog({
                                          columnTitle,
                                          cardCount = 0,
                                          canWrite = true,
-                                         yjsDoc
+                                         yjsDoc,
                                      }: ColumnSettingsDialogProps) {
     const [title, setTitle] = useState(columnTitle);
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -34,7 +34,7 @@ export function ColumnSettingsDialog({
 
         yjsDoc.transact(() => {
             const columnsMap = yjsDoc.getMap('columns');
-            const columnMap = columnsMap.get(columnId) as Y.Map<any>;
+            const columnMap = columnsMap.get(columnId) as Y.Map<unknown>;
             if (columnMap) columnMap.set('title', title.trim());
         });
 
@@ -49,10 +49,10 @@ export function ColumnSettingsDialog({
             const tasksMap = yjsDoc.getMap('tasks');
             const columnOrderArray = yjsDoc.getArray('columnOrder');
 
-            const columnMap = columnsMap.get(columnId) as Y.Map<any>;
+            const columnMap = columnsMap.get(columnId) as Y.Map<unknown>;
             if (!columnMap) return;
 
-            const taskIdsArray = columnMap.get('taskIds') as Y.Array<any>;
+            const taskIdsArray = columnMap.get('taskIds') as Y.Array<string>;
             if (taskIdsArray) {
                 for (const taskId of taskIdsArray.toArray() as string[]) {
                     tasksMap.delete(taskId);
@@ -115,9 +115,11 @@ export function ColumnSettingsDialog({
                 open={isDeleteDialogOpen}
                 onOpenChange={setIsDeleteDialogOpen}
                 title="Delete Column"
-                description={cardCount > 0
-                    ? `This will permanently delete the column and ${cardCount} ${cardCount === 1 ? 'card' : 'cards'} within it. This action cannot be undone.`
-                    : 'This will permanently delete the column. This action cannot be undone.'}
+                description={
+                    cardCount > 0
+                        ? `This will permanently delete the column and ${cardCount} ${cardCount === 1 ? 'card' : 'cards'} within it. This action cannot be undone.`
+                        : 'This will permanently delete the column. This action cannot be undone.'
+                }
                 onDelete={handleDelete}
             />
         </Dialog>

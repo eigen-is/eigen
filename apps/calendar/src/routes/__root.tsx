@@ -1,10 +1,10 @@
-import {createRootRouteWithContext, Outlet} from '@tanstack/react-router'
-import {AuthContextType, useAuth} from "@workspace/lib/auth";
-import {AppShell} from "@workspace/ui/components/layout/app/app-shell.tsx";
-import {CalendarSidebar} from "../components/calendar-sidebar";
+import {createRootRouteWithContext, Outlet} from '@tanstack/react-router';
+import {type AuthContextType, useAuth} from '@workspace/lib/auth';
+import {AppShell} from '@workspace/ui/components/layout/app/app-shell.tsx';
+import {CalendarSidebar} from '../components/calendar-sidebar';
 
 interface MyRouterContext {
-    auth: AuthContextType
+    auth: AuthContextType;
 }
 
 function CalendarRoot() {
@@ -23,11 +23,7 @@ function CalendarRoot() {
             appName="calendar"
             rootRoute={Route}
             sidebar={({condensed, isMobile, onClose}) => (
-                <CalendarSidebar
-                    condensed={condensed}
-                    isMobile={isMobile}
-                    onClose={onClose}
-                />
+                <CalendarSidebar condensed={condensed} isMobile={isMobile} onClose={onClose}/>
             )}
         >
             <Outlet/>

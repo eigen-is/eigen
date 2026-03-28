@@ -8,7 +8,8 @@ export const SHARED_DB_CONFIG: DatabaseConfig<typeof schema> = {
     migrations: [
         {
             version: 1,
-            up: (db) => db.exec(`
+            up: (db) =>
+                db.exec(`
                 CREATE TABLE IF NOT EXISTS shared_paths (
                     id TEXT PRIMARY KEY,
                     mountId TEXT NOT NULL,
@@ -26,7 +27,7 @@ export const SHARED_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     createdAt INTEGER DEFAULT (unixepoch()),
                     updatedAt INTEGER DEFAULT (unixepoch())
                 );
-            `)
-        }
-    ]
+            `),
+        },
+    ],
 };

@@ -1,13 +1,13 @@
-import {useState} from 'react';
-import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
-import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
+import {EIGEN_STICKIES_COLORS} from '@workspace/lib/constants';
 import {Button} from '@workspace/ui/components/button';
+import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
 import {Input} from '@workspace/ui/components/input';
 import {Label} from '@workspace/ui/components/label';
-import {Textarea} from '@workspace/ui/components/textarea';
+import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
 import {ColorPicker} from '@workspace/ui/components/layout/media/color-picker';
+import {Textarea} from '@workspace/ui/components/textarea';
+import {useState} from 'react';
 import * as Y from 'yjs';
-import {EIGEN_STICKIES_COLORS} from "@workspace/lib/constants";
 
 type CardSettingsDialogProps = {
     isOpen: boolean;
@@ -17,9 +17,17 @@ type CardSettingsDialogProps = {
     cardDescription: string;
     cardColor: string;
     yjsDoc: Y.Doc | null;
-}
+};
 
-export function CardSettingsDialog({isOpen, onClose, cardId, cardTitle, cardDescription, cardColor, yjsDoc}: CardSettingsDialogProps) {
+export function CardSettingsDialog({
+                                       isOpen,
+                                       onClose,
+                                       cardId,
+                                       cardTitle,
+                                       cardDescription,
+                                       cardColor,
+                                       yjsDoc,
+                                   }: CardSettingsDialogProps) {
     const [title, setTitle] = useState(cardTitle);
     const [description, setDescription] = useState(cardDescription);
     const [color, setColor] = useState(cardColor);
@@ -31,7 +39,7 @@ export function CardSettingsDialog({isOpen, onClose, cardId, cardTitle, cardDesc
 
         yjsDoc.transact(() => {
             const tasksMap = yjsDoc.getMap('tasks');
-            const taskMap = tasksMap.get(cardId) as Y.Map<any>;
+            const taskMap = tasksMap.get(cardId) as Y.Map<unknown>;
             if (taskMap) {
                 taskMap.set('title', title.trim());
                 taskMap.set('description', description.trim());
@@ -51,7 +59,7 @@ export function CardSettingsDialog({isOpen, onClose, cardId, cardTitle, cardDesc
 
             for (const [, columnMapValue] of columnsMap) {
                 if (!(columnMapValue instanceof Y.Map)) return;
-                const taskIdsArray = columnMapValue.get('taskIds') as Y.Array<any>;
+                const taskIdsArray = columnMapValue.get('taskIds') as Y.Array<string>;
                 const taskIds = taskIdsArray.toArray() as string[];
                 const index = taskIds.indexOf(cardId);
                 if (index !== -1) {
@@ -78,11 +86,7 @@ export function CardSettingsDialog({isOpen, onClose, cardId, cardTitle, cardDesc
                         <div className="grid gap-4 py-4">
                             <div className="grid gap-2">
                                 <Label htmlFor="title">Title</Label>
-                                <Input
-                                    id="title"
-                                    value={title}
-                                    onChange={(e) => setTitle(e.target.value)}
-                                />
+                                <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)}/>
                             </div>
                             <div className="grid gap-2">
                                 <Label htmlFor="description">Description</Label>
@@ -95,8 +99,12 @@ export function CardSettingsDialog({isOpen, onClose, cardId, cardTitle, cardDesc
                             </div>
                             <div className="grid gap-2">
                                 <Label>Color</Label>
-                                <ColorPicker value={color} onChange={setColor} colors={EIGEN_STICKIES_COLORS}
-                                             columns={8}/>
+                                <ColorPicker
+                                    value={color}
+                                    onChange={setColor}
+                                    colors={EIGEN_STICKIES_COLORS}
+                                    columns={8}
+                                />
                             </div>
                         </div>
                         <DialogFooter>

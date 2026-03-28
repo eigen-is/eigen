@@ -1,41 +1,41 @@
-import {lazy, Suspense, useState} from "react";
-import {ErrorState, LoadingState} from "@workspace/ui";
-import {editorKeys, useFileContent} from "@workspace/lib/editor";
-import {useCheckWritePermission, useTextPreview} from "@workspace/lib/drive";
-import type {DrivePath} from "@workspace/lib/types/drive";
-import {useQueryClient} from "@tanstack/react-query";
-import {Column, ColumnLayout} from "@workspace/ui/components/layout/app/column-layout";
-import {DriveDetail, DriveDetailToolbar} from "@workspace/ui/components/layout/drive/drive-detail";
-import {useLayout} from "@workspace/ui/components/layout/app/layout-context";
-import {getDriveDownloadUrl} from "@workspace/lib/api";
-import {ViewToolbar} from "./editor-toolbar";
+import { useQueryClient } from '@tanstack/react-query';
+import { getDriveDownloadUrl } from '@workspace/lib/api';
+import { useCheckWritePermission, useTextPreview } from '@workspace/lib/drive';
+import { editorKeys, useFileContent } from '@workspace/lib/editor';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { ErrorState, LoadingState } from '@workspace/ui';
+import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout';
+import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
+import { DriveDetail, DriveDetailToolbar } from '@workspace/ui/components/layout/drive/drive-detail';
+import { lazy, Suspense, useState } from 'react';
+import { ViewToolbar } from './editor-toolbar';
 
-const MarkdownEditor = lazy(() => import("./markdown-editor").then(m => ({default: m.MarkdownEditor})));
-const CodeEditor = lazy(() => import("./code-editor").then(m => ({default: m.CodeEditor})));
+const MarkdownEditor = lazy(() => import('./markdown-editor').then((m) => ({ default: m.MarkdownEditor })));
+const CodeEditor = lazy(() => import('./code-editor').then((m) => ({ default: m.CodeEditor })));
 
 type NativeFileEditorProps = {
     path: DrivePath;
     onClose: () => void;
 };
 
-export function NativeFileEditor({path, onClose}: NativeFileEditorProps) {
+export function NativeFileEditor({ path, onClose }: NativeFileEditorProps) {
     const [editing, setEditing] = useState(false);
     const [reloadKey, setReloadKey] = useState(0);
-    const {data, isLoading, error} = useFileContent(path.ownerId, path.mountId, path.id);
-    const {data: writePermission} = useCheckWritePermission(path.ownerId, path.mountId, path.id);
+    const { data, isLoading, error } = useFileContent(path.ownerId, path.mountId, path.id);
+    const { data: writePermission } = useCheckWritePermission(path.ownerId, path.mountId, path.id);
     const canWrite = writePermission?.canWrite ?? false;
     const queryClient = useQueryClient();
-    const {isMobile} = useLayout();
-    const {data: preview} = useTextPreview(path.ownerId, path.mountId, path.id, !editing);
+    const { isMobile } = useLayout();
+    const { data: preview } = useTextPreview(path.ownerId, path.mountId, path.id, !editing);
 
     const handleReload = () => {
-        queryClient.invalidateQueries({queryKey: editorKeys.content(path.ownerId, path.mountId, path.id)});
-        setReloadKey(k => k + 1);
+        queryClient.invalidateQueries({ queryKey: editorKeys.content(path.ownerId, path.mountId, path.id) });
+        setReloadKey((k) => k + 1);
         setEditing(false);
     };
 
     const exitEditMode = () => {
-        setReloadKey(k => k + 1);
+        setReloadKey((k) => k + 1);
         setEditing(false);
     };
 
@@ -50,31 +50,36 @@ export function NativeFileEditor({path, onClose}: NativeFileEditorProps) {
     };
 
     if (isLoading && !preview) {
-        return <LoadingState/>;
+        return <LoadingState />;
     }
 
     if (error || (!data && !preview)) {
-        return <ErrorState detail={error?.message || 'Failed to load file'}/>;
+        return <ErrorState detail={error?.message || 'Failed to load file'} />;
     }
 
     const detailColumn = !isMobile && (
-        <Column id="detail" width="400px"
-                toolbar={<DriveDetailToolbar path={path} onDownload={handleDownload} allowDelete={false}/>}>
-            <DriveDetail path={path} onDownload={handleDownload}/>
+        <Column
+            id="detail"
+            width="400px"
+            toolbar={<DriveDetailToolbar path={path} onDownload={handleDownload} allowDelete={false} />}
+        >
+            <DriveDetail path={path} onDownload={handleDownload} />
         </Column>
     );
 
     if (!editing) {
-        const viewToolbar = <ViewToolbar path={path} canWrite={canWrite && !!data} onEdit={() => setEditing(true)} onClose={onClose}/>;
+        const viewToolbar = (
+            <ViewToolbar path={path} canWrite={canWrite && !!data} onEdit={() => setEditing(true)} onClose={onClose} />
+        );
         return (
             <ColumnLayout>
                 <Column id="list" width="flex" toolbar={viewToolbar}>
                     <div className="h-full overflow-auto">
                         <div className="w-full px-12 py-6 max-w-[52rem] mx-auto">
                             {preview?.body ? (
-                                <div className="eigen-prose" dangerouslySetInnerHTML={{__html: preview.body}}/>
+                                <div className="eigen-prose" dangerouslySetInnerHTML={{ __html: preview.body }} />
                             ) : (
-                                <LoadingState/>
+                                <LoadingState />
                             )}
                         </div>
                     </div>
@@ -101,11 +106,11 @@ export function NativeFileEditor({path, onClose}: NativeFileEditorProps) {
 
     return (
         <ColumnLayout>
-            <Suspense fallback={<LoadingState/>}>
+            <Suspense fallback={<LoadingState />}>
                 {data!.editMode === 'markdown' ? (
-                    <MarkdownEditor {...editorProps} frontmatter={data!.frontmatter ?? null}/>
+                    <MarkdownEditor {...editorProps} frontmatter={data!.frontmatter ?? null} />
                 ) : (
-                    <CodeEditor {...editorProps}/>
+                    <CodeEditor {...editorProps} />
                 )}
             </Suspense>
             {detailColumn}

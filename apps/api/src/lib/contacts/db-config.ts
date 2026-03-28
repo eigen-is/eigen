@@ -8,7 +8,8 @@ export const CONTACTS_DB_CONFIG: DatabaseConfig<typeof schema> = {
     migrations: [
         {
             version: 1,
-            up: (db) => db.exec(`
+            up: (db) =>
+                db.exec(`
                 CREATE TABLE IF NOT EXISTS contacts (
                     id TEXT PRIMARY KEY,
                     firstName TEXT NOT NULL,
@@ -37,7 +38,7 @@ export const CONTACTS_DB_CONFIG: DatabaseConfig<typeof schema> = {
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_contacts_eigenId ON contacts(eigenId);
-            `)
-        }
-    ]
+            `),
+        },
+    ],
 };

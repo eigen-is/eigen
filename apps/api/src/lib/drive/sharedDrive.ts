@@ -1,15 +1,15 @@
-import type {User} from "better-auth";
-import Drive from "./drive";
-import type {Home} from "../home";
-import type {DriveACL, DrivePath, DriveVisibility} from "@workspace/lib/types/drive";
-import type {MountInfo} from "@workspace/lib/types";
-import {parseOwnerId} from "@workspace/lib/types";
-import CollabDocument from "../collab/collabDocument.ts";
-import type {ChatRoom} from "../chat";
-import type {DatabaseConfig, ManagedDatabase, SchemaType} from "../core";
-import {ApiError} from "../core";
-import {getMemberships, type Memberships} from "../user/";
-import {canReadFromAncestors} from "./acl";
+import type { MountInfo } from '@workspace/lib/types';
+import { parseOwnerId } from '@workspace/lib/types';
+import type { DriveACL, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
+import type { User } from 'better-auth';
+import type { ChatRoom } from '../chat';
+import type CollabDocument from '../collab/collabDocument.ts';
+import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
+import { ApiError } from '../core';
+import type { Home } from '../home';
+import { getMemberships, type Memberships } from '../user/';
+import { canReadFromAncestors } from './acl';
+import Drive from './drive';
 
 export default class SharedDrive extends Drive {
     private sharedDrive: Drive;
@@ -44,14 +44,13 @@ export default class SharedDrive extends Drive {
     private async withParentWritePermission<T>(mountId: string, pathId: string, fn: () => Promise<T>): Promise<T> {
         const memberships = await this.getUserMemberships();
         const path = await this.sharedDrive.getPath(mountId, pathId);
-        if (path?.parentId && await this.canWrite(mountId, path.parentId, this.user, memberships)) {
+        if (path?.parentId && (await this.canWrite(mountId, path.parentId, this.user, memberships))) {
             return fn();
         }
         throw new ApiError(403, 'No write permission');
     }
 
-    public async init() {
-    }
+    public async init() {}
 
     public async listMounts(): Promise<MountInfo[]> {
         return this.sharedDrive.listMounts();
@@ -68,9 +67,12 @@ export default class SharedDrive extends Drive {
         return 0;
     }
 
-    public async getMimeTypeContents(mimeType: string, options?: {
-        excludeDocumentChildren?: boolean
-    }): Promise<DrivePath[]> {
+    public async getMimeTypeContents(
+        mimeType: string,
+        options?: {
+            excludeDocumentChildren?: boolean;
+        },
+    ): Promise<DrivePath[]> {
         const parsed = parseOwnerId(this.owner.id);
         if (parsed?.type === 'team') {
             const memberships = await this.getUserMemberships();
@@ -102,15 +104,26 @@ export default class SharedDrive extends Drive {
     }
 
     public async writeFileContent(mountId: string, pathId: string, data: Buffer) {
-        return this.withWritePermission(mountId, pathId, () => this.sharedDrive.writeFileContent(mountId, pathId, data));
+        return this.withWritePermission(mountId, pathId, () =>
+            this.sharedDrive.writeFileContent(mountId, pathId, data),
+        );
     }
 
     public async getEditableContent(mountId: string, pathId: string) {
         return this.withReadPermission(mountId, pathId, () => this.sharedDrive.getEditableContent(mountId, pathId));
     }
 
-    public async saveEditableContent(mountId: string, pathId: string, content: string, frontmatter: string | null, expectedUpdatedAt: string, force: boolean) {
-        return this.withWritePermission(mountId, pathId, () => this.sharedDrive.saveEditableContent(mountId, pathId, content, frontmatter, expectedUpdatedAt, force));
+    public async saveEditableContent(
+        mountId: string,
+        pathId: string,
+        content: string,
+        frontmatter: string | null,
+        expectedUpdatedAt: string,
+        force: boolean,
+    ) {
+        return this.withWritePermission(mountId, pathId, () =>
+            this.sharedDrive.saveEditableContent(mountId, pathId, content, frontmatter, expectedUpdatedAt, force),
+        );
     }
 
     public async getThumbnail(mountId: string, fileName: string) {
@@ -135,31 +148,50 @@ export default class SharedDrive extends Drive {
     }
 
     public async createFolder(mountId: string, parentId: string, folderName: string): Promise<DrivePath> {
-        return this.withWritePermission(mountId, parentId, () => this.sharedDrive.createFolder(mountId, parentId, folderName));
+        return this.withWritePermission(mountId, parentId, () =>
+            this.sharedDrive.createFolder(mountId, parentId, folderName),
+        );
     }
 
-    public async uploadFiles(mountId: string, parentId: string, request: Request, maxSize: number): Promise<DrivePath[]> {
-        return this.withWritePermission(mountId, parentId, () => this.sharedDrive.uploadFiles(mountId, parentId, request, maxSize));
+    public async uploadFiles(
+        mountId: string,
+        parentId: string,
+        request: Request,
+        maxSize: number,
+    ): Promise<DrivePath[]> {
+        return this.withWritePermission(mountId, parentId, () =>
+            this.sharedDrive.uploadFiles(mountId, parentId, request, maxSize),
+        );
     }
 
     public async createStickies(mountId: string, parentId: string, stickiesName: string): Promise<DrivePath> {
-        return this.withWritePermission(mountId, parentId, () => this.sharedDrive.createStickies(mountId, parentId, stickiesName));
+        return this.withWritePermission(mountId, parentId, () =>
+            this.sharedDrive.createStickies(mountId, parentId, stickiesName),
+        );
     }
 
     public async createSlides(mountId: string, parentId: string, slidesName: string): Promise<DrivePath> {
-        return this.withWritePermission(mountId, parentId, () => this.sharedDrive.createSlides(mountId, parentId, slidesName));
+        return this.withWritePermission(mountId, parentId, () =>
+            this.sharedDrive.createSlides(mountId, parentId, slidesName),
+        );
     }
 
     public async createSheets(mountId: string, parentId: string, sheetsName: string): Promise<DrivePath> {
-        return this.withWritePermission(mountId, parentId, () => this.sharedDrive.createSheets(mountId, parentId, sheetsName));
+        return this.withWritePermission(mountId, parentId, () =>
+            this.sharedDrive.createSheets(mountId, parentId, sheetsName),
+        );
     }
 
     public async createDoc(mountId: string, parentId: string, docName: string): Promise<DrivePath> {
-        return this.withWritePermission(mountId, parentId, () => this.sharedDrive.createDoc(mountId, parentId, docName));
+        return this.withWritePermission(mountId, parentId, () =>
+            this.sharedDrive.createDoc(mountId, parentId, docName),
+        );
     }
 
     public async createChat(mountId: string, parentId: string, chatName: string): Promise<DrivePath> {
-        return this.withWritePermission(mountId, parentId, () => this.sharedDrive.createChat(mountId, parentId, chatName));
+        return this.withWritePermission(mountId, parentId, () =>
+            this.sharedDrive.createChat(mountId, parentId, chatName),
+        );
     }
 
     public async getChat(mountId: string, chatId: string): Promise<ChatRoom> {
@@ -167,7 +199,9 @@ export default class SharedDrive extends Drive {
     }
 
     public async getChildByName(mountId: string, parentId: string, name: string): Promise<DrivePath | null> {
-        return this.withReadPermission(mountId, parentId, () => this.sharedDrive.getChildByName(mountId, parentId, name));
+        return this.withReadPermission(mountId, parentId, () =>
+            this.sharedDrive.getChildByName(mountId, parentId, name),
+        );
     }
 
     public async getEffectiveMembers(mountId: string, pathId: string) {
@@ -175,12 +209,27 @@ export default class SharedDrive extends Drive {
     }
 
     public async emailCollaborators(
-        mountId: string, pathId: string,
-        subject: string, message: string, documentUrl: string,
-        sendCopyToSelf: boolean, senderEmail: string, senderName: string,
+        mountId: string,
+        pathId: string,
+        subject: string,
+        message: string,
+        documentUrl: string,
+        sendCopyToSelf: boolean,
+        senderEmail: string,
+        senderName: string,
     ) {
         return this.withWritePermission(mountId, pathId, () =>
-            this.sharedDrive.emailCollaborators(mountId, pathId, subject, message, documentUrl, sendCopyToSelf, senderEmail, senderName));
+            this.sharedDrive.emailCollaborators(
+                mountId,
+                pathId,
+                subject,
+                message,
+                documentUrl,
+                sendCopyToSelf,
+                senderEmail,
+                senderName,
+            ),
+        );
     }
 
     public async findContainerPath(mountId: string, pathId: string): Promise<DrivePath | null> {
@@ -212,7 +261,13 @@ export default class SharedDrive extends Drive {
         return this.sharedDrive.inviteToChat(mountId, chatId, email);
     }
 
-    public async updateACL(mountId: string, pathId: string, acl: DriveACL[], visibility?: DriveVisibility, sharingRestricted?: boolean) {
+    public async updateACL(
+        mountId: string,
+        pathId: string,
+        acl: DriveACL[],
+        visibility?: DriveVisibility,
+        sharingRestricted?: boolean,
+    ) {
         const memberships = await this.getUserMemberships();
         if (!(await this.canWrite(mountId, pathId, this.user, memberships))) {
             throw new ApiError(403, 'No write permission');
@@ -227,8 +282,13 @@ export default class SharedDrive extends Drive {
             throw new ApiError(403, 'Sharing is restricted by the owner');
         }
 
-        return this.sharedDrive.updateACL(mountId, pathId, acl, visibility,
-            effectiveOwner ? sharingRestricted : undefined);
+        return this.sharedDrive.updateACL(
+            mountId,
+            pathId,
+            acl,
+            visibility,
+            effectiveOwner ? sharingRestricted : undefined,
+        );
     }
 
     public async deleteFolder(mountId: string, pathId: string) {
@@ -240,7 +300,9 @@ export default class SharedDrive extends Drive {
     }
 
     public async renamePath(mountId: string, pathId: string, newName: string) {
-        return this.withParentWritePermission(mountId, pathId, () => this.sharedDrive.renamePath(mountId, pathId, newName));
+        return this.withParentWritePermission(mountId, pathId, () =>
+            this.sharedDrive.renamePath(mountId, pathId, newName),
+        );
     }
 
     public async movePath(mountId: string, pathId: string, targetParentId: string): Promise<DrivePath> {
@@ -275,7 +337,7 @@ export default class SharedDrive extends Drive {
     public async openDatabase<S extends SchemaType>(
         mountId: string,
         config: DatabaseConfig<S>,
-        pathId: string
+        pathId: string,
     ): Promise<ManagedDatabase<S>> {
         return this.sharedDrive.openDatabase(mountId, config, pathId);
     }

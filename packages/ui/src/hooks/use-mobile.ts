@@ -1,1 +1,1 @@
-export * from "@workspace/lib/media";
+export * from '@workspace/lib/media';

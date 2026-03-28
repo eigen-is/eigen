@@ -1,1 +1,1 @@
-export * from "./preview-provider"
+export * from './preview-provider';

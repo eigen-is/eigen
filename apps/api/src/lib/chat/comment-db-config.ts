@@ -5,9 +5,11 @@ export const COMMENT_INDEX_DB_CONFIG: DatabaseConfig<typeof commentSchema> = {
     name: 'comment-index',
     currentVersion: 1,
     schema: commentSchema,
-    migrations: [{
-        version: 1,
-        up: (db) => db.exec(`
+    migrations: [
+        {
+            version: 1,
+            up: (db) =>
+                db.exec(`
             CREATE TABLE IF NOT EXISTS comments
             (
                 chatName
@@ -63,6 +65,7 @@ export const COMMENT_INDEX_DB_CONFIG: DatabaseConfig<typeof commentSchema> = {
             )
                 );
             CREATE INDEX IF NOT EXISTS idx_mentions_email ON comment_mentions(email);
-        `)
-    }]
+        `),
+        },
+    ],
 };

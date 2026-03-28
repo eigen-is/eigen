@@ -1,9 +1,9 @@
+import {parseOwnerId, teamOwnerId} from '@workspace/lib/types';
+import type {CalendarShare} from '@workspace/lib/types/calendar';
 import type {User} from 'better-auth/types';
+import {ApiError} from '../core';
 import {getHome} from '../home';
 import {getMemberships} from '../user';
-import {parseOwnerId, teamOwnerId} from '@workspace/lib/types';
-import {ApiError} from '../core';
-import type {CalendarShare} from '@workspace/lib/types/calendar';
 import type {Calendar} from './calendar';
 
 type CalendarAccess = {
@@ -23,7 +23,11 @@ export async function resolveCalendar(user: User, ownerId: string) {
     return home.calendar;
 }
 
-export async function resolveCalendarForEvents(user: User, ownerId: string, calendarId: string): Promise<CalendarAccess> {
+export async function resolveCalendarForEvents(
+    user: User,
+    ownerId: string,
+    calendarId: string,
+): Promise<CalendarAccess> {
     const parsed = parseOwnerId(ownerId);
 
     if (parsed.type === 'team') {

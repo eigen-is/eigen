@@ -1,17 +1,17 @@
-import * as Y from "yjs";
-import * as awarenessProtocol from "y-protocols/awareness";
-import * as syncProtocol from "y-protocols/sync";
-import {type ServerWebSocket} from "bun";
-import * as encoding from "lib0/encoding";
-import * as decoding from "lib0/decoding";
-import {desc, eq, gt, lt, lte} from "drizzle-orm";
-import type {DrivePath} from "@workspace/lib/types/drive";
-import type {Drive} from "../drive";
-import type {ManagedDatabase} from "../core";
-import {COLLAB_DB_CONFIG} from "./db-config";
-import * as schema from "./schema.ts";
-import type {User} from "better-auth/types";
-import type {BunSQLiteDatabase} from "drizzle-orm/bun-sqlite";
+import type {DrivePath} from '@workspace/lib/types/drive';
+import type {User} from 'better-auth/types';
+import type {ServerWebSocket} from 'bun';
+import {desc, eq, gt, lt, lte} from 'drizzle-orm';
+import type {BunSQLiteDatabase} from 'drizzle-orm/bun-sqlite';
+import * as decoding from 'lib0/decoding';
+import * as encoding from 'lib0/encoding';
+import * as awarenessProtocol from 'y-protocols/awareness';
+import * as syncProtocol from 'y-protocols/sync';
+import * as Y from 'yjs';
+import type {ManagedDatabase} from '../core';
+import type {Drive} from '../drive';
+import {COLLAB_DB_CONFIG} from './db-config';
+import * as schema from './schema.ts';
 
 const MESSAGE_SYNC = 0;
 const MESSAGE_AWARENESS = 1;
@@ -41,31 +41,27 @@ class DbProvider {
 
     private loadState(): void {
         this.db.transaction((tx) => {
-            const snapshot = tx.select().from(schema.docSnapshots)
-                .orderBy(desc(schema.docSnapshots.id))
-                .limit(1)
-                .get();
+            const snapshot = tx.select().from(schema.docSnapshots).orderBy(desc(schema.docSnapshots.id)).limit(1).get();
 
             let loadedSnapshot = false;
             if (snapshot) {
                 try {
                     Y.applyUpdate(this.doc, snapshot.stateData as Uint8Array);
                     loadedSnapshot = true;
-                } catch (error) {
+                } catch (_error) {
                     console.error(`[DbProvider] Corrupted snapshot for ${this.docId}, loading all updates instead`);
                 }
             }
 
-            const updates = loadedSnapshot && snapshot
-                ? tx.select().from(schema.docUpdates)
-                    .where(gt(schema.docUpdates.id, snapshot.lastUpdateId))
-                    .all()
-                : tx.select().from(schema.docUpdates).all();
+            const updates =
+                loadedSnapshot && snapshot
+                    ? tx.select().from(schema.docUpdates).where(gt(schema.docUpdates.id, snapshot.lastUpdateId)).all()
+                    : tx.select().from(schema.docUpdates).all();
 
             for (const update of updates) {
                 try {
                     Y.applyUpdate(this.doc, update.updateData as Uint8Array);
-                } catch (error) {
+                } catch (_error) {
                     console.error(`[DbProvider] Skipping corrupted update ${update.id} for ${this.docId}`);
                 }
             }
@@ -75,9 +71,12 @@ class DbProvider {
 
     private storeUpdate(update: Uint8Array): void {
         try {
-            this.db.insert(schema.docUpdates).values({
-                updateData: Buffer.from(update)
-            }).run();
+            this.db
+                .insert(schema.docUpdates)
+                .values({
+                    updateData: Buffer.from(update),
+                })
+                .run();
             this.updatesSinceSnapshot++;
 
             if (this.updatesSinceSnapshot >= SNAPSHOT_INTERVAL) {
@@ -93,31 +92,33 @@ class DbProvider {
             const stateData = Buffer.from(Y.encodeStateAsUpdate(this.doc));
 
             this.db.transaction((tx) => {
-                const lastUpdate = tx.select({id: schema.docUpdates.id}).from(schema.docUpdates)
+                const lastUpdate = tx
+                    .select({id: schema.docUpdates.id})
+                    .from(schema.docUpdates)
                     .orderBy(desc(schema.docUpdates.id))
                     .limit(1)
                     .get();
 
                 if (!lastUpdate) return;
 
-                tx.insert(schema.docSnapshots).values({
-                    stateData,
-                    lastUpdateId: lastUpdate.id,
-                }).run();
-
-                tx.delete(schema.docUpdates)
-                    .where(lte(schema.docUpdates.id, lastUpdate.id))
+                tx.insert(schema.docSnapshots)
+                    .values({
+                        stateData,
+                        lastUpdateId: lastUpdate.id,
+                    })
                     .run();
 
-                const allSnapshots = tx.select({id: schema.docSnapshots.id}).from(schema.docSnapshots)
+                tx.delete(schema.docUpdates).where(lte(schema.docUpdates.id, lastUpdate.id)).run();
+
+                const allSnapshots = tx
+                    .select({id: schema.docSnapshots.id})
+                    .from(schema.docSnapshots)
                     .orderBy(desc(schema.docSnapshots.id))
                     .all();
 
                 if (allSnapshots.length > MAX_REVISIONS) {
                     const cutoffId = allSnapshots[MAX_REVISIONS - 1].id;
-                    tx.delete(schema.docSnapshots)
-                        .where(lt(schema.docSnapshots.id, cutoffId))
-                        .run();
+                    tx.delete(schema.docSnapshots).where(lt(schema.docSnapshots.id, cutoffId)).run();
                 }
             });
 
@@ -128,16 +129,20 @@ class DbProvider {
     }
 
     getRevisions(): { id: number; createdAt: Date | null }[] {
-        return this.db.select({
-            id: schema.docSnapshots.id,
-            createdAt: schema.docSnapshots.createdAt,
-        }).from(schema.docSnapshots)
+        return this.db
+            .select({
+                id: schema.docSnapshots.id,
+                createdAt: schema.docSnapshots.createdAt,
+            })
+            .from(schema.docSnapshots)
             .orderBy(desc(schema.docSnapshots.id))
             .all();
     }
 
     getRevisionState(revisionId: number): Uint8Array | null {
-        const snapshot = this.db.select({stateData: schema.docSnapshots.stateData}).from(schema.docSnapshots)
+        const snapshot = this.db
+            .select({stateData: schema.docSnapshots.stateData})
+            .from(schema.docSnapshots)
             .where(eq(schema.docSnapshots.id, revisionId))
             .get();
         return snapshot ? (snapshot.stateData as Uint8Array) : null;
@@ -155,15 +160,14 @@ export default class CollabDocument {
     private doc!: Y.Doc;
     private provider!: DbProvider;
     private awareness!: awarenessProtocol.Awareness;
-    private connections: Set<ServerWebSocket<any>> = new Set();
-    private connectionClientIds: Map<ServerWebSocket<any>, Set<number>> = new Map();
+    private connections: Set<ServerWebSocket<undefined>> = new Set();
+    private connectionClientIds: Map<ServerWebSocket<undefined>, Set<number>> = new Map();
     private closed: boolean = false;
     public dataDbPathId: string | null = null;
 
     constructor(drive: Drive, path: DrivePath) {
         this.drive = drive;
         this.path = path;
-
     }
 
     static async create(drive: Drive, mountId: string, docId: string): Promise<void> {
@@ -197,7 +201,7 @@ export default class CollabDocument {
             syncProtocol.writeUpdate(encoder, update);
             const message = encoding.toUint8Array(encoder);
             if (origin && typeof origin === 'object' && 'readyState' in origin) {
-                this.broadcastMessage(origin as ServerWebSocket<any>, message);
+                this.broadcastMessage(origin as ServerWebSocket<undefined>, message);
             } else {
                 for (const conn of this.connections) {
                     if (conn.readyState === 1) conn.send(Buffer.from(message));
@@ -205,19 +209,28 @@ export default class CollabDocument {
             }
         });
 
-        this.awareness.on('update', ({added, updated, removed}: {added: number[], updated: number[], removed: number[]}, origin: unknown) => {
-            const changedClients = added.concat(updated, removed);
-            if (changedClients.length === 0) return;
-            const encoder = encoding.createEncoder();
-            encoding.writeVarUint(encoder, MESSAGE_AWARENESS);
-            encoding.writeVarUint8Array(encoder, awarenessProtocol.encodeAwarenessUpdate(this.awareness, changedClients));
-            const message = encoding.toUint8Array(encoder);
-            for (const conn of this.connections) {
-                if (conn !== origin && conn.readyState === 1) {
-                    conn.send(Buffer.from(message));
+        this.awareness.on(
+            'update',
+            (
+                {added, updated, removed}: { added: number[]; updated: number[]; removed: number[] },
+                origin: unknown,
+            ) => {
+                const changedClients = added.concat(updated, removed);
+                if (changedClients.length === 0) return;
+                const encoder = encoding.createEncoder();
+                encoding.writeVarUint(encoder, MESSAGE_AWARENESS);
+                encoding.writeVarUint8Array(
+                    encoder,
+                    awarenessProtocol.encodeAwarenessUpdate(this.awareness, changedClients),
+                );
+                const message = encoding.toUint8Array(encoder);
+                for (const conn of this.connections) {
+                    if (conn !== origin && conn.readyState === 1) {
+                        conn.send(Buffer.from(message));
+                    }
                 }
-            }
-        });
+            },
+        );
 
         return this;
     }
@@ -242,7 +255,7 @@ export default class CollabDocument {
         this.doc.destroy();
     }
 
-    public subscribe(_user: User, conn: ServerWebSocket<any>) {
+    public subscribe(_user: User, conn: ServerWebSocket<undefined>) {
         if (this.closed) {
             return;
         }
@@ -250,7 +263,7 @@ export default class CollabDocument {
         this.sendSyncStep1(conn);
     }
 
-    public unsubscribe(_user: User, conn: ServerWebSocket<any>) {
+    public unsubscribe(_user: User, conn: ServerWebSocket<undefined>) {
         if (this.closed) {
             return;
         }
@@ -263,7 +276,8 @@ export default class CollabDocument {
         this.connectionClientIds.delete(conn);
 
         for (const connection of this.connections) {
-            if (connection.readyState > 1) { // CLOSING or CLOSED
+            if (connection.readyState > 1) {
+                // CLOSING or CLOSED
                 this.connections.delete(connection);
                 const staleIds = this.connectionClientIds.get(connection);
                 if (staleIds && staleIds.size > 0) {
@@ -278,7 +292,7 @@ export default class CollabDocument {
         }
     }
 
-    public handleMessage(conn: ServerWebSocket<any>, update: Uint8Array, canWrite: boolean) {
+    public handleMessage(conn: ServerWebSocket<undefined>, update: Uint8Array, canWrite: boolean) {
         if (this.closed) {
             return;
         }
@@ -298,12 +312,7 @@ export default class CollabDocument {
             encoding.writeVarUint(encoder, MESSAGE_SYNC);
 
             // Process sync message
-            syncProtocol.readSyncMessage(
-                decoder,
-                encoder,
-                this.doc,
-                conn
-            );
+            syncProtocol.readSyncMessage(decoder, encoder, this.doc, conn);
 
             // Only send a response if we have content beyond the message type
             if (encoding.length(encoder) > 1) {
@@ -315,11 +324,7 @@ export default class CollabDocument {
         } else if (messageType === MESSAGE_AWARENESS) {
             // Process awareness message
             const awarenessUpdate = decoding.readVarUint8Array(decoder);
-            awarenessProtocol.applyAwarenessUpdate(
-                this.awareness,
-                awarenessUpdate,
-                conn
-            );
+            awarenessProtocol.applyAwarenessUpdate(this.awareness, awarenessUpdate, conn);
 
             // Track which clientIds belong to this connection
             try {
@@ -340,22 +345,20 @@ export default class CollabDocument {
             const encoder = encoding.createEncoder();
             encoding.writeVarUint(encoder, MESSAGE_AWARENESS);
             encoding.writeVarUint8Array(encoder, awarenessUpdate);
-            this.broadcastMessage(
-                conn,
-                encoding.toUint8Array(encoder)
-            );
+            this.broadcastMessage(conn, encoding.toUint8Array(encoder));
         } else {
             console.warn(`Unknown message type: ${messageType}`);
         }
     }
 
     // Helper function to broadcast a message to all clients
-    private broadcastMessage(originConn: ServerWebSocket<any>, message: Uint8Array) {
+    private broadcastMessage(originConn: ServerWebSocket<undefined>, message: Uint8Array) {
         if (this.closed) {
             return;
         }
         for (const conn of this.connections) {
-            if (conn !== originConn && conn.readyState === 1) { // OPEN
+            if (conn !== originConn && conn.readyState === 1) {
+                // OPEN
                 try {
                     conn.send(Buffer.from(message));
                 } catch (err) {
@@ -365,8 +368,8 @@ export default class CollabDocument {
         }
     }
 
-// Helper function to send full document state to a client
-    private sendSyncStep1(conn: ServerWebSocket<any>) {
+    // Helper function to send full document state to a client
+    private sendSyncStep1(conn: ServerWebSocket<undefined>) {
         if (this.closed) {
             return;
         }
@@ -387,10 +390,7 @@ export default class CollabDocument {
                 encoding.writeVarUint(awarenessEncoder, MESSAGE_AWARENESS);
                 encoding.writeVarUint8Array(
                     awarenessEncoder,
-                    awarenessProtocol.encodeAwarenessUpdate(
-                        this.awareness,
-                        Array.from(awarenessStates.keys())
-                    )
+                    awarenessProtocol.encodeAwarenessUpdate(this.awareness, Array.from(awarenessStates.keys())),
                 );
 
                 const awarenessMessage = encoding.toUint8Array(awarenessEncoder);

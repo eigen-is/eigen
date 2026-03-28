@@ -1,6 +1,6 @@
-import * as path from "path";
-import * as fs from "node:fs";
-import {isProduction} from './env';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import { isProduction } from './env';
 
 function getDataRoot(): string {
     const envRoot = process.env['EIGEN_DATA_ROOT'];
@@ -9,7 +9,7 @@ function getDataRoot(): string {
     if (isProduction()) {
         throw new Error(
             'EIGEN_DATA_ROOT environment variable is required in production. ' +
-            'Set it to the absolute path of your data directory (e.g. /home/user/eigen/data).'
+                'Set it to the absolute path of your data directory (e.g. /home/user/eigen/data).',
         );
     }
 
@@ -19,7 +19,7 @@ function getDataRoot(): string {
 export function getServerDataPath(filename?: string): string {
     const serverData = path.join(getDataRoot(), 'server');
     if (!fs.existsSync(serverData)) {
-        fs.mkdirSync(serverData, {recursive: true});
+        fs.mkdirSync(serverData, { recursive: true });
     }
     return filename ? path.join(serverData, filename) : serverData;
 }

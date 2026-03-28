@@ -58,23 +58,23 @@ export const SSEventType = {
 // --- Event data types (minimal — only what frontend handlers need for cache invalidation) ---
 
 type SSEventDrive = {
-    type: typeof SSEventType[keyof typeof SSEventType] & `drive:${string}`;
+    type: (typeof SSEventType)[keyof typeof SSEventType] & `drive:${string}`;
     path: { ownerId: string; mountId: string; id: string; parentId: string | null; mimeType: string | null };
     oldParentId?: string;
 };
 
 type SSEventMail = {
-    type: typeof SSEventType[keyof typeof SSEventType] & `mail:${string}`;
+    type: (typeof SSEventType)[keyof typeof SSEventType] & `mail:${string}`;
     mail: { messageId: string; mailbox: string; toMailbox?: string };
 };
 
 type SSEventCalendar = {
-    type: typeof SSEventType[keyof typeof SSEventType] & `calendar:${string}`;
+    type: (typeof SSEventType)[keyof typeof SSEventType] & `calendar:${string}`;
     ownerId: string;
 };
 
 type SSEventChat = {
-    type: typeof SSEventType[keyof typeof SSEventType] & `chat:${string}`;
+    type: (typeof SSEventType)[keyof typeof SSEventType] & `chat:${string}`;
     chat: { chatId: string; ownerId: string; mountId: string };
 };
 
@@ -116,13 +116,13 @@ export type SSEvent =
     | SSEventTeam;
 
 export type {
-    SSEventDrive,
-    SSEventMail,
     SSEventCalendar,
     SSEventChat,
     SSEventContact,
+    SSEventDrive,
     SSEventLabel,
+    SSEventMail,
     SSEventNotificationCreated,
     SSEventSpace,
-    SSEventTeam
+    SSEventTeam,
 };

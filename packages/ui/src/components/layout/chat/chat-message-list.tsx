@@ -1,20 +1,20 @@
+import {getDriveDownloadUrl, getDriveThumbnailUrl} from '@workspace/lib/api';
+import {useContacts} from '@workspace/lib/contacts';
+import {formatTime} from '@workspace/lib/date';
+import {useFolderLookup} from '@workspace/lib/drive';
+import {usePublicUser} from '@workspace/lib/public';
+import type {ChatMessage} from '@workspace/lib/types/chat';
+import type {Contact} from '@workspace/lib/types/contact';
+import {EMAIL_FIND_REGEX} from '@workspace/lib/validation';
+import {UserItem} from '@workspace/ui/components/layout/user-item';
+import {Paperclip} from 'lucide-react';
 import {type ReactNode, useCallback, useEffect, useRef} from 'react';
-import {UserAvatar} from "../user-avatar";
-import {EigenLoader} from "../braket/eigen-loader.tsx";
-import {LoadingState} from "../app/loading-state";
-import {cn} from "../../../lib/utils";
-import {usePublicUser} from "@workspace/lib/public";
-import {useContacts} from "@workspace/lib/contacts";
-import {Paperclip} from "lucide-react";
-import {useFolderLookup} from "@workspace/lib/drive";
-import {getDriveDownloadUrl, getDriveThumbnailUrl} from "@workspace/lib/api";
-import {HoverCard, HoverCardContent, HoverCardTrigger} from "../../../components/hover-card";
-import {usePreview} from "../preview-provider";
-import {formatTime} from "@workspace/lib/date";
-import {EMAIL_FIND_REGEX} from "@workspace/lib/validation";
-import type {ChatMessage} from "@workspace/lib/types/chat";
-import type {Contact} from "@workspace/lib/types/contact";
-import {UserItem} from "@workspace/ui/components/layout/user-item";
+import {HoverCard, HoverCardContent, HoverCardTrigger} from '../../../components/hover-card';
+import {cn} from '../../../lib/utils';
+import {LoadingState} from '../app/loading-state';
+import {EigenLoader} from '../braket/eigen-loader.tsx';
+import {usePreview} from '../preview-provider';
+import {UserAvatar} from '../user-avatar';
 
 type ChatMessageListProps = {
     messages: ChatMessage[];
@@ -28,7 +28,7 @@ type ChatMessageListProps = {
     hasOlderMessages?: boolean;
     isFetchingOlderMessages?: boolean;
     onLoadMore?: () => void;
-}
+};
 
 function isSameAuthorAndClose(prev: ChatMessage, curr: ChatMessage): boolean {
     if (prev.authorId !== curr.authorId) return false;
@@ -36,7 +36,17 @@ function isSameAuthorAndClose(prev: ChatMessage, curr: ChatMessage): boolean {
     return diff < 5 * 60 * 1000;
 }
 
-function AttachmentChip({fileName, ownerId, mountId, mediaFolderId}: { fileName: string; ownerId: string; mountId: string; mediaFolderId: string }) {
+function AttachmentChip({
+                            fileName,
+                            ownerId,
+                            mountId,
+                            mediaFolderId,
+                        }: {
+    fileName: string;
+    ownerId: string;
+    mountId: string;
+    mediaFolderId: string;
+}) {
     const {findByName} = useFolderLookup(ownerId, mountId, mediaFolderId);
     const fileInfo = findByName(fileName);
     const {openPreview} = usePreview();
@@ -122,8 +132,15 @@ function RichContent({text, className}: { text: string; className?: string }) {
             parts.push(<InlineEmail key={token.index} email={token.value}/>);
         } else {
             parts.push(
-                <a key={token.index} href={token.value} target="_blank" rel="noopener noreferrer"
-                   className="text-primary hover:underline break-all">{token.value}</a>
+                <a
+                    key={token.index}
+                    href={token.value}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline break-all"
+                >
+                    {token.value}
+                </a>,
             );
         }
         lastIdx = token.end;
@@ -136,9 +153,7 @@ function RichContent({text, className}: { text: string; className?: string }) {
 
 function InspectCard({target}: { target: string }) {
     const {data: contacts = []} = useContacts();
-    const contact = (contacts as Contact[]).find(c =>
-        c.email?.some(e => e.toLowerCase() === target.toLowerCase())
-    );
+    const contact = (contacts as Contact[]).find((c) => c.email?.some((e) => e.toLowerCase() === target.toLowerCase()));
 
     return (
         <div className="flex gap-4 p-4 rounded-lg border bg-card max-w-sm">
@@ -147,7 +162,10 @@ function InspectCard({target}: { target: string }) {
             </div>
             <div className="flex-1 min-w-0 space-y-1">
                 {contact?.company && (
-                    <p className="text-xs text-muted-foreground">{contact.jobTitle ? `${contact.jobTitle} at ` : ''}{contact.company}</p>
+                    <p className="text-xs text-muted-foreground">
+                        {contact.jobTitle ? `${contact.jobTitle} at ` : ''}
+                        {contact.company}
+                    </p>
                 )}
                 {contact?.phone && contact.phone.length > 0 && contact.phone[0] && (
                     <p className="text-xs text-muted-foreground">{contact.phone[0]}</p>
@@ -230,14 +248,14 @@ export function ChatMessageList({
 
     if (messages.length === 0) {
         return (
-            <div className={cn("flex items-center justify-center flex-1", className)}>
+            <div className={cn('flex items-center justify-center flex-1', className)}>
                 <p className="text-sm text-muted-foreground">{emptyMessage}</p>
             </div>
         );
     }
 
     return (
-        <div ref={scrollRef} className={cn("flex-1 overflow-y-auto", className)}>
+        <div ref={scrollRef} className={cn('flex-1 overflow-y-auto', className)}>
             {isFetchingOlderMessages && (
                 <div className="flex justify-center py-3">
                     <EigenLoader/>
@@ -249,7 +267,12 @@ export function ChatMessageList({
                 const isSystem = message.type === 'system';
                 const isDeleted = !!message.deletedAt;
                 const prev = i > 0 ? messages[i - 1] : null;
-                const grouped = prev && !isSystem && !prev.deletedAt && prev.type !== 'system' && isSameAuthorAndClose(prev, message);
+                const grouped =
+                    prev &&
+                    !isSystem &&
+                    !prev.deletedAt &&
+                    prev.type !== 'system' &&
+                    isSameAuthorAndClose(prev, message);
 
                 if (isSystem) {
                     if (message.content.startsWith('inspect:')) {
@@ -264,7 +287,9 @@ export function ChatMessageList({
                     return (
                         <div key={message.id} className="flex gap-3 px-5 py-2">
                             <div className="w-9 shrink-0"/>
-                            <p className="text-sm text-muted-foreground italic whitespace-pre-wrap">{message.content}</p>
+                            <p className="text-sm text-muted-foreground italic whitespace-pre-wrap">
+                                {message.content}
+                            </p>
                         </div>
                     );
                 }
@@ -273,7 +298,7 @@ export function ChatMessageList({
 
                 if (isEmote && !isDeleted) {
                     return (
-                        <div key={message.id} className={cn("flex gap-3 px-5", grouped ? "py-1" : "pt-3")}>
+                        <div key={message.id} className={cn('flex gap-3 px-5', grouped ? 'py-1' : 'pt-3')}>
                             <div className="w-9 shrink-0 pt-0.5">
                                 {!grouped ? (
                                     <UserAvatar
@@ -292,8 +317,9 @@ export function ChatMessageList({
                                 {!grouped && (
                                     <div className="flex items-baseline gap-2">
                                         <span className="text-sm font-bold text-foreground">{displayName}</span>
-                                        <span
-                                            className="text-xs text-muted-foreground">{formatTime(message.createdAt)}</span>
+                                        <span className="text-xs text-muted-foreground">
+                                            {formatTime(message.createdAt)}
+                                        </span>
                                     </div>
                                 )}
                                 <RichContent
@@ -310,9 +336,9 @@ export function ChatMessageList({
                         <div
                             key={message.id}
                             className={cn(
-                                "flex gap-3 px-5 hover:bg-primary/10 transition-colors",
-                                grouped ? "pt-0.5" : "pt-3",
-                                "bg-primary/5"
+                                'flex gap-3 px-5 hover:bg-primary/10 transition-colors',
+                                grouped ? 'pt-0.5' : 'pt-3',
+                                'bg-primary/5',
                             )}
                         >
                             <div className="w-9 shrink-0 pt-0.5">
@@ -329,8 +355,9 @@ export function ChatMessageList({
                                 {!grouped && (
                                     <div className="flex items-baseline gap-2">
                                         <span className="text-sm font-bold text-foreground">{displayName}</span>
-                                        <span
-                                            className="text-xs text-muted-foreground">{formatTime(message.createdAt)}</span>
+                                        <span className="text-xs text-muted-foreground">
+                                            {formatTime(message.createdAt)}
+                                        </span>
                                         <span className="text-xs text-primary font-medium italic">whisper</span>
                                     </div>
                                 )}
@@ -347,8 +374,8 @@ export function ChatMessageList({
                     <div
                         key={message.id}
                         className={cn(
-                            "flex gap-3 px-5 hover:bg-muted/50 transition-colors",
-                            grouped ? "pt-0.5" : "pt-3",
+                            'flex gap-3 px-5 hover:bg-muted/50 transition-colors',
+                            grouped ? 'pt-0.5' : 'pt-3',
                         )}
                     >
                         <div className="w-9 shrink-0 pt-0.5">
@@ -364,9 +391,7 @@ export function ChatMessageList({
                         <div className="flex-1 min-w-0 pb-1">
                             {!grouped && (
                                 <div className="flex items-baseline gap-2">
-                                    <span className="text-sm font-bold text-foreground">
-                                        {displayName}
-                                    </span>
+                                    <span className="text-sm font-bold text-foreground">{displayName}</span>
                                     <span className="text-xs text-muted-foreground">
                                         {formatTime(message.createdAt)}
                                     </span>
@@ -383,13 +408,24 @@ export function ChatMessageList({
                                     className="text-sm text-foreground whitespace-pre-wrap break-words"
                                 />
                             )}
-                            {message.attachments && message.attachments.length > 0 && !isDeleted && ownerId && mountId && mediaFolderId && (
-                                <div className="flex flex-wrap gap-2 mt-1">
-                                    {message.attachments.map((name) => (
-                                        <AttachmentChip key={name} fileName={name} ownerId={ownerId} mountId={mountId} mediaFolderId={mediaFolderId}/>
-                                    ))}
-                                </div>
-                            )}
+                            {message.attachments &&
+                                message.attachments.length > 0 &&
+                                !isDeleted &&
+                                ownerId &&
+                                mountId &&
+                                mediaFolderId && (
+                                    <div className="flex flex-wrap gap-2 mt-1">
+                                        {message.attachments.map((name) => (
+                                            <AttachmentChip
+                                                key={name}
+                                                fileName={name}
+                                                ownerId={ownerId}
+                                                mountId={mountId}
+                                                mediaFolderId={mediaFolderId}
+                                            />
+                                        ))}
+                                    </div>
+                                )}
                         </div>
                     </div>
                 );

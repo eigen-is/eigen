@@ -1,15 +1,15 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
-import {MembersList, MembersListToolbar} from '../components/people/members-list';
-import {MemberDetail, MemberDetailToolbar} from '../components/people/member-detail';
 import {usePeopleMembers} from '@workspace/lib/people';
 import {usePublicConfig} from '@workspace/lib/public';
-import {Column, ColumnLayout} from '@workspace/ui/components/layout/app/column-layout.tsx';
 import {EmptyState, LoadingState} from '@workspace/ui';
+import {Column, ColumnLayout} from '@workspace/ui/components/layout/app/column-layout.tsx';
 import {useState} from 'react';
+import {MemberDetail, MemberDetailToolbar} from '../components/people/member-detail';
+import {MembersList, MembersListToolbar} from '../components/people/members-list';
 
 type MembersSearch = {
     memberId?: string;
-}
+};
 
 export const Route = createFileRoute('/_auth/members')({
     component: MembersRoute,
@@ -27,7 +27,7 @@ function MembersRoute() {
     const {data: config} = usePublicConfig();
     const {data: members = [], isLoading} = usePeopleMembers(config?.orgId);
 
-    const member = members.find(m => m.id === memberId);
+    const member = members.find((m) => m.id === memberId);
 
     const handleBackToList = () => {
         navigate({to: '/members', search: {}});
@@ -51,9 +51,7 @@ function MembersRoute() {
         />
     );
 
-    const detailToolbar = member ? (
-        <MemberDetailToolbar member={member} organizationId={config?.orgId}/>
-    ) : null;
+    const detailToolbar = member ? <MemberDetailToolbar member={member} organizationId={config?.orgId}/> : null;
 
     return (
         <ColumnLayout mobileColumn={memberId ? 'detail' : 'list'}>

@@ -1,14 +1,14 @@
-import {lazy, Suspense} from 'react'
-import {createRootRouteWithContext, Outlet} from '@tanstack/react-router'
-import type {AuthContextType} from "@workspace/lib/auth";
+import {createRootRouteWithContext, Outlet} from '@tanstack/react-router';
+import type {AuthContextType} from '@workspace/lib/auth';
+import {lazy, Suspense} from 'react';
 
 const TanStackRouterDevtools = import.meta.env.DEV
-    ? lazy(() => import('@tanstack/react-router-devtools').then(m => ({default: m.TanStackRouterDevtools})))
+    ? lazy(() => import('@tanstack/react-router-devtools').then((m) => ({default: m.TanStackRouterDevtools})))
     : () => null;
 
 type MyRouterContext = {
-    auth: AuthContextType
-}
+    auth: AuthContextType;
+};
 
 export const Route = createRootRouteWithContext<MyRouterContext>()({
     beforeLoad: ({context}) => {
@@ -26,5 +26,6 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
             <Suspense>
                 <TanStackRouterDevtools position="bottom-right"/>
             </Suspense>
-        </>)
+        </>
+    ),
 });

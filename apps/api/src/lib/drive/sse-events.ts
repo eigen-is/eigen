@@ -1,7 +1,6 @@
-import type {SSEvent} from '@workspace/lib/types/sse';
-import {SSEventType} from '@workspace/lib/types/sse';
+import type { SSEvent, SSEventType } from '@workspace/lib/types/sse';
 
-type DriveEventType = typeof SSEventType[keyof typeof SSEventType] & `drive:${string}`;
+type DriveEventType = (typeof SSEventType)[keyof typeof SSEventType] & `drive:${string}`;
 
 type PathData = { ownerId: string; mountId: string; id: string; parentId: string | null; mimeType: string | null };
 
@@ -9,6 +8,6 @@ export function buildDriveEvent(type: DriveEventType, path: PathData, oldParentI
     return {
         type,
         path,
-        ...(oldParentId && {oldParentId}),
+        ...(oldParentId && { oldParentId }),
     } as SSEvent;
 }

@@ -1,11 +1,11 @@
-import {Download, Plus, UsersRound} from 'lucide-react';
-import {Button} from "@workspace/ui/components/button";
-import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
-import {SidebarHeader} from '@workspace/ui/components/layout/sidebar/sidebar-header';
-import {SidebarItem, StorageUsage} from "@workspace/ui";
-import {useState} from 'react';
 import {useNavigate} from '@tanstack/react-router';
 import type {DrivePath} from '@workspace/lib/types/drive';
+import {SidebarItem, StorageUsage} from '@workspace/ui';
+import {Button} from '@workspace/ui/components/button';
+import {SidebarHeader} from '@workspace/ui/components/layout/sidebar/sidebar-header';
+import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
+import {Download, Plus, UsersRound} from 'lucide-react';
+import {useState} from 'react';
 import type {EigenDocAppConfig} from './eigendoc-config';
 
 type EigenDocSidebarProps = {
@@ -14,7 +14,7 @@ type EigenDocSidebarProps = {
     onClose?: () => void;
     isMobile?: boolean;
     rootPath?: DrivePath | null;
-}
+};
 
 export function EigenDocSidebar({
                                     config,
@@ -33,7 +33,7 @@ export function EigenDocSidebar({
             <div className="px-3 py-2">
                 <Button
                     variant="default"
-                    size={condensed ? "icon" : "default"}
+                    size={condensed ? 'icon' : 'default'}
                     className={`${condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}`}
                     onClick={() => setCreateOpen(true)}
                 >

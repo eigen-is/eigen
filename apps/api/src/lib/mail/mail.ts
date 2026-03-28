@@ -1,8 +1,8 @@
-import {type User} from "better-auth/types";
-import type {EmailDraft} from "@workspace/lib/types/mail";
-import {getUserByEmail} from "../user/";
-import {getHome} from "../home";
-import {ApiError} from '../core/errors';
+import type { EmailDraft } from '@workspace/lib/types/mail';
+import type { User } from 'better-auth/types';
+import { ApiError } from '../core/errors';
+import { getHome } from '../home';
+import { getUserByEmail } from '../user/';
 
 async function getMailClient(user: User) {
     const home = await getHome(user.id);
@@ -65,7 +65,7 @@ export async function messageMove(user: User, messageId: string, targetMailbox: 
 
 async function messageMoveToSpecial(user: User, messageId: string, flag: string) {
     const mailboxes = await mailboxesList(user);
-    const target = mailboxes.find(mailbox => mailbox.flags.includes(flag));
+    const target = mailboxes.find((mailbox) => mailbox.flags.includes(flag));
     if (!target) {
         throw new ApiError(404, `Mailbox with flag '${flag}' not found`);
     }

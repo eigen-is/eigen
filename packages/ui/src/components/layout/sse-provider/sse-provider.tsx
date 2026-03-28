@@ -1,11 +1,11 @@
-import type {ReactNode} from 'react';
-import {useSSE} from "@workspace/lib/sse";
+import { useSSE } from '@workspace/lib/sse';
+import type { ReactNode } from 'react';
 
 type SSEProviderProps = {
     children: ReactNode;
-}
+};
 
-export function SSEProvider({children}: SSEProviderProps) {
+export function SSEProvider({ children }: SSEProviderProps) {
     useSSE();
 
     return <>{children}</>;

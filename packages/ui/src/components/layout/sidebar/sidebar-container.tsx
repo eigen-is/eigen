@@ -1,20 +1,20 @@
-import {ReactNode, useEffect} from 'react';
-import {useLocation} from '@tanstack/react-router';
-import {useLayout} from '../app/layout-context.tsx';
+import { useLocation } from '@tanstack/react-router';
+import { type ReactNode, useEffect } from 'react';
+import { useLayout } from '../app/layout-context.tsx';
 
 export type SidebarProps = {
     condensed: boolean;
     isMobile: boolean;
     onClose: () => void;
-}
+};
 
 type SidebarContainerProps = {
     sidebar: ReactNode | ((props: SidebarProps) => ReactNode);
-}
+};
 
-export function SidebarContainer({sidebar}: SidebarContainerProps) {
-    const {sidebarOpen, setSidebarOpen, sidebarMode, isMobile, isTablet} = useLayout();
-    const {pathname} = useLocation();
+export function SidebarContainer({ sidebar }: SidebarContainerProps) {
+    const { sidebarOpen, setSidebarOpen, sidebarMode, isMobile, isTablet } = useLayout();
+    const { pathname } = useLocation();
 
     useEffect(() => {
         if (isMobile && sidebarOpen) setSidebarOpen(false);
@@ -22,9 +22,10 @@ export function SidebarContainer({sidebar}: SidebarContainerProps) {
 
     if (sidebarMode === 'none') return null;
 
-    const sidebarContent = typeof sidebar === 'function'
-        ? sidebar({condensed: isTablet, isMobile, onClose: () => setSidebarOpen(false)})
-        : sidebar;
+    const sidebarContent =
+        typeof sidebar === 'function'
+            ? sidebar({ condensed: isTablet, isMobile, onClose: () => setSidebarOpen(false) })
+            : sidebar;
 
     return (
         <>
@@ -39,10 +40,7 @@ export function SidebarContainer({sidebar}: SidebarContainerProps) {
             </div>
 
             {isMobile && sidebarOpen && (
-                <div
-                    className="fixed inset-0 z-40 bg-background/80"
-                    onClick={() => setSidebarOpen(false)}
-                />
+                <div className="fixed inset-0 z-40 bg-background/80" onClick={() => setSidebarOpen(false)} />
             )}
         </>
     );

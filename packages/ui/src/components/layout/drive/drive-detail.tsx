@@ -1,20 +1,20 @@
-import {getDriveDownloadUrl, getDriveThumbnailUrl} from "@workspace/lib/api";
-import {ArrowRight, Download, MoreVertical, Pencil, Trash2, UserRoundPlus, X} from "lucide-react";
+import {getDriveDownloadUrl, getDriveThumbnailUrl} from '@workspace/lib/api';
+import {type DrivePath, isInlineEditable} from '@workspace/lib/types/drive';
+import {TooltipButton} from '@workspace/ui';
+import {Button} from '@workspace/ui/components/button';
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuSeparator,
-    DropdownMenuTrigger
-} from "@workspace/ui/components/dropdown-menu";
-import {Button} from "@workspace/ui/components/button";
-import {TooltipButton} from "@workspace/ui";
-import {LoadingState} from "../app/loading-state";
-import {DriveAccessList} from "@workspace/ui/components/layout/drive";
-import {type DrivePath, isInlineEditable} from "@workspace/lib/types/drive";
-import {formatFileSize} from "@workspace/ui/lib/formatFileSize";
-import {Table, TableBody, TableCell, TableRow} from "@workspace/ui/components/table";
-import {useLayout} from "../app/layout-context.tsx";
+    DropdownMenuTrigger,
+} from '@workspace/ui/components/dropdown-menu';
+import {DriveAccessList} from '@workspace/ui/components/layout/drive';
+import {Table, TableBody, TableCell, TableRow} from '@workspace/ui/components/table';
+import {formatFileSize} from '@workspace/ui/lib/formatFileSize';
+import {ArrowRight, Download, MoreVertical, Pencil, Trash2, UserRoundPlus, X} from 'lucide-react';
+import {useLayout} from '../app/layout-context.tsx';
+import {LoadingState} from '../app/loading-state';
 
 type DriveDetailToolbarProps = {
     path: DrivePath;
@@ -25,7 +25,7 @@ type DriveDetailToolbarProps = {
     onItemOpen?: (path: DrivePath) => void;
     onRename?: (path: DrivePath) => void;
     allowDelete?: boolean;
-}
+};
 
 export function DriveDetailToolbar({
                                        path,
@@ -42,18 +42,10 @@ export function DriveDetailToolbar({
     return (
         <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-1">
-                {!isMobile && onClose && (
-                    <TooltipButton onClick={onClose} tooltipText="Close" icon={X}/>
-                )}
+                {!isMobile && onClose && <TooltipButton onClick={onClose} tooltipText="Close" icon={X}/>}
             </div>
             <div className="flex items-center gap-1">
-                {onDelete && (
-                    <TooltipButton
-                        icon={Trash2}
-                        tooltipText="Delete"
-                        onClick={() => onDelete(path)}
-                    />
-                )}
+                {onDelete && <TooltipButton icon={Trash2} tooltipText="Delete" onClick={() => onDelete(path)}/>}
                 <div className="h-6 w-[1px] bg-border mx-1"/>
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -102,14 +94,9 @@ type DriveDetailProps = {
     onItemOpen?: (path: DrivePath) => void;
     onRename?: (path: DrivePath) => void;
     allowDelete?: boolean;
-}
+};
 
-export function DriveDetail({
-                                path,
-                                onShareClick,
-                                onItemOpen,
-                            }: DriveDetailProps) {
-
+export function DriveDetail({path, onShareClick, onItemOpen}: DriveDetailProps) {
     if (!path) {
         return <LoadingState/>;
     }
@@ -123,11 +110,7 @@ export function DriveDetail({
                 <h2 className="text-xl font-medium mb-2 flex items-center">
                     <span className="truncate overflow-hidden min-w-0 flex-1">{path.name}</span>
                     {onItemOpen && path && (path.type !== 'file' || isInlineEditable(path.mimeType, path.name)) && (
-                        <TooltipButton
-                            onClick={() => onItemOpen(path)}
-                            tooltipText="Open"
-                            icon={ArrowRight}
-                        />
+                        <TooltipButton onClick={() => onItemOpen(path)} tooltipText="Open" icon={ArrowRight}/>
                     )}
                 </h2>
                 <Table className="text-sm text-muted-foreground mb-4">
@@ -154,72 +137,80 @@ export function DriveDetail({
                             src={thumbnailPath}
                             alt={`Thumbnail for ${path.name}`}
                             className="max-w-full max-h-[25%] object-contain"
-                            style={path.details?.width && path.details?.height ? {aspectRatio: path.details.width / path.details.height} : undefined}
+                            style={
+                                path.details?.width && path.details?.height
+                                    ? {aspectRatio: path.details.width / path.details.height}
+                                    : undefined
+                            }
                         />
                     </div>
                 )}
-                {(path.mimeType === "video/mp4" || path.mimeType === "video/mpeg") && (
+                {(path.mimeType === 'video/mp4' || path.mimeType === 'video/mpeg') && (
                     <div>
                         <video
                             src={fullPath}
                             className="w-full max-h-[25%] object-contain"
                             autoPlay={false}
                             controls
-                            style={path.details?.width && path.details?.height ? {aspectRatio: path.details.width / path.details.height} : undefined}
+                            style={
+                                path.details?.width && path.details?.height
+                                    ? {aspectRatio: path.details.width / path.details.height}
+                                    : undefined
+                            }
                         />
                     </div>
                 )}
-                {(path.mimeType == "audio/mpeg" || path.mimeType == "audio/wav" || path.mimeType == "audio/ogg" || path.mimeType == "audio/vorbis" || path.mimeType == "audio/mp4") && (
+                {(path.mimeType === 'audio/mpeg' ||
+                    path.mimeType === 'audio/wav' ||
+                    path.mimeType === 'audio/ogg' ||
+                    path.mimeType === 'audio/vorbis' ||
+                    path.mimeType === 'audio/mp4') && (
                     <div>
-                        <audio
-                            src={fullPath}
-                            className="w-full"
-                            autoPlay={false}
-                            controls
-                        />
+                        <audio src={fullPath} className="w-full" autoPlay={false} controls/>
                     </div>
                 )}
 
-                {path.details && (path.details.width || path.details.height || path.details.duration || path.details.pageCount) && (
-                    <Table className="mt-4">
-                        <TableBody>
-                            {path.details.width && path.details.height && (
-                                <TableRow>
-                                    <TableCell className="font-medium px-0 w-20">Dimensions</TableCell>
-                                    <TableCell className="px">{path.details.width} × {path.details.height}</TableCell>
-                                </TableRow>
-                            )}
-                            {path.details.duration && (
-                                <TableRow>
-                                    <TableCell className="font-medium px-0 w-20">Duration</TableCell>
-                                    <TableCell
-                                        className="px">{Math.floor(path.details.duration / 60)}:{String(Math.floor(path.details.duration % 60)).padStart(2, '0')}</TableCell>
-                                </TableRow>
-                            )}
-                            {path.details.pageCount && (
-                                <TableRow>
-                                    <TableCell className="font-medium px-0 w-20">Pages</TableCell>
-                                    <TableCell className="px">{path.details.pageCount}</TableCell>
-                                </TableRow>
-                            )}
-                            {Object.entries(path.details)
-                                .filter(([key]) => !['width', 'height', 'duration', 'pageCount'].includes(key))
-                                .map(([key, value]) => (
-                                    <TableRow key={key}>
-                                        <TableCell className="font-medium px-0 w-20 capitalize">{key}</TableCell>
-                                        <TableCell className="px truncate">{String(value)}</TableCell>
+                {path.details &&
+                    (path.details.width || path.details.height || path.details.duration || path.details.pageCount) && (
+                        <Table className="mt-4">
+                            <TableBody>
+                                {path.details.width && path.details.height && (
+                                    <TableRow>
+                                        <TableCell className="font-medium px-0 w-20">Dimensions</TableCell>
+                                        <TableCell className="px">
+                                            {path.details.width} × {path.details.height}
+                                        </TableCell>
                                     </TableRow>
-                                ))
-                            }
-                        </TableBody>
-                    </Table>
-                )}
+                                )}
+                                {path.details.duration && (
+                                    <TableRow>
+                                        <TableCell className="font-medium px-0 w-20">Duration</TableCell>
+                                        <TableCell className="px">
+                                            {Math.floor(path.details.duration / 60)}:
+                                            {String(Math.floor(path.details.duration % 60)).padStart(2, '0')}
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                                {path.details.pageCount && (
+                                    <TableRow>
+                                        <TableCell className="font-medium px-0 w-20">Pages</TableCell>
+                                        <TableCell className="px">{path.details.pageCount}</TableCell>
+                                    </TableRow>
+                                )}
+                                {Object.entries(path.details)
+                                    .filter(([key]) => !['width', 'height', 'duration', 'pageCount'].includes(key))
+                                    .map(([key, value]) => (
+                                        <TableRow key={key}>
+                                            <TableCell className="font-medium px-0 w-20 capitalize">{key}</TableCell>
+                                            <TableCell className="px truncate">{String(value)}</TableCell>
+                                        </TableRow>
+                                    ))}
+                            </TableBody>
+                        </Table>
+                    )}
 
                 <div className="mt-4">
-                    <DriveAccessList
-                        path={path}
-                        onShareClick={onShareClick}
-                    />
+                    <DriveAccessList path={path} onShareClick={onShareClick}/>
                 </div>
             </div>
         </div>

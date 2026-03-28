@@ -1,10 +1,10 @@
-import {createFileRoute} from '@tanstack/react-router'
-import {apps} from "@workspace/lib/apps"
-import {Card, CardContent} from "@workspace/ui/components/card"
+import {createFileRoute} from '@tanstack/react-router';
+import {apps} from '@workspace/lib/apps';
+import {Card, CardContent} from '@workspace/ui/components/card';
 
 export const Route = createFileRoute('/_auth/')({
     component: HomeComponent,
-})
+});
 
 function HomeComponent() {
     return (
@@ -36,9 +36,15 @@ function HomeComponent() {
                                                     <Icon className="w-5 h-5 md:w-6 md:h-6"/>
                                                 </div>
                                                 <div>
-                                                    <h3 className="font-medium text-sm md:text-base"
-                                                        style={{color: app.color}}>{app.name}</h3>
-                                                    <p className="text-xs text-muted-foreground hidden md:block">{app.description}</p>
+                                                    <h3
+                                                        className="font-medium text-sm md:text-base"
+                                                        style={{color: app.color}}
+                                                    >
+                                                        {app.name}
+                                                    </h3>
+                                                    <p className="text-xs text-muted-foreground hidden md:block">
+                                                        {app.description}
+                                                    </p>
                                                 </div>
                                             </div>
                                         </a>

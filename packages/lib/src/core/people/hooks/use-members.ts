@@ -1,17 +1,17 @@
-import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
-import {toast} from 'sonner';
-import {authClient} from '../../auth/hooks/use-auth-client';
-import {settingsApi} from '../../api';
-import {peopleKeys} from './keys.ts';
-import type {OrgMember} from '@workspace/lib/types/people';
-import {AppError, onMutationError} from '../../api-error';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { OrgMember } from '@workspace/lib/types/people';
+import { toast } from 'sonner';
+import { settingsApi } from '../../api';
+import { AppError, onMutationError } from '../../api-error';
+import { authClient } from '../../auth/hooks/use-auth-client';
+import { peopleKeys } from './keys.ts';
 
 export function usePeopleMembers(organizationId?: string) {
     return useQuery({
         queryKey: peopleKeys.members(organizationId ?? ''),
         queryFn: async (): Promise<OrgMember[]> => {
-            const {data} = await authClient.organization.listMembers({
-                query: {organizationId: organizationId!},
+            const { data } = await authClient.organization.listMembers({
+                query: { organizationId: organizationId! },
             });
             if (!data?.members) return [];
             return data.members.map((m) => ({
@@ -32,8 +32,8 @@ export function usePeopleMembers(organizationId?: string) {
 export function useUpdateMemberRole(organizationId?: string) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({memberId, role}: { memberId: string; role: 'admin' | 'member' | 'owner' }) => {
-            const {data, error} = await authClient.organization.updateMemberRole({
+        mutationFn: async ({ memberId, role }: { memberId: string; role: 'admin' | 'member' | 'owner' }) => {
+            const { data, error } = await authClient.organization.updateMemberRole({
                 memberId,
                 role,
                 organizationId,
@@ -42,7 +42,7 @@ export function useUpdateMemberRole(organizationId?: string) {
             return data;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({queryKey: peopleKeys.members(organizationId ?? '')});
+            queryClient.invalidateQueries({ queryKey: peopleKeys.members(organizationId ?? '') });
         },
         onError: onMutationError,
     });
@@ -52,7 +52,7 @@ export function useRemoveMember(organizationId?: string) {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (memberIdOrEmail: string) => {
-            const {data, error} = await authClient.organization.removeMember({
+            const { data, error } = await authClient.organization.removeMember({
                 memberIdOrEmail,
                 organizationId,
             });
@@ -60,7 +60,7 @@ export function useRemoveMember(organizationId?: string) {
             return data;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({queryKey: peopleKeys.members(organizationId ?? '')});
+            queryClient.invalidateQueries({ queryKey: peopleKeys.members(organizationId ?? '') });
         },
         onError: onMutationError,
     });
@@ -70,12 +70,12 @@ export function useDeleteUser(organizationId?: string) {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (userId: string) => {
-            const response = await settingsApi.user({userId}).delete();
+            const response = await settingsApi.user({ userId }).delete();
             if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({queryKey: peopleKeys.members(organizationId ?? '')});
+            queryClient.invalidateQueries({ queryKey: peopleKeys.members(organizationId ?? '') });
         },
         onError: onMutationError,
     });
@@ -83,8 +83,8 @@ export function useDeleteUser(organizationId?: string) {
 
 export function useResetUserPassword() {
     return useMutation({
-        mutationFn: async ({userId, newPassword}: { userId: string; newPassword: string }) => {
-            const {error} = await authClient.admin.setUserPassword({
+        mutationFn: async ({ userId, newPassword }: { userId: string; newPassword: string }) => {
+            const { error } = await authClient.admin.setUserPassword({
                 userId,
                 newPassword,
             });
@@ -100,13 +100,18 @@ export function useResetUserPassword() {
 export function useCreateUser(organizationId?: string) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({name, email, password, role}: {
+        mutationFn: async ({
+            name,
+            email,
+            password,
+            role,
+        }: {
             name: string;
             email: string;
             password: string;
             role: 'admin' | 'user';
         }) => {
-            const {data, error} = await authClient.admin.createUser({
+            const { data, error } = await authClient.admin.createUser({
                 name,
                 email,
                 password,
@@ -116,7 +121,7 @@ export function useCreateUser(organizationId?: string) {
             return data;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({queryKey: peopleKeys.members(organizationId ?? '')});
+            queryClient.invalidateQueries({ queryKey: peopleKeys.members(organizationId ?? '') });
         },
         onError: onMutationError,
     });

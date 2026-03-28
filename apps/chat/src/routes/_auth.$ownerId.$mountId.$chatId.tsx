@@ -1,12 +1,12 @@
-import {createFileRoute} from '@tanstack/react-router'
+import {createFileRoute} from '@tanstack/react-router';
+import {useChatRoom} from '@workspace/lib/chat';
+import {ChatMessageInput, ChatMessageList, Toolbar, TooltipButton} from '@workspace/ui';
+import {Column, ColumnLayout} from '@workspace/ui/components/layout/app/column-layout.tsx';
+import {DriveAccessDialog} from '@workspace/ui/components/layout/drive/drive-access-dialog';
+import {DriveRenameItem} from '@workspace/ui/components/layout/drive/drive-rename-item';
+import {DriveShareSummary} from '@workspace/ui/components/layout/drive/drive-share-summary';
+import {Pencil, UserRoundPlus} from 'lucide-react';
 import {useState} from 'react';
-import {useChatRoom} from "@workspace/lib/chat";
-import {Column, ColumnLayout} from "@workspace/ui/components/layout/app/column-layout.tsx";
-import {ChatMessageInput, ChatMessageList, Toolbar, TooltipButton} from "@workspace/ui";
-import {Pencil, UserRoundPlus} from "lucide-react";
-import {DriveAccessDialog} from "@workspace/ui/components/layout/drive/drive-access-dialog";
-import {DriveRenameItem} from "@workspace/ui/components/layout/drive/drive-rename-item";
-import {DriveShareSummary} from "@workspace/ui/components/layout/drive/drive-share-summary";
 
 function ChatView() {
     const {ownerId, mountId, chatId} = Route.useParams();
@@ -17,8 +17,13 @@ function ChatView() {
 
     const toolbar = (
         <Toolbar>
-            {chat.chatPath && <DriveShareSummary path={chat.chatPath} onClick={() => setAccessDialogOpen(true)}
-                                            showIconOnHover={false}/>}
+            {chat.chatPath && (
+                <DriveShareSummary
+                    path={chat.chatPath}
+                    onClick={() => setAccessDialogOpen(true)}
+                    showIconOnHover={false}
+                />
+            )}
             <span className="font-semibold text-sm truncate">{chat.chatName}</span>
             <div className="flex items-center gap-1">
                 <TooltipButton
@@ -73,15 +78,11 @@ function ChatView() {
                 path={chat.chatPath ?? null}
             />
 
-            <DriveRenameItem
-                path={chat.chatPath ?? null}
-                open={renameDialogOpen}
-                onOpenChange={setRenameDialogOpen}
-            />
+            <DriveRenameItem path={chat.chatPath ?? null} open={renameDialogOpen} onOpenChange={setRenameDialogOpen}/>
         </>
     );
 }
 
 export const Route = createFileRoute('/_auth/$ownerId/$mountId/$chatId')({
     component: ChatView,
-})
+});

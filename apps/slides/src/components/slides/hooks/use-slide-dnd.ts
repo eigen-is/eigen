@@ -1,28 +1,28 @@
-import {useState} from 'react';
-import * as Y from 'yjs';
-import {DragEndEvent, DragStartEvent} from '@dnd-kit/core';
-import {DeckData} from '../types';
+import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
+import { useState } from 'react';
+import type * as Y from 'yjs';
+import type { DeckData } from '../types';
 
 type DragState = {
     activeId: string | null;
-}
+};
 
 type UseSlideDndProps = {
     deck: DeckData;
     yjsDoc: Y.Doc | null;
-}
+};
 
-export const useSlideDnd = ({deck, yjsDoc}: UseSlideDndProps) => {
-    const [dragState, setDragState] = useState<DragState>({activeId: null});
+export const useSlideDnd = ({ deck: _deck, yjsDoc }: UseSlideDndProps) => {
+    const [dragState, setDragState] = useState<DragState>({ activeId: null });
 
     const handleDragStart = (event: DragStartEvent) => {
-        setDragState({activeId: event.active.id as string});
+        setDragState({ activeId: event.active.id as string });
     };
 
     const handleDragEnd = (event: DragEndEvent) => {
-        const {active, over} = event;
+        const { active, over } = event;
         if (!over || !yjsDoc) {
-            setDragState({activeId: null});
+            setDragState({ activeId: null });
             return;
         }
         const activeId = active.id as string;
@@ -43,7 +43,7 @@ export const useSlideDnd = ({deck, yjsDoc}: UseSlideDndProps) => {
                 }
             });
         }
-        setDragState({activeId: null});
+        setDragState({ activeId: null });
     };
 
     return {

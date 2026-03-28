@@ -1,8 +1,4 @@
-import type {User} from 'better-auth/types';
-import {BunSQLiteDatabase} from 'drizzle-orm/bun-sqlite';
-import {eq} from 'drizzle-orm';
-import {ApiError, type DatabaseConfig, type ManagedDatabase, type SchemaType} from '../core';
-import {createDefaultMountConfig, createMountConfig, Mount} from '../mount';
+import {getTextPreviewMode} from '@workspace/lib/constants';
 import {
     DRIVE_TYPE_CHAT,
     DRIVE_TYPE_DOC,
@@ -24,31 +20,42 @@ import {
     isChatType,
     isCollabType,
     isContainerType,
-    stripEigenExtension
+    stripEigenExtension,
 } from '@workspace/lib/types/drive';
-import {ChatRoom} from '../chat';
-import {canReadFromAncestors, canWriteFromAncestors, filterRedundantACL, findContainerFromAncestors, matchesACL, normalizeACL} from './acl';
-import {type EffectiveMember, propagateACLChange, resolveACLToEmails} from './acl-propagation';
+import {SSEventType} from '@workspace/lib/types/sse';
 import {validateACLEntries, validateEmailAddress} from '@workspace/lib/validation';
-import {getThumbnail, saveThumbnail} from '../shared/thumbnails';
-import {sendMail} from '../core/mailer';
-import {getDomain} from '../config/server-config';
-import {getScreenPreview, getTextPreviewData} from '../preview/preview-cache';
-import {getTextPreviewMode} from '@workspace/lib/constants';
-import {extractFrontmatter, MAX_INLINE_EDIT_SIZE, reattachFrontmatter} from './inline-edit';
-import {getTeamMembers} from '../team';
+import type {User} from 'better-auth/types';
+import {eq} from 'drizzle-orm';
+import type {BunSQLiteDatabase} from 'drizzle-orm/bun-sqlite';
+import {createAsyncSingleton} from '../../utils/singleton';
+import {ChatRoom} from '../chat';
 import CollabDocument from '../collab/collabDocument';
+import {getDomain} from '../config/server-config';
+import {ApiError, type DatabaseConfig, type ManagedDatabase, type SchemaType} from '../core';
+import {sendMail} from '../core/mailer';
+import type {Home} from '../home';
+import {createDefaultMountConfig, createMountConfig, Mount} from '../mount';
+import {getScreenPreview, getTextPreviewData} from '../preview/preview-cache';
+import {getThumbnail, saveThumbnail} from '../shared/thumbnails';
+import {getTeamMembers} from '../team';
+import {getMemberships, type Memberships} from '../user/';
+import {
+    canReadFromAncestors,
+    canWriteFromAncestors,
+    filterRedundantACL,
+    findContainerFromAncestors,
+    matchesACL,
+    normalizeACL,
+} from './acl';
+import {type EffectiveMember, propagateACLChange, resolveACLToEmails} from './acl-propagation';
+import {extractFrontmatter, MAX_INLINE_EDIT_SIZE, reattachFrontmatter} from './inline-edit';
+import {getUniqueFileName} from './naming';
 import {getSharedDatabase} from './shared';
 import * as sharedSchema from './sharedschema';
-import {createAsyncSingleton} from '../../utils/singleton';
-import type {Home} from '../home';
-import {SSEventType} from '@workspace/lib/types/sse';
 import {buildDriveEvent} from './sse-events';
-import {getUniqueFileName} from './naming';
 import {streamFilesToTemp} from './streaming';
-import {getMemberships, type Memberships} from '../user/';
 
-export type {DrivePath, DriveACL} from '@workspace/lib/types/drive';
+export type {DriveACL, DrivePath} from '@workspace/lib/types/drive';
 
 const COLLAB_EXTENSIONS: Record<string, string> = {
     doc: '.eigendoc',
@@ -98,12 +105,7 @@ export default class Drive {
     }
 
     async addMount(config: MountConfig): Promise<void> {
-        const mount = new Mount(
-            this.owner.id,
-            this.home.homeDir,
-            config,
-            this.home.getLocalDatabase.bind(this.home)
-        );
+        const mount = new Mount(this.owner.id, this.home.homeDir, config, this.home.getLocalDatabase.bind(this.home));
         await mount.init();
         this.mounts.set(config.id, mount);
         if (config.isDefault) {
@@ -131,7 +133,7 @@ export default class Drive {
                 storageType: mount.config.storageType,
                 isDefault: id === this.defaultMountId,
                 totalSize: await mount.getTotalSize(),
-                fileCount: await mount.getFileCount()
+                fileCount: await mount.getFileCount(),
             });
         }
         return infos;
@@ -248,15 +250,22 @@ export default class Drive {
                 const existing = await mount.getChildByName(parentId, safeName);
                 if (existing) {
                     const siblings = await mount.listFolder(parentId);
-                    const usedNames = new Set(siblings.map(s => s.name.toLowerCase()));
+                    const usedNames = new Set(siblings.map((s) => s.name.toLowerCase()));
                     safeName = getUniqueFileName(safeName, usedNames);
                 }
 
                 const pathId = await mount.createFileFromTemp(
-                    parentId, safeName, result.mimeType, result.size, result.hash, result.tempId
+                    parentId,
+                    safeName,
+                    result.mimeType,
+                    result.size,
+                    result.hash,
+                    result.tempId,
                 );
 
-                uploaded.push(await this.finalizeUpload(mount, pathId, originalName, safeName, result.mimeType, result.tempId));
+                uploaded.push(
+                    await this.finalizeUpload(mount, pathId, originalName, safeName, result.mimeType, result.tempId),
+                );
             } catch (e) {
                 await mount.cleanupTemp(result.tempId);
                 throw e;
@@ -413,14 +422,24 @@ export default class Drive {
             throw new ApiError(400, 'File contains invalid UTF-8 encoding');
         }
 
-        const {frontmatter, body} = editMode === 'markdown' ? extractFrontmatter(content) : {
-            frontmatter: null,
-            body: content
-        };
+        const {frontmatter, body} =
+            editMode === 'markdown'
+                ? extractFrontmatter(content)
+                : {
+                    frontmatter: null,
+                    body: content,
+                };
         return {editMode, content: body, frontmatter, mimeType: path.mimeType, updatedAt: path.updatedAt};
     }
 
-    async saveEditableContent(mountId: string, pathId: string, content: string, frontmatter: string | null, expectedUpdatedAt: string, force: boolean) {
+    async saveEditableContent(
+        mountId: string,
+        pathId: string,
+        content: string,
+        frontmatter: string | null,
+        expectedUpdatedAt: string,
+        force: boolean,
+    ) {
         const mount = this.getMount(mountId);
         const path = await mount.getPath(pathId);
         if (!path || path.type !== DRIVE_TYPE_FILE) throw new ApiError(404, 'File not found');
@@ -432,7 +451,8 @@ export default class Drive {
 
         const fullContent = reattachFrontmatter(content, frontmatter);
         const updated = await this.writeFileContent(mountId, pathId, Buffer.from(fullContent, 'utf-8'));
-        const updatedAt = updated.updatedAt instanceof Date ? updated.updatedAt.toISOString() : String(updated.updatedAt);
+        const updatedAt =
+            updated.updatedAt instanceof Date ? updated.updatedAt.toISOString() : String(updated.updatedAt);
         return {conflict: false as const, updatedAt};
     }
 
@@ -457,9 +477,12 @@ export default class Drive {
         return data ? new Uint8Array(data).buffer : null;
     }
 
-    async getMimeTypeContents(mimeType: string, options: {
-        excludeDocumentChildren?: boolean
-    } = {excludeDocumentChildren: true}): Promise<DrivePath[]> {
+    async getMimeTypeContents(
+        mimeType: string,
+        options: {
+            excludeDocumentChildren?: boolean;
+        } = {excludeDocumentChildren: true},
+    ): Promise<DrivePath[]> {
         // Aggregate results from all mounts
         const allResults: DrivePath[] = [];
         for (const mount of this.mounts.values()) {
@@ -467,13 +490,14 @@ export default class Drive {
             allResults.push(...mountResults);
         }
 
-        const sharedResults = await this.sharedDb.select()
+        const sharedResults = await this.sharedDb
+            .select()
             .from(sharedSchema.sharedPaths)
             .where(eq(sharedSchema.sharedPaths.mimeType, mimeType))
             .all();
 
-        const seen = new Set(allResults.map(r => r.id));
-        const unique = sharedResults.map(r => this.sharedRowToDrivePath(r)).filter(r => !seen.has(r.id));
+        const seen = new Set(allResults.map((r) => r.id));
+        const unique = sharedResults.map((r) => this.sharedRowToDrivePath(r)).filter((r) => !seen.has(r.id));
         return [...allResults, ...unique];
     }
 
@@ -482,7 +506,13 @@ export default class Drive {
         return await mount.getBreadcrumb(pathId);
     }
 
-    async updateACL(mountId: string, pathId: string, acl: DriveACL[] | null, visibility?: DriveVisibility, sharingRestricted?: boolean): Promise<void> {
+    async updateACL(
+        mountId: string,
+        pathId: string,
+        acl: DriveACL[] | null,
+        visibility?: DriveVisibility,
+        sharingRestricted?: boolean,
+    ): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getPath(pathId);
         if (!item) {
@@ -569,9 +599,14 @@ export default class Drive {
     }
 
     async emailCollaborators(
-        mountId: string, pathId: string,
-        subject: string, message: string, documentUrl: string,
-        sendCopyToSelf: boolean, senderEmail: string, senderName: string,
+        mountId: string,
+        pathId: string,
+        subject: string,
+        message: string,
+        documentUrl: string,
+        sendCopyToSelf: boolean,
+        senderEmail: string,
+        senderName: string,
     ): Promise<{ sent: number }> {
         // Validate URL belongs to this server's domain to prevent phishing
         const domain = getDomain();
@@ -587,23 +622,25 @@ export default class Drive {
 
         const members = await this.getEffectiveMembers(mountId, pathId);
         const self = senderEmail.toLowerCase();
-        const recipients = members.filter(m => sendCopyToSelf || m.email !== self);
+        const recipients = members.filter((m) => sendCopyToSelf || m.email !== self);
 
-        const results = await Promise.allSettled(recipients.map(member => {
-            const isExternal = !member.email.endsWith(`@${domain}`);
-            const link = isExternal
-                ? `${documentUrl}${documentUrl.includes('?') ? '&' : '?'}email=${encodeURIComponent(member.email)}`
-                : documentUrl;
+        const results = await Promise.allSettled(
+            recipients.map((member) => {
+                const isExternal = !member.email.endsWith(`@${domain}`);
+                const link = isExternal
+                    ? `${documentUrl}${documentUrl.includes('?') ? '&' : '?'}email=${encodeURIComponent(member.email)}`
+                    : documentUrl;
 
-            return sendMail({
-                from: {name: senderName, address: senderEmail},
-                to: [{name: '', address: member.email}],
-                subject,
-                text: `${message}\n\n${link}`,
-            });
-        }));
+                return sendMail({
+                    from: {name: senderName, address: senderEmail},
+                    to: [{name: '', address: member.email}],
+                    subject,
+                    text: `${message}\n\n${link}`,
+                });
+            }),
+        );
 
-        const sent = results.filter(r => r.status === 'fulfilled' && r.value).length;
+        const sent = results.filter((r) => r.status === 'fulfilled' && r.value).length;
         return {sent};
     }
 
@@ -613,7 +650,11 @@ export default class Drive {
         return findContainerFromAncestors(ancestors);
     }
 
-    async inviteToChat(mountId: string, chatId: string, email: string): Promise<{
+    async inviteToChat(
+        mountId: string,
+        chatId: string,
+        email: string,
+    ): Promise<{
         alreadyHasAccess: boolean;
         targetPathId: string;
     }> {
@@ -630,7 +671,7 @@ export default class Drive {
         const targetPath = container ?? chatPath;
 
         const currentAcl = targetPath.acl || [];
-        if (currentAcl.some(a => a.id.toLowerCase() === email.toLowerCase())) {
+        if (currentAcl.some((a) => a.id.toLowerCase() === email.toLowerCase())) {
             return {alreadyHasAccess: true, targetPathId: targetPath.id};
         }
 
@@ -644,7 +685,7 @@ export default class Drive {
         const mount = this.getMount(mountId);
         const ancestors = await mount.getBreadcrumb(pathId);
         if (ancestors.length === 0) return false;
-        const resolved = memberships ?? await getMemberships(user.id);
+        const resolved = memberships ?? (await getMemberships(user.id));
         return canReadFromAncestors(ancestors, user, resolved);
     }
 
@@ -652,7 +693,7 @@ export default class Drive {
         const mount = this.getMount(mountId);
         const ancestors = await mount.getBreadcrumb(pathId);
         if (ancestors.length === 0) return false;
-        const resolved = memberships ?? await getMemberships(user.id);
+        const resolved = memberships ?? (await getMemberships(user.id));
         return canWriteFromAncestors(ancestors, user, resolved);
     }
 
@@ -660,16 +701,19 @@ export default class Drive {
         const mount = this.getMount(mountId);
         const key = `${this.owner.id}.${mountId}.${pathId}`;
         if (!this.documents.has(key)) {
-            this.documents.set(key, createAsyncSingleton(async () => {
-                const path = await mount.getPath(pathId);
-                if (!path || !isCollabType(path.type)) {
-                    throw new Error('Document not found');
-                }
-                const document = new CollabDocument(this, path);
-                return (await document.init()) as CollabDocument;
-            }));
+            this.documents.set(
+                key,
+                createAsyncSingleton(async () => {
+                    const path = await mount.getPath(pathId);
+                    if (!path || !isCollabType(path.type)) {
+                        throw new Error('Document not found');
+                    }
+                    const document = new CollabDocument(this, path);
+                    return (await document.init()) as CollabDocument;
+                }),
+            );
         }
-        return await this.documents.get(key)!() as CollabDocument;
+        return (await this.documents.get(key)!()) as CollabDocument;
     }
 
     async closeCollabDocument(mountId: string, pathId: string): Promise<void> {
@@ -684,13 +728,12 @@ export default class Drive {
                 await mount.closeDatabase(doc.dataDbPathId);
             }
         }
-
     }
 
     async openDatabase<S extends SchemaType>(
         mountId: string,
         config: DatabaseConfig<S>,
-        pathId: string
+        pathId: string,
     ): Promise<ManagedDatabase<S>> {
         const mount = this.getMount(mountId);
         return mount.openDatabase(config, pathId);
@@ -713,7 +756,7 @@ export default class Drive {
 
     async getSharedPathsWithMe(): Promise<DrivePath[]> {
         const results = await this.sharedDb.select().from(sharedSchema.sharedPaths).all();
-        return results.map(r => this.sharedRowToDrivePath(r));
+        return results.map((r) => this.sharedRowToDrivePath(r));
     }
 
     async getSharedWith(user: User): Promise<DrivePath[]> {
@@ -731,7 +774,7 @@ export default class Drive {
     async getSharedPathsByMe(): Promise<DrivePath[]> {
         const allResults: DrivePath[] = [];
         for (const mount of this.mounts.values()) {
-            allResults.push(...await mount.getPathsWithACL());
+            allResults.push(...(await mount.getPathsWithACL()));
         }
         return allResults;
     }
@@ -740,44 +783,51 @@ export default class Drive {
         const displayName = stripEigenExtension(path.name);
         const memberships = await getMemberships(this.owner.id);
         if (newACL === null || !matchesACL(newACL, this.owner, memberships, 'read')) {
-            this.sharedDb.delete(sharedSchema.sharedPaths)
-                .where(eq(sharedSchema.sharedPaths.id, path.id))
-                .run();
+            this.sharedDb.delete(sharedSchema.sharedPaths).where(eq(sharedSchema.sharedPaths.id, path.id)).run();
             this.emit(SSEventType.DRIVE_ACL_UNSHARED, path);
             this.home.notifications?.persist({
                 type: 'unshare',
                 actorEmail,
                 title: `"${displayName}" is no longer shared with you`,
             });
-        } else if (this.sharedDb.select().from(sharedSchema.sharedPaths).where(eq(sharedSchema.sharedPaths.id, path.id)).get()) {
-            this.sharedDb.update(sharedSchema.sharedPaths).set({
-                acl: newACL,
-                visibility: path.visibility,
-                sharingRestricted: path.sharingRestricted ? 1 : 0,
-                name: path.name,
-                size: path.size,
-                thumbnail: path.thumbnail,
-                parentId: path.parentId,
-                updatedAt: new Date()
-            }).where(eq(sharedSchema.sharedPaths.id, path.id)).run();
+        } else if (
+            this.sharedDb.select().from(sharedSchema.sharedPaths).where(eq(sharedSchema.sharedPaths.id, path.id)).get()
+        ) {
+            this.sharedDb
+                .update(sharedSchema.sharedPaths)
+                .set({
+                    acl: newACL,
+                    visibility: path.visibility,
+                    sharingRestricted: path.sharingRestricted ? 1 : 0,
+                    name: path.name,
+                    size: path.size,
+                    thumbnail: path.thumbnail,
+                    parentId: path.parentId,
+                    updatedAt: new Date(),
+                })
+                .where(eq(sharedSchema.sharedPaths.id, path.id))
+                .run();
             this.emit(SSEventType.DRIVE_ACL_UPDATED, path);
         } else {
-            this.sharedDb.insert(sharedSchema.sharedPaths).values({
-                id: path.id,
-                mountId: path.mountId,
-                name: path.name,
-                type: path.type,
-                parentId: path.parentId,
-                ownerId: path.ownerId,
-                mimeType: path.mimeType,
-                size: path.size,
-                thumbnail: path.thumbnail,
-                acl: newACL,
-                visibility: path.visibility,
-                sharingRestricted: path.sharingRestricted ? 1 : 0,
-                createdAt: new Date(),
-                updatedAt: new Date()
-            }).run();
+            this.sharedDb
+                .insert(sharedSchema.sharedPaths)
+                .values({
+                    id: path.id,
+                    mountId: path.mountId,
+                    name: path.name,
+                    type: path.type,
+                    parentId: path.parentId,
+                    ownerId: path.ownerId,
+                    mimeType: path.mimeType,
+                    size: path.size,
+                    thumbnail: path.thumbnail,
+                    acl: newACL,
+                    visibility: path.visibility,
+                    sharingRestricted: path.sharingRestricted ? 1 : 0,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                })
+                .run();
             this.emit(SSEventType.DRIVE_ACL_SHARED, path);
             this.home.notifications?.persist({
                 type: 'share',
@@ -814,7 +864,12 @@ export default class Drive {
         }
     }
 
-    private async createCollabDoc(mountId: string, parentId: string, name: string, type: DriveCollabType): Promise<DrivePath> {
+    private async createCollabDoc(
+        mountId: string,
+        parentId: string,
+        name: string,
+        type: DriveCollabType,
+    ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         if (!(await this.canWrite(mountId, parentId, this.owner))) {
             throw new ApiError(403, 'No write permission');
@@ -845,7 +900,7 @@ export default class Drive {
             sharingRestricted: !!r.sharingRestricted,
             details: r.details ?? null,
             createdAt: r.createdAt ?? new Date(),
-            updatedAt: r.updatedAt ?? new Date()
+            updatedAt: r.updatedAt ?? new Date(),
         };
     }
 
@@ -890,7 +945,12 @@ export default class Drive {
     }
 
     private async finalizeUpload(
-        mount: Mount, pathId: string, originalName: string, safeName: string, mimeType: string, tempId: string
+        mount: Mount,
+        pathId: string,
+        originalName: string,
+        safeName: string,
+        mimeType: string,
+        tempId: string,
     ): Promise<DrivePath> {
         if (originalName) {
             await mount.updatePath(pathId, {details: {originalName}});

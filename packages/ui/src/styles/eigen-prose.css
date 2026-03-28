@@ -10,10 +10,16 @@
 }
 
 /* ===== Shared rules: headings, code, formatting, tables, images ===== */
-.eigen-prose, .tiptap {
+.eigen-prose,
+.tiptap {
     /* Headings */
 
-    h1, h2, h3, h4, h5, h6 {
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6 {
         margin-top: 1.5em;
         margin-bottom: 0.5em;
         font-weight: 600;
@@ -42,7 +48,10 @@
         line-height: 1.4;
     }
 
-    h1:first-child, h2:first-child, h3:first-child, h4:first-child {
+    h1:first-child,
+    h2:first-child,
+    h3:first-child,
+    h4:first-child {
         margin-top: 0;
     }
 
@@ -94,7 +103,10 @@
         margin: 0;
     }
 
-    ul ul, ol ol, ul ol, ol ul {
+    ul ul,
+    ol ol,
+    ul ol,
+    ol ul {
         margin: 0.2em 0;
     }
 
@@ -136,7 +148,8 @@
         margin: 0.75em 0;
     }
 
-    th, td {
+    th,
+    td {
         border: 1px solid #d1d5db;
         padding: 0.4em 0.8em;
         text-align: left;
@@ -148,7 +161,8 @@
         font-weight: 600;
     }
 
-    table td > p, table th > p {
+    table td > p,
+    table th > p {
         margin: 0;
     }
 
@@ -193,25 +207,37 @@
 
     /* Syntax highlighting (Catppuccin) */
 
-    pre .hljs-keyword, pre .hljs-selector-tag, pre .hljs-tag {
+    pre .hljs-keyword,
+    pre .hljs-selector-tag,
+    pre .hljs-tag {
         color: #cba6f7;
     }
 
-    pre .hljs-addition, pre .hljs-string, pre .hljs-doctag,
-    pre .hljs-regexp, pre .hljs-selector-class, pre .hljs-attribute {
+    pre .hljs-addition,
+    pre .hljs-string,
+    pre .hljs-doctag,
+    pre .hljs-regexp,
+    pre .hljs-selector-class,
+    pre .hljs-attribute {
         color: #a6e3a1;
     }
 
-    pre .hljs-number, pre .hljs-literal, pre .hljs-selector-id {
+    pre .hljs-number,
+    pre .hljs-literal,
+    pre .hljs-selector-id {
         color: #fab387;
     }
 
-    pre .hljs-comment, pre .hljs-quote {
+    pre .hljs-comment,
+    pre .hljs-quote {
         color: #6c7086;
         font-style: italic;
     }
 
-    pre .hljs-title, pre .hljs-function, pre .hljs-name, pre .hljs-section {
+    pre .hljs-title,
+    pre .hljs-function,
+    pre .hljs-name,
+    pre .hljs-section {
         color: #89b4fa;
     }
 
@@ -223,11 +249,15 @@
         color: #f2cdcd;
     }
 
-    pre .hljs-variable, pre .hljs-template-variable, pre .hljs-deletion {
+    pre .hljs-variable,
+    pre .hljs-template-variable,
+    pre .hljs-deletion {
         color: #f38ba8;
     }
 
-    pre .hljs-attr, pre .hljs-symbol, pre .hljs-bullet {
+    pre .hljs-attr,
+    pre .hljs-symbol,
+    pre .hljs-bullet {
         color: #89dceb;
     }
 
@@ -350,7 +380,8 @@
         text-decoration: underline;
     }
 
-    ul, ol {
+    ul,
+    ol {
         margin-bottom: 1em;
     }
 
@@ -391,7 +422,8 @@
         color: #f87171;
     }
 
-    th, td {
+    th,
+    td {
         border-color: #3f3f46;
     }
 

@@ -1,21 +1,21 @@
-import type {Contact} from "@workspace/lib/types/contact";
-import type {Label} from "@workspace/lib/types/label";
-import type {BunSQLiteDatabase} from "drizzle-orm/bun-sqlite";
-import {eq, sql} from "drizzle-orm";
-import * as schema from "./schema";
-import {v4 as uuidv4} from "uuid";
-import type {Home} from "../home";
-import {getHome} from "../home";
-import type {User} from "better-auth/types";
-import {getUserByEmail, updateUser} from "../user/";
-import {generateImagePreview} from "../shared/thumbnails";
-import {DEFAULT_LABELS, LocalFilesystem, PATHS} from "../core";
-import {buildContactEvent, buildLabelEvent} from "./sse-events";
-import {SSEventType} from "@workspace/lib/types/sse";
-import {CONTACTS_DB_CONFIG} from "./db-config";
-import type {ManagedDatabase} from "../core/";
-import {ApiError} from '../core/';
+import type {Contact} from '@workspace/lib/types/contact';
+import type {Label} from '@workspace/lib/types/label';
+import {SSEventType} from '@workspace/lib/types/sse';
+import type {User} from 'better-auth/types';
+import {eq, sql} from 'drizzle-orm';
+import type {BunSQLiteDatabase} from 'drizzle-orm/bun-sqlite';
+import {v4 as uuidv4} from 'uuid';
 import {getDomain} from '../config/server-config';
+import {DEFAULT_LABELS, LocalFilesystem, PATHS} from '../core';
+import type {ManagedDatabase} from '../core/';
+import {ApiError} from '../core/';
+import type {Home} from '../home';
+import {getHome} from '../home';
+import {generateImagePreview} from '../shared/thumbnails';
+import {getUserByEmail, updateUser} from '../user/';
+import {CONTACTS_DB_CONFIG} from './db-config';
+import * as schema from './schema';
+import {buildContactEvent, buildLabelEvent} from './sse-events';
 
 export async function getContacts(user: User) {
     const home = await getHome(user.id);
@@ -37,10 +37,10 @@ function extractContactData(contact: Omit<Contact, 'id'>) {
             address: contactData.address,
             birthday: contactData.birthday,
             notes: contactData.notes,
-            avatar: contactData.avatar
+            avatar: contactData.avatar,
         },
         contactData,
-        labels
+        labels,
     };
 }
 
@@ -73,7 +73,7 @@ export class Contacts {
                 await this.db.insert(schema.labels).values({
                     id: uuidv4(),
                     name: label.name,
-                    color: label.color
+                    color: label.color,
                 });
             }
         }
@@ -98,7 +98,7 @@ export class Contacts {
                     birthday: '',
                     notes: '',
                     avatar: '',
-                    labels: []
+                    labels: [],
                 });
             }
         }
@@ -120,10 +120,12 @@ export class Contacts {
         this.db.transaction((tx) => {
             tx.delete(schema.contactsToLabels).where(eq(schema.contactsToLabels.contactId, contactId)).run();
             for (const labelId of labels) {
-                tx.insert(schema.contactsToLabels).values({
-                    contactId,
-                    labelId
-                }).run();
+                tx.insert(schema.contactsToLabels)
+                    .values({
+                        contactId,
+                        labelId,
+                    })
+                    .run();
             }
         });
     }
@@ -172,12 +174,13 @@ export class Contacts {
         const {data, contactData, labels} = extractContactData(contact);
 
         // Update contact
-        await this.db.update(schema.contacts)
+        await this.db
+            .update(schema.contacts)
             .set({
                 firstName: contactData.firstName.trim(),
                 lastName: contactData.lastName.trim(),
                 data,
-                updatedAt: sql`unixepoch()`
+                updatedAt: sql`unixepoch()`,
             })
             .where(eq(schema.contacts.id, id));
 
@@ -209,23 +212,20 @@ export class Contacts {
     }
 
     public async updateLabel(id: string, label: Omit<Label, 'id'>) {
-        try {
-            await this.db.update(schema.labels)
-                .set({
-                    name: label.name.trim(),
-                    color: label.color,
-                    updatedAt: sql`unixepoch()`
-                })
-                .where(eq(schema.labels.id, id));
+        await this.db
+            .update(schema.labels)
+            .set({
+                name: label.name.trim(),
+                color: label.color,
+                updatedAt: sql`unixepoch()`,
+            })
+            .where(eq(schema.labels.id, id));
 
-            const updatedLabel = await this.db.select().from(schema.labels).where(eq(schema.labels.id, id)).get();
+        const updatedLabel = await this.db.select().from(schema.labels).where(eq(schema.labels.id, id)).get();
 
-            this.emitLabel(SSEventType.LABEL_UPDATED, id);
+        this.emitLabel(SSEventType.LABEL_UPDATED, id);
 
-            return updatedLabel;
-        } catch (error) {
-            throw error;
-        }
+        return updatedLabel;
     }
 
     public async deleteLabel(id: string) {
@@ -241,14 +241,15 @@ export class Contacts {
 
         if (!contact) return null;
 
-        const labelRelations = this.db.select({
-            labelId: schema.contactsToLabels.labelId
-        })
+        const labelRelations = this.db
+            .select({
+                labelId: schema.contactsToLabels.labelId,
+            })
             .from(schema.contactsToLabels)
             .where(eq(schema.contactsToLabels.contactId, id))
             .all();
 
-        const labelIds = labelRelations.map(rel => rel.labelId);
+        const labelIds = labelRelations.map((rel) => rel.labelId);
 
         // Parse the stored JSON data
         const data = contact.data ?? {};
@@ -258,8 +259,8 @@ export class Contacts {
             firstName: contact.firstName.trim(),
             lastName: contact.lastName.trim(),
             eigenId: contact.eigenId,
-            ...data as Omit<Contact, 'id' | 'firstName' | 'lastName' | 'labels'>,
-            labels: labelIds
+            ...(data as Omit<Contact, 'id' | 'firstName' | 'lastName' | 'labels'>),
+            labels: labelIds,
         };
     }
 
@@ -268,14 +269,15 @@ export class Contacts {
         const results = [];
 
         for (const contact of contacts) {
-            const labelRelations = this.db.select({
-                labelId: schema.contactsToLabels.labelId
-            })
+            const labelRelations = this.db
+                .select({
+                    labelId: schema.contactsToLabels.labelId,
+                })
                 .from(schema.contactsToLabels)
                 .where(eq(schema.contactsToLabels.contactId, contact.id))
                 .all();
 
-            const labelIds = labelRelations.map(rel => rel.labelId);
+            const labelIds = labelRelations.map((rel) => rel.labelId);
 
             // Parse the stored JSON data
             const data = contact.data ?? {};
@@ -285,8 +287,8 @@ export class Contacts {
                 firstName: contact.firstName.trim(),
                 lastName: contact.lastName.trim(),
                 eigenId: contact.eigenId,
-                ...data as Omit<Contact, 'id' | 'firstName' | 'lastName' | 'labels'>,
-                labels: labelIds
+                ...(data as Omit<Contact, 'id' | 'firstName' | 'lastName' | 'labels'>),
+                labels: labelIds,
             });
         }
 
@@ -301,7 +303,7 @@ export class Contacts {
             maxSize: 512,
             quality: 80,
             format: 'webp',
-            fit: 'cover'
+            fit: 'cover',
         });
 
         if (!result) {
@@ -335,7 +337,7 @@ export class Contacts {
         const files = await this.storage.list('avatars');
         const contacts = await this.getContacts();
         for (const file of files) {
-            const contact = contacts.find(c => c.avatar?.includes(file));
+            const contact = contacts.find((c) => c.avatar?.includes(file));
             if (!contact) {
                 await this.storage.delete(`avatars/${file}`);
             }
@@ -358,7 +360,7 @@ export class Contacts {
             birthday: '',
             notes: '',
             avatar: '',
-            labels: []
+            labels: [],
         });
     }
 

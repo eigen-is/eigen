@@ -1,33 +1,33 @@
-import {useCallback, useState} from 'react';
-import {useHotkey} from '@tanstack/react-hotkeys';
 import {DndContext, DragOverlay, PointerSensor, useSensor, useSensors} from '@dnd-kit/core';
 import {horizontalListSortingStrategy, SortableContext} from '@dnd-kit/sortable';
-import {Column} from './column';
-import {CardItem, ColumnItem} from './types';
-import {AddCardDialog} from './add-card-dialog';
-import {AddColumnDialog} from './add-column-dialog';
-import {ColumnSettingsDialog} from './column-settings-dialog';
-import {CardSettingsDialog} from './card-settings-dialog';
-import {Card, CardContent} from '@workspace/ui/components/card';
-import {isLightColor} from '@workspace/ui/components/layout/media/color-picker';
+import {useHotkey} from '@tanstack/react-hotkeys';
 import {EIGEN_STICKIES_COLORS, lightenColor} from '@workspace/lib/constants';
+import {MediaResolverProvider} from '@workspace/lib/drive';
 import {useIsMobile} from '@workspace/lib/media';
-import {ContextMenuAnchor, useContextMenu} from '@workspace/ui/components/layout/context-menu';
+import type {DrivePath} from '@workspace/lib/types/drive';
+import {Card, CardContent} from '@workspace/ui/components/card';
 import {
     DropdownMenuItem,
     DropdownMenuSeparator,
     DropdownMenuSub,
     DropdownMenuSubContent,
-    DropdownMenuSubTrigger
+    DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import {Check, CircleOff, Palette, Pencil, Trash2} from 'lucide-react';
+import {ContextMenuAnchor, useContextMenu} from '@workspace/ui/components/layout/context-menu';
 import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
+import {isLightColor} from '@workspace/ui/components/layout/media/color-picker';
+import {Check, CircleOff, Palette, Pencil, Trash2} from 'lucide-react';
+import {useCallback, useState} from 'react';
+import * as Y from 'yjs';
+import {AddCardDialog} from './add-card-dialog';
+import {AddColumnDialog} from './add-column-dialog';
+import {CardSettingsDialog} from './card-settings-dialog';
+import {Column} from './column';
+import {ColumnSettingsDialog} from './column-settings-dialog';
 import {useBoard} from './hooks/use-board';
 import {useDragAndDrop} from './hooks/use-drag-and-drop';
 import {Toolbar} from './toolbar';
-import type {DrivePath} from '@workspace/lib/types/drive';
-import {MediaResolverProvider} from '@workspace/lib/drive';
-import * as Y from 'yjs';
+import type {CardItem, ColumnItem} from './types';
 
 function jsonToYType(value: unknown): unknown {
     if (Array.isArray(value)) {
@@ -51,7 +51,7 @@ type StickiesBoardProps = {
     canWrite: boolean;
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
-}
+};
 
 export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDialogOpen}: StickiesBoardProps) {
     const {
@@ -68,26 +68,34 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
         undoManager,
     } = useBoard(ownerId, path.mountId, path.id, chatFolderId);
 
-    const {
-        dragState,
-        handleDragStart,
-        handleDragEnd,
-    } = useDragAndDrop({board, yjsDoc});
+    const {dragState, handleDragStart, handleDragEnd} = useDragAndDrop({board, yjsDoc});
 
-    useHotkey('Mod+Z', (e) => {
-        e.preventDefault();
-        undoManager?.undo();
-    }, {enabled: canWrite && !!undoManager});
+    useHotkey(
+        'Mod+Z',
+        (e) => {
+            e.preventDefault();
+            undoManager?.undo();
+        },
+        {enabled: canWrite && !!undoManager},
+    );
 
-    useHotkey('Mod+Y', (e) => {
-        e.preventDefault();
-        undoManager?.redo();
-    }, {enabled: canWrite && !!undoManager});
+    useHotkey(
+        'Mod+Y',
+        (e) => {
+            e.preventDefault();
+            undoManager?.redo();
+        },
+        {enabled: canWrite && !!undoManager},
+    );
 
-    useHotkey('Mod+Shift+Z', (e) => {
-        e.preventDefault();
-        undoManager?.redo();
-    }, {enabled: canWrite && !!undoManager});
+    useHotkey(
+        'Mod+Shift+Z',
+        (e) => {
+            e.preventDefault();
+            undoManager?.redo();
+        },
+        {enabled: canWrite && !!undoManager},
+    );
 
     const isMobile = useIsMobile();
     const [editColumnId, setEditColumnId] = useState<string | null>(null);
@@ -110,7 +118,7 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
     const handleCardContextColor = (color: string) => {
         if (!yjsDoc || !cardContextMenu.item) return;
         yjsDoc.transact(() => {
-            const taskMap = yjsDoc.getMap('tasks').get(cardContextMenu.item!.id) as Y.Map<any>;
+            const taskMap = yjsDoc.getMap('tasks').get(cardContextMenu.item!.id) as Y.Map<unknown>;
             if (taskMap) taskMap.set('color', color);
         });
         cardContextMenu.close();
@@ -122,7 +130,7 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
             const columnsMap = yjsDoc.getMap('columns');
             for (const [, col] of columnsMap) {
                 if (!(col instanceof Y.Map)) continue;
-                const taskIds = col.get('taskIds') as Y.Array<any>;
+                const taskIds = col.get('taskIds') as Y.Array<string>;
                 const index = (taskIds.toArray() as string[]).indexOf(deleteCardId);
                 if (index !== -1) {
                     taskIds.delete(index, 1);
@@ -139,36 +147,39 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
         setIsColumnSettingsOpen(true);
     };
 
-    const handleRestore = useCallback((state: Uint8Array) => {
-        if (!yjsDoc) return;
-        const tempDoc = new Y.Doc();
-        Y.applyUpdate(tempDoc, state);
+    const handleRestore = useCallback(
+        (state: Uint8Array) => {
+            if (!yjsDoc) return;
+            const tempDoc = new Y.Doc();
+            Y.applyUpdate(tempDoc, state);
 
-        const allKeys = new Set([...yjsDoc.share.keys(), ...tempDoc.share.keys()]);
+            const allKeys = new Set([...yjsDoc.share.keys(), ...tempDoc.share.keys()]);
 
-        yjsDoc.transact(() => {
-            for (const key of allKeys) {
-                const localType = yjsDoc.get(key);
-                if (localType instanceof Y.Map) {
-                    const json = tempDoc.getMap(key).toJSON();
-                    for (const k of [...localType.keys()]) localType.delete(k);
-                    for (const [k, v] of Object.entries(json)) {
-                        localType.set(k, jsonToYType(v));
+            yjsDoc.transact(() => {
+                for (const key of allKeys) {
+                    const localType = yjsDoc.get(key);
+                    if (localType instanceof Y.Map) {
+                        const json = tempDoc.getMap(key).toJSON();
+                        for (const k of [...localType.keys()]) localType.delete(k);
+                        for (const [k, v] of Object.entries(json)) {
+                            localType.set(k, jsonToYType(v));
+                        }
+                    } else if (localType instanceof Y.Array) {
+                        const json = tempDoc.getArray(key).toJSON();
+                        localType.delete(0, localType.length);
+                        localType.push(json);
                     }
-                } else if (localType instanceof Y.Array) {
-                    const json = tempDoc.getArray(key).toJSON();
-                    localType.delete(0, localType.length);
-                    localType.push(json);
                 }
-            }
-        });
-        tempDoc.destroy();
-    }, [yjsDoc]);
+            });
+            tempDoc.destroy();
+        },
+        [yjsDoc],
+    );
 
     const sensors = useSensors(
         useSensor(PointerSensor, {
             activationConstraint: {distance: 5},
-        })
+        }),
     );
 
     const getActiveComponent = () => {
@@ -179,14 +190,17 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
             return (
                 <Card
                     className={`${isMobile ? 'w-full p-0' : 'w-[254px] p-0'} shadow-md rounded-none ${!card.color ? 'border' : 'border-0'}`}
-                      style={{
-                          backgroundColor: card.color ? lightenColor(card.color, 0.25) : undefined,
-                          color: card.color ? (isLightColor(card.color) ? '#000' : '#fff') : undefined,
-                      }}>
+                    style={{
+                        backgroundColor: card.color ? lightenColor(card.color, 0.25) : undefined,
+                        color: card.color ? (isLightColor(card.color) ? '#000' : '#fff') : undefined,
+                    }}
+                >
                     <CardContent className={`p-3 text-sm ${!card.color ? 'bg-accent' : ''}`}>
                         {card.title}
                         {card.description && (
-                            <p className="text-xs mt-1 line-clamp-2" style={{opacity: 0.7}}>{card.description}</p>
+                            <p className="text-xs mt-1 line-clamp-2" style={{opacity: 0.7}}>
+                                {card.description}
+                            </p>
                         )}
                     </CardContent>
                 </Card>
@@ -215,154 +229,174 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
     };
 
     return (
-        <MediaResolverProvider ownerId={ownerId} mountId={path.mountId} mediaFolderId={null} chatFolderId={chatFolderId}>
-        <div className="flex flex-col h-full w-full">
-            <Toolbar path={path} canWrite={canWrite} undoManager={undoManager}
-                     onAccessDialogOpen={onAccessDialogOpen} onRestore={handleRestore}
-                     onAddColumn={() => setIsAddColumnDialogOpen(true)}
-                     colorFilter={colorFilter} onColorFilterChange={setColorFilter}/>
-            <div className="flex-1 w-full flex overflow-hidden">
-                <div
-                    className="overflow-x-auto overflow-y-hidden flex-1"
-                    style={board.columnOrder.length > 0 ? {
-                        padding: 0,
-                        scrollSnapType: 'x mandatory',
-                        scrollBehavior: 'smooth',
-                    } : {
-                        visibility: 'hidden',
-                    }}
-                >
-                    <DndContext
-                        sensors={canWrite ? sensors : []}
-                        onDragStart={handleDragStart}
-                        onDragEnd={handleDragEnd}
-                        autoScroll={{
-                            enabled: true,
-                            threshold: {x: 0.2, y: 0.2},
-                            acceleration: 10,
-                            interval: 10,
-                            layoutShiftCompensation: false,
-                        }}
+        <MediaResolverProvider
+            ownerId={ownerId}
+            mountId={path.mountId}
+            mediaFolderId={null}
+            chatFolderId={chatFolderId}
+        >
+            <div className="flex flex-col h-full w-full">
+                <Toolbar
+                    path={path}
+                    canWrite={canWrite}
+                    undoManager={undoManager}
+                    onAccessDialogOpen={onAccessDialogOpen}
+                    onRestore={handleRestore}
+                    onAddColumn={() => setIsAddColumnDialogOpen(true)}
+                    colorFilter={colorFilter}
+                    onColorFilterChange={setColorFilter}
+                />
+                <div className="flex-1 w-full flex overflow-hidden">
+                    <div
+                        className="overflow-x-auto overflow-y-hidden flex-1"
+                        style={
+                            board.columnOrder.length > 0
+                                ? {
+                                    padding: 0,
+                                    scrollSnapType: 'x mandatory',
+                                    scrollBehavior: 'smooth',
+                                }
+                                : {
+                                    visibility: 'hidden',
+                                }
+                        }
                     >
-                        <div className={`flex gap-0 h-full bg-muted`}>
-                            <SortableContext items={board.columnOrder} strategy={horizontalListSortingStrategy}>
-                                {board.columnOrder.map((columnId) => {
-                                    const column = board.columns[columnId];
-                                    const columnCards = column.taskIds
-                                        .map((taskId) => board.tasks[taskId])
-                                        .filter((card) => colorFilter.size === 0 || colorFilter.has(card.color || ''));
-                                    return (
-                                        <Column
-                                            key={column.id}
-                                            column={column}
-                                            cards={columnCards}
-                                            canWrite={canWrite}
-                                            onAddCard={handleAddCardClick}
-                                            onEditColumn={handleEditColumn}
-                                            onCardContextMenu={canWrite ? cardContextMenu.handleContextMenu : undefined}
-                                            isMobile={isMobile}
-                                            yjsDoc={yjsDoc}
-                                            ownerId={ownerId}
-                                            mountId={path.mountId}
-                                        />
-                                    );
-                                })}
-                            </SortableContext>
-                        </div>
+                        <DndContext
+                            sensors={canWrite ? sensors : []}
+                            onDragStart={handleDragStart}
+                            onDragEnd={handleDragEnd}
+                            autoScroll={{
+                                enabled: true,
+                                threshold: {x: 0.2, y: 0.2},
+                                acceleration: 10,
+                                interval: 10,
+                                layoutShiftCompensation: false,
+                            }}
+                        >
+                            <div className={`flex gap-0 h-full bg-muted`}>
+                                <SortableContext items={board.columnOrder} strategy={horizontalListSortingStrategy}>
+                                    {board.columnOrder.map((columnId) => {
+                                        const column = board.columns[columnId];
+                                        const columnCards = column.taskIds
+                                            .map((taskId) => board.tasks[taskId])
+                                            .filter(
+                                                (card) => colorFilter.size === 0 || colorFilter.has(card.color || ''),
+                                            );
+                                        return (
+                                            <Column
+                                                key={column.id}
+                                                column={column}
+                                                cards={columnCards}
+                                                canWrite={canWrite}
+                                                onAddCard={handleAddCardClick}
+                                                onEditColumn={handleEditColumn}
+                                                onCardContextMenu={
+                                                    canWrite ? cardContextMenu.handleContextMenu : undefined
+                                                }
+                                                isMobile={isMobile}
+                                                yjsDoc={yjsDoc}
+                                                ownerId={ownerId}
+                                                mountId={path.mountId}
+                                            />
+                                        );
+                                    })}
+                                </SortableContext>
+                            </div>
 
-                        <DragOverlay adjustScale={false}>
-                            {getActiveComponent()}
-                        </DragOverlay>
-                    </DndContext>
+                            <DragOverlay adjustScale={false}>{getActiveComponent()}</DragOverlay>
+                        </DndContext>
 
-                    <AddCardDialog
-                        isOpen={isAddCardDialogOpen}
-                        onClose={() => setIsAddCardDialogOpen(false)}
-                        onAddCard={handleAddCard}
-                        columnId={selectedColumnId}
-                    />
-
-                    <AddColumnDialog
-                        isOpen={isAddColumnDialogOpen}
-                        onClose={() => setIsAddColumnDialogOpen(false)}
-                        onAddColumn={handleAddColumn}
-                    />
-
-                    {editColumnId && (
-                        <ColumnSettingsDialog
-                            key={editColumnId}
-                            isOpen={isColumnSettingsOpen}
-                            onClose={() => setIsColumnSettingsOpen(false)}
-                            columnId={editColumnId}
-                            columnTitle={board.columns[editColumnId]?.title || ''}
-                            cardCount={board.columns[editColumnId]?.taskIds.length || 0}
-                            canWrite={canWrite}
-                            yjsDoc={yjsDoc}
+                        <AddCardDialog
+                            isOpen={isAddCardDialogOpen}
+                            onClose={() => setIsAddCardDialogOpen(false)}
+                            onAddCard={handleAddCard}
+                            columnId={selectedColumnId}
                         />
-                    )}
 
-                    <ContextMenuAnchor contextMenu={cardContextMenu}>
-                        <DropdownMenuItem onClick={handleCardContextEdit}>
-                            <Pencil className="h-4 w-4 mr-2"/> Edit
-                        </DropdownMenuItem>
-                        <DropdownMenuSub>
-                            <DropdownMenuSubTrigger>
-                                <Palette className="h-4 w-4 mr-2"/> Color
-                            </DropdownMenuSubTrigger>
-                            <DropdownMenuSubContent>
-                                <div className="flex gap-1 p-2">
-                                    <button
-                                        className="h-4 w-4 rounded-full border border-border hover:scale-125 transition-transform flex items-center justify-center bg-background"
-                                        title="No color"
-                                        onClick={() => handleCardContextColor('')}
-                                    >
-                                        <CircleOff className="h-2.5 w-2.5 text-muted-foreground"/>
-                                    </button>
-                                    {EIGEN_STICKIES_COLORS[0].map((c) => (
+                        <AddColumnDialog
+                            isOpen={isAddColumnDialogOpen}
+                            onClose={() => setIsAddColumnDialogOpen(false)}
+                            onAddColumn={handleAddColumn}
+                        />
+
+                        {editColumnId && (
+                            <ColumnSettingsDialog
+                                key={editColumnId}
+                                isOpen={isColumnSettingsOpen}
+                                onClose={() => setIsColumnSettingsOpen(false)}
+                                columnId={editColumnId}
+                                columnTitle={board.columns[editColumnId]?.title || ''}
+                                cardCount={board.columns[editColumnId]?.taskIds.length || 0}
+                                canWrite={canWrite}
+                                yjsDoc={yjsDoc}
+                            />
+                        )}
+
+                        <ContextMenuAnchor contextMenu={cardContextMenu}>
+                            <DropdownMenuItem onClick={handleCardContextEdit}>
+                                <Pencil className="h-4 w-4 mr-2"/> Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuSub>
+                                <DropdownMenuSubTrigger>
+                                    <Palette className="h-4 w-4 mr-2"/> Color
+                                </DropdownMenuSubTrigger>
+                                <DropdownMenuSubContent>
+                                    <div className="flex gap-1 p-2">
                                         <button
-                                            key={c.value}
-                                            className="h-4 w-4 rounded-full border border-border/50 hover:scale-125 transition-transform flex items-center justify-center"
-                                            style={{backgroundColor: c.value}}
-                                            title={c.label}
-                                            onClick={() => handleCardContextColor(c.value)}
+                                            className="h-4 w-4 rounded-full border border-border hover:scale-125 transition-transform flex items-center justify-center bg-background"
+                                            title="No color"
+                                            onClick={() => handleCardContextColor('')}
                                         >
-                                            {cardContextMenu.item?.color === c.value && (
-                                                <Check className="h-2 w-2" style={{color: isLightColor(c.value) ? '#000' : '#fff'}}/>
-                                            )}
+                                            <CircleOff className="h-2.5 w-2.5 text-muted-foreground"/>
                                         </button>
-                                    ))}
-                                </div>
-                            </DropdownMenuSubContent>
-                        </DropdownMenuSub>
-                        <DropdownMenuSeparator/>
-                        <DropdownMenuItem variant="destructive" onClick={handleCardContextDelete}>
-                            <Trash2 className="h-4 w-4 mr-2"/> Delete
-                        </DropdownMenuItem>
-                    </ContextMenuAnchor>
+                                        {EIGEN_STICKIES_COLORS[0].map((c) => (
+                                            <button
+                                                key={c.value}
+                                                className="h-4 w-4 rounded-full border border-border/50 hover:scale-125 transition-transform flex items-center justify-center"
+                                                style={{backgroundColor: c.value}}
+                                                title={c.label}
+                                                onClick={() => handleCardContextColor(c.value)}
+                                            >
+                                                {cardContextMenu.item?.color === c.value && (
+                                                    <Check
+                                                        className="h-2 w-2"
+                                                        style={{color: isLightColor(c.value) ? '#000' : '#fff'}}
+                                                    />
+                                                )}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </DropdownMenuSubContent>
+                            </DropdownMenuSub>
+                            <DropdownMenuSeparator/>
+                            <DropdownMenuItem variant="destructive" onClick={handleCardContextDelete}>
+                                <Trash2 className="h-4 w-4 mr-2"/> Delete
+                            </DropdownMenuItem>
+                        </ContextMenuAnchor>
 
-                    {editCardId && board.tasks[editCardId] && (
-                        <CardSettingsDialog
-                            key={editCardId}
-                            isOpen={!!editCardId}
-                            onClose={() => setEditCardId(null)}
-                            cardId={editCardId}
-                            cardTitle={board.tasks[editCardId].title}
-                            cardDescription={board.tasks[editCardId].description}
-                            cardColor={board.tasks[editCardId].color || ''}
-                            yjsDoc={yjsDoc}
+                        {editCardId && board.tasks[editCardId] && (
+                            <CardSettingsDialog
+                                key={editCardId}
+                                isOpen={!!editCardId}
+                                onClose={() => setEditCardId(null)}
+                                cardId={editCardId}
+                                cardTitle={board.tasks[editCardId].title}
+                                cardDescription={board.tasks[editCardId].description}
+                                cardColor={board.tasks[editCardId].color || ''}
+                                yjsDoc={yjsDoc}
+                            />
+                        )}
+
+                        <DeleteDialog
+                            open={!!deleteCardId}
+                            onOpenChange={(open) => !open && setDeleteCardId(null)}
+                            title="Delete Card"
+                            description="This will permanently delete the card. This action cannot be undone."
+                            onDelete={handleDeleteCard}
                         />
-                    )}
-
-                    <DeleteDialog
-                        open={!!deleteCardId}
-                        onOpenChange={(open) => !open && setDeleteCardId(null)}
-                        title="Delete Card"
-                        description="This will permanently delete the card. This action cannot be undone."
-                        onDelete={handleDeleteCard}
-                    />
+                    </div>
                 </div>
             </div>
-        </div>
         </MediaResolverProvider>
     );
 }

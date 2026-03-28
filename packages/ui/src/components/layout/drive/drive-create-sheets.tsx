@@ -1,7 +1,7 @@
-import type {DrivePath} from "@workspace/lib/types/drive";
-import {useCreateSheets} from "@workspace/lib/drive";
-import {getSheetUrl} from "@workspace/lib/api";
-import {DriveCreateItemDialog} from "./drive-create-folder-item";
+import {getSheetUrl} from '@workspace/lib/api';
+import {useCreateSheets} from '@workspace/lib/drive';
+import type {DrivePath} from '@workspace/lib/types/drive';
+import {DriveCreateItemDialog} from './drive-create-folder-item';
 
 export type DriveCreateSheetsProps = {
     path: DrivePath;
@@ -9,8 +9,8 @@ export type DriveCreateSheetsProps = {
     onOpenChange: (open: boolean) => void;
     onSave?: (newPath: string) => void;
     onCancel?: () => void;
-    onAfterAction?: (actionType: string, data: any) => void;
-}
+    onAfterAction?: (actionType: string, data: Record<string, unknown>) => void;
+};
 
 export function DriveCreateSheets({
                                       path,

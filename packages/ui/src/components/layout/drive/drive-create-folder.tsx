@@ -1,6 +1,6 @@
-import type {DrivePath} from "@workspace/lib/types/drive";
-import {useCreateFolder} from "@workspace/lib/drive";
-import {DriveCreateItemDialog} from "./drive-create-folder-item";
+import {useCreateFolder} from '@workspace/lib/drive';
+import type {DrivePath} from '@workspace/lib/types/drive';
+import {DriveCreateItemDialog} from './drive-create-folder-item';
 
 export type DriveCreateFolderProps = {
     path: DrivePath;
@@ -8,8 +8,8 @@ export type DriveCreateFolderProps = {
     onOpenChange: (open: boolean) => void;
     onSave?: (newPath: string) => void;
     onCancel?: () => void;
-    onAfterAction?: (actionType: string, data: any) => void;
-}
+    onAfterAction?: (actionType: string, data: Record<string, unknown>) => void;
+};
 
 export function DriveCreateFolder({
                                       path,

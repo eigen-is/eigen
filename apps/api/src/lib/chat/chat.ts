@@ -1,24 +1,23 @@
-import {randomUUID} from 'crypto';
+import {randomUUID} from 'node:crypto';
+import type {ChatMessage} from '@workspace/lib/types/chat';
+import {type DrivePath, stripEigenExtension} from '@workspace/lib/types/drive';
+import {type SSEvent, SSEventType} from '@workspace/lib/types/sse';
+import {validateEmailAddress} from '@workspace/lib/validation';
 import {desc, eq, lt} from 'drizzle-orm';
 import type {BunSQLiteDatabase} from 'drizzle-orm/bun-sqlite';
-
-import {type DrivePath, stripEigenExtension} from '@workspace/lib/types/drive';
-import type {ChatMessage} from '@workspace/lib/types/chat';
-import type {Drive} from '../drive';
+import {ApiError} from '../core/errors';
 import type {ManagedDatabase} from '../core/managed-database';
-import {CHAT_ROOM_DB_CONFIG} from './db-config';
-import * as schema from './schema';
-import {buildChatEvent, buildCommentIndexUpdatedEvent} from './sse-events';
-import {type CommentIndex, openCommentIndex} from './comment-index';
-import {extractMentionedEmails} from './mentions';
-import {type SSEvent, SSEventType} from '@workspace/lib/types/sse';
+import type {Drive} from '../drive';
 import type {Home} from '../home';
 import {getHome} from '../home';
-import {formatEmoteForViewer, parseCommand} from './commands';
-import {validateEmailAddress} from '@workspace/lib/validation';
+import {atHome} from '../home/get-home.ts';
 import {getUserByEmail} from '../user/';
-import {ApiError} from '../core/errors';
-import {atHome} from "../home/get-home.ts";
+import {formatEmoteForViewer, parseCommand} from './commands';
+import {type CommentIndex, openCommentIndex} from './comment-index';
+import {CHAT_ROOM_DB_CONFIG} from './db-config';
+import {extractMentionedEmails} from './mentions';
+import * as schema from './schema';
+import {buildChatEvent, buildCommentIndexUpdatedEvent} from './sse-events';
 
 export class ChatRoom {
     private drive: Drive;
@@ -53,14 +52,20 @@ export class ChatRoom {
         this.db = this.managedDb.db;
 
         // Walk parentId chain to find outermost collab container (if any)
-        this.containerPath = await this.drive.findContainerPath(
-            this.path.mountId, this.path.parentId ?? ''
-        );
+        this.containerPath = await this.drive.findContainerPath(this.path.mountId, this.path.parentId ?? '');
 
         return this;
     }
 
-    async postMessage(authorId: string, authorEmail: string, content: string, type: ChatMessage['type'] = 'message', whisperTo?: string, replyTo?: string, attachments?: string[]): Promise<ChatMessage> {
+    async postMessage(
+        authorId: string,
+        authorEmail: string,
+        content: string,
+        type: ChatMessage['type'] = 'message',
+        whisperTo?: string,
+        replyTo?: string,
+        attachments?: string[],
+    ): Promise<ChatMessage> {
         if (content.startsWith('/') && type === 'message') {
             const cmd = parseCommand(content);
             switch (cmd.kind) {
@@ -146,7 +151,7 @@ export class ChatRoom {
             const mentionedEmails = extractMentionedEmails(content);
             if (mentionedEmails.length > 0) {
                 const members = await this.drive.getEffectiveMembers(this.path.mountId, this.path.id);
-                const memberEmails = new Set(members.map(m => m.email.toLowerCase()));
+                const memberEmails = new Set(members.map((m) => m.email.toLowerCase()));
                 const displayName = stripEigenExtension(this.containerPath?.name ?? this.path.name);
                 const notificationType = this.containerPath ? 'mention-comment' : 'mention-chat';
                 const targetPath = this.containerPath ?? this.path;
@@ -162,10 +167,11 @@ export class ChatRoom {
                             type: notificationType,
                             actorEmail: authorEmail,
                             title: `You were mentioned in "${displayName}"`,
-                            body: content.length > 100 ? content.slice(0, 100) + '...' : content,
+                            body: content.length > 100 ? `${content.slice(0, 100)}...` : content,
                             tag: `mention:${targetPath.ownerId}:${targetPath.mountId}:${targetPath.id}:${email}`,
                         });
-                    } catch { /* user may not exist */
+                    } catch {
+                        /* user may not exist */
                     }
                 }
             }
@@ -175,29 +181,42 @@ export class ChatRoom {
     }
 
     async getMessages(limit: number = 50, beforeId?: string): Promise<ChatMessage[]> {
-        let rows;
+        let rows: ChatMessage[];
         if (beforeId) {
-            const beforeMsg = await this.db.select().from(schema.messages).where(eq(schema.messages.id, beforeId)).get();
+            const beforeMsg = await this.db
+                .select()
+                .from(schema.messages)
+                .where(eq(schema.messages.id, beforeId))
+                .get();
             if (!beforeMsg) return [];
-            rows = await this.db.select().from(schema.messages)
+            rows = await this.db
+                .select()
+                .from(schema.messages)
                 .where(lt(schema.messages.createdAt, beforeMsg.createdAt))
                 .orderBy(desc(schema.messages.createdAt))
                 .limit(limit)
                 .all();
         } else {
-            rows = await this.db.select().from(schema.messages)
+            rows = await this.db
+                .select()
+                .from(schema.messages)
                 .orderBy(desc(schema.messages.createdAt))
                 .limit(limit)
                 .all();
         }
 
-        return rows.map(r => this.toMessage(r)).reverse();
+        return rows.map((r) => this.toMessage(r)).reverse();
     }
 
-    async getMessagesForUser(userId: string, userEmail: string, limit: number = 50, beforeId?: string): Promise<ChatMessage[]> {
+    async getMessagesForUser(
+        userId: string,
+        userEmail: string,
+        limit: number = 50,
+        beforeId?: string,
+    ): Promise<ChatMessage[]> {
         const allMessages = await this.getMessages(limit, beforeId);
 
-        return allMessages.map(msg => {
+        return allMessages.map((msg) => {
             if (msg.type === 'whisper') {
                 const isAuthor = msg.authorId === userId;
                 const isRecipient = msg.whisperTo === userId || msg.whisperTo === userEmail;
@@ -229,9 +248,7 @@ export class ChatRoom {
         if (!existing || existing.authorId !== userId) return null;
 
         const now = new Date();
-        await this.db.update(schema.messages)
-            .set({content, editedAt: now})
-            .where(eq(schema.messages.id, messageId));
+        await this.db.update(schema.messages).set({content, editedAt: now}).where(eq(schema.messages.id, messageId));
 
         const updated = this.toMessage({...existing, content, editedAt: now});
 
@@ -260,7 +277,8 @@ export class ChatRoom {
         if (!existing || existing.authorId !== userId) return false;
 
         const now = new Date();
-        await this.db.update(schema.messages)
+        await this.db
+            .update(schema.messages)
             .set({deletedAt: now, content: ''})
             .where(eq(schema.messages.id, messageId));
 
@@ -296,7 +314,8 @@ export class ChatRoom {
         const now = new Date();
         const existing = await this.db.select().from(schema.readState).where(eq(schema.readState.userId, userId)).get();
         if (existing) {
-            await this.db.update(schema.readState)
+            await this.db
+                .update(schema.readState)
                 .set({lastReadMessageId: messageId, lastReadAt: now})
                 .where(eq(schema.readState.userId, userId));
         } else {
@@ -314,9 +333,7 @@ export class ChatRoom {
             const index = await openCommentIndex(this.drive, this.containerPath);
             await fn(index);
 
-            const event = buildCommentIndexUpdatedEvent(
-                this.containerPath.id, this.path.ownerId, this.path.mountId
-            );
+            const event = buildCommentIndexUpdatedEvent(this.containerPath.id, this.path.ownerId, this.path.mountId);
             this.home.broadcast(event);
             this.notifySharedUsers(event);
         } catch (error) {
@@ -336,7 +353,8 @@ export class ChatRoom {
                     const home = await getHome(user.id);
                     home.broadcast(event);
                 }
-            } catch { /* user home may not exist */
+            } catch {
+                /* user home may not exist */
             }
         }
     }

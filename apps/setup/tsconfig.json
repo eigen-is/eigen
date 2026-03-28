@@ -3,18 +3,10 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@workspace/lib/*": [
-        "../../packages/lib/src/*"
-      ],
-      "@workspace/ui/*": [
-        "../../packages/ui/src/*"
-      ]
+      "@workspace/lib/*": ["../../packages/lib/src/*"],
+      "@workspace/ui/*": ["../../packages/ui/src/*"]
     }
   },
-  "include": [
-    "src"
-  ],
-  "exclude": [
-    "node_modules"
-  ]
+  "include": ["src"],
+  "exclude": ["node_modules"]
 }

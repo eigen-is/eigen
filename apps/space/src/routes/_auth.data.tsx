@@ -2,8 +2,8 @@ import {createFileRoute} from '@tanstack/react-router';
 import {DownloadHome} from '../components/space/download-home';
 
 export const Route = createFileRoute('/_auth/data')({
-    component: DataExportComponent
-})
+    component: DataExportComponent,
+});
 
 function DataExportComponent() {
     return (

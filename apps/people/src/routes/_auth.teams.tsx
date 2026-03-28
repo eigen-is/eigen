@@ -1,13 +1,13 @@
 import {createFileRoute} from '@tanstack/react-router';
-import {TeamDetail, TeamDetailToolbar} from '../components/people/team-detail';
 import {usePeopleTeams} from '@workspace/lib/people';
 import {usePublicConfig} from '@workspace/lib/public';
-import {Column, ColumnLayout} from '@workspace/ui/components/layout/app/column-layout.tsx';
 import {EmptyState, LoadingState} from '@workspace/ui';
+import {Column, ColumnLayout} from '@workspace/ui/components/layout/app/column-layout.tsx';
+import {TeamDetail, TeamDetailToolbar} from '../components/people/team-detail';
 
 type TeamsSearch = {
     teamId?: string;
-}
+};
 
 export const Route = createFileRoute('/_auth/teams')({
     component: TeamsRoute,
@@ -22,15 +22,13 @@ function TeamsRoute() {
     const {data: config} = usePublicConfig();
     const {data: teams = [], isLoading} = usePeopleTeams(config?.orgId);
 
-    const team = teams.find(t => t.id === teamId);
+    const team = teams.find((t) => t.id === teamId);
 
     if (isLoading) {
         return <LoadingState/>;
     }
 
-    const detailToolbar = team ? (
-        <TeamDetailToolbar team={team} organizationId={config?.orgId}/>
-    ) : null;
+    const detailToolbar = team ? <TeamDetailToolbar team={team} organizationId={config?.orgId}/> : null;
 
     return (
         <ColumnLayout>

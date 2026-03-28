@@ -24,7 +24,7 @@ export function parseMediaGrids(markdown: string): {
         const mediaRegex = /<media\s+([\s\S]+?)\/>/g;
         const items: MediaItem[] = [];
 
-        let mediaMatch;
+        let mediaMatch: RegExpExecArray | null;
         while ((mediaMatch = mediaRegex.exec(innerContent)) !== null) {
             const attrs = mediaMatch[1];
             const srcMatch = attrs.match(/src="([^"]+)"/);
@@ -36,7 +36,7 @@ export function parseMediaGrids(markdown: string): {
 
             const item: MediaItem = {
                 src: srcMatch ? srcMatch[1] : '',
-                type: (typeMatch?.[1] === 'video' ? 'video' : 'image'),
+                type: typeMatch?.[1] === 'video' ? 'video' : 'image',
                 caption: captionMatch?.[1],
                 thumbnail: thumbnailMatch?.[1] ?? thumbMatch?.[1],
                 poster: posterMatch?.[1],
@@ -45,10 +45,10 @@ export function parseMediaGrids(markdown: string): {
             items.push(item);
         }
 
-        mediaGrids.push({columns, items});
+        mediaGrids.push({ columns, items });
 
         return `\n\n[MEDIAGRID:${gridIndex++}]\n\n`;
     });
 
-    return {content, mediaGrids};
+    return { content, mediaGrids };
 }

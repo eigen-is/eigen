@@ -1,9 +1,9 @@
-import {createFileRoute} from '@tanstack/react-router'
+import {createFileRoute} from '@tanstack/react-router';
 import {ProfileEditor} from '../components/space/profile-editor';
 
 export const Route = createFileRoute('/_auth/user')({
     component: RouteComponent,
-})
+});
 
 function RouteComponent() {
     return (

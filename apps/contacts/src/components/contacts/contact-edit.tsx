@@ -1,67 +1,71 @@
-import {z} from 'zod';
-import {useForm} from 'react-hook-form';
 import {zodResolver} from '@hookform/resolvers/zod';
-import React, {useState} from 'react';
-import {Camera, Plus, Trash2} from 'lucide-react';
-import {format} from "date-fns";
-import {useLabels} from '@workspace/lib/contacts';
+import {getContactsAvatarUploadUrl} from '@workspace/lib/api';
 import {useAuth} from '@workspace/lib/auth';
-import {type Contact} from "@workspace/lib/types/contact";
-import {useUpload} from '@workspace/ui/components/layout/upload-provider/upload-provider';
-import {uploadWithProgress} from "@workspace/ui/components/layout/upload-provider/upload-with-progress";
-import {getContactsAvatarUploadUrl} from "@workspace/lib/api";
-import {Button} from "@workspace/ui/components/button";
-import {Input} from "@workspace/ui/components/input";
-import {Badge} from "@workspace/ui/components/badge";
-import {Textarea} from "@workspace/ui/components/textarea";
-import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage} from "@workspace/ui/components/form";
-import {Toolbar, UserAvatar} from "@workspace/ui";
+import {useLabels} from '@workspace/lib/contacts';
+import type {Contact} from '@workspace/lib/types/contact';
+import {Toolbar, UserAvatar} from '@workspace/ui';
+import {Badge} from '@workspace/ui/components/badge';
+import {Button} from '@workspace/ui/components/button';
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
-    DropdownMenuTrigger
-} from "@workspace/ui/components/dropdown-menu";
+    DropdownMenuTrigger,
+} from '@workspace/ui/components/dropdown-menu';
+import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage} from '@workspace/ui/components/form';
+import {Input} from '@workspace/ui/components/input';
+import {useUpload} from '@workspace/ui/components/layout/upload-provider/upload-provider';
+import {uploadWithProgress} from '@workspace/ui/components/layout/upload-provider/upload-with-progress';
+import {Textarea} from '@workspace/ui/components/textarea';
+import {format} from 'date-fns';
+import {Camera, Plus, Trash2} from 'lucide-react';
+import React, {useState} from 'react';
+import {useForm} from 'react-hook-form';
+import {z} from 'zod';
 
 // Define the form schema
-export const formSchema = z.object({
-    firstName: z.string().optional(),
-    lastName: z.string().optional(),
-    company: z.string().optional(),
-    jobTitle: z.string().optional(),
-    email: z.array(z.string().email().or(z.string().length(0))),
-    phone: z.array(z.string()),
-    address: z.array(
-        z.object({
-            street: z.string().optional(),
-            city: z.string().optional(),
-            state: z.string().optional(),
-            zipCode: z.string().optional(),
-            country: z.string().optional(),
-        })
-    ),
-    birthday: z.date().nullable(),
-    notes: z.string().optional(),
-    labels: z.array(z.string()).optional(),
-    avatar: z.string().nullable().optional(),
-}).refine(
-    (data) => (data.firstName ? data.firstName.trim().length > 0 : false) || (data.lastName ? data.lastName.trim().length > 0 : false),
-    {
-        message: "Either first name or last name is required",
-        path: ["firstName"], // This will show the error on the firstName field
-    }
-);
+export const formSchema = z
+    .object({
+        firstName: z.string().optional(),
+        lastName: z.string().optional(),
+        company: z.string().optional(),
+        jobTitle: z.string().optional(),
+        email: z.array(z.string().email().or(z.string().length(0))),
+        phone: z.array(z.string()),
+        address: z.array(
+            z.object({
+                street: z.string().optional(),
+                city: z.string().optional(),
+                state: z.string().optional(),
+                zipCode: z.string().optional(),
+                country: z.string().optional(),
+            }),
+        ),
+        birthday: z.date().nullable(),
+        notes: z.string().optional(),
+        labels: z.array(z.string()).optional(),
+        avatar: z.string().nullable().optional(),
+    })
+    .refine(
+        (data) =>
+            (data.firstName ? data.firstName.trim().length > 0 : false) ||
+            (data.lastName ? data.lastName.trim().length > 0 : false),
+        {
+            message: 'Either first name or last name is required',
+            path: ['firstName'], // This will show the error on the firstName field
+        },
+    );
 
 export type ContactFormValues = z.infer<typeof formSchema>;
 
 type ContactEditToolbarProps = {
     isNew: boolean;
-}
+};
 
 export function ContactEditToolbar({isNew}: ContactEditToolbarProps) {
     return (
         <Toolbar>
-        <h1 className="font-medium">{isNew ? 'Create Contact' : 'Edit Contact'}</h1>
+            <h1 className="font-medium">{isNew ? 'Create Contact' : 'Edit Contact'}</h1>
         </Toolbar>
     );
 }
@@ -70,13 +74,9 @@ type ContactEditProps = {
     contact: Contact;
     onSave: (data: ContactFormValues) => void;
     onCancel: () => void;
-}
+};
 
-export function ContactEdit({
-                                contact,
-                                onSave,
-                                onCancel
-                            }: ContactEditProps) {
+export function ContactEdit({contact, onSave, onCancel}: ContactEditProps) {
     const {user} = useAuth();
 
     const {data: labels = [], error: labelsError} = useLabels();
@@ -88,16 +88,16 @@ export function ContactEdit({
     const form = useForm<ContactFormValues>({
         resolver: zodResolver(formSchema),
         defaultValues: {
-            firstName: contact?.firstName || "",
-            lastName: contact?.lastName || "",
-            company: contact?.company || "",
-            jobTitle: contact?.jobTitle || "",
-            email: contact?.email || [""],
-            phone: contact?.phone || [""],
+            firstName: contact?.firstName || '',
+            lastName: contact?.lastName || '',
+            company: contact?.company || '',
+            jobTitle: contact?.jobTitle || '',
+            email: contact?.email || [''],
+            phone: contact?.phone || [''],
             address: contact?.address?.length ? contact.address : [{}],
             birthday: contact?.birthday ? new Date(contact.birthday) : null,
-            notes: contact?.notes || "",
-            labels: contact?.labels || []
+            notes: contact?.notes || '',
+            labels: contact?.labels || [],
         },
     });
 
@@ -107,8 +107,8 @@ export function ContactEdit({
         try {
             await onSave({...data, avatar});
         } catch (e) {
-            console.error("Error saving contact:", e);
-            setError("An error occurred while saving the contact.");
+            console.error('Error saving contact:', e);
+            setError('An error occurred while saving the contact.');
         }
     });
 
@@ -117,11 +117,7 @@ export function ContactEdit({
     return (
         <div className="h-full flex flex-col overflow-hidden">
             <div className="flex-1 overflow-y-auto p-6">
-                {error && (
-                    <div className="bg-destructive/15 text-destructive px-4 py-2 rounded-md mb-4">
-                        {error}
-                    </div>
-                )}
+                {error && <div className="bg-destructive/15 text-destructive px-4 py-2 rounded-md mb-4">{error}</div>}
 
                 {labelsError && (
                     <div className="bg-destructive/15 text-destructive px-4 py-2 rounded-md mb-4">
@@ -137,7 +133,7 @@ export function ContactEdit({
                                     <UserAvatar
                                         name={`${contact.firstName} ${contact.lastName}`}
                                         email={contact.email?.[0]}
-                                        imageUrl={avatar ?? ""}
+                                        imageUrl={avatar ?? ''}
                                         className="h-full w-full"
                                         size="lg"
                                     />
@@ -170,9 +166,8 @@ export function ContactEdit({
                                                         onError: (err) => {
                                                             uploadHandler.error();
                                                             console.error('Upload error:', err);
-                                                        }
+                                                        },
                                                     });
-
                                                 } catch (err: unknown) {
                                                     console.error('Error uploading file:', err);
                                                     uploadHandler.error();
@@ -194,15 +189,19 @@ export function ContactEdit({
                                             </Button>
                                         </DropdownMenuTrigger>
                                         <DropdownMenuContent align="end">
-                                            <DropdownMenuItem onSelect={() => {
-                                                fileInputRef.current?.click();
-                                            }}>
+                                            <DropdownMenuItem
+                                                onSelect={() => {
+                                                    fileInputRef.current?.click();
+                                                }}
+                                            >
                                                 Upload from files
                                             </DropdownMenuItem>
                                             {avatar && (
-                                                <DropdownMenuItem onSelect={() => {
-                                                    setAvatar(null);
-                                                }}>
+                                                <DropdownMenuItem
+                                                    onSelect={() => {
+                                                        setAvatar(null);
+                                                    }}
+                                                >
                                                     Remove avatar
                                                 </DropdownMenuItem>
                                             )}
@@ -226,8 +225,9 @@ export function ContactEdit({
                                             name="firstName"
                                             render={({field}) => (
                                                 <FormItem>
-                                                    <FormLabel>First name<span
-                                                        className="text-muted-foreground">*</span></FormLabel>
+                                                    <FormLabel>
+                                                        First name<span className="text-muted-foreground">*</span>
+                                                    </FormLabel>
                                                     <FormControl>
                                                         <Input {...field} />
                                                     </FormControl>
@@ -241,7 +241,9 @@ export function ContactEdit({
                                             name="lastName"
                                             render={({field}) => (
                                                 <FormItem>
-                                                    <FormLabel>Last name<span className="text-muted-foreground">*</span></FormLabel>
+                                                    <FormLabel>
+                                                        Last name<span className="text-muted-foreground">*</span>
+                                                    </FormLabel>
                                                     <FormControl>
                                                         <Input {...field} />
                                                     </FormControl>
@@ -290,20 +292,21 @@ export function ContactEdit({
                                                 <FormLabel>Labels</FormLabel>
                                                 <div className="flex flex-wrap gap-2 mt-2">
                                                     {field.value?.map((labelId, index) => {
-                                                        const labelObj = labels.find(l => l.id === labelId);
+                                                        const labelObj = labels.find((l) => l.id === labelId);
                                                         return (
-                                                            <Badge key={index}
-                                                                   className="px-3 py-1 text-primary-foreground"
-                                                                   style={{
-                                                                       backgroundColor: labelObj?.color || '#3b82f6',
-                                                                   }}
+                                                            <Badge
+                                                                key={index}
+                                                                className="px-3 py-1 text-primary-foreground"
+                                                                style={{
+                                                                    backgroundColor: labelObj?.color || '#3b82f6',
+                                                                }}
                                                             >
                                                                 {labelObj?.name}
                                                                 <button
                                                                     type="button"
                                                                     className="ml-1 hover:text-destructive"
                                                                     onClick={() => {
-                                                                        const newLabels = [...field.value || []];
+                                                                        const newLabels = [...(field.value || [])];
                                                                         newLabels.splice(index, 1);
                                                                         field.onChange(newLabels);
                                                                     }}
@@ -311,20 +314,28 @@ export function ContactEdit({
                                                                     <Trash2 className="h-3 w-3"/>
                                                                 </button>
                                                             </Badge>
-                                                        )
+                                                        );
                                                     })}
                                                     <select
                                                         className="h-7 w-auto rounded-md border border-input px-2 py-1 text-xs shadow-sm"
                                                         onChange={(e) => {
-                                                            if (e.target.value && !field.value?.includes(e.target.value)) {
-                                                                field.onChange([...field.value || [], e.target.value]);
+                                                            if (
+                                                                e.target.value &&
+                                                                !field.value?.includes(e.target.value)
+                                                            ) {
+                                                                field.onChange([
+                                                                    ...(field.value || []),
+                                                                    e.target.value,
+                                                                ]);
                                                             }
-                                                            e.target.value = "";
+                                                            e.target.value = '';
                                                         }}
                                                         defaultValue=""
                                                         disabled={isLoading}
                                                     >
-                                                        <option value="" disabled>Add label</option>
+                                                        <option value="" disabled>
+                                                            Add label
+                                                        </option>
                                                         {labels.map((label) => (
                                                             <option
                                                                 key={label.id}
@@ -354,16 +365,17 @@ export function ContactEdit({
                                 <div className="grid gap-6">
                                     <div>
                                         <div className="flex items-center justify-between">
-                                            <FormLabel className="text-base">Email Addresses<span
-                                                className="text-muted-foreground">*</span></FormLabel>
+                                            <FormLabel className="text-base">
+                                                Email Addresses<span className="text-muted-foreground">*</span>
+                                            </FormLabel>
                                             <Button
                                                 type="button"
                                                 variant="outline"
                                                 size="sm"
                                                 className="h-7 gap-1"
                                                 onClick={() => {
-                                                    const currentEmails = form.getValues("email");
-                                                    form.setValue("email", [...currentEmails, ""]);
+                                                    const currentEmails = form.getValues('email');
+                                                    form.setValue('email', [...currentEmails, '']);
                                                 }}
                                             >
                                                 <Plus className="h-3.5 w-3.5"/>
@@ -371,7 +383,7 @@ export function ContactEdit({
                                             </Button>
                                         </div>
                                         <div className="grid gap-3 mt-2">
-                                            {form.watch("email").map((_, index) => (
+                                            {form.watch('email').map((_, index) => (
                                                 <div key={index} className="flex gap-2 items-center">
                                                     <FormField
                                                         control={form.control}
@@ -379,26 +391,23 @@ export function ContactEdit({
                                                         render={({field}) => (
                                                             <FormItem className="flex-1 space-y-0">
                                                                 <FormControl>
-                                                                    <Input
-                                                                        {...field}
-                                                                        placeholder="Email address"
-                                                                    />
+                                                                    <Input {...field} placeholder="Email address"/>
                                                                 </FormControl>
                                                             </FormItem>
                                                         )}
                                                     />
 
-                                                    {form.watch("email").length > 1 && (
+                                                    {form.watch('email').length > 1 && (
                                                         <Button
                                                             type="button"
                                                             variant="ghost"
                                                             size="sm"
                                                             className="h-7 w-7 p-0"
                                                             onClick={() => {
-                                                                const currentEmails = form.getValues("email");
+                                                                const currentEmails = form.getValues('email');
                                                                 const newEmails = [...currentEmails];
                                                                 newEmails.splice(index, 1);
-                                                                form.setValue("email", newEmails);
+                                                                form.setValue('email', newEmails);
                                                             }}
                                                         >
                                                             <Trash2 className="h-4 w-4"/>
@@ -418,8 +427,8 @@ export function ContactEdit({
                                                 size="sm"
                                                 className="h-7 gap-1"
                                                 onClick={() => {
-                                                    const currentPhones = form.getValues("phone");
-                                                    form.setValue("phone", [...currentPhones, ""]);
+                                                    const currentPhones = form.getValues('phone');
+                                                    form.setValue('phone', [...currentPhones, '']);
                                                 }}
                                             >
                                                 <Plus className="h-3.5 w-3.5"/>
@@ -427,7 +436,7 @@ export function ContactEdit({
                                             </Button>
                                         </div>
                                         <div className="grid gap-3 mt-2">
-                                            {form.watch("phone").map((_, index) => (
+                                            {form.watch('phone').map((_, index) => (
                                                 <div key={index} className="flex gap-2 items-center">
                                                     <FormField
                                                         control={form.control}
@@ -435,26 +444,23 @@ export function ContactEdit({
                                                         render={({field}) => (
                                                             <FormItem className="flex-1 space-y-0">
                                                                 <FormControl>
-                                                                    <Input
-                                                                        {...field}
-                                                                        placeholder="Phone number"
-                                                                    />
+                                                                    <Input {...field} placeholder="Phone number"/>
                                                                 </FormControl>
                                                             </FormItem>
                                                         )}
                                                     />
 
-                                                    {form.watch("phone").length > 1 && (
+                                                    {form.watch('phone').length > 1 && (
                                                         <Button
                                                             type="button"
                                                             variant="ghost"
                                                             size="sm"
                                                             className="h-7 w-7 p-0"
                                                             onClick={() => {
-                                                                const currentPhones = form.getValues("phone");
+                                                                const currentPhones = form.getValues('phone');
                                                                 const newPhones = [...currentPhones];
                                                                 newPhones.splice(index, 1);
-                                                                form.setValue("phone", newPhones);
+                                                                form.setValue('phone', newPhones);
                                                             }}
                                                         >
                                                             <Trash2 className="h-4 w-4"/>
@@ -474,8 +480,8 @@ export function ContactEdit({
                                                 size="sm"
                                                 className="h-7 gap-1"
                                                 onClick={() => {
-                                                    const currentAddresses = form.getValues("address");
-                                                    form.setValue("address", [...currentAddresses, {}]);
+                                                    const currentAddresses = form.getValues('address');
+                                                    form.setValue('address', [...currentAddresses, {}]);
                                                 }}
                                             >
                                                 <Plus className="h-3.5 w-3.5"/>
@@ -483,22 +489,22 @@ export function ContactEdit({
                                             </Button>
                                         </div>
                                         <div className="grid gap-4 mt-2">
-                                            {form.watch("address").map((_, index) => (
+                                            {form.watch('address').map((_, index) => (
                                                 <div key={index} className="border rounded-lg p-4 space-y-3">
                                                     <div className="flex justify-between items-center">
                                                         <p className="text-sm font-medium">Address {index + 1}</p>
-                                                        {form.watch("address").length > 1 && (
+                                                        {form.watch('address').length > 1 && (
                                                             <Button
                                                                 type="button"
                                                                 variant="ghost"
                                                                 size="sm"
                                                                 className="h-7 w-7 p-0"
                                                                 onClick={() => {
-                                                                    const currentAddresses = form.getValues("address");
+                                                                    const currentAddresses = form.getValues('address');
                                                                     if (currentAddresses.length > 1) {
                                                                         const newAddresses = [...currentAddresses];
                                                                         newAddresses.splice(index, 1);
-                                                                        form.setValue("address", newAddresses);
+                                                                        form.setValue('address', newAddresses);
                                                                     }
                                                                 }}
                                                             >
@@ -543,7 +549,10 @@ export function ContactEdit({
                                                                 <FormItem>
                                                                     <FormLabel>State</FormLabel>
                                                                     <FormControl>
-                                                                        <Input {...field} placeholder="State/Province"/>
+                                                                        <Input
+                                                                            {...field}
+                                                                            placeholder="State/Province"
+                                                                        />
                                                                     </FormControl>
                                                                     <FormMessage/>
                                                                 </FormItem>
@@ -559,8 +568,11 @@ export function ContactEdit({
                                                                 <FormItem>
                                                                     <FormLabel>Postal code</FormLabel>
                                                                     <FormControl>
-                                                                        <Input {...field} value={field.value || ''}
-                                                                               placeholder="Postal/ZIP code"/>
+                                                                        <Input
+                                                                            {...field}
+                                                                            value={field.value || ''}
+                                                                            placeholder="Postal/ZIP code"
+                                                                        />
                                                                     </FormControl>
                                                                     <FormMessage/>
                                                                 </FormItem>
@@ -610,7 +622,7 @@ export function ContactEdit({
                                                         value={field.value ? format(field.value, 'yyyy-MM-dd') : ''}
                                                         onChange={(e) => {
                                                             const val = e.target.value;
-                                                            field.onChange(val ? new Date(val + 'T00:00:00') : null);
+                                                            field.onChange(val ? new Date(`${val}T00:00:00`) : null);
                                                         }}
                                                     />
                                                 </FormControl>
@@ -626,8 +638,11 @@ export function ContactEdit({
                                             <FormItem>
                                                 <FormLabel>Notes</FormLabel>
                                                 <FormControl>
-                                                    <Textarea rows={4} {...field}
-                                                              placeholder="Add notes about this contact"/>
+                                                    <Textarea
+                                                        rows={4}
+                                                        {...field}
+                                                        placeholder="Add notes about this contact"
+                                                    />
                                                 </FormControl>
                                                 <FormMessage/>
                                             </FormItem>

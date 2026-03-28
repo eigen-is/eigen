@@ -1,5 +1,5 @@
-import {useCallback, useState} from "react";
-import {DrivePath} from "@workspace/lib/types/drive";
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { useCallback, useState } from 'react';
 
 export type DriveDialogsState = {
     createFolder: { open: boolean };
@@ -9,7 +9,7 @@ export type DriveDialogsState = {
     rename: { open: boolean; item: DrivePath | null };
     share: { open: boolean; item: DrivePath | null };
     upload: { open: boolean; files: File[] };
-}
+};
 
 export function useDriveDialogs() {
     const [createFolderOpen, setCreateFolderOpen] = useState(false);

@@ -1,3 +1,5 @@
+import {createHash} from 'node:crypto';
+import {EIGEN_ACCENT_COLORS_SHUFFLED} from '@workspace/lib/constants/colors';
 import type {
     Attendee,
     CalendarEvent,
@@ -5,23 +7,21 @@ import type {
     CalendarItem,
     CalendarShare,
     EventData,
-    SharedCalendar
+    SharedCalendar,
 } from '@workspace/lib/types/calendar';
-import type {BunSQLiteDatabase} from 'drizzle-orm/bun-sqlite';
-import {and, count, eq, gte, isNull, lte, sql} from 'drizzle-orm';
-import {v4 as uuidv4} from 'uuid';
-import {RRule} from 'rrule';
-import type {Home} from '../home';
-import * as schema from './schema';
-import {CALENDAR_DB_CONFIG} from './db-config';
-import type {ManagedDatabase} from '../core/';
-import {ApiError, PATHS} from '../core';
 import {SSEventType} from '@workspace/lib/types/sse';
-import {buildCalendarEvent} from './sse-events';
-import {EIGEN_ACCENT_COLORS_SHUFFLED} from '@workspace/lib/constants/colors';
-import {notifySharedCalendarUsers, propagateCalendarShare} from './share-propagation';
+import {and, count, eq, gte, isNull, lte, sql} from 'drizzle-orm';
+import type {BunSQLiteDatabase} from 'drizzle-orm/bun-sqlite';
+import {RRule} from 'rrule';
+import {v4 as uuidv4} from 'uuid';
+import {ApiError, PATHS} from '../core';
+import type {ManagedDatabase} from '../core/';
+import type {Home} from '../home';
+import {CALENDAR_DB_CONFIG} from './db-config';
 import {propagateCancellation, propagateDecline, propagateInvitation, propagateRsvp} from './invite-propagation';
-import {createHash} from 'crypto';
+import * as schema from './schema';
+import {notifySharedCalendarUsers, propagateCalendarShare} from './share-propagation';
+import {buildCalendarEvent} from './sse-events';
 
 type UserIdentity = { id: string; email: string; name?: string | null };
 
@@ -42,18 +42,20 @@ function computeEtag(event: {
     data?: EventData | null;
 }): string {
     const hash = createHash('md5');
-    hash.update(JSON.stringify({
-        title: event.title,
-        description: event.description,
-        location: event.location,
-        startTime: event.startTime,
-        endTime: event.endTime,
-        allDay: event.allDay,
-        rrule: event.rrule,
-        timezone: event.timezone,
-        status: event.status,
-        data: event.data,
-    }));
+    hash.update(
+        JSON.stringify({
+            title: event.title,
+            description: event.description,
+            location: event.location,
+            startTime: event.startTime,
+            endTime: event.endTime,
+            allDay: event.allDay,
+            rrule: event.rrule,
+            timezone: event.timezone,
+            status: event.status,
+            data: event.data,
+        }),
+    );
     return hash.digest('hex');
 }
 
@@ -66,8 +68,12 @@ function getIntlFormatter(tz: string): Intl.DateTimeFormat {
     if (!fmt) {
         fmt = new Intl.DateTimeFormat('en-GB', {
             timeZone: tz,
-            year: 'numeric', month: '2-digit', day: '2-digit',
-            hour: '2-digit', minute: '2-digit', second: '2-digit',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
             hour12: false,
         });
         intlCache.set(tz, fmt);
@@ -78,7 +84,7 @@ function getIntlFormatter(tz: string): Intl.DateTimeFormat {
 function utcToLocal(epochSeconds: number, tz: string): LocalComponents {
     const fmt = getIntlFormatter(tz);
     const parts = fmt.formatToParts(new Date(epochSeconds * 1000));
-    const get = (type: Intl.DateTimeFormatPartTypes) => parseInt(parts.find(p => p.type === type)!.value);
+    const get = (type: Intl.DateTimeFormatPartTypes) => parseInt(parts.find((p) => p.type === type)!.value, 10);
     return {
         year: get('year'),
         month: get('month'),
@@ -89,7 +95,15 @@ function utcToLocal(epochSeconds: number, tz: string): LocalComponents {
     };
 }
 
-function localToUtcSeconds(tz: string, year: number, month: number, day: number, hour: number, minute: number, second: number): number {
+function localToUtcSeconds(
+    tz: string,
+    year: number,
+    month: number,
+    day: number,
+    hour: number,
+    minute: number,
+    second: number,
+): number {
     const guessMs = Date.UTC(year, month - 1, day, hour, minute, second);
     const guessEpoch = Math.floor(guessMs / 1000);
     const local = utcToLocal(guessEpoch, tz);
@@ -174,14 +188,17 @@ export class Calendar {
 
         const existing = this.db.select().from(schema.calendars).all();
         if (existing.length === 0) {
-            this.db.insert(schema.calendars).values({
-                id: uuidv4(),
-                name: this.home.user.name || 'Personal',
-                color: EIGEN_ACCENT_COLORS_SHUFFLED[0].value,
-                isDefault: true,
-                ctag: 0,
-                shares: null,
-            }).run();
+            this.db
+                .insert(schema.calendars)
+                .values({
+                    id: uuidv4(),
+                    name: this.home.user.name || 'Personal',
+                    color: EIGEN_ACCENT_COLORS_SHUFFLED[0].value,
+                    isDefault: true,
+                    ctag: 0,
+                    shares: null,
+                })
+                .run();
         }
     }
 
@@ -199,37 +216,48 @@ export class Calendar {
 
     public createCalendar(input: { name: string; color: string }): CalendarItem {
         const id = uuidv4();
-        this.db.insert(schema.calendars).values({
-            id,
-            name: input.name.trim(),
-            color: input.color,
-            isDefault: false,
-            ctag: 0,
-            shares: null,
-        }).run();
+        this.db
+            .insert(schema.calendars)
+            .values({
+                id,
+                name: input.name.trim(),
+                color: input.color,
+                isDefault: false,
+                ctag: 0,
+                shares: null,
+            })
+            .run();
 
         this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_CREATED, this.home.user.id));
         return this.getCalendarById(id)!;
     }
 
-    public async updateCalendar(id: string, input: {
-        name?: string;
-        color?: string;
-        visible?: boolean;
-        shares?: CalendarShare[] | null;
-    }): Promise<CalendarItem> {
+    public async updateCalendar(
+        id: string,
+        input: {
+            name?: string;
+            color?: string;
+            visible?: boolean;
+            shares?: CalendarShare[] | null;
+        },
+    ): Promise<CalendarItem> {
         const existing = this.getCalendarById(id);
         if (!existing) throw new ApiError(404, 'Calendar not found');
 
         const oldShares = existing.shares;
 
-        this.db.update(schema.calendars).set({
-            name: input.name !== undefined ? input.name.trim() : existing.name,
-            color: input.color !== undefined ? input.color : existing.color,
-            visible: input.visible !== undefined ? input.visible : existing.visible,
-            shares: input.shares !== undefined ? input.shares : existing.shares,
-            updatedAt: sql`unixepoch()`,
-        }).where(eq(schema.calendars.id, id)).run();
+        this.db
+            .update(schema.calendars)
+            .set({
+                name: input.name !== undefined ? input.name.trim() : existing.name,
+                color: input.color !== undefined ? input.color : existing.color,
+                visible: input.visible !== undefined ? input.visible : existing.visible,
+                shares: input.shares !== undefined ? input.shares : existing.shares,
+                updatedAt: sql`unixepoch
+                ()`,
+            })
+            .where(eq(schema.calendars.id, id))
+            .run();
 
         if (input.shares !== undefined) {
             const updated = this.getCalendarById(id)!;
@@ -255,21 +283,25 @@ export class Calendar {
 
     // --- Events ---
 
-    public createEvent(calendarId: string, input: {
-        title: string;
-        startTime: number;
-        endTime: number;
-        allDay: boolean;
-        description?: string | null;
-        location?: string | null;
-        rrule?: string | null;
-        timezone?: string | null;
-        parentEventId?: string | null;
-        recurrenceDate?: string | null;
-        status?: CalendarEvent['status'];
-        data?: EventData | null;
-        createByUserId?: string | null;
-    }, user?: UserIdentity): CalendarEvent {
+    public createEvent(
+        calendarId: string,
+        input: {
+            title: string;
+            startTime: number;
+            endTime: number;
+            allDay: boolean;
+            description?: string | null;
+            location?: string | null;
+            rrule?: string | null;
+            timezone?: string | null;
+            parentEventId?: string | null;
+            recurrenceDate?: string | null;
+            status?: CalendarEvent['status'];
+            data?: EventData | null;
+            createByUserId?: string | null;
+        },
+        user?: UserIdentity,
+    ): CalendarEvent {
         const cal = this.getCalendarById(calendarId);
         if (!cal) throw new ApiError(404, 'Calendar not found');
 
@@ -277,7 +309,11 @@ export class Calendar {
         const uid = uuidv4();
         const rruleStr = input.rrule ?? null;
         if (rruleStr) {
-            try { RRule.parseString(rruleStr); } catch { throw new ApiError(400, 'Invalid RRULE'); }
+            try {
+                RRule.parseString(rruleStr);
+            } catch {
+                throw new ApiError(400, 'Invalid RRULE');
+            }
         }
         const timezone = input.timezone ?? null;
         const status = input.status ?? 'confirmed';
@@ -294,26 +330,29 @@ export class Calendar {
             data: input.data,
         });
 
-        this.db.insert(schema.events).values({
-            id,
-            calendarId,
-            uid,
-            uri: `${uid}.ics`,
-            title: input.title.trim(),
-            description: input.description ?? null,
-            location: input.location ?? null,
-            startTime: input.startTime,
-            endTime: input.endTime,
-            allDay: input.allDay,
-            rrule: rruleStr,
-            timezone,
-            parentEventId: input.parentEventId ?? null,
-            recurrenceDate: input.recurrenceDate ?? null,
-            status,
-            etag,
-            data: input.data ?? null,
-            createByUserId: input.createByUserId ?? null,
-        }).run();
+        this.db
+            .insert(schema.events)
+            .values({
+                id,
+                calendarId,
+                uid,
+                uri: `${uid}.ics`,
+                title: input.title.trim(),
+                description: input.description ?? null,
+                location: input.location ?? null,
+                startTime: input.startTime,
+                endTime: input.endTime,
+                allDay: input.allDay,
+                rrule: rruleStr,
+                timezone,
+                parentEventId: input.parentEventId ?? null,
+                recurrenceDate: input.recurrenceDate ?? null,
+                status,
+                etag,
+                data: input.data ?? null,
+                createByUserId: input.createByUserId ?? null,
+            })
+            .run();
 
         this.incrementCtag(calendarId);
         const event = this.getEventById(id)!;
@@ -334,18 +373,22 @@ export class Calendar {
         return row ? dbEventToCalendarEvent(row) : null;
     }
 
-    public updateEvent(id: string, input: {
-        title?: string;
-        startTime?: number;
-        endTime?: number;
-        allDay?: boolean;
-        description?: string | null;
-        location?: string | null;
-        rrule?: string | null;
-        timezone?: string | null;
-        status?: CalendarEvent['status'];
-        data?: EventData | null;
-    }, user?: UserIdentity): CalendarEvent {
+    public updateEvent(
+        id: string,
+        input: {
+            title?: string;
+            startTime?: number;
+            endTime?: number;
+            allDay?: boolean;
+            description?: string | null;
+            location?: string | null;
+            rrule?: string | null;
+            timezone?: string | null;
+            status?: CalendarEvent['status'];
+            data?: EventData | null;
+        },
+        user?: UserIdentity,
+    ): CalendarEvent {
         const existing = this.getEventById(id);
         if (!existing) throw new ApiError(404, 'Event not found');
 
@@ -371,20 +414,45 @@ export class Calendar {
 
         const rruleStr = input.rrule !== undefined ? (input.rrule ?? null) : (existing.rrule ?? null);
         if (rruleStr && input.rrule !== undefined) {
-            try { RRule.parseString(rruleStr); } catch { throw new ApiError(400, 'Invalid RRULE'); }
+            try {
+                RRule.parseString(rruleStr);
+            } catch {
+                throw new ApiError(400, 'Invalid RRULE');
+            }
         }
         const timezone = input.timezone !== undefined ? (input.timezone ?? null) : (existing.timezone ?? null);
 
         const etag = computeEtag({
-            title, description, location, startTime, endTime, allDay,
-            rrule: rruleStr, timezone, status, data,
+            title,
+            description,
+            location,
+            startTime,
+            endTime,
+            allDay,
+            rrule: rruleStr,
+            timezone,
+            status,
+            data,
         });
 
-        this.db.update(schema.events).set({
-            title, description, location, startTime, endTime, allDay,
-            rrule: rruleStr, timezone, status, etag, data,
-            updatedAt: sql`unixepoch()`,
-        }).where(eq(schema.events.id, id)).run();
+        this.db
+            .update(schema.events)
+            .set({
+                title,
+                description,
+                location,
+                startTime,
+                endTime,
+                allDay,
+                rrule: rruleStr,
+                timezone,
+                status,
+                etag,
+                data,
+                updatedAt: sql`unixepoch()`,
+            })
+            .where(eq(schema.events.id, id))
+            .run();
 
         this.incrementCtag(existing.calendarId);
         const updated = this.getEventById(id)!;
@@ -397,7 +465,9 @@ export class Calendar {
         if (user && updated.data?.attendees?.length) {
             this.incrementSequence(id);
             const withSequence = this.getEventById(id)!;
-            propagateInvitation(this.home, withSequence, user, oldAttendees, withSequence.data!.attendees!).catch(console.error);
+            propagateInvitation(this.home, withSequence, user, oldAttendees, withSequence.data!.attendees!).catch(
+                console.error,
+            );
             return withSequence;
         }
 
@@ -410,7 +480,9 @@ export class Calendar {
 
         if (user && existing.data?.organizer) {
             // Attendee deleting linked copy = decline
-            propagateDecline(existing.data.organizer.userId, existing.data.organizerEventId!, user.email).catch(console.error);
+            propagateDecline(existing.data.organizer.userId, existing.data.organizerEventId!, user.email).catch(
+                console.error,
+            );
         } else if (existing.data?.attendees?.length) {
             // Organizer deleting = cancel for all attendees
             propagateCancellation(this.home, existing).catch(console.error);
@@ -430,32 +502,44 @@ export class Calendar {
             conditions.push(eq(schema.events.calendarId, calendarId));
         }
 
-        const nonRecurring = this.db.select().from(schema.events).where(
-            and(
-                ...conditions,
-                isNull(schema.events.rrule),
-                isNull(schema.events.parentEventId),
-                lte(schema.events.startTime, to),
-                gte(schema.events.endTime, from),
+        const nonRecurring = this.db
+            .select()
+            .from(schema.events)
+            .where(
+                and(
+                    ...conditions,
+                    isNull(schema.events.rrule),
+                    isNull(schema.events.parentEventId),
+                    lte(schema.events.startTime, to),
+                    gte(schema.events.endTime, from),
+                ),
             )
-        ).all();
+            .all();
 
-        const recurring = this.db.select().from(schema.events).where(
-            and(
-                ...conditions,
-                sql`${schema.events.rrule}
+        const recurring = this.db
+            .select()
+            .from(schema.events)
+            .where(
+                and(
+                    ...conditions,
+                    sql`${schema.events.rrule}
                 IS NOT NULL`,
-                isNull(schema.events.parentEventId),
+                    isNull(schema.events.parentEventId),
+                ),
             )
-        ).all();
+            .all();
 
-        const exceptions = this.db.select().from(schema.events).where(
-            and(
-                ...conditions,
-                sql`${schema.events.parentEventId}
+        const exceptions = this.db
+            .select()
+            .from(schema.events)
+            .where(
+                and(
+                    ...conditions,
+                    sql`${schema.events.parentEventId}
                 IS NOT NULL`,
+                ),
             )
-        ).all();
+            .all();
 
         const exceptionsByParent = new Map<string, (typeof schema.events.$inferSelect)[]>();
         for (const exc of exceptions) {
@@ -524,11 +608,15 @@ export class Calendar {
         const existing = this.db.select().from(schema.sharedCalendars).where(eq(schema.sharedCalendars.id, id)).get();
         if (!existing) throw new ApiError(404, 'Shared calendar not found');
 
-        this.db.update(schema.sharedCalendars).set({
-            color: input.color !== undefined ? input.color : existing.color,
-            visible: input.visible !== undefined ? input.visible : existing.visible,
-            updatedAt: sql`unixepoch()`,
-        }).where(eq(schema.sharedCalendars.id, id)).run();
+        this.db
+            .update(schema.sharedCalendars)
+            .set({
+                color: input.color !== undefined ? input.color : existing.color,
+                visible: input.visible !== undefined ? input.visible : existing.visible,
+                updatedAt: sql`unixepoch()`,
+            })
+            .where(eq(schema.sharedCalendars.id, id))
+            .run();
 
         const updated = this.db.select().from(schema.sharedCalendars).where(eq(schema.sharedCalendars.id, id)).get()!;
         return dbRowToSharedCalendar(updated);
@@ -538,33 +626,53 @@ export class Calendar {
         this.db.delete(schema.sharedCalendars).where(eq(schema.sharedCalendars.id, id)).run();
     }
 
-    public receiveShare(ownerUserId: string, calendarId: string, calendarName: string, _calendarColor: string, permission: CalendarShare['permission'], actorEmail?: string): void {
-        const existing = this.db.select().from(schema.sharedCalendars).where(
-            and(
-                eq(schema.sharedCalendars.ownerUserId, ownerUserId),
-                eq(schema.sharedCalendars.calendarId, calendarId),
+    public receiveShare(
+        ownerUserId: string,
+        calendarId: string,
+        calendarName: string,
+        _calendarColor: string,
+        permission: CalendarShare['permission'],
+        actorEmail?: string,
+    ): void {
+        const existing = this.db
+            .select()
+            .from(schema.sharedCalendars)
+            .where(
+                and(
+                    eq(schema.sharedCalendars.ownerUserId, ownerUserId),
+                    eq(schema.sharedCalendars.calendarId, calendarId),
+                ),
             )
-        ).get();
+            .get();
 
         if (existing) {
-            this.db.update(schema.sharedCalendars).set({
-                calendarName,
-                permission,
-                updatedAt: sql`unixepoch()`,
-            }).where(eq(schema.sharedCalendars.id, existing.id)).run();
+            this.db
+                .update(schema.sharedCalendars)
+                .set({
+                    calendarName,
+                    permission,
+                    updatedAt: sql`unixepoch()`,
+                })
+                .where(eq(schema.sharedCalendars.id, existing.id))
+                .run();
         } else {
             const ownCalendarCount = this.db.select({count: count()}).from(schema.calendars).get()!.count;
             const sharedCount = this.db.select({count: count()}).from(schema.sharedCalendars).get()!.count;
-            const localColor = EIGEN_ACCENT_COLORS_SHUFFLED[(ownCalendarCount + sharedCount) % EIGEN_ACCENT_COLORS_SHUFFLED.length].value;
-            this.db.insert(schema.sharedCalendars).values({
-                id: uuidv4(),
-                ownerUserId,
-                calendarId,
-                calendarName,
-                calendarColor: localColor,
-                permission,
-                visible: true,
-            }).run();
+            const localColor =
+                EIGEN_ACCENT_COLORS_SHUFFLED[(ownCalendarCount + sharedCount) % EIGEN_ACCENT_COLORS_SHUFFLED.length]
+                    .value;
+            this.db
+                .insert(schema.sharedCalendars)
+                .values({
+                    id: uuidv4(),
+                    ownerUserId,
+                    calendarId,
+                    calendarName,
+                    calendarColor: localColor,
+                    permission,
+                    visible: true,
+                })
+                .run();
         }
 
         this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_SHARED, ownerUserId));
@@ -577,12 +685,16 @@ export class Calendar {
     }
 
     public removeShare(ownerUserId: string, calendarId: string, actorEmail?: string): void {
-        const existing = this.db.select().from(schema.sharedCalendars).where(
-            and(
-                eq(schema.sharedCalendars.ownerUserId, ownerUserId),
-                eq(schema.sharedCalendars.calendarId, calendarId),
+        const existing = this.db
+            .select()
+            .from(schema.sharedCalendars)
+            .where(
+                and(
+                    eq(schema.sharedCalendars.ownerUserId, ownerUserId),
+                    eq(schema.sharedCalendars.calendarId, calendarId),
+                ),
             )
-        ).get();
+            .get();
 
         if (existing) {
             this.db.delete(schema.sharedCalendars).where(eq(schema.sharedCalendars.id, existing.id)).run();
@@ -595,56 +707,76 @@ export class Calendar {
         }
     }
 
-    public ensureSharedEntry(ownerUserId: string, calendarId: string, calendarName: string, _calendarColor: string, permission: CalendarShare['permission']): void {
-        const existing = this.db.select().from(schema.sharedCalendars).where(
-            and(
-                eq(schema.sharedCalendars.ownerUserId, ownerUserId),
-                eq(schema.sharedCalendars.calendarId, calendarId),
+    public ensureSharedEntry(
+        ownerUserId: string,
+        calendarId: string,
+        calendarName: string,
+        _calendarColor: string,
+        permission: CalendarShare['permission'],
+    ): void {
+        const existing = this.db
+            .select()
+            .from(schema.sharedCalendars)
+            .where(
+                and(
+                    eq(schema.sharedCalendars.ownerUserId, ownerUserId),
+                    eq(schema.sharedCalendars.calendarId, calendarId),
+                ),
             )
-        ).get();
+            .get();
 
         if (existing) {
             if (existing.calendarName !== calendarName || existing.permission !== permission) {
-                this.db.update(schema.sharedCalendars).set({
-                    calendarName,
-                    permission,
-                    updatedAt: sql`unixepoch()`,
-                }).where(eq(schema.sharedCalendars.id, existing.id)).run();
+                this.db
+                    .update(schema.sharedCalendars)
+                    .set({
+                        calendarName,
+                        permission,
+                        updatedAt: sql`unixepoch()`,
+                    })
+                    .where(eq(schema.sharedCalendars.id, existing.id))
+                    .run();
             }
         } else {
             const ownCalendarCount = this.db.select({count: count()}).from(schema.calendars).get()!.count;
             const sharedCount = this.db.select({count: count()}).from(schema.sharedCalendars).get()!.count;
-            const localColor = EIGEN_ACCENT_COLORS_SHUFFLED[(ownCalendarCount + sharedCount) % EIGEN_ACCENT_COLORS_SHUFFLED.length].value;
-            this.db.insert(schema.sharedCalendars).values({
-                id: uuidv4(),
-                ownerUserId,
-                calendarId,
-                calendarName,
-                calendarColor: localColor,
-                permission,
-                visible: true,
-            }).run();
+            const localColor =
+                EIGEN_ACCENT_COLORS_SHUFFLED[(ownCalendarCount + sharedCount) % EIGEN_ACCENT_COLORS_SHUFFLED.length]
+                    .value;
+            this.db
+                .insert(schema.sharedCalendars)
+                .values({
+                    id: uuidv4(),
+                    ownerUserId,
+                    calendarId,
+                    calendarName,
+                    calendarColor: localColor,
+                    permission,
+                    visible: true,
+                })
+                .run();
         }
     }
 
     public removeSharedEntriesForOwner(ownerUserId: string): void {
-        this.db.delete(schema.sharedCalendars)
-            .where(eq(schema.sharedCalendars.ownerUserId, ownerUserId))
-            .run();
+        this.db.delete(schema.sharedCalendars).where(eq(schema.sharedCalendars.ownerUserId, ownerUserId)).run();
     }
 
-    public getSharedWith(userEmail: string, teamIds: string[]): {
+    public getSharedWith(
+        userEmail: string,
+        teamIds: string[],
+    ): {
         calendarId: string;
         name: string;
         color: string;
-        permission: CalendarShare['permission']
+        permission: CalendarShare['permission'];
     }[] {
         const calendars = this.getCalendars();
         const results: {
             calendarId: string;
             name: string;
             color: string;
-            permission: CalendarShare['permission']
+            permission: CalendarShare['permission'];
         }[] = [];
 
         for (const cal of calendars) {
@@ -663,12 +795,16 @@ export class Calendar {
         return results;
     }
 
-    public checkPermission(calendarId: string, userEmail: string, teamIds: string[]): CalendarShare['permission'] | null {
+    public checkPermission(
+        calendarId: string,
+        userEmail: string,
+        teamIds: string[],
+    ): CalendarShare['permission'] | null {
         const cal = this.getCalendarById(calendarId);
-        if (!cal || !cal.shares) return null;
+        if (!cal?.shares) return null;
 
         let bestPermission: CalendarShare['permission'] | null = null;
-        const permissionRank = {'free-busy': 0, 'read': 1, 'write': 2};
+        const permissionRank = {'free-busy': 0, read: 1, write: 2};
 
         for (const share of cal.shares) {
             let matches = false;
@@ -692,12 +828,11 @@ export class Calendar {
     // --- Invitations ---
 
     public findLinkedEvent(orgEventId: string, orgUserId: string): CalendarEvent | null {
-        const row = this.db.select().from(schema.events).where(
-            and(
-                eq(schema.events.organizerEventId, orgEventId),
-                eq(schema.events.organizerUserId, orgUserId),
-            )
-        ).get();
+        const row = this.db
+            .select()
+            .from(schema.events)
+            .where(and(eq(schema.events.organizerEventId, orgEventId), eq(schema.events.organizerUserId, orgUserId)))
+            .get();
         return row ? dbEventToCalendarEvent(row) : null;
     }
 
@@ -721,7 +856,7 @@ export class Calendar {
         const existing = this.findLinkedEvent(payload.organizerEventId, payload.organizerUserId);
         if (existing) return existing.id;
 
-        const defaultCal = this.getCalendars().find(c => c.isDefault);
+        const defaultCal = this.getCalendars().find((c) => c.isDefault);
         if (!defaultCal) throw new ApiError(500, 'No default calendar');
 
         const id = uuidv4();
@@ -738,45 +873,52 @@ export class Calendar {
             data: payload.data,
         });
 
-        this.db.insert(schema.events).values({
-            id,
-            calendarId: defaultCal.id,
-            uid: payload.uid,
-            uri: `${payload.uid}.ics`,
-            title: payload.title,
-            description: payload.description,
-            location: payload.location,
-            startTime: payload.startTime,
-            endTime: payload.endTime,
-            allDay: payload.allDay,
-            rrule: payload.rrule,
-            timezone: payload.timezone,
-            status: payload.status,
-            sequence: payload.sequence,
-            etag,
-            data: payload.data,
-            organizerEventId: payload.organizerEventId,
-            organizerUserId: payload.organizerUserId,
-            createByUserId: payload.createByUserId,
-        }).run();
+        this.db
+            .insert(schema.events)
+            .values({
+                id,
+                calendarId: defaultCal.id,
+                uid: payload.uid,
+                uri: `${payload.uid}.ics`,
+                title: payload.title,
+                description: payload.description,
+                location: payload.location,
+                startTime: payload.startTime,
+                endTime: payload.endTime,
+                allDay: payload.allDay,
+                rrule: payload.rrule,
+                timezone: payload.timezone,
+                status: payload.status,
+                sequence: payload.sequence,
+                etag,
+                data: payload.data,
+                organizerEventId: payload.organizerEventId,
+                organizerUserId: payload.organizerUserId,
+                createByUserId: payload.createByUserId,
+            })
+            .run();
 
         this.incrementCtag(defaultCal.id);
         return id;
     }
 
-    public receiveInvitationUpdate(orgEventId: string, orgUserId: string, payload: {
-        title: string;
-        description: string | null;
-        location: string | null;
-        startTime: number;
-        endTime: number;
-        allDay: boolean;
-        rrule: string | null;
-        timezone?: string | null;
-        status: CalendarEvent['status'];
-        sequence: number;
-        attendees?: Attendee[];
-    }): void {
+    public receiveInvitationUpdate(
+        orgEventId: string,
+        orgUserId: string,
+        payload: {
+            title: string;
+            description: string | null;
+            location: string | null;
+            startTime: number;
+            endTime: number;
+            allDay: boolean;
+            rrule: string | null;
+            timezone?: string | null;
+            status: CalendarEvent['status'];
+            sequence: number;
+            attendees?: Attendee[];
+        },
+    ): void {
         const linked = this.findLinkedEvent(orgEventId, orgUserId);
         if (!linked) return;
 
@@ -803,21 +945,25 @@ export class Calendar {
             data,
         });
 
-        this.db.update(schema.events).set({
-            title: payload.title,
-            description: payload.description,
-            location: payload.location,
-            startTime: payload.startTime,
-            endTime: payload.endTime,
-            allDay: payload.allDay,
-            rrule,
-            timezone,
-            status: payload.status,
-            sequence: payload.sequence,
-            etag,
-            data,
-            updatedAt: sql`unixepoch()`,
-        }).where(eq(schema.events.id, linked.id)).run();
+        this.db
+            .update(schema.events)
+            .set({
+                title: payload.title,
+                description: payload.description,
+                location: payload.location,
+                startTime: payload.startTime,
+                endTime: payload.endTime,
+                allDay: payload.allDay,
+                rrule,
+                timezone,
+                status: payload.status,
+                sequence: payload.sequence,
+                etag,
+                data,
+                updatedAt: sql`unixepoch()`,
+            })
+            .where(eq(schema.events.id, linked.id))
+            .run();
 
         this.incrementCtag(linked.calendarId);
     }
@@ -837,14 +983,17 @@ export class Calendar {
             const data = (row.data as EventData) ?? null;
             if (!data?.attendees) return;
 
-            const attendees = data.attendees.map(a =>
-                a.email.toLowerCase() === email.toLowerCase() ? {...a, status} : a
+            const attendees = data.attendees.map((a) =>
+                a.email.toLowerCase() === email.toLowerCase() ? {...a, status} : a,
             );
 
-            tx.update(schema.events).set({
-                data: {...data, attendees},
-                updatedAt: sql`unixepoch()`,
-            }).where(eq(schema.events.id, eventId)).run();
+            tx.update(schema.events)
+                .set({
+                    data: {...data, attendees},
+                    updatedAt: sql`unixepoch()`,
+                })
+                .where(eq(schema.events.id, eventId))
+                .run();
         });
 
         const updated = this.getEventById(eventId);
@@ -852,22 +1001,22 @@ export class Calendar {
     }
 
     public incrementSequence(eventId: string): void {
-        this.db.update(schema.events).set({
-            sequence: sql`${schema.events.sequence} + 1`,
-            updatedAt: sql`unixepoch()`,
-        }).where(eq(schema.events.id, eventId)).run();
+        this.db
+            .update(schema.events)
+            .set({
+                sequence: sql`${schema.events.sequence} + 1`,
+                updatedAt: sql`unixepoch()`,
+            })
+            .where(eq(schema.events.id, eventId))
+            .run();
     }
 
     public getEventsWithAttendee(email: string): CalendarEvent[] {
-        const rows = this.db.select().from(schema.events).where(
-            isNull(schema.events.organizerEventId)
-        ).all();
+        const rows = this.db.select().from(schema.events).where(isNull(schema.events.organizerEventId)).all();
 
         return rows
             .map(dbEventToCalendarEvent)
-            .filter(e => e.data?.attendees?.some(
-                a => a.email.toLowerCase() === email.toLowerCase()
-            ));
+            .filter((e) => e.data?.attendees?.some((a) => a.email.toLowerCase() === email.toLowerCase()));
     }
 
     public rsvpForOccurrence(eventId: string, email: string, status: Attendee['status'], recurrenceDate: string): void {
@@ -878,8 +1027,8 @@ export class Calendar {
 
         if (existing) {
             const data = (existing.data as EventData) ?? parent.data ?? {};
-            const attendees = (data.attendees || parent.data?.attendees || []).map(a =>
-                a.email.toLowerCase() === email.toLowerCase() ? {...a, status} : a
+            const attendees = (data.attendees || parent.data?.attendees || []).map((a) =>
+                a.email.toLowerCase() === email.toLowerCase() ? {...a, status} : a,
             );
             const updatedData: EventData = {...data, attendees};
             const newStatus = existing.status === 'cancelled' ? 'confirmed' : existing.status;
@@ -895,17 +1044,21 @@ export class Calendar {
                 data: updatedData,
             });
 
-            this.db.update(schema.events).set({
-                status: newStatus,
-                data: updatedData,
-                etag,
-                updatedAt: sql`unixepoch()`,
-            }).where(eq(schema.events.id, existing.id)).run();
+            this.db
+                .update(schema.events)
+                .set({
+                    status: newStatus,
+                    data: updatedData,
+                    etag,
+                    updatedAt: sql`unixepoch()`,
+                })
+                .where(eq(schema.events.id, existing.id))
+                .run();
 
             this.incrementCtag(parent.calendarId);
         } else {
-            const attendees = (parent.data?.attendees || []).map(a =>
-                a.email.toLowerCase() === email.toLowerCase() ? {...a, status} : a
+            const attendees = (parent.data?.attendees || []).map((a) =>
+                a.email.toLowerCase() === email.toLowerCase() ? {...a, status} : a,
             );
             const {startTime, endTime} = computeOccurrenceTimes(parent, recurrenceDate);
 
@@ -931,10 +1084,14 @@ export class Calendar {
         const existing = this.getException(eventId, recurrenceDate);
 
         if (existing) {
-            this.db.update(schema.events).set({
-                status: 'cancelled',
-                updatedAt: sql`unixepoch()`,
-            }).where(eq(schema.events.id, existing.id)).run();
+            this.db
+                .update(schema.events)
+                .set({
+                    status: 'cancelled',
+                    updatedAt: sql`unixepoch()`,
+                })
+                .where(eq(schema.events.id, existing.id))
+                .run();
             this.incrementCtag(parent.calendarId);
         } else {
             const {startTime, endTime} = computeOccurrenceTimes(parent, recurrenceDate);
@@ -950,19 +1107,21 @@ export class Calendar {
         }
     }
 
-    public rsvp(eventId: string, user: UserIdentity, input: {
-        status: Attendee['status'];
-        scope?: 'this' | 'this-and-following' | 'all';
-        recurrenceDate?: string;
-        remove?: boolean;
-    }): void {
+    public rsvp(
+        eventId: string,
+        user: UserIdentity,
+        input: {
+            status: Attendee['status'];
+            scope?: 'this' | 'this-and-following' | 'all';
+            recurrenceDate?: string;
+            remove?: boolean;
+        },
+    ): void {
         const event = this.getEventById(eventId);
         if (!event) throw new ApiError(404, 'Event not found');
         if (!event.data?.organizer) throw new ApiError(400, 'Not a linked event');
 
-        const isAttendee = event.data.attendees?.some(
-            a => a.email.toLowerCase() === user.email.toLowerCase()
-        );
+        const isAttendee = event.data.attendees?.some((a) => a.email.toLowerCase() === user.email.toLowerCase());
         if (!isAttendee) throw new ApiError(403, 'Not an attendee');
 
         const scope = input.scope || 'all';
@@ -972,10 +1131,14 @@ export class Calendar {
         if (scope === 'this' && input.recurrenceDate) {
             if (input.remove) {
                 this.removeOccurrence(eventId, input.recurrenceDate);
-                propagateRsvp(organizerUserId, organizerEventId, user.email, 'declined', input.recurrenceDate).catch(console.error);
+                propagateRsvp(organizerUserId, organizerEventId, user.email, 'declined', input.recurrenceDate).catch(
+                    console.error,
+                );
             } else {
                 this.rsvpForOccurrence(eventId, user.email, input.status, input.recurrenceDate);
-                propagateRsvp(organizerUserId, organizerEventId, user.email, input.status, input.recurrenceDate).catch(console.error);
+                propagateRsvp(organizerUserId, organizerEventId, user.email, input.status, input.recurrenceDate).catch(
+                    console.error,
+                );
             }
         } else if (scope === 'this-and-following' && input.remove && input.recurrenceDate) {
             this.removeThisAndFuture(eventId, input.recurrenceDate);
@@ -993,7 +1156,7 @@ export class Calendar {
         if (!event) throw new ApiError(404, 'Event not found');
         if (!event.rrule) throw new ApiError(400, 'Not a recurring event');
 
-        const occDate = new Date(recurrenceDate + 'T00:00:00Z');
+        const occDate = new Date(`${recurrenceDate}T00:00:00Z`);
         const truncated = truncateRRule(event.rrule, occDate);
 
         const etag = computeEtag({
@@ -1008,11 +1171,15 @@ export class Calendar {
             data: event.data,
         });
 
-        this.db.update(schema.events).set({
-            rrule: truncated,
-            etag,
-            updatedAt: sql`unixepoch()`,
-        }).where(eq(schema.events.id, eventId)).run();
+        this.db
+            .update(schema.events)
+            .set({
+                rrule: truncated,
+                etag,
+                updatedAt: sql`unixepoch()`,
+            })
+            .where(eq(schema.events.id, eventId))
+            .run();
 
         this.incrementCtag(event.calendarId);
     }
@@ -1026,19 +1193,22 @@ export class Calendar {
     }
 
     private getException(parentEventId: string, recurrenceDate: string) {
-        return this.db.select().from(schema.events).where(
-            and(
-                eq(schema.events.parentEventId, parentEventId),
-                eq(schema.events.recurrenceDate, recurrenceDate),
+        return this.db
+            .select()
+            .from(schema.events)
+            .where(
+                and(eq(schema.events.parentEventId, parentEventId), eq(schema.events.recurrenceDate, recurrenceDate)),
             )
-        ).get();
+            .get();
     }
 
     private incrementCtag(calendarId: string): void {
-        this.db.update(schema.calendars)
+        this.db
+            .update(schema.calendars)
             .set({
                 ctag: sql`${schema.calendars.ctag}
-                + 1`, updatedAt: sql`unixepoch()`
+                + 1`,
+                updatedAt: sql`unixepoch()`,
             })
             .where(eq(schema.calendars.id, calendarId))
             .run();
@@ -1055,10 +1225,9 @@ function expandRecurrence(event: CalendarEvent, rangeFrom: number, rangeTo: numb
         // Timezone-aware expansion: convert to wall-clock, let rrule work in wall-clock space,
         // then convert results back to real UTC. This avoids rrule's broken built-in tzid handling.
         const local = utcToLocal(event.startTime, tz);
-        const wallClockDtstart = new Date(Date.UTC(
-            local.year, local.month - 1, local.day,
-            local.hour, local.minute, local.second,
-        ));
+        const wallClockDtstart = new Date(
+            Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute, local.second),
+        );
 
         const rule = new RRule({
             ...RRule.parseString(event.rrule),
@@ -1067,23 +1236,33 @@ function expandRecurrence(event: CalendarEvent, rangeFrom: number, rangeTo: numb
 
         // Pad range by ±1 day to handle timezone offset edge cases, then filter
         const localFrom = utcToLocal(rangeFrom - 86400, tz);
-        const wallClockFrom = new Date(Date.UTC(
-            localFrom.year, localFrom.month - 1, localFrom.day,
-            localFrom.hour, localFrom.minute, localFrom.second,
-        ));
+        const wallClockFrom = new Date(
+            Date.UTC(
+                localFrom.year,
+                localFrom.month - 1,
+                localFrom.day,
+                localFrom.hour,
+                localFrom.minute,
+                localFrom.second,
+            ),
+        );
         const localTo = utcToLocal(rangeTo + 86400, tz);
-        const wallClockTo = new Date(Date.UTC(
-            localTo.year, localTo.month - 1, localTo.day,
-            localTo.hour, localTo.minute, localTo.second,
-        ));
+        const wallClockTo = new Date(
+            Date.UTC(localTo.year, localTo.month - 1, localTo.day, localTo.hour, localTo.minute, localTo.second),
+        );
 
         const dates = rule.between(wallClockFrom, wallClockTo, true);
         const results: CalendarEventOccurrence[] = [];
 
         for (const date of dates) {
-            const ts = localToUtcSeconds(tz,
-                date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate(),
-                date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds(),
+            const ts = localToUtcSeconds(
+                tz,
+                date.getUTCFullYear(),
+                date.getUTCMonth() + 1,
+                date.getUTCDate(),
+                date.getUTCHours(),
+                date.getUTCMinutes(),
+                date.getUTCSeconds(),
             );
             if (ts >= rangeFrom && ts <= rangeTo) {
                 results.push({
@@ -1108,7 +1287,7 @@ function expandRecurrence(event: CalendarEvent, rangeFrom: number, rangeTo: numb
     const rangeEnd = new Date(rangeTo * 1000);
     const dates = rule.between(rangeStart, rangeEnd, true);
 
-    return dates.map(date => {
+    return dates.map((date) => {
         const ts = Math.floor(date.getTime() / 1000);
         return {
             ...event,
@@ -1118,7 +1297,6 @@ function expandRecurrence(event: CalendarEvent, rangeFrom: number, rangeTo: numb
         };
     });
 }
-
 
 function formatOccurrenceDate(date: Date): string {
     const y = date.getUTCFullYear();
@@ -1147,20 +1325,19 @@ function truncateRRule(rruleStr: string, beforeDate: Date): string {
     return result.replace(/^RRULE:/, '');
 }
 
-function computeOccurrenceTimes(parent: CalendarEvent, recurrenceDate: string): {startTime: number; endTime: number} {
+function computeOccurrenceTimes(parent: CalendarEvent, recurrenceDate: string): { startTime: number; endTime: number } {
     const duration = parent.endTime - parent.startTime;
     const tz = parent.timezone;
     const dtstart = new Date(parent.startTime * 1000);
-    const occDate = new Date(recurrenceDate + 'T00:00:00Z');
+    const occDate = new Date(`${recurrenceDate}T00:00:00Z`);
 
     if (parent.rrule) {
         if (tz) {
             // Timezone-aware: expand in wall-clock space, convert back to UTC
             const local = utcToLocal(parent.startTime, tz);
-            const wallClockDtstart = new Date(Date.UTC(
-                local.year, local.month - 1, local.day,
-                local.hour, local.minute, local.second,
-            ));
+            const wallClockDtstart = new Date(
+                Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute, local.second),
+            );
             const rule = new RRule({...RRule.parseString(parent.rrule), dtstart: wallClockDtstart});
             const dayStart = new Date(occDate);
             const dayEnd = new Date(occDate);
@@ -1168,9 +1345,14 @@ function computeOccurrenceTimes(parent: CalendarEvent, recurrenceDate: string): 
             const matches = rule.between(dayStart, dayEnd, true);
             if (matches.length > 0) {
                 const match = matches[0];
-                const startTime = localToUtcSeconds(tz,
-                    match.getUTCFullYear(), match.getUTCMonth() + 1, match.getUTCDate(),
-                    match.getUTCHours(), match.getUTCMinutes(), match.getUTCSeconds(),
+                const startTime = localToUtcSeconds(
+                    tz,
+                    match.getUTCFullYear(),
+                    match.getUTCMonth() + 1,
+                    match.getUTCDate(),
+                    match.getUTCHours(),
+                    match.getUTCMinutes(),
+                    match.getUTCSeconds(),
                 );
                 return {startTime, endTime: startTime + duration};
             }
@@ -1191,14 +1373,22 @@ function computeOccurrenceTimes(parent: CalendarEvent, recurrenceDate: string): 
     if (tz) {
         const local = utcToLocal(parent.startTime, tz);
         const occDateParts = occDate.toISOString().substring(0, 10).split('-');
-        const startTime = localToUtcSeconds(tz,
-            parseInt(occDateParts[0]), parseInt(occDateParts[1]), parseInt(occDateParts[2]),
-            local.hour, local.minute, local.second,
+        const startTime = localToUtcSeconds(
+            tz,
+            parseInt(occDateParts[0], 10),
+            parseInt(occDateParts[1], 10),
+            parseInt(occDateParts[2], 10),
+            local.hour,
+            local.minute,
+            local.second,
         );
         return {startTime, endTime: startTime + duration};
     }
 
-    const startTime = Math.floor(occDate.getTime() / 1000) +
-        dtstart.getUTCHours() * 3600 + dtstart.getUTCMinutes() * 60 + dtstart.getUTCSeconds();
+    const startTime =
+        Math.floor(occDate.getTime() / 1000) +
+        dtstart.getUTCHours() * 3600 +
+        dtstart.getUTCMinutes() * 60 +
+        dtstart.getUTCSeconds();
     return {startTime, endTime: startTime + duration};
 }

@@ -3,22 +3,11 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@workspace/lib/*": [
-        "../../packages/lib/src/*"
-      ],
-      "@workspace/ui/*": [
-        "../../packages/ui/src/*"
-      ],
-      "@/*": [
-        "./src/*"
-      ]
+      "@workspace/lib/*": ["../../packages/lib/src/*"],
+      "@workspace/ui/*": ["../../packages/ui/src/*"],
+      "@/*": ["./src/*"]
     }
   },
-  "include": [
-    "src",
-    "css.d.ts"
-  ],
-  "exclude": [
-    "node_modules"
-  ]
+  "include": ["src", "css.d.ts"],
+  "exclude": ["node_modules"]
 }

@@ -1,16 +1,15 @@
-import type {User} from 'better-auth/types';
-import {randomUUID} from 'crypto';
-
-import {getTeamDataPath} from '../config/paths';
-import {Home} from './home';
-import {parseOwnerId} from "@workspace/lib/types";
-import type {MountSettings, TeamSettings} from "@workspace/lib/types/settings";
-import type {S3Config} from "@workspace/lib/types";
-import {ApiError, JsonStore, LocalFilesystem} from "../core";
-import {Drive} from '../drive';
-import {Calendar} from '../calendar/calendar';
-import {createMountConfig} from '../mount';
-import {getServerSettings, mapStorageType} from '../config/server-settings';
+import { randomUUID } from 'node:crypto';
+import type { S3Config } from '@workspace/lib/types';
+import { parseOwnerId } from '@workspace/lib/types';
+import type { MountSettings, TeamSettings } from '@workspace/lib/types/settings';
+import type { User } from 'better-auth/types';
+import { Calendar } from '../calendar/calendar';
+import { getTeamDataPath } from '../config/paths';
+import { getServerSettings, mapStorageType } from '../config/server-settings';
+import { ApiError, JsonStore, LocalFilesystem } from '../core';
+import { Drive } from '../drive';
+import { createMountConfig } from '../mount';
+import { Home } from './home';
 
 export function getSyntheticTeamUser(ownerId: string): User {
     const parsed = parseOwnerId(ownerId);
@@ -30,7 +29,7 @@ export function getSyntheticTeamUser(ownerId: string): User {
 
 export class TeamHome extends Home {
     public teamId: string;
-    declare public settings: JsonStore<TeamSettings>;
+    public declare settings: JsonStore<TeamSettings>;
 
     constructor(syntheticUser: User, cleanUp?: () => void) {
         super(syntheticUser, cleanUp);
@@ -40,7 +39,7 @@ export class TeamHome extends Home {
         this.homeDir = getTeamDataPath(parsed.id);
         this.fs = new LocalFilesystem(this.homeDir);
 
-        this.settings = new JsonStore<TeamSettings>(this.fs, 'settings.json', {calendar: {enabled: true}});
+        this.settings = new JsonStore<TeamSettings>(this.fs, 'settings.json', { calendar: { enabled: true } });
         // Teams start with no mounts by default — mounts are added explicitly via "Add Mount" wizard
         this._drive = new Drive(this);
         this._calendar = new Calendar(this);
@@ -54,11 +53,17 @@ export class TeamHome extends Home {
         return this._calendar;
     }
 
-    async addMount(input: {name: string; storageType?: string; maxSizeMB?: number; s3Config?: S3Config}): Promise<{id: string} & MountSettings> {
+    async addMount(input: {
+        name: string;
+        storageType?: string;
+        maxSizeMB?: number;
+        s3Config?: S3Config;
+    }): Promise<{ id: string } & MountSettings> {
         const mountId = randomUUID().slice(0, 8);
         const serverSettings = getServerSettings();
         const mountSettings: MountSettings = {
-            storageType: (input.storageType ?? mapStorageType(serverSettings.defaults.mount.storageType)) as MountSettings['storageType'],
+            storageType: (input.storageType ??
+                mapStorageType(serverSettings.defaults.mount.storageType)) as MountSettings['storageType'],
             maxSizeMB: input.maxSizeMB ?? serverSettings.quotas.defaultMountMaxSizeMB,
             enabled: true,
             name: input.name,
@@ -66,20 +71,23 @@ export class TeamHome extends Home {
         };
 
         const currentMounts = this.settings.get().mounts ?? {};
-        await this.settings.set({mounts: {...currentMounts, [mountId]: mountSettings}});
+        await this.settings.set({ mounts: { ...currentMounts, [mountId]: mountSettings } });
 
         const config = createMountConfig(mountId, mountSettings);
         await this.drive.addMount(config);
 
-        return {id: mountId, ...mountSettings};
+        return { id: mountId, ...mountSettings };
     }
 
-    async updateMount(mountId: string, update: Partial<Pick<MountSettings, 'enabled' | 'maxSizeMB' | 'name' | 's3Config'>>): Promise<MountSettings> {
+    async updateMount(
+        mountId: string,
+        update: Partial<Pick<MountSettings, 'enabled' | 'maxSizeMB' | 'name' | 's3Config'>>,
+    ): Promise<MountSettings> {
         const existing = this.settings.get().mounts?.[mountId];
         if (!existing) throw new ApiError(404, 'Mount not found');
 
-        const updated = {...existing, ...update};
-        await this.settings.set({mounts: { [mountId]: updated}});
+        const updated = { ...existing, ...update };
+        await this.settings.set({ mounts: { [mountId]: updated } });
         return updated;
     }
 }

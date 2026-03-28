@@ -1,18 +1,14 @@
-import {cn} from "../../../lib/utils.ts";
+import {cn} from '../../../lib/utils.ts';
 
 interface BraProps {
-    className?: string
-    style?: React.CSSProperties
+    className?: string;
+    style?: React.CSSProperties;
 }
 
-export function Bra({
-                        className,
-                        style,
-                        ...props
-                    }: BraProps) {
+export function Bra({className, style, ...props}: BraProps) {
     return (
         <svg
-            className={cn("inline align-baseline overflow-visible", className)}
+            className={cn('inline align-baseline overflow-visible', className)}
             style={style}
             {...props}
             height="1em"
@@ -25,5 +21,5 @@ export function Bra({
         >
             <path d="m9 0 -4 7.5 4 7.5"/>
         </svg>
-    )
+    );
 }

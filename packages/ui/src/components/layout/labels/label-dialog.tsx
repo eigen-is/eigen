@@ -1,7 +1,7 @@
-import {useEffect, useState} from 'react';
-import {z} from 'zod';
-import {useForm} from 'react-hook-form';
 import {zodResolver} from '@hookform/resolvers/zod';
+import {EIGEN_ACCENT_COLORS_SHUFFLED} from '@workspace/lib/constants';
+import type {Label} from '@workspace/lib/types/label';
+import {Button} from '@workspace/ui/components/button';
 
 import {
     Dialog,
@@ -10,25 +10,25 @@ import {
     DialogFooter,
     DialogHeader,
     DialogTitle,
-} from "@workspace/ui/components/dialog";
+} from '@workspace/ui/components/dialog';
 
-import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage,} from "@workspace/ui/components/form";
+import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage} from '@workspace/ui/components/form';
 
-import {Input} from "@workspace/ui/components/input";
-import {Button} from "@workspace/ui/components/button";
-import {Popover, PopoverContent, PopoverTrigger} from "@workspace/ui/components/popover";
-import {ColorPicker} from "@workspace/ui/components/layout/media/color-picker";
-import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog";
-import type {Label} from "@workspace/lib/types/label";
-import {EIGEN_ACCENT_COLORS_SHUFFLED} from "@workspace/lib/constants";
+import {Input} from '@workspace/ui/components/input';
+import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
+import {ColorPicker} from '@workspace/ui/components/layout/media/color-picker';
+import {Popover, PopoverContent, PopoverTrigger} from '@workspace/ui/components/popover';
+import {useEffect, useState} from 'react';
+import {useForm} from 'react-hook-form';
+import {z} from 'zod';
 
 // Form schema for label management
 const labelFormSchema = z.object({
     name: z.string().min(1, {
-        message: "Label name is required.",
+        message: 'Label name is required.',
     }),
     color: z.string().min(1, {
-        message: "Color is required.",
+        message: 'Color is required.',
     }),
 });
 
@@ -41,7 +41,7 @@ type LabelDialogProps = {
     onSubmit: (data: LabelFormValues) => Promise<void>;
     onDelete: () => void;
     labelCount?: number;
-}
+};
 
 export function LabelDialog({
                                 open,
@@ -61,7 +61,7 @@ export function LabelDialog({
         resolver: zodResolver(labelFormSchema),
         defaultValues: selectedLabel
             ? {name: selectedLabel.name, color: selectedLabel.color}
-            : {name: "", color: EIGEN_ACCENT_COLORS_SHUFFLED[labelCount % EIGEN_ACCENT_COLORS_SHUFFLED.length].value},
+            : {name: '', color: EIGEN_ACCENT_COLORS_SHUFFLED[labelCount % EIGEN_ACCENT_COLORS_SHUFFLED.length].value},
     });
 
     const defaultColor = EIGEN_ACCENT_COLORS_SHUFFLED[labelCount % EIGEN_ACCENT_COLORS_SHUFFLED.length].value;
@@ -70,12 +70,12 @@ export function LabelDialog({
         if (selectedLabel) {
             form.reset({
                 name: selectedLabel.name,
-                color: selectedLabel.color
+                color: selectedLabel.color,
             });
         } else if (open) {
             form.reset({
-                name: "",
-                color: defaultColor
+                name: '',
+                color: defaultColor,
             });
         }
     }, [selectedLabel, form, open]);
@@ -102,11 +102,9 @@ export function LabelDialog({
             <Dialog open={open && !showDeleteConfirmation} onOpenChange={onOpenChange}>
                 <DialogContent size="sm">
                     <DialogHeader>
-                        <DialogTitle>{isEditMode ? "Edit Label" : "Add Label"}</DialogTitle>
+                        <DialogTitle>{isEditMode ? 'Edit Label' : 'Add Label'}</DialogTitle>
                         <DialogDescription>
-                            {isEditMode
-                                ? "Make changes to your label here."
-                                : "Add a new label to your collection."}
+                            {isEditMode ? 'Make changes to your label here.' : 'Add a new label to your collection.'}
                         </DialogDescription>
                     </DialogHeader>
 
@@ -141,9 +139,7 @@ export function LabelDialog({
                                                     </PopoverContent>
                                                 </Popover>
                                             </FormControl>
-                                            <FormMessage>
-                                                {fieldState.error?.message}
-                                            </FormMessage>
+                                            <FormMessage>{fieldState.error?.message}</FormMessage>
                                         </FormItem>
                                     )}
                                 />
@@ -161,9 +157,7 @@ export function LabelDialog({
                                                     disabled={isLoading}
                                                 />
                                             </FormControl>
-                                            <FormMessage>
-                                                {fieldState.error?.message}
-                                            </FormMessage>
+                                            <FormMessage>{fieldState.error?.message}</FormMessage>
                                         </FormItem>
                                     )}
                                 />
@@ -188,10 +182,7 @@ export function LabelDialog({
                                 >
                                     Cancel
                                 </Button>
-                                <Button
-                                    type="submit"
-                                    disabled={isLoading || form.formState.isSubmitting}
-                                >
+                                <Button type="submit" disabled={isLoading || form.formState.isSubmitting}>
                                     {isLoading ? 'Saving...' : 'Save'}
                                 </Button>
                             </DialogFooter>

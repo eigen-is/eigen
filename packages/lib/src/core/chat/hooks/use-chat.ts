@@ -1,9 +1,9 @@
-import {type QueryClient, useInfiniteQuery, useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
-import {chatApi, driveApi} from "@workspace/lib/api";
-import {driveKeys, invalidateItemCreated} from "../../drive/hooks/use-drive";
-import type {DrivePath} from "@workspace/lib/types/drive";
-import type {ChatMessage} from "@workspace/lib/types/chat";
-import {AppError, onMutationError} from '../../api-error';
+import { type QueryClient, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { chatApi, driveApi } from '@workspace/lib/api';
+import type { ChatMessage } from '@workspace/lib/types/chat';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { AppError, onMutationError } from '../../api-error';
+import { driveKeys, invalidateItemCreated } from '../../drive/hooks/use-drive';
 
 const MESSAGE_PAGE_SIZE = 50;
 
@@ -17,7 +17,7 @@ export function useChats(ownerId: string) {
     return useQuery<DrivePath[]>({
         queryKey: driveKeys.mime(ownerId, 'application-eigenchat'),
         queryFn: async () => {
-            const response = await driveApi({ownerId}).mime({mimeType: 'application-eigenchat'}).get();
+            const response = await driveApi({ ownerId }).mime({ mimeType: 'application-eigenchat' }).get();
             return response.data || [];
         },
         enabled: !!ownerId,
@@ -27,11 +27,11 @@ export function useChats(ownerId: string) {
 export function useMessages(ownerId: string, mountId: string, chatId: string | undefined) {
     return useInfiniteQuery({
         queryKey: chatKeys.messages(ownerId, mountId, chatId || ''),
-        queryFn: async ({pageParam}: { pageParam: string | undefined }) => {
+        queryFn: async ({ pageParam }: { pageParam: string | undefined }) => {
             if (!chatId) return [] as ChatMessage[];
-            const query: { before?: string; limit?: string } = {limit: String(MESSAGE_PAGE_SIZE)};
+            const query: { before?: string; limit?: string } = { limit: String(MESSAGE_PAGE_SIZE) };
             if (pageParam) query.before = pageParam;
-            const response = await chatApi({ownerId})({mountId})({chatId}).messages.get({query});
+            const response = await chatApi({ ownerId })({ mountId })({ chatId }).messages.get({ query });
             return (response.data || []) as ChatMessage[];
         },
         initialPageParam: undefined as string | undefined,
@@ -51,14 +51,14 @@ export function usePostMessage(ownerId: string, mountId: string, chatId: string)
             type?: 'message' | 'emote' | 'whisper';
             whisperTo?: string;
             replyTo?: string;
-            attachments?: string[]
+            attachments?: string[];
         }) => {
-            const response = await chatApi({ownerId})({mountId})({chatId}).messages.post(body);
+            const response = await chatApi({ ownerId })({ mountId })({ chatId }).messages.post(body);
             if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({queryKey: chatKeys.messages(ownerId, mountId, chatId)});
+            queryClient.invalidateQueries({ queryKey: chatKeys.messages(ownerId, mountId, chatId) });
         },
         onError: onMutationError,
     });
@@ -67,12 +67,15 @@ export function usePostMessage(ownerId: string, mountId: string, chatId: string)
 export function useCreateChat(ownerId: string, mountId: string) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({parentId, fileName}: { parentId: string; fileName: string }): Promise<DrivePath> => {
-            const response = await driveApi({ownerId})({mountId}).folder({pathId: parentId}).chat.post({fileName});
+        mutationFn: async ({ parentId, fileName }: { parentId: string; fileName: string }): Promise<DrivePath> => {
+            const response = await driveApi({ ownerId })({ mountId })
+                .folder({ pathId: parentId })
+                .chat.post({ fileName });
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId, 'DRIVE_MIME_CHAT'),
+        onSuccess: (_data, variables) =>
+            invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId, 'DRIVE_MIME_CHAT'),
         onError: onMutationError,
     });
 }
@@ -80,14 +83,14 @@ export function useCreateChat(ownerId: string, mountId: string) {
 export function useInviteToChat(ownerId: string, mountId: string, chatId: string) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({email}: { email: string }) => {
-            const response = await chatApi({ownerId})({mountId})({chatId}).invite.post({email});
+        mutationFn: async ({ email }: { email: string }) => {
+            const response = await chatApi({ ownerId })({ mountId })({ chatId }).invite.post({ email });
             if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: () => {
             // Refresh chat path so roomMembers list updates
-            queryClient.invalidateQueries({queryKey: driveKeys.path(ownerId, mountId, chatId)});
+            queryClient.invalidateQueries({ queryKey: driveKeys.path(ownerId, mountId, chatId) });
         },
         onError: onMutationError,
     });
@@ -95,5 +98,5 @@ export function useInviteToChat(ownerId: string, mountId: string, chatId: string
 
 // SSE invalidation functions
 export function invalidateMessages(queryClient: QueryClient, ownerId: string, mountId: string, chatId: string): void {
-    queryClient.invalidateQueries({queryKey: chatKeys.messages(ownerId, mountId, chatId)});
+    queryClient.invalidateQueries({ queryKey: chatKeys.messages(ownerId, mountId, chatId) });
 }

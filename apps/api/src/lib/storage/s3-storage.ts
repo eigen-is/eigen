@@ -1,7 +1,7 @@
-import {type BunFile, S3Client, type S3File} from 'bun';
-import type {S3Config, StorageBackend} from './types';
+import { type BunFile, S3Client, type S3File } from 'bun';
+import type { S3Config, StorageBackend } from './types';
 
-export async function checkS3Connection(config: S3Config): Promise<{ok: boolean; message: string}> {
+export async function checkS3Connection(config: S3Config): Promise<{ ok: boolean; message: string }> {
     try {
         const client = new S3Client({
             endpoint: config.endpoint,
@@ -16,9 +16,9 @@ export async function checkS3Connection(config: S3Config): Promise<{ok: boolean;
         const exists = await testFile.exists();
         await testFile.delete();
         if (!exists) throw new Error('Write verification failed');
-        return {ok: true, message: 'Connection successful'};
+        return { ok: true, message: 'Connection successful' };
     } catch (err) {
-        return {ok: false, message: err instanceof Error ? err.message : 'Connection failed'};
+        return { ok: false, message: err instanceof Error ? err.message : 'Connection failed' };
     }
 }
 
@@ -32,13 +32,13 @@ export class S3Storage implements StorageBackend {
             bucket: config.bucket,
             accessKeyId: config.accessKeyId,
             secretAccessKey: config.secretAccessKey,
-            region: config.region
+            region: config.region,
         });
         this.prefix = config.prefix;
     }
 
     private getKey(key: string): string {
-        if (key.split('/').some(seg => seg === '..')) {
+        if (key.split('/').some((seg) => seg === '..')) {
             throw new Error(`Path traversal blocked: ${key}`);
         }
         return this.prefix ? `${this.prefix}/${key}` : key;

@@ -1,7 +1,7 @@
-import {ReactNode} from 'react';
-import {cn} from "../../../lib/utils";
-import {Button} from "../../button";
-import {Link} from '@tanstack/react-router';
+import { Link } from '@tanstack/react-router';
+import type { ReactNode } from 'react';
+import { cn } from '../../../lib/utils';
+import { Button } from '../../button';
 
 export type SidebarItemProps = {
     icon: ReactNode;
@@ -14,38 +14,33 @@ export type SidebarItemProps = {
     condensed?: boolean;
     className?: string;
     children?: ReactNode;
-}
+};
 
 export function SidebarItem({
-                                icon,
-                                label,
-                                to,
-                                params,
-                                isActive,
-                                colorDot,
-                                onClick,
-                                condensed = false,
-                                className,
-                                children,
-                            }: SidebarItemProps) {
+    icon,
+    label,
+    to,
+    params,
+    isActive,
+    colorDot,
+    onClick,
+    condensed = false,
+    className,
+    children,
+}: SidebarItemProps) {
     // Common styling for both button and link variants
     const baseStyles = cn(
-        "flex items-center rounded-md px-3 py-2 text-sm font-medium select-none",
-        condensed ? "justify-center" : "gap-3",
-        isActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground",
-        className
+        'flex items-center rounded-md px-3 py-2 text-sm font-medium select-none',
+        condensed ? 'justify-center' : 'gap-3',
+        isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+        className,
     );
 
     // Content to render inside the button or link
     const content = (
         <>
             {/* Color dot for labels */}
-            {colorDot && (
-                <span
-                    className="h-3 w-3 rounded-full"
-                    style={{backgroundColor: colorDot}}
-                />
-            )}
+            {colorDot && <span className="h-3 w-3 rounded-full" style={{ backgroundColor: colorDot }} />}
 
             {/* Icon */}
             {icon}
@@ -71,7 +66,7 @@ export function SidebarItem({
                 inactiveProps={{
                     className: 'text-muted-foreground hover:bg-muted hover:text-foreground',
                 }}
-                activeOptions={{exact: false}}
+                activeOptions={{ exact: false }}
             >
                 {content}
             </Link>
@@ -79,11 +74,7 @@ export function SidebarItem({
     }
 
     return (
-        <Button
-            variant="ghost"
-            className={baseStyles}
-            onClick={onClick}
-        >
+        <Button variant="ghost" className={baseStyles} onClick={onClick}>
             {content}
         </Button>
     );

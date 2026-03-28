@@ -1,12 +1,18 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
-import {DEFAULT_MOUNT_ID, useMimeContent, usePathInfo} from '@workspace/lib/drive';
-import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
-import {DrivePath, DriveSearchParams, isDocumentType, isFolderType, isInlineEditable} from "@workspace/lib/types/drive";
+import {openDocument} from '@workspace/lib/api';
 import {useAuth} from '@workspace/lib/auth';
-import {useLayout} from "@workspace/ui/components/layout/app/layout-context.tsx";
-import {openDocument} from "@workspace/lib/api";
-import {usePreview} from '@workspace/ui/components/layout/preview-provider';
+import {DEFAULT_MOUNT_ID, useMimeContent, usePathInfo} from '@workspace/lib/drive';
+import {
+    type DrivePath,
+    type DriveSearchParams,
+    isDocumentType,
+    isFolderType,
+    isInlineEditable,
+} from '@workspace/lib/types/drive';
 import {NotFound} from '@workspace/ui';
+import {useLayout} from '@workspace/ui/components/layout/app/layout-context.tsx';
+import {DriveLayout} from '@workspace/ui/components/layout/drive/drive-layout';
+import {usePreview} from '@workspace/ui/components/layout/preview-provider';
 
 export const Route = createFileRoute('/_auth/mime/$mimeType')({
     component: DriveRoute,
@@ -31,7 +37,7 @@ function DriveRoute() {
     const {
         data: folderContents = [],
         isLoading: isFolderContentLoading,
-        error: isFolderContentLoadingError
+        error: isFolderContentLoadingError,
     } = useMimeContent(ownerId, mimeType);
 
     const onRowSelect = (path: DrivePath) => {
@@ -45,7 +51,7 @@ function DriveRoute() {
             navigate({
                 to: Route.fullPath,
                 params: {mimeType},
-                search: {pid: path.id, uid: path.ownerId, mid: path.mountId}
+                search: {pid: path.id, uid: path.ownerId, mid: path.mountId},
             });
         }
     };
@@ -60,7 +66,10 @@ function DriveRoute() {
         } else if (isDocumentType(path.type)) {
             openDocument(path);
         } else if (isInlineEditable(path.mimeType, path.name)) {
-            navigate({to: '/edit/$ownerId/$mountId/$pathId', params: {ownerId: path.ownerId, mountId: path.mountId, pathId: path.id}});
+            navigate({
+                to: '/edit/$ownerId/$mountId/$pathId',
+                params: {ownerId: path.ownerId, mountId: path.mountId, pathId: path.id},
+            });
         } else {
             openPreview(path);
         }
@@ -75,28 +84,27 @@ function DriveRoute() {
     }
 
     return (
-        <>
-            <DriveLayout
-                pid={pid}
-                selectedPath={selectedPath}
-                ownerId={uid || ownerId}
-                mountId={mid || DEFAULT_MOUNT_ID}
-                folderContents={folderContents}
-                isLoading={isFolderContentLoading}
-                error={isFolderContentLoadingError}
-                onRowSelect={onRowSelect}
-                onRowActivate={onRowActivate}
-                onBackToList={handleBackToList}
-                onAfterAction={() => {}}
-                allowDelete={true}
-                allowShare={true}
-                allowCreateFolder={false}
-                allowUpload={false}
-                allowCreateDoc={false}
-                allowCreateStickies={false}
-                showBreadcrumb={false}
-                onQuickLook={onQuickLook}
-            />
-        </>
+        <DriveLayout
+            pid={pid}
+            selectedPath={selectedPath}
+            ownerId={uid || ownerId}
+            mountId={mid || DEFAULT_MOUNT_ID}
+            folderContents={folderContents}
+            isLoading={isFolderContentLoading}
+            error={isFolderContentLoadingError}
+            onRowSelect={onRowSelect}
+            onRowActivate={onRowActivate}
+            onBackToList={handleBackToList}
+            onAfterAction={() => {
+            }}
+            allowDelete={true}
+            allowShare={true}
+            allowCreateFolder={false}
+            allowUpload={false}
+            allowCreateDoc={false}
+            allowCreateStickies={false}
+            showBreadcrumb={false}
+            onQuickLook={onQuickLook}
+        />
     );
 }

@@ -1,11 +1,11 @@
 import {createFileRoute, redirect, useNavigate} from '@tanstack/react-router';
+import {emptyContact} from '@workspace/lib/constants/contact';
+import {useAddContact, useContacts, useUpdateContact} from '@workspace/lib/contacts';
+import type {Contact} from '@workspace/lib/types/contact';
+import {LoadingState} from '@workspace/ui';
+import {Column, ColumnLayout} from '@workspace/ui/components/layout/app/column-layout.tsx';
 import {z} from 'zod';
 import {ContactEdit, ContactEditToolbar, type ContactFormValues} from '../components/contacts/contact-edit';
-import {useAddContact, useContacts, useUpdateContact} from '@workspace/lib/contacts';
-import {type Contact} from "@workspace/lib/types/contact";
-import {LoadingState} from "@workspace/ui";
-import {Column, ColumnLayout} from "@workspace/ui/components/layout/app/column-layout.tsx";
-import {emptyContact} from '@workspace/lib/constants/contact';
 
 // Define search params type with Zod schema
 const searchSchema = z.object({
@@ -25,8 +25,8 @@ export const Route = createFileRoute('/_auth/edit/$filterType/$filterId')({
                 to: '/$filterType/$filterId',
                 params: {
                     filterType: 'book',
-                    filterId: 'all'
-                }
+                    filterId: 'all',
+                },
             });
         }
 
@@ -51,13 +51,13 @@ function EditContactRoute() {
             lastName: data.lastName || '',
             birthday: data.birthday?.toISOString(),
             labels: data.labels || [],
-            avatar: data.avatar ?? ''
+            avatar: data.avatar ?? '',
         };
 
         if (contactId) {
             await updateContactMutation.mutateAsync({
                 id: contactId,
-                ...contactData
+                ...contactData,
             });
         } else {
             const newId = await addContactMutation.mutateAsync(contactData);
@@ -105,11 +105,7 @@ function EditContactRoute() {
     return (
         <ColumnLayout mobileColumn="editor">
             <Column id="editor" width="flex" onBack={handleCancel} toolbar={<ContactEditToolbar isNew={isNew}/>}>
-                <ContactEdit
-                    contact={contact || emptyContact}
-                    onSave={handleSave}
-                    onCancel={handleCancel}
-                />
+                <ContactEdit contact={contact || emptyContact} onSave={handleSave} onCancel={handleCancel}/>
             </Column>
         </ColumnLayout>
     );

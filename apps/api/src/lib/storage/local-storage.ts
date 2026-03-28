@@ -1,9 +1,9 @@
-import type {BunFile} from 'bun';
-import * as path from 'path';
 import * as fs from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
-import {ApiError} from '../core';
-import type {StorageBackend} from './types';
+import * as path from 'node:path';
+import type { BunFile } from 'bun';
+import { ApiError } from '../core';
+import type { StorageBackend } from './types';
 
 export class LocalStorage implements StorageBackend {
     private dataDir: string;
@@ -11,7 +11,7 @@ export class LocalStorage implements StorageBackend {
     constructor(baseDir: string) {
         this.dataDir = path.resolve(path.join(baseDir, 'data'));
         if (!fs.existsSync(this.dataDir)) {
-            fs.mkdirSync(this.dataDir, {recursive: true});
+            fs.mkdirSync(this.dataDir, { recursive: true });
         }
     }
 
@@ -28,7 +28,7 @@ export class LocalStorage implements StorageBackend {
     }
 
     async write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
-        return await Bun.write(this.resolve(key), data, {createPath: true});
+        return await Bun.write(this.resolve(key), data, { createPath: true });
     }
 
     async delete(key: string): Promise<boolean> {
@@ -64,7 +64,7 @@ export class LocalStorage implements StorageBackend {
     async mkdir(key: string): Promise<void> {
         const dirPath = this.resolve(key);
         if (!fs.existsSync(dirPath)) {
-            await fsPromises.mkdir(dirPath, {recursive: true});
+            await fsPromises.mkdir(dirPath, { recursive: true });
         }
     }
 
@@ -76,7 +76,7 @@ export class LocalStorage implements StorageBackend {
         const newPath = this.resolve(newKey);
         const newParent = path.dirname(newPath);
         if (!fs.existsSync(newParent)) {
-            await fsPromises.mkdir(newParent, {recursive: true});
+            await fsPromises.mkdir(newParent, { recursive: true });
         }
         await fsPromises.rename(oldPath, newPath);
     }
@@ -85,7 +85,7 @@ export class LocalStorage implements StorageBackend {
         const dirPath = this.resolve(key);
         try {
             if (fs.existsSync(dirPath)) {
-                await fsPromises.rm(dirPath, {recursive: true});
+                await fsPromises.rm(dirPath, { recursive: true });
                 return true;
             }
             return false;
@@ -95,4 +95,3 @@ export class LocalStorage implements StorageBackend {
         }
     }
 }
-

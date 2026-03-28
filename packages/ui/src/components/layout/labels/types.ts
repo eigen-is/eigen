@@ -1,4 +1,4 @@
-import type {Label} from "@workspace/lib/types/label";
+import type { Label } from '@workspace/lib/types/label';
 
 export type LabelManagerProps = {
     labels: Label[];
@@ -7,4 +7,4 @@ export type LabelManagerProps = {
     condensed?: boolean;
     dropAcceptTypes?: string[];
     onItemDrop?: (itemIds: string[], labelId: string) => void;
-}
+};

@@ -1,8 +1,8 @@
+import type {RoomMember} from '@workspace/lib/types/chat';
 import {useEffect, useMemo} from 'react';
-import {useContactSuggestions} from "../contacts/use-contact-suggestions";
-import {UserItem} from "../user-item";
-import type {ContactSuggestion} from "../contacts/types";
-import type {RoomMember} from "@workspace/lib/types/chat";
+import type {ContactSuggestion} from '../contacts/types';
+import {useContactSuggestions} from '../contacts/use-contact-suggestions';
+import {UserItem} from '../user-item';
 
 type ChatPlayerSuggestProps = {
     query: string;
@@ -12,7 +12,7 @@ type ChatPlayerSuggestProps = {
     selectedIndex: number;
     onItemsChange: (count: number, emails: string[]) => void;
     includeContacts?: boolean;
-}
+};
 
 export function ChatPlayerSuggest({
                                       query,
@@ -30,11 +30,11 @@ export function ChatPlayerSuggest({
 
         const q = query.toLowerCase();
         const memberSuggestions: ContactSuggestion[] = roomMembers
-            .filter(m => {
+            .filter((m) => {
                 if (!q) return true;
                 return m.email.toLowerCase().includes(q) || m.displayName.toLowerCase().includes(q);
             })
-            .map(m => ({
+            .map((m) => ({
                 id: m.email,
                 displayName: m.displayName,
                 email: m.email,
@@ -42,7 +42,7 @@ export function ChatPlayerSuggest({
             }));
 
         if (!includeContacts) {
-            if (q && memberSuggestions.some(s => s.email.toLowerCase() === q)) return [];
+            if (q && memberSuggestions.some((s) => s.email.toLowerCase() === q)) return [];
             return memberSuggestions.slice(0, 6);
         }
 
@@ -55,11 +55,11 @@ export function ChatPlayerSuggest({
                 merged.push(s);
             }
         }
-        if (q && merged.some(s => s.email.toLowerCase() === q)) return [];
+        if (q && merged.some((s) => s.email.toLowerCase() === q)) return [];
         return merged.slice(0, 6);
     }, [visible, query, roomMembers, contactSuggestions, includeContacts]);
 
-    const emails = useMemo(() => items.map(i => i.email), [items]);
+    const emails = useMemo(() => items.map((i) => i.email), [items]);
 
     useEffect(() => {
         onItemsChange(items.length, emails);
@@ -78,11 +78,7 @@ export function ChatPlayerSuggest({
                         onSelect(suggestion.email);
                     }}
                 >
-                    <UserItem
-                        name={suggestion.displayName}
-                        email={suggestion.email}
-                        userId={suggestion.id}
-                    />
+                    <UserItem name={suggestion.displayName} email={suggestion.email} userId={suggestion.id}/>
                 </li>
             ))}
         </ul>

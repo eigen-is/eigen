@@ -1,3 +1,3 @@
-import {createAppConfig} from '../../vite.shared.config'
+import { createAppConfig } from '../../vite.shared.config';
 
-export default createAppConfig('sheets')
+export default createAppConfig('sheets');
