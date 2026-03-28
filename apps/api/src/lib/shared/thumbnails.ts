@@ -1,9 +1,11 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { ImageDimensions } from '@workspace/lib/types/drive';
-import type { BunFile } from 'bun';
 import sharp from 'sharp';
 import { cleanupExtract, extractEmbeddedPreview, isExiftoolCandidate } from '../preview/exiftool-preview';
+import type { StorageFile } from '../storage';
+
+type ImageSource = StorageFile | Buffer | string;
 
 export type ThumbnailOptions = {
     maxSize?: number;
@@ -23,18 +25,17 @@ export type ImageResult = ImageDimensions & {
     data: Buffer;
 };
 
-async function sharpResize(source: BunFile | Buffer | string, options?: ThumbnailOptions): Promise<ImageResult | null> {
+async function toBuffer(source: ImageSource): Promise<Buffer> {
+    if (Buffer.isBuffer(source)) return source;
+    if (typeof source === 'string') return Buffer.from(await Bun.file(source).arrayBuffer());
+    return Buffer.from(await source.arrayBuffer());
+}
+
+async function sharpResize(source: ImageSource, options?: ThumbnailOptions): Promise<ImageResult | null> {
     const opts = { ...DEFAULT_OPTIONS, ...options };
     try {
-        let image: sharp.Sharp;
-
-        if (typeof source === 'string') {
-            image = sharp(source);
-        } else if (Buffer.isBuffer(source)) {
-            image = sharp(source);
-        } else {
-            image = sharp(Buffer.from(await source.arrayBuffer()));
-        }
+        // sharp accepts file paths directly (zero-copy) or Buffers
+        const image = typeof source === 'string' ? sharp(source) : sharp(await toBuffer(source));
         const metadata = await image.metadata();
 
         if (!metadata.width || !metadata.height) return null;
@@ -59,7 +60,7 @@ async function sharpResize(source: BunFile | Buffer | string, options?: Thumbnai
     }
 }
 
-async function heicToJpeg(source: BunFile | Buffer | string): Promise<Buffer | null> {
+async function heicToJpeg(source: ImageSource): Promise<Buffer | null> {
     try {
         // @ts-expect-error -- no type declarations available for heic-convert
         const convert = (await import('heic-convert')).default as (opts: {
@@ -67,14 +68,7 @@ async function heicToJpeg(source: BunFile | Buffer | string): Promise<Buffer | n
             format: string;
             quality: number;
         }) => Promise<ArrayBuffer>;
-        let buffer: Buffer;
-        if (typeof source === 'string') {
-            buffer = Buffer.from(await Bun.file(source).arrayBuffer());
-        } else if (Buffer.isBuffer(source)) {
-            buffer = source;
-        } else {
-            buffer = Buffer.from(await source.arrayBuffer());
-        }
+        const buffer = await toBuffer(source);
         const output = await convert({ buffer, format: 'JPEG', quality: 0.8 });
         return Buffer.from(output);
     } catch {
@@ -83,7 +77,7 @@ async function heicToJpeg(source: BunFile | Buffer | string): Promise<Buffer | n
 }
 
 export async function generateImagePreview(
-    source: BunFile | Buffer | string,
+    source: ImageSource,
     mimeType: string,
     fileName: string,
     tmpDir: string,
@@ -113,8 +107,7 @@ export async function generateImagePreview(
         filePath = source;
     } else {
         tempFile = path.join(tmpDir, `${pathId}-src.tmp`);
-        const data = Buffer.isBuffer(source) ? source : Buffer.from(await source.arrayBuffer());
-        await Bun.write(tempFile, data);
+        await Bun.write(tempFile, await toBuffer(source));
         filePath = tempFile;
     }
 
@@ -139,7 +132,7 @@ export function getThumbnailPath(thumbsDir: string, pathId: string, format: 'web
 export async function saveThumbnail(
     thumbsDir: string,
     pathId: string,
-    source: BunFile | Buffer | string,
+    source: ImageSource,
     mimeType: string,
     fileName: string,
     options?: ThumbnailOptions,

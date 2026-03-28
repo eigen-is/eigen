@@ -167,27 +167,34 @@ export const driveRouter = new Elysia({ name: 'drive' })
         async ({ params, user, set }) => {
             const drive = await getSharedDrive(params.ownerId, user);
             const path = await drive.getPath(params.mountId, params.pathId);
-            if (path?.name) {
-                set.headers['Content-Disposition'] = contentDisposition(
-                    'attachment',
-                    path.details?.originalName || path.name,
-                );
-                set.headers['Cache-Control'] = 'public, max-age=86400';
-                set.headers['Expires'] = new Date(Date.now() + 86400000).toUTCString();
+            const file = await drive.downloadFile(params.mountId, params.pathId);
+            if (!file || !path) {
+                set.status = 404;
+                return 'File not found';
             }
-            return await drive.downloadFile(params.mountId, params.pathId);
+            return new Response(file, {
+                headers: {
+                    'Content-Disposition': contentDisposition('attachment', path.details?.originalName || path.name),
+                    'Cache-Control': 'public, max-age=86400',
+                    Expires: new Date(Date.now() + 86400000).toUTCString(),
+                },
+            });
         },
         { auth: true },
     )
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/embed/:fileName',
-        async ({ params, user }) => {
+        async ({ params, user, set }) => {
             const drive = await getSharedDrive(params.ownerId, user);
             const path = await drive.getPath(params.mountId, params.pathId);
-            const data = await drive.downloadFile(params.mountId, params.pathId);
-            return new Response(data, {
+            const file = await drive.downloadFile(params.mountId, params.pathId);
+            if (!file || !path) {
+                set.status = 404;
+                return 'File not found';
+            }
+            return new Response(file, {
                 headers: {
-                    'Content-Type': path?.mimeType || 'application/octet-stream',
+                    'Content-Type': path.mimeType || 'application/octet-stream',
                     'Content-Disposition': 'inline',
                     'Cache-Control': 'public, max-age=86400',
                     Expires: new Date(Date.now() + 86400000).toUTCString(),

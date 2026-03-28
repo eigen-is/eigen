@@ -21,13 +21,8 @@ function getTextCacheKey(pathId: string, updatedAt: Date | string): string {
 export async function getScreenPreview(mount: Mount, drivePath: DrivePath, embedUrl: string): Promise<PreviewResult> {
     const mime = drivePath.mimeType || '';
 
-    // Video/audio → redirect to embed
-    if (mime.startsWith('video/') || mime.startsWith('audio/')) {
-        return { type: 'redirect', url: embedUrl };
-    }
-
-    // PDF → redirect to embed
-    if (mime === 'application/pdf') {
+    // Video/audio/PDF → redirect to embed
+    if (mime.startsWith('video/') || mime.startsWith('audio/') || mime === 'application/pdf') {
         return { type: 'redirect', url: embedUrl };
     }
 
@@ -46,9 +41,9 @@ export async function getScreenPreview(mount: Mount, drivePath: DrivePath, embed
             };
         }
 
-        const fileData = await mount.readFile(drivePath.id);
-        if (!fileData) return null;
-        const data = Buffer.from(fileData);
+        const file = await mount.readFile(drivePath.id);
+        if (!file) return null;
+        const data = Buffer.from(await file.arrayBuffer());
         await Bun.write(cacheFile, data);
         return { type: 'image', data, contentType: 'image/svg+xml' };
     }
@@ -66,11 +61,12 @@ export async function getScreenPreview(mount: Mount, drivePath: DrivePath, embed
             };
         }
 
-        const fileData = await mount.readFile(drivePath.id);
-        if (!fileData) return null;
+        // Pass the storage file reference directly — generateImagePreview accepts BunFile
+        const file = await mount.readFile(drivePath.id);
+        if (!file) return null;
 
         const result = await generateImagePreview(
-            Buffer.from(fileData),
+            file,
             mime,
             drivePath.name,
             mount.previewsDir,
@@ -98,13 +94,13 @@ export async function getTextPreviewData(mount: Mount, drivePath: DrivePath): Pr
         return cached as TextPreviewResult;
     }
 
-    // Read file content
-    const fileData = await mount.readFile(drivePath.id);
-    if (!fileData) return null;
+    // Read file as text directly — no intermediate ArrayBuffer
+    const file = await mount.readFile(drivePath.id);
+    if (!file) return null;
 
     let content: string;
     try {
-        content = new TextDecoder('utf-8', { fatal: true }).decode(fileData);
+        content = await file.text();
     } catch {
         return null;
     }
