@@ -152,7 +152,8 @@
       "Bash(bunx --bun @biomejs/biome lint apps/api/src/lib/mail/)",
       "Bash(find /Users/reinder/Documents/GitHub/eigen -maxdepth 2 \\\\\\(-name .github -type d -o -name .gitlab-ci.yml -o -name *.yml -path */.github/workflows/* \\\\\\))",
       "Bash(bash)",
-      "Bash(bunx:*)"
+      "Bash(bunx:*)",
+      "Bash(echo \"Updated $f\")"
     ]
   },
   "enabledPlugins": {
