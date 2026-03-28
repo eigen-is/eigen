@@ -1,6 +1,6 @@
 import type { Readable } from 'node:stream';
-import MailParser from './mail-parser';
 import type { Attachment, AttachmentStream, HeaderValue, MailParserOptions, ParsedMail } from './mail-parser';
+import MailParser from './mail-parser';
 
 export type Source = Buffer | Readable | string;
 export type SimpleParserOptions = MailParserOptions;

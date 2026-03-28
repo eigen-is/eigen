@@ -1,5 +1,5 @@
-import type { BunFile } from 'bun';
 import type { Email } from '@workspace/lib/types/mail';
+import type { BunFile } from 'bun';
 import DOMPurify from 'isomorphic-dompurify';
 import { simpleParser } from './mail-parser';
 

@@ -25,7 +25,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({
     children,
     loadingFallback = null,
-}: { children: ReactNode; loadingFallback?: ReactNode }): React.ReactElement {
+}: { children: ReactNode; loadingFallback?: ReactNode }): ReactNode {
     const [user, setUser] = useState<AuthUser | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const queryClient = useQueryClient();
@@ -78,7 +78,7 @@ export function AuthProvider({
     };
 
     return isLoading ? (
-        <>{loadingFallback}</>
+        loadingFallback
     ) : (
         <AuthContext.Provider
             value={{
