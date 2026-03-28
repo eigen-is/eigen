@@ -167,8 +167,12 @@ export const driveRouter = new Elysia({ name: 'drive' })
         async ({ params, user, set }) => {
             const drive = await getSharedDrive(params.ownerId, user);
             const path = await drive.getPath(params.mountId, params.pathId);
+            if (!path || path.type !== 'file') {
+                set.status = 404;
+                return 'File not found';
+            }
             const file = await drive.downloadFile(params.mountId, params.pathId);
-            if (!file || !path) {
+            if (!file) {
                 set.status = 404;
                 return 'File not found';
             }
@@ -187,8 +191,12 @@ export const driveRouter = new Elysia({ name: 'drive' })
         async ({ params, user, set }) => {
             const drive = await getSharedDrive(params.ownerId, user);
             const path = await drive.getPath(params.mountId, params.pathId);
+            if (!path || path.type !== 'file') {
+                set.status = 404;
+                return 'File not found';
+            }
             const file = await drive.downloadFile(params.mountId, params.pathId);
-            if (!file || !path) {
+            if (!file) {
                 set.status = 404;
                 return 'File not found';
             }
