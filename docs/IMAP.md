@@ -23,12 +23,15 @@ reconciles disk state with the DB, enabling seamless coexistence with Dovecot IM
 | File | Responsibility |
 |------|----------------|
 | `maildir.ts` | Orchestrator -- public API, ties together store + DB + parsing + SSE |
-| `maildir-store.ts` | Filesystem ops on Maildir structure (deliver, move, list, rename, watch) |
+| `maildir-store.ts` | Filesystem ops on Maildir structure (deliver, move, list, rename, watch). Returns `BunFile` via `getMessageFile()` for lazy reads |
 | `maildb.ts` | CRUD for email metadata in `mail.db` |
-| `mail-parse.ts` | Parses `.eml` content into `Email`, sanitizes HTML via DOMPurify |
+| `mail-parse.ts` | Parses `.eml` content into `Email` (accepts `BunFile`), sanitizes HTML via DOMPurify |
 | `mailfile.ts` | Generates RFC 5322 `.eml` content from draft input |
 | `mailutils.ts` | Filename generation, flag parsing, flag rebuild helpers |
+| `sender.ts` | `draftToOutboundMail()` -- converts `EmailDraft` to `OutboundMail` for `sendMail()` |
+| `welcome.ts` | Generates the welcome email delivered on first mailbox init |
 | `mail.ts` | Thin facade resolving `User` -> `Maildir` instance (called by routes) |
+| `sse-events.ts` | `buildMailEvent()` -- SSE event builder for mail mutations |
 | `schema.ts` | Drizzle ORM schema for `emails`, `emailLabels`, `emailsToLabels` |
 | `constants.ts` | `STANDARD_MAILBOXES`, `PATHS.MAIL` |
 
@@ -105,7 +108,8 @@ Labels (`emailLabels` table) provide per-message tagging as an alternative to fo
 **Drafts and sent copies** (`deliverToCur`): writes to `tmp/` then renames directly to `cur/` with flags already set.
 Drafts get `D`+`S` flags. Skips `new/` because Eigen knows the final flags at creation time.
 
-**Send flow**: `messageSend()` saves via `messageHandleDraft()` into Drafts, sends via SMTP, then moves to Sent.
+**Send flow**: `messageSend()` saves via `messageHandleDraft()` into Drafts, sends via `sendMail()` (using
+`draftToOutboundMail()` from `sender.ts`), then moves to Sent and clears the draft flag.
 
 ## Sync Engine
 
@@ -115,8 +119,8 @@ Drafts get `D`+`S` flags. Skips `new/` because Eigen knows the final flags at cr
    moved the file.
 2. **Build disk state** -- lists all files in `cur/`, builds a `Map<messageId, filename>`.
 3. **Reconcile with DB** --
-   - **New messages** (on disk, not in DB): parse EML, apply flags from filename, insert into DB, emit
-     `MAIL_RECEIVED`.
+   - **New messages** (on disk, not in DB): read file via `getMessageFile()` (returns `BunFile`), parse EML, apply
+     flags from filename, insert into DB, emit `MAIL_RECEIVED`, persist notification via `home.notifications`.
    - **Flag changes** (on disk with different filename than DB): update DB flags + filename, emit
      `MAIL_FLAGS_CHANGED`.
    - **Deleted messages** (in DB, not on disk): delete from DB, emit `MAIL_DELETED`.
@@ -207,7 +211,10 @@ maildir_very_dirty_syncs = no
 | EML parser | `apps/api/src/lib/mail/mail-parse.ts` |
 | EML generator | `apps/api/src/lib/mail/mailfile.ts` |
 | Filename helpers | `apps/api/src/lib/mail/mailutils.ts` |
+| Send helper | `apps/api/src/lib/mail/sender.ts` |
+| Welcome email | `apps/api/src/lib/mail/welcome.ts` |
 | Route facade | `apps/api/src/lib/mail/mail.ts` |
+| SSE events | `apps/api/src/lib/mail/sse-events.ts` |
 | Routes | `apps/api/src/routes/mail.ts` |
 | DB schema | `apps/api/src/lib/mail/schema.ts` |
 | DB config | `apps/api/src/lib/mail/db-config.ts` |

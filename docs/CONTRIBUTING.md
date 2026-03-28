@@ -73,7 +73,7 @@ bun serve:mail         # Single app + API
 bun run lint           # Lint + format check (biome)
 bun run lint:fix       # Auto-fix lint + format issues
 bun run typecheck      # Type check all packages
-bun run test           # Run API tests
+bun run test           # Run all workspace tests (API + fortune-sheet)
 bun run check          # lint + typecheck + test
 ```
 
@@ -83,18 +83,19 @@ bun run check          # lint + typecheck + test
 
 ## Public API
 
-Public endpoints at `/p/` require no auth. Avatar URL: `{API_HOST}/p/avatar/{email}?fallback=digidoodle` —
-HTTP-cacheable, no client resolution needed.
+Public endpoints at `/p/` require no auth. Avatar URL: `{API_HOST}/p/avatar/{emailOrId}` —
+HTTP-cacheable, server generates a fallback SVG when no avatar exists.
 
 ```
-GET /p/user/:emailOrId     → { name, email, avatar }
 GET /p/avatar/:emailOrId   → image binary (Cache-Control: 86400s) or fallback SVG
+GET /p/user/:emailOrId     → { name, email, avatar }
+GET /p/config              → public server config (org name, etc.)
 POST /p/waitlist           → waitlist signup
 ```
 
 Components use `UserAvatar` (`packages/ui/src/components/layout/user-avatar.tsx`) which resolves via
-`packages/lib/src/core/media/hooks/avatar.ts`. Direct loading:
-`<img src="{API_HOST}/p/avatar/{email}?fallback=digidoodle" />`.
+`useResolvedUser` (`packages/lib/src/core/public/hooks/use-resolved-user.ts`). Direct loading:
+`<img src="{API_HOST}/p/avatar/{emailOrId}" />`.
 
 **Route**: `apps/api/src/routes/public.ts`
 
@@ -103,18 +104,19 @@ Components use `UserAvatar` (`packages/ui/src/components/layout/user-avatar.tsx`
 `@tanstack/react-hotkeys` for global shortcuts. `Mod` = Cmd (Mac) / Ctrl (Windows). Manual listeners kept for stateful
 navigation and Tiptap editor. Use `formatForDisplay()` for tooltip labels.
 
-| Shortcut             | Action                      | Location                      |
-|----------------------|-----------------------------|-------------------------------|
-| `Mod+B`              | Toggle sidebar              | `packages/ui/.../sidebar.tsx` |
-| `Mod+P`              | Print                       | `eigen-app.tsx`               |
-| `Mod+S`              | Save (Inline Editor)        | `use-editor-save.ts`          |
-| `Escape`             | Close preview               | `file-preview.tsx`            |
-| `ArrowLeft/Right`    | Navigate preview            | `file-preview.tsx`            |
-| `Mod+Z`              | Undo (Stickies, Slides)     | `board.tsx`, `editor.tsx`     |
-| `Mod+Y`              | Redo (Stickies, Slides)     | `board.tsx`, `editor.tsx`     |
-| `Mod+Shift+Z`        | Redo alt (Stickies, Slides) | `board.tsx`, `editor.tsx`     |
-| `Delete`/`Backspace` | Delete selected (Slides)    | `slides/editor.tsx`           |
-| `Escape`             | Deselect (Slides)           | `slides/editor.tsx`           |
+| Shortcut             | Action                      | Location                           |
+|----------------------|-----------------------------|------------------------------------|
+| `Mod+B`              | Toggle sidebar              | `packages/ui/.../sidebar.tsx`      |
+| `Mod+P`              | Print                       | `eigen-app.tsx`                    |
+| `Mod+S`              | Save (Inline Editor)        | `use-editor-save.ts`              |
+| `Escape`             | Close preview               | `file-preview.tsx`                 |
+| `ArrowLeft/Right`    | Navigate preview            | `file-preview.tsx`                 |
+| `Mod+Z`              | Undo (Stickies, Slides)     | `board.tsx`, `slides/editor.tsx`   |
+| `Mod+Y`              | Redo (Stickies, Slides)     | `board.tsx`, `slides/editor.tsx`   |
+| `Mod+Shift+Z`        | Redo alt (Stickies, Slides) | `board.tsx`, `slides/editor.tsx`   |
+| `Delete`/`Backspace` | Delete selected (Slides)    | `slides/editor.tsx`                |
+| `Escape`             | Deselect (Slides)           | `slides/editor.tsx`                |
+| `Arrow keys`         | Nudge selected (Slides)     | `slides/editor.tsx`                |
 
 **Use `@tanstack/react-hotkeys`** for: global shortcuts, simple actions, display formatting, cross-platform needs.
 

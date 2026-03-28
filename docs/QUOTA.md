@@ -18,11 +18,12 @@ files, and vice versa.
 
 ## Resolution
 
-`resolveUserQuotas()` computes a user's effective quotas by gathering candidates from the server default and all
-team memberships, then taking the maximum.
+`resolveUserQuotas(mountConfig, teamIds)` computes a user's effective quotas by gathering candidates from the
+server default, the mount's own config, and all team memberships, then taking the maximum.
 
 ```
-effective = max(server default, ...team overrides where set)
+mailAndContactsMax = max(server default, ...team overrides where set)
+mountMax           = max(mountConfig.maxSizeMB ?? server default, ...team overrides where set)
 ```
 
 Rules:
@@ -30,6 +31,7 @@ Rules:
 - Teams can elevate members' quotas, never restrict below server default
 - `undefined` in `TeamSettings.memberOverrides` means "inherit" (no contribution to max)
 - User in no teams gets the server default
+- A mount's own `maxSizeMB` (from `MountConfig`) takes precedence over the server default when set
 - Team homes are always active in memory, so `getHome(teamOwnerId(teamId))` reads settings directly
 
 `ResolvedQuotas` returns values in bytes:
@@ -57,25 +59,21 @@ These are independent from the team's own drive storage. A team's own mount quot
 
 ## Enforcement
 
-Three enforcement functions, all in `enforcement.ts`. Each resolves quotas on the fly (stateless, no cache).
+Two enforcement functions in `enforcement.ts`. Each resolves quotas on the fly (stateless, no cache).
 
-### `enforceFileUpload(ownerId, userId, mountId, fileSize)`
+### `getUploadMaxSize(ownerId, userId, mountId)`
 
-Two-stage check for single file uploads:
-
-1. `fileSize > maxUploadSizeMB` -> 413 "File exceeds max upload size"
-2. `currentUsage + fileSize > mountMax` -> 413 "Storage quota exceeded"
-
-### `enforceBatchUpload(ownerId, userId, mountId, files)`
-
-Checks each file against `maxBatchUploadSizeMB`, then checks total against mount quota.
+Returns the maximum allowed upload size in bytes for a single streaming upload. Computes
+`min(maxUploadSizeMB, remainingQuota)` where `remainingQuota = mountMax - currentUsage`. Throws
+`ApiError(413, 'Storage quota exceeded')` if the mount is already at or over quota. The drive route passes this
+max to the streaming upload handler, which enforces it during transfer.
 
 ### `enforceAvatarUpload(userId, fileSize)`
 
 Checks file size against `maxUploadSizeMB`, then checks combined mail + contacts usage against
 `mailAndContactsMax`.
 
-All throw `ApiError(413, ...)` on violation. Called from `apps/api/src/routes/drive.ts` and
+Both throw `ApiError(413, ...)` on violation. Called from `apps/api/src/routes/drive.ts` and
 `apps/api/src/routes/contacts.ts`.
 
 ## Over-Quota Behavior
@@ -100,6 +98,7 @@ type MountSettings = {
     maxSizeMB?: number;     // falls back to server default if unset
     enabled: boolean;
     name?: string;
+    s3Config?: S3Config;
 };
 ```
 
@@ -116,8 +115,8 @@ login, the user gets the latest defaults.
 | File                                         | Purpose                                                           |
 |----------------------------------------------|-------------------------------------------------------------------|
 | `apps/api/src/lib/config/quota.ts`           | `resolveUserQuotas()`, `ResolvedQuotas` type                      |
-| `apps/api/src/lib/config/enforcement.ts`     | `enforceFileUpload`, `enforceBatchUpload`, `enforceAvatarUpload`  |
-| `apps/api/src/lib/config/server-settings.ts` | Server defaults, `getMaxUploadSize()`, `getMaxBatchUploadSize()`  |
+| `apps/api/src/lib/config/enforcement.ts`     | `getUploadMaxSize`, `enforceAvatarUpload`                         |
+| `apps/api/src/lib/config/server-settings.ts` | Server defaults, `getMaxUploadSize()`                             |
 | `packages/lib/src/types/settings.ts`         | `ServerSettings`, `MountSettings`, `TeamSettings.memberOverrides` |
 | `apps/api/src/routes/drive.ts`               | Calls enforcement on upload routes                                |
 | `apps/api/src/routes/contacts.ts`            | Calls enforcement on avatar upload                                |

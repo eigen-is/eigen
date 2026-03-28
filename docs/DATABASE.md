@@ -6,17 +6,19 @@
 
 ## Database Inventory
 
-| Database       | Path                                   | Purpose                                                       |
-|----------------|----------------------------------------|---------------------------------------------------------------|
-| Auth           | `{server}/users3.db`                   | User auth (better-auth managed)                               |
-| Eigen          | `{server}/eigen.db`                    | Share registry ([ACL.md](ACL.md#share-registry))              |
-| Mount metadata | `{home}/mounts/{id}/metadata.db`       | Drive file/folder structure                                   |
-| Shared paths   | `{home}/mounts/shared.db`              | Files shared with this user                                   |
-| Contacts       | `{home}/eigen.contacts/contacts.db`    | Contact data                                                  |
-| Mail           | `{home}/eigen.mail/mail.db`            | Email metadata                                                |
-| Calendar       | `{home}/eigen.calendar/calendar.db`    | Calendars, events, shared calendars                           |
-| Collab docs    | Via storage backend (`{dataDbPathId}`) | Yjs snapshots + updates                                       |
-| Chat rooms     | Via storage backend (`{dataDbPathId}`) | Messages + read state                                         |
+| Database        | Path                                            | Purpose                                                  |
+|-----------------|-------------------------------------------------|----------------------------------------------------------|
+| Auth            | `{server}/users3.db`                            | User auth (better-auth managed)                          |
+| Share registry  | `{server}/eigen.db`                             | Share registry ([ACL.md](ACL.md#share-registry))         |
+| Notifications   | `{home}/eigen.notifications/notifications.db`   | Per-user notification history                            |
+| Mount metadata  | `{home}/mounts/{id}/metadata.db`                | Drive file/folder structure                              |
+| Shared paths    | `{home}/mounts/shared.db`                       | Files shared with this user                              |
+| Contacts        | `{home}/eigen.contacts/contacts.db`             | Contact data                                             |
+| Mail            | `{home}/eigen.mail/mail.db`                     | Email metadata                                           |
+| Calendar        | `{home}/eigen.calendar/calendar.db`             | Calendars, events, shared calendars                      |
+| Collab docs     | Via storage backend (`{dataDbPathId}`)           | Yjs snapshots + updates                                  |
+| Chat rooms      | Via storage backend (`{dataDbPathId}`)           | Messages + read state                                    |
+| Comment index   | Via storage backend (inside eigendoc containers) | Comment status, mentions per eigendoc                    |
 
 ## ManagedDatabase
 
@@ -31,7 +33,7 @@ Core database wrapper providing:
 - **Sync callbacks** — `onOpen`, `onSync`, `onClose` for remote storage
 
 ```typescript
-type DatabaseConfig<S> = {
+type DatabaseConfig<S extends SchemaType> = {
     name: string;
     currentVersion: number;
     schema: S;
@@ -41,9 +43,9 @@ type DatabaseConfig<S> = {
 
 ### Lifecycle
 
-1. `open(autoSyncMs)` — opens DB, runs pending migrations, starts sync timer
-2. `sync()` — runs `onSync` callback + `PRAGMA wal_checkpoint(PASSIVE)` (non-blocking)
-3. `close()` — syncs, then `PRAGMA wal_checkpoint(TRUNCATE)` to clean WAL/SHM files, closes DB
+1. `open(autoSyncMs)` — opens DB, runs pending migrations, starts sync timer (default 30s)
+2. `sync()` — runs `onSync` callback + `PRAGMA wal_checkpoint(PASSIVE)` (non-blocking). Skips if not dirty
+3. `close()` — syncs, `PRAGMA wal_checkpoint(TRUNCATE)`, closes DB, deletes WAL/SHM journal files
 
 ### Migrations
 
@@ -58,30 +60,40 @@ changes are rolled back and the version is not updated.
 
 Each domain defines its schema and migrations in `db-config.ts`:
 
-| Config                | File                                     |
-|-----------------------|------------------------------------------|
-| `MOUNT_DB_CONFIG`     | `apps/api/src/lib/mount/db-config.ts`    |
-| `SHARED_DB_CONFIG`    | `apps/api/src/lib/drive/db-config.ts`    |
-| `CONTACTS_DB_CONFIG`  | `apps/api/src/lib/contacts/db-config.ts` |
-| `MAIL_DB_CONFIG`      | `apps/api/src/lib/mail/db-config.ts`     |
-| `COLLAB_DB_CONFIG`    | `apps/api/src/lib/collab/db-config.ts`   |
-| `CHAT_ROOM_DB_CONFIG` | `apps/api/src/lib/chat/db-config.ts`     |
-| `CALENDAR_DB_CONFIG`  | `apps/api/src/lib/calendar/db-config.ts` |
+| Config                          | File                                                 |
+|---------------------------------|------------------------------------------------------|
+| `MOUNT_DB_CONFIG`               | `apps/api/src/lib/mount/db-config.ts`                |
+| `SHARED_DB_CONFIG`              | `apps/api/src/lib/drive/db-config.ts`                |
+| `SHARE_REGISTRY_DB_CONFIG`      | `apps/api/src/lib/share/db-config.ts`                |
+| `CONTACTS_DB_CONFIG`            | `apps/api/src/lib/contacts/db-config.ts`             |
+| `MAIL_DB_CONFIG`                | `apps/api/src/lib/mail/db-config.ts`                 |
+| `COLLAB_DB_CONFIG`              | `apps/api/src/lib/collab/db-config.ts`               |
+| `CHAT_ROOM_DB_CONFIG`           | `apps/api/src/lib/chat/db-config.ts`                 |
+| `COMMENT_INDEX_DB_CONFIG`       | `apps/api/src/lib/chat/comment-db-config.ts`         |
+| `CALENDAR_DB_CONFIG`            | `apps/api/src/lib/calendar/db-config.ts`             |
+| `NOTIFICATION_CENTER_DB_CONFIG` | `apps/api/src/lib/notification-center/db-config.ts`  |
 
 ## Access Patterns
 
-### Local databases (Contacts, Mail, Calendar, Shared)
+### Server-level databases (Auth, Share Registry)
 
-Opened via `Home.getLocalDatabase(config, path)`. Singletons per path — opened once, reused. No remote sync.
+Opened once as global singletons. Auth (`users3.db`) is managed directly by better-auth. The share registry
+(`eigen.db`) is opened via `openLocalDatabase()` wrapped in `createAsyncSingleton()` in `apps/api/src/lib/share/db.ts`.
 
-### Mount-based databases (Collab, Chat)
+### Local databases (Contacts, Mail, Calendar, Shared, Notifications)
 
-Collab documents and chats are Drive folders containing a `data.db` file. The `data.db`'s `pathId` is used as the
-storage key:
+Opened via `Home.getLocalDatabase(config, relativePath)`. Singletons per path -- opened once, reused. No remote sync.
+The `relativePath` is resolved against the home directory (e.g., `eigen.contacts/contacts.db`).
+
+### Mount-based databases (Collab, Chat, Comment Index)
+
+Collab documents, chats, and comment indices are Drive folders containing database files. The file's `pathId` is used
+as the storage key:
 
 ```
 test.eigendoc/          (pathId: abc123)
-└── data.db             (pathId: xyz789, stored via storage backend)
+├── data.db             (pathId: xyz789, stored via storage backend)
+└── comments.db         (pathId: def456, comment index)
 ```
 
 For remote storage (S3): `Mount.openDatabase()` downloads to temp, syncs periodically, uploads on close.
@@ -93,5 +105,6 @@ only once.
 
 ## Schema Tables
 
-See [STORAGE.md](STORAGE.md) for mount metadata/shared schemas. See [CHAT.md](CHAT.md), [CALENDAR.md](CALENDAR.md) for
-domain-specific schemas.
+See [STORAGE.md](STORAGE.md) for mount metadata/shared schemas. See [CHAT.md](CHAT.md), [CALENDAR.md](CALENDAR.md),
+[COMMENTS_IN_DOCS.md](COMMENTS_IN_DOCS.md), and [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md) for domain-specific
+schemas.

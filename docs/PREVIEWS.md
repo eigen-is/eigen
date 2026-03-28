@@ -19,20 +19,21 @@
 Everything in `mount.previewsDir` (`tmpDir/previews/`). Cache key: `{pathId}-{updatedAt}.{ext}`.
 
 - Image previews: `{pathId}-{updatedAt}.screen.webp`
+- SVG previews: `{pathId}-{updatedAt}.screen.svg` (raw SVG, no conversion)
 - Text previews: `{pathId}-{updatedAt}.json`
 - Cache hit = serve directly, no regeneration
 - Cleanup: files older than 7 days, run at `mount.init()`
 
 ## Text Previews
 
-`text-preview.ts` returns `{ body: string, mode: TextPreviewMode }`. Modes:
+`text-preview.ts` returns `{ body: string, mode: TextPreviewMode }`. Modes (defined in
+`packages/lib/src/constants/preview.ts`):
 
-| Mode       | Rendering                                        |
-|------------|--------------------------------------------------|
-| `markdown` | `markdown-it` → HTML, sanitized with DOMPurify  |
-| `code`     | `lowlight` syntax highlighting → HTML spans      |
-| `html`     | Raw HTML, sanitized with DOMPurify               |
-| `plaintext`| `<pre>` wrapped, HTML-escaped                    |
+| Mode        | Rendering                                       |
+|-------------|-------------------------------------------------|
+| `markdown`  | `markdown-it` → HTML, sanitized with DOMPurify |
+| `code`      | `lowlight` syntax highlighting → HTML spans     |
+| `plaintext` | `<pre>` wrapped, HTML-escaped                   |
 
 Body is consumed via `useTextPreview()` hook (TanStack Query, 5min staleTime) and rendered with
 `dangerouslySetInnerHTML` inside a `.eigen-prose` container. No iframe, no shadow DOM.
@@ -42,12 +43,17 @@ used by both previews and the docs editor.
 
 ## Image Previews
 
-Unified flow in `generateImagePreview()` (`thumbnails.ts`): try sharp first, fall back to exiftool extraction.
-Used by both upload thumbnails (512px) and screen previews (max 2560px).
+Unified flow in `generateImagePreview()` (`thumbnails.ts`): accepts `ImageSource` (`StorageFile | Buffer | string`),
+tries sharp first, then HEIC-specific conversion, then exiftool extraction. Used by both upload thumbnails (512px) and
+screen previews (max 2560px). `preview-cache.ts` passes `StorageFile` references from `mount.readFile()` directly
+to avoid buffering the entire file upfront.
 
-- Standard images (JPEG, PNG, WebP, GIF, TIFF): sharp resize + WebP conversion
-- HEIC/RAW/PSD/AI: sharp if libvips supports it, else exiftool extracts embedded JPEG → sharp → WebP
-- Gate: `isExiftoolCandidate()` — true for any `image/*` mime or known exiftool extensions (.cr2, .psd, .heic, etc.)
+- **SVG**: Served as-is (no rasterisation). `preview-cache.ts` caches the raw SVG locally for S3 mounts
+- **Standard images** (JPEG, PNG, WebP, GIF, TIFF): sharp resize + WebP conversion
+- **HEIC/HEIF**: sharp first (works if libvips has HEIC support), else `heic-convert` to JPEG → sharp → WebP
+- **RAW/PSD/AI**: sharp if libvips supports it, else exiftool extracts embedded JPEG → sharp → WebP
+- **Gate**: `isExiftoolCandidate()` — true for any `image/*` mime or known exiftool extensions
+  (defined in `packages/lib/src/constants/preview.ts`)
 
 ## Frontend Overlay
 
@@ -87,7 +93,8 @@ Heavy editors (Tiptap for markdown, CodeMirror for code) are lazy-loaded only wh
 | `apps/api/src/lib/preview/preview-cache.ts`                               | Orchestration: check cache, generate, serve      |
 | `apps/api/src/lib/preview/text-preview.ts`                                | markdown-it + lowlight → HTML body + DOMPurify   |
 | `apps/api/src/lib/preview/exiftool-preview.ts`                            | Embedded JPEG extraction for RAW/PSD/AI/HEIC     |
-| `apps/api/src/lib/shared/thumbnails.ts`                                   | Unified image processing (sharp + exiftool)      |
+| `apps/api/src/lib/shared/thumbnails.ts`                                   | Unified image processing (sharp + heic-convert + exiftool) |
+| `packages/lib/src/constants/preview.ts`                                   | `TextPreviewMode`, `getTextPreviewMode()`, `isExiftoolExtension()` |
 | `apps/api/src/lib/drive/drive.ts`                                         | `getPreview()` + `getTextPreview()` methods      |
 | `apps/api/src/routes/drive.ts`                                            | `/preview` + `/text-preview` routes              |
 | `packages/ui/src/styles/eigen-prose.css`                                  | Shared prose + code highlight styles             |
@@ -104,22 +111,19 @@ Heavy editors (Tiptap for markdown, CodeMirror for code) are lazy-loaded only wh
 - Video thumbnail frames (FFmpeg dependency)
 - DOCX/XLSX/PPTX preview
 
+---
+
+### Phase — CSV Table Rendering
+
+**Goal:** CSV as a scrollable table (generated server-side to keep the frontend clean).
+
+| File                                       | Change                                                                                                                      |
+|--------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------|
+| `apps/api/src/lib/preview/text-preview.ts` | Extend to handle `text/csv` — parse with a lightweight server-side CSV parser, render HTML table (max 500 rows x 50 cols).  |
 
 ---
 
-### Phase 3 — Audio + CSV
-
-**Goal:** Audio with native player. CSV as a scrollable table (generated server-side to keep the frontend clean).
-
-| File                                                       | Change                                                                                                                     |
-|------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------|
-| `apps/api/src/lib/preview/text-preview.ts`                 | Extend to handle `text/csv` — parse with a lightweight server-side CSV parser, render HTML table (max 500 rows × 50 cols). |
-| `apps/api/src/routes/drive.ts`                             | Add audio/CSV to preview endpoint dispatch                                                                                 |
-| `packages/ui/src/components/layout/drive/file-preview.tsx` | Add `audio` viewer: `<audio controls src={embedUrl} className="w-full">`                                                   |
-
----
-
-### Phase 4 — Eigen Native Types (eigendoc, eigenslides, eigensheets, eigenstickies)
+### Phase — Eigen Native Types (eigendoc, eigenslides, eigensheets, eigenstickies)
 
 **Goal:** Preview Eigen native files without opening them. Shares heavy infrastructure with import/export Phase 2.
 

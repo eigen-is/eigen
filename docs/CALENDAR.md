@@ -24,6 +24,7 @@ Follows the Contacts/Mail pattern — per-user Home directory, not Drive.
 | `name`      | TEXT    | Display name                                   |
 | `color`     | TEXT    | Hex color                                      |
 | `isDefault` | INTEGER | Primary calendar (auto-created, cannot delete) |
+| `visible`   | INTEGER | Toggle visibility in UI (default true)         |
 | `ctag`      | INTEGER | Increments on any event change (CalDAV-ready)  |
 | `shares`    | TEXT    | JSON `CalendarShare[]`                         |
 | `createdAt` | INTEGER | Timestamp                                      |
@@ -69,6 +70,8 @@ Follows the Contacts/Mail pattern — per-user Home directory, not Drive.
 | `permission`    | TEXT    | `free-busy` / `read` / `write` |
 | `color`         | TEXT    | Local override (nullable)      |
 | `visible`       | INTEGER | Toggle visibility              |
+| `createdAt`     | INTEGER | Timestamp                      |
+| `updatedAt`     | INTEGER | Timestamp                      |
 
 ## Sharing
 
@@ -79,11 +82,12 @@ Push-based propagation — when shares change, `share-propagation.ts` resolves t
 
 **Team calendars**: Auto-synced into the user's `shared_calendars` table (with `ownerUserId = 'team_{teamId}'`) when
 `GET /calendar/:ownerId/shared` is called. Can be disabled via `settings.json` in the team home dir
-(`calendarEnabled: false`). Default member permission is `read`. To grant `write` or `free-busy`, set shares on the
+(`calendar.enabled: false`). Default member permission is `read`. To grant `write` or `free-busy`, set shares on the
 team's default calendar: `{targetId: 'team_{teamId}', permission: 'write'}`. Permission is resolved via
-`checkPermission()` and synced on every fetch. When disabled, entries are removed from members' `shared_calendars`.
+`checkPermission()` and synced on every fetch. When disabled, the `TeamHome.calendar` getter throws a 404, so
+`syncTeamCalendars` catches the error and removes entries from members' `shared_calendars`.
 Displayed in a separate "Team Calendars" section in the sidebar, using the same `SharedCalendar` infrastructure for
-visibility/color prefs. Managed in the People app team detail page.
+visibility/color prefs. Managed in the People app team detail page (via `PUT /team/:teamId/settings`).
 
 ## Invitations
 
@@ -91,7 +95,10 @@ Organizer creates event with `data.attendees[]` → server writes a linked copy 
 attendees RSVP → status propagates back to organizer. All server-side, no email needed.
 
 **Linked events**: Regular events in the attendee's calendar with `organizerEventId`/`organizerUserId` columns set
-(indexed for fast lookup). Same `uid` as organizer's event (CalDAV requirement). Detection: `organizerEventId IS NOT NULL`.
+(indexed for fast lookup). Same `uid` as organizer's event (CalDAV requirement). `data.organizer` is also set with
+`{ userId, email, name? }` and `data.organizerEventId`. DB-level detection: `organizerEventId IS NOT NULL` (used by
+`findLinkedEvent`). Application-level detection: `event.data.organizer` is present (used by `updateEvent` guard and
+`deleteEvent` decline logic).
 
 **Propagation** (`invite-propagation.ts`):
 - Create/update with attendees: diff old vs new → add/remove/update linked copies + SSE notifications
@@ -118,14 +125,36 @@ incoming rrule does not extend beyond any local truncation the attendee made. Th
 from being undone by an organizer edit.
 
 **Linked event guard**: Attendees can only change `data.reminders` and `data.color` on linked copies. Title, time,
-description, location, rrule changes are blocked by `updateEvent()`.
+description, location, rrule changes are blocked by `updateEvent()`. Detection: `event.data.organizer` is present
+(not the DB column `organizerEventId`).
 
 **SSE events**: `calendar:invite-received`, `calendar:invite-updated`, `calendar:invite-cancelled`, `calendar:invite-rsvp`.
+
+## SSE Events
+
+Full list of calendar SSE events (defined in `packages/lib/src/types/sse.ts`):
+
+| Event                       | Trigger                           |
+|-----------------------------|-----------------------------------|
+| `calendar:calendar-created` | Calendar created                  |
+| `calendar:calendar-updated` | Calendar updated (name/color/shares) |
+| `calendar:calendar-deleted` | Calendar deleted                  |
+| `calendar:event-created`    | Event created                     |
+| `calendar:event-updated`    | Event updated                     |
+| `calendar:event-deleted`    | Event deleted                     |
+| `calendar:shared`           | Calendar shared with user         |
+| `calendar:unshared`         | Calendar share removed            |
+| `calendar:invite-received`  | Invitation received by attendee   |
+| `calendar:invite-updated`   | Invitation updated by organizer   |
+| `calendar:invite-cancelled` | Invitation cancelled by organizer |
+| `calendar:invite-rsvp`      | Attendee RSVP propagated to organizer |
+
+Shared calendar users are also notified via `notifySharedCalendarUsers()` when events are created/updated/deleted.
 
 ## Recurrence
 
 - RRULE strings stored/transmitted as-is (no conversion layer)
-- Expansion via `rrule` npm package: `RRule.fromString().between(from, to)`
+- Expansion via `rrule` npm package: `new RRule({...RRule.parseString(rrule), dtstart}).between(from, to)`
 - **Never store expanded occurrences** — expand in memory per query
 - **Exceptions**: Regular events with `parentEventId` + `recurrenceDate`. Cancel = `status: 'cancelled'`, modify =
   different data at that date
@@ -155,8 +184,13 @@ GET    /calendar/:ownerId/shared                  (shared-with-me list, auto-syn
 PUT    /calendar/:ownerId/shared/:id              (local prefs)
 DELETE /calendar/:ownerId/shared/:id
 GET    /calendar/:ownerId/shared-with-me          (pull: what has owner shared with me?)
-GET    /calendar/team/:teamId/settings            (team calendar settings)
-PUT    /calendar/team/:teamId/settings            (update: {calendarEnabled})
+```
+
+Team calendar settings (enable/disable, member permission) are managed via the team router, not the calendar router:
+
+```
+GET    /team/:teamId/settings                     (includes calendar.enabled)
+PUT    /team/:teamId/settings                     (update: {calendar: {enabled}})
 ```
 
 Events endpoint returns `CalendarEventOccurrence[]` — expanded occurrences with `occurrenceDate` field. Free-busy
@@ -166,15 +200,41 @@ permission returns time blocks only.
 
 ```typescript
 type CalendarShare = { targetId: string; permission: 'free-busy' | 'read' | 'write' }
-type CalendarItem = { id, name, color, isDefault, shares: CalendarShare[] | null, createdAt, updatedAt }
-type CalendarEvent = { id, calendarId, uid, title, description, location, startTime, endTime, allDay, rrule, parentEventId, recurrenceDate, status, sequence, etag, data, createdAt, updatedAt }
+type CalendarItem = { id, name, color, isDefault, visible, shares: CalendarShare[] | null, createdAt, updatedAt }
+type CalendarEvent = { id, calendarId, uid, uri, title, description, location, startTime, endTime, allDay, rrule, timezone, parentEventId, recurrenceDate, status, sequence, etag, data, createByUserId, createdAt, updatedAt }
 type CalendarEventOccurrence = CalendarEvent & { occurrenceDate: string }
+type FreeBusyBlock = { startTime, endTime, allDay, status: 'confirmed' | 'tentative' }
 type SharedCalendar = { id, ownerUserId, calendarId, calendarName, calendarColor, permission, color, visible, createdAt, updatedAt }
 type Attendee = { email, name?, status: 'pending'|'accepted'|'declined'|'tentative', role: 'required'|'optional' }
 type EventData = { reminders?: Reminder[], attendees?: Attendee[], organizer?: { userId, email, name? }, organizerEventId?, url?, notes?, color? }
 ```
 
 Defined in `packages/lib/src/types/calendar.ts`.
+
+## Frontend Hooks
+
+All hooks in `packages/lib/src/core/calendar/hooks/use-calendar.ts`:
+
+| Hook                          | Purpose                                    |
+|-------------------------------|--------------------------------------------|
+| `useCalendars(ownerId)`       | List calendars for an owner                |
+| `useCreateCalendar(ownerId)`  | Create calendar mutation                   |
+| `useUpdateCalendar(ownerId)`  | Update calendar mutation (name/color/shares/visible) |
+| `useDeleteCalendar(ownerId)`  | Delete calendar mutation                   |
+| `useEvents(ownerId, from, to)` | All events in time range (all calendars)  |
+| `useCalendarEvents(ownerId, calId, from, to)` | Events for a single calendar |
+| `useCreateEvent(ownerId)`     | Create event mutation                      |
+| `useUpdateEvent(ownerId)`     | Update event mutation                      |
+| `useDeleteEvent(ownerId)`     | Delete event mutation                      |
+| `useCalendarAccess(ownerId, calId)` | Get calendar shares (if `write` permission) |
+| `useAllSharedCalendarEvents(sharedCalendars, from, to)` | Parallel queries for all visible shared calendar events |
+| `useSharedCalendars(ownerId)` | List shared calendars (triggers team sync) |
+| `useUpdateSharedCalendar(ownerId)` | Update local prefs (color/visible)    |
+| `useDeleteSharedCalendar(ownerId)` | Remove shared calendar entry          |
+| `useRsvp(ownerId)`            | RSVP mutation (accept/decline/tentative)   |
+
+**Query keys**: `calendarKeys` with `ownerId`-scoped hierarchy — `all > owner(ownerId) > calendars/events/shared`.
+SSE handler in `packages/lib/src/core/calendar/sse-handlers.ts` routes events to invalidation functions.
 
 ## Files
 

@@ -26,9 +26,9 @@ Route: parse: 'none' → getUploadMaxSize() → drive.uploadFiles(mountId, paren
 Drive.uploadFiles():
   → streamFilesToTemp(mount, request, maxSize) — writes each file to mount tmp/, hashes incrementally
   → for each result:
+    → deduplicate filename against siblings
     → mount.createFileFromTemp() — move temp→storage, insert DB row
-    → finalizeUpload() — store originalName, emit SSE, background thumbnail
-    → mount.cleanupTemp()
+    → finalizeUpload() — store originalName, emit SSE, then background: generate thumbnail + cleanupTemp()
   → return DrivePath[]
 ```
 
@@ -38,7 +38,7 @@ Drive.uploadFiles():
 |------|------|
 | `apps/api/src/lib/drive/streaming.ts` | `streamFilesToTemp()` — multipart parsing + temp file writing |
 | `apps/api/src/lib/drive/drive.ts` | `uploadFiles()` + `finalizeUpload()` |
-| `apps/api/src/lib/drive/sharedDrive.ts` | `uploadFiles()` wrapper with write permission check |
+| `apps/api/src/lib/drive/sharedDrive.ts` | `uploadFiles()` — delegates to underlying `Drive` after ACL write permission check |
 | `apps/api/src/lib/mount/mount.ts` | `createFileFromTemp()` + stale temp cleanup on init |
 | `apps/api/src/lib/config/enforcement.ts` | `getUploadMaxSize()` — returns min(maxUploadSize, remainingQuota) |
 | `apps/api/src/routes/drive.ts` | Thin route: 3 lines |
@@ -57,8 +57,8 @@ partial uploads behind.
 ### S3 and Non-Local Mounts
 
 `createFileFromTemp()` calls `mount.uploadFromTemp(storageKey, tempId)` which calls
-`storage.write(storageKey, Bun.file(tempPath))`. The `StorageBackend.write()` interface accepts `BunFile` on all
-backends. No new interface methods needed.
+`storage.write(storageKey, Bun.file(tempPath))`. The `StorageBackend.write()` interface accepts
+`Buffer | Uint8Array | ArrayBuffer | BunFile` on all backends. No new interface methods needed.
 
 ## What Was Removed
 

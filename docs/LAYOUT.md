@@ -8,7 +8,7 @@
 
 ```
 AppShell
-├── Topbar              (blue header, app logo, user dropdown)
+├── Topbar              (themed header, app logo, notification bell, user dropdown)
 └── Content Area
     ├── SidebarContainer (collapsible)
     └── ColumnLayout
@@ -43,8 +43,11 @@ Every app wraps its root route in `AppShell`:
 
 `EigenApp` (`packages/ui/src/components/layout/app/eigen-app.tsx`) wraps every app with providers:
 
-HotkeysProvider → TooltipProvider → QueryClientProvider → AuthProvider → SSEProvider → UploadProvider →
-PreviewProvider → GlobalHotkeys → Toaster → ReactQueryDevtools
+HotkeysProvider → TooltipProvider → QueryClientProvider → AuthProvider(loadingFallback) → ThemeProvider →
+SSEProvider → UploadProvider → PreviewProvider → GlobalHotkeys → ErrorBoundary → Toaster + ReactQueryDevtools
+
+`AuthProvider` accepts a `loadingFallback` prop (defaults to `<LoadingScreen />`) shown while auth state loads.
+`ThemeProvider` applies light/dark/system theme from user space settings.
 
 ## ColumnLayout & Column
 
@@ -71,11 +74,11 @@ PreviewProvider → GlobalHotkeys → Toaster → ReactQueryDevtools
 
 ## LayoutContext
 
-`useLayout()` provides: `documentTitle`, `setDocumentTitle`, `sidebarOpen`, `setSidebarOpen`, `sidebarMode`,
-`isMobile`, `isTablet`.
+`useLayout()` provides: `appName`, `setAppName`, `documentTitle`, `setDocumentTitle`, `sidebarOpen`,
+`setSidebarOpen`, `sidebarMode`, `isMobile`, `isTablet`.
 
-Convenience hooks: `useSidebar()` → `{sidebarOpen, setSidebarOpen}`. Use `setDocumentTitle()` to update the
-browser tab title dynamically (e.g., showing the current document name).
+Convenience hooks: `useApp()` → `{appName, setAppName}`, `useSidebar()` → `{sidebarOpen, setSidebarOpen}`. Use
+`setDocumentTitle()` to update the browser tab title dynamically (e.g., showing the current document name).
 
 ## Adding a New App
 
@@ -95,36 +98,45 @@ menu needs submenu.
 
 ### Core Layout
 
-| Component       | File                 | Description                                                            |
-|-----------------|----------------------|------------------------------------------------------------------------|
-| `EigenApp`      | `app/eigen-app.tsx`  | Root provider stack (QueryClient, Auth, SSE, Upload, Tooltip, Toaster) |
-| `AppShell`      | `app/app-shell.tsx`  | App shell: Topbar + sidebar + content                                  |
-| `LayoutContext` | `layout-context.tsx` | Layout state context. Hooks: `useLayout`, `useApp`, `useSidebar`       |
-| `ColumnLayout`  | `column-layout.tsx`  | Multi-column layout with mobile switching                              |
-| `Column`        | `column-layout.tsx`  | Single column with toolbar slot                                        |
-| `Topbar`        | `topbar.tsx`         | Blue header: app logo, user dropdown, navigation                       |
+| Component       | File                       | Description                                                                        |
+|-----------------|----------------------------|------------------------------------------------------------------------------------|
+| `EigenApp`      | `app/eigen-app.tsx`        | Root provider stack (QueryClient, Auth, Theme, SSE, Upload, Tooltip, Toaster)      |
+| `AppShell`      | `app/app-shell.tsx`        | App shell: Topbar + sidebar + content                                              |
+| `LayoutContext` | `app/layout-context.tsx`   | Layout state context. Hooks: `useLayout`, `useApp`, `useSidebar`                   |
+| `ColumnLayout`  | `app/column-layout.tsx`    | Multi-column layout with mobile switching                                          |
+| `Column`        | `app/column-layout.tsx`    | Single column with toolbar slot                                                    |
+| `Topbar`        | `app/topbar.tsx`           | Themed header (`bg-app`): app logo, notification bell, user dropdown               |
+| `ThemeProvider` | `app/theme-provider.tsx`   | Applies light/dark/system theme from space settings                                |
+| `NotificationBell` | `app/notification-bell.tsx` | Unread notification count + popover                                            |
+| `NotFound`      | `app/not-found.tsx`        | Empty state for missing resources                                                  |
+| `AccessDenied`  | `app/access-denied.tsx`    | Empty state for permission errors                                                  |
+| `EmptyState`    | `app/empty-state.tsx`      | Centered message with optional icon + action                                       |
+| `ErrorState`    | `app/error-state.tsx`      | Error message with optional detail                                                 |
+| `LoadingState`  | `app/loading-state.tsx`    | Centered EigenLoader spinner                                                       |
 
 ### Sidebar
 
 | Component              | File                                 | Description                                       |
 |------------------------|--------------------------------------|---------------------------------------------------|
 | `SidebarContainer`     | `sidebar/sidebar-container.tsx`      | Responsive wrapper: full/condensed/overlay        |
+| `SidebarHeader`        | `sidebar/sidebar-header.tsx`         | Mobile sidebar header with close button + AppLogo |
 | `SidebarItem`          | `sidebar/sidebar-item.tsx`           | Nav item: icon + label + colorDot. Link or Button |
 | `SidebarSection`       | `sidebar/sidebar-section.tsx`        | Grouped section with optional title               |
 | `DroppableSidebarItem` | `sidebar/droppable-sidebar-item.tsx` | SidebarItem + drop target                         |
 
 ### Providers
 
-| Provider          | File                                    | Description                              |
-|-------------------|-----------------------------------------|------------------------------------------|
-| `SSEProvider`     | `sse-provider/sse-provider.tsx`         | SSE events → toast notifications         |
-| `UploadProvider`  | `upload-provider/upload-provider.tsx`   | File upload state + progress UI          |
-| `useUpload`       | `upload-provider/upload-provider.tsx`   | Hook for creating/tracking uploads       |
-| `UploadContainer` | `upload-provider/upload-container.tsx`  | Floating upload progress cards           |
-| `LabelProvider`   | `labels/label-provider.tsx`             | Label CRUD context                       |
-| `useLabels`       | `labels/label-provider.tsx`             | Hook: addLabel, updateLabel, deleteLabel |
-| `PreviewProvider` | `preview-provider/preview-provider.tsx` | File preview (images, videos, PDFs)      |
-| `usePreview`      | `preview-provider/preview-provider.tsx` | Hook: openPreview, closePreview          |
+| Provider              | File                                            | Description                                |
+|-----------------------|-------------------------------------------------|--------------------------------------------|
+| `SSEProvider`         | `sse-provider/sse-provider.tsx`                 | SSE events → toast notifications           |
+| `UploadProvider`      | `upload-provider/upload-provider.tsx`            | File upload state + progress UI            |
+| `useUpload`           | `upload-provider/upload-provider.tsx`            | Hook for creating/tracking uploads         |
+| `UploadContainer`     | `upload-provider/upload-container.tsx`           | Floating upload progress cards             |
+| `uploadWithProgress`  | `upload-provider/upload-with-progress.tsx`       | XHR upload helper with progress callback   |
+| `LabelProvider`       | `labels/label-provider.tsx`                      | Label CRUD context                         |
+| `useLabels`           | `labels/label-provider.tsx`                      | Hook: addLabel, updateLabel, deleteLabel   |
+| `PreviewProvider`     | `preview-provider/preview-provider.tsx`          | File preview (images, videos, PDFs)        |
+| `usePreview`          | `preview-provider/preview-provider.tsx`          | Hook: openPreview, closePreview            |
 
 ### User Components
 
@@ -158,18 +170,21 @@ menu needs submenu.
 
 ### Common UI
 
-| Component            | File                               | Description                                   |
-|----------------------|------------------------------------|-----------------------------------------------|
-| `SearchBar`          | `search-bar/search-bar.tsx`        | Search input with icon                        |
-| `TooltipButton`      | `toolbar/tooltip-button.tsx`       | Icon button + tooltip                         |
-| `TooltipToggle`      | `toolbar/tooltip-toggle.tsx`       | Toggle button + tooltip                       |
-| `Toolbar`            | `toolbar/toolbar.tsx`              | Base toolbar component                        |
-| `DocumentModeButton` | `toolbar/document-mode-button.tsx` | Read-only/editing mode toggle                 |
-| `DeleteDialog`       | `delete/delete-dialog.tsx`         | Confirmation dialog for destructive actions   |
-| `ShadowContent`      | `shadow-content.tsx`               | Shadow DOM for style isolation (email bodies) |
-| `ColorPicker`        | `media/color-picker.tsx`           | Color picker popover                          |
-| `ImageResizeHandles` | `media/image-resize-handles.tsx`   | Resize handles (docs + slides)                |
-| `RevisionHistory`    | `collab/revision-history.tsx`      | Yjs document revision panel                   |
+| Component            | File                               | Description                                    |
+|----------------------|------------------------------------|------------------------------------------------|
+| `SearchBar`          | `search-bar/search-bar.tsx`        | Search input with icon                         |
+| `TooltipButton`      | `toolbar/tooltip-button.tsx`       | Icon button + tooltip                          |
+| `TooltipToggle`      | `toolbar/tooltip-toggle.tsx`       | Toggle button + tooltip                        |
+| `Toolbar`            | `toolbar/toolbar.tsx`              | Base toolbar component                         |
+| `DocumentModeButton` | `toolbar/document-mode-button.tsx` | Read-only/editing mode toggle                  |
+| `FileMenu`           | `toolbar/file-menu.tsx`            | File dropdown: rename, delete, revision history |
+| `DeleteDialog`       | `delete/delete-dialog.tsx`         | Confirmation dialog for destructive actions    |
+| `ConfirmDialog`      | `delete/confirm-dialog.tsx`        | Generic confirmation dialog (title + action)   |
+| `ShadowContent`      | `shadow-content.tsx`               | Shadow DOM for style isolation (email bodies)  |
+| `ColorPicker`        | `media/color-picker.tsx`           | Color picker popover                           |
+| `FontPicker`         | `media/font-picker.tsx`            | Font family picker dropdown                    |
+| `ImageResizeHandles` | `media/image-resize-handles.tsx`   | Resize handles (docs + slides)                 |
+| `MountForm`          | `mount/mount-form.tsx`             | Storage mount configuration form               |
 
 ### Properties Panel
 
@@ -239,10 +254,27 @@ DriveLayout (orchestrator)
 | `DriveAccessListEdit` | `drive-access-list-edit.tsx` | Editable access list                                  |
 | `DriveAccessList`     | `drive-access-list.tsx`      | Read-only access list                                 |
 | `DriveShareSummary`   | `drive-share-summary.tsx`    | Sharing status badge                                  |
-| `DriveUploadFiles`    | `drive-upload-files.tsx`     | Upload with drag-drop                                 |
-| `FilePreview`         | `file-preview.tsx`           | Lightbox for images/videos/PDFs                       |
-| `fileIconHelper`      | `file-icon-helper.tsx`       | MIME type → Lucide icon                               |
-| `useDriveDialogs`     | `use-drive-dialogs.ts`       | Dialog state for all 7+ dialogs                       |
+| `DriveUploadFiles`        | `drive-upload-files.tsx`        | Upload with drag-drop                               |
+| `DriveCreateFolderItem`   | `drive-create-folder-item.tsx`  | Shared create-item dialog (name input + breadcrumb) |
+| `DriveEmailCollaborators` | `drive-email-collaborators.tsx` | Email collaborators about a shared file             |
+| `FilePreview`             | `file-preview.tsx`              | Lightbox for images/videos/PDFs                     |
+| `fileIconHelper`          | `file-icon-helper.tsx`          | MIME type → Lucide icon                             |
+| `useFileUpload`           | `file-upload.tsx`               | Hook for uploading files with progress              |
+| `useDriveDialogs`         | `use-drive-dialogs.ts`          | Dialog state for all 7+ dialogs                     |
+
+### EigenDoc Components
+
+Document-like apps (Docs, Stickies, Slides, Sheets) share a common UI shell via `eigendoc-*` components. Each app
+provides an `EigenDocAppConfig` and gets a sidebar, list view, and shared-with-me view for free.
+
+| Component             | File                      | Description                                             |
+|-----------------------|---------------------------|---------------------------------------------------------|
+| `EigenDocAppConfig`   | `eigendoc-config.ts`      | Config type: appName, mimeType, icon, createDialog      |
+| `eigenDocConfigs`     | `eigendoc-configs.ts`     | Pre-built configs: `DOCS_CONFIG`, `STICKIES_CONFIG`, etc |
+| `EigenDocRoot`        | `eigendoc-root.tsx`       | Root route wrapper: AppShell + sidebar + DriveContext    |
+| `EigenDocSidebar`     | `eigendoc-sidebar.tsx`    | Sidebar: new button, all items, shared-with-me          |
+| `EigenDocListView`    | `eigendoc-list-view.tsx`  | MIME-filtered DriveLayout for the app's file type        |
+| `EigenDocSharedView`  | `eigendoc-shared-view.tsx`| Shared-with-me view for the app's file type              |
 
 ## List Patterns
 
@@ -339,8 +371,8 @@ const drag = useListDrag({ selection, getId: (item) => item.id, dragType: 'my-ty
 |---------------------------|-------------------------------------------------------------------|
 | AppShell                  | `packages/ui/src/components/layout/app/app-shell.tsx`             |
 | EigenApp (provider stack) | `packages/ui/src/components/layout/app/eigen-app.tsx`             |
-| ColumnLayout / Column     | `packages/ui/src/components/layout/column-layout.tsx`             |
-| LayoutContext             | `packages/ui/src/components/layout/layout-context.tsx`            |
-| Topbar                    | `packages/ui/src/components/layout/topbar.tsx`                    |
+| ColumnLayout / Column     | `packages/ui/src/components/layout/app/column-layout.tsx`         |
+| LayoutContext             | `packages/ui/src/components/layout/app/layout-context.tsx`        |
+| Topbar                    | `packages/ui/src/components/layout/app/topbar.tsx`                |
 | SidebarContainer          | `packages/ui/src/components/layout/sidebar/sidebar-container.tsx` |
 | DriveLayout               | `packages/ui/src/components/layout/drive/drive-layout.tsx`        |
