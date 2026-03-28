@@ -117,7 +117,7 @@ export default class Maildir {
     async messageGetFile(messageId: string): Promise<ArrayBuffer> {
         const email = this.db.getEmail(messageId);
         if (!email) throw new ApiError(404, `Email '${messageId}' not found`);
-        return this.store.readMessageBuffer(email.mailbox, email.filename);
+        return this.store.getMessageFile(email.mailbox, email.filename).arrayBuffer();
     }
 
     async messageGetAttachment(messageId: string, index: number) {
@@ -167,7 +167,7 @@ export default class Maildir {
             throw new ApiError(404, `Target mailbox '${targetMailbox}' not found`);
         }
 
-        const text = await this.store.readMessageText(email.mailbox, email.filename);
+        const text = await this.store.getMessageFile(email.mailbox, email.filename).text();
         await this.store.deliverAtomic(text, targetMailbox);
         await this.syncMailbox(targetMailbox);
     }
@@ -317,8 +317,8 @@ export default class Maildir {
         for (const [id, fileName] of diskFiles) {
             if (!dbById.has(id)) {
                 try {
-                    const { content, size } = await this.store.readMessage(mailbox, fileName);
-                    const parsed = await parseEml(id, mailbox, content, size);
+                    const file = this.store.getMessageFile(mailbox, fileName);
+                    const parsed = await parseEml(id, mailbox, file);
                     if (parsed) {
                         applyFlagsFromFilename(parsed, fileName);
                         parsed.filename = fileName;
@@ -386,8 +386,7 @@ export default class Maildir {
             }
             if (!filename) return null;
 
-            const { content, size } = await this.store.readMessage(mailbox, filename);
-            return parseEml(messageId, mailbox, content, size);
+            return parseEml(messageId, mailbox, this.store.getMessageFile(mailbox, filename));
         } catch {
             return null;
         }

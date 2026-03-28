@@ -1,4 +1,5 @@
 import type { FSWatcher } from 'node:fs';
+import type { BunFile } from 'bun';
 import { LocalFilesystem, PATHS, STANDARD_MAILBOXES } from '../core';
 import { buildMaildirFilename, createUniqueMessageId } from './mailutils';
 
@@ -106,20 +107,9 @@ export class MaildirStore {
         return this.storage.readdir(curPath);
     }
 
-    async readMessage(mailbox: string, filename: string): Promise<{ content: Buffer; size: number }> {
+    getMessageFile(mailbox: string, filename: string): BunFile {
         const filePath = this.storage.pathJoin(this.mailboxDir(mailbox), CUR, filename);
-        const file = this.storage.file(filePath);
-        return { content: Buffer.from(await file.arrayBuffer()), size: file.size };
-    }
-
-    async readMessageText(mailbox: string, filename: string): Promise<string> {
-        const filePath = this.storage.pathJoin(this.mailboxDir(mailbox), CUR, filename);
-        return this.storage.file(filePath).text();
-    }
-
-    async readMessageBuffer(mailbox: string, filename: string): Promise<ArrayBuffer> {
-        const filePath = this.storage.pathJoin(this.mailboxDir(mailbox), CUR, filename);
-        return this.storage.file(filePath).arrayBuffer();
+        return this.storage.read(filePath);
     }
 
     async moveMessage(fromMailbox: string, fromFilename: string, toMailbox: string): Promise<void> {
