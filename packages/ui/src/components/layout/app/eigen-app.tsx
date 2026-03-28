@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '@workspace/lib/auth/auth-context.tsx';
 import type React from 'react';
 import { lazy, Suspense, useState } from 'react';
+import { LoadingScreen } from '../pages/loading-screen.tsx';
 import { printDocument } from '../../../lib/printElement.ts';
 import { ErrorBoundary } from '../../error-boundary.tsx';
 import { Toaster } from '../../sonner.tsx';
@@ -45,7 +46,7 @@ export function EigenApp({ children }: EigenAppProps) {
         <HotkeysProvider>
             <TooltipProvider>
                 <QueryClientProvider client={queryClient}>
-                    <AuthProvider>
+                    <AuthProvider loadingFallback={<LoadingScreen />}>
                         <ThemeProvider>
                             <SSEProvider>
                                 <UploadProvider>

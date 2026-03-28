@@ -239,6 +239,6 @@ Detailed architecture docs in `docs/`:
 | [TODO-GUEST-ACCESS.md](docs/TODO-GUEST-ACCESS.md)           | Guest access, OTP auth, access requests  |
 | [TODO-GUEST-USERS.md](docs/TODO-GUEST-USERS.md)             | Guest user access plan (superseded)      |
 | [TODO-CALENDAR-TIMEZONE.md](docs/TODO-CALENDAR-TIMEZONE.md) | Timezone-aware recurrence expansion      |
-| [FORTUNE-SHEETS-TODO.md](docs/FORTUNE-SHEETS-TODO.md)       | Fortune-sheet refactoring audit          |
+| [FORTUNE-SHEETS-TODO.md](docs/TODO-FORTUNE-SHEETS.md)       | Fortune-sheet refactoring audit          |
 | [RESEARCH_AI.md](docs/RESEARCH_AI.md)                       | Local/private AI integration research    |
 | [RESEARCH_CALDAV.md](docs/RESEARCH_CALDAV.md)               | CalDAV implementation plan               |
