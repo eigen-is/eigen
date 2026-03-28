@@ -1,3 +1,0 @@
-[   57650ms] [ERROR] Internal React error: Expected static flag was missing. Please notify the React team. @ http://localhost:3008/chat/node_modules/.vite/deps/react-dom_client.js?v=347c76dc:5689
-[   73343ms] [ERROR] Failed to load resource: net::ERR_INCOMPLETE_CHUNKED_ENCODING @ http://localhost:8000/sse/r7veTxwcuZ2ve3prabqIT6NuxQDc2fWE/events:0
-[  165302ms] [ERROR] Failed to load resource: net::ERR_INCOMPLETE_CHUNKED_ENCODING @ http://localhost:8000/sse/r7veTxwcuZ2ve3prabqIT6NuxQDc2fWE/events:0
