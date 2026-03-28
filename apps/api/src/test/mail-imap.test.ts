@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import type { EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
 import { readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
 import {
     applyFlagsFromFilename,
     buildMaildirFilename,

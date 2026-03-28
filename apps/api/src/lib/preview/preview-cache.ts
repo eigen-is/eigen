@@ -65,14 +65,10 @@ export async function getScreenPreview(mount: Mount, drivePath: DrivePath, embed
         const file = await mount.readFile(drivePath.id);
         if (!file) return null;
 
-        const result = await generateImagePreview(
-            file,
-            mime,
-            drivePath.name,
-            mount.previewsDir,
-            drivePath.id,
-            { maxSize: 2560, quality: 85 },
-        );
+        const result = await generateImagePreview(file, mime, drivePath.name, mount.previewsDir, drivePath.id, {
+            maxSize: 2560,
+            quality: 85,
+        });
         if (!result) return null;
 
         await Bun.write(cacheFile, result.data);

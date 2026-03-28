@@ -108,16 +108,12 @@ describe('Mail Parser', () => {
             const mail = await simpleParser(MULTI_RECIPIENT_EMAIL);
 
             expect(mail.subject).toBe('Group Email');
-            const toAddresses = Array.isArray(mail.to)
-                ? mail.to.flatMap((a) => a.value)
-                : mail.to?.value ?? [];
+            const toAddresses = Array.isArray(mail.to) ? mail.to.flatMap((a) => a.value) : (mail.to?.value ?? []);
             expect(toAddresses).toHaveLength(2);
             expect(toAddresses[0].address).toBe('alice@example.com');
             expect(toAddresses[1].address).toBe('bob@example.com');
 
-            const ccAddresses = Array.isArray(mail.cc)
-                ? mail.cc.flatMap((a) => a.value)
-                : mail.cc?.value ?? [];
+            const ccAddresses = Array.isArray(mail.cc) ? mail.cc.flatMap((a) => a.value) : (mail.cc?.value ?? []);
             expect(ccAddresses).toHaveLength(1);
             expect(ccAddresses[0].address).toBe('charlie@example.com');
         });
