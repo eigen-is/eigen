@@ -5,7 +5,7 @@ import { simpleParser } from './mail-parser';
 export async function parseEml(
     messageId: string,
     mailbox: string,
-    content: string,
+    content: Buffer,
     size: number,
 ): Promise<Email | null> {
     try {

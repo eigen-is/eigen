@@ -106,10 +106,15 @@ export class MaildirStore {
         return this.storage.readdir(curPath);
     }
 
-    async readMessage(mailbox: string, filename: string): Promise<{ content: string; size: number }> {
+    async readMessage(mailbox: string, filename: string): Promise<{ content: Buffer; size: number }> {
         const filePath = this.storage.pathJoin(this.mailboxDir(mailbox), CUR, filename);
         const file = this.storage.file(filePath);
-        return { content: await file.text(), size: file.size };
+        return { content: Buffer.from(await file.arrayBuffer()), size: file.size };
+    }
+
+    async readMessageText(mailbox: string, filename: string): Promise<string> {
+        const filePath = this.storage.pathJoin(this.mailboxDir(mailbox), CUR, filename);
+        return this.storage.file(filePath).text();
     }
 
     async readMessageBuffer(mailbox: string, filename: string): Promise<ArrayBuffer> {
