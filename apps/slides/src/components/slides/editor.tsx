@@ -1,4 +1,4 @@
-import {useHotkey} from '@tanstack/react-hotkeys';
+import { useHotkey } from '@tanstack/react-hotkeys';
 import {
     needsReUpload,
     readEigenClipboard,
@@ -6,28 +6,28 @@ import {
     writeEigenClipboard,
     writeEigenClipboardAsync,
 } from '@workspace/lib/clipboard';
-import {MediaResolverProvider, useMediaResolver, useUploadFile} from '@workspace/lib/drive';
-import type {EigenClipboardData, EigenClipboardItem} from '@workspace/lib/types/clipboard';
-import type {DrivePath} from '@workspace/lib/types/drive';
-import {useLayout} from '@workspace/ui/components/layout/app/layout-context';
-import {Column, ColumnLayout, EmptyState} from '@workspace/ui/index';
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import { MediaResolverProvider, useMediaResolver, useUploadFile } from '@workspace/lib/drive';
+import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/types/clipboard';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
+import { Column, ColumnLayout, EmptyState } from '@workspace/ui/index';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Y from 'yjs';
-import {useDeck} from './hooks/use-deck';
-import {useSlideDnd} from './hooks/use-slide-dnd';
-import {SlideCanvas} from './slide-canvas';
-import {ReadOnlySlideObject} from './slide-object';
-import {SlidePanel} from './slide-panel';
-import {SlideBackgroundPanel, SlidePropertiesPanel} from './slide-properties-panel';
-import {Toolbar} from './toolbar';
-import {DEFAULT_IMAGE_OBJECT, DEFAULT_TEXT_OBJECT, type ImageObject, type SlideObject} from './types';
+import { useDeck } from './hooks/use-deck';
+import { useSlideDnd } from './hooks/use-slide-dnd';
+import { SlideCanvas } from './slide-canvas';
+import { ReadOnlySlideObject } from './slide-object';
+import { SlidePanel } from './slide-panel';
+import { SlideBackgroundPanel, SlidePropertiesPanel } from './slide-properties-panel';
+import { Toolbar } from './toolbar';
+import { DEFAULT_IMAGE_OBJECT, DEFAULT_TEXT_OBJECT, type ImageObject, type SlideObject } from './types';
 
 function buildClipboardItem(
     obj: SlideObject,
     resolveMediaPath: (name: string) => DrivePath | undefined,
 ): EigenClipboardItem | null {
-    const rect = {x: obj.x, y: obj.y, w: obj.w, h: obj.h, rotation: obj.rotation};
-    const border = {borderColor: obj.borderColor, borderWidth: obj.borderWidth, borderRadius: obj.borderRadius};
+    const rect = { x: obj.x, y: obj.y, w: obj.w, h: obj.h, rotation: obj.rotation };
+    const border = { borderColor: obj.borderColor, borderWidth: obj.borderWidth, borderRadius: obj.borderRadius };
     if (obj.type === 'image') {
         const mediaPath = resolveMediaPath(obj.mediaName);
         if (!mediaPath) return null;
@@ -38,7 +38,7 @@ function buildClipboardItem(
             sourceParentId: mediaPath.parentId,
             sourceOwnerId: mediaPath.ownerId,
             sourceMountId: mediaPath.mountId,
-            meta: {...rect, ...border, objectFit: obj.objectFit},
+            meta: { ...rect, ...border, objectFit: obj.objectFit },
         };
     }
     return {
@@ -87,7 +87,7 @@ type SlideEditorProps = {
     onAccessDialogOpen: () => void;
 };
 
-export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDialogOpen}: SlideEditorProps) {
+export function SlideEditor({ ownerId, path, canWrite, mediaFolderId, onAccessDialogOpen }: SlideEditorProps) {
     return (
         <MediaResolverProvider
             ownerId={ownerId}
@@ -106,7 +106,7 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
     );
 }
 
-function SlideEditorInner({ownerId, path, canWrite, mediaFolderId, onAccessDialogOpen}: SlideEditorProps) {
+function SlideEditorInner({ ownerId, path, canWrite, mediaFolderId, onAccessDialogOpen }: SlideEditorProps) {
     const {
         deck,
         activeSlideId,
@@ -129,9 +129,9 @@ function SlideEditorInner({ownerId, path, canWrite, mediaFolderId, onAccessDialo
         moveObjectToBack,
     } = useDeck(ownerId, path.mountId, path.id);
 
-    const {isMobile} = useLayout();
-    const {resolveMediaUrl, resolveMediaPath} = useMediaResolver();
-    const {dragState, handleDragStart, handleDragEnd} = useSlideDnd({deck, yjsDoc});
+    const { isMobile } = useLayout();
+    const { resolveMediaUrl, resolveMediaPath } = useMediaResolver();
+    const { dragState, handleDragStart, handleDragEnd } = useSlideDnd({ deck, yjsDoc });
 
     const [selectedObjectIds, setSelectedObjectIds] = useState<string[]>([]);
     const [editingObjectId, setEditingObjectId] = useState<string | null>(null);
@@ -149,7 +149,7 @@ function SlideEditorInner({ownerId, path, canWrite, mediaFolderId, onAccessDialo
             e.preventDefault();
             undoManager?.undo();
         },
-        {enabled: canWrite && !!undoManager},
+        { enabled: canWrite && !!undoManager },
     );
     useHotkey(
         'Mod+Y',
@@ -157,7 +157,7 @@ function SlideEditorInner({ownerId, path, canWrite, mediaFolderId, onAccessDialo
             e.preventDefault();
             undoManager?.redo();
         },
-        {enabled: canWrite && !!undoManager},
+        { enabled: canWrite && !!undoManager },
     );
     useHotkey(
         'Mod+Shift+Z',
@@ -165,7 +165,7 @@ function SlideEditorInner({ownerId, path, canWrite, mediaFolderId, onAccessDialo
             e.preventDefault();
             undoManager?.redo();
         },
-        {enabled: canWrite && !!undoManager},
+        { enabled: canWrite && !!undoManager },
     );
     useHotkey(
         'Delete',
@@ -175,7 +175,7 @@ function SlideEditorInner({ownerId, path, canWrite, mediaFolderId, onAccessDialo
                 setSelectedObjectIds([]);
             }
         },
-        {enabled: canWrite && hasSelection && !isEditing},
+        { enabled: canWrite && hasSelection && !isEditing },
     );
     useHotkey(
         'Backspace',
@@ -185,7 +185,7 @@ function SlideEditorInner({ownerId, path, canWrite, mediaFolderId, onAccessDialo
                 setSelectedObjectIds([]);
             }
         },
-        {enabled: canWrite && hasSelection && !isEditing},
+        { enabled: canWrite && hasSelection && !isEditing },
     );
     useHotkey(
         'Escape',
@@ -194,7 +194,7 @@ function SlideEditorInner({ownerId, path, canWrite, mediaFolderId, onAccessDialo
             else if (isEditing) setEditingObjectId(null);
             else setSelectedObjectIds([]);
         },
-        {enabled: true},
+        { enabled: true },
     );
     const moveSelected = useCallback(
         (dx: number, dy: number) => {
@@ -219,7 +219,7 @@ function SlideEditorInner({ownerId, path, canWrite, mediaFolderId, onAccessDialo
             e.preventDefault();
             moveSelected(-1, 0);
         },
-        {enabled: canWrite && hasSelection && !isEditing},
+        { enabled: canWrite && hasSelection && !isEditing },
     );
     useHotkey(
         'ArrowRight',
@@ -227,7 +227,7 @@ function SlideEditorInner({ownerId, path, canWrite, mediaFolderId, onAccessDialo
             e.preventDefault();
             moveSelected(1, 0);
         },
-        {enabled: canWrite && hasSelection && !isEditing},
+        { enabled: canWrite && hasSelection && !isEditing },
     );
     useHotkey(
         'ArrowUp',
@@ -235,7 +235,7 @@ function SlideEditorInner({ownerId, path, canWrite, mediaFolderId, onAccessDialo
             e.preventDefault();
             moveSelected(0, -1);
         },
-        {enabled: canWrite && hasSelection && !isEditing},
+        { enabled: canWrite && hasSelection && !isEditing },
     );
     useHotkey(
         'ArrowDown',
@@ -243,13 +243,13 @@ function SlideEditorInner({ownerId, path, canWrite, mediaFolderId, onAccessDialo
             e.preventDefault();
             moveSelected(0, 1);
         },
-        {enabled: canWrite && hasSelection && !isEditing},
+        { enabled: canWrite && hasSelection && !isEditing },
     );
     const handleImageFile = useCallback(
         async (file: File) => {
             if (!activeSlideId || !mediaFolderId || !file.type.startsWith('image/')) return;
             try {
-                const result = await uploadFile.mutateAsync({parentId: mediaFolderId, file});
+                const result = await uploadFile.mutateAsync({ parentId: mediaFolderId, file });
                 if (result) {
                     addObject(activeSlideId, {
                         ...DEFAULT_IMAGE_OBJECT,
@@ -285,7 +285,7 @@ function SlideEditorInner({ownerId, path, canWrite, mediaFolderId, onAccessDialo
                 .filter(Boolean) as EigenClipboardItem[];
             if (items.length === 0) return;
             e.preventDefault();
-            const data: EigenClipboardData = {version: 1, items};
+            const data: EigenClipboardData = { version: 1, items };
             const firstObj = selectedObjectIds.length === 1 ? deck.objects[selectedObjectIds[0]] : undefined;
             const textPreview = firstObj?.type === 'text' ? firstObj.text : undefined;
             writeEigenClipboard(e, data, textPreview);
@@ -354,7 +354,7 @@ function SlideEditorInner({ownerId, path, canWrite, mediaFolderId, onAccessDialo
                         ] as const) {
                             if (m[k] != null) overrides[k] = m[k];
                         }
-                        const imageProps = {...DEFAULT_IMAGE_OBJECT, ...overrides};
+                        const imageProps = { ...DEFAULT_IMAGE_OBJECT, ...overrides };
                         if (needsReUpload(item.sourceParentId, mediaFolderId) && mediaFolderId) {
                             reUploadImage(
                                 item.sourcePathId,
@@ -431,7 +431,7 @@ function SlideEditorInner({ownerId, path, canWrite, mediaFolderId, onAccessDialo
             if (!obj) return;
             const item = buildClipboardItem(obj, resolveMediaPath);
             if (!item) return;
-            const data: EigenClipboardData = {version: 1, items: [item]};
+            const data: EigenClipboardData = { version: 1, items: [item] };
             writeEigenClipboardAsync(data, obj.type === 'text' ? obj.text : undefined);
         },
         [deck.objects, resolveMediaPath],
@@ -482,7 +482,7 @@ function SlideEditorInner({ownerId, path, canWrite, mediaFolderId, onAccessDialo
         async (file: File): Promise<string | null> => {
             if (!mediaFolderId || !file.type.startsWith('image/')) return null;
             try {
-                const result = await uploadFile.mutateAsync({parentId: mediaFolderId, file});
+                const result = await uploadFile.mutateAsync({ parentId: mediaFolderId, file });
                 if (result) return result.name;
             } catch (e) {
                 console.error('Background image upload failed:', e);
@@ -570,15 +570,15 @@ function SlideEditorInner({ownerId, path, canWrite, mediaFolderId, onAccessDialo
                         backgroundColor: activeSlide.backgroundColor,
                         ...(bgUrl
                             ? {
-                                backgroundImage: `url(${bgUrl})`,
-                                backgroundSize: 'cover',
-                                backgroundPosition: 'center',
-                            }
+                                  backgroundImage: `url(${bgUrl})`,
+                                  backgroundSize: 'cover',
+                                  backgroundPosition: 'center',
+                              }
                             : {}),
                     }}
                 >
                     {activeObjects.map((obj) => (
-                        <ReadOnlySlideObject key={obj.id} obj={obj}/>
+                        <ReadOnlySlideObject key={obj.id} obj={obj} />
                     ))}
                 </div>
             </div>
@@ -643,8 +643,7 @@ function SlideEditorInner({ownerId, path, canWrite, mediaFolderId, onAccessDialo
                                         onMoveToBack={canWrite ? moveObjectToBack : undefined}
                                         canWrite={canWrite}
                                     />
-                                    <div
-                                        className="h-8 bg-muted border-t flex items-center justify-between px-4 text-xs text-muted-foreground">
+                                    <div className="h-8 bg-muted border-t flex items-center justify-between px-4 text-xs text-muted-foreground">
                                         <span>
                                             Slide {deck.slideOrder.indexOf(activeSlideId!) + 1} of{' '}
                                             {deck.slideOrder.length}
@@ -675,7 +674,7 @@ function SlideEditorInner({ownerId, path, canWrite, mediaFolderId, onAccessDialo
                                 ) : null}
                             </div>
                         ) : (
-                            <EmptyState message="No slides yet"/>
+                            <EmptyState message="No slides yet" />
                         ))}
                 </div>
 

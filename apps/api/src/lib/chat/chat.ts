@@ -1,23 +1,23 @@
-import {randomUUID} from 'node:crypto';
-import type {ChatMessage} from '@workspace/lib/types/chat';
-import {type DrivePath, stripEigenExtension} from '@workspace/lib/types/drive';
-import {type SSEvent, SSEventType} from '@workspace/lib/types/sse';
-import {validateEmailAddress} from '@workspace/lib/validation';
-import {desc, eq, lt} from 'drizzle-orm';
-import type {BunSQLiteDatabase} from 'drizzle-orm/bun-sqlite';
-import {ApiError} from '../core/errors';
-import type {ManagedDatabase} from '../core/managed-database';
-import type {Drive} from '../drive';
-import type {Home} from '../home';
-import {getHome} from '../home';
-import {atHome} from '../home/get-home.ts';
-import {getUserByEmail} from '../user/';
-import {formatEmoteForViewer, parseCommand} from './commands';
-import {type CommentIndex, openCommentIndex} from './comment-index';
-import {CHAT_ROOM_DB_CONFIG} from './db-config';
-import {extractMentionedEmails} from './mentions';
+import { randomUUID } from 'node:crypto';
+import type { ChatMessage } from '@workspace/lib/types/chat';
+import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
+import { type SSEvent, SSEventType } from '@workspace/lib/types/sse';
+import { validateEmailAddress } from '@workspace/lib/validation';
+import { desc, eq, lt } from 'drizzle-orm';
+import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
+import { ApiError } from '../core/errors';
+import type { ManagedDatabase } from '../core/managed-database';
+import type { Drive } from '../drive';
+import type { Home } from '../home';
+import { getHome } from '../home';
+import { atHome } from '../home/get-home.ts';
+import { getUserByEmail } from '../user/';
+import { formatEmoteForViewer, parseCommand } from './commands';
+import { type CommentIndex, openCommentIndex } from './comment-index';
+import { CHAT_ROOM_DB_CONFIG } from './db-config';
+import { extractMentionedEmails } from './mentions';
 import * as schema from './schema';
-import {buildChatEvent, buildCommentIndexUpdatedEvent} from './sse-events';
+import { buildChatEvent, buildCommentIndexUpdatedEvent } from './sse-events';
 
 export class ChatRoom {
     private drive: Drive;
@@ -222,10 +222,10 @@ export class ChatRoom {
                 const isRecipient = msg.whisperTo === userId || msg.whisperTo === userEmail;
                 const targetName = msg.whisperTo?.split('@')[0] || msg.whisperTo || 'someone';
                 if (isAuthor) {
-                    return {...msg, content: `whispers to ${targetName}: ${msg.content}`};
+                    return { ...msg, content: `whispers to ${targetName}: ${msg.content}` };
                 }
                 if (isRecipient) {
-                    return {...msg, content: `whispers to you: ${msg.content}`};
+                    return { ...msg, content: `whispers to you: ${msg.content}` };
                 }
                 return {
                     ...msg,
@@ -248,9 +248,9 @@ export class ChatRoom {
         if (!existing || existing.authorId !== userId) return null;
 
         const now = new Date();
-        await this.db.update(schema.messages).set({content, editedAt: now}).where(eq(schema.messages.id, messageId));
+        await this.db.update(schema.messages).set({ content, editedAt: now }).where(eq(schema.messages.id, messageId));
 
-        const updated = this.toMessage({...existing, content, editedAt: now});
+        const updated = this.toMessage({ ...existing, content, editedAt: now });
 
         const event = buildChatEvent(SSEventType.CHAT_MESSAGE_EDITED, {
             chatId: this.path.id,
@@ -279,7 +279,7 @@ export class ChatRoom {
         const now = new Date();
         await this.db
             .update(schema.messages)
-            .set({deletedAt: now, content: ''})
+            .set({ deletedAt: now, content: '' })
             .where(eq(schema.messages.id, messageId));
 
         if (existing.attachments) {
@@ -316,7 +316,7 @@ export class ChatRoom {
         if (existing) {
             await this.db
                 .update(schema.readState)
-                .set({lastReadMessageId: messageId, lastReadAt: now})
+                .set({ lastReadMessageId: messageId, lastReadAt: now })
                 .where(eq(schema.readState.userId, userId));
         } else {
             await this.db.insert(schema.readState).values({

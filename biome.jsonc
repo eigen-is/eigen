@@ -8,16 +8,7 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": [
-      "**",
-      "!**/*.gen.ts",
-      "!packages/fortune-sheet",
-      "!apps/api/src/lib/mail/mail-parser",
-      "!apps/api/src/lib/mail/mail-split",
-      "!!dist",
-      "!!coverage",
-      "!!node_modules"
-    ]
+    "includes": ["**", "!**/*.gen.ts", "!packages/fortune-sheet", "!!dist", "!!coverage", "!!node_modules"]
   },
   "formatter": {
     "enabled": true,

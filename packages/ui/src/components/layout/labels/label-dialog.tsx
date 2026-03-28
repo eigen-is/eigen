@@ -1,7 +1,7 @@
-import {zodResolver} from '@hookform/resolvers/zod';
-import {EIGEN_ACCENT_COLORS_SHUFFLED} from '@workspace/lib/constants';
-import type {Label} from '@workspace/lib/types/label';
-import {Button} from '@workspace/ui/components/button';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants';
+import type { Label } from '@workspace/lib/types/label';
+import { Button } from '@workspace/ui/components/button';
 
 import {
     Dialog,
@@ -12,15 +12,15 @@ import {
     DialogTitle,
 } from '@workspace/ui/components/dialog';
 
-import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage} from '@workspace/ui/components/form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
 
-import {Input} from '@workspace/ui/components/input';
-import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
-import {ColorPicker} from '@workspace/ui/components/layout/media/color-picker';
-import {Popover, PopoverContent, PopoverTrigger} from '@workspace/ui/components/popover';
-import {useEffect, useState} from 'react';
-import {useForm} from 'react-hook-form';
-import {z} from 'zod';
+import { Input } from '@workspace/ui/components/input';
+import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
+import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker';
+import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
+import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
 
 // Form schema for label management
 const labelFormSchema = z.object({
@@ -44,13 +44,13 @@ type LabelDialogProps = {
 };
 
 export function LabelDialog({
-                                open,
-                                onOpenChange,
-                                selectedLabel,
-                                onSubmit,
-                                onDelete,
-                                labelCount = 0,
-                            }: LabelDialogProps) {
+    open,
+    onOpenChange,
+    selectedLabel,
+    onSubmit,
+    onDelete,
+    labelCount = 0,
+}: LabelDialogProps) {
     const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
     const [colorPickerOpen, setColorPickerOpen] = useState(false);
     const isEditMode = !!selectedLabel;
@@ -60,8 +60,8 @@ export function LabelDialog({
     const form = useForm<LabelFormValues>({
         resolver: zodResolver(labelFormSchema),
         defaultValues: selectedLabel
-            ? {name: selectedLabel.name, color: selectedLabel.color}
-            : {name: '', color: EIGEN_ACCENT_COLORS_SHUFFLED[labelCount % EIGEN_ACCENT_COLORS_SHUFFLED.length].value},
+            ? { name: selectedLabel.name, color: selectedLabel.color }
+            : { name: '', color: EIGEN_ACCENT_COLORS_SHUFFLED[labelCount % EIGEN_ACCENT_COLORS_SHUFFLED.length].value },
     });
 
     const defaultColor = EIGEN_ACCENT_COLORS_SHUFFLED[labelCount % EIGEN_ACCENT_COLORS_SHUFFLED.length].value;
@@ -114,7 +114,7 @@ export function LabelDialog({
                                 <FormField
                                     control={form.control}
                                     name="color"
-                                    render={({field, fieldState}) => (
+                                    render={({ field, fieldState }) => (
                                         <FormItem>
                                             <FormLabel className="invisible">Color</FormLabel>
                                             <FormControl>
@@ -123,7 +123,7 @@ export function LabelDialog({
                                                         <button
                                                             type="button"
                                                             className="h-9 w-9 rounded-md border border-input shrink-0"
-                                                            style={{backgroundColor: field.value}}
+                                                            style={{ backgroundColor: field.value }}
                                                             disabled={isLoading}
                                                         />
                                                     </PopoverTrigger>
@@ -146,7 +146,7 @@ export function LabelDialog({
                                 <FormField
                                     control={form.control}
                                     name="name"
-                                    render={({field, fieldState}) => (
+                                    render={({ field, fieldState }) => (
                                         <FormItem className="flex-1">
                                             <FormLabel>Label Name</FormLabel>
                                             <FormControl>

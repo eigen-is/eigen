@@ -1,14 +1,14 @@
-import {useQueryClient} from '@tanstack/react-query';
-import {getDriveFileUploadUrl} from '@workspace/lib/api';
-import {invalidateItemCreated} from '@workspace/lib/drive';
-import type {DrivePath} from '@workspace/lib/types/drive';
+import { useQueryClient } from '@tanstack/react-query';
+import { getDriveFileUploadUrl } from '@workspace/lib/api';
+import { invalidateItemCreated } from '@workspace/lib/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import type React from 'react';
-import {useEffect, useRef} from 'react';
-import {useUpload} from '../../layout/upload-provider/upload-provider';
-import {uploadWithProgress} from '../upload-provider/upload-with-progress';
-import type {UploadResult} from './file-upload';
+import { useEffect, useRef } from 'react';
+import { useUpload } from '../../layout/upload-provider/upload-provider';
+import { uploadWithProgress } from '../upload-provider/upload-with-progress';
+import type { UploadResult } from './file-upload';
 
-export type {UploadResult};
+export type { UploadResult };
 
 export type DriveUploadFilesProps = {
     path: DrivePath;
@@ -20,13 +20,13 @@ export type DriveUploadFilesProps = {
 };
 
 export function DriveUploadFiles({
-                                     path,
-                                     open,
-                                     onOpenChange,
-                                     onAfterAction,
-                                     initialFiles = [],
-                                     onAfterUpload,
-                                 }: DriveUploadFilesProps) {
+    path,
+    open,
+    onOpenChange,
+    onAfterAction,
+    initialFiles = [],
+    onAfterUpload,
+}: DriveUploadFilesProps) {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const upload = useUpload();
     const queryClient = useQueryClient();
@@ -95,13 +95,13 @@ export function DriveUploadFiles({
                         });
                     }
 
-                    return {success: true, fileName: name};
+                    return { success: true, fileName: name };
                 },
                 onError: (err) => {
                     // Mark upload as failed
                     uploadHandler.error();
 
-                    return {success: false, fileName: name, error: err};
+                    return { success: false, fileName: name, error: err };
                 },
             });
         } catch (_err: unknown) {
@@ -119,5 +119,5 @@ export function DriveUploadFiles({
         e.target.value = '';
     };
 
-    return <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileChange}/>;
+    return <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileChange} />;
 }

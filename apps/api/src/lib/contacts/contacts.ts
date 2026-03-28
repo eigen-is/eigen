@@ -1,21 +1,21 @@
-import type {Contact} from '@workspace/lib/types/contact';
-import type {Label} from '@workspace/lib/types/label';
-import {SSEventType} from '@workspace/lib/types/sse';
-import type {User} from 'better-auth/types';
-import {eq, sql} from 'drizzle-orm';
-import type {BunSQLiteDatabase} from 'drizzle-orm/bun-sqlite';
-import {v4 as uuidv4} from 'uuid';
-import {getDomain} from '../config/server-config';
-import {DEFAULT_LABELS, LocalFilesystem, PATHS} from '../core';
-import type {ManagedDatabase} from '../core/';
-import {ApiError} from '../core/';
-import type {Home} from '../home';
-import {getHome} from '../home';
-import {generateImagePreview} from '../shared/thumbnails';
-import {getUserByEmail, updateUser} from '../user/';
-import {CONTACTS_DB_CONFIG} from './db-config';
+import type { Contact } from '@workspace/lib/types/contact';
+import type { Label } from '@workspace/lib/types/label';
+import { SSEventType } from '@workspace/lib/types/sse';
+import type { User } from 'better-auth/types';
+import { eq, sql } from 'drizzle-orm';
+import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
+import { v4 as uuidv4 } from 'uuid';
+import { getDomain } from '../config/server-config';
+import { DEFAULT_LABELS, LocalFilesystem, PATHS } from '../core';
+import type { ManagedDatabase } from '../core/';
+import { ApiError } from '../core/';
+import type { Home } from '../home';
+import { getHome } from '../home';
+import { generateImagePreview } from '../shared/thumbnails';
+import { getUserByEmail, updateUser } from '../user/';
+import { CONTACTS_DB_CONFIG } from './db-config';
 import * as schema from './schema';
-import {buildContactEvent, buildLabelEvent} from './sse-events';
+import { buildContactEvent, buildLabelEvent } from './sse-events';
 
 export async function getContacts(user: User) {
     const home = await getHome(user.id);
@@ -27,7 +27,7 @@ async function getContactsDatabase(home: Home): Promise<ManagedDatabase<typeof s
 }
 
 function extractContactData(contact: Omit<Contact, 'id'>) {
-    const {labels, ...contactData} = contact;
+    const { labels, ...contactData } = contact;
     return {
         data: {
             email: contactData.email,
@@ -132,7 +132,7 @@ export class Contacts {
 
     public async addContact(contact: Omit<Contact, 'id'>) {
         const contactId = uuidv4();
-        const {data, contactData, labels} = extractContactData(contact);
+        const { data, contactData, labels } = extractContactData(contact);
 
         await this.db.insert(schema.contacts).values({
             id: contactId,
@@ -171,7 +171,7 @@ export class Contacts {
             }
         }
 
-        const {data, contactData, labels} = extractContactData(contact);
+        const { data, contactData, labels } = extractContactData(contact);
 
         // Update contact
         await this.db

@@ -1,43 +1,43 @@
-import {createRootRouteWithContext, Outlet} from '@tanstack/react-router';
-import {type AuthContextType, useAuth} from '@workspace/lib/auth';
-import {useEmailById, useMailboxes, useMoveEmail} from '@workspace/lib/mail';
-import type {Email} from '@workspace/lib/types/mail';
-import {AppShell} from '@workspace/ui/components/layout/app/app-shell.tsx';
-import {EmailSidebar} from '../components/mail/email-sidebar';
+import { createRootRouteWithContext, Outlet } from '@tanstack/react-router';
+import { type AuthContextType, useAuth } from '@workspace/lib/auth';
+import { useEmailById, useMailboxes, useMoveEmail } from '@workspace/lib/mail';
+import type { Email } from '@workspace/lib/types/mail';
+import { AppShell } from '@workspace/ui/components/layout/app/app-shell.tsx';
+import { EmailSidebar } from '../components/mail/email-sidebar';
 
 type MyRouterContext = {
     auth: AuthContextType;
 };
 
 function MailRoot() {
-    const {user} = useAuth();
+    const { user } = useAuth();
 
     if (!user) {
         return (
             <AppShell appName="mail" rootRoute={Route}>
-                <Outlet/>
+                <Outlet />
             </AppShell>
         );
     }
 
-    return <AuthenticatedMailRoot/>;
+    return <AuthenticatedMailRoot />;
 }
 
 function AuthenticatedMailRoot() {
-    const {data: mailboxes = [], isLoading, error} = useMailboxes();
+    const { data: mailboxes = [], isLoading, error } = useMailboxes();
     const moveMail = useMoveEmail();
     const getEmailById = useEmailById();
 
     const handleMoveByDrop = async (emailIds: string[], folderId: string) => {
         const emails = (await Promise.all(emailIds.map((id) => getEmailById(id)))).filter((e): e is Email => !!e);
-        await Promise.allSettled(emails.map((email) => moveMail.mutateAsync({email, mailbox: folderId})));
+        await Promise.allSettled(emails.map((email) => moveMail.mutateAsync({ email, mailbox: folderId })));
     };
 
     return (
         <AppShell
             appName="mail"
             rootRoute={Route}
-            sidebar={({condensed, isMobile, onClose}) => (
+            sidebar={({ condensed, isMobile, onClose }) => (
                 <EmailSidebar
                     condensed={condensed}
                     isMobile={isMobile}
@@ -49,7 +49,7 @@ function AuthenticatedMailRoot() {
                 />
             )}
         >
-            <Outlet/>
+            <Outlet />
         </AppShell>
     );
 }

@@ -1,6 +1,6 @@
-import {useCreateFolder} from '@workspace/lib/drive';
-import type {DrivePath} from '@workspace/lib/types/drive';
-import {DriveCreateItemDialog} from './drive-create-folder-item';
+import { useCreateFolder } from '@workspace/lib/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { DriveCreateItemDialog } from './drive-create-folder-item';
 
 export type DriveCreateFolderProps = {
     path: DrivePath;
@@ -12,13 +12,13 @@ export type DriveCreateFolderProps = {
 };
 
 export function DriveCreateFolder({
-                                      path,
-                                      open,
-                                      onOpenChange,
-                                      onSave,
-                                      onCancel,
-                                      onAfterAction,
-                                  }: DriveCreateFolderProps) {
+    path,
+    open,
+    onOpenChange,
+    onSave,
+    onCancel,
+    onAfterAction,
+}: DriveCreateFolderProps) {
     const createFolderMutation = useCreateFolder(path.ownerId, path.mountId);
 
     const handleOpenChange = (nextOpen: boolean) => {
@@ -35,7 +35,7 @@ export function DriveCreateFolder({
 
         // Call onAfterAction if provided
         if (onAfterAction) {
-            onAfterAction('create', {name: folderName});
+            onAfterAction('create', { name: folderName });
         }
 
         if (onSave) onSave(newPath?.id || '');

@@ -1,25 +1,25 @@
-import type {Label} from '@workspace/lib/types/label';
-import {TooltipButton} from '@workspace/ui';
-import {Pencil, Plus} from 'lucide-react';
-import {useState} from 'react';
-import {cn} from '../../../lib/utils';
-import {SidebarItem} from '../sidebar';
-import {DroppableSidebarItem} from '../sidebar/droppable-sidebar-item';
-import {LabelDialog} from './label-dialog';
-import {useLabels} from './label-provider';
-import type {LabelManagerProps} from './types';
+import type { Label } from '@workspace/lib/types/label';
+import { TooltipButton } from '@workspace/ui';
+import { Pencil, Plus } from 'lucide-react';
+import { useState } from 'react';
+import { cn } from '../../../lib/utils';
+import { SidebarItem } from '../sidebar';
+import { DroppableSidebarItem } from '../sidebar/droppable-sidebar-item';
+import { LabelDialog } from './label-dialog';
+import { useLabels } from './label-provider';
+import type { LabelManagerProps } from './types';
 
 export function LabelManager({
-                                 labels,
-                                 getLabelPath = (label) => `/label/${label.id.toLowerCase()}`,
-                                 className,
-                                 condensed = false,
-                                 dropAcceptTypes,
-                                 onItemDrop,
-                             }: LabelManagerProps) {
+    labels,
+    getLabelPath = (label) => `/label/${label.id.toLowerCase()}`,
+    className,
+    condensed = false,
+    dropAcceptTypes,
+    onItemDrop,
+}: LabelManagerProps) {
     const [selectedLabel, setSelectedLabel] = useState<Label | null>(null);
     const [dialogOpen, setDialogOpen] = useState(false);
-    const {addLabel, updateLabel, deleteLabel} = useLabels();
+    const { addLabel, updateLabel, deleteLabel } = useLabels();
 
     const handleAddLabel = () => {
         setSelectedLabel(null);
@@ -71,7 +71,7 @@ export function LabelManager({
             <div className={cn('flex items-center mb-2', condensed ? 'justify-center' : 'justify-between')}>
                 {!condensed && <h3 className="text-sm font-semibold text-foreground px-3 select-none">Labels</h3>}
                 <div className="flex items-center gap-1">
-                    <TooltipButton icon={Plus} tooltipText="Add new label" onClick={handleAddLabel}/>
+                    <TooltipButton icon={Plus} tooltipText="Add new label" onClick={handleAddLabel} />
                 </div>
             </div>
 

@@ -68,7 +68,6 @@ function SidebarProvider({
             } else {
                 _setOpen(openState);
             }
-
         },
         [setOpenProp, open],
     );

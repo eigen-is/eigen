@@ -1,8 +1,8 @@
-import {useAuth} from '@workspace/lib/auth';
-import {createDraftEmail} from '@workspace/lib/mail';
-import type {EmailDraft as EmailDraftType} from '@workspace/lib/types/mail';
-import {ContactAutosuggest, Toolbar, TooltipButton} from '@workspace/ui';
-import {Button} from '@workspace/ui/components/button';
+import { useAuth } from '@workspace/lib/auth';
+import { createDraftEmail } from '@workspace/lib/mail';
+import type { EmailDraft as EmailDraftType } from '@workspace/lib/types/mail';
+import { ContactAutosuggest, Toolbar, TooltipButton } from '@workspace/ui';
+import { Button } from '@workspace/ui/components/button';
 import {
     Dialog,
     DialogContent,
@@ -11,11 +11,11 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@workspace/ui/components/dialog';
-import {Input} from '@workspace/ui/components/input';
-import {ConfirmDialog} from '@workspace/ui/components/layout/delete/confirm-dialog';
-import {Textarea} from '@workspace/ui/components/textarea';
-import {Send, Trash2} from 'lucide-react';
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import { Input } from '@workspace/ui/components/input';
+import { ConfirmDialog } from '@workspace/ui/components/layout/delete/confirm-dialog';
+import { Textarea } from '@workspace/ui/components/textarea';
+import { Send, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 export function getEmailDraftStatus(draft: EmailDraftType) {
     // Check if draft is sendable (to field is not empty)
@@ -30,22 +30,22 @@ export function getEmailDraftStatus(draft: EmailDraftType) {
         (draft.text && draft.text.trim() !== '')
     );
 
-    return {isSendable, isSaveable};
+    return { isSendable, isSaveable };
 }
 
 export function EmailDraftToolbar({
-                                      onDelete,
-                                      isSending,
-                                      hasId,
-                                  }: {
+    onDelete,
+    isSending,
+    hasId,
+}: {
     onDelete: () => void;
     isSending: boolean;
     hasId: boolean;
 }) {
     return (
         <Toolbar>
-            <TooltipButton icon={Send} tooltipText="Send" type="submit" form="draft-form" disabled={isSending}/>
-            {hasId && <TooltipButton icon={Trash2} tooltipText="Delete" onClick={onDelete} disabled={isSending}/>}
+            <TooltipButton icon={Send} tooltipText="Send" type="submit" form="draft-form" disabled={isSending} />
+            {hasId && <TooltipButton icon={Trash2} tooltipText="Delete" onClick={onDelete} disabled={isSending} />}
         </Toolbar>
     );
 }
@@ -58,7 +58,7 @@ type EmailDraftProps = {
     onAutoSave?: (mail: EmailDraftType) => Promise<unknown>;
 };
 
-export function EmailDraft({email, to, onDelete: _onDelete, sendDraft, onAutoSave}: EmailDraftProps) {
+export function EmailDraft({ email, to, onDelete: _onDelete, sendDraft, onAutoSave }: EmailDraftProps) {
     // Create refs for the input fields
     const toFieldRef = useRef<HTMLInputElement>(null);
     const subjectFieldRef = useRef<HTMLInputElement>(null);
@@ -76,11 +76,11 @@ export function EmailDraft({email, to, onDelete: _onDelete, sendDraft, onAutoSav
         return {
             ...d,
             from: {
-                value: [{name: auth.user!.name || '', address: auth.user!.email || ''}],
+                value: [{ name: auth.user!.name || '', address: auth.user!.email || '' }],
                 html: '',
                 text: '',
             },
-            ...(to ? {to: {value: [{name: '', address: to}], html: to, text: to}} : {}),
+            ...(to ? { to: { value: [{ name: '', address: to }], html: to, text: to } } : {}),
         };
     }, [email, to, auth.user]);
 
@@ -131,24 +131,24 @@ export function EmailDraft({email, to, onDelete: _onDelete, sendDraft, onAutoSav
             ...draft,
             to: toFieldRef.current?.value
                 ? {
-                    value: convertStringToEmailAddressArray(toFieldRef.current?.value || ''),
-                    text: toFieldRef.current?.value || '',
-                    html: toFieldRef.current?.value || '',
-                }
+                      value: convertStringToEmailAddressArray(toFieldRef.current?.value || ''),
+                      text: toFieldRef.current?.value || '',
+                      html: toFieldRef.current?.value || '',
+                  }
                 : undefined,
             cc: ccFieldRef.current?.value
                 ? {
-                    value: convertStringToEmailAddressArray(ccFieldRef.current?.value || ''),
-                    text: ccFieldRef.current?.value || '',
-                    html: ccFieldRef.current?.value || '',
-                }
+                      value: convertStringToEmailAddressArray(ccFieldRef.current?.value || ''),
+                      text: ccFieldRef.current?.value || '',
+                      html: ccFieldRef.current?.value || '',
+                  }
                 : undefined,
             bcc: bccFieldRef.current?.value
                 ? {
-                    value: convertStringToEmailAddressArray(bccFieldRef.current?.value || ''),
-                    text: bccFieldRef.current?.value || '',
-                    html: bccFieldRef.current?.value || '',
-                }
+                      value: convertStringToEmailAddressArray(bccFieldRef.current?.value || ''),
+                      text: bccFieldRef.current?.value || '',
+                      html: bccFieldRef.current?.value || '',
+                  }
                 : undefined,
             subject: subjectFieldRef.current?.value || '',
             text: textareaRef.current?.value || '',
@@ -161,8 +161,7 @@ export function EmailDraft({email, to, onDelete: _onDelete, sendDraft, onAutoSav
     useEffect(() => {
         if (!email?.id) return;
         return () => {
-            onAutoSaveRef.current?.(getCurrentDraft()).catch(() => {
-            });
+            onAutoSaveRef.current?.(getCurrentDraft()).catch(() => {});
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps -- save on unmount only
     }, [email?.id]);

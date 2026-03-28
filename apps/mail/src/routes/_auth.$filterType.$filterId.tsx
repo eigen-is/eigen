@@ -1,15 +1,15 @@
-import {createFileRoute} from '@tanstack/react-router';
-import {useEmail, useEmails, useMailboxes} from '@workspace/lib/mail';
-import type {Email, EmailDraft as EmailDraftType} from '@workspace/lib/types/mail';
-import {EmptyState} from '@workspace/ui';
-import {Column, ColumnLayout} from '@workspace/ui/components/layout/app/column-layout.tsx';
-import {useLayout} from '@workspace/ui/components/layout/app/layout-context.tsx';
-import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
-import {useEffect, useState} from 'react';
-import {EmailDetail, EmailDetailToolbar} from '../components/mail/email-detail';
-import {EmailDraft, EmailDraftToolbar} from '../components/mail/email-draft';
-import {EmailList, EmailListToolbar} from '../components/mail/email-list';
-import {useMailActions} from '../components/mail/hooks/use-mail-actions';
+import { createFileRoute } from '@tanstack/react-router';
+import { useEmail, useEmails, useMailboxes } from '@workspace/lib/mail';
+import type { Email, EmailDraft as EmailDraftType } from '@workspace/lib/types/mail';
+import { EmptyState } from '@workspace/ui';
+import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
+import { useLayout } from '@workspace/ui/components/layout/app/layout-context.tsx';
+import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
+import { useEffect, useState } from 'react';
+import { EmailDetail, EmailDetailToolbar } from '../components/mail/email-detail';
+import { EmailDraft, EmailDraftToolbar } from '../components/mail/email-draft';
+import { EmailList, EmailListToolbar } from '../components/mail/email-list';
+import { useMailActions } from '../components/mail/hooks/use-mail-actions';
 
 export type MailSearchParams = {
     mailId?: string;
@@ -24,28 +24,28 @@ export const Route = createFileRoute('/_auth/$filterType/$filterId')({
         const to = typeof search.to === 'string' ? search.to.toLowerCase() : undefined;
         const mode = !mailId && typeof search.mode === 'string' ? search.mode : undefined;
 
-        return {mailId, mode, to} as MailSearchParams;
+        return { mailId, mode, to } as MailSearchParams;
     },
 });
 
 function MailRoute() {
-    const {filterId} = Route.useParams();
-    const {mailId, mode, to} = Route.useSearch();
-    const {isTablet} = useLayout();
+    const { filterId } = Route.useParams();
+    const { mailId, mode, to } = Route.useSearch();
+    const { isTablet } = useLayout();
 
     const [searchQuery, setSearchQuery] = useState('');
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [pendingDeleteEmails, setPendingDeleteEmails] = useState<Email[]>([]);
 
-    const {data: emails = [], isLoading: isEmailsLoading, error: emailsError} = useEmails(filterId);
-    const {data: selectedEmail = null} = useEmail(mailId);
-    const {data: mailboxes = []} = useMailboxes();
+    const { data: emails = [], isLoading: isEmailsLoading, error: emailsError } = useEmails(filterId);
+    const { data: selectedEmail = null } = useEmail(mailId);
+    const { data: mailboxes = [] } = useMailboxes();
 
     const actions = useMailActions();
 
     const selectedEmailInData = emails.find((m) => m.id === selectedEmail?.id);
     const displayEmails = selectedEmailInData
-        ? emails.map((m) => (m.id === selectedEmail?.id ? {...m, isRead: true} : m))
+        ? emails.map((m) => (m.id === selectedEmail?.id ? { ...m, isRead: true } : m))
         : emails;
 
     const handleDeleteEmail = async (mail: Email) => {
@@ -82,7 +82,7 @@ function MailRoute() {
     const showDetail = !!(selectedEmail || mode === 'compose');
     const isDraft = mode === 'compose' || selectedEmail?.isDraft;
 
-    const listToolbar = <EmailListToolbar searchQuery={searchQuery} onSearchChange={setSearchQuery}/>;
+    const listToolbar = <EmailListToolbar searchQuery={searchQuery} onSearchChange={setSearchQuery} />;
 
     const detailToolbar = isDraft ? (
         <EmailDraftToolbar
@@ -160,10 +160,10 @@ function MailRoute() {
                                 to={to}
                             />
                         ) : (
-                            <EmailDetail email={selectedEmail} toggleMailRead={actions.handleToggleMailRead}/>
+                            <EmailDetail email={selectedEmail} toggleMailRead={actions.handleToggleMailRead} />
                         )
                     ) : (
-                        <EmptyState message="Select an email to view details"/>
+                        <EmptyState message="Select an email to view details" />
                     )}
                 </Column>
             </ColumnLayout>

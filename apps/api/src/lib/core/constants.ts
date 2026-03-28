@@ -1,4 +1,4 @@
-import {EIGEN_ACCENT_COLORS_SHUFFLED} from '@workspace/lib/constants';
+import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants';
 
 export const PATHS = {
     DRIVE: {
@@ -33,8 +33,8 @@ export const PATHS = {
 export const STANDARD_MAILBOXES = ['', 'Sent', 'Drafts', 'Trash', 'Junk', 'Archive'] as const;
 
 export const DEFAULT_LABELS = [
-    {name: 'Family', color: EIGEN_ACCENT_COLORS_SHUFFLED[0].value},
-    {name: 'Friends', color: EIGEN_ACCENT_COLORS_SHUFFLED[1].value},
-    {name: 'Work', color: EIGEN_ACCENT_COLORS_SHUFFLED[2].value},
-    {name: 'Important', color: EIGEN_ACCENT_COLORS_SHUFFLED[3].value},
+    { name: 'Family', color: EIGEN_ACCENT_COLORS_SHUFFLED[0].value },
+    { name: 'Friends', color: EIGEN_ACCENT_COLORS_SHUFFLED[1].value },
+    { name: 'Work', color: EIGEN_ACCENT_COLORS_SHUFFLED[2].value },
+    { name: 'Important', color: EIGEN_ACCENT_COLORS_SHUFFLED[3].value },
 ] as const;

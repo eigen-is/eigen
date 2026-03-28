@@ -1,19 +1,19 @@
-import {createFileRoute} from '@tanstack/react-router';
-import {useCollabDocumentInfo} from '@workspace/lib/collab';
-import {AccessDenied, LoadingState} from '@workspace/ui';
-import {useLayout} from '@workspace/ui/components/layout/app/layout-context';
-import {DriveAccessDialog} from '@workspace/ui/components/layout/drive/drive-access-dialog';
-import {useCallback, useEffect, useMemo, useState} from 'react';
-import {StickiesBoard} from '../components/stickies/board';
+import { createFileRoute } from '@tanstack/react-router';
+import { useCollabDocumentInfo } from '@workspace/lib/collab';
+import { AccessDenied, LoadingState } from '@workspace/ui';
+import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
+import { DriveAccessDialog } from '@workspace/ui/components/layout/drive/drive-access-dialog';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { StickiesBoard } from '../components/stickies/board';
 
 export const Route = createFileRoute('/_auth/board/$ownerId/$mountId/$pathId')({
     component: StickiesRoute,
 });
 
 function StickiesRoute() {
-    const {ownerId, mountId, pathId} = Route.useParams();
-    const {data: docInfo, isLoading} = useCollabDocumentInfo(ownerId, mountId, pathId);
-    const {setDocumentTitle} = useLayout();
+    const { ownerId, mountId, pathId } = Route.useParams();
+    const { data: docInfo, isLoading } = useCollabDocumentInfo(ownerId, mountId, pathId);
+    const { setDocumentTitle } = useLayout();
     const [accessDialogOpen, setAccessDialogOpen] = useState(false);
 
     useEffect(() => {
@@ -30,9 +30,9 @@ function StickiesRoute() {
         return docInfo?.folderContents?.find((item) => item.name === 'chat')?.id ?? null;
     }, [docInfo?.folderContents]);
 
-    if (isLoading) return <LoadingState/>;
+    if (isLoading) return <LoadingState />;
     if (!docInfo?.canRead || !docInfo.path) {
-        return <AccessDenied/>;
+        return <AccessDenied />;
     }
 
     return (
@@ -44,7 +44,7 @@ function StickiesRoute() {
                 chatFolderId={chatFolderId}
                 onAccessDialogOpen={handleAccessDialogOpen}
             />
-            <DriveAccessDialog open={accessDialogOpen} onOpenChange={setAccessDialogOpen} path={docInfo.path}/>
+            <DriveAccessDialog open={accessDialogOpen} onOpenChange={setAccessDialogOpen} path={docInfo.path} />
         </>
     );
 }

@@ -1,6 +1,6 @@
-import {EIGEN_ACCENT_COLOR_ROW, EIGEN_COLORS, type EigenColor} from '@workspace/lib/constants';
-import {cn} from '@workspace/ui/lib/utils';
-import {Check, RotateCcw} from 'lucide-react';
+import { EIGEN_ACCENT_COLOR_ROW, EIGEN_COLORS, type EigenColor } from '@workspace/lib/constants';
+import { cn } from '@workspace/ui/lib/utils';
+import { Check, RotateCcw } from 'lucide-react';
 
 type ColorPickerProps = {
     value: string;
@@ -17,7 +17,7 @@ const DEFAULT_COLORS = [EIGEN_ACCENT_COLOR_ROW, 0, 1, 2, 4, 6, 8, 10].map((ri) =
 );
 const DEFAULT_COLUMNS = DEFAULT_COLORS[0].length;
 DEFAULT_COLORS.unshift(
-    Array.from({length: DEFAULT_COLUMNS}, (_, i) => i).map((i) => {
+    Array.from({ length: DEFAULT_COLUMNS }, (_, i) => i).map((i) => {
         const b = ((Math.sqrt(i / (DEFAULT_COLUMNS - 1)) * 255) | 0).toString(16).padStart(2, '0');
         return {
             label: 'test',
@@ -27,14 +27,14 @@ DEFAULT_COLORS.unshift(
 );
 
 export function ColorPicker({
-                                value,
-                                onChange,
-                                colors = DEFAULT_COLORS,
-                                columns = DEFAULT_COLUMNS,
-                                resetLabel = 'Reset',
-                                showReset = true,
-                                preventFocusLoss,
-                            }: ColorPickerProps) {
+    value,
+    onChange,
+    colors = DEFAULT_COLORS,
+    columns = DEFAULT_COLUMNS,
+    resetLabel = 'Reset',
+    showReset = true,
+    preventFocusLoss,
+}: ColorPickerProps) {
     const normalizedValue = value.toLowerCase();
 
     const handleClick = (color: string, e: React.MouseEvent) => {
@@ -54,12 +54,12 @@ export function ColorPicker({
                     onClick={(e) => handleClick('', e)}
                     onMouseDown={stopFocus}
                 >
-                    <RotateCcw className="h-4 w-4"/>
+                    <RotateCcw className="h-4 w-4" />
                     <span>{resetLabel}</span>
                 </button>
             )}
             {colors.map((row, rowIdx) => (
-                <div key={rowIdx} className={`grid gap-1`} style={{gridTemplateColumns: `repeat(${columns}, 1fr)`}}>
+                <div key={rowIdx} className={`grid gap-1`} style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}>
                     {row.map((color) => (
                         <button
                             key={color.value}
@@ -69,14 +69,14 @@ export function ColorPicker({
                                 'h-4 w-4 rounded-full border border-border/50 transition-transform hover:scale-125 flex items-center justify-center',
                                 normalizedValue === color.value.toLowerCase() && 'ring-2 ring-ring ring-offset-1',
                             )}
-                            style={{backgroundColor: color.value}}
+                            style={{ backgroundColor: color.value }}
                             onClick={(e) => handleClick(color.value, e)}
                             onMouseDown={stopFocus}
                         >
                             {normalizedValue === color.value.toLowerCase() && (
                                 <Check
                                     className="h-2 w-2"
-                                    style={{color: isLightColor(color.value) ? '#000' : '#fff'}}
+                                    style={{ color: isLightColor(color.value) ? '#000' : '#fff' }}
                                 />
                             )}
                         </button>
@@ -95,5 +95,5 @@ function isLightColor(hex: string): boolean {
     return luminance > 0.5;
 }
 
-export type {ColorPickerProps};
-export {DEFAULT_COLORS, isLightColor};
+export type { ColorPickerProps };
+export { DEFAULT_COLORS, isLightColor };

@@ -61,6 +61,8 @@
     "@tailwindcss/vite": "^4.2.1",
     "@tanstack/react-router-devtools": "^1.163.2",
     "@tanstack/router-plugin": "^1.163.2",
+    "@types/he": "^1.2.3",
+    "@types/linkify-it": "^5.0.0",
     "@types/node": "^20.19.35",
     "@types/react": "^19.2.3",
     "@types/react-dom": "^19.2.3",

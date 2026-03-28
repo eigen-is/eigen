@@ -1,19 +1,19 @@
-import {createFileRoute} from '@tanstack/react-router';
-import {useCollabDocumentInfo} from '@workspace/lib/collab';
-import {AccessDenied, LoadingState} from '@workspace/ui';
-import {useLayout} from '@workspace/ui/components/layout/app/layout-context';
-import {DriveAccessDialog} from '@workspace/ui/components/layout/drive/drive-access-dialog';
-import {useCallback, useEffect, useMemo, useState} from 'react';
-import {SlideEditor} from '../components/slides/editor';
+import { createFileRoute } from '@tanstack/react-router';
+import { useCollabDocumentInfo } from '@workspace/lib/collab';
+import { AccessDenied, LoadingState } from '@workspace/ui';
+import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
+import { DriveAccessDialog } from '@workspace/ui/components/layout/drive/drive-access-dialog';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { SlideEditor } from '../components/slides/editor';
 
 export const Route = createFileRoute('/_auth/slide/$ownerId/$mountId/$pathId')({
     component: SlideView,
 });
 
 function SlideView() {
-    const {ownerId, mountId, pathId} = Route.useParams();
-    const {data: docInfo, isLoading} = useCollabDocumentInfo(ownerId, mountId, pathId);
-    const {setDocumentTitle} = useLayout();
+    const { ownerId, mountId, pathId } = Route.useParams();
+    const { data: docInfo, isLoading } = useCollabDocumentInfo(ownerId, mountId, pathId);
+    const { setDocumentTitle } = useLayout();
     const [accessDialogOpen, setAccessDialogOpen] = useState(false);
 
     useEffect(() => {
@@ -26,9 +26,9 @@ function SlideView() {
         () =>
             docInfo?.path
                 ? {
-                    ...docInfo.path,
-                    mountId,
-                }
+                      ...docInfo.path,
+                      mountId,
+                  }
                 : null,
         [docInfo?.path, mountId],
     );
@@ -38,8 +38,8 @@ function SlideView() {
 
     const handleAccessDialogOpen = useCallback(() => setAccessDialogOpen(true), []);
 
-    if (isLoading) return <LoadingState/>;
-    if (!path) return <AccessDenied/>;
+    if (isLoading) return <LoadingState />;
+    if (!path) return <AccessDenied />;
 
     return (
         <>
@@ -50,7 +50,7 @@ function SlideView() {
                 mediaFolderId={mediaFolderId}
                 onAccessDialogOpen={handleAccessDialogOpen}
             />
-            <DriveAccessDialog path={path} open={accessDialogOpen} onOpenChange={setAccessDialogOpen}/>
+            <DriveAccessDialog path={path} open={accessDialogOpen} onOpenChange={setAccessDialogOpen} />
         </>
     );
 }

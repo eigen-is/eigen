@@ -1,7 +1,7 @@
-import {getDriveFileUploadUrl} from '@workspace/lib/api';
-import {useRef} from 'react';
-import {useUpload} from '../../layout/upload-provider/upload-provider';
-import {uploadWithProgress} from '../upload-provider/upload-with-progress';
+import { getDriveFileUploadUrl } from '@workspace/lib/api';
+import { useRef } from 'react';
+import { useUpload } from '../../layout/upload-provider/upload-provider';
+import { uploadWithProgress } from '../upload-provider/upload-with-progress';
 
 export type UploadResult = {
     success: boolean;
@@ -59,7 +59,7 @@ export function useFileUpload(ownerId: string, mountId: string, folderId: string
                     // Mark upload as complete
                     uploadHandler.complete();
 
-                    const result = {success: true, fileName: name};
+                    const result = { success: true, fileName: name };
 
                     // Call custom onSuccess callback if provided
                     if (options.onSuccess) {
@@ -72,7 +72,7 @@ export function useFileUpload(ownerId: string, mountId: string, folderId: string
                     // Mark upload as failed
                     uploadHandler.error();
 
-                    const result = {success: false, fileName: name, error: err};
+                    const result = { success: false, fileName: name, error: err };
 
                     // Call custom onError callback if provided
                     if (options.onError) {
@@ -85,7 +85,7 @@ export function useFileUpload(ownerId: string, mountId: string, folderId: string
         } catch (err: unknown) {
             uploadHandler.error();
 
-            const result = {success: false, fileName: name, error: err};
+            const result = { success: false, fileName: name, error: err };
 
             // Call custom onError callback if provided
             if (options.onError) {

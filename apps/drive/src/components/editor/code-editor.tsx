@@ -1,18 +1,18 @@
-import {defaultKeymap, history, historyKeymap, redo, undo} from '@codemirror/commands';
-import {css} from '@codemirror/lang-css';
-import {html} from '@codemirror/lang-html';
-import {javascript} from '@codemirror/lang-javascript';
-import {json} from '@codemirror/lang-json';
-import {markdown as markdownLang} from '@codemirror/lang-markdown';
-import {php} from '@codemirror/lang-php';
-import {python} from '@codemirror/lang-python';
-import {rust} from '@codemirror/lang-rust';
-import {sql} from '@codemirror/lang-sql';
-import {xml} from '@codemirror/lang-xml';
-import {yaml} from '@codemirror/lang-yaml';
-import {bracketMatching, defaultHighlightStyle, syntaxHighlighting} from '@codemirror/language';
-import {EditorState} from '@codemirror/state';
-import {oneDark} from '@codemirror/theme-one-dark';
+import { defaultKeymap, history, historyKeymap, redo, undo } from '@codemirror/commands';
+import { css } from '@codemirror/lang-css';
+import { html } from '@codemirror/lang-html';
+import { javascript } from '@codemirror/lang-javascript';
+import { json } from '@codemirror/lang-json';
+import { markdown as markdownLang } from '@codemirror/lang-markdown';
+import { php } from '@codemirror/lang-php';
+import { python } from '@codemirror/lang-python';
+import { rust } from '@codemirror/lang-rust';
+import { sql } from '@codemirror/lang-sql';
+import { xml } from '@codemirror/lang-xml';
+import { yaml } from '@codemirror/lang-yaml';
+import { bracketMatching, defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language';
+import { EditorState } from '@codemirror/state';
+import { oneDark } from '@codemirror/theme-one-dark';
 import {
     drawSelection,
     EditorView,
@@ -21,13 +21,13 @@ import {
     keymap,
     lineNumbers,
 } from '@codemirror/view';
-import {TooltipButton} from '@workspace/ui';
-import {Column} from '@workspace/ui/components/layout/app/column-layout';
-import {Redo, Undo} from 'lucide-react';
-import {forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState} from 'react';
-import {ConflictDialog} from './conflict-dialog';
-import {EditToolbar} from './editor-toolbar';
-import {useEditorSave} from './use-editor-save';
+import { TooltipButton } from '@workspace/ui';
+import { Column } from '@workspace/ui/components/layout/app/column-layout';
+import { Redo, Undo } from 'lucide-react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { ConflictDialog } from './conflict-dialog';
+import { EditToolbar } from './editor-toolbar';
+import { useEditorSave } from './use-editor-save';
 
 function getLanguageExtension(language: string | null) {
     switch (language) {
@@ -46,11 +46,11 @@ function getLanguageExtension(language: string | null) {
         case 'javascript':
             return javascript();
         case 'typescript':
-            return javascript({typescript: true});
+            return javascript({ typescript: true });
         case 'jsx':
-            return javascript({jsx: true});
+            return javascript({ jsx: true });
         case 'tsx':
-            return javascript({jsx: true, typescript: true});
+            return javascript({ jsx: true, typescript: true });
         case 'python':
             return python();
         case 'rust':
@@ -118,7 +118,7 @@ function useDarkMode(): boolean {
         const observer = new MutationObserver(() => {
             setDark(document.documentElement.classList.contains('dark'));
         });
-        observer.observe(document.documentElement, {attributes: true, attributeFilter: ['class']});
+        observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
         return () => observer.disconnect();
     }, []);
     return dark;
@@ -128,10 +128,10 @@ function cmThemeExtensions(isDark: boolean) {
     return [
         EditorView.lineWrapping,
         EditorView.theme({
-            '&': {height: '100%'},
-            '.cm-scroller': {overflow: 'auto'},
-            '.cm-content': {padding: '16px 0', fontFamily: 'var(--font-mono)'},
-            '.cm-gutters': {paddingRight: '8px', fontFamily: 'var(--font-mono)'},
+            '&': { height: '100%' },
+            '.cm-scroller': { overflow: 'auto' },
+            '.cm-content': { padding: '16px 0', fontFamily: 'var(--font-mono)' },
+            '.cm-gutters': { paddingRight: '8px', fontFamily: 'var(--font-mono)' },
         }),
         ...(isDark ? [oneDark] : []),
     ];
@@ -145,7 +145,7 @@ function cmBaseExtensions(language: string | null, isDark: boolean) {
         drawSelection(),
         bracketMatching(),
         history(),
-        syntaxHighlighting(defaultHighlightStyle, {fallback: true}),
+        syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
         keymap.of([...defaultKeymap, ...historyKeymap]),
         getLanguageExtension(language),
         ...cmThemeExtensions(isDark),
@@ -165,7 +165,7 @@ export const CodeEditorView = forwardRef<
         language: string | null;
         onChange?: (value: string) => void;
     }
->(function CodeEditorView({content, language, onChange}, ref) {
+>(function CodeEditorView({ content, language, onChange }, ref) {
     const containerRef = useRef<HTMLDivElement>(null);
     const viewRef = useRef<EditorView | null>(null);
     const isDark = useDarkMode();
@@ -185,13 +185,13 @@ export const CodeEditorView = forwardRef<
                 }),
             );
         }
-        const state = EditorState.create({doc: content, extensions});
-        const view = new EditorView({state, parent: containerRef.current});
+        const state = EditorState.create({ doc: content, extensions });
+        const view = new EditorView({ state, parent: containerRef.current });
         viewRef.current = view;
         return () => view.destroy();
     }, [isDark]);
 
-    return <div ref={containerRef} className="h-full overflow-hidden"/>;
+    return <div ref={containerRef} className="h-full overflow-hidden" />;
 });
 
 // Full standalone code editor
@@ -209,24 +209,24 @@ type CodeEditorProps = {
 };
 
 export function CodeEditor({
-                               content,
-                               updatedAt,
-                               ownerId,
-                               mountId,
-                               pathId,
-                               fileName,
-                               onBack,
-                               onCancel,
-                               onSaved,
-                               onReload,
-                           }: CodeEditorProps) {
+    content,
+    updatedAt,
+    ownerId,
+    mountId,
+    pathId,
+    fileName,
+    onBack,
+    onCancel,
+    onSaved,
+    onReload,
+}: CodeEditorProps) {
     const contentRef = useRef(content);
     const editorViewRef = useRef<CodeEditorViewHandle>(null);
     const language = getLanguageFromName(fileName);
 
     const getContent = useCallback(() => contentRef.current, []);
 
-    const {saveState, showConflict, setShowConflict, markDirty, doSave, confirmClose} = useEditorSave({
+    const { saveState, showConflict, setShowConflict, markDirty, doSave, confirmClose } = useEditorSave({
         ownerId,
         mountId,
         pathId,
@@ -243,7 +243,7 @@ export function CodeEditor({
     );
 
     const handleDownload = () => {
-        const blob = new Blob([contentRef.current], {type: 'text/plain'});
+        const blob = new Blob([contentRef.current], { type: 'text/plain' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
         a.download = fileName;
@@ -265,15 +265,15 @@ export function CodeEditor({
             onSave={handleSave}
             isSaving={saveState === 'saving'}
         >
-            <TooltipButton icon={Undo} tooltipText="Undo" onClick={() => editorViewRef.current?.undo()}/>
-            <TooltipButton icon={Redo} tooltipText="Redo" onClick={() => editorViewRef.current?.redo()}/>
+            <TooltipButton icon={Undo} tooltipText="Undo" onClick={() => editorViewRef.current?.undo()} />
+            <TooltipButton icon={Redo} tooltipText="Redo" onClick={() => editorViewRef.current?.redo()} />
         </EditToolbar>
     );
 
     return (
         <Column id="list" width="flex" toolbar={toolbar}>
             <div className="h-full overflow-hidden">
-                <CodeEditorView ref={editorViewRef} content={content} language={language} onChange={handleChange}/>
+                <CodeEditorView ref={editorViewRef} content={content} language={language} onChange={handleChange} />
             </div>
             <ConflictDialog
                 open={showConflict}

@@ -1,10 +1,10 @@
-import {createFileRoute, Link, useParams} from '@tanstack/react-router';
-import {BlogPost} from '../components/BlogPost';
-import {getBlogPost} from '../data/blog-posts';
+import { createFileRoute, Link, useParams } from '@tanstack/react-router';
+import { BlogPost } from '../components/BlogPost';
+import { getBlogPost } from '../data/blog-posts';
 
 export const Route = createFileRoute('/blog/$id')({
     component: BlogPostComponent,
-    head: ({params}) => {
+    head: ({ params }) => {
         const post = getBlogPost(params.id);
 
         if (!post) {
@@ -54,7 +54,7 @@ export const Route = createFileRoute('/blog/$id')({
 });
 
 function BlogPostComponent() {
-    const {id} = useParams({from: '/blog/$id'});
+    const { id } = useParams({ from: '/blog/$id' });
     const post = getBlogPost(id);
 
     if (!post) {
@@ -82,7 +82,7 @@ function BlogPostComponent() {
                     </Link>
                 </div>
 
-                <BlogPost post={post}/>
+                <BlogPost post={post} />
             </div>
         </div>
     );

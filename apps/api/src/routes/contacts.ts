@@ -1,8 +1,8 @@
-import {Elysia, t} from 'elysia';
-import {enforceAvatarUpload} from '../lib/config/enforcement';
-import {getContacts} from '../lib/contacts/contacts';
-import {requireSelf} from '../lib/core/access';
-import {betterAuth} from './auth';
+import { Elysia, t } from 'elysia';
+import { enforceAvatarUpload } from '../lib/config/enforcement';
+import { getContacts } from '../lib/contacts/contacts';
+import { requireSelf } from '../lib/core/access';
+import { betterAuth } from './auth';
 
 const AddressSchema = t.Object({
     street: t.Optional(t.String()),
@@ -35,27 +35,27 @@ const LabelSchema = t.Object({
 });
 
 // All contacts routes require ownerId === user.id (contacts are personal-only, no shared access)
-export const contactsRouter = new Elysia({name: 'contacts'})
+export const contactsRouter = new Elysia({ name: 'contacts' })
     .use(betterAuth)
     .get(
         '/contacts/:ownerId/contacts',
-        async ({params, user}) => {
+        async ({ params, user }) => {
             requireSelf(params.ownerId, user.id);
             return await (await getContacts(user)).getContacts();
         },
-        {auth: true},
+        { auth: true },
     )
     .get(
         '/contacts/:ownerId/contacts/:id',
-        async ({params, user}) => {
+        async ({ params, user }) => {
             requireSelf(params.ownerId, user.id);
             return await (await getContacts(user)).getContactById(params.id);
         },
-        {auth: true},
+        { auth: true },
     )
     .post(
         '/contacts/:ownerId/contacts',
-        async ({params, body, user}) => {
+        async ({ params, body, user }) => {
             requireSelf(params.ownerId, user.id);
             return await (await getContacts(user)).addContact(body);
         },
@@ -66,7 +66,7 @@ export const contactsRouter = new Elysia({name: 'contacts'})
     )
     .put(
         '/contacts/:ownerId/contacts/:id',
-        async ({params, body, user}) => {
+        async ({ params, body, user }) => {
             requireSelf(params.ownerId, user.id);
             return await (await getContacts(user)).updateContact(params.id, body);
         },
@@ -77,23 +77,23 @@ export const contactsRouter = new Elysia({name: 'contacts'})
     )
     .delete(
         '/contacts/:ownerId/contacts/:id',
-        async ({params, user}) => {
+        async ({ params, user }) => {
             requireSelf(params.ownerId, user.id);
             return await (await getContacts(user)).deleteContact(params.id);
         },
-        {auth: true},
+        { auth: true },
     )
     .get(
         '/contacts/:ownerId/labels',
-        async ({params, user}) => {
+        async ({ params, user }) => {
             requireSelf(params.ownerId, user.id);
             return await (await getContacts(user)).getLabels();
         },
-        {auth: true},
+        { auth: true },
     )
     .post(
         '/contacts/:ownerId/labels',
-        async ({params, body, user}) => {
+        async ({ params, body, user }) => {
             requireSelf(params.ownerId, user.id);
             return await (await getContacts(user)).addLabel(body);
         },
@@ -104,7 +104,7 @@ export const contactsRouter = new Elysia({name: 'contacts'})
     )
     .put(
         '/contacts/:ownerId/labels/:id',
-        async ({params, body, user}) => {
+        async ({ params, body, user }) => {
             requireSelf(params.ownerId, user.id);
             return await (await getContacts(user)).updateLabel(params.id, body);
         },
@@ -115,29 +115,29 @@ export const contactsRouter = new Elysia({name: 'contacts'})
     )
     .delete(
         '/contacts/:ownerId/labels/:id',
-        async ({params, user}) => {
+        async ({ params, user }) => {
             requireSelf(params.ownerId, user.id);
             return await (await getContacts(user)).deleteLabel(params.id);
         },
-        {auth: true},
+        { auth: true },
     )
     .post(
         '/contacts/:ownerId/avatar',
-        async ({params, body, user}) => {
+        async ({ params, body, user }) => {
             requireSelf(params.ownerId, user.id);
             await enforceAvatarUpload(user.id, body.file.size);
             return await (await getContacts(user)).uploadAvatar(body.file);
         },
         {
             body: t.Object({
-                file: t.File({format: 'image/*'}),
+                file: t.File({ format: 'image/*' }),
             }),
             auth: true,
         },
     )
     .get(
         '/contacts/:ownerId/avatar/:filename',
-        async ({params, user, set}) => {
+        async ({ params, user, set }) => {
             requireSelf(params.ownerId, user.id);
             try {
                 const data = await (await getContacts(user)).downloadAvatar(params.filename);
@@ -150,13 +150,13 @@ export const contactsRouter = new Elysia({name: 'contacts'})
                 return null;
             }
         },
-        {auth: true},
+        { auth: true },
     )
     .get(
         '/contacts/:ownerId/me',
-        async ({params, user}) => {
+        async ({ params, user }) => {
             requireSelf(params.ownerId, user.id);
             return await (await getContacts(user)).getMe();
         },
-        {auth: true},
+        { auth: true },
     );

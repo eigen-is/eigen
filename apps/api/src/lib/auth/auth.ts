@@ -1,9 +1,9 @@
-import {apiKey} from '@better-auth/api-key';
-import {betterAuth} from 'better-auth';
-import {drizzleAdapter} from 'better-auth/adapters/drizzle';
-import {admin, organization, twoFactor} from 'better-auth/plugins';
-import type {User} from 'better-auth/types';
-import {drizzle} from 'drizzle-orm/bun-sqlite';
+import { apiKey } from '@better-auth/api-key';
+import { betterAuth } from 'better-auth';
+import { drizzleAdapter } from 'better-auth/adapters/drizzle';
+import { admin, organization, twoFactor } from 'better-auth/plugins';
+import type { User } from 'better-auth/types';
+import { drizzle } from 'drizzle-orm/bun-sqlite';
 import {
     account as accountScheme,
     apikey as apikeyScheme,
@@ -17,11 +17,11 @@ import {
     user as userScheme,
     verification as verificationScheme,
 } from '../../../auth-schema.ts';
-import {getServerDataPath} from '../config/paths';
-import {getServerConfig} from '../config/server-config';
-import {ApiError} from '../core';
-import {sendMail} from '../core/mailer';
-import {reconcileSharesForNewTeamMember, reconcileSharesForNewUser} from '../share';
+import { getServerDataPath } from '../config/paths';
+import { getServerConfig } from '../config/server-config';
+import { ApiError } from '../core';
+import { sendMail } from '../core/mailer';
+import { reconcileSharesForNewTeamMember, reconcileSharesForNewUser } from '../share';
 
 export const trustedOrigins = [
     'http://localhost',
@@ -76,9 +76,9 @@ export const auth = betterAuth({
         twoFactor({
             issuer: 'eigen',
             otpOptions: {
-                async sendOTP({user, otp}) {
+                async sendOTP({ user, otp }) {
                     const ok = await sendMail({
-                        to: [{name: user.name, address: user.email}],
+                        to: [{ name: user.name, address: user.email }],
                         subject: 'Your verification code',
                         text: `Your verification code is: ${otp}\n\nThis code expires in 5 minutes.`,
                     });
@@ -92,7 +92,7 @@ export const auth = betterAuth({
                 enabled: true,
             },
             organizationHooks: {
-                afterAddTeamMember: async ({teamMember}) => {
+                afterAddTeamMember: async ({ teamMember }) => {
                     await reconcileSharesForNewTeamMember(teamMember.userId, teamMember.teamId);
                 },
             },

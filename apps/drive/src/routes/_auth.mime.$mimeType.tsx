@@ -1,7 +1,7 @@
-import {createFileRoute, useNavigate} from '@tanstack/react-router';
-import {openDocument} from '@workspace/lib/api';
-import {useAuth} from '@workspace/lib/auth';
-import {DEFAULT_MOUNT_ID, useMimeContent, usePathInfo} from '@workspace/lib/drive';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { openDocument } from '@workspace/lib/api';
+import { useAuth } from '@workspace/lib/auth';
+import { DEFAULT_MOUNT_ID, useMimeContent, usePathInfo } from '@workspace/lib/drive';
 import {
     type DrivePath,
     type DriveSearchParams,
@@ -9,10 +9,10 @@ import {
     isFolderType,
     isInlineEditable,
 } from '@workspace/lib/types/drive';
-import {NotFound} from '@workspace/ui';
-import {useLayout} from '@workspace/ui/components/layout/app/layout-context.tsx';
-import {DriveLayout} from '@workspace/ui/components/layout/drive/drive-layout';
-import {usePreview} from '@workspace/ui/components/layout/preview-provider';
+import { NotFound } from '@workspace/ui';
+import { useLayout } from '@workspace/ui/components/layout/app/layout-context.tsx';
+import { DriveLayout } from '@workspace/ui/components/layout/drive/drive-layout';
+import { usePreview } from '@workspace/ui/components/layout/preview-provider';
 
 export const Route = createFileRoute('/_auth/mime/$mimeType')({
     component: DriveRoute,
@@ -20,19 +20,19 @@ export const Route = createFileRoute('/_auth/mime/$mimeType')({
         const pid = typeof search.pid === 'string' ? search.pid : undefined;
         const uid = typeof search.uid === 'string' ? search.uid : undefined;
         const mid = typeof search.mid === 'string' ? search.mid : undefined;
-        return {pid, uid, mid} as DriveSearchParams;
+        return { pid, uid, mid } as DriveSearchParams;
     },
 });
 
 function DriveRoute() {
-    const {mimeType} = Route.useParams();
+    const { mimeType } = Route.useParams();
     const navigate = useNavigate();
-    const {pid, uid, mid} = Route.useSearch();
+    const { pid, uid, mid } = Route.useSearch();
     const auth = useAuth();
     const ownerId = auth.user!.id;
-    const {data: selectedPath = null} = usePathInfo(uid || ownerId, mid || DEFAULT_MOUNT_ID, pid);
-    const {isMobile} = useLayout();
-    const {openPreview, updatePreview, isPreviewOpen} = usePreview();
+    const { data: selectedPath = null } = usePathInfo(uid || ownerId, mid || DEFAULT_MOUNT_ID, pid);
+    const { isMobile } = useLayout();
+    const { openPreview, updatePreview, isPreviewOpen } = usePreview();
 
     const {
         data: folderContents = [],
@@ -50,8 +50,8 @@ function DriveRoute() {
         } else {
             navigate({
                 to: Route.fullPath,
-                params: {mimeType},
-                search: {pid: path.id, uid: path.ownerId, mid: path.mountId},
+                params: { mimeType },
+                search: { pid: path.id, uid: path.ownerId, mid: path.mountId },
             });
         }
     };
@@ -62,13 +62,13 @@ function DriveRoute() {
 
     const onRowActivate = (path: DrivePath) => {
         if (path.type === 'folder') {
-            navigate({to: Route.fullPath, params: {mimeType}, search: {pid: undefined}});
+            navigate({ to: Route.fullPath, params: { mimeType }, search: { pid: undefined } });
         } else if (isDocumentType(path.type)) {
             openDocument(path);
         } else if (isInlineEditable(path.mimeType, path.name)) {
             navigate({
                 to: '/edit/$ownerId/$mountId/$pathId',
-                params: {ownerId: path.ownerId, mountId: path.mountId, pathId: path.id},
+                params: { ownerId: path.ownerId, mountId: path.mountId, pathId: path.id },
             });
         } else {
             openPreview(path);
@@ -76,11 +76,11 @@ function DriveRoute() {
     };
 
     const handleBackToList = () => {
-        navigate({to: Route.fullPath, params: {mimeType}});
+        navigate({ to: Route.fullPath, params: { mimeType } });
     };
 
     if (isFolderContentLoadingError) {
-        return <NotFound/>;
+        return <NotFound />;
     }
 
     return (
@@ -95,8 +95,7 @@ function DriveRoute() {
             onRowSelect={onRowSelect}
             onRowActivate={onRowActivate}
             onBackToList={handleBackToList}
-            onAfterAction={() => {
-            }}
+            onAfterAction={() => {}}
             allowDelete={true}
             allowShare={true}
             allowCreateFolder={false}

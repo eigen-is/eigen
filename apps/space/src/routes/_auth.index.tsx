@@ -1,6 +1,6 @@
-import {createFileRoute} from '@tanstack/react-router';
-import {apps} from '@workspace/lib/apps';
-import {Card, CardContent} from '@workspace/ui/components/card';
+import { createFileRoute } from '@tanstack/react-router';
+import { apps } from '@workspace/lib/apps';
+import { Card, CardContent } from '@workspace/ui/components/card';
 
 export const Route = createFileRoute('/_auth/')({
     component: HomeComponent,
@@ -17,7 +17,7 @@ function HomeComponent() {
                 <div className="text-md text-center mb-10">
                     <p className="mb-4">
                         Your personal workspace in the cloud.
-                        <br/>
+                        <br />
                         Simple and secure. You control your own data.
                     </p>
                 </div>
@@ -32,13 +32,13 @@ function HomeComponent() {
                                     <CardContent className="p-0">
                                         <a href={app.href || '#'} className="block p-3 md:p-6">
                                             <div className="flex items-center gap-2 md:gap-3">
-                                                <div className="p-2 rounded-md" style={{color: app.color}}>
-                                                    <Icon className="w-5 h-5 md:w-6 md:h-6"/>
+                                                <div className="p-2 rounded-md" style={{ color: app.color }}>
+                                                    <Icon className="w-5 h-5 md:w-6 md:h-6" />
                                                 </div>
                                                 <div>
                                                     <h3
                                                         className="font-medium text-sm md:text-base"
-                                                        style={{color: app.color}}
+                                                        style={{ color: app.color }}
                                                     >
                                                         {app.name}
                                                     </h3>

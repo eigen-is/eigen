@@ -1,10 +1,10 @@
-import {useBreadcrumb} from '@workspace/lib/drive';
-import type {DrivePath} from '@workspace/lib/types/drive';
-import {Button} from '@workspace/ui/components/button';
-import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
-import {Input} from '@workspace/ui/components/input';
-import {Label} from '@workspace/ui/components/label';
-import {useEffect, useState} from 'react';
+import { useBreadcrumb } from '@workspace/lib/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { Button } from '@workspace/ui/components/button';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { Input } from '@workspace/ui/components/input';
+import { Label } from '@workspace/ui/components/label';
+import { useEffect, useState } from 'react';
 
 interface DriveCreateItemDialogProps {
     open: boolean;
@@ -19,18 +19,18 @@ interface DriveCreateItemDialogProps {
 }
 
 export function DriveCreateItemDialog({
-                                          open,
-                                          onOpenChange,
-                                          onCreateItem,
-                                          isPending = false,
-                                          type,
-                                          path,
-                                          title,
-                                          defaultValue = '',
-                                          confirmLabel,
-                                      }: DriveCreateItemDialogProps) {
+    open,
+    onOpenChange,
+    onCreateItem,
+    isPending = false,
+    type,
+    path,
+    title,
+    defaultValue = '',
+    confirmLabel,
+}: DriveCreateItemDialogProps) {
     const [itemName, setItemName] = useState(defaultValue);
-    const {data: breadcrumbPaths = []} = useBreadcrumb(path.ownerId, path.mountId, path.id);
+    const { data: breadcrumbPaths = [] } = useBreadcrumb(path.ownerId, path.mountId, path.id);
 
     // Reset input value when dialog opens/closes or defaultValue changes
     useEffect(() => {

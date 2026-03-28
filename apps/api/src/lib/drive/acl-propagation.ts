@@ -1,9 +1,9 @@
-import {parseOwnerId} from '@workspace/lib/types';
-import type {DriveACL, DrivePath} from '@workspace/lib/types/drive';
-import {getHome} from '../home';
-import {addRegistryEntry} from '../share';
-import {getTeamMembers} from '../team';
-import {getUserByEmail} from '../user/';
+import { parseOwnerId } from '@workspace/lib/types';
+import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
+import { getHome } from '../home';
+import { addRegistryEntry } from '../share';
+import { getTeamMembers } from '../team';
+import { getUserByEmail } from '../user/';
 
 export async function resolveACLUserIds(ownerId: string, acls: DriveACL[]): Promise<Set<string>> {
     const ids = new Set<string>();
@@ -41,7 +41,7 @@ export async function resolveACLToEmails(acls: DriveACL[]): Promise<Map<string, 
             existing.read = existing.read || read;
             existing.write = existing.write || write;
         } else {
-            members.set(key, {email: key, read, write});
+            members.set(key, { email: key, read, write });
         }
     }
 

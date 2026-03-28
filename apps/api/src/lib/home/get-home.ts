@@ -1,13 +1,13 @@
-import {parseOwnerId} from '@workspace/lib/types';
-import {createAsyncSingleton} from '../../utils/singleton';
-import {ApiError} from '../core';
-import {getOrgExists} from '../org/org.ts';
-import {getTeamExists} from '../team/team.ts';
-import {getUserById} from '../user/user.ts';
-import type {Home} from './home';
-import {getSyntheticOrgUser, OrgHome} from './org-home.ts';
-import {getSyntheticTeamUser, TeamHome} from './team-home.ts';
-import {UserHome} from './user-home.ts';
+import { parseOwnerId } from '@workspace/lib/types';
+import { createAsyncSingleton } from '../../utils/singleton';
+import { ApiError } from '../core';
+import { getOrgExists } from '../org/org.ts';
+import { getTeamExists } from '../team/team.ts';
+import { getUserById } from '../user/user.ts';
+import type { Home } from './home';
+import { getSyntheticOrgUser, OrgHome } from './org-home.ts';
+import { getSyntheticTeamUser, TeamHome } from './team-home.ts';
+import { UserHome } from './user-home.ts';
 
 const homeFactories: Map<string, () => Promise<Home>> = new Map();
 

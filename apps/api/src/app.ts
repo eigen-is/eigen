@@ -1,26 +1,26 @@
 import cors from '@elysiajs/cors';
-import {serverTiming} from '@elysiajs/server-timing';
+import { serverTiming } from '@elysiajs/server-timing';
 import swagger from '@elysiajs/swagger';
 import Elysia from 'elysia';
-import {rateLimit} from 'elysia-rate-limit';
-import {trustedOrigins} from './lib/auth/auth';
-import {ApiError} from './lib/core/errors';
-import {betterAuth} from './routes/auth';
-import {calendarRouter} from './routes/calendar';
-import {chatRouter} from './routes/chat';
-import {collabRouter} from './routes/collab';
-import {contactsRouter} from './routes/contacts';
-import {driveRouter} from './routes/drive.ts';
-import {editorRouter} from './routes/editor';
-import {homeRouter} from './routes/home.ts';
-import {mailRouter} from './routes/mail';
-import {notificationRouter} from './routes/notification';
-import {publicRouter} from './routes/public';
-import {settingsRouter} from './routes/settings';
-import {setupRouter} from './routes/setup';
-import {spaceRouter} from './routes/space';
-import {sseRouter} from './routes/sse';
-import {teamRouter} from './routes/team';
+import { rateLimit } from 'elysia-rate-limit';
+import { trustedOrigins } from './lib/auth/auth';
+import { ApiError } from './lib/core/errors';
+import { betterAuth } from './routes/auth';
+import { calendarRouter } from './routes/calendar';
+import { chatRouter } from './routes/chat';
+import { collabRouter } from './routes/collab';
+import { contactsRouter } from './routes/contacts';
+import { driveRouter } from './routes/drive.ts';
+import { editorRouter } from './routes/editor';
+import { homeRouter } from './routes/home.ts';
+import { mailRouter } from './routes/mail';
+import { notificationRouter } from './routes/notification';
+import { publicRouter } from './routes/public';
+import { settingsRouter } from './routes/settings';
+import { setupRouter } from './routes/setup';
+import { spaceRouter } from './routes/space';
+import { sseRouter } from './routes/sse';
+import { teamRouter } from './routes/team';
 
 const SLOW_REQUEST_MS = 200;
 
@@ -48,10 +48,10 @@ export const app = new Elysia()
         }),
     )
     .state('requestStart', 0)
-    .onBeforeHandle(({store}) => {
+    .onBeforeHandle(({ store }) => {
         store.requestStart = Bun.nanoseconds();
     })
-    .onAfterResponse(({store, request, set}) => {
+    .onAfterResponse(({ store, request, set }) => {
         const ms = (Bun.nanoseconds() - store.requestStart) / 1_000_000;
         if (ms > SLOW_REQUEST_MS) {
             console.warn(
@@ -77,7 +77,7 @@ export const app = new Elysia()
     .use(notificationRouter)
     .use(sseRouter)
 
-    .onError(({error, set, code}) => {
+    .onError(({ error, set, code }) => {
         if (code === 'VALIDATION') return;
         const err = error as Error;
         if (err instanceof ApiError) {

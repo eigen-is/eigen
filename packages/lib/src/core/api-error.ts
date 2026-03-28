@@ -1,4 +1,4 @@
-import {toast} from 'sonner';
+import { toast } from 'sonner';
 
 export class AppError extends Error {
     status: number;
@@ -9,14 +9,14 @@ export class AppError extends Error {
             typeof value === 'string'
                 ? value
                 : value && typeof value === 'object' && 'message' in value
-                    ? String(
+                  ? String(
                         (
                             value as {
                                 message: unknown;
                             }
                         ).message,
                     )
-                    : String(value ?? 'Unknown error');
+                  : String(value ?? 'Unknown error');
         super(message);
         this.status = response.error?.status ?? response.status;
     }

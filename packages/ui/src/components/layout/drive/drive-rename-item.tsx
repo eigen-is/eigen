@@ -1,6 +1,6 @@
-import {useRenamePath} from '@workspace/lib/drive';
-import type {DrivePath} from '@workspace/lib/types/drive';
-import {DriveCreateItemDialog} from './drive-create-folder-item';
+import { useRenamePath } from '@workspace/lib/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { DriveCreateItemDialog } from './drive-create-folder-item';
 
 export type DriveRenameItemProps = {
     path: DrivePath | null;
@@ -11,7 +11,7 @@ export type DriveRenameItemProps = {
     onAfterAction?: (actionType: string, data: Record<string, unknown>) => void;
 };
 
-export function DriveRenameItem({path, open, onOpenChange, onSave, onCancel, onAfterAction}: DriveRenameItemProps) {
+export function DriveRenameItem({ path, open, onOpenChange, onSave, onCancel, onAfterAction }: DriveRenameItemProps) {
     if (!path) return null;
 
     const renamePathMutation = useRenamePath(
@@ -49,7 +49,7 @@ export function DriveRenameItem({path, open, onOpenChange, onSave, onCancel, onA
 
         // Call onAfterAction if provided
         if (onAfterAction) {
-            onAfterAction('rename', {name: newName});
+            onAfterAction('rename', { name: newName });
         }
 
         if (onSave) onSave(newName || '');

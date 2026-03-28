@@ -1,16 +1,16 @@
-import {createFileRoute, redirect} from '@tanstack/react-router';
+import { createFileRoute, redirect } from '@tanstack/react-router';
 import { getMonthRange } from 'src/components/calendar-utils';
 
 export const Route = createFileRoute('/')({
-    beforeLoad: ({context}) => {
+    beforeLoad: ({ context }) => {
         if (context.auth.isAuthenticated) {
-            const {from, to} = getMonthRange(new Date());
+            const { from, to } = getMonthRange(new Date());
             throw redirect({
                 to: '/view/$mode/$from/$to',
-                params: {mode: 'month', from: String(from), to: String(to)},
+                params: { mode: 'month', from: String(from), to: String(to) },
             } as never);
         } else {
-            throw redirect({to: '/login'});
+            throw redirect({ to: '/login' });
         }
     },
 });

@@ -1,18 +1,18 @@
-import {getMailAttachmentUrl} from '@workspace/lib/api';
-import {useAuth} from '@workspace/lib/auth';
-import type {AddressObject, Attachment, Email, MaildirMailbox} from '@workspace/lib/types/mail';
-import {Toolbar, TooltipButton} from '@workspace/ui';
-import {Button} from '@workspace/ui/components/button';
-import {DropdownMenu, DropdownMenuContent, DropdownMenuTrigger} from '@workspace/ui/components/dropdown-menu';
-import {ShadowContent} from '@workspace/ui/components/layout/shadow-content';
-import {UserItem} from '@workspace/ui/components/layout/user-item';
-import {Separator} from '@workspace/ui/components/separator';
-import {Table, TableBody, TableCell, TableRow} from '@workspace/ui/components/table';
-import {printDocument} from '@workspace/ui/lib/printElement';
-import {format} from 'date-fns';
-import {AlertTriangle, Archive, Forward, MoreVertical, Paperclip, Reply, ReplyAll, Trash2} from 'lucide-react';
-import {useEffect, useRef} from 'react';
-import {EmailContextMenu} from './email-context-menu';
+import { getMailAttachmentUrl } from '@workspace/lib/api';
+import { useAuth } from '@workspace/lib/auth';
+import type { AddressObject, Attachment, Email, MaildirMailbox } from '@workspace/lib/types/mail';
+import { Toolbar, TooltipButton } from '@workspace/ui';
+import { Button } from '@workspace/ui/components/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@workspace/ui/components/dropdown-menu';
+import { ShadowContent } from '@workspace/ui/components/layout/shadow-content';
+import { UserItem } from '@workspace/ui/components/layout/user-item';
+import { Separator } from '@workspace/ui/components/separator';
+import { Table, TableBody, TableCell, TableRow } from '@workspace/ui/components/table';
+import { printDocument } from '@workspace/ui/lib/printElement';
+import { format } from 'date-fns';
+import { AlertTriangle, Archive, Forward, MoreVertical, Paperclip, Reply, ReplyAll, Trash2 } from 'lucide-react';
+import { useEffect, useRef } from 'react';
+import { EmailContextMenu } from './email-context-menu';
 
 type EmailDetailToolbarProps = {
     email: Email;
@@ -27,21 +27,21 @@ type EmailDetailToolbarProps = {
 };
 
 export function EmailDetailToolbar({
-                                       email,
-                                       onReply,
-                                       onReplyAll,
-                                       onForward,
-                                       onArchive,
-                                       onReportSpam,
-                                       onDelete,
-                                       onMoveToFolder,
-                                       mailboxes = [],
-                                   }: EmailDetailToolbarProps) {
+    email,
+    onReply,
+    onReplyAll,
+    onForward,
+    onArchive,
+    onReportSpam,
+    onDelete,
+    onMoveToFolder,
+    mailboxes = [],
+}: EmailDetailToolbarProps) {
     return (
         <Toolbar>
             <div className="flex items-center gap-1">
                 {email.mailbox !== 'Archive' && (
-                    <TooltipButton icon={Archive} tooltipText="Archive" onClick={() => onArchive?.(email.id)}/>
+                    <TooltipButton icon={Archive} tooltipText="Archive" onClick={() => onArchive?.(email.id)} />
                 )}
                 {email.mailbox !== 'Junk' && (
                     <TooltipButton
@@ -50,17 +50,17 @@ export function EmailDetailToolbar({
                         onClick={() => onReportSpam?.(email.id)}
                     />
                 )}
-                <TooltipButton icon={Trash2} tooltipText="Delete" onClick={() => onDelete?.(email.id)}/>
+                <TooltipButton icon={Trash2} tooltipText="Delete" onClick={() => onDelete?.(email.id)} />
             </div>
             <div className="flex items-center gap-1">
-                <TooltipButton icon={Reply} tooltipText="Reply" onClick={() => onReply?.(email.id)}/>
-                <TooltipButton icon={ReplyAll} tooltipText="Reply All" onClick={() => onReplyAll?.(email.id)}/>
-                <TooltipButton icon={Forward} tooltipText="Forward" onClick={() => onForward?.(email.id)}/>
-                <div className="h-6 w-[1px] bg-border mx-1"/>
+                <TooltipButton icon={Reply} tooltipText="Reply" onClick={() => onReply?.(email.id)} />
+                <TooltipButton icon={ReplyAll} tooltipText="Reply All" onClick={() => onReplyAll?.(email.id)} />
+                <TooltipButton icon={Forward} tooltipText="Forward" onClick={() => onForward?.(email.id)} />
+                <div className="h-6 w-[1px] bg-border mx-1" />
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon" className="h-8 w-8" title="More actions">
-                            <MoreVertical className="h-4 w-4"/>
+                            <MoreVertical className="h-4 w-4" />
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent className="w-56">
@@ -75,37 +75,36 @@ export function EmailDetailToolbar({
                             onArchive={
                                 onArchive
                                     ? (ids) =>
-                                        ids.forEach((id) => {
-                                            onArchive(id);
-                                        })
+                                          ids.forEach((id) => {
+                                              onArchive(id);
+                                          })
                                     : undefined
                             }
                             onReportSpam={
                                 onReportSpam
                                     ? (ids) =>
-                                        ids.forEach((id) => {
-                                            onReportSpam(id);
-                                        })
+                                          ids.forEach((id) => {
+                                              onReportSpam(id);
+                                          })
                                     : undefined
                             }
                             onDelete={
                                 onDelete
                                     ? (ids) =>
-                                        ids.forEach((id) => {
-                                            onDelete(id);
-                                        })
+                                          ids.forEach((id) => {
+                                              onDelete(id);
+                                          })
                                     : undefined
                             }
                             onMoveToFolder={
                                 onMoveToFolder
                                     ? (ids, folderId) =>
-                                        ids.forEach((id) => {
-                                            onMoveToFolder(id, folderId);
-                                        })
+                                          ids.forEach((id) => {
+                                              onMoveToFolder(id, folderId);
+                                          })
                                     : undefined
                             }
-                            onClose={() => {
-                            }}
+                            onClose={() => {}}
                             onPrint={() => printDocument()}
                         />
                     </DropdownMenuContent>
@@ -121,11 +120,11 @@ type EmailDetailProps = {
 };
 
 export function MailLink({
-                             email,
-                             name,
-                             mailLink = true,
-                             compact = false,
-                         }: {
+    email,
+    name,
+    mailLink = true,
+    compact = false,
+}: {
     email?: string;
     name: string;
     mailLink?: boolean;
@@ -161,8 +160,8 @@ export function MailLink({
     );
 }
 
-export function EmailDetail({email, toggleMailRead}: EmailDetailProps) {
-    const {user} = useAuth();
+export function EmailDetail({ email, toggleMailRead }: EmailDetailProps) {
+    const { user } = useAuth();
     const hasMarkedAsRead = useRef<string | null>(null);
 
     useEffect(() => {
@@ -226,7 +225,7 @@ export function EmailDetail({email, toggleMailRead}: EmailDetailProps) {
     const formatContactObject = (contact: AddressObject, compact: boolean = false) => {
         return contact.value.map((address, idx, arr) => (
             <span key={address.address || idx}>
-                <MailLink email={address.address} name={address.name} mailLink={!compact} compact={compact}/>
+                <MailLink email={address.address} name={address.name} mailLink={!compact} compact={compact} />
                 {idx < arr.length - 1 ? ', ' : ''}
             </span>
         ));
@@ -243,7 +242,7 @@ export function EmailDetail({email, toggleMailRead}: EmailDetailProps) {
                         </h1>
 
                         <div className="mt-4 ">
-                            <UserItem name={fromName} email={fromEmail} label={formattedDate} mailLink={true}/>
+                            <UserItem name={fromName} email={fromEmail} label={formattedDate} mailLink={true} />
                         </div>
                     </div>
 
@@ -295,14 +294,14 @@ export function EmailDetail({email, toggleMailRead}: EmailDetailProps) {
                         </details>
                     )}
 
-                    <Separator/>
+                    <Separator />
 
                     {/* Email body */}
                     <div className="prose prose-sm max-w-none">
                         {email.html || email.textAsHtml ? (
-                            <ShadowContent content={emailContent} contentType="html" className="w-full"/>
+                            <ShadowContent content={emailContent} contentType="html" className="w-full" />
                         ) : (
-                            <div style={{whiteSpace: 'pre-wrap'}}>{emailContent}</div>
+                            <div style={{ whiteSpace: 'pre-wrap' }}>{emailContent}</div>
                         )}
                     </div>
 
@@ -310,7 +309,7 @@ export function EmailDetail({email, toggleMailRead}: EmailDetailProps) {
                     {email.attachments && email.attachments.length > 0 && (
                         <div className="mt-6 pt-6 border-t">
                             <h3 className="font-medium mb-3 flex items-center gap-2">
-                                <Paperclip className="h-4 w-4"/>
+                                <Paperclip className="h-4 w-4" />
                                 Attachments ({email.attachments.length})
                             </h3>
 
@@ -338,7 +337,7 @@ export function EmailDetail({email, toggleMailRead}: EmailDetailProps) {
                                             document.body.removeChild(a);
                                         }}
                                     >
-                                        <Paperclip className="h-4 w-4 mr-2 text-muted-foreground"/>
+                                        <Paperclip className="h-4 w-4 mr-2 text-muted-foreground" />
                                         <span className="text-sm truncate">
                                             {attachment.filename || `Attachment ${index + 1}`}
                                         </span>

@@ -1,13 +1,13 @@
-import {getDocumentUrl} from '@workspace/lib/api';
-import {useEmailCollaborators} from '@workspace/lib/drive';
-import type {DrivePath} from '@workspace/lib/types/drive';
-import {Button} from '@workspace/ui/components/button';
-import {Checkbox} from '@workspace/ui/components/checkbox';
-import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
-import {Input} from '@workspace/ui/components/input';
-import {Label} from '@workspace/ui/components/label';
-import {Textarea} from '@workspace/ui/components/textarea';
-import {useEffect, useState} from 'react';
+import { getDocumentUrl } from '@workspace/lib/api';
+import { useEmailCollaborators } from '@workspace/lib/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { Button } from '@workspace/ui/components/button';
+import { Checkbox } from '@workspace/ui/components/checkbox';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { Input } from '@workspace/ui/components/input';
+import { Label } from '@workspace/ui/components/label';
+import { Textarea } from '@workspace/ui/components/textarea';
+import { useEffect, useState } from 'react';
 
 type DriveEmailCollaboratorsProps = {
     path: DrivePath;
@@ -20,7 +20,7 @@ function fileNameWithoutExtension(name: string): string {
     return dot > 0 ? name.slice(0, dot) : name;
 }
 
-export function DriveEmailCollaborators({path, open, onOpenChange}: DriveEmailCollaboratorsProps) {
+export function DriveEmailCollaborators({ path, open, onOpenChange }: DriveEmailCollaboratorsProps) {
     const [subject, setSubject] = useState('');
     const [message, setMessage] = useState('');
     const [sendCopyToSelf, setSendCopyToSelf] = useState(true);

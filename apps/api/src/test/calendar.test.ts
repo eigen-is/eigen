@@ -1,5 +1,11 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import type { CalendarEvent, CalendarEventOccurrence, CalendarItem, FreeBusyBlock, SharedCalendar } from '@workspace/lib/types/calendar';
+import type {
+    CalendarEvent,
+    CalendarEventOccurrence,
+    CalendarItem,
+    FreeBusyBlock,
+    SharedCalendar,
+} from '@workspace/lib/types/calendar';
 import { assertJson, authedRequest, findOrFail, getTestContext } from './setup';
 
 describe('Calendar', () => {
@@ -435,7 +441,8 @@ describe('Calendar', () => {
                 );
                 const afterEvents = await assertJson<CalendarEventOccurrence[]>(afterRes);
                 const afterSyncs = afterEvents.filter(
-                    (e: CalendarEventOccurrence) => e.title === 'Weekly Sync' && e.occurrenceDate === targetDate && !e.parentEventId,
+                    (e: CalendarEventOccurrence) =>
+                        e.title === 'Weekly Sync' && e.occurrenceDate === targetDate && !e.parentEventId,
                 );
                 expect(afterSyncs.length).toBe(0);
             }
@@ -450,7 +457,9 @@ describe('Calendar', () => {
                 `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/event-range/${from}/${to}`,
             );
             const beforeEvents = await assertJson<CalendarEventOccurrence[]>(beforeRes);
-            const weeklySyncs = beforeEvents.filter((e: CalendarEventOccurrence) => e.title === 'Weekly Sync' && !e.parentEventId);
+            const weeklySyncs = beforeEvents.filter(
+                (e: CalendarEventOccurrence) => e.title === 'Weekly Sync' && !e.parentEventId,
+            );
             const target = weeklySyncs[0];
 
             if (target) {
@@ -497,7 +506,9 @@ describe('Calendar', () => {
                 `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/event-range/${from}/${to}`,
             );
             const beforeEvents = await assertJson<CalendarEventOccurrence[]>(beforeRes);
-            const weeklySyncs = beforeEvents.filter((e: CalendarEventOccurrence) => e.title === 'Weekly Sync' && !e.parentEventId);
+            const weeklySyncs = beforeEvents.filter(
+                (e: CalendarEventOccurrence) => e.title === 'Weekly Sync' && !e.parentEventId,
+            );
             const first = weeklySyncs[0];
 
             if (first) {
@@ -599,11 +610,14 @@ describe('Calendar', () => {
             );
             const afterEvents = await assertJson<CalendarEventOccurrence[]>(afterRes);
             const remaining = afterEvents.filter(
-                (e: CalendarEventOccurrence) => e.title === 'Exception Delete Test' || e.title === 'Exception Delete Test (modified)',
+                (e: CalendarEventOccurrence) =>
+                    e.title === 'Exception Delete Test' || e.title === 'Exception Delete Test (modified)',
             );
             // Should have 3 occurrences (4 total - 1 cancelled), not 4
             expect(remaining.length).toBe(3);
-            expect(remaining.find((e: CalendarEventOccurrence) => e.occurrenceDate === firstOcc.occurrenceDate)).toBeUndefined();
+            expect(
+                remaining.find((e: CalendarEventOccurrence) => e.occurrenceDate === firstOcc.occurrenceDate),
+            ).toBeUndefined();
         });
     });
 
@@ -749,7 +763,9 @@ describe('Calendar', () => {
             );
             const afterEvents = await assertJson<CalendarEventOccurrence[]>(afterRes);
             const oldReviews = afterEvents.filter((e: CalendarEventOccurrence) => e.title === 'Weekly Review');
-            const newReviews = afterEvents.filter((e: CalendarEventOccurrence) => e.title === 'Weekly Review (updated)');
+            const newReviews = afterEvents.filter(
+                (e: CalendarEventOccurrence) => e.title === 'Weekly Review (updated)',
+            );
             expect(oldReviews.length).toBe(2);
             expect(newReviews.length).toBeGreaterThanOrEqual(3);
         });

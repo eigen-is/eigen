@@ -1,4 +1,4 @@
-import type {CalendarEventOccurrence, CalendarItem, SharedCalendar} from '@workspace/lib/types/calendar';
+import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 
 export type ViewMode = 'month' | 'week';
 
@@ -26,7 +26,7 @@ export function getMonthRange(date: Date): { from: number; to: number; startDate
         new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59).getTime() / 1000,
     );
 
-    return {from, to, startDate, endDate};
+    return { from, to, startDate, endDate };
 }
 
 export function getWeekRange(date: Date): { from: number; to: number; startDate: Date; endDate: Date } {
@@ -44,7 +44,7 @@ export function getWeekRange(date: Date): { from: number; to: number; startDate:
     const from = Math.floor(startDate.getTime() / 1000);
     const to = Math.floor(endDate.getTime() / 1000);
 
-    return {from, to, startDate, endDate};
+    return { from, to, startDate, endDate };
 }
 
 export function getDaysInRange(startDate: Date, endDate: Date): Date[] {

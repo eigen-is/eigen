@@ -1,11 +1,11 @@
-import {createFileRoute, useNavigate} from '@tanstack/react-router';
-import {usePeopleMembers} from '@workspace/lib/people';
-import {usePublicConfig} from '@workspace/lib/public';
-import {EmptyState, LoadingState} from '@workspace/ui';
-import {Column, ColumnLayout} from '@workspace/ui/components/layout/app/column-layout.tsx';
-import {useState} from 'react';
-import {MemberDetail, MemberDetailToolbar} from '../components/people/member-detail';
-import {MembersList, MembersListToolbar} from '../components/people/members-list';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { usePeopleMembers } from '@workspace/lib/people';
+import { usePublicConfig } from '@workspace/lib/public';
+import { EmptyState, LoadingState } from '@workspace/ui';
+import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
+import { useState } from 'react';
+import { MemberDetail, MemberDetailToolbar } from '../components/people/member-detail';
+import { MembersList, MembersListToolbar } from '../components/people/members-list';
 
 type MembersSearch = {
     memberId?: string;
@@ -19,26 +19,26 @@ export const Route = createFileRoute('/_auth/members')({
 });
 
 function MembersRoute() {
-    const {memberId} = Route.useSearch();
+    const { memberId } = Route.useSearch();
     const navigate = useNavigate();
     const [searchQuery, setSearchQuery] = useState('');
     const [showCreateDialog, setShowCreateDialog] = useState(false);
 
-    const {data: config} = usePublicConfig();
-    const {data: members = [], isLoading} = usePeopleMembers(config?.orgId);
+    const { data: config } = usePublicConfig();
+    const { data: members = [], isLoading } = usePeopleMembers(config?.orgId);
 
     const member = members.find((m) => m.id === memberId);
 
     const handleBackToList = () => {
-        navigate({to: '/members', search: {}});
+        navigate({ to: '/members', search: {} });
     };
 
     const handleRowClick = (id: string) => {
-        navigate({to: '/members', search: {memberId: id}});
+        navigate({ to: '/members', search: { memberId: id } });
     };
 
     if (isLoading) {
-        return <LoadingState/>;
+        return <LoadingState />;
     }
 
     const listToolbar = (
@@ -51,7 +51,7 @@ function MembersRoute() {
         />
     );
 
-    const detailToolbar = member ? <MemberDetailToolbar member={member} organizationId={config?.orgId}/> : null;
+    const detailToolbar = member ? <MemberDetailToolbar member={member} organizationId={config?.orgId} /> : null;
 
     return (
         <ColumnLayout mobileColumn={memberId ? 'detail' : 'list'}>
@@ -67,9 +67,9 @@ function MembersRoute() {
             </Column>
             <Column id="detail" width="flex" onBack={handleBackToList} toolbar={detailToolbar}>
                 {member ? (
-                    <MemberDetail member={member} organizationId={config?.orgId}/>
+                    <MemberDetail member={member} organizationId={config?.orgId} />
                 ) : (
-                    <EmptyState message="Select a member to view details"/>
+                    <EmptyState message="Select a member to view details" />
                 )}
             </Column>
         </ColumnLayout>

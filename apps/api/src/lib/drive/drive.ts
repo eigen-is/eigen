@@ -1,4 +1,4 @@
-import {getTextPreviewMode} from '@workspace/lib/constants';
+import { getTextPreviewMode } from '@workspace/lib/constants';
 import {
     DRIVE_TYPE_CHAT,
     DRIVE_TYPE_DOC,
@@ -22,23 +22,23 @@ import {
     isContainerType,
     stripEigenExtension,
 } from '@workspace/lib/types/drive';
-import {SSEventType} from '@workspace/lib/types/sse';
-import {validateACLEntries, validateEmailAddress} from '@workspace/lib/validation';
-import type {User} from 'better-auth/types';
-import {eq} from 'drizzle-orm';
-import type {BunSQLiteDatabase} from 'drizzle-orm/bun-sqlite';
-import {createAsyncSingleton} from '../../utils/singleton';
-import {ChatRoom} from '../chat';
+import { SSEventType } from '@workspace/lib/types/sse';
+import { validateACLEntries, validateEmailAddress } from '@workspace/lib/validation';
+import type { User } from 'better-auth/types';
+import { eq } from 'drizzle-orm';
+import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
+import { createAsyncSingleton } from '../../utils/singleton';
+import { ChatRoom } from '../chat';
 import CollabDocument from '../collab/collabDocument';
-import {getDomain} from '../config/server-config';
-import {ApiError, type DatabaseConfig, type ManagedDatabase, type SchemaType} from '../core';
-import {sendMail} from '../core/mailer';
-import type {Home} from '../home';
-import {createDefaultMountConfig, createMountConfig, Mount} from '../mount';
-import {getScreenPreview, getTextPreviewData} from '../preview/preview-cache';
-import {getThumbnail, saveThumbnail} from '../shared/thumbnails';
-import {getTeamMembers} from '../team';
-import {getMemberships, type Memberships} from '../user/';
+import { getDomain } from '../config/server-config';
+import { ApiError, type DatabaseConfig, type ManagedDatabase, type SchemaType } from '../core';
+import { sendMail } from '../core/mailer';
+import type { Home } from '../home';
+import { createDefaultMountConfig, createMountConfig, Mount } from '../mount';
+import { getScreenPreview, getTextPreviewData } from '../preview/preview-cache';
+import { getThumbnail, saveThumbnail } from '../shared/thumbnails';
+import { getTeamMembers } from '../team';
+import { getMemberships, type Memberships } from '../user/';
 import {
     canReadFromAncestors,
     canWriteFromAncestors,
@@ -47,15 +47,15 @@ import {
     matchesACL,
     normalizeACL,
 } from './acl';
-import {type EffectiveMember, propagateACLChange, resolveACLToEmails} from './acl-propagation';
-import {extractFrontmatter, MAX_INLINE_EDIT_SIZE, reattachFrontmatter} from './inline-edit';
-import {getUniqueFileName} from './naming';
-import {getSharedDatabase} from './shared';
+import { type EffectiveMember, propagateACLChange, resolveACLToEmails } from './acl-propagation';
+import { extractFrontmatter, MAX_INLINE_EDIT_SIZE, reattachFrontmatter } from './inline-edit';
+import { getUniqueFileName } from './naming';
+import { getSharedDatabase } from './shared';
 import * as sharedSchema from './sharedschema';
-import {buildDriveEvent} from './sse-events';
-import {streamFilesToTemp} from './streaming';
+import { buildDriveEvent } from './sse-events';
+import { streamFilesToTemp } from './streaming';
 
-export type {DriveACL, DrivePath} from '@workspace/lib/types/drive';
+export type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
 
 const COLLAB_EXTENSIONS: Record<string, string> = {
     doc: '.eigendoc',
@@ -354,7 +354,7 @@ export default class Drive {
             if (!ancestor) break;
         }
 
-        await mount.updatePath(pathId, {parentId: targetParentId});
+        await mount.updatePath(pathId, { parentId: targetParentId });
         const movedPath = await mount.getPath(pathId);
         if (!movedPath) throw new ApiError(500, 'Failed to move path');
         this.emit(SSEventType.DRIVE_PATH_MOVED, movedPath, oldParentId ?? undefined);
@@ -372,7 +372,7 @@ export default class Drive {
             throw new ApiError(403, 'No write permission');
         }
 
-        await mount.updatePath(pathId, {name: newName});
+        await mount.updatePath(pathId, { name: newName });
         await propagateACLChange(item, item.acl, item.acl);
         const renamedItem = await mount.getPath(pathId);
         if (renamedItem) this.emit(SSEventType.DRIVE_PATH_RENAMED, renamedItem);
@@ -417,19 +417,19 @@ export default class Drive {
 
         let content: string;
         try {
-            content = new TextDecoder('utf-8', {fatal: true}).decode(data);
+            content = new TextDecoder('utf-8', { fatal: true }).decode(data);
         } catch {
             throw new ApiError(400, 'File contains invalid UTF-8 encoding');
         }
 
-        const {frontmatter, body} =
+        const { frontmatter, body } =
             editMode === 'markdown'
                 ? extractFrontmatter(content)
                 : {
-                    frontmatter: null,
-                    body: content,
-                };
-        return {editMode, content: body, frontmatter, mimeType: path.mimeType, updatedAt: path.updatedAt};
+                      frontmatter: null,
+                      body: content,
+                  };
+        return { editMode, content: body, frontmatter, mimeType: path.mimeType, updatedAt: path.updatedAt };
     }
 
     async saveEditableContent(
@@ -446,14 +446,14 @@ export default class Drive {
 
         const currentUpdatedAt = path.updatedAt instanceof Date ? path.updatedAt.toISOString() : String(path.updatedAt);
         if (expectedUpdatedAt !== currentUpdatedAt && !force) {
-            return {conflict: true as const, currentUpdatedAt};
+            return { conflict: true as const, currentUpdatedAt };
         }
 
         const fullContent = reattachFrontmatter(content, frontmatter);
         const updated = await this.writeFileContent(mountId, pathId, Buffer.from(fullContent, 'utf-8'));
         const updatedAt =
             updated.updatedAt instanceof Date ? updated.updatedAt.toISOString() : String(updated.updatedAt);
-        return {conflict: false as const, updatedAt};
+        return { conflict: false as const, updatedAt };
     }
 
     async getPreview(mountId: string, pathId: string, embedUrl: string) {
@@ -481,7 +481,7 @@ export default class Drive {
         mimeType: string,
         options: {
             excludeDocumentChildren?: boolean;
-        } = {excludeDocumentChildren: true},
+        } = { excludeDocumentChildren: true },
     ): Promise<DrivePath[]> {
         // Aggregate results from all mounts
         const allResults: DrivePath[] = [];
@@ -537,11 +537,11 @@ export default class Drive {
         let normalizedACL = normalizeACL(acl);
 
         if (normalizedACL && normalizedACL.length > 0) {
-            const {filtered} = filterRedundantACL(normalizedACL, item, ancestors);
+            const { filtered } = filterRedundantACL(normalizedACL, item, ancestors);
             normalizedACL = filtered.length > 0 ? filtered : null;
         }
 
-        const updates: Partial<DrivePath> = {acl: normalizedACL};
+        const updates: Partial<DrivePath> = { acl: normalizedACL };
         if (visibility !== undefined) updates.visibility = visibility;
         if (sharingRestricted !== undefined) updates.sharingRestricted = sharingRestricted;
         const oldACL = item.acl;
@@ -579,7 +579,7 @@ export default class Drive {
                 existing.read = true;
                 existing.write = true;
             } else {
-                members.set(key, {email: key, read: true, write: true});
+                members.set(key, { email: key, read: true, write: true });
             }
         }
 
@@ -632,8 +632,8 @@ export default class Drive {
                     : documentUrl;
 
                 return sendMail({
-                    from: {name: senderName, address: senderEmail},
-                    to: [{name: '', address: member.email}],
+                    from: { name: senderName, address: senderEmail },
+                    to: [{ name: '', address: member.email }],
                     subject,
                     text: `${message}\n\n${link}`,
                 });
@@ -641,7 +641,7 @@ export default class Drive {
         );
 
         const sent = results.filter((r) => r.status === 'fulfilled' && r.value).length;
-        return {sent};
+        return { sent };
     }
 
     async findContainerPath(mountId: string, pathId: string): Promise<DrivePath | null> {
@@ -672,13 +672,13 @@ export default class Drive {
 
         const currentAcl = targetPath.acl || [];
         if (currentAcl.some((a) => a.id.toLowerCase() === email.toLowerCase())) {
-            return {alreadyHasAccess: true, targetPathId: targetPath.id};
+            return { alreadyHasAccess: true, targetPathId: targetPath.id };
         }
 
-        const newAcl = [...currentAcl, {id: email.toLowerCase(), read: true, write: true}];
+        const newAcl = [...currentAcl, { id: email.toLowerCase(), read: true, write: true }];
         await this.updateACL(mountId, targetPath.id, newAcl);
 
-        return {alreadyHasAccess: false, targetPathId: targetPath.id};
+        return { alreadyHasAccess: false, targetPathId: targetPath.id };
     }
 
     async canRead(mountId: string, pathId: string, user: User, memberships?: Memberships): Promise<boolean> {
@@ -953,7 +953,7 @@ export default class Drive {
         tempId: string,
     ): Promise<DrivePath> {
         if (originalName) {
-            await mount.updatePath(pathId, {details: {originalName}});
+            await mount.updatePath(pathId, { details: { originalName } });
         }
 
         const uploadedFile = await mount.getPath(pathId);
@@ -967,7 +967,7 @@ export default class Drive {
                 if (thumbnail) {
                     await mount.updatePath(pathId, {
                         thumbnail: thumbnail.fileName,
-                        details: {...(uploadedFile.details ?? {}), width: thumbnail.width, height: thumbnail.height},
+                        details: { ...(uploadedFile.details ?? {}), width: thumbnail.width, height: thumbnail.height },
                     });
                     this.emit(SSEventType.DRIVE_FILE_UPLOADED, (await mount.getPath(pathId))!);
                 }

@@ -1,17 +1,17 @@
-import {createRootRouteWithContext, Outlet, useLocation} from '@tanstack/react-router';
-import type {AuthContextType} from '@workspace/lib/auth';
-import {useAddTeamMember, usePeopleTeams} from '@workspace/lib/people';
-import {usePublicConfig} from '@workspace/lib/public';
-import {AppShell} from '@workspace/ui/components/layout/app/app-shell.tsx';
-import {PeopleSidebar} from '../components/people/people-sidebar';
+import { createRootRouteWithContext, Outlet, useLocation } from '@tanstack/react-router';
+import type { AuthContextType } from '@workspace/lib/auth';
+import { useAddTeamMember, usePeopleTeams } from '@workspace/lib/people';
+import { usePublicConfig } from '@workspace/lib/public';
+import { AppShell } from '@workspace/ui/components/layout/app/app-shell.tsx';
+import { PeopleSidebar } from '../components/people/people-sidebar';
 
 interface MyRouterContext {
     auth: AuthContextType;
 }
 
 function PeopleRoot() {
-    const {data: config} = usePublicConfig();
-    const {data: teams = []} = usePeopleTeams(config?.orgId);
+    const { data: config } = usePublicConfig();
+    const { data: teams = [] } = usePeopleTeams(config?.orgId);
     const addMember = useAddTeamMember(config?.orgId);
     const location = useLocation();
 
@@ -20,7 +20,7 @@ function PeopleRoot() {
 
     const handleAddMembersToTeam = async (memberIds: string[], teamId: string) => {
         for (const userId of memberIds) {
-            await addMember.mutateAsync({teamId, userId});
+            await addMember.mutateAsync({ teamId, userId });
         }
     };
 
@@ -29,7 +29,7 @@ function PeopleRoot() {
             appName="people"
             rootRoute={Route}
             sidebarMode={isTeamDetailSelected ? 'hidden' : 'collapsible'}
-            sidebar={({condensed, isMobile, onClose}) => (
+            sidebar={({ condensed, isMobile, onClose }) => (
                 <PeopleSidebar
                     condensed={condensed}
                     isMobile={isMobile}
@@ -39,7 +39,7 @@ function PeopleRoot() {
                 />
             )}
         >
-            <Outlet/>
+            <Outlet />
         </AppShell>
     );
 }

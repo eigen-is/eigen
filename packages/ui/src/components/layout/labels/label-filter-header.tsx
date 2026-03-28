@@ -1,19 +1,19 @@
-import type {Label} from '@workspace/lib/types/label';
-import {TooltipButton} from '@workspace/ui';
-import {Pencil} from 'lucide-react';
-import {useState} from 'react';
-import {LabelDialog} from './label-dialog';
-import {useLabels} from './label-provider';
+import type { Label } from '@workspace/lib/types/label';
+import { TooltipButton } from '@workspace/ui';
+import { Pencil } from 'lucide-react';
+import { useState } from 'react';
+import { LabelDialog } from './label-dialog';
+import { useLabels } from './label-provider';
 
 export type LabelFilterHeaderProps = {
     labels: Label[];
     labelId: string;
 };
 
-export function LabelFilterHeader({labels, labelId}: LabelFilterHeaderProps) {
+export function LabelFilterHeader({ labels, labelId }: LabelFilterHeaderProps) {
     const [selectedLabel, setSelectedLabel] = useState<Label | null>(null);
     const [dialogOpen, setDialogOpen] = useState(false);
-    const {updateLabel, deleteLabel} = useLabels();
+    const { updateLabel, deleteLabel } = useLabels();
 
     const label = labels.find((l) => l.id === labelId);
 
@@ -55,7 +55,7 @@ export function LabelFilterHeader({labels, labelId}: LabelFilterHeaderProps) {
         <>
             <div className="flex items-center justify-between h-12 px-4 border-b">
                 <h1 className="text-base font-medium flex items-center gap-2">
-                    <span className="h-3 w-3 rounded-full" style={{backgroundColor: label.color}}/>
+                    <span className="h-3 w-3 rounded-full" style={{ backgroundColor: label.color }} />
                     {label.name}
                 </h1>
                 <TooltipButton

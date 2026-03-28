@@ -1,16 +1,16 @@
-import {zodResolver} from '@hookform/resolvers/zod';
-import {createFileRoute, useNavigate} from '@tanstack/react-router';
-import {authClient} from '@workspace/lib/auth';
-import {Button} from '@workspace/ui/components/button';
-import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage} from '@workspace/ui/components/form';
-import {Input} from '@workspace/ui/components/input';
-import {Separator} from '@workspace/ui/components/separator';
-import {ShieldCheck} from 'lucide-react';
-import {useEffect, useState} from 'react';
-import {useForm} from 'react-hook-form';
-import {toast} from 'sonner';
-import {z} from 'zod';
-import {TwoFactorSetup} from '../components/space/fa2';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { authClient } from '@workspace/lib/auth';
+import { Button } from '@workspace/ui/components/button';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
+import { Input } from '@workspace/ui/components/input';
+import { Separator } from '@workspace/ui/components/separator';
+import { ShieldCheck } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { toast } from 'sonner';
+import { z } from 'zod';
+import { TwoFactorSetup } from '../components/space/fa2';
 
 export const Route = createFileRoute('/_auth/security/2fa')({
     component: TwoFaComponent,
@@ -33,7 +33,7 @@ function TwoFaComponent() {
     useEffect(() => {
         authClient
             .getSession()
-            .then(({data}) => {
+            .then(({ data }) => {
                 setTwoFactorEnabled(data?.user?.twoFactorEnabled ?? false);
             })
             .catch(() => {
@@ -43,7 +43,7 @@ function TwoFaComponent() {
 
     const disableForm = useForm<z.infer<typeof disableSchema>>({
         resolver: zodResolver(disableSchema),
-        defaultValues: {password: ''},
+        defaultValues: { password: '' },
     });
 
     const handleInitialize2FA = async (password: string) => {
@@ -69,7 +69,7 @@ function TwoFaComponent() {
 
     const handleVerifyTotp = async (code: string): Promise<boolean> => {
         try {
-            const result = await authClient.twoFactor.verifyTotp({code});
+            const result = await authClient.twoFactor.verifyTotp({ code });
 
             if (result.data) {
                 toast.success('Two-factor authentication enabled');
@@ -86,7 +86,7 @@ function TwoFaComponent() {
     };
 
     const handleComplete = () => {
-        navigate({to: '/'});
+        navigate({ to: '/' });
     };
 
     const handleBack = () => {
@@ -129,11 +129,11 @@ function TwoFaComponent() {
 
                     <div className="space-y-6">
                         <div className="flex items-center gap-3 text-sm">
-                            <ShieldCheck className="h-5 w-5 text-primary"/>
+                            <ShieldCheck className="h-5 w-5 text-primary" />
                             <span>Two-factor authentication is enabled on your account.</span>
                         </div>
 
-                        <Separator/>
+                        <Separator />
 
                         {!showDisableForm ? (
                             <Button variant="destructive" onClick={() => setShowDisableForm(true)}>
@@ -145,7 +145,7 @@ function TwoFaComponent() {
                                     <FormField
                                         control={disableForm.control}
                                         name="password"
-                                        render={({field}) => (
+                                        render={({ field }) => (
                                             <FormItem>
                                                 <FormLabel>Confirm your password</FormLabel>
                                                 <FormControl>
@@ -157,7 +157,7 @@ function TwoFaComponent() {
                                                         {...field}
                                                     />
                                                 </FormControl>
-                                                <FormMessage/>
+                                                <FormMessage />
                                             </FormItem>
                                         )}
                                     />

@@ -1,12 +1,12 @@
-import {COMMANDS_HELP, commandNeedsSpace, SLASH_COMMANDS} from '@workspace/lib/chat';
-import type {RoomMember} from '@workspace/lib/types/chat';
-import {Paperclip, Send, X} from 'lucide-react';
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {cn} from '../../../lib/utils';
-import {Button} from '../../button';
-import {ChatPlayerSuggest} from './chat-player-suggest';
-import {ChatSlashSuggest} from './chat-slash-suggest';
-import {getAtSuggestQuery, getSlashTargetQuery} from './chat-utils';
+import { COMMANDS_HELP, commandNeedsSpace, SLASH_COMMANDS } from '@workspace/lib/chat';
+import type { RoomMember } from '@workspace/lib/types/chat';
+import { Paperclip, Send, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { cn } from '../../../lib/utils';
+import { Button } from '../../button';
+import { ChatPlayerSuggest } from './chat-player-suggest';
+import { ChatSlashSuggest } from './chat-slash-suggest';
+import { getAtSuggestQuery, getSlashTargetQuery } from './chat-utils';
 
 type ChatMessageInputProps = {
     onSend: (rawContent: string, files?: File[]) => void;
@@ -22,17 +22,17 @@ type ChatMessageInputProps = {
 };
 
 export function ChatMessageInput({
-                                     onSend,
-                                     disabled = false,
-                                     readOnly = false,
-                                     placeholder = 'Type a message...',
-                                     readOnlyMessage = 'You have read-only access to this chat',
-                                     roomMembers = [],
-                                     currentUserEmail = '',
-                                     messageCount = 0,
-                                     className,
-                                     onKeyDown: onKeyDownProp,
-                                 }: ChatMessageInputProps) {
+    onSend,
+    disabled = false,
+    readOnly = false,
+    placeholder = 'Type a message...',
+    readOnlyMessage = 'You have read-only access to this chat',
+    roomMembers = [],
+    currentUserEmail = '',
+    messageCount = 0,
+    className,
+    onKeyDown: onKeyDownProp,
+}: ChatMessageInputProps) {
     const [content, setContent] = useState('');
     const [files, setFiles] = useState<File[]>([]);
     const [selectedSuggestIdx, setSelectedSuggestIdx] = useState(0);
@@ -289,20 +289,20 @@ export function ChatMessageInput({
                             key={i}
                             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-muted text-xs border"
                         >
-                            <Paperclip className="h-3 w-3 text-muted-foreground"/>
+                            <Paperclip className="h-3 w-3 text-muted-foreground" />
                             <span className="truncate max-w-[150px]">{file.name}</span>
                             <button
                                 onClick={() => removeFile(i)}
                                 className="text-muted-foreground hover:text-foreground"
                             >
-                                <X className="h-3 w-3"/>
+                                <X className="h-3 w-3" />
                             </button>
                         </div>
                     ))}
                 </div>
             )}
             <div className="flex items-end gap-2 relative">
-                <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect}/>
+                <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} />
                 <Button
                     variant="ghost"
                     size="icon"
@@ -310,7 +310,7 @@ export function ChatMessageInput({
                     onClick={() => fileInputRef.current?.click()}
                     disabled={disabled}
                 >
-                    <Paperclip className="h-4 w-4"/>
+                    <Paperclip className="h-4 w-4" />
                 </Button>
                 <ChatPlayerSuggest
                     query={atQuery || ''}
@@ -359,7 +359,7 @@ export function ChatMessageInput({
                     disabled={(!content.trim() && files.length === 0) || disabled}
                     className="shrink-0 h-10 w-10"
                 >
-                    <Send className="h-4 w-4"/>
+                    <Send className="h-4 w-4" />
                 </Button>
             </div>
         </div>

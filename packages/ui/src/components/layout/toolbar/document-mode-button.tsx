@@ -1,11 +1,11 @@
-import {Eye, Pencil} from 'lucide-react';
-import {TooltipButton} from './tooltip-button.tsx';
+import { Eye, Pencil } from 'lucide-react';
+import { TooltipButton } from './tooltip-button.tsx';
 
 export type DocumentModeButtonProps = {
     canWrite: boolean;
 };
 
-export const DocumentModeButton = ({canWrite}: DocumentModeButtonProps) => {
+export const DocumentModeButton = ({ canWrite }: DocumentModeButtonProps) => {
     return (
         <TooltipButton
             icon={canWrite ? Pencil : Eye}

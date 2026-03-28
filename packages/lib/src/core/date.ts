@@ -1,9 +1,9 @@
 export function formatTime(date: Date | string | number): string {
-    return new Date(date).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
+    return new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 export function formatDate(date: Date | string | number): string {
-    return new Date(date).toLocaleDateString([], {month: 'short', day: 'numeric'});
+    return new Date(date).toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
 export function formatTimeAgo(date: Date | string | number): string {

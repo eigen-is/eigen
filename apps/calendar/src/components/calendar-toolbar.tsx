@@ -1,8 +1,8 @@
-import {Button} from '@workspace/ui/components/button';
-import {Toolbar} from '@workspace/ui/components/layout/toolbar';
-import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@workspace/ui/components/select';
-import {ChevronLeft, ChevronRight} from 'lucide-react';
-import type {ViewMode} from './calendar-utils';
+import { Button } from '@workspace/ui/components/button';
+import { Toolbar } from '@workspace/ui/components/layout/toolbar';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+import type { ViewMode } from './calendar-utils';
 
 type CalendarToolbarProps = {
     currentDate: Date;
@@ -15,7 +15,7 @@ type CalendarToolbarProps = {
 
 function formatTitle(date: Date, viewMode: ViewMode): string {
     if (viewMode === 'month') {
-        return date.toLocaleDateString('en', {month: 'long', year: 'numeric'});
+        return date.toLocaleDateString('en', { month: 'long', year: 'numeric' });
     }
     const startOfWeek = new Date(date);
     const day = startOfWeek.getDay();
@@ -24,8 +24,8 @@ function formatTitle(date: Date, viewMode: ViewMode): string {
     const endOfWeek = new Date(startOfWeek);
     endOfWeek.setDate(startOfWeek.getDate() + 6);
 
-    const startMonth = startOfWeek.toLocaleDateString('en', {month: 'short'});
-    const endMonth = endOfWeek.toLocaleDateString('en', {month: 'short'});
+    const startMonth = startOfWeek.toLocaleDateString('en', { month: 'short' });
+    const endMonth = endOfWeek.toLocaleDateString('en', { month: 'short' });
     const year = endOfWeek.getFullYear();
 
     if (startOfWeek.getMonth() === endOfWeek.getMonth()) {
@@ -50,10 +50,10 @@ export function CalendarToolbar({
                 </Button>
                 <div className="flex items-center">
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onPrev}>
-                        <ChevronLeft className="h-4 w-4"/>
+                        <ChevronLeft className="h-4 w-4" />
                     </Button>
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onNext}>
-                        <ChevronRight className="h-4 w-4"/>
+                        <ChevronRight className="h-4 w-4" />
                     </Button>
                 </div>
                 <h2 className="text-lg font-semibold whitespace-nowrap">{formatTitle(currentDate, viewMode)}</h2>
@@ -62,7 +62,7 @@ export function CalendarToolbar({
             <div className="flex items-center gap-2">
                 <Select value={viewMode} onValueChange={(v) => onViewModeChange(v as ViewMode)}>
                     <SelectTrigger className="w-24 h-8">
-                        <SelectValue/>
+                        <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem value="month">Month</SelectItem>

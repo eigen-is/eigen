@@ -340,9 +340,13 @@ describe('Calendar Invites', () => {
             const aliceOccs = aliceEvents.filter((e: CalendarEventOccurrence) => e.title === 'Weekly Scoped RSVP');
             const acceptedOcc = findOrFail(aliceOccs, (e) => e.occurrenceDate === linked.occurrenceDate);
             expect(acceptedOcc.data!.attendees![0].status).toBe('accepted');
-            const otherOccs = aliceOccs.filter((e: CalendarEventOccurrence) => e.occurrenceDate !== linked.occurrenceDate);
+            const otherOccs = aliceOccs.filter(
+                (e: CalendarEventOccurrence) => e.occurrenceDate !== linked.occurrenceDate,
+            );
             expect(otherOccs.length).toBeGreaterThan(0);
-            expect(otherOccs.every((e: CalendarEventOccurrence) => e.data!.attendees![0].status === 'pending')).toBe(true);
+            expect(otherOccs.every((e: CalendarEventOccurrence) => e.data!.attendees![0].status === 'pending')).toBe(
+                true,
+            );
         });
 
         test('RSVP scope=all accepts all occurrences', async () => {
@@ -359,7 +363,9 @@ describe('Calendar Invites', () => {
 
             const aliceEvents = await getEventsInRange(ctx.alice.user.sessionToken, ctx.alice.user.id);
             const aliceOccs = aliceEvents.filter((e: CalendarEventOccurrence) => e.title === 'Weekly All RSVP');
-            expect(aliceOccs.every((e: CalendarEventOccurrence) => e.data!.attendees![0].status === 'accepted')).toBe(true);
+            expect(aliceOccs.every((e: CalendarEventOccurrence) => e.data!.attendees![0].status === 'accepted')).toBe(
+                true,
+            );
         });
 
         test('delete scope=this removes one occurrence from attendee, declines on organizer', async () => {

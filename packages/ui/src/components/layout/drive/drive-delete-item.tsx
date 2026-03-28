@@ -1,6 +1,6 @@
-import {DEFAULT_MOUNT_ID, useDeleteFile, useDeleteFolder, useDeletePaths} from '@workspace/lib/drive';
-import type {DrivePath} from '@workspace/lib/types/drive';
-import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
+import { DEFAULT_MOUNT_ID, useDeleteFile, useDeleteFolder, useDeletePaths } from '@workspace/lib/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
 
 export type DriveDeleteItemProps = {
     paths: DrivePath[];
@@ -9,7 +9,7 @@ export type DriveDeleteItemProps = {
     onAfterAction?: (actionType: string, data: Record<string, unknown>) => void;
 };
 
-export function DriveDeleteItem({paths, open, onOpenChange, onAfterAction}: DriveDeleteItemProps) {
+export function DriveDeleteItem({ paths, open, onOpenChange, onAfterAction }: DriveDeleteItemProps) {
     const first = paths[0] ?? null;
     const isSingle = paths.length === 1;
     const deleteFileMutation = useDeleteFile(

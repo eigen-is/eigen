@@ -1,7 +1,7 @@
-import {getSlideUrl} from '@workspace/lib/api';
-import {useCreateSlides} from '@workspace/lib/drive';
-import type {DrivePath} from '@workspace/lib/types/drive';
-import {DriveCreateItemDialog} from './drive-create-folder-item';
+import { getSlideUrl } from '@workspace/lib/api';
+import { useCreateSlides } from '@workspace/lib/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { DriveCreateItemDialog } from './drive-create-folder-item';
 
 export type DriveCreateSlidesProps = {
     path: DrivePath;
@@ -13,13 +13,13 @@ export type DriveCreateSlidesProps = {
 };
 
 export function DriveCreateSlides({
-                                      path,
-                                      open,
-                                      onOpenChange,
-                                      onSave,
-                                      onCancel,
-                                      onAfterAction,
-                                  }: DriveCreateSlidesProps) {
+    path,
+    open,
+    onOpenChange,
+    onSave,
+    onCancel,
+    onAfterAction,
+}: DriveCreateSlidesProps) {
     const createSlidesMutation = useCreateSlides(path.ownerId, path.mountId);
 
     const handleOpenChange = (nextOpen: boolean) => {
@@ -35,7 +35,7 @@ export function DriveCreateSlides({
         onOpenChange(false);
 
         if (onAfterAction) {
-            onAfterAction('create', {name: fileName});
+            onAfterAction('create', { name: fileName });
         }
 
         if (newPath) {

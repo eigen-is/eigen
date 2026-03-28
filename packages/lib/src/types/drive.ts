@@ -171,11 +171,11 @@ export type ImageDimensions = {
 
 export type DrivePathDetails =
     | ({
-    originalName?: string;
-    duration?: number;
-    pageCount?: number;
-    [key: string]: unknown;
-} & Partial<ImageDimensions>)
+          originalName?: string;
+          duration?: number;
+          pageCount?: number;
+          [key: string]: unknown;
+      } & Partial<ImageDimensions>)
     | null;
 
 export type DrivePath = {
