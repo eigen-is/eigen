@@ -52,9 +52,10 @@ by default. Source Serif 4, JetBrains Mono, and Excalifont are only used by spec
 
 ### Console Stripping in Production [LOW]
 
-Fortune-sheet has 54 `console.error()` and 357 `console.warn()` calls that ship to production.
+Fortune-sheet has ~17 remaining `console.error()`/`console.warn()` calls (down from 400+). Most were removed during
+the fork cleanup.
 
-**Fix:** Add esbuild/Vite plugin to strip console calls in production builds.
+**Fix:** Add esbuild/Vite plugin to strip remaining console calls in production builds.
 
 ### Image Lazy Loading [LOW]
 
@@ -88,32 +89,23 @@ Lists all avatar files, then calls `storage.size()` per file.
 
 ## P3 — Code Quality
 
-### `interface` vs `type` Convention [MEDIUM]
+### `interface` vs `type` Convention [LOW]
 
-131 instances of `interface` in app components (should be `type` per CLAUDE.md).
+~35 instances of `interface` remaining in app code (down from 131), many in auto-generated `routeTree.gen.ts` files.
 
-**Fix:** Bulk convert. Consider adding a lint rule.
+**Fix:** Convert remaining hand-written instances. Biome's `useConsistentObjectType` rule could enforce this.
 
 ### Large Monolithic Components [LOW]
 
 | Component | Lines | Issue |
 |-----------|-------|-------|
-| `apps/docs/.../editor-toolbar.tsx` | 708 | Toolbar + formatting + layout |
-| `apps/contacts/.../contact-edit.tsx` | 653 | Form + avatar upload + labels |
-| `apps/slides/.../slide-properties-panel.tsx` | 584 | Animation + styling + text |
-| `apps/slides/.../editor.tsx` | 529 | Canvas + 29 internal functions |
-| `packages/ui/.../chat-message-input.tsx` | 366 | 3 suggest systems in one file |
+| `apps/docs/.../editor-toolbar.tsx` | 775 | Toolbar + formatting + layout |
+| `apps/slides/.../editor.tsx` | 691 | Canvas + many internal functions |
+| `apps/contacts/.../contact-edit.tsx` | 668 | Form + avatar upload + labels |
+| `apps/slides/.../slide-properties-panel.tsx` | 647 | Animation + styling + text |
+| `packages/ui/.../chat-message-input.tsx` | 367 | 3 suggest systems in one file |
 
 **Fix:** Extract sub-components when touching these files.
-
----
-
-## P3 — Tooling
-
-### Biome.js [EVALUATE]
-
-Could replace ESLint + Prettier with a single Rust-based tool (10-100x faster).
-Worth adopting if Tailwind class sorting is available.
 
 ---
 
@@ -127,8 +119,17 @@ Worth adopting if Tailwind class sorting is available.
 | Thumbnail retry                          | P2       | 1-2 hr   | Backend  |
 | Recycle bin / soft delete                | P2       | 1-2 days | Backend  |
 | Contacts.size() N+1                      | P2       | 30 min   | Backend  |
-| Console stripping in production          | P3       | 1 hr     | Bundle   |
+| Console stripping in production          | P3       | 30 min   | Bundle   |
 | Image lazy loading                       | P3       | 2-3 hr   | Bundle   |
 | Email date formatting                    | P3       | 30 min   | Frontend |
-| `interface` → `type` conversion          | P3       | 1-2 hr   | Quality  |
-| Biome.js adoption                        | P3       | 1 day    | Tooling  |
+| `interface` → `type` conversion          | P3       | 30 min   | Quality  |
+
+### Completed
+
+| Item                                     | Status |
+|------------------------------------------|--------|
+| Biome.js adoption                        | Done -- `biome.jsonc` configured, CI runs `bun run lint` |
+| Mail-parser/mail-split JS -> TS          | Done -- all `.js` files converted to `.ts` |
+| CI pipeline                              | Done -- `.github/workflows/check.yml` (lint + typecheck + test) |
+| Console call cleanup (fortune-sheet)     | Mostly done -- reduced from 400+ to ~17 |
+| `interface` -> `type` bulk conversion    | Mostly done -- reduced from 131 to ~35 (many in generated files) |

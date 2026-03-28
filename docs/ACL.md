@@ -1,11 +1,12 @@
 # ACL System
 
-> **TLDR**: Additive ACL inheritance — permissions flow down the folder tree. `canRead`/`canWrite` check local ACL,
-> then recurse to parents. No deny mechanism. Supports user emails and `team_` prefixed group IDs. Visibility:
-> `private`, `public-read`, `public-write`. Push-based share propagation writes to recipient DBs on share; a share
-> registry handles targets that don't exist yet. Chat invites bubble ACL to the outermost container document via
-> `findContainerPath()`. A per-path `sharingRestricted` flag lets owners lock down who can manage access without
-> removing edit rights. Core logic in `apps/api/src/lib/drive/acl.ts`.
+> **TLDR**: Additive ACL inheritance — permissions flow down the folder tree. `canReadFromAncestors`/
+> `canWriteFromAncestors` check local ACL entries across a pre-fetched breadcrumb. No deny mechanism. Supports user
+> emails and `team_` prefixed group IDs. Visibility: `private`, `public-read`, `public-write`. Push-based share
+> propagation writes to recipient DBs on share; a share registry handles targets that don't exist yet. Chat invites
+> bubble ACL to the outermost container document via `findContainerFromAncestors()`. A per-path `sharingRestricted`
+> flag lets owners lock down who can manage access without removing edit rights. Core logic in
+> `apps/api/src/lib/drive/acl.ts`.
 
 ## Types
 
@@ -20,20 +21,29 @@ Defined in `packages/lib/src/types/drive.ts`.
 
 **File**: `apps/api/src/lib/drive/acl.ts`
 
-### canRead(path, user, getPath)
+### canReadFromAncestors(ancestors, user, memberships)
+
+Walks a pre-fetched breadcrumb (root-first) and returns `true` on the first ancestor that grants access:
 
 1. Owner → true
 2. Team member (path owned by user's team) → true
 3. Visibility `public-read` or `public-write` → true
 4. User in local `acl` with `read: true` (by email or team membership) → true
-5. **Recurse to parent** → true if any ancestor grants access
-6. Default → false
+5. Default → false
 
-### canWrite — same pattern, checks `write` and `public-write`
+The `Drive.canRead(mountId, pathId, user, memberships?)` method fetches the breadcrumb and delegates to this function.
 
-### matchesACL(entry, user)
+### canWriteFromAncestors — same pattern, checks `write` and `public-write`
 
-Uses `parseOwnerId(entry.id)`: user type matches email, team/org type checks membership via `getMemberships()`.
+### matchesACL(acl, user, memberships, permission)
+
+Iterates ACL entries for the given permission. Uses `parseOwnerId(entry.id)`: user type matches email (case-insensitive),
+team type checks `memberships.teamIds`.
+
+### normalizeACL(acl)
+
+Lowercases email-type ACL entry IDs (leaves team IDs unchanged). Returns `null` for empty arrays. Called by
+`Drive.updateACL()` before saving.
 
 ### filterRedundantACL
 
@@ -45,8 +55,8 @@ Strips entries already granted by ancestors or by ownership.
 - **No deny**: No `{read: false}` mechanism
 - **External emails**: Any valid email can be in ACLs
 - **Team ACL**: Additive with user ACL
-- **No org-level ACL**: `parseOwnerId` recognises the `org_` prefix but `matchesACL` only handles `user` and `team`.
-  Org-wide sharing is not implemented; use teams instead
+- **No org-level ACL**: `parseOwnerId` recognises the `org_` prefix but `matchesACL` only checks `user` and `team`
+  entries. Org-wide sharing is not implemented; use teams instead
 
 ## Visibility
 
@@ -96,10 +106,10 @@ exist yet, write to the share registry. On account/team join: pull from registry
 
 **Database**: `data/server/eigen.db` (server-level, `ManagedDatabase`)
 
-| Column             | Type | Description            |
-|--------------------|------|------------------------|
-| `fromUserId`       | TEXT | User who created share |
-| `targetIdentifier` | TEXT | Email or `team_{id}`   |
+| Column             | Type | Description                                     |
+|--------------------|------|-------------------------------------------------|
+| `fromUserId`       | TEXT | Resource owner (Home that owns the file/calendar) |
+| `targetIdentifier` | TEXT | Email or `team_{id}`                            |
 
 PK: `(fromUserId, targetIdentifier)`. No share data — just the pair. Pull routes handle domain resolution.
 
@@ -117,11 +127,14 @@ PK: `(fromUserId, targetIdentifier)`. No share data — just the pair. Pull rout
 - **Account created**: `databaseHooks.user.create.after` in `apps/api/src/lib/auth/auth.ts`
 - **Team member added**: `organizationHooks.afterAddTeamMember` on the `organization()` plugin in `apps/api/src/lib/auth/auth.ts`
 
-On new user/team member, `reconcileSharesForNewUser()` runs:
+On new user, `reconcileSharesForNewUser()` runs:
 
 1. `pullCalendarShares()` — shared calendar entries (synchronous)
 2. `pullDriveShares()` — shared drive paths (async, queries drive DB)
 3. `pullPendingInvitations()` — calendar invites (synchronous, creates linked event copies)
+
+On new team member, `reconcileSharesForNewTeamMember()` runs steps 1 and 2 only (no pending invitations).
+Team registry entries are kept (not deleted) so future members also receive shares.
 
 On user deletion (`deleteUserCompletely`), share registry entries are cleaned up:
 
@@ -154,12 +167,15 @@ current path's ACL. An embedded chat typically has no direct ACL (it inherits fr
 would contain only the new entry — overwriting the container's existing ACL entries. Server-side resolution and merging
 avoids this data loss.
 
-### findContainerPath()
+### findContainerFromAncestors()
 
 **File**: `apps/api/src/lib/drive/acl.ts`
 
-Walks the `parentId` chain upward from a starting path. Returns the outermost `DrivePath` whose MIME type is a collab
-type (eigendoc, eigenstickies, eigenslides, eigensheets), or `null` if none is found (standalone chat).
+Takes a pre-fetched breadcrumb (root-first) and walks it to find the outermost `DrivePath` whose type passes
+`isCollabType()` (doc, stickies, slides, sheets). Returns `null` if none is found (standalone chat).
+
+`Drive.findContainerPath(mountId, pathId)` fetches the breadcrumb via `mount.getBreadcrumb()` and delegates to this
+function.
 
 ```
 chat/General.eigenchat  → not collab
@@ -169,7 +185,7 @@ root                    → stop
 → returns my-doc.eigendoc
 ```
 
-Used by `ChatRoom.init()` and `Drive.inviteToChat()`.
+Used by `Drive.inviteToChat()` and `SharedDrive.inviteToChat()`.
 
 ### Invite Endpoint
 
@@ -257,7 +273,7 @@ TypeScript type: `sharingRestricted: boolean` on `DrivePath` in `packages/lib/sr
 permission:
 
 1. `withWritePermission()` — non-editors get 403 "no write permission" (viewers never see the restriction error)
-2. `isEffectiveOwner()` — returns `true` if the path is team-owned and the caller is a team member
+2. `isEffectiveOwnerSync()` — returns `true` if the path is team-owned and the caller is a team member
 3. If `sharingRestricted && !effectiveOwner` — 403 "Sharing is restricted by the owner"
 4. The `sharingRestricted` parameter itself is only passed through to `Drive.updateACL()` when the caller is an
    effective owner; for all other callers it is silently dropped
@@ -282,7 +298,8 @@ fields, so recipients see the current restriction state in their shared-with-me 
 
 **Share dialog** (`packages/ui/src/components/layout/drive/drive-access-dialog.tsx`):
 
-- `useIsEffectiveOwner()` determines if the caller is the owner or a team member
+- `useIsEffectiveOwner()` (from `packages/lib/src/core/drive/hooks/use-drive-access.ts`) determines if the caller is
+  the owner or a team member
 - When `sharingRestricted && !isEffectiveOwner`, the dialog renders the read-only `DriveAccessList` instead of
   `DriveAccessListEdit`
 
@@ -305,18 +322,18 @@ if needed.
 `public-read`. Both go through the same `updateACL` route and the same check.
 
 **Team members are co-owners.** Team members always go through `SharedDrive` (no team user logs in).
-`isEffectiveOwner()` uses `parseOwnerId()` + `getMemberships()` to grant team members full ACL control on team paths,
-including toggling the flag itself.
+`isEffectiveOwnerSync()` uses `parseOwnerId()` + pre-fetched `memberships.teamIds` to grant team members full ACL
+control on team paths, including toggling the flag itself.
 
 ## Files
 
 | File                                                                 | Purpose                                                                 |
 |----------------------------------------------------------------------|-------------------------------------------------------------------------|
 | `packages/lib/src/types/drive.ts`                                    | `DriveACL`, `DriveVisibility`, `sharingRestricted` on `DrivePath`       |
-| `apps/api/src/lib/drive/acl.ts`                                      | `canRead`, `canWrite`, `matchesACL`, `filterRedundantACL`, `findContainerPath()` |
-| `apps/api/src/lib/drive/acl-propagation.ts`                          | Drive-specific propagation + registry, `resolveACLToEmails()`, `EffectiveMember` |
-| `apps/api/src/lib/drive/drive.ts`                                    | `getEffectiveMembers()`, `inviteToChat()`, `updateACL()`, `receiveACLChange()` |
-| `apps/api/src/lib/drive/sharedDrive.ts`                              | Permission checks, `isEffectiveOwner()`, `inviteToChat()`/`updateACL()` overrides |
+| `apps/api/src/lib/drive/acl.ts`                                      | `canReadFromAncestors`, `canWriteFromAncestors`, `matchesACL`, `normalizeACL`, `filterRedundantACL`, `findContainerFromAncestors` |
+| `apps/api/src/lib/drive/acl-propagation.ts`                          | `propagateACLChange`, `resolveACLUserIds`, `resolveACLToEmails`, `EffectiveMember` |
+| `apps/api/src/lib/drive/drive.ts`                                    | `canRead`, `canWrite`, `findContainerPath`, `getEffectiveMembers`, `inviteToChat`, `updateACL`, `receiveACLChange` |
+| `apps/api/src/lib/drive/sharedDrive.ts`                              | Permission checks, `isEffectiveOwnerSync()`, `inviteToChat()`/`updateACL()` overrides |
 | `apps/api/src/lib/mount/schema.ts`                                   | `sharingRestricted` column on `paths` table                             |
 | `apps/api/src/lib/drive/sharedschema.ts`                             | `sharingRestricted` column on `shared_paths` table                      |
 | `apps/api/src/lib/share/schema.ts`                                   | Share registry Drizzle schema                                           |
@@ -328,11 +345,12 @@ including toggling the flag itself.
 | `apps/api/src/routes/drive.ts`                                       | ACL route with optional `sharingRestricted`                             |
 | `apps/api/src/routes/chat.ts`                                        | `POST /chat/:ownerId/:mountId/:chatId/invite` route                     |
 | `packages/lib/src/core/drive/hooks/use-drive.ts`                     | `useEffectiveMembers()` hook                                            |
+| `packages/lib/src/core/drive/hooks/use-drive-access.ts`              | `useIsEffectiveOwner()` hook                                            |
 | `packages/lib/src/core/chat/hooks/use-chat.ts`                       | `useInviteToChat()` mutation hook                                       |
 | `packages/lib/src/core/chat/hooks/use-chat-room.ts`                  | `/invite` command handler                                               |
 | `packages/ui/src/components/layout/drive/drive-access-dialog.tsx`    | Share dialog, read-only fallback when restricted                        |
 | `packages/ui/src/components/layout/drive/drive-access-list-edit.tsx` | Share dialog edit view, "Editors can share" checkbox                    |
-| `apps/api/src/tests/acl-bubbling.test.ts`                            | ACL bubbling integration tests                                          |
+| `apps/api/src/test/acl-bubbling.test.ts`                             | ACL bubbling integration tests                                          |
 | `apps/api/src/test/sharing-restricted.test.ts`                       | Sharing restriction integration tests                                   |
 
 See: [ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md) for team ACL details, [CHAT.md](CHAT.md) for the chat system

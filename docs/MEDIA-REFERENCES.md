@@ -30,12 +30,15 @@ Two guarantees make this safe:
 
 ## Resolution at Render Time
 
-Names are resolved to pathIds (for API calls) or URLs (for `<img src>`) using the existing `useFolderContent` hook.
+Names are resolved to pathIds (for API calls) or URLs (for `<img src>`) using `useFolderLookup`, which wraps
+`useFolderContent` with refetch-on-miss logic (triggers a single refetch per unknown name to handle the case where
+a collaborator uploads a file and Yjs propagates the name before the query cache updates).
 
 **`MediaResolverProvider`** (`packages/lib/src/core/drive/media-resolver.tsx`) wraps editors and provides:
-- `resolveMediaUrl(name)` — returns embed URL or null
+- `resolveMediaUrl(name)` — returns preview URL or null (uses `getDrivePreviewUrl`)
 - `resolveMediaPath(name)` — returns DrivePath or undefined
 - `resolveChatId(name)` — returns pathId or null
+- `mediaFolderId` — the media folder's pathId (used by clipboard for `needsReUpload()` comparison)
 
 Used by: eigendoc editor (wraps `TiptapEditor`), eigenslides editor, eigenstickies board.
 
@@ -50,11 +53,11 @@ detection and downloading:
 ```typescript
 type EigenClipboardImageItem = {
     type: 'image';
-    mediaName: string;           // file name (stored in Yjs on paste)
-    sourcePathId: string;        // for downloading if re-upload needed
-    sourceParentId: string;      // for needsReUpload() comparison
-    sourceOwnerId: string;       // for constructing download URL
-    sourceMountId: string;       // for constructing download URL
+    mediaName: string;              // file name (stored in Yjs on paste)
+    sourcePathId: string;           // for downloading if re-upload needed
+    sourceParentId: string | null;  // for needsReUpload() comparison
+    sourceOwnerId: string;          // for constructing download URL
+    sourceMountId: string;          // for constructing download URL
 }
 ```
 

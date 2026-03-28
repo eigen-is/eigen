@@ -17,10 +17,11 @@ Notification → home.notifications.persist({...})
                  └── broadcasts notification:created SSE → toast + invalidate notification queries
 ```
 
-SSE is personal-only — each user subscribes to their own Home's event stream. The SSE keepalive (every 30s)
+SSE is personal-only — each user subscribes to their own Home's event stream. The SSE keepalive (every 15s)
 re-acquires the Home via `getHome()` (which calls `touch()`), preventing idle destruction and self-healing if the
 Home was destructed externally. An initial keepalive is sent immediately in `start()` to prevent Apache proxy
-timeouts. The frontend `useSSE` hook auto-reconnects after HTTP errors (e.g. 502) with a 5-second retry.
+timeouts. The frontend `useSSE` hook auto-reconnects after HTTP errors (e.g. 502) with exponential backoff
+(1s initial, doubling up to 30s max, with 20% jitter).
 
 Events fall into two categories:
 
@@ -54,7 +55,8 @@ Events are minimal — only what the frontend handler needs for cache invalidati
 - Chat: `chat.chatId`, `chat.ownerId`, `chat.mountId`
 - Contacts: `contactId` or `labelId`
 - Notification: `title`, optional `body`
-- Space/Team: just the event type
+- Space: just the event type
+- Team: `teamId`
 
 Type prefixes: `drive:`, `mail:`, `contacts:`, `chat:`, `calendar:`, `notification:`, `space:`, `team:`
 
@@ -69,13 +71,16 @@ Type prefixes: `drive:`, `mail:`, `contacts:`, `chat:`, `calendar:`, `notificati
 
 ## Implemented Domains
 
-| Domain       | sse-events builder | sse-handler |
-|--------------|--------------------|-------------|
-| Drive        | Yes                | Yes         |
-| Mail         | Yes                | Yes         |
-| Contacts     | Yes                | Yes         |
-| Chat         | Yes                | Yes         |
-| Calendar     | Yes                | Yes         |
-| Notification | Yes                | Yes         |
-| Space        | —                  | Yes         |
-| Team         | —                  | Yes         |
+| Domain       | sse-events builder | sse-handler | Backend emits |
+|--------------|--------------------|-------------|---------------|
+| Drive        | Yes                | Yes         | Yes           |
+| Mail         | Yes                | Yes         | Yes           |
+| Contacts     | Yes                | Yes         | Yes           |
+| Chat         | Yes                | Yes         | Yes           |
+| Calendar     | Yes                | Yes         | Yes           |
+| Notification | Yes                | Yes         | Yes           |
+| Space        | —                  | Yes         | No            |
+| Team         | —                  | Yes         | No            |
+
+Space and Team have SSE types defined and frontend handlers registered, but no backend code broadcasts these
+events yet. The handlers are wired up in advance so adding the backend emit is all that's needed.

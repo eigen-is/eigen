@@ -10,10 +10,12 @@ defaults through the People app settings page. Separate from `config.json` (infr
 Generic JSON persistence with deep-merge updates, used by ServerSettings, UserSettings, and TeamSettings.
 
 - Constructed with a `LocalFilesystem`, filename, and typed defaults
-- `load()` reads from disk, deep-merges onto defaults (missing keys get default values)
+- `load()` checks if file exists; if so, reads and deep-merges onto defaults (missing keys get default values).
+  On missing file or parse error, keeps defaults
 - `get()` returns the current in-memory state
-- `set(update)` deep-merges the partial update, writes atomically (tmp + rename), rolls back on failure
-- Missing file on load is not an error -- defaults are used, file created on first `set()`
+- `set(update)` deep-merges the partial update, writes atomically (tmp + rename), rolls back on failure. Returns
+  the merged state
+- File is created on first `set()`, not on `load()`
 
 | File                                  | Purpose                                     |
 |---------------------------------------|---------------------------------------------|
@@ -47,12 +49,11 @@ completed, it inherits the storage type from `config.json`.
 
 Exported accessors:
 
-| Function                       | Returns                                      |
-|--------------------------------|----------------------------------------------|
-| `getServerSettings()`          | Full `ServerSettings` object                 |
-| `updateServerSettings(update)` | Deep-merges partial update, persists         |
-| `getMaxUploadSize()`           | `maxUploadSizeMB * 1024 * 1024` (bytes)      |
-| `getMaxBatchUploadSize()`      | `maxBatchUploadSizeMB * 1024 * 1024` (bytes) |
+| Function                       | Returns                                 |
+|--------------------------------|-----------------------------------------|
+| `getServerSettings()`          | Full `ServerSettings` object            |
+| `updateServerSettings(update)` | Deep-merges partial update, persists    |
+| `getMaxUploadSize()`           | `maxUploadSizeMB * 1024 * 1024` (bytes) |
 
 | File                                         | Purpose                   |
 |----------------------------------------------|---------------------------|
@@ -73,17 +74,23 @@ All endpoints require admin or owner role. Defined in `apps/api/src/routes/setti
 
 ## Frontend Hooks
 
-| Hook                                    | Purpose                                                   |
-|-----------------------------------------|-----------------------------------------------------------|
-| `useServerSettings()`                   | Fetches server settings (5 min stale time)                |
-| `useUpdateServerSettings()`             | Mutation to save settings, invalidates cache, shows toast |
-| `invalidateServerSettings(queryClient)` | Manual cache invalidation                                 |
+| Hook                                      | Purpose                                                      |
+|-------------------------------------------|--------------------------------------------------------------|
+| `useServerSettings()`                     | Fetches server settings (5 min stale time)                   |
+| `useUpdateServerSettings()`               | Mutation to save settings, invalidates cache, shows toast    |
+| `invalidateServerSettings(queryClient)`   | Manual cache invalidation                                    |
+| `useServerS3Config()`                     | Fetches S3 storage configuration (5 min stale time)          |
+| `useUpdateServerS3Config()`               | Mutation to save S3 config, invalidates cache, shows toast   |
+| `invalidateServerS3Config(queryClient)`   | Manual S3 config cache invalidation                          |
+| `useCheckS3Connection()`                  | Mutation to test S3 connectivity with provided credentials   |
 
-Query key: `['settings', 'server']`
+Query keys: `['settings', 'server']`, `['settings', 's3config']`
 
-| File                                                          | Purpose              |
-|---------------------------------------------------------------|----------------------|
-| `packages/lib/src/core/settings/hooks/use-server-settings.ts` | Hooks and query keys |
+| File                                                          | Purpose                      |
+|---------------------------------------------------------------|------------------------------|
+| `packages/lib/src/core/settings/hooks/use-server-settings.ts` | Server settings hooks + keys |
+| `packages/lib/src/core/settings/hooks/use-s3-config.ts`       | S3 config hooks              |
+| `packages/lib/src/core/settings/hooks/use-s3-check.ts`        | S3 connection test hook      |
 
 ## Settings UI
 
@@ -115,6 +122,8 @@ The People app has a `/settings` route with the `ServerSettingsPage` component. 
 | `apps/api/src/lib/core/json-store.ts`                         | `JsonStore<T>` generic persistence                                      |
 | `apps/api/src/lib/config/server-settings.ts`                  | Server settings store and accessors                                     |
 | `apps/api/src/routes/settings.ts`                             | Admin API endpoints                                                     |
-| `packages/lib/src/core/settings/hooks/use-server-settings.ts` | Frontend hooks                                                          |
+| `packages/lib/src/core/settings/hooks/use-server-settings.ts` | Server settings hooks and query keys                                    |
+| `packages/lib/src/core/settings/hooks/use-s3-config.ts`       | S3 config hooks                                                         |
+| `packages/lib/src/core/settings/hooks/use-s3-check.ts`        | S3 connection test hook                                                 |
 | `apps/people/src/routes/_auth.settings.tsx`                   | Settings route                                                          |
 | `apps/people/src/components/people/server-settings.tsx`       | Settings form UI                                                        |
