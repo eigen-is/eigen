@@ -139,7 +139,8 @@
       "Bash(bunx --bun @biomejs/biome lint --max-diagnostics=5000 .)",
       "Bash(bunx --bun @biomejs/biome lint --max-diagnostics=500 .)",
       "Bash(bunx --bun @biomejs/biome lint --max-diagnostics=10 .)",
-      "Bash(bunx --bun @biomejs/biome lint --max-diagnostics=100 .)"
+      "Bash(bunx --bun @biomejs/biome lint --max-diagnostics=100 .)",
+      "Bash(bunx --bun @biomejs/biome lint .)"
     ]
   },
   "enabledPlugins": {
