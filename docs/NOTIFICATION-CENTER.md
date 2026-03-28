@@ -123,16 +123,23 @@ Links are constructed client-side based on notification `type` and `tag`:
 
 - `share`, `mention-chat`, `mention-comment` → async: fetches `DrivePath` via API on click, routes to correct app
   using `getDocumentUrl()` (eigendoc → Docs, eigenchat → Chat, etc.) or falls back to Drive
-- `calendar-*` → `getCalendarAppUrl()`
+- `calendar-share`, `calendar-unshare`, `calendar-invite`, `calendar-invite-updated`, `calendar-invite-cancelled` →
+  `getCalendarAppUrl()`
 - `mail` → `getMailAppUrl('box/inbox')`
-- `unshare`, `calendar-unshare` → not clickable (resource no longer accessible)
+- `unshare` → not clickable (resource no longer accessible)
 
 No URLs stored in the database — `tag` contains the IDs, frontend resolves using `get*AppUrl()` helpers from `api.ts`.
 
 ### Display Names
 
-Eigen extensions (`.eigendoc`, `.eigenstickies`, etc.) are stripped from notification titles using
-`stripEigenExtension()` from `packages/lib/src/types/drive.ts`.
+Eigen extensions (`.eigendoc`, `.eigenstickies`, etc.) are stripped from notification titles server-side using
+`stripEigenExtension()` (from `packages/lib/src/types/drive.ts`) before persisting. The bell component displays
+the stored title as-is.
+
+### Actor Avatars
+
+`UserAvatar` (from `packages/ui/src/components/layout/user-avatar.tsx`) renders the `actorEmail` avatar next to each
+notification item.
 
 ### SSE Handler
 
@@ -169,3 +176,4 @@ Minimal — only what the toast needs. The notification list is fetched via API,
 | `packages/lib/src/core/notification/hooks/use-notifications.ts` | Query + mutation hooks           |
 | `packages/lib/src/core/notification/sse-handlers.ts`            | SSE handler (toast + invalidate) |
 | `packages/ui/src/components/layout/app/notification-bell.tsx`   | Topbar bell + popover            |
+| `packages/ui/src/components/layout/user-avatar.tsx`            | Actor avatar in notification item |

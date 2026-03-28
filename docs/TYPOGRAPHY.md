@@ -23,10 +23,10 @@ Font files live in `packages/ui/src/assets/fonts/` as Vite assets (hashed, cache
 Tailwind theme tokens in `globals.css`:
 
 ```css
---font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
---font-serif: 'Source Serif 4', Georgia, 'Times New Roman', serif;
---font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
---font-hand: 'Excalifont', 'Comic Sans MS', cursive;
+--font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+--font-serif: "Source Serif 4", Georgia, "Times New Roman", serif;
+--font-mono: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+--font-hand: "Excalifont", "Comic Sans MS", cursive;
 ```
 
 These enable Tailwind utilities: `font-sans`, `font-serif`, `font-mono`, `font-hand`.
@@ -39,8 +39,8 @@ These enable Tailwind utilities: `font-sans`, `font-serif`, `font-mono`, `font-h
 `EIGEN_FONTS` in `packages/lib/src/constants/fonts.ts` is the single source of truth for available fonts.
 Each entry has `name`, `family` (CSS value with fallbacks), `category`, and `weights`.
 
-`getFontFamily(fontName)` resolves a font name to its CSS `font-family` value, falling back to sans-serif
-for unknown names.
+`DEFAULT_FONT` is `EIGEN_FONTS[0]` (Inter). `getFontFamily(fontName)` resolves a font name to its CSS
+`font-family` value, falling back to sans-serif for unknown names.
 
 ## FontPicker Component
 

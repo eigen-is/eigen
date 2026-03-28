@@ -41,7 +41,7 @@ my-doc.eigendoc/
 // apps/api/src/lib/chat/comment-schema.ts
 export const comments = sqliteTable('comments', {
     chatName: text('chatName').primaryKey(),
-    status: text('status').notNull().default('open'),       // 'open' | 'resolved'
+    status: text('status').notNull().default('open').$type<'open' | 'resolved'>(),
     resolvedBy: text('resolvedBy'),
     resolvedAt: integer('resolvedAt', {mode: 'timestamp'}),
     lastAuthorEmail: text('lastAuthorEmail'),
@@ -66,9 +66,9 @@ automatically — mentioning the same user twice in the same chat is a no-op.
 
 ## ChatRoom: Container Discovery
 
-`containerPath` field on `ChatRoom`, resolved during `init()` via `Drive.findContainerPath()`. This delegates to the
-shared `findContainerPath()` in `acl.ts`, which walks the full `parentId` chain to root and returns the outermost
-collab ancestor. For the standard eigendoc structure the walk is short (chat/ folder -> doc -> parent folder -> root).
+`containerPath` field on `ChatRoom`, resolved during `init()` via `Drive.findContainerPath()`. This calls
+`findContainerFromAncestors()` (exported from `acl.ts`), which walks the breadcrumb and returns the outermost collab
+ancestor. For the standard eigendoc structure the walk is short (chat/ folder -> doc -> parent folder -> root).
 Negligible cost, done once per `ChatRoom.init()`.
 
 ## CommentIndex Service

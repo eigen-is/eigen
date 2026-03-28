@@ -9,9 +9,8 @@ coverage
 .idea
 *.md
 !README.md
+node_modules
 data/*.db
 data/*.db-shm
 data/*.db-wal
 apps/api/data
-apps/*/node_modules
-packages/*/node_modules
