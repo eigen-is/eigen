@@ -380,10 +380,6 @@ export default class Drive {
 
     async downloadFile(mountId: string, pathId: string) {
         const mount = this.getMount(mountId);
-        const path = await mount.getPath(pathId);
-        if (!path || path.type !== DRIVE_TYPE_FILE) {
-            return null;
-        }
         return await mount.readFile(pathId);
     }
 
