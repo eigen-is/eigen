@@ -1,5 +1,5 @@
-import {useBreadcrumb} from '@workspace/lib/drive';
-import type {DrivePath} from '@workspace/lib/types/drive';
+import { useBreadcrumb } from '@workspace/lib/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     Breadcrumb,
     BreadcrumbItem,
@@ -8,7 +8,7 @@ import {
     BreadcrumbPage,
     BreadcrumbSeparator,
 } from '@workspace/ui/components/breadcrumb';
-import {Button} from '@workspace/ui/components/button';
+import { Button } from '@workspace/ui/components/button';
 import {
     ContextMenu,
     ContextMenuContent,
@@ -21,14 +21,14 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import {DriveTable, getFileIcon} from '@workspace/ui/components/layout/drive';
-import {cn} from '@workspace/ui/lib/utils';
-import {FileText, FolderPlus, MessageSquare, Plus, Presentation, Sheet, StickyNote, UploadIcon} from 'lucide-react';
-import {Fragment, useRef, useState} from 'react';
-import {EmptyState} from '../app/empty-state';
-import {ErrorState} from '../app/error-state';
-import {useLayout} from '../app/layout-context.tsx';
-import {LoadingState} from '../app/loading-state';
+import { DriveTable, getFileIcon } from '@workspace/ui/components/layout/drive';
+import { cn } from '@workspace/ui/lib/utils';
+import { FileText, FolderPlus, MessageSquare, Plus, Presentation, Sheet, StickyNote, UploadIcon } from 'lucide-react';
+import { Fragment, useRef, useState } from 'react';
+import { EmptyState } from '../app/empty-state';
+import { ErrorState } from '../app/error-state';
+import { useLayout } from '../app/layout-context.tsx';
+import { LoadingState } from '../app/loading-state';
 
 type CreateCallbacks = {
     onCreateFolder?: () => void;
@@ -42,17 +42,17 @@ type CreateCallbacks = {
 
 const CREATE_MENU_DEFS: { key: keyof CreateCallbacks; icon: typeof FolderPlus; label: string; buttonLabel: string }[] =
     [
-        {key: 'onCreateFolder', icon: FolderPlus, label: 'Create folder', buttonLabel: 'New folder'},
-        {key: 'onUploadFile', icon: UploadIcon, label: 'Upload file', buttonLabel: 'Upload'},
-        {key: 'onCreateDoc', icon: FileText, label: 'Create document', buttonLabel: 'New document'},
-        {key: 'onCreateStickies', icon: StickyNote, label: 'Create stickies', buttonLabel: 'New stickies'},
-        {key: 'onCreateChat', icon: MessageSquare, label: 'Create chat', buttonLabel: 'New chat'},
-        {key: 'onCreateSlides', icon: Presentation, label: 'Create slides', buttonLabel: 'New slides'},
-        {key: 'onCreateSheets', icon: Sheet, label: 'Create sheets', buttonLabel: 'New sheets'},
+        { key: 'onCreateFolder', icon: FolderPlus, label: 'Create folder', buttonLabel: 'New folder' },
+        { key: 'onUploadFile', icon: UploadIcon, label: 'Upload file', buttonLabel: 'Upload' },
+        { key: 'onCreateDoc', icon: FileText, label: 'Create document', buttonLabel: 'New document' },
+        { key: 'onCreateStickies', icon: StickyNote, label: 'Create stickies', buttonLabel: 'New stickies' },
+        { key: 'onCreateChat', icon: MessageSquare, label: 'Create chat', buttonLabel: 'New chat' },
+        { key: 'onCreateSlides', icon: Presentation, label: 'Create slides', buttonLabel: 'New slides' },
+        { key: 'onCreateSheets', icon: Sheet, label: 'Create sheets', buttonLabel: 'New sheets' },
     ];
 
 function getCreateMenuItems(cb: CreateCallbacks) {
-    return CREATE_MENU_DEFS.filter((def) => cb[def.key]).map((def) => ({...def, onSelect: cb[def.key]!}));
+    return CREATE_MENU_DEFS.filter((def) => cb[def.key]).map((def) => ({ ...def, onSelect: cb[def.key]! }));
 }
 
 type DriveListToolbarProps = CreateCallbacks & {
@@ -66,23 +66,23 @@ type DriveListToolbarProps = CreateCallbacks & {
 };
 
 export function DriveListToolbar({
-                                     ownerId,
-                                     mountId,
-                                     pathId,
-                                     showBreadcrumb = true,
-                                     onRowSelect,
-                                     onRowActivate,
-                                     activeRowId,
-                                     onCreateFolder,
-                                     onUploadFile,
-                                     onCreateDoc,
-                                     onCreateStickies,
-                                     onCreateChat,
-                                     onCreateSlides,
-                                     onCreateSheets,
-                                 }: DriveListToolbarProps) {
-    const {data: breadcrumbPaths = []} = useBreadcrumb(ownerId, mountId, showBreadcrumb ? pathId : undefined);
-    const {isMobile} = useLayout();
+    ownerId,
+    mountId,
+    pathId,
+    showBreadcrumb = true,
+    onRowSelect,
+    onRowActivate,
+    activeRowId,
+    onCreateFolder,
+    onUploadFile,
+    onCreateDoc,
+    onCreateStickies,
+    onCreateChat,
+    onCreateSlides,
+    onCreateSheets,
+}: DriveListToolbarProps) {
+    const { data: breadcrumbPaths = [] } = useBreadcrumb(ownerId, mountId, showBreadcrumb ? pathId : undefined);
+    const { isMobile } = useLayout();
 
     const handleBreadcrumbClick = (path: DrivePath) => {
         if (path.id === activeRowId && onRowActivate) {
@@ -105,21 +105,21 @@ export function DriveListToolbar({
     const newItemButton =
         createItems.length === 0 ? null : createItems.length === 1 ? (
             <Button size="default" onClick={createItems[0].onSelect}>
-                <Plus/>
+                <Plus />
                 <span className="mr-2">{createItems[0].buttonLabel}</span>
             </Button>
         ) : (
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                     <Button size="default">
-                        <Plus/>
+                        <Plus />
                         <span className="mr-2">New</span>
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                    {createItems.map(({key, icon: Icon, label, onSelect}) => (
+                    {createItems.map(({ key, icon: Icon, label, onSelect }) => (
                         <DropdownMenuItem key={key} onClick={onSelect}>
-                            <Icon className="h-4 w-4 mr-2"/>
+                            <Icon className="h-4 w-4 mr-2" />
                             {label}
                         </DropdownMenuItem>
                     ))}
@@ -134,7 +134,7 @@ export function DriveListToolbar({
                     <BreadcrumbList>
                         {breadcrumbPaths.map((path, index) => (
                             <Fragment key={path.id}>
-                                {index > 0 && <BreadcrumbSeparator/>}
+                                {index > 0 && <BreadcrumbSeparator />}
                                 <BreadcrumbItem>
                                     {index === breadcrumbPaths.length - 1 ? (
                                         <BreadcrumbPage className="flex items-center">{path.name}</BreadcrumbPage>
@@ -152,7 +152,7 @@ export function DriveListToolbar({
                     </BreadcrumbList>
                 </Breadcrumb>
             ) : (
-                <div className="flex-1"/>
+                <div className="flex-1" />
             )}
             <div className="flex gap-1">{isMobile && newItemButton}</div>
         </div>
@@ -185,36 +185,36 @@ type DriveListProps = CreateCallbacks & {
 };
 
 export function DriveList({
-                              items = [],
-                              isLoading = false,
-                              error = null,
-                              onRowSelect,
-                              onRowActivate,
-                              activeRowId,
-                              onCreateFolder,
-                              onUploadFile,
-                              onUploadFiles,
-                              onDelete,
-                              currentPath,
-                              onShareClick,
-                              onCreateDoc,
-                              onCreateStickies,
-                              onCreateChat,
-                              onCreateSlides,
-                              onCreateSheets,
-                              onDownload,
-                              ownerId,
-                              mountId,
-                              pathId,
-                              allowDelete = false,
-                              allowDownload = false,
-                              allowUpload = false,
-                              onRename,
-                              onMove,
-                              onQuickLook,
-                              sortFn,
-                          }: DriveListProps) {
-    const {data: breadcrumbPaths} = useBreadcrumb(ownerId, mountId, pathId);
+    items = [],
+    isLoading = false,
+    error = null,
+    onRowSelect,
+    onRowActivate,
+    activeRowId,
+    onCreateFolder,
+    onUploadFile,
+    onUploadFiles,
+    onDelete,
+    currentPath,
+    onShareClick,
+    onCreateDoc,
+    onCreateStickies,
+    onCreateChat,
+    onCreateSlides,
+    onCreateSheets,
+    onDownload,
+    ownerId,
+    mountId,
+    pathId,
+    allowDelete = false,
+    allowDownload = false,
+    allowUpload = false,
+    onRename,
+    onMove,
+    onQuickLook,
+    sortFn,
+}: DriveListProps) {
+    const { data: breadcrumbPaths } = useBreadcrumb(ownerId, mountId, pathId);
     const [isDragging, setIsDragging] = useState(false);
     const dragCounter = useRef(0);
     // Handle row click with two different behaviors
@@ -297,11 +297,11 @@ export function DriveList({
     });
 
     if (isLoading) {
-        return <LoadingState/>;
+        return <LoadingState />;
     }
 
     if (error) {
-        return <ErrorState message="Error loading files" detail={error.message}/>;
+        return <ErrorState message="Error loading files" detail={error.message} />;
     }
 
     const contentDiv = (
@@ -313,10 +313,9 @@ export function DriveList({
             onDrop={handleDrop}
         >
             {allowUpload && isDragging && (
-                <div
-                    className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-10 pointer-events-none">
+                <div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-10 pointer-events-none">
                     <div className="bg-card p-6 rounded-lg shadow-lg text-center">
-                        <UploadIcon className="h-12 w-12 mx-auto mb-4 text-primary animate-bounce"/>
+                        <UploadIcon className="h-12 w-12 mx-auto mb-4 text-primary animate-bounce" />
                         <h3 className="text-xl font-medium mb-2">Drop files here</h3>
                         <p className="text-muted-foreground">Release to upload</p>
                     </div>
@@ -342,7 +341,7 @@ export function DriveList({
                 sortFn={sortFn}
             />
 
-            {items.length === 0 && <EmptyState/>}
+            {items.length === 0 && <EmptyState />}
         </div>
     );
 
@@ -352,9 +351,9 @@ export function DriveList({
         <ContextMenu>
             <ContextMenuTrigger asChild>{contentDiv}</ContextMenuTrigger>
             <ContextMenuContent>
-                {createItems.map(({key, icon: Icon, label, onSelect}) => (
+                {createItems.map(({ key, icon: Icon, label, onSelect }) => (
                     <ContextMenuItem key={key} onSelect={onSelect}>
-                        <Icon className="h-4 w-4 mr-2"/>
+                        <Icon className="h-4 w-4 mr-2" />
                         {label}
                     </ContextMenuItem>
                 ))}

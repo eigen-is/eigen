@@ -1,4 +1,4 @@
-import {useEffect, useMemo} from 'react';
+import { useEffect, useMemo } from 'react';
 
 type CommandHelp = {
     cmd: string;
@@ -15,13 +15,13 @@ type ChatSlashSuggestProps = {
 };
 
 export function ChatSlashSuggest({
-                                     query,
-                                     commandsHelp,
-                                     onSelect,
-                                     visible,
-                                     selectedIndex,
-                                     onItemsChange,
-                                 }: ChatSlashSuggestProps) {
+    query,
+    commandsHelp,
+    onSelect,
+    visible,
+    selectedIndex,
+    onItemsChange,
+}: ChatSlashSuggestProps) {
     const items = useMemo(() => {
         if (!visible || !query) return [];
 
@@ -36,7 +36,7 @@ export function ChatSlashSuggest({
             if (allCmds.some((c) => c.toLowerCase().startsWith(q))) {
                 if (!seen.has(primaryCmd)) {
                     seen.add(primaryCmd);
-                    results.push({cmd: help.cmd, desc: help.desc});
+                    results.push({ cmd: help.cmd, desc: help.desc });
                 }
             }
         }

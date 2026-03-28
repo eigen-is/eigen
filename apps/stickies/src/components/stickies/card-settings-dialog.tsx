@@ -1,12 +1,12 @@
-import {EIGEN_STICKIES_COLORS} from '@workspace/lib/constants';
-import {Button} from '@workspace/ui/components/button';
-import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
-import {Input} from '@workspace/ui/components/input';
-import {Label} from '@workspace/ui/components/label';
-import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
-import {ColorPicker} from '@workspace/ui/components/layout/media/color-picker';
-import {Textarea} from '@workspace/ui/components/textarea';
-import {useState} from 'react';
+import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
+import { Button } from '@workspace/ui/components/button';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { Input } from '@workspace/ui/components/input';
+import { Label } from '@workspace/ui/components/label';
+import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
+import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker';
+import { Textarea } from '@workspace/ui/components/textarea';
+import { useState } from 'react';
 import * as Y from 'yjs';
 
 type CardSettingsDialogProps = {
@@ -20,14 +20,14 @@ type CardSettingsDialogProps = {
 };
 
 export function CardSettingsDialog({
-                                       isOpen,
-                                       onClose,
-                                       cardId,
-                                       cardTitle,
-                                       cardDescription,
-                                       cardColor,
-                                       yjsDoc,
-                                   }: CardSettingsDialogProps) {
+    isOpen,
+    onClose,
+    cardId,
+    cardTitle,
+    cardDescription,
+    cardColor,
+    yjsDoc,
+}: CardSettingsDialogProps) {
     const [title, setTitle] = useState(cardTitle);
     const [description, setDescription] = useState(cardDescription);
     const [color, setColor] = useState(cardColor);
@@ -86,7 +86,7 @@ export function CardSettingsDialog({
                         <div className="grid gap-4 py-4">
                             <div className="grid gap-2">
                                 <Label htmlFor="title">Title</Label>
-                                <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)}/>
+                                <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} />
                             </div>
                             <div className="grid gap-2">
                                 <Label htmlFor="description">Description</Label>

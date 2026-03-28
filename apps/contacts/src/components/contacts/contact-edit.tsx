@@ -1,27 +1,27 @@
-import {zodResolver} from '@hookform/resolvers/zod';
-import {getContactsAvatarUploadUrl} from '@workspace/lib/api';
-import {useAuth} from '@workspace/lib/auth';
-import {useLabels} from '@workspace/lib/contacts';
-import type {Contact} from '@workspace/lib/types/contact';
-import {Toolbar, UserAvatar} from '@workspace/ui';
-import {Badge} from '@workspace/ui/components/badge';
-import {Button} from '@workspace/ui/components/button';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { getContactsAvatarUploadUrl } from '@workspace/lib/api';
+import { useAuth } from '@workspace/lib/auth';
+import { useLabels } from '@workspace/lib/contacts';
+import type { Contact } from '@workspace/lib/types/contact';
+import { Toolbar, UserAvatar } from '@workspace/ui';
+import { Badge } from '@workspace/ui/components/badge';
+import { Button } from '@workspace/ui/components/button';
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage} from '@workspace/ui/components/form';
-import {Input} from '@workspace/ui/components/input';
-import {useUpload} from '@workspace/ui/components/layout/upload-provider/upload-provider';
-import {uploadWithProgress} from '@workspace/ui/components/layout/upload-provider/upload-with-progress';
-import {Textarea} from '@workspace/ui/components/textarea';
-import {format} from 'date-fns';
-import {Camera, Plus, Trash2} from 'lucide-react';
-import React, {useState} from 'react';
-import {useForm} from 'react-hook-form';
-import {z} from 'zod';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
+import { Input } from '@workspace/ui/components/input';
+import { useUpload } from '@workspace/ui/components/layout/upload-provider/upload-provider';
+import { uploadWithProgress } from '@workspace/ui/components/layout/upload-provider/upload-with-progress';
+import { Textarea } from '@workspace/ui/components/textarea';
+import { format } from 'date-fns';
+import { Camera, Plus, Trash2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
 
 // Define the form schema
 export const formSchema = z
@@ -62,7 +62,7 @@ type ContactEditToolbarProps = {
     isNew: boolean;
 };
 
-export function ContactEditToolbar({isNew}: ContactEditToolbarProps) {
+export function ContactEditToolbar({ isNew }: ContactEditToolbarProps) {
     return (
         <Toolbar>
             <h1 className="font-medium">{isNew ? 'Create Contact' : 'Edit Contact'}</h1>
@@ -76,10 +76,10 @@ type ContactEditProps = {
     onCancel: () => void;
 };
 
-export function ContactEdit({contact, onSave, onCancel}: ContactEditProps) {
-    const {user} = useAuth();
+export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
+    const { user } = useAuth();
 
-    const {data: labels = [], error: labelsError} = useLabels();
+    const { data: labels = [], error: labelsError } = useLabels();
     const [error, setError] = useState<string | null>(null);
     const [avatar, setAvatar] = useState<string | null>(contact?.avatar ?? null);
     const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -101,11 +101,11 @@ export function ContactEdit({contact, onSave, onCancel}: ContactEditProps) {
         },
     });
 
-    const {handleSubmit: hookFormSubmit} = form;
+    const { handleSubmit: hookFormSubmit } = form;
     const handleSubmit = hookFormSubmit(async (data) => {
         setError(null);
         try {
-            await onSave({...data, avatar});
+            await onSave({ ...data, avatar });
         } catch (e) {
             console.error('Error saving contact:', e);
             setError('An error occurred while saving the contact.');
@@ -185,7 +185,7 @@ export function ContactEdit({contact, onSave, onCancel}: ContactEditProps) {
                                                 variant="secondary"
                                                 className="absolute bottom-1 right-1 rounded-full h-8 w-8 shadow-md opacity-80 hover:opacity-100"
                                             >
-                                                <Camera className="h-4 w-4"/>
+                                                <Camera className="h-4 w-4" />
                                             </Button>
                                         </DropdownMenuTrigger>
                                         <DropdownMenuContent align="end">
@@ -223,7 +223,7 @@ export function ContactEdit({contact, onSave, onCancel}: ContactEditProps) {
                                         <FormField
                                             control={form.control}
                                             name="firstName"
-                                            render={({field}) => (
+                                            render={({ field }) => (
                                                 <FormItem>
                                                     <FormLabel>
                                                         First name<span className="text-muted-foreground">*</span>
@@ -231,7 +231,7 @@ export function ContactEdit({contact, onSave, onCancel}: ContactEditProps) {
                                                     <FormControl>
                                                         <Input {...field} />
                                                     </FormControl>
-                                                    <FormMessage/>
+                                                    <FormMessage />
                                                 </FormItem>
                                             )}
                                         />
@@ -239,7 +239,7 @@ export function ContactEdit({contact, onSave, onCancel}: ContactEditProps) {
                                         <FormField
                                             control={form.control}
                                             name="lastName"
-                                            render={({field}) => (
+                                            render={({ field }) => (
                                                 <FormItem>
                                                     <FormLabel>
                                                         Last name<span className="text-muted-foreground">*</span>
@@ -247,7 +247,7 @@ export function ContactEdit({contact, onSave, onCancel}: ContactEditProps) {
                                                     <FormControl>
                                                         <Input {...field} />
                                                     </FormControl>
-                                                    <FormMessage/>
+                                                    <FormMessage />
                                                 </FormItem>
                                             )}
                                         />
@@ -257,13 +257,13 @@ export function ContactEdit({contact, onSave, onCancel}: ContactEditProps) {
                                         <FormField
                                             control={form.control}
                                             name="company"
-                                            render={({field}) => (
+                                            render={({ field }) => (
                                                 <FormItem>
                                                     <FormLabel>Company</FormLabel>
                                                     <FormControl>
                                                         <Input {...field} />
                                                     </FormControl>
-                                                    <FormMessage/>
+                                                    <FormMessage />
                                                 </FormItem>
                                             )}
                                         />
@@ -271,13 +271,13 @@ export function ContactEdit({contact, onSave, onCancel}: ContactEditProps) {
                                         <FormField
                                             control={form.control}
                                             name="jobTitle"
-                                            render={({field}) => (
+                                            render={({ field }) => (
                                                 <FormItem>
                                                     <FormLabel>Job title</FormLabel>
                                                     <FormControl>
                                                         <Input {...field} />
                                                     </FormControl>
-                                                    <FormMessage/>
+                                                    <FormMessage />
                                                 </FormItem>
                                             )}
                                         />
@@ -287,7 +287,7 @@ export function ContactEdit({contact, onSave, onCancel}: ContactEditProps) {
                                     <FormField
                                         control={form.control}
                                         name="labels"
-                                        render={({field}) => (
+                                        render={({ field }) => (
                                             <FormItem>
                                                 <FormLabel>Labels</FormLabel>
                                                 <div className="flex flex-wrap gap-2 mt-2">
@@ -311,7 +311,7 @@ export function ContactEdit({contact, onSave, onCancel}: ContactEditProps) {
                                                                         field.onChange(newLabels);
                                                                     }}
                                                                 >
-                                                                    <Trash2 className="h-3 w-3"/>
+                                                                    <Trash2 className="h-3 w-3" />
                                                                 </button>
                                                             </Badge>
                                                         );
@@ -347,7 +347,7 @@ export function ContactEdit({contact, onSave, onCancel}: ContactEditProps) {
                                                         ))}
                                                     </select>
                                                 </div>
-                                                <FormMessage/>
+                                                <FormMessage />
                                             </FormItem>
                                         )}
                                     />
@@ -378,7 +378,7 @@ export function ContactEdit({contact, onSave, onCancel}: ContactEditProps) {
                                                     form.setValue('email', [...currentEmails, '']);
                                                 }}
                                             >
-                                                <Plus className="h-3.5 w-3.5"/>
+                                                <Plus className="h-3.5 w-3.5" />
                                                 <span className="text-xs">Add</span>
                                             </Button>
                                         </div>
@@ -388,10 +388,10 @@ export function ContactEdit({contact, onSave, onCancel}: ContactEditProps) {
                                                     <FormField
                                                         control={form.control}
                                                         name={`email.${index}`}
-                                                        render={({field}) => (
+                                                        render={({ field }) => (
                                                             <FormItem className="flex-1 space-y-0">
                                                                 <FormControl>
-                                                                    <Input {...field} placeholder="Email address"/>
+                                                                    <Input {...field} placeholder="Email address" />
                                                                 </FormControl>
                                                             </FormItem>
                                                         )}
@@ -410,7 +410,7 @@ export function ContactEdit({contact, onSave, onCancel}: ContactEditProps) {
                                                                 form.setValue('email', newEmails);
                                                             }}
                                                         >
-                                                            <Trash2 className="h-4 w-4"/>
+                                                            <Trash2 className="h-4 w-4" />
                                                         </Button>
                                                     )}
                                                 </div>
@@ -431,7 +431,7 @@ export function ContactEdit({contact, onSave, onCancel}: ContactEditProps) {
                                                     form.setValue('phone', [...currentPhones, '']);
                                                 }}
                                             >
-                                                <Plus className="h-3.5 w-3.5"/>
+                                                <Plus className="h-3.5 w-3.5" />
                                                 <span className="text-xs">Add</span>
                                             </Button>
                                         </div>
@@ -441,10 +441,10 @@ export function ContactEdit({contact, onSave, onCancel}: ContactEditProps) {
                                                     <FormField
                                                         control={form.control}
                                                         name={`phone.${index}`}
-                                                        render={({field}) => (
+                                                        render={({ field }) => (
                                                             <FormItem className="flex-1 space-y-0">
                                                                 <FormControl>
-                                                                    <Input {...field} placeholder="Phone number"/>
+                                                                    <Input {...field} placeholder="Phone number" />
                                                                 </FormControl>
                                                             </FormItem>
                                                         )}
@@ -463,7 +463,7 @@ export function ContactEdit({contact, onSave, onCancel}: ContactEditProps) {
                                                                 form.setValue('phone', newPhones);
                                                             }}
                                                         >
-                                                            <Trash2 className="h-4 w-4"/>
+                                                            <Trash2 className="h-4 w-4" />
                                                         </Button>
                                                     )}
                                                 </div>
@@ -484,7 +484,7 @@ export function ContactEdit({contact, onSave, onCancel}: ContactEditProps) {
                                                     form.setValue('address', [...currentAddresses, {}]);
                                                 }}
                                             >
-                                                <Plus className="h-3.5 w-3.5"/>
+                                                <Plus className="h-3.5 w-3.5" />
                                                 <span className="text-xs">Add</span>
                                             </Button>
                                         </div>
@@ -508,7 +508,7 @@ export function ContactEdit({contact, onSave, onCancel}: ContactEditProps) {
                                                                     }
                                                                 }}
                                                             >
-                                                                <Trash2 className="h-4 w-4"/>
+                                                                <Trash2 className="h-4 w-4" />
                                                             </Button>
                                                         )}
                                                     </div>
@@ -516,13 +516,13 @@ export function ContactEdit({contact, onSave, onCancel}: ContactEditProps) {
                                                     <FormField
                                                         control={form.control}
                                                         name={`address.${index}.street`}
-                                                        render={({field}) => (
+                                                        render={({ field }) => (
                                                             <FormItem>
                                                                 <FormLabel>Street</FormLabel>
                                                                 <FormControl>
-                                                                    <Input {...field} placeholder="Street address"/>
+                                                                    <Input {...field} placeholder="Street address" />
                                                                 </FormControl>
-                                                                <FormMessage/>
+                                                                <FormMessage />
                                                             </FormItem>
                                                         )}
                                                     />
@@ -531,13 +531,13 @@ export function ContactEdit({contact, onSave, onCancel}: ContactEditProps) {
                                                         <FormField
                                                             control={form.control}
                                                             name={`address.${index}.city`}
-                                                            render={({field}) => (
+                                                            render={({ field }) => (
                                                                 <FormItem>
                                                                     <FormLabel>City</FormLabel>
                                                                     <FormControl>
-                                                                        <Input {...field} placeholder="City"/>
+                                                                        <Input {...field} placeholder="City" />
                                                                     </FormControl>
-                                                                    <FormMessage/>
+                                                                    <FormMessage />
                                                                 </FormItem>
                                                             )}
                                                         />
@@ -545,7 +545,7 @@ export function ContactEdit({contact, onSave, onCancel}: ContactEditProps) {
                                                         <FormField
                                                             control={form.control}
                                                             name={`address.${index}.state`}
-                                                            render={({field}) => (
+                                                            render={({ field }) => (
                                                                 <FormItem>
                                                                     <FormLabel>State</FormLabel>
                                                                     <FormControl>
@@ -554,7 +554,7 @@ export function ContactEdit({contact, onSave, onCancel}: ContactEditProps) {
                                                                             placeholder="State/Province"
                                                                         />
                                                                     </FormControl>
-                                                                    <FormMessage/>
+                                                                    <FormMessage />
                                                                 </FormItem>
                                                             )}
                                                         />
@@ -564,7 +564,7 @@ export function ContactEdit({contact, onSave, onCancel}: ContactEditProps) {
                                                         <FormField
                                                             control={form.control}
                                                             name={`address.${index}.zipCode`}
-                                                            render={({field}) => (
+                                                            render={({ field }) => (
                                                                 <FormItem>
                                                                     <FormLabel>Postal code</FormLabel>
                                                                     <FormControl>
@@ -574,7 +574,7 @@ export function ContactEdit({contact, onSave, onCancel}: ContactEditProps) {
                                                                             placeholder="Postal/ZIP code"
                                                                         />
                                                                     </FormControl>
-                                                                    <FormMessage/>
+                                                                    <FormMessage />
                                                                 </FormItem>
                                                             )}
                                                         />
@@ -582,13 +582,13 @@ export function ContactEdit({contact, onSave, onCancel}: ContactEditProps) {
                                                         <FormField
                                                             control={form.control}
                                                             name={`address.${index}.country`}
-                                                            render={({field}) => (
+                                                            render={({ field }) => (
                                                                 <FormItem>
                                                                     <FormLabel>Country</FormLabel>
                                                                     <FormControl>
-                                                                        <Input {...field} placeholder="Country"/>
+                                                                        <Input {...field} placeholder="Country" />
                                                                     </FormControl>
-                                                                    <FormMessage/>
+                                                                    <FormMessage />
                                                                 </FormItem>
                                                             )}
                                                         />
@@ -612,7 +612,7 @@ export function ContactEdit({contact, onSave, onCancel}: ContactEditProps) {
                                     <FormField
                                         control={form.control}
                                         name="birthday"
-                                        render={({field}) => (
+                                        render={({ field }) => (
                                             <FormItem className="flex flex-col">
                                                 <FormLabel>Birthday</FormLabel>
 
@@ -626,7 +626,7 @@ export function ContactEdit({contact, onSave, onCancel}: ContactEditProps) {
                                                         }}
                                                     />
                                                 </FormControl>
-                                                <FormMessage/>
+                                                <FormMessage />
                                             </FormItem>
                                         )}
                                     />
@@ -634,7 +634,7 @@ export function ContactEdit({contact, onSave, onCancel}: ContactEditProps) {
                                     <FormField
                                         control={form.control}
                                         name="notes"
-                                        render={({field}) => (
+                                        render={({ field }) => (
                                             <FormItem>
                                                 <FormLabel>Notes</FormLabel>
                                                 <FormControl>
@@ -644,7 +644,7 @@ export function ContactEdit({contact, onSave, onCancel}: ContactEditProps) {
                                                         placeholder="Add notes about this contact"
                                                     />
                                                 </FormControl>
-                                                <FormMessage/>
+                                                <FormMessage />
                                             </FormItem>
                                         )}
                                     />

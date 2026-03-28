@@ -1,7 +1,7 @@
-import {getDocUrl} from '@workspace/lib/api';
-import {useCreateDoc} from '@workspace/lib/drive';
-import type {DrivePath} from '@workspace/lib/types/drive';
-import {DriveCreateItemDialog} from './drive-create-folder-item';
+import { getDocUrl } from '@workspace/lib/api';
+import { useCreateDoc } from '@workspace/lib/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { DriveCreateItemDialog } from './drive-create-folder-item';
 
 export type DriveCreateDocProps = {
     path: DrivePath;
@@ -12,7 +12,7 @@ export type DriveCreateDocProps = {
     onAfterAction?: (actionType: string, data: Record<string, unknown>) => void;
 };
 
-export function DriveCreateDoc({path, open, onOpenChange, onSave, onCancel, onAfterAction}: DriveCreateDocProps) {
+export function DriveCreateDoc({ path, open, onOpenChange, onSave, onCancel, onAfterAction }: DriveCreateDocProps) {
     const createDocMutation = useCreateDoc(path.ownerId, path.mountId);
 
     const handleOpenChange = (nextOpen: boolean) => {
@@ -29,7 +29,7 @@ export function DriveCreateDoc({path, open, onOpenChange, onSave, onCancel, onAf
 
         // Call onAfterAction if provided
         if (onAfterAction) {
-            onAfterAction('create', {name: fileName});
+            onAfterAction('create', { name: fileName });
         }
 
         // Open the document in a new window

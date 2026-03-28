@@ -1,7 +1,7 @@
-import {getStickiesBoardUrl} from '@workspace/lib/api';
-import {useCreateStickies} from '@workspace/lib/drive';
-import type {DrivePath} from '@workspace/lib/types/drive';
-import {DriveCreateItemDialog} from './drive-create-folder-item';
+import { getStickiesBoardUrl } from '@workspace/lib/api';
+import { useCreateStickies } from '@workspace/lib/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { DriveCreateItemDialog } from './drive-create-folder-item';
 
 export type DriveCreateStickiesProps = {
     path: DrivePath;
@@ -13,13 +13,13 @@ export type DriveCreateStickiesProps = {
 };
 
 export function DriveCreateStickies({
-                                        path,
-                                        open,
-                                        onOpenChange,
-                                        onSave,
-                                        onCancel,
-                                        onAfterAction,
-                                    }: DriveCreateStickiesProps) {
+    path,
+    open,
+    onOpenChange,
+    onSave,
+    onCancel,
+    onAfterAction,
+}: DriveCreateStickiesProps) {
     const createStickiesMutation = useCreateStickies(path.ownerId, path.mountId);
 
     const handleOpenChange = (nextOpen: boolean) => {
@@ -36,7 +36,7 @@ export function DriveCreateStickies({
 
         // Call onAfterAction if provided
         if (onAfterAction) {
-            onAfterAction('create', {name: fileName});
+            onAfterAction('create', { name: fileName });
         }
 
         // Open the stickies board in a new window

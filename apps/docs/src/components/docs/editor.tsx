@@ -18,35 +18,35 @@ import TextAlign from '@tiptap/extension-text-align';
 import TextStyle from '@tiptap/extension-text-style';
 import Typography from '@tiptap/extension-typography';
 import Underline from '@tiptap/extension-underline';
-import {EditorContent, useEditor} from '@tiptap/react';
+import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import {getCollabWebSocketUrl} from '@workspace/lib/api';
-import {useAuth} from '@workspace/lib/auth';
-import {EIGEN_CLIPBOARD_MIME, needsReUpload, readEigenClipboard, reUploadImage} from '@workspace/lib/clipboard';
-import {EIGEN_ACCENT_COLORS_SHUFFLED} from '@workspace/lib/constants/colors';
-import {MediaResolverProvider, useMediaResolver, useUploadFile} from '@workspace/lib/drive';
-import type {EigenClipboardData, EigenClipboardImageItem} from '@workspace/lib/types/clipboard';
-import type {DrivePath} from '@workspace/lib/types/drive';
-import {Column, LoadingState} from '@workspace/ui';
-import {common, createLowlight} from 'lowlight';
-import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {WebsocketProvider} from 'y-websocket';
+import { getCollabWebSocketUrl } from '@workspace/lib/api';
+import { useAuth } from '@workspace/lib/auth';
+import { EIGEN_CLIPBOARD_MIME, needsReUpload, readEigenClipboard, reUploadImage } from '@workspace/lib/clipboard';
+import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
+import { MediaResolverProvider, useMediaResolver, useUploadFile } from '@workspace/lib/drive';
+import type { EigenClipboardData, EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { Column, LoadingState } from '@workspace/ui';
+import { common, createLowlight } from 'lowlight';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
-import {CreateCommentDialog, ViewCommentDialog} from './comment-dialog';
-import {EditorToolbar} from './editor-toolbar';
-import {CommentMark} from './extensions/comment-mark';
-import {ResizableImage} from './extensions/resizable-image';
+import { CreateCommentDialog, ViewCommentDialog } from './comment-dialog';
+import { EditorToolbar } from './editor-toolbar';
+import { CommentMark } from './extensions/comment-mark';
+import { ResizableImage } from './extensions/resizable-image';
 
 const lowlight = createLowlight(common);
 const A4_WIDTH_PX = 794; // 210mm at 96dpi
 
 export const CollaborativeEditor = ({
-                                        path,
-                                        access,
-                                        mediaFolderId,
-                                        chatFolderId,
-                                        onAccessDialogOpen,
-                                    }: {
+    path,
+    access,
+    mediaFolderId,
+    chatFolderId,
+    onAccessDialogOpen,
+}: {
     path: DrivePath;
     access: { canRead: boolean; canWrite: boolean };
     mediaFolderId: string | null;
@@ -75,7 +75,7 @@ export const CollaborativeEditor = ({
     }, [yDoc, path.ownerId, path.mountId, path.id]);
 
     if (!connected || !provider) {
-        return <LoadingState/>;
+        return <LoadingState />;
     }
 
     return (
@@ -99,14 +99,14 @@ export const CollaborativeEditor = ({
 };
 
 const TiptapEditor = ({
-                          yDoc,
-                          provider,
-                          path,
-                          access,
-                          mediaFolderId,
-                          chatFolderId,
-                          onAccessDialogOpen,
-                      }: {
+    yDoc,
+    provider,
+    path,
+    access,
+    mediaFolderId,
+    chatFolderId,
+    onAccessDialogOpen,
+}: {
     yDoc: Y.Doc;
     provider: WebsocketProvider;
     path: DrivePath;
@@ -117,7 +117,7 @@ const TiptapEditor = ({
 }) => {
     const auth = useAuth();
     const uploadFile = useUploadFile(path.ownerId, path.mountId);
-    const {resolveMediaPath} = useMediaResolver();
+    const { resolveMediaPath } = useMediaResolver();
     const [commentDialogOpen, setCommentDialogOpen] = useState(false);
     const [commentSelectedText, setCommentSelectedText] = useState('');
     const [viewCommentChatName, setViewCommentChatName] = useState<string | null>(null);
@@ -219,9 +219,9 @@ const TiptapEditor = ({
                     user: {
                         name: auth.user!.name,
                         color: EIGEN_ACCENT_COLORS_SHUFFLED[
-                        Math.abs([...auth.user!.id].reduce((h, c) => (h << 5) - h + c.charCodeAt(0), 0)) %
-                        EIGEN_ACCENT_COLORS_SHUFFLED.length
-                            ].value,
+                            Math.abs([...auth.user!.id].reduce((h, c) => (h << 5) - h + c.charCodeAt(0), 0)) %
+                                EIGEN_ACCENT_COLORS_SHUFFLED.length
+                        ].value,
                     },
                     render: (user: Record<string, string>) => {
                         const cursor = document.createElement('span');
@@ -331,9 +331,9 @@ const TiptapEditor = ({
         if (!mediaFolderIdRef.current || !file.type.startsWith('image/')) return;
         const mediaFolderId = mediaFolderIdRef.current;
 
-        const result = await uploadFile.mutateAsync({parentId: mediaFolderId, file});
+        const result = await uploadFile.mutateAsync({ parentId: mediaFolderId, file });
         if (result && editorRef.current) {
-            editorRef.current.chain().focus().setResizableImage({mediaName: result.name}).run();
+            editorRef.current.chain().focus().setResizableImage({ mediaName: result.name }).run();
         }
     };
 
@@ -351,12 +351,12 @@ const TiptapEditor = ({
                 item.mediaName,
             );
             if (result && editorRef.current) {
-                editorRef.current.chain().focus().setResizableImage({mediaName: result.mediaName, width}).run();
+                editorRef.current.chain().focus().setResizableImage({ mediaName: result.mediaName, width }).run();
                 return;
             }
         }
         if (editorRef.current) {
-            editorRef.current.chain().focus().setResizableImage({mediaName: item.mediaName, width}).run();
+            editorRef.current.chain().focus().setResizableImage({ mediaName: item.mediaName, width }).run();
         }
     };
 
@@ -364,7 +364,7 @@ const TiptapEditor = ({
         if (!editor) return;
         const handleCopy = (e: ClipboardEvent) => {
             if (!editor.isFocused) return;
-            const {from, to} = editor.state.selection;
+            const { from, to } = editor.state.selection;
             if (from === to) return;
 
             const items: EigenClipboardData['items'] = [];
@@ -380,7 +380,7 @@ const TiptapEditor = ({
                             sourceParentId: mediaPath.parentId,
                             sourceOwnerId: mediaPath.ownerId,
                             sourceMountId: mediaPath.mountId,
-                            meta: {width},
+                            meta: { width },
                         });
                     }
                 }
@@ -388,11 +388,11 @@ const TiptapEditor = ({
 
             const text = editor.state.doc.textBetween(from, to, '\n');
             if (text.trim()) {
-                items.push({type: 'text', text: text.trim()});
+                items.push({ type: 'text', text: text.trim() });
             }
 
             if (items.length > 0) {
-                const data: EigenClipboardData = {version: 1, items};
+                const data: EigenClipboardData = { version: 1, items };
                 e.clipboardData?.setData(EIGEN_CLIPBOARD_MIME, JSON.stringify(data));
             }
         };
@@ -402,7 +402,7 @@ const TiptapEditor = ({
 
     const handleAddComment = () => {
         if (!editor || !chatFolderId) return;
-        const {from, to} = editor.state.selection;
+        const { from, to } = editor.state.selection;
         const text = editor.state.doc.textBetween(from, to, ' ');
         if (!text.trim()) return;
         setCommentSelectedText(text);
@@ -443,14 +443,14 @@ const TiptapEditor = ({
                         style={
                             needsScale
                                 ? {
-                                    transform: `scale(${canvasScale})`,
-                                    transformOrigin: 'top left',
-                                    marginBottom: -(1 - canvasScale) * docHeight,
-                                }
+                                      transform: `scale(${canvasScale})`,
+                                      transformOrigin: 'top left',
+                                      marginBottom: -(1 - canvasScale) * docHeight,
+                                  }
                                 : undefined
                         }
                     >
-                        <EditorContent editor={editor} className="h-full tiptap-wrapper"/>
+                        <EditorContent editor={editor} className="h-full tiptap-wrapper" />
                     </div>
                 </div>
             </Column>

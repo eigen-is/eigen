@@ -1,9 +1,9 @@
-import {zodResolver} from '@hookform/resolvers/zod';
-import {useAuth} from '@workspace/lib/auth';
-import {useCreateCalendar, useDeleteCalendar, useUpdateCalendar} from '@workspace/lib/calendar';
-import {EIGEN_ACCENT_COLORS_SHUFFLED} from '@workspace/lib/constants/colors';
-import type {CalendarItem, CalendarShare} from '@workspace/lib/types/calendar';
-import {Button} from '@workspace/ui/components/button';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useAuth } from '@workspace/lib/auth';
+import { useCreateCalendar, useDeleteCalendar, useUpdateCalendar } from '@workspace/lib/calendar';
+import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
+import type { CalendarItem, CalendarShare } from '@workspace/lib/types/calendar';
+import { Button } from '@workspace/ui/components/button';
 import {
     Dialog,
     DialogContent,
@@ -12,20 +12,20 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@workspace/ui/components/dialog';
-import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage} from '@workspace/ui/components/form';
-import {Input} from '@workspace/ui/components/input';
-import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
-import {ColorPicker} from '@workspace/ui/components/layout/media/color-picker';
-import {Popover, PopoverContent, PopoverTrigger} from '@workspace/ui/components/popover';
-import {Separator} from '@workspace/ui/components/separator';
-import {useEffect, useState} from 'react';
-import {useForm} from 'react-hook-form';
-import {z} from 'zod';
-import {CalendarShareEditor} from './calendar-share-editor';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
+import { Input } from '@workspace/ui/components/input';
+import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
+import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker';
+import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
+import { Separator } from '@workspace/ui/components/separator';
+import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+import { CalendarShareEditor } from './calendar-share-editor';
 
 const calendarFormSchema = z.object({
-    name: z.string().min(1, {message: 'Calendar name is required.'}),
-    color: z.string().min(1, {message: 'Color is required.'}),
+    name: z.string().min(1, { message: 'Calendar name is required.' }),
+    color: z.string().min(1, { message: 'Color is required.' }),
 });
 
 type CalendarFormValues = z.infer<typeof calendarFormSchema>;
@@ -37,8 +37,8 @@ type CalendarConfigDialogProps = {
     calendarCount?: number;
 };
 
-export function CalendarConfigDialog({open, onOpenChange, calendar, calendarCount = 0}: CalendarConfigDialogProps) {
-    const {user} = useAuth();
+export function CalendarConfigDialog({ open, onOpenChange, calendar, calendarCount = 0 }: CalendarConfigDialogProps) {
+    const { user } = useAuth();
     const ownerId = user?.id || '';
     const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
     const [colorPickerOpen, setColorPickerOpen] = useState(false);
@@ -53,21 +53,21 @@ export function CalendarConfigDialog({open, onOpenChange, calendar, calendarCoun
     const form = useForm<CalendarFormValues>({
         resolver: zodResolver(calendarFormSchema),
         defaultValues: calendar
-            ? {name: calendar.name, color: calendar.color}
+            ? { name: calendar.name, color: calendar.color }
             : {
-                name: '',
-                color: EIGEN_ACCENT_COLORS_SHUFFLED[calendarCount % EIGEN_ACCENT_COLORS_SHUFFLED.length].value,
-            },
+                  name: '',
+                  color: EIGEN_ACCENT_COLORS_SHUFFLED[calendarCount % EIGEN_ACCENT_COLORS_SHUFFLED.length].value,
+              },
     });
 
     const defaultColor = EIGEN_ACCENT_COLORS_SHUFFLED[calendarCount % EIGEN_ACCENT_COLORS_SHUFFLED.length].value;
 
     useEffect(() => {
         if (calendar) {
-            form.reset({name: calendar.name, color: calendar.color});
+            form.reset({ name: calendar.name, color: calendar.color });
             setShares(calendar.shares);
         } else if (open) {
-            form.reset({name: '', color: defaultColor});
+            form.reset({ name: '', color: defaultColor });
             setShares(null);
         }
     }, [calendar, form, open, defaultColor]);
@@ -124,7 +124,7 @@ export function CalendarConfigDialog({open, onOpenChange, calendar, calendarCoun
                                 <FormField
                                     control={form.control}
                                     name="color"
-                                    render={({field}) => (
+                                    render={({ field }) => (
                                         <FormItem>
                                             <FormLabel className="invisible">Color</FormLabel>
                                             <FormControl>
@@ -133,7 +133,7 @@ export function CalendarConfigDialog({open, onOpenChange, calendar, calendarCoun
                                                         <button
                                                             type="button"
                                                             className="h-9 w-9 rounded-md border border-input shrink-0"
-                                                            style={{backgroundColor: field.value}}
+                                                            style={{ backgroundColor: field.value }}
                                                             disabled={isLoading}
                                                         />
                                                     </PopoverTrigger>
@@ -155,7 +155,7 @@ export function CalendarConfigDialog({open, onOpenChange, calendar, calendarCoun
                                 <FormField
                                     control={form.control}
                                     name="name"
-                                    render={({field, fieldState}) => (
+                                    render={({ field, fieldState }) => (
                                         <FormItem className="flex-1">
                                             <FormLabel>Calendar Name</FormLabel>
                                             <FormControl>
@@ -174,8 +174,8 @@ export function CalendarConfigDialog({open, onOpenChange, calendar, calendarCoun
 
                             {isEditMode && (
                                 <>
-                                    <Separator/>
-                                    <CalendarShareEditor shares={shares} onChange={setShares}/>
+                                    <Separator />
+                                    <CalendarShareEditor shares={shares} onChange={setShares} />
                                 </>
                             )}
 

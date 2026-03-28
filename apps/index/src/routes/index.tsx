@@ -1,14 +1,14 @@
-import {createFileRoute, Link} from '@tanstack/react-router';
-import {publicApi} from '@workspace/lib/api';
-import {apps} from '@workspace/lib/apps';
-import {Button} from '@workspace/ui/components/button';
-import {Card, CardContent, CardFooter, CardHeader, CardTitle} from '@workspace/ui/components/card';
-import {Input} from '@workspace/ui/components/input';
-import {Label} from '@workspace/ui/components/label';
-import {Bar, Ket} from '@workspace/ui/components/layout/braket';
-import {Textarea} from '@workspace/ui/components/textarea';
-import React, {useCallback} from 'react';
-import {toast} from 'sonner';
+import { createFileRoute, Link } from '@tanstack/react-router';
+import { publicApi } from '@workspace/lib/api';
+import { apps } from '@workspace/lib/apps';
+import { Button } from '@workspace/ui/components/button';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@workspace/ui/components/card';
+import { Input } from '@workspace/ui/components/input';
+import { Label } from '@workspace/ui/components/label';
+import { Bar, Ket } from '@workspace/ui/components/layout/braket';
+import { Textarea } from '@workspace/ui/components/textarea';
+import React, { useCallback } from 'react';
+import { toast } from 'sonner';
 
 export const Route = createFileRoute('/')({
     component: HomeComponent,
@@ -51,7 +51,7 @@ export function HomeComponent() {
             setIsSubmitting(true);
 
             const time = Date.now();
-            const waitlistResult = await publicApi.waitlist.post({email, notes});
+            const waitlistResult = await publicApi.waitlist.post({ email, notes });
             const duration = Date.now() - time;
             // Make sure it takes a bit
             await new Promise((resolve) => setTimeout(resolve, Math.max(350 - duration, 0)));
@@ -60,7 +60,7 @@ export function HomeComponent() {
 
             const isSignedUp = waitlistResult.data === true;
             if (isSignedUp) {
-                toast.success('Joined the waitlist', {description: 'Thanks for signing up'});
+                toast.success('Joined the waitlist', { description: 'Thanks for signing up' });
             } else {
                 toast.error('Failed to sign up', {
                     description: 'Signing up currently not available, please try again',
@@ -72,19 +72,19 @@ export function HomeComponent() {
 
     return (
         <div className="flex flex-col items-center justify-center min-h-screen p-4">
-            <div className="text-5xl mb-8" style={{color: app.color}}>
+            <div className="text-5xl mb-8" style={{ color: app.color }}>
                 <span className="font-bold">eigen</span>
                 <span className="font-normal">
-                    <Bar/>
+                    <Bar />
                     {app.name.toLowerCase()}
-                    <Ket/>
+                    <Ket />
                 </span>
             </div>
             <div className="text-lg text-center mb-8 max-w-md">
                 <div>
                     <p className="mb-4">
                         Your personal workspace in the cloud.
-                        <br/>
+                        <br />
                         Simple and secure. You control your data.
                     </p>
                 </div>

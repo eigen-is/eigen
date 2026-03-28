@@ -1,4 +1,4 @@
-import type {DatabaseConfig} from '../core/managed-database';
+import type { DatabaseConfig } from '../core/managed-database';
 import * as commentSchema from './comment-schema';
 
 export const COMMENT_INDEX_DB_CONFIG: DatabaseConfig<typeof commentSchema> = {

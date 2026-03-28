@@ -282,9 +282,15 @@ describe('Chat', () => {
         });
 
         test('Alice posts a normal message', async () => {
-            await chatPost<ChatMessage>(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `${chatId}/messages`, {
-                content: 'Public message from Alice',
-            });
+            await chatPost<ChatMessage>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `${chatId}/messages`,
+                {
+                    content: 'Public message from Alice',
+                },
+            );
         });
 
         test('Alice sees whisper content (she is the author)', async () => {
@@ -396,7 +402,10 @@ describe('Chat', () => {
                 aliceMountId,
                 `${chatId}/messages`,
             );
-            const withAttachment = findOrFail(msgs, (m: ChatMessage) => m.attachments !== null && m.attachments.length > 0);
+            const withAttachment = findOrFail(
+                msgs,
+                (m: ChatMessage) => m.attachments !== null && m.attachments.length > 0,
+            );
             expect(withAttachment.attachments).toHaveLength(1);
         });
 
@@ -503,7 +512,9 @@ describe('Chat', () => {
                 aliceMountId,
                 `${chatId}/messages`,
             );
-            const dance = msgs.find((m: ChatMessage) => m.type === 'emote' && m.content === 'You dance around the room.');
+            const dance = msgs.find(
+                (m: ChatMessage) => m.type === 'emote' && m.content === 'You dance around the room.',
+            );
             expect(dance).toBeDefined();
         });
 
@@ -514,7 +525,9 @@ describe('Chat', () => {
                 aliceMountId,
                 `${chatId}/messages`,
             );
-            const dance = msgs.find((m: ChatMessage) => m.type === 'emote' && m.content.includes('dances around the room.'));
+            const dance = msgs.find(
+                (m: ChatMessage) => m.type === 'emote' && m.content.includes('dances around the room.'),
+            );
             expect(dance).toBeDefined();
         });
 
@@ -574,7 +587,9 @@ describe('Chat', () => {
                 aliceMountId,
                 `${chatId}/messages`,
             );
-            const leaked = msgs.find((m: ChatMessage) => m.content === 'hello' && m.whisperTo === 'nobody@fake.eigen.is');
+            const leaked = msgs.find(
+                (m: ChatMessage) => m.content === 'hello' && m.whisperTo === 'nobody@fake.eigen.is',
+            );
             expect(leaked).toBeUndefined();
         });
 
@@ -658,9 +673,15 @@ describe('Chat', () => {
                 },
             );
 
-            await chatPost<ChatMessage>(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `${chatId}/messages`, {
-                content: 'Hello from Alice',
-            });
+            await chatPost<ChatMessage>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `${chatId}/messages`,
+                {
+                    content: 'Hello from Alice',
+                },
+            );
         });
 
         test('Bob can read messages with read-only access', async () => {
@@ -835,7 +856,10 @@ describe('Chat', () => {
                 aliceMountId,
                 `${chatId}/messages`,
             );
-            const emote = findOrFail(msgs, (m: ChatMessage) => m.type === 'emote' && m.content.includes('ALL THE THINGS'));
+            const emote = findOrFail(
+                msgs,
+                (m: ChatMessage) => m.type === 'emote' && m.content.includes('ALL THE THINGS'),
+            );
             expect(emote.content).toContain('\\o/');
         });
 

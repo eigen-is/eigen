@@ -1,24 +1,24 @@
-import {getDriveDownloadUrl} from '@workspace/lib/api';
-import {useMovePath} from '@workspace/lib/drive';
-import type {DrivePath} from '@workspace/lib/types/drive';
-import {useCallback, useMemo} from 'react';
-import {Column, ColumnLayout} from '../app/column-layout.tsx';
-import {useLayout} from '../app/layout-context.tsx';
-import {LoadingState} from '../app/loading-state';
-import {DriveAccessDialog} from './drive-access-dialog';
-import {DriveCreateChat} from './drive-create-chat';
-import {DriveCreateDoc} from './drive-create-doc';
-import {DriveCreateFolder} from './drive-create-folder';
-import {DriveCreateSheets} from './drive-create-sheets';
-import {DriveCreateSlides} from './drive-create-slides';
-import {DriveCreateStickies} from './drive-create-stickies';
-import {DriveDeleteItem} from './drive-delete-item';
-import {DriveDetail, DriveDetailToolbar} from './drive-detail';
-import {DriveList, DriveListToolbar} from './drive-list';
-import {DriveRenameItem} from './drive-rename-item';
-import {defaultDriveSort} from './drive-table';
-import {DriveUploadFiles} from './drive-upload-files';
-import {useDriveDialogs} from './use-drive-dialogs';
+import { getDriveDownloadUrl } from '@workspace/lib/api';
+import { useMovePath } from '@workspace/lib/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { useCallback, useMemo } from 'react';
+import { Column, ColumnLayout } from '../app/column-layout.tsx';
+import { useLayout } from '../app/layout-context.tsx';
+import { LoadingState } from '../app/loading-state';
+import { DriveAccessDialog } from './drive-access-dialog';
+import { DriveCreateChat } from './drive-create-chat';
+import { DriveCreateDoc } from './drive-create-doc';
+import { DriveCreateFolder } from './drive-create-folder';
+import { DriveCreateSheets } from './drive-create-sheets';
+import { DriveCreateSlides } from './drive-create-slides';
+import { DriveCreateStickies } from './drive-create-stickies';
+import { DriveDeleteItem } from './drive-delete-item';
+import { DriveDetail, DriveDetailToolbar } from './drive-detail';
+import { DriveList, DriveListToolbar } from './drive-list';
+import { DriveRenameItem } from './drive-rename-item';
+import { defaultDriveSort } from './drive-table';
+import { DriveUploadFiles } from './drive-upload-files';
+import { useDriveDialogs } from './use-drive-dialogs';
 
 export type DriveLayoutProps = {
     ownerId: string;
@@ -51,35 +51,35 @@ export type DriveLayoutProps = {
 };
 
 export function DriveLayout({
-                                ownerId,
-                                mountId,
-                                folderContents,
-                                isLoading,
-                                error,
-                                onRowSelect,
-                                onRowActivate,
-                                onBackToList,
-                                onAfterAction,
-                                pathId = 'unknown',
-                                selectedPath = null,
-                                currentPath = null,
-                                allowCreateFolder = true,
-                                allowDelete = true,
-                                allowShare = true,
-                                allowCreateDoc = true,
-                                allowCreateStickies = true,
-                                allowCreateChat = true,
-                                allowCreateSlides = true,
-                                allowCreateSheets = true,
-                                allowUpload = true,
-                                allowRename = true,
-                                allowMove = true,
-                                onQuickLook,
-                                sortFn = defaultDriveSort,
-                                pid = undefined,
-                                showBreadcrumb = false,
-                            }: DriveLayoutProps) {
-    const {isMobile} = useLayout();
+    ownerId,
+    mountId,
+    folderContents,
+    isLoading,
+    error,
+    onRowSelect,
+    onRowActivate,
+    onBackToList,
+    onAfterAction,
+    pathId = 'unknown',
+    selectedPath = null,
+    currentPath = null,
+    allowCreateFolder = true,
+    allowDelete = true,
+    allowShare = true,
+    allowCreateDoc = true,
+    allowCreateStickies = true,
+    allowCreateChat = true,
+    allowCreateSlides = true,
+    allowCreateSheets = true,
+    allowUpload = true,
+    allowRename = true,
+    allowMove = true,
+    onQuickLook,
+    sortFn = defaultDriveSort,
+    pid = undefined,
+    showBreadcrumb = false,
+}: DriveLayoutProps) {
+    const { isMobile } = useLayout();
     const dialogs = useDriveDialogs();
     const movePath = useMovePath(ownerId, mountId, currentPath?.id);
 
@@ -109,7 +109,7 @@ export function DriveLayout({
 
     const handleMovePath = async (path: DrivePath, targetItemId: string) => {
         if (!allowMove) return;
-        await movePath.mutateAsync({pathId: path.id, targetParentId: targetItemId});
+        await movePath.mutateAsync({ pathId: path.id, targetParentId: targetItemId });
     };
 
     const handleDownloadPath = (path: DrivePath) => {
@@ -140,7 +140,7 @@ export function DriveLayout({
     );
 
     if (isLoading) {
-        return <LoadingState/>;
+        return <LoadingState />;
     }
 
     const listProps = {

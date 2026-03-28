@@ -1,28 +1,28 @@
-import {Input} from '@workspace/ui/components/input';
-import {type KeyboardEvent, useCallback, useRef, useState} from 'react';
-import {UserItem} from '../user-item';
-import type {ContactAutosuggestProps, ContactSuggestion} from './types';
-import {useContactSuggestions} from './use-contact-suggestions';
+import { Input } from '@workspace/ui/components/input';
+import { type KeyboardEvent, useCallback, useRef, useState } from 'react';
+import { UserItem } from '../user-item';
+import type { ContactAutosuggestProps, ContactSuggestion } from './types';
+import { useContactSuggestions } from './use-contact-suggestions';
 
 export function ContactAutosuggest({
-                                       initialValue = '',
-                                       value: controlledValue,
-                                       onChange,
-                                       appendMode = false,
-                                       onlyEigenIsMails = false,
-                                       maxSuggestions = 5,
-                                       className = '',
-                                       suggestionsClassName = '',
-                                       inputClassName = '',
-                                       placeholder = '',
-                                       disabled = false,
-                                       autoComplete = 'one-time-code',
-                                       id,
-                                       name,
-                                       required,
-                                       inputRef: externalInputRef,
-                                       onSubmit,
-                                   }: ContactAutosuggestProps) {
+    initialValue = '',
+    value: controlledValue,
+    onChange,
+    appendMode = false,
+    onlyEigenIsMails = false,
+    maxSuggestions = 5,
+    className = '',
+    suggestionsClassName = '',
+    inputClassName = '',
+    placeholder = '',
+    disabled = false,
+    autoComplete = 'one-time-code',
+    id,
+    name,
+    required,
+    inputRef: externalInputRef,
+    onSubmit,
+}: ContactAutosuggestProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [selectedIndex, setSelectedIndex] = useState(0);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -32,7 +32,7 @@ export function ContactAutosuggest({
     const [internalValue, setInternalValue] = useState(initialValue);
     const inputValue = controlledValue !== undefined ? controlledValue : internalValue;
 
-    const {suggestions, isLoading} = useContactSuggestions(inputValue, onlyEigenIsMails);
+    const { suggestions, isLoading } = useContactSuggestions(inputValue, onlyEigenIsMails);
 
     const displayedSuggestions = suggestions.slice(0, maxSuggestions);
 
@@ -169,7 +169,7 @@ export function ContactAutosuggest({
                             onClick={() => handleSelect(suggestion)}
                             aria-selected={index === selectedIndex}
                         >
-                            <UserItem name={suggestion.displayName} email={suggestion.email} userId={suggestion.id}/>
+                            <UserItem name={suggestion.displayName} email={suggestion.email} userId={suggestion.id} />
                         </li>
                     ))}
                 </ul>

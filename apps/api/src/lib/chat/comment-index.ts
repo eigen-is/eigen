@@ -1,9 +1,9 @@
-import type {DrivePath} from '@workspace/lib/types/drive';
-import {eq, sql} from 'drizzle-orm';
-import type {BunSQLiteDatabase} from 'drizzle-orm/bun-sqlite';
-import {ApiError} from '../core/errors';
-import type {Drive} from '../drive';
-import {COMMENT_INDEX_DB_CONFIG} from './comment-db-config';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { eq, sql } from 'drizzle-orm';
+import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
+import { ApiError } from '../core/errors';
+import type { Drive } from '../drive';
+import { COMMENT_INDEX_DB_CONFIG } from './comment-db-config';
 import * as commentSchema from './comment-schema';
 
 export class CommentIndex {
@@ -14,7 +14,7 @@ export class CommentIndex {
     }
 
     async ensureComment(chatName: string): Promise<void> {
-        await this.db.insert(commentSchema.comments).values({chatName, createdAt: new Date()}).onConflictDoNothing();
+        await this.db.insert(commentSchema.comments).values({ chatName, createdAt: new Date() }).onConflictDoNothing();
     }
 
     async updateActivity(chatName: string, authorEmail: string, snippet: string, incrementCount = true): Promise<void> {
@@ -24,7 +24,7 @@ export class CommentIndex {
                 lastAuthorEmail: authorEmail,
                 lastMessageSnippet: snippet.slice(0, 100),
                 lastActivityAt: new Date(),
-                ...(incrementCount && {messageCount: sql`messageCount + 1`}),
+                ...(incrementCount && { messageCount: sql`messageCount + 1` }),
             })
             .where(eq(commentSchema.comments.chatName, chatName));
     }
@@ -32,28 +32,28 @@ export class CommentIndex {
     async addMention(chatName: string, email: string): Promise<void> {
         await this.db
             .insert(commentSchema.commentMentions)
-            .values({chatName, email: email.toLowerCase()})
+            .values({ chatName, email: email.toLowerCase() })
             .onConflictDoNothing();
     }
 
     async resolve(chatName: string, email: string): Promise<void> {
         await this.db
             .update(commentSchema.comments)
-            .set({status: 'resolved', resolvedBy: email, resolvedAt: new Date()})
+            .set({ status: 'resolved', resolvedBy: email, resolvedAt: new Date() })
             .where(eq(commentSchema.comments.chatName, chatName));
     }
 
     async reopen(chatName: string): Promise<void> {
         await this.db
             .update(commentSchema.comments)
-            .set({status: 'open', resolvedBy: null, resolvedAt: null})
+            .set({ status: 'open', resolvedBy: null, resolvedAt: null })
             .where(eq(commentSchema.comments.chatName, chatName));
     }
 
     async decrementCount(chatName: string): Promise<void> {
         await this.db
             .update(commentSchema.comments)
-            .set({messageCount: sql`MAX(0, messageCount - 1)`})
+            .set({ messageCount: sql`MAX(0, messageCount - 1)` })
             .where(eq(commentSchema.comments.chatName, chatName));
     }
 
@@ -81,7 +81,7 @@ export class CommentIndex {
 
     async unresolvedCount(): Promise<number> {
         const result = await this.db
-            .select({count: sql<number>`COUNT(*)`})
+            .select({ count: sql<number>`COUNT(*)` })
             .from(commentSchema.comments)
             .where(eq(commentSchema.comments.status, 'open'))
             .get();

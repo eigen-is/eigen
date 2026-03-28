@@ -1,11 +1,11 @@
-import {createFileRoute, redirect, useNavigate} from '@tanstack/react-router';
-import {emptyContact} from '@workspace/lib/constants/contact';
-import {useAddContact, useContacts, useUpdateContact} from '@workspace/lib/contacts';
-import type {Contact} from '@workspace/lib/types/contact';
-import {LoadingState} from '@workspace/ui';
-import {Column, ColumnLayout} from '@workspace/ui/components/layout/app/column-layout.tsx';
-import {z} from 'zod';
-import {ContactEdit, ContactEditToolbar, type ContactFormValues} from '../components/contacts/contact-edit';
+import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
+import { emptyContact } from '@workspace/lib/constants/contact';
+import { useAddContact, useContacts, useUpdateContact } from '@workspace/lib/contacts';
+import type { Contact } from '@workspace/lib/types/contact';
+import { LoadingState } from '@workspace/ui';
+import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
+import { z } from 'zod';
+import { ContactEdit, ContactEditToolbar, type ContactFormValues } from '../components/contacts/contact-edit';
 
 // Define search params type with Zod schema
 const searchSchema = z.object({
@@ -35,11 +35,11 @@ export const Route = createFileRoute('/_auth/edit/$filterType/$filterId')({
 });
 
 function EditContactRoute() {
-    const {filterType, filterId} = Route.useParams();
-    const {contactId} = Route.useSearch();
+    const { filterType, filterId } = Route.useParams();
+    const { contactId } = Route.useSearch();
     const navigate = useNavigate();
 
-    const {data: contacts = [], isLoading: contactsLoading} = useContacts();
+    const { data: contacts = [], isLoading: contactsLoading } = useContacts();
     const contact = contactId ? contacts.find((c): c is Contact => c.id === contactId) : undefined;
     const updateContactMutation = useUpdateContact();
     const addContactMutation = useAddContact();
@@ -65,8 +65,8 @@ function EditContactRoute() {
             if (newId && typeof newId === 'string') {
                 navigate({
                     to: '/$filterType/$filterId',
-                    params: {filterType, filterId},
-                    search: {contactId: newId},
+                    params: { filterType, filterId },
+                    search: { contactId: newId },
                 });
                 return;
             }
@@ -74,27 +74,27 @@ function EditContactRoute() {
 
         navigate({
             to: '/$filterType/$filterId',
-            params: {filterType, filterId},
-            search: contactId ? {contactId} : {},
+            params: { filterType, filterId },
+            search: contactId ? { contactId } : {},
         });
     };
 
     const handleCancel = () => {
         navigate({
             to: '/$filterType/$filterId',
-            params: {filterType, filterId},
-            search: contactId ? {contactId} : {},
+            params: { filterType, filterId },
+            search: contactId ? { contactId } : {},
         });
     };
 
     if (contactsLoading) {
-        return <LoadingState/>;
+        return <LoadingState />;
     }
 
     if (contactId && !contact) {
         navigate({
             to: '/$filterType/$filterId',
-            params: {filterType, filterId},
+            params: { filterType, filterId },
             search: {},
         });
         return null;
@@ -104,8 +104,8 @@ function EditContactRoute() {
 
     return (
         <ColumnLayout mobileColumn="editor">
-            <Column id="editor" width="flex" onBack={handleCancel} toolbar={<ContactEditToolbar isNew={isNew}/>}>
-                <ContactEdit contact={contact || emptyContact} onSave={handleSave} onCancel={handleCancel}/>
+            <Column id="editor" width="flex" onBack={handleCancel} toolbar={<ContactEditToolbar isNew={isNew} />}>
+                <ContactEdit contact={contact || emptyContact} onSave={handleSave} onCancel={handleCancel} />
             </Column>
         </ColumnLayout>
     );

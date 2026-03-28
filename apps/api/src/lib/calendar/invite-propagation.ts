@@ -1,10 +1,10 @@
-import type {Attendee, CalendarEvent} from '@workspace/lib/types/calendar';
-import {SSEventType} from '@workspace/lib/types/sse';
-import type {Home} from '../home';
-import {getHome} from '../home';
-import {addRegistryEntry} from '../share';
-import {getUserByEmail} from '../user/';
-import {buildCalendarEvent} from './sse-events';
+import type { Attendee, CalendarEvent } from '@workspace/lib/types/calendar';
+import { SSEventType } from '@workspace/lib/types/sse';
+import type { Home } from '../home';
+import { getHome } from '../home';
+import { addRegistryEntry } from '../share';
+import { getUserByEmail } from '../user/';
+import { buildCalendarEvent } from './sse-events';
 
 type InviteUser = { id: string; email: string; name?: string | null };
 
@@ -46,7 +46,7 @@ export async function propagateInvitation(
                 status: event.status,
                 sequence: event.sequence,
                 data: {
-                    organizer: {userId: organizerHome.user.id, email: user.email, name: user.name ?? undefined},
+                    organizer: { userId: organizerHome.user.id, email: user.email, name: user.name ?? undefined },
                     organizerEventId: event.id,
                     attendees: newAttendees,
                 },

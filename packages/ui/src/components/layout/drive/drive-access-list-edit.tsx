@@ -1,29 +1,29 @@
 'use client';
 
-import {type DirectAccessItem, useDriveAccess, useIsEffectiveOwner} from '@workspace/lib/drive';
-import {usePeopleTeams} from '@workspace/lib/people';
-import {usePublicConfig} from '@workspace/lib/public';
-import {teamOwnerId} from '@workspace/lib/types';
-import type {DriveACL, DrivePath, DriveVisibility} from '@workspace/lib/types/drive';
-import {validateEmailAddress} from '@workspace/lib/validation';
-import {AvatarIcon} from '@workspace/ui/components/avatar';
-import {Button} from '@workspace/ui/components/button';
-import {Checkbox} from '@workspace/ui/components/checkbox';
-import {DialogFooter} from '@workspace/ui/components/dialog';
+import { type DirectAccessItem, useDriveAccess, useIsEffectiveOwner } from '@workspace/lib/drive';
+import { usePeopleTeams } from '@workspace/lib/people';
+import { usePublicConfig } from '@workspace/lib/public';
+import { teamOwnerId } from '@workspace/lib/types';
+import type { DriveACL, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
+import { validateEmailAddress } from '@workspace/lib/validation';
+import { AvatarIcon } from '@workspace/ui/components/avatar';
+import { Button } from '@workspace/ui/components/button';
+import { Checkbox } from '@workspace/ui/components/checkbox';
+import { DialogFooter } from '@workspace/ui/components/dialog';
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@workspace/ui/components/select';
-import {Separator} from '@workspace/ui/components/separator';
-import {cn} from '@workspace/ui/lib/utils';
-import {Lock, Plus, Unlock, Users} from 'lucide-react';
-import {useCallback, useEffect, useRef, useState} from 'react';
-import {ContactAutosuggest} from '../contacts/contact-autosuggest';
-import type {ContactSuggestion} from '../contacts/types';
-import {UserItem} from '../user-item';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
+import { Separator } from '@workspace/ui/components/separator';
+import { cn } from '@workspace/ui/lib/utils';
+import { Lock, Plus, Unlock, Users } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ContactAutosuggest } from '../contacts/contact-autosuggest';
+import type { ContactSuggestion } from '../contacts/types';
+import { UserItem } from '../user-item';
 
 export type DriveAccessListEditProps = {
     path: DrivePath;
@@ -32,21 +32,21 @@ export type DriveAccessListEditProps = {
     className?: string;
 };
 
-export function DriveAccessListEdit({path, onSave, onCancel, className}: DriveAccessListEditProps) {
+export function DriveAccessListEdit({ path, onSave, onCancel, className }: DriveAccessListEditProps) {
     const [pendingChanges, setPendingChanges] = useState(false);
     const [newContactInput, setNewContactInput] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
 
     const [directListOverride, setDirectListOverride] = useState<DirectAccessItem[] | undefined>();
 
-    const {baseDirectList, directList, inheritedList} = useDriveAccess(path, directListOverride);
+    const { baseDirectList, directList, inheritedList } = useDriveAccess(path, directListOverride);
 
     const [visibility, setVisibility] = useState<DriveVisibility>(path.visibility ?? 'private');
     const [sharingRestricted, setSharingRestricted] = useState(path.sharingRestricted ?? false);
 
     // Fetch org and teams for the team sharing picker
-    const {data: config} = usePublicConfig();
-    const {data: teams} = usePeopleTeams(config?.orgId);
+    const { data: config } = usePublicConfig();
+    const { data: teams } = usePeopleTeams(config?.orgId);
 
     const isEffectiveOwner = useIsEffectiveOwner(path.ownerId);
 
@@ -160,11 +160,11 @@ export function DriveAccessListEdit({path, onSave, onCancel, className}: DriveAc
                 (prev || baseDirectList).map((item: DirectAccessItem) => {
                     if (item.id === id) {
                         if (permission === 'remove') {
-                            return {...item, read: false, write: false};
+                            return { ...item, read: false, write: false };
                         } else if (permission === 'editor') {
-                            return {...item, read: true, write: true};
+                            return { ...item, read: true, write: true };
                         } else if (permission === 'viewer') {
-                            return {...item, read: true, write: false};
+                            return { ...item, read: true, write: false };
                         }
                     }
                     return item;
@@ -223,12 +223,12 @@ export function DriveAccessListEdit({path, onSave, onCancel, className}: DriveAc
                         onClick={handleAddContactClick}
                         disabled={!newContactInput}
                     >
-                        <Plus className="h-4 w-4"/>
+                        <Plus className="h-4 w-4" />
                     </Button>
                 </div>
             </div>
 
-            <Separator/>
+            <Separator />
 
             <div className="space-y-2">
                 <h4 className="text-base font-medium">People with access</h4>
@@ -236,7 +236,7 @@ export function DriveAccessListEdit({path, onSave, onCancel, className}: DriveAc
                 {directList.map((access: DirectAccessItem) => {
                     return (
                         <div key={access.id} className="flex items-center justify-between">
-                            <UserItem email={access.id}/>
+                            <UserItem email={access.id} />
                             {access.owner ? (
                                 <span className="text-xs text-muted-foreground w-28 text-right">Owner</span>
                             ) : (
@@ -245,7 +245,7 @@ export function DriveAccessListEdit({path, onSave, onCancel, className}: DriveAc
                                     onValueChange={(value) => handlePermissionChange(access.id, value)}
                                 >
                                     <SelectTrigger className="h-7 w-28">
-                                        <SelectValue/>
+                                        <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="editor">Editor</SelectItem>
@@ -261,7 +261,7 @@ export function DriveAccessListEdit({path, onSave, onCancel, className}: DriveAc
                 {inheritedList.map((access) => {
                     return (
                         <div key={access.id} className="flex items-center justify-between">
-                            <UserItem email={access.id} label={<>(inherited from /{access.sourceFolderName})</>}/>
+                            <UserItem email={access.id} label={<>(inherited from /{access.sourceFolderName})</>} />
                             <span className="text-xs text-muted-foreground w-28 text-right">
                                 {access.write ? 'Editor' : 'Viewer'}
                             </span>
@@ -270,7 +270,7 @@ export function DriveAccessListEdit({path, onSave, onCancel, className}: DriveAc
                 })}
             </div>
 
-            <Separator/>
+            <Separator />
 
             <div>
                 <h4 className="text-sm font-medium mb-2">General access</h4>
@@ -280,7 +280,7 @@ export function DriveAccessListEdit({path, onSave, onCancel, className}: DriveAc
                             className="w-8 h-8 cursor-pointer"
                             onClick={() => handleVisibilityChange(visibility === 'private' ? 'public-read' : 'private')}
                         >
-                            {visibility !== 'private' ? <Unlock/> : <Lock/>}
+                            {visibility !== 'private' ? <Unlock /> : <Lock />}
                         </AvatarIcon>
                         <div className="ml-3">
                             <p className="text-sm font-medium">
@@ -302,7 +302,7 @@ export function DriveAccessListEdit({path, onSave, onCancel, className}: DriveAc
                             }
                         >
                             <SelectTrigger className="h-7 w-28">
-                                <SelectValue/>
+                                <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="editor">Can edit</SelectItem>
@@ -315,7 +315,7 @@ export function DriveAccessListEdit({path, onSave, onCancel, className}: DriveAc
                 {isEffectiveOwner && (
                     <label className="flex items-center cursor-pointer">
                         <div className="w-8 h-8 flex items-center justify-center shrink-0">
-                            <Checkbox checked={!sharingRestricted} onCheckedChange={handleSharingRestrictedChange}/>
+                            <Checkbox checked={!sharingRestricted} onCheckedChange={handleSharingRestrictedChange} />
                         </div>
                         <div className="ml-3">
                             <p className="text-sm">Editors can share</p>
@@ -327,14 +327,14 @@ export function DriveAccessListEdit({path, onSave, onCancel, className}: DriveAc
                 )}
             </div>
 
-            <Separator/>
+            <Separator />
 
             <DialogFooter>
                 {teams && teams.length > 0 && (
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button variant="outline" className="mr-auto gap-2">
-                                <Users className="h-4 w-4"/>
+                                <Users className="h-4 w-4" />
                                 Share with team
                             </Button>
                         </DropdownMenuTrigger>
@@ -345,7 +345,7 @@ export function DriveAccessListEdit({path, onSave, onCancel, className}: DriveAc
                                     onClick={() => handleAddTeam(team.id)}
                                     disabled={directList.some((i: DirectAccessItem) => i.id === teamOwnerId(team.id))}
                                 >
-                                    <Users className="h-4 w-4 mr-2"/>
+                                    <Users className="h-4 w-4 mr-2" />
                                     {team.name}
                                 </DropdownMenuItem>
                             ))}

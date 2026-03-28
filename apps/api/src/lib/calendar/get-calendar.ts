@@ -1,10 +1,10 @@
-import {parseOwnerId, teamOwnerId} from '@workspace/lib/types';
-import type {CalendarShare} from '@workspace/lib/types/calendar';
-import type {User} from 'better-auth/types';
-import {ApiError} from '../core';
-import {getHome} from '../home';
-import {getMemberships} from '../user';
-import type {Calendar} from './calendar';
+import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
+import type { CalendarShare } from '@workspace/lib/types/calendar';
+import type { User } from 'better-auth/types';
+import { ApiError } from '../core';
+import { getHome } from '../home';
+import { getMemberships } from '../user';
+import type { Calendar } from './calendar';
 
 type CalendarAccess = {
     calendar: Calendar;
@@ -37,12 +37,12 @@ export async function resolveCalendarForEvents(
         }
         const home = await getHome(ownerId);
         const permission = home.calendar.checkPermission(calendarId, user.email, memberships.teamIds);
-        return {calendar: home.calendar, permission: permission || 'read'};
+        return { calendar: home.calendar, permission: permission || 'read' };
     }
 
     if (ownerId === user.id) {
         const home = await getHome(user.id);
-        return {calendar: home.calendar, permission: 'write'};
+        return { calendar: home.calendar, permission: 'write' };
     }
 
     const ownerHome = await getHome(ownerId);
@@ -51,7 +51,7 @@ export async function resolveCalendarForEvents(
     if (!permission) {
         throw new ApiError(403, 'No access to this calendar');
     }
-    return {calendar: ownerHome.calendar, permission};
+    return { calendar: ownerHome.calendar, permission };
 }
 
 export async function syncTeamCalendars(user: User) {

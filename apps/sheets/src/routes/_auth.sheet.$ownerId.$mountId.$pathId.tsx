@@ -1,19 +1,19 @@
-import {createFileRoute} from '@tanstack/react-router';
-import {useCollabDocumentInfo} from '@workspace/lib/collab';
-import {AccessDenied, LoadingState} from '@workspace/ui';
-import {useLayout} from '@workspace/ui/components/layout/app/layout-context';
-import {DriveAccessDialog} from '@workspace/ui/components/layout/drive/drive-access-dialog';
-import {useCallback, useEffect, useMemo, useState} from 'react';
-import {SheetEditor} from '../components/sheets/editor';
+import { createFileRoute } from '@tanstack/react-router';
+import { useCollabDocumentInfo } from '@workspace/lib/collab';
+import { AccessDenied, LoadingState } from '@workspace/ui';
+import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
+import { DriveAccessDialog } from '@workspace/ui/components/layout/drive/drive-access-dialog';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { SheetEditor } from '../components/sheets/editor';
 
 export const Route = createFileRoute('/_auth/sheet/$ownerId/$mountId/$pathId')({
     component: SheetView,
 });
 
 function SheetView() {
-    const {ownerId, mountId, pathId} = Route.useParams();
-    const {data: docInfo, isLoading} = useCollabDocumentInfo(ownerId, mountId, pathId);
-    const {setDocumentTitle} = useLayout();
+    const { ownerId, mountId, pathId } = Route.useParams();
+    const { data: docInfo, isLoading } = useCollabDocumentInfo(ownerId, mountId, pathId);
+    const { setDocumentTitle } = useLayout();
     const [accessDialogOpen, setAccessDialogOpen] = useState(false);
 
     useEffect(() => {
@@ -26,9 +26,9 @@ function SheetView() {
         () =>
             docInfo?.path
                 ? {
-                    ...docInfo.path,
-                    mountId,
-                }
+                      ...docInfo.path,
+                      mountId,
+                  }
                 : null,
         [docInfo?.path, mountId],
     );
@@ -37,8 +37,8 @@ function SheetView() {
 
     const handleAccessDialogOpen = useCallback(() => setAccessDialogOpen(true), []);
 
-    if (isLoading) return <LoadingState/>;
-    if (!path) return <AccessDenied/>;
+    if (isLoading) return <LoadingState />;
+    if (!path) return <AccessDenied />;
 
     return (
         <>
@@ -48,7 +48,7 @@ function SheetView() {
                 canWrite={canWrite}
                 onAccessDialogOpen={handleAccessDialogOpen}
             />
-            <DriveAccessDialog path={path} open={accessDialogOpen} onOpenChange={setAccessDialogOpen}/>
+            <DriveAccessDialog path={path} open={accessDialogOpen} onOpenChange={setAccessDialogOpen} />
         </>
     );
 }

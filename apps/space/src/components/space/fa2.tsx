@@ -1,6 +1,6 @@
-import {zodResolver} from '@hookform/resolvers/zod';
-import {Button} from '@workspace/ui/components/button';
-import {Card, CardContent} from '@workspace/ui/components/card';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { Button } from '@workspace/ui/components/button';
+import { Card, CardContent } from '@workspace/ui/components/card';
 import {
     Form,
     FormControl,
@@ -10,13 +10,13 @@ import {
     FormLabel,
     FormMessage,
 } from '@workspace/ui/components/form';
-import {Input} from '@workspace/ui/components/input';
-import {Separator} from '@workspace/ui/components/separator';
-import {Check, Copy, InfoIcon} from 'lucide-react';
-import {useState} from 'react';
-import {useForm} from 'react-hook-form';
+import { Input } from '@workspace/ui/components/input';
+import { Separator } from '@workspace/ui/components/separator';
+import { Check, Copy, InfoIcon } from 'lucide-react';
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
 import QRCode from 'react-qr-code';
-import {z} from 'zod';
+import { z } from 'zod';
 
 const passwordFormSchema = z.object({
     password: z.string().min(1, 'Password is required'),
@@ -44,16 +44,16 @@ type TwoFactorSetupProps = {
 };
 
 export function TwoFactorSetup({
-                                   onInitialize2FA,
-                                   onVerifyTotp,
-                                   onComplete,
-                                   onBack,
-                                   totpUri,
-                                   secretKey,
-                                   backupCodes,
-                                   currentStep,
-                                   setCurrentStep,
-                               }: TwoFactorSetupProps) {
+    onInitialize2FA,
+    onVerifyTotp,
+    onComplete,
+    onBack,
+    totpUri,
+    secretKey,
+    backupCodes,
+    currentStep,
+    setCurrentStep,
+}: TwoFactorSetupProps) {
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [isCopied, setIsCopied] = useState<boolean>(false);
     const [codesCopied, setCodesCopied] = useState<boolean>(false);
@@ -120,14 +120,14 @@ export function TwoFactorSetup({
                 </p>
             </div>
 
-            <Separator/>
+            <Separator />
 
             {currentStep === 'password' && (
                 <Form {...passwordForm}>
                     <form onSubmit={passwordForm.handleSubmit(onPasswordSubmit)} className="space-y-6">
                         <div className="bg-accent border text-accent-foreground rounded-md p-4">
                             <div className="flex">
-                                <InfoIcon className="h-5 w-5 text-primary mr-2"/>
+                                <InfoIcon className="h-5 w-5 text-primary mr-2" />
                                 <div>
                                     <h3 className="font-medium">Important</h3>
                                     <p className="text-sm">
@@ -142,7 +142,7 @@ export function TwoFactorSetup({
                         <FormField
                             control={passwordForm.control}
                             name="password"
-                            render={({field}) => (
+                            render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>Current Password</FormLabel>
                                     <FormControl>
@@ -153,7 +153,7 @@ export function TwoFactorSetup({
                                             {...field}
                                         />
                                     </FormControl>
-                                    <FormMessage/>
+                                    <FormMessage />
                                 </FormItem>
                             )}
                         />
@@ -171,7 +171,7 @@ export function TwoFactorSetup({
                 <div className="space-y-6">
                     <div className="bg-accent border text-accent-foreground rounded-md p-4">
                         <div className="flex">
-                            <InfoIcon className="h-5 w-5 text-primary mr-2"/>
+                            <InfoIcon className="h-5 w-5 text-primary mr-2" />
                             <div>
                                 <h3 className="font-medium">Set up authenticator app</h3>
                                 <p className="text-sm">
@@ -189,7 +189,7 @@ export function TwoFactorSetup({
                         <Card className="border-dashed">
                             <CardContent className="flex items-center justify-center p-6">
                                 <div className="w-48 h-48 flex items-center justify-center">
-                                    <QRCode value={totpUri} size={192}/>
+                                    <QRCode value={totpUri} size={192} />
                                 </div>
                             </CardContent>
                         </Card>
@@ -202,9 +202,9 @@ export function TwoFactorSetup({
                         </p>
 
                         <div className="flex items-center space-x-2">
-                            <Input value={secretKey} readOnly className="font-mono"/>
+                            <Input value={secretKey} readOnly className="font-mono" />
                             <Button variant="outline" size="icon" onClick={copyToClipboard} title="Copy to clipboard">
-                                {isCopied ? <Check className="h-4 w-4"/> : <Copy className="h-4 w-4"/>}
+                                {isCopied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                             </Button>
                         </div>
                     </div>
@@ -223,7 +223,7 @@ export function TwoFactorSetup({
                     <form onSubmit={verificationForm.handleSubmit(onVerificationSubmit)} className="space-y-6">
                         <div className="bg-accent border text-accent-foreground rounded-md p-4">
                             <div className="flex">
-                                <InfoIcon className="h-5 w-5 text-primary mr-2"/>
+                                <InfoIcon className="h-5 w-5 text-primary mr-2" />
                                 <div>
                                     <h3 className="font-medium">Verify your setup</h3>
                                     <p className="text-sm">
@@ -237,7 +237,7 @@ export function TwoFactorSetup({
                         <FormField
                             control={verificationForm.control}
                             name="verificationCode"
-                            render={({field}) => (
+                            render={({ field }) => (
                                 <FormItem>
                                     <FormLabel>Verification Code</FormLabel>
                                     <FormControl>
@@ -252,7 +252,7 @@ export function TwoFactorSetup({
                                     <FormDescription>
                                         Enter the 6-digit code from your authentication app
                                     </FormDescription>
-                                    <FormMessage/>
+                                    <FormMessage />
                                 </FormItem>
                             )}
                         />
@@ -273,7 +273,7 @@ export function TwoFactorSetup({
                 <div className="space-y-6">
                     <div className="bg-accent border text-accent-foreground rounded-md p-4">
                         <div className="flex">
-                            <InfoIcon className="h-5 w-5 text-primary mr-2"/>
+                            <InfoIcon className="h-5 w-5 text-primary mr-2" />
                             <div>
                                 <h3 className="font-medium">Save your recovery codes</h3>
                                 <p className="text-sm">
@@ -299,12 +299,12 @@ export function TwoFactorSetup({
                     <Button variant="outline" className="w-full" onClick={copyBackupCodes}>
                         {codesCopied ? (
                             <>
-                                <Check className="h-4 w-4 mr-2"/>
+                                <Check className="h-4 w-4 mr-2" />
                                 Copied!
                             </>
                         ) : (
                             <>
-                                <Copy className="h-4 w-4 mr-2"/>
+                                <Copy className="h-4 w-4 mr-2" />
                                 Copy all codes
                             </>
                         )}

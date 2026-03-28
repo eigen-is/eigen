@@ -1,13 +1,13 @@
-import {createFileRoute, useNavigate} from '@tanstack/react-router';
-import {useContacts, useDeleteContact, useLabels, useUpdateContact} from '@workspace/lib/contacts';
-import type {Contact} from '@workspace/lib/types/contact';
-import {EmptyState, LoadingState} from '@workspace/ui';
-import {Column, ColumnLayout} from '@workspace/ui/components/layout/app/column-layout.tsx';
-import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
-import {LabelFilterHeader} from '@workspace/ui/components/layout/labels/label-filter-header';
-import {useEffect, useState} from 'react';
-import {ContactDetail, ContactDetailToolbar} from '../components/contacts/contact-detail';
-import {ContactsList, ContactsListToolbar} from '../components/contacts/contacts-list';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { useContacts, useDeleteContact, useLabels, useUpdateContact } from '@workspace/lib/contacts';
+import type { Contact } from '@workspace/lib/types/contact';
+import { EmptyState, LoadingState } from '@workspace/ui';
+import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
+import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
+import { LabelFilterHeader } from '@workspace/ui/components/layout/labels/label-filter-header';
+import { useEffect, useState } from 'react';
+import { ContactDetail, ContactDetailToolbar } from '../components/contacts/contact-detail';
+import { ContactsList, ContactsListToolbar } from '../components/contacts/contacts-list';
 
 export type ContactsSearchParams = {
     contactId?: string;
@@ -17,20 +17,20 @@ export const Route = createFileRoute('/_auth/$filterType/$filterId')({
     component: ContactsRoute,
     validateSearch: (search: Record<string, unknown>) => {
         const contactId = typeof search.contactId === 'string' ? search.contactId : undefined;
-        return {contactId} as ContactsSearchParams;
+        return { contactId } as ContactsSearchParams;
     },
 });
 
 function ContactsRoute() {
-    const {filterType, filterId} = Route.useParams();
-    const {contactId} = Route.useSearch();
+    const { filterType, filterId } = Route.useParams();
+    const { contactId } = Route.useSearch();
     const navigate = useNavigate();
 
     const [searchQuery, setSearchQuery] = useState('');
     const [sortBy, setSortBy] = useState<'firstName' | 'lastName'>('firstName');
 
-    const {data: contacts = [], isLoading: contactsLoading} = useContacts();
-    const {data: labels = []} = useLabels();
+    const { data: contacts = [], isLoading: contactsLoading } = useContacts();
+    const { data: labels = [] } = useLabels();
     const deleteMutation = useDeleteContact();
     const updateContactMutation = useUpdateContact();
 
@@ -42,7 +42,7 @@ function ContactsRoute() {
         setDeleteTargets([]);
         navigate({
             to: Route.fullPath,
-            params: {filterType, filterId},
+            params: { filterType, filterId },
             search: {},
         });
     };
@@ -50,7 +50,7 @@ function ContactsRoute() {
     const handleBackToList = () => {
         navigate({
             to: Route.fullPath,
-            params: {filterType, filterId},
+            params: { filterType, filterId },
             search: {},
         });
     };
@@ -58,8 +58,8 @@ function ContactsRoute() {
     const handleRowClick = (id: string) => {
         navigate({
             to: Route.fullPath,
-            params: {filterType, filterId},
-            search: {contactId: id},
+            params: { filterType, filterId },
+            search: { contactId: id },
         });
     };
 
@@ -69,7 +69,7 @@ function ContactsRoute() {
         if (!contactsLoading && contactId && !contact) {
             navigate({
                 to: Route.fullPath,
-                params: {filterType, filterId},
+                params: { filterType, filterId },
                 search: {},
             });
         }
@@ -94,7 +94,7 @@ function ContactsRoute() {
     ) : null;
 
     if (contactsLoading) {
-        return <LoadingState/>;
+        return <LoadingState />;
     }
 
     return (
@@ -102,7 +102,7 @@ function ContactsRoute() {
             <ColumnLayout mobileColumn={contactId ? 'detail' : 'list'}>
                 <Column id="list" width="350px" toolbar={listToolbar}>
                     <div className="flex h-full flex-col border-r overflow-y-auto">
-                        {filterType === 'label' && <LabelFilterHeader labels={labels} labelId={filterId}/>}
+                        {filterType === 'label' && <LabelFilterHeader labels={labels} labelId={filterId} />}
                         <ContactsList
                             filterType={filterType}
                             filterId={filterId}
@@ -114,8 +114,8 @@ function ContactsRoute() {
                             onEdit={(contact) => {
                                 navigate({
                                     to: '/edit/$filterType/$filterId',
-                                    params: {filterType, filterId},
-                                    search: {contactId: contact.id},
+                                    params: { filterType, filterId },
+                                    search: { contactId: contact.id },
                                 });
                             }}
                             onDelete={(selectedContacts) => {
@@ -146,9 +146,9 @@ function ContactsRoute() {
                 </Column>
                 <Column id="detail" width="flex" onBack={handleBackToList} toolbar={detailToolbar}>
                     {contact ? (
-                        <ContactDetail contact={contact} onDelete={(_id) => setDeleteTargets([contact])}/>
+                        <ContactDetail contact={contact} onDelete={(_id) => setDeleteTargets([contact])} />
                     ) : (
-                        <EmptyState message="Select a contact to view details"/>
+                        <EmptyState message="Select a contact to view details" />
                     )}
                 </Column>
             </ColumnLayout>

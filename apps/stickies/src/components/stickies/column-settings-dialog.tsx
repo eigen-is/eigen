@@ -1,9 +1,9 @@
-import {Button} from '@workspace/ui/components/button';
-import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
-import {Input} from '@workspace/ui/components/input';
-import {Label} from '@workspace/ui/components/label';
-import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
-import {useState} from 'react';
+import { Button } from '@workspace/ui/components/button';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { Input } from '@workspace/ui/components/input';
+import { Label } from '@workspace/ui/components/label';
+import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
+import { useState } from 'react';
 import type * as Y from 'yjs';
 
 type ColumnSettingsDialogProps = {
@@ -17,14 +17,14 @@ type ColumnSettingsDialogProps = {
 };
 
 export function ColumnSettingsDialog({
-                                         isOpen,
-                                         onClose,
-                                         columnId,
-                                         columnTitle,
-                                         cardCount = 0,
-                                         canWrite = true,
-                                         yjsDoc,
-                                     }: ColumnSettingsDialogProps) {
+    isOpen,
+    onClose,
+    columnId,
+    columnTitle,
+    cardCount = 0,
+    canWrite = true,
+    yjsDoc,
+}: ColumnSettingsDialogProps) {
     const [title, setTitle] = useState(columnTitle);
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 

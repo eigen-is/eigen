@@ -1,5 +1,5 @@
-import {createHash} from 'node:crypto';
-import {EIGEN_ACCENT_COLORS_SHUFFLED} from '@workspace/lib/constants/colors';
+import { createHash } from 'node:crypto';
+import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import type {
     Attendee,
     CalendarEvent,
@@ -9,19 +9,19 @@ import type {
     EventData,
     SharedCalendar,
 } from '@workspace/lib/types/calendar';
-import {SSEventType} from '@workspace/lib/types/sse';
-import {and, count, eq, gte, isNull, lte, sql} from 'drizzle-orm';
-import type {BunSQLiteDatabase} from 'drizzle-orm/bun-sqlite';
-import {RRule} from 'rrule';
-import {v4 as uuidv4} from 'uuid';
-import {ApiError, PATHS} from '../core';
-import type {ManagedDatabase} from '../core/';
-import type {Home} from '../home';
-import {CALENDAR_DB_CONFIG} from './db-config';
-import {propagateCancellation, propagateDecline, propagateInvitation, propagateRsvp} from './invite-propagation';
+import { SSEventType } from '@workspace/lib/types/sse';
+import { and, count, eq, gte, isNull, lte, sql } from 'drizzle-orm';
+import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
+import { RRule } from 'rrule';
+import { v4 as uuidv4 } from 'uuid';
+import { ApiError, PATHS } from '../core';
+import type { ManagedDatabase } from '../core/';
+import type { Home } from '../home';
+import { CALENDAR_DB_CONFIG } from './db-config';
+import { propagateCancellation, propagateDecline, propagateInvitation, propagateRsvp } from './invite-propagation';
 import * as schema from './schema';
-import {notifySharedCalendarUsers, propagateCalendarShare} from './share-propagation';
-import {buildCalendarEvent} from './sse-events';
+import { notifySharedCalendarUsers, propagateCalendarShare } from './share-propagation';
+import { buildCalendarEvent } from './sse-events';
 
 type UserIdentity = { id: string; email: string; name?: string | null };
 
@@ -274,7 +274,7 @@ export class Calendar {
         if (existing.isDefault) throw new ApiError(400, 'Cannot delete default calendar');
 
         if (existing.shares?.length) {
-            await propagateCalendarShare(this.home, {...existing, shares: []}, existing.shares);
+            await propagateCalendarShare(this.home, { ...existing, shares: [] }, existing.shares);
         }
 
         this.db.delete(schema.calendars).where(eq(schema.calendars.id, id)).run();
@@ -394,12 +394,12 @@ export class Calendar {
 
         // Linked event guard: attendees can only change local fields (reminders, color)
         if (existing.data?.organizer) {
-            const localData: EventData = {...existing.data};
+            const localData: EventData = { ...existing.data };
             if (input.data) {
                 localData.reminders = input.data.reminders ?? localData.reminders;
                 localData.color = input.data.color ?? localData.color;
             }
-            input = {data: localData};
+            input = { data: localData };
         }
 
         const oldAttendees = existing.data?.attendees || [];
@@ -656,8 +656,8 @@ export class Calendar {
                 .where(eq(schema.sharedCalendars.id, existing.id))
                 .run();
         } else {
-            const ownCalendarCount = this.db.select({count: count()}).from(schema.calendars).get()!.count;
-            const sharedCount = this.db.select({count: count()}).from(schema.sharedCalendars).get()!.count;
+            const ownCalendarCount = this.db.select({ count: count() }).from(schema.calendars).get()!.count;
+            const sharedCount = this.db.select({ count: count() }).from(schema.sharedCalendars).get()!.count;
             const localColor =
                 EIGEN_ACCENT_COLORS_SHUFFLED[(ownCalendarCount + sharedCount) % EIGEN_ACCENT_COLORS_SHUFFLED.length]
                     .value;
@@ -738,8 +738,8 @@ export class Calendar {
                     .run();
             }
         } else {
-            const ownCalendarCount = this.db.select({count: count()}).from(schema.calendars).get()!.count;
-            const sharedCount = this.db.select({count: count()}).from(schema.sharedCalendars).get()!.count;
+            const ownCalendarCount = this.db.select({ count: count() }).from(schema.calendars).get()!.count;
+            const sharedCount = this.db.select({ count: count() }).from(schema.sharedCalendars).get()!.count;
             const localColor =
                 EIGEN_ACCENT_COLORS_SHUFFLED[(ownCalendarCount + sharedCount) % EIGEN_ACCENT_COLORS_SHUFFLED.length]
                     .value;
@@ -804,7 +804,7 @@ export class Calendar {
         if (!cal?.shares) return null;
 
         let bestPermission: CalendarShare['permission'] | null = null;
-        const permissionRank = {'free-busy': 0, read: 1, write: 2};
+        const permissionRank = { 'free-busy': 0, read: 1, write: 2 };
 
         for (const share of cal.shares) {
             let matches = false;
@@ -984,12 +984,12 @@ export class Calendar {
             if (!data?.attendees) return;
 
             const attendees = data.attendees.map((a) =>
-                a.email.toLowerCase() === email.toLowerCase() ? {...a, status} : a,
+                a.email.toLowerCase() === email.toLowerCase() ? { ...a, status } : a,
             );
 
             tx.update(schema.events)
                 .set({
-                    data: {...data, attendees},
+                    data: { ...data, attendees },
                     updatedAt: sql`unixepoch()`,
                 })
                 .where(eq(schema.events.id, eventId))
@@ -1028,9 +1028,9 @@ export class Calendar {
         if (existing) {
             const data = (existing.data as EventData) ?? parent.data ?? {};
             const attendees = (data.attendees || parent.data?.attendees || []).map((a) =>
-                a.email.toLowerCase() === email.toLowerCase() ? {...a, status} : a,
+                a.email.toLowerCase() === email.toLowerCase() ? { ...a, status } : a,
             );
-            const updatedData: EventData = {...data, attendees};
+            const updatedData: EventData = { ...data, attendees };
             const newStatus = existing.status === 'cancelled' ? 'confirmed' : existing.status;
             const etag = computeEtag({
                 title: existing.title,
@@ -1058,9 +1058,9 @@ export class Calendar {
             this.incrementCtag(parent.calendarId);
         } else {
             const attendees = (parent.data?.attendees || []).map((a) =>
-                a.email.toLowerCase() === email.toLowerCase() ? {...a, status} : a,
+                a.email.toLowerCase() === email.toLowerCase() ? { ...a, status } : a,
             );
-            const {startTime, endTime} = computeOccurrenceTimes(parent, recurrenceDate);
+            const { startTime, endTime } = computeOccurrenceTimes(parent, recurrenceDate);
 
             this.createEvent(parent.calendarId, {
                 title: parent.title,
@@ -1071,7 +1071,7 @@ export class Calendar {
                 allDay: parent.allDay,
                 parentEventId: eventId,
                 recurrenceDate,
-                data: {...parent.data, attendees},
+                data: { ...parent.data, attendees },
                 createByUserId: parent.createByUserId,
             });
         }
@@ -1094,7 +1094,7 @@ export class Calendar {
                 .run();
             this.incrementCtag(parent.calendarId);
         } else {
-            const {startTime, endTime} = computeOccurrenceTimes(parent, recurrenceDate);
+            const { startTime, endTime } = computeOccurrenceTimes(parent, recurrenceDate);
             this.createEvent(parent.calendarId, {
                 title: parent.title,
                 startTime,
@@ -1338,7 +1338,7 @@ function computeOccurrenceTimes(parent: CalendarEvent, recurrenceDate: string): 
             const wallClockDtstart = new Date(
                 Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute, local.second),
             );
-            const rule = new RRule({...RRule.parseString(parent.rrule), dtstart: wallClockDtstart});
+            const rule = new RRule({ ...RRule.parseString(parent.rrule), dtstart: wallClockDtstart });
             const dayStart = new Date(occDate);
             const dayEnd = new Date(occDate);
             dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
@@ -1354,17 +1354,17 @@ function computeOccurrenceTimes(parent: CalendarEvent, recurrenceDate: string): 
                     match.getUTCMinutes(),
                     match.getUTCSeconds(),
                 );
-                return {startTime, endTime: startTime + duration};
+                return { startTime, endTime: startTime + duration };
             }
         } else {
-            const rule = new RRule({...RRule.parseString(parent.rrule), dtstart});
+            const rule = new RRule({ ...RRule.parseString(parent.rrule), dtstart });
             const dayStart = new Date(occDate);
             const dayEnd = new Date(occDate);
             dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
             const matches = rule.between(dayStart, dayEnd, true);
             if (matches.length > 0) {
                 const startTime = Math.floor(matches[0].getTime() / 1000);
-                return {startTime, endTime: startTime + duration};
+                return { startTime, endTime: startTime + duration };
             }
         }
     }
@@ -1382,7 +1382,7 @@ function computeOccurrenceTimes(parent: CalendarEvent, recurrenceDate: string): 
             local.minute,
             local.second,
         );
-        return {startTime, endTime: startTime + duration};
+        return { startTime, endTime: startTime + duration };
     }
 
     const startTime =
@@ -1390,5 +1390,5 @@ function computeOccurrenceTimes(parent: CalendarEvent, recurrenceDate: string): 
         dtstart.getUTCHours() * 3600 +
         dtstart.getUTCMinutes() * 60 +
         dtstart.getUTCSeconds();
-    return {startTime, endTime: startTime + duration};
+    return { startTime, endTime: startTime + duration };
 }

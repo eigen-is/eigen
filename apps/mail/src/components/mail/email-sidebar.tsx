@@ -1,22 +1,22 @@
-import type {MaildirMailbox} from '@workspace/lib/types/mail';
-import {EigenLoader, StorageUsage} from '@workspace/ui';
-import {DroppableSidebarItem} from '@workspace/ui/components/layout/sidebar/droppable-sidebar-item';
-import {SidebarHeader} from '@workspace/ui/components/layout/sidebar/sidebar-header';
-import {SidebarItem} from '@workspace/ui/components/layout/sidebar/sidebar-item';
-import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
-import {AlertOctagon, AlertTriangle, Archive, File, Inbox, Send, Trash2} from 'lucide-react';
+import type { MaildirMailbox } from '@workspace/lib/types/mail';
+import { EigenLoader, StorageUsage } from '@workspace/ui';
+import { DroppableSidebarItem } from '@workspace/ui/components/layout/sidebar/droppable-sidebar-item';
+import { SidebarHeader } from '@workspace/ui/components/layout/sidebar/sidebar-header';
+import { SidebarItem } from '@workspace/ui/components/layout/sidebar/sidebar-item';
+import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
+import { AlertOctagon, AlertTriangle, Archive, File, Inbox, Send, Trash2 } from 'lucide-react';
 import type React from 'react';
-import {useMemo} from 'react';
-import {EmailComposeButton} from './email-compose-button';
+import { useMemo } from 'react';
+import { EmailComposeButton } from './email-compose-button';
 
 // Map of special mailbox flags to their icons and display names
 const standardMailboxes: Record<string, { icon: React.ComponentType<{ className?: string }>; name: string }> = {
-    '\\Inbox': {icon: Inbox, name: 'Inbox'},
-    '\\Drafts': {icon: File, name: 'Drafts'},
-    '\\Sent': {icon: Send, name: 'Sent'},
-    '\\Junk': {icon: AlertOctagon, name: 'Spam'},
-    '\\Trash': {icon: Trash2, name: 'Trash'},
-    '\\Archive': {icon: Archive, name: 'Archive'},
+    '\\Inbox': { icon: Inbox, name: 'Inbox' },
+    '\\Drafts': { icon: File, name: 'Drafts' },
+    '\\Sent': { icon: Send, name: 'Sent' },
+    '\\Junk': { icon: AlertOctagon, name: 'Spam' },
+    '\\Trash': { icon: Trash2, name: 'Trash' },
+    '\\Archive': { icon: Archive, name: 'Archive' },
 };
 
 // Default mailboxes to display if API call fails
@@ -24,7 +24,7 @@ const defaultMailboxes = [
     {
         path: 'INBOX',
         name: 'Inbox',
-        icon: <Inbox className="h-4 w-4"/>,
+        icon: <Inbox className="h-4 w-4" />,
         href: '/box/inbox',
         unread: 0,
         flags: ['\\HasNoChildren', '\\Inbox'],
@@ -33,7 +33,7 @@ const defaultMailboxes = [
     {
         path: 'Drafts',
         name: 'Drafts',
-        icon: <File className="h-4 w-4"/>,
+        icon: <File className="h-4 w-4" />,
         href: '/box/drafts',
         unread: 0,
         flags: ['\\HasNoChildren', '\\Drafts'],
@@ -42,7 +42,7 @@ const defaultMailboxes = [
     {
         path: 'Sent',
         name: 'Sent',
-        icon: <Send className="h-4 w-4"/>,
+        icon: <Send className="h-4 w-4" />,
         href: '/box/sent',
         unread: 0,
         flags: ['\\HasNoChildren', '\\Sent'],
@@ -51,7 +51,7 @@ const defaultMailboxes = [
     {
         path: 'Junk',
         name: 'Spam',
-        icon: <AlertTriangle className="h-4 w-4"/>,
+        icon: <AlertTriangle className="h-4 w-4" />,
         href: '/box/junk',
         unread: 0,
         flags: ['\\HasNoChildren', '\\Junk'],
@@ -60,7 +60,7 @@ const defaultMailboxes = [
     {
         path: 'Trash',
         name: 'Trash',
-        icon: <Trash2 className="h-4 w-4"/>,
+        icon: <Trash2 className="h-4 w-4" />,
         href: '/box/trash',
         unread: 0,
         flags: ['\\HasNoChildren', '\\Trash'],
@@ -69,7 +69,7 @@ const defaultMailboxes = [
     {
         path: 'Archive',
         name: 'Archive',
-        icon: <Archive className="h-4 w-4"/>,
+        icon: <Archive className="h-4 w-4" />,
         href: '/box/archive',
         unread: 0,
         flags: ['\\HasNoChildren', '\\Archive'],
@@ -94,14 +94,14 @@ type AppSidebarProps = {
 };
 
 export function EmailSidebar({
-                                 condensed = false,
-                                 onClose,
-                                 isMobile = false,
-                                 mailboxes = [],
-                                 isLoading = false,
-                                 error = null,
-                                 onMoveToFolder,
-                             }: AppSidebarProps) {
+    condensed = false,
+    onClose,
+    isMobile = false,
+    mailboxes = [],
+    isLoading = false,
+    error = null,
+    onMoveToFolder,
+}: AppSidebarProps) {
     // Memoize the processed mailboxes to avoid unnecessary recalculations
     const standardMailboxList = useMemo(() => {
         const processedMailboxes = mailboxes.map((mailbox) => {
@@ -116,9 +116,9 @@ export function EmailSidebar({
             let icon: React.ReactNode;
             if (standardFlag && standardMailboxes[standardFlag]) {
                 const IconComponent = standardMailboxes[standardFlag].icon;
-                icon = <IconComponent className="h-4 w-4"/>;
+                icon = <IconComponent className="h-4 w-4" />;
             } else {
-                icon = <File className="h-4 w-4"/>;
+                icon = <File className="h-4 w-4" />;
             }
 
             return {
@@ -148,16 +148,16 @@ export function EmailSidebar({
 
     return (
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
-            {isMobile && <SidebarHeader appName="mail" onClose={onClose}/>}
+            {isMobile && <SidebarHeader appName="mail" onClose={onClose} />}
 
             <div className="px-3 py-2">
-                <EmailComposeButton condensed={condensed}/>
+                <EmailComposeButton condensed={condensed} />
             </div>
 
             <SidebarSection condensed={condensed}>
                 {isLoading ? (
                     <div className="flex items-center justify-center py-4">
-                        <EigenLoader/>
+                        <EigenLoader />
                     </div>
                 ) : (
                     standardMailboxList.map((item) => {
@@ -190,7 +190,7 @@ export function EmailSidebar({
             </SidebarSection>
 
             {/* Storage usage indicator at the bottom of sidebar */}
-            <StorageUsage className="mt-auto" condensed={condensed}/>
+            <StorageUsage className="mt-auto" condensed={condensed} />
         </div>
     );
 }

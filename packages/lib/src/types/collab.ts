@@ -1,4 +1,4 @@
-import type {DrivePath} from './drive';
+import type { DrivePath } from './drive';
 
 export type CollabDocumentInfo = {
     canRead: boolean;

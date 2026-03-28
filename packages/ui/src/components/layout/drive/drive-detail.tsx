@@ -1,7 +1,7 @@
-import {getDriveDownloadUrl, getDriveThumbnailUrl} from '@workspace/lib/api';
-import {type DrivePath, isInlineEditable} from '@workspace/lib/types/drive';
-import {TooltipButton} from '@workspace/ui';
-import {Button} from '@workspace/ui/components/button';
+import { getDriveDownloadUrl, getDriveThumbnailUrl } from '@workspace/lib/api';
+import { type DrivePath, isInlineEditable } from '@workspace/lib/types/drive';
+import { TooltipButton } from '@workspace/ui';
+import { Button } from '@workspace/ui/components/button';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -9,12 +9,12 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import {DriveAccessList} from '@workspace/ui/components/layout/drive';
-import {Table, TableBody, TableCell, TableRow} from '@workspace/ui/components/table';
-import {formatFileSize} from '@workspace/ui/lib/formatFileSize';
-import {ArrowRight, Download, MoreVertical, Pencil, Trash2, UserRoundPlus, X} from 'lucide-react';
-import {useLayout} from '../app/layout-context.tsx';
-import {LoadingState} from '../app/loading-state';
+import { DriveAccessList } from '@workspace/ui/components/layout/drive';
+import { Table, TableBody, TableCell, TableRow } from '@workspace/ui/components/table';
+import { formatFileSize } from '@workspace/ui/lib/formatFileSize';
+import { ArrowRight, Download, MoreVertical, Pencil, Trash2, UserRoundPlus, X } from 'lucide-react';
+import { useLayout } from '../app/layout-context.tsx';
+import { LoadingState } from '../app/loading-state';
 
 type DriveDetailToolbarProps = {
     path: DrivePath;
@@ -28,54 +28,54 @@ type DriveDetailToolbarProps = {
 };
 
 export function DriveDetailToolbar({
-                                       path,
-                                       onClose,
-                                       onDelete,
-                                       onShareClick,
-                                       onDownload,
-                                       onItemOpen,
-                                       onRename,
-                                       allowDelete,
-                                   }: DriveDetailToolbarProps) {
-    const {isMobile} = useLayout();
+    path,
+    onClose,
+    onDelete,
+    onShareClick,
+    onDownload,
+    onItemOpen,
+    onRename,
+    allowDelete,
+}: DriveDetailToolbarProps) {
+    const { isMobile } = useLayout();
 
     return (
         <div className="flex items-center justify-between w-full">
             <div className="flex items-center gap-1">
-                {!isMobile && onClose && <TooltipButton onClick={onClose} tooltipText="Close" icon={X}/>}
+                {!isMobile && onClose && <TooltipButton onClick={onClose} tooltipText="Close" icon={X} />}
             </div>
             <div className="flex items-center gap-1">
-                {onDelete && <TooltipButton icon={Trash2} tooltipText="Delete" onClick={() => onDelete(path)}/>}
-                <div className="h-6 w-[1px] bg-border mx-1"/>
+                {onDelete && <TooltipButton icon={Trash2} tooltipText="Delete" onClick={() => onDelete(path)} />}
+                <div className="h-6 w-[1px] bg-border mx-1" />
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button variant="ghost" size="icon" className="h-8 w-8" title="More actions">
-                            <MoreVertical className="h-4 w-4"/>
+                            <MoreVertical className="h-4 w-4" />
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent>
                         <DropdownMenuItem onClick={() => onItemOpen?.(path)} className="flex items-center">
-                            <ArrowRight className="h-4 w-4 mr-2"/>
+                            <ArrowRight className="h-4 w-4 mr-2" />
                             Open
                         </DropdownMenuItem>
                         {path.type === 'file' && (
                             <DropdownMenuItem onClick={() => onDownload?.(path)} className="flex items-center">
-                                <Download className="h-4 w-4 mr-2"/>
+                                <Download className="h-4 w-4 mr-2" />
                                 Download
                             </DropdownMenuItem>
                         )}
                         <DropdownMenuItem onClick={() => onShareClick?.(path)} className="flex items-center">
-                            <UserRoundPlus className="h-4 w-4 mr-2"/>
+                            <UserRoundPlus className="h-4 w-4 mr-2" />
                             Edit access
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => onRename?.(path)} className="flex items-center">
-                            <Pencil className="h-4 w-4 mr-2"/>
+                            <Pencil className="h-4 w-4 mr-2" />
                             Rename
                         </DropdownMenuItem>
-                        <DropdownMenuSeparator/>
+                        <DropdownMenuSeparator />
                         {allowDelete && (
                             <DropdownMenuItem onClick={() => onDelete?.(path)} className="flex items-center">
-                                <Trash2 className="h-4 w-4 mr-2"/>
+                                <Trash2 className="h-4 w-4 mr-2" />
                                 Delete
                             </DropdownMenuItem>
                         )}
@@ -96,9 +96,9 @@ type DriveDetailProps = {
     allowDelete?: boolean;
 };
 
-export function DriveDetail({path, onShareClick, onItemOpen}: DriveDetailProps) {
+export function DriveDetail({ path, onShareClick, onItemOpen }: DriveDetailProps) {
     if (!path) {
-        return <LoadingState/>;
+        return <LoadingState />;
     }
 
     const fullPath = getDriveDownloadUrl(path.ownerId, path.mountId, path.id);
@@ -110,7 +110,7 @@ export function DriveDetail({path, onShareClick, onItemOpen}: DriveDetailProps) 
                 <h2 className="text-xl font-medium mb-2 flex items-center">
                     <span className="truncate overflow-hidden min-w-0 flex-1">{path.name}</span>
                     {onItemOpen && path && (path.type !== 'file' || isInlineEditable(path.mimeType, path.name)) && (
-                        <TooltipButton onClick={() => onItemOpen(path)} tooltipText="Open" icon={ArrowRight}/>
+                        <TooltipButton onClick={() => onItemOpen(path)} tooltipText="Open" icon={ArrowRight} />
                     )}
                 </h2>
                 <Table className="text-sm text-muted-foreground mb-4">
@@ -139,7 +139,7 @@ export function DriveDetail({path, onShareClick, onItemOpen}: DriveDetailProps) 
                             className="max-w-full max-h-[25%] object-contain"
                             style={
                                 path.details?.width && path.details?.height
-                                    ? {aspectRatio: path.details.width / path.details.height}
+                                    ? { aspectRatio: path.details.width / path.details.height }
                                     : undefined
                             }
                         />
@@ -154,7 +154,7 @@ export function DriveDetail({path, onShareClick, onItemOpen}: DriveDetailProps) 
                             controls
                             style={
                                 path.details?.width && path.details?.height
-                                    ? {aspectRatio: path.details.width / path.details.height}
+                                    ? { aspectRatio: path.details.width / path.details.height }
                                     : undefined
                             }
                         />
@@ -166,7 +166,7 @@ export function DriveDetail({path, onShareClick, onItemOpen}: DriveDetailProps) 
                     path.mimeType === 'audio/vorbis' ||
                     path.mimeType === 'audio/mp4') && (
                     <div>
-                        <audio src={fullPath} className="w-full" autoPlay={false} controls/>
+                        <audio src={fullPath} className="w-full" autoPlay={false} controls />
                     </div>
                 )}
 
@@ -210,7 +210,7 @@ export function DriveDetail({path, onShareClick, onItemOpen}: DriveDetailProps) 
                     )}
 
                 <div className="mt-4">
-                    <DriveAccessList path={path} onShareClick={onShareClick}/>
+                    <DriveAccessList path={path} onShareClick={onShareClick} />
                 </div>
             </div>
         </div>

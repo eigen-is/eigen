@@ -1,7 +1,5 @@
-'use strict';
-
-const Transform = require('stream').Transform;
-const MimeNode = require('./mime-node');
+import { Transform, type TransformCallback } from 'node:stream';
+import MimeNode from './mime-node';
 
 const MAX_HEAD_SIZE = 1 * 1024 * 1024;
 const MAX_CHILD_NODES = 1000;
@@ -9,13 +7,38 @@ const MAX_CHILD_NODES = 1000;
 const HEAD = 0x01;
 const BODY = 0x02;
 
+type SplitterConfig = {
+    maxHeadSize?: number;
+    maxChildNodes?: number;
+    Iconv?: unknown;
+    ignoreEmbedded?: boolean;
+    defaultInlineEmbedded?: boolean;
+};
+
+type SplitterData = {
+    node: MimeNode;
+    type: string;
+    value?: Buffer;
+};
+
+type ProcessLineCallback = (err?: Error | null, data?: MimeNode | SplitterData | null, flush?: boolean) => void;
+
 class MessageSplitter extends Transform {
-    constructor(config) {
-        let options = {
+    config: SplitterConfig;
+    maxHeadSize: number;
+    maxChildNodes: number;
+    tree: MimeNode[];
+    nodeCounter: number;
+    node!: MimeNode;
+    state!: number;
+    line: Buffer | null;
+    hasFailed: boolean;
+
+    constructor(config?: SplitterConfig) {
+        super({
             readableObjectMode: true,
-            writableObjectMode: false
-        };
-        super(options);
+            writableObjectMode: false,
+        });
 
         this.config = config || {};
         this.maxHeadSize = this.config.maxHeadSize || MAX_HEAD_SIZE;
@@ -24,23 +47,21 @@ class MessageSplitter extends Transform {
         this.nodeCounter = 0;
         this.newNode();
         this.tree.push(this.node);
-        this.line = false;
+        this.line = null;
         this.hasFailed = false;
     }
 
-    _transform(chunk, encoding, callback) {
-        // process line by line
-        // find next line ending
+    _transform(chunk: Buffer, _encoding: BufferEncoding, callback: TransformCallback): void {
         let pos = 0;
         let i = 0;
-        let group = {
-            type: 'none'
+        let group: { type: string; node?: MimeNode; value?: Buffer } = {
+            type: 'none',
         };
         let groupstart = this.line ? -this.line.length : 0;
         let groupend = 0;
 
-        let checkTrailingLinebreak = data => {
-            if (data.type === 'body' && data.node.parentNode && data.value && data.value.length) {
+        const checkTrailingLinebreak = (data: SplitterData) => {
+            if (data.type === 'body' && data.node.parentNode && data.value?.length) {
                 if (data.value[data.value.length - 1] === 0x0a) {
                     groupstart--;
                     groupend--;
@@ -50,7 +71,6 @@ class MessageSplitter extends Transform {
                         groupend--;
                         pos--;
                         if (groupstart < 0 && !this.line) {
-                            // store only <CR> as <LF> should be on the positive side
                             this.line = Buffer.allocUnsafe(1);
                             this.line[0] = 0x0d;
                         }
@@ -67,29 +87,25 @@ class MessageSplitter extends Transform {
             }
         };
 
-        let iterateData = () => {
-            for (let len = chunk.length; i < len; i++) {
-                // find next <LF>
+        const iterateData = () => {
+            for (const len = chunk.length; i < len; i++) {
                 if (chunk[i] === 0x0a) {
-                    // line end
-
-                    let start = Math.max(pos, 0);
+                    const start = Math.max(pos, 0);
                     pos = ++i;
 
                     return this.processLine(chunk.slice(start, i), false, (err, data, flush) => {
                         if (err) {
                             this.hasFailed = true;
-                            return process.nextTick(() => callback(err), 0);
+                            return process.nextTick(() => callback(err));
                         }
 
                         if (!data) {
-                            return process.nextTick(iterateData, 0);
+                            return process.nextTick(iterateData);
                         }
 
                         if (flush) {
                             if (group && group.type !== 'none') {
-                                if (group.type === 'body' && groupend >= groupstart && group.node.parentNode) {
-                                    // do not include the last line ending for body
+                                if (group.type === 'body' && groupend >= groupstart && group.node?.parentNode) {
                                     if (chunk[groupend - 1] === 0x0a) {
                                         groupend--;
                                         if (groupend >= groupstart && chunk[groupend - 1] === 0x0d) {
@@ -100,26 +116,25 @@ class MessageSplitter extends Transform {
                                 if (groupstart !== groupend) {
                                     group.value = chunk.slice(groupstart, groupend);
                                     if (groupend < i) {
-                                        data.value = chunk.slice(groupend, i);
+                                        (data as SplitterData).value = chunk.slice(groupend, i);
                                     }
                                 }
                                 this.push(group);
                                 group = {
-                                    type: 'none'
+                                    type: 'none',
                                 };
                                 groupstart = groupend = i;
                             }
                             this.push(data);
                             groupend = i;
-                            return process.nextTick(iterateData, 0);
+                            return process.nextTick(iterateData);
                         }
 
-                        if (data.type === group.type) {
-                            // shift slice end position forward
+                        const dataObj = data as SplitterData;
+                        if (dataObj.type === group.type) {
                             groupend = i;
                         } else {
-                            if (group.type === 'body' && groupend >= groupstart && group.node.parentNode) {
-                                // do not include the last line ending for body
+                            if (group.type === 'body' && groupend >= groupstart && group.node?.parentNode) {
                                 if (chunk[groupend - 1] === 0x0a) {
                                     groupend--;
                                     if (groupend >= groupstart && chunk[groupend - 1] === 0x0d) {
@@ -129,44 +144,40 @@ class MessageSplitter extends Transform {
                             }
 
                             if (group.type !== 'none' && group.type !== 'node') {
-                                // we have a previous data/body chunk to output
                                 if (groupstart !== groupend) {
                                     group.value = chunk.slice(groupstart, groupend);
-                                    if (group.value && group.value.length) {
+                                    if (group.value?.length) {
                                         this.push(group);
                                         group = {
-                                            type: 'none'
+                                            type: 'none',
                                         };
                                     }
                                 }
                             }
 
-                            if (data.type === 'node') {
+                            if (dataObj.type === 'node') {
                                 this.push(data);
                                 groupstart = i;
                                 groupend = i;
                             } else if (groupstart < 0) {
                                 groupstart = i;
                                 groupend = i;
-                                checkTrailingLinebreak(data);
-                                if (data.value && data.value.length) {
+                                checkTrailingLinebreak(dataObj);
+                                if (dataObj.value?.length) {
                                     this.push(data);
                                 }
                             } else {
-                                // start new body/data chunk
-                                group = data;
+                                group = dataObj;
                                 groupstart = groupend;
                                 groupend = i;
                             }
                         }
-                        return process.nextTick(iterateData, 0);
+                        return process.nextTick(iterateData);
                     });
                 }
             }
 
-            // skip last linebreak for body
-            if (pos >= groupstart + 1 && group.type === 'body' && group.node.parentNode) {
-                // do not include the last line ending for body
+            if (pos >= groupstart + 1 && group.type === 'body' && group.node?.parentNode) {
                 if (chunk[pos - 1] === 0x0a) {
                     pos--;
                     if (pos >= groupstart && chunk[pos - 1] === 0x0d) {
@@ -176,13 +187,12 @@ class MessageSplitter extends Transform {
             }
 
             if (group.type !== 'none' && group.type !== 'node' && pos > groupstart) {
-                // we have a leftover data/body chunk to push out
                 group.value = chunk.slice(groupstart, pos);
 
-                if (group.value && group.value.length) {
+                if (group.value?.length) {
                     this.push(group);
                     group = {
-                        type: 'none'
+                        type: 'none',
                     };
                 }
             }
@@ -197,26 +207,30 @@ class MessageSplitter extends Transform {
             callback();
         };
 
-        process.nextTick(iterateData, 0);
+        process.nextTick(iterateData);
     }
 
-    _flush(callback) {
+    _flush(callback: TransformCallback): void {
         if (this.hasFailed) {
-            return callback();
+            callback();
+            return;
         }
-        this.processLine(false, true, (err, data) => {
+        this.processLine(null, true, (err, data) => {
             if (err) {
-                return process.nextTick(() => callback(err), 0);
+                return process.nextTick(() => callback(err));
             }
-            if (data && (data.type === 'node' || (data.value && data.value.length))) {
-                this.push(data);
+            if (data) {
+                if (data instanceof MimeNode) {
+                    this.push(data);
+                } else if ((data as SplitterData).value && (data as SplitterData).value!.length) {
+                    this.push(data);
+                }
             }
             callback();
         });
     }
 
-    compareBoundary(line, startpos, boundary) {
-        // --{boundary}\r\n or --{boundary}--\r\n
+    compareBoundary(line: Buffer, startpos: number, boundary: Buffer): number | false {
         if (line.length < boundary.length + 3 + startpos || line.length > boundary.length + 6 + startpos) {
             return false;
         }
@@ -228,35 +242,29 @@ class MessageSplitter extends Transform {
 
         let pos = 0;
         for (let i = boundary.length + 2 + startpos; i < line.length; i++) {
-            let c = line[i];
+            const c = line[i];
             if (pos === 0 && (c === 0x0d || c === 0x0a)) {
-                // 1: next node
                 return 1;
             }
             if (pos === 0 && c !== 0x2d) {
-                // expecting "-"
                 return false;
             }
             if (pos === 1 && c !== 0x2d) {
-                // expecting "-"
                 return false;
             }
             if (pos === 2 && c !== 0x0d && c !== 0x0a) {
-                // expecting line terminator, either <CR> or <LF>
                 return false;
             }
             if (pos === 3 && c !== 0x0a) {
-                // expecting line terminator <LF>
                 return false;
             }
             pos++;
         }
 
-        // 2: multipart end
         return 2;
     }
 
-    checkBoundary(line) {
+    checkBoundary(line: Buffer): number | false {
         let startpos = 0;
         if (line.length >= 1 && (line[0] === 0x0d || line[0] === 0x0a)) {
             startpos++;
@@ -265,35 +273,30 @@ class MessageSplitter extends Transform {
             }
         }
         if (line.length < 4 || line[startpos] !== 0x2d || line[startpos + 1] !== 0x2d) {
-            // defnitely not a boundary
             return false;
         }
 
-        let boundary;
+        let boundary: number | false;
         if (this.node._boundary && (boundary = this.compareBoundary(line, startpos, this.node._boundary))) {
-            // 1: next child
-            // 2: multipart end
             return boundary;
         }
 
         if (this.node._parentBoundary && (boundary = this.compareBoundary(line, startpos, this.node._parentBoundary))) {
-            // 3: next sibling
-            // 4: parent end
             return boundary + 2;
         }
 
         return false;
     }
 
-    processLine(line, final, next) {
+    processLine(line: Buffer | null, final: boolean, next: ProcessLineCallback): void {
         let flush = false;
 
         if (this.line && line) {
             line = Buffer.concat([this.line, line]);
-            this.line = false;
+            this.line = null;
         } else if (this.line && !line) {
             line = this.line;
-            this.line = false;
+            this.line = null;
         }
 
         if (!line) {
@@ -301,85 +304,84 @@ class MessageSplitter extends Transform {
         }
 
         if (this.nodeCounter > this.maxChildNodes) {
-            let err = new Error('Max allowed child nodes exceeded');
+            const err = new Error('Max allowed child nodes exceeded') as Error & { code: string };
             err.code = 'EMAXLEN';
-            return next(err);
+            next(err);
+            return;
         }
 
-        // we check boundary outside the HEAD/BODY scope as it may appear anywhere
-        let boundary = this.checkBoundary(line);
+        const boundary = this.checkBoundary(line);
         if (boundary) {
-            // reached boundary, switch context
             switch (boundary) {
                 case 1:
-                    // next child
                     this.newNode(this.node);
                     flush = true;
                     break;
                 case 2:
-                    // reached end of children, keep current node
                     break;
                 case 3: {
-                    // next sibling
                     let parentNode = this.node.parentNode;
                     if (parentNode && parentNode.contentType === 'message/rfc822') {
-                        // special case where immediate parent is an inline message block
-                        // move up another step
                         parentNode = parentNode.parentNode;
                     }
-                    this.newNode(parentNode);
+                    this.newNode(parentNode || undefined);
                     flush = true;
                     break;
                 }
                 case 4:
-                    // special case when boundary close a node with only header.
-                    if (this.node && this.node._headerlen && !this.node.headers) {
+                    if (this.node?._headerlen && !this.node.headers) {
                         this.node.parseHeaders();
                         this.push(this.node);
                     }
-                    // move up
                     if (this.tree.length) {
-                        this.node = this.tree.pop();
+                        this.node = this.tree.pop()!;
                     }
                     this.state = BODY;
                     break;
             }
 
-            return next(
+            next(
                 null,
                 {
                     node: this.node,
                     type: 'data',
-                    value: line
+                    value: line,
                 },
-                flush
+                flush,
             );
+            return;
         }
 
         switch (this.state) {
             case HEAD: {
                 this.node.addHeaderChunk(line);
                 if (this.node._headerlen > this.maxHeadSize) {
-                    let err = new Error('Max header size for a MIME node exceeded');
+                    const err = new Error('Max header size for a MIME node exceeded') as Error & { code: string };
                     err.code = 'EMAXLEN';
-                    return next(err);
+                    next(err);
+                    return;
                 }
-                if (final || (line.length === 1 && line[0] === 0x0a) || (line.length === 2 && line[0] === 0x0d && line[1] === 0x0a)) {
-                    let currentNode = this.node;
+                if (
+                    final ||
+                    (line.length === 1 && line[0] === 0x0a) ||
+                    (line.length === 2 && line[0] === 0x0d && line[1] === 0x0a)
+                ) {
+                    const currentNode = this.node;
 
                     currentNode.parseHeaders();
 
-                    // if the content is attached message then just continue
                     if (
                         currentNode.contentType === 'message/rfc822' &&
                         !this.config.ignoreEmbedded &&
                         (!currentNode.encoding || ['7bit', '8bit', 'binary'].includes(currentNode.encoding)) &&
-                        (this.config.defaultInlineEmbedded ? currentNode.disposition !== 'attachment' : currentNode.disposition === 'inline')
+                        (this.config.defaultInlineEmbedded
+                            ? currentNode.disposition !== 'attachment'
+                            : currentNode.disposition === 'inline')
                     ) {
                         currentNode.messageNode = true;
                         this.newNode(currentNode);
                         if (currentNode.parentNode) {
-                            this.node._parentBoundary = currentNode.parentNode._boundary;
+                            this.node._parentBoundary = (currentNode.parentNode as MimeNode)._boundary;
                         }
                     } else {
                         if (currentNode.contentType === 'message/rfc822') {
@@ -391,32 +393,35 @@ class MessageSplitter extends Transform {
                         }
                     }
 
-                    return next(null, currentNode, flush);
+                    next(null, currentNode, flush);
+                    return;
                 }
 
-                return next();
+                next();
+                return;
             }
             case BODY: {
-                return next(
+                next(
                     null,
                     {
                         node: this.node,
                         type: this.node.multipart ? 'data' : 'body',
-                        value: line
+                        value: line,
                     },
-                    flush
+                    flush,
                 );
+                return;
             }
         }
 
-        next(null, false);
+        next(null, null);
     }
 
-    newNode(parent) {
-        this.node = new MimeNode(parent || false, this.config);
+    newNode(parent?: MimeNode | null): void {
+        this.node = new MimeNode(parent ?? null, this.config);
         this.state = HEAD;
         this.nodeCounter++;
     }
 }
 
-module.exports = MessageSplitter;
+export default MessageSplitter;

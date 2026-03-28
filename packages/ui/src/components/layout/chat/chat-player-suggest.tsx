@@ -1,8 +1,8 @@
-import type {RoomMember} from '@workspace/lib/types/chat';
-import {useEffect, useMemo} from 'react';
-import type {ContactSuggestion} from '../contacts/types';
-import {useContactSuggestions} from '../contacts/use-contact-suggestions';
-import {UserItem} from '../user-item';
+import type { RoomMember } from '@workspace/lib/types/chat';
+import { useEffect, useMemo } from 'react';
+import type { ContactSuggestion } from '../contacts/types';
+import { useContactSuggestions } from '../contacts/use-contact-suggestions';
+import { UserItem } from '../user-item';
 
 type ChatPlayerSuggestProps = {
     query: string;
@@ -15,15 +15,15 @@ type ChatPlayerSuggestProps = {
 };
 
 export function ChatPlayerSuggest({
-                                      query,
-                                      roomMembers,
-                                      onSelect,
-                                      visible,
-                                      selectedIndex,
-                                      onItemsChange,
-                                      includeContacts = true,
-                                  }: ChatPlayerSuggestProps) {
-    const {suggestions: contactSuggestions} = useContactSuggestions(query, true);
+    query,
+    roomMembers,
+    onSelect,
+    visible,
+    selectedIndex,
+    onItemsChange,
+    includeContacts = true,
+}: ChatPlayerSuggestProps) {
+    const { suggestions: contactSuggestions } = useContactSuggestions(query, true);
 
     const items = useMemo(() => {
         if (!visible) return [];
@@ -78,7 +78,7 @@ export function ChatPlayerSuggest({
                         onSelect(suggestion.email);
                     }}
                 >
-                    <UserItem name={suggestion.displayName} email={suggestion.email} userId={suggestion.id}/>
+                    <UserItem name={suggestion.displayName} email={suggestion.email} userId={suggestion.id} />
                 </li>
             ))}
         </ul>

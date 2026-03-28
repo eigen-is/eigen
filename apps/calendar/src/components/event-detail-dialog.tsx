@@ -1,10 +1,10 @@
-import {useAuth} from '@workspace/lib/auth';
-import {useCreateEvent, useDeleteEvent, useRsvp, useUpdateEvent} from '@workspace/lib/calendar';
-import type {CalendarEventOccurrence, CalendarItem, SharedCalendar} from '@workspace/lib/types/calendar';
-import {Button} from '@workspace/ui/components/button';
-import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
-import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
-import {UserName} from '@workspace/ui/components/layout/user-name';
+import { useAuth } from '@workspace/lib/auth';
+import { useCreateEvent, useDeleteEvent, useRsvp, useUpdateEvent } from '@workspace/lib/calendar';
+import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
+import { Button } from '@workspace/ui/components/button';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
+import { UserName } from '@workspace/ui/components/layout/user-name';
 import {
     AlignLeft,
     Calendar,
@@ -18,14 +18,14 @@ import {
     UsersRound,
     X as XIcon,
 } from 'lucide-react';
-import {useState} from 'react';
-import {RRule} from 'rrule';
-import {AttendeeList} from './attendee-editor';
-import {occurrenceDateToString, parseOccurrenceDate} from './calendar-utils';
-import {EditEventDialog} from './edit-event-dialog';
-import {rruleToText} from './recurrence-picker';
-import type {RecurringAction} from './recurring-action-dialog';
-import {RecurringActionDialog} from './recurring-action-dialog';
+import { useState } from 'react';
+import { RRule } from 'rrule';
+import { AttendeeList } from './attendee-editor';
+import { occurrenceDateToString, parseOccurrenceDate } from './calendar-utils';
+import { EditEventDialog } from './edit-event-dialog';
+import { rruleToText } from './recurrence-picker';
+import type { RecurringAction } from './recurring-action-dialog';
+import { RecurringActionDialog } from './recurring-action-dialog';
 
 type EventDetailDialogProps = {
     open: boolean;
@@ -92,8 +92,8 @@ function truncateRRule(rruleStr: string, beforeDate: Date): string {
     return result.replace(/^RRULE:/, '');
 }
 
-export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCalendar}: EventDetailDialogProps) {
-    const {user} = useAuth();
+export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedCalendar }: EventDetailDialogProps) {
+    const { user } = useAuth();
     const eventOwnerId = sharedCalendar?.ownerUserId || user?.id || '';
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [showRecurringDeleteDialog, setShowRecurringDeleteDialog] = useState(false);
@@ -144,7 +144,7 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
                         remove: true,
                     });
                 } else {
-                    await deleteEvent.mutateAsync({id: eventId, calendarId: event.calendarId});
+                    await deleteEvent.mutateAsync({ id: eventId, calendarId: event.calendarId });
                 }
             } else {
                 if (action === 'this') {
@@ -166,7 +166,7 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
                             status: 'cancelled',
                         });
                     } else {
-                        await deleteEvent.mutateAsync({id: event.id, calendarId: event.calendarId});
+                        await deleteEvent.mutateAsync({ id: event.id, calendarId: event.calendarId });
                     }
                 } else if (action === 'this-and-following') {
                     const parentId = event.parentEventId || event.id;
@@ -174,11 +174,11 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
                     const rrule = event.rrule || (isException && event.parentEventId ? null : null);
                     if (rrule) {
                         const truncated = truncateRRule(rrule, occDate);
-                        await updateEvent.mutateAsync({id: parentId, calendarId: event.calendarId, rrule: truncated});
+                        await updateEvent.mutateAsync({ id: parentId, calendarId: event.calendarId, rrule: truncated });
                     }
                 } else if (action === 'all') {
                     const targetId = event.parentEventId || event.id;
-                    await deleteEvent.mutateAsync({id: targetId, calendarId: event.calendarId});
+                    await deleteEvent.mutateAsync({ id: targetId, calendarId: event.calendarId });
                 }
             }
         } finally {
@@ -188,7 +188,7 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
     };
 
     const handleNonRecurringDelete = async () => {
-        await deleteEvent.mutateAsync({id: event.id, calendarId: event.calendarId});
+        await deleteEvent.mutateAsync({ id: event.id, calendarId: event.calendarId });
         setShowDeleteDialog(false);
         onOpenChange(false);
     };
@@ -229,7 +229,7 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
                 recurrenceDate: occurrenceDateToString(event.occurrenceDate),
             });
         } else {
-            rsvp.mutate({calendarId: event.calendarId, eventId, status: pendingRsvpStatus});
+            rsvp.mutate({ calendarId: event.calendarId, eventId, status: pendingRsvpStatus });
         }
         setPendingRsvpStatus(null);
         onOpenChange(false);
@@ -255,7 +255,7 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
 
                     <div className="space-y-3">
                         <div className="flex items-start gap-3 text-sm">
-                            <Clock className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0"/>
+                            <Clock className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
                             <div className="flex flex-grow justify-between items-start">
                                 <span>{formatTimeRange(event)}</span>
                                 {event.timezone && (
@@ -268,28 +268,28 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
 
                         {recurrenceText && (
                             <div className="flex items-start gap-3 text-sm">
-                                <Repeat className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0"/>
+                                <Repeat className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
                                 <span className="capitalize">{recurrenceText}</span>
                             </div>
                         )}
 
                         {event.location && (
                             <div className="flex items-start gap-3 text-sm">
-                                <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0"/>
+                                <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
                                 <span>{event.location}</span>
                             </div>
                         )}
 
                         {event.description && (
                             <div className="flex items-start gap-3 text-sm">
-                                <AlignLeft className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0"/>
+                                <AlignLeft className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
                                 <span className="whitespace-pre-wrap">{event.description}</span>
                             </div>
                         )}
 
                         {hasAttendees && (
                             <div className="flex items-start gap-3 text-sm">
-                                <UsersRound className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0"/>
+                                <UsersRound className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
                                 <div className="flex-1">
                                     <AttendeeList
                                         attendees={event.data!.attendees!}
@@ -325,17 +325,17 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
                                         >
                                             {status === 'accepted' && (
                                                 <>
-                                                    <Check className="h-3 w-3"/> Accept
+                                                    <Check className="h-3 w-3" /> Accept
                                                 </>
                                             )}
                                             {status === 'tentative' && (
                                                 <>
-                                                    <HelpCircle className="h-3 w-3"/> Maybe
+                                                    <HelpCircle className="h-3 w-3" /> Maybe
                                                 </>
                                             )}
                                             {status === 'declined' && (
                                                 <>
-                                                    <XIcon className="h-3 w-3"/> Decline
+                                                    <XIcon className="h-3 w-3" /> Decline
                                                 </>
                                             )}
                                         </Button>
@@ -346,12 +346,12 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
 
                         {calendarName && (
                             <div className="pt-3 mt-3 border-t flex items-start gap-3">
-                                <Calendar className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0"/>
+                                <Calendar className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
                                 <div className="text-sm text-muted-foreground">
                                     {calendarName}
                                     {isShared && sharedCalendar && !isLinkedEvent && (
                                         <div className="text-xs">
-                                            Created by: <UserName userId={event.createByUserId || undefined}/>
+                                            Created by: <UserName userId={event.createByUserId || undefined} />
                                         </div>
                                     )}
                                 </div>
@@ -363,10 +363,10 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
                         {canEdit && (
                             <div className="flex gap-1 mr-auto">
                                 <Button variant="ghost" size="icon" onClick={() => setEditOpen(true)}>
-                                    <Pencil className="h-4 w-4"/>
+                                    <Pencil className="h-4 w-4" />
                                 </Button>
                                 <Button variant="ghost" size="icon" onClick={handleDeleteClick}>
-                                    <Trash2 className="h-4 w-4"/>
+                                    <Trash2 className="h-4 w-4" />
                                 </Button>
                             </div>
                         )}

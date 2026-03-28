@@ -1,4 +1,4 @@
-import {useCallback, useState} from 'react';
+import { useCallback, useState } from 'react';
 
 type ImageResizeHandlesProps = {
     width: number | null;
@@ -11,14 +11,14 @@ type ImageResizeHandlesProps = {
 };
 
 export function ImageResizeHandles({
-                                       width,
-                                       aspectRatio,
-                                       maxWidth,
-                                       onResize,
-                                       children,
-                                       selected = false,
-                                       editable = true,
-                                   }: ImageResizeHandlesProps) {
+    width,
+    aspectRatio,
+    maxWidth,
+    onResize,
+    children,
+    selected = false,
+    editable = true,
+}: ImageResizeHandlesProps) {
     const [localWidth, setLocalWidth] = useState<number | null>(null);
 
     const handleResizeStart = useCallback(
@@ -55,7 +55,7 @@ export function ImageResizeHandles({
     const displayWidth = localWidth ?? width;
 
     return (
-        <div className="relative inline-block group" style={{width: displayWidth ? `${displayWidth}px` : undefined}}>
+        <div className="relative inline-block group" style={{ width: displayWidth ? `${displayWidth}px` : undefined }}>
             {children}
             {selected && editable && (
                 <>

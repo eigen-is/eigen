@@ -1,5 +1,5 @@
-import {resolveEmoteKey} from '@workspace/lib/core/chat/emotes';
-import {validateCommand} from '@workspace/lib/validation';
+import { resolveEmoteKey } from '@workspace/lib/core/chat/emotes';
+import { validateCommand } from '@workspace/lib/validation';
 
 type EmoteDefinition = {
     firstPerson?: string;
@@ -680,7 +680,7 @@ export function parseCommand(raw: string): ParsedCommand {
 
     const validation = validateCommand(trimmed);
     if (!validation.valid) {
-        return {kind: 'error', error: validation.error};
+        return { kind: 'error', error: validation.error };
     }
 
     // Built-in emotes (with optional target)
@@ -691,14 +691,14 @@ export function parseCommand(raw: string): ParsedCommand {
     if (emoteKey) {
         const rest = spaceIdx > 0 ? trimmed.slice(spaceIdx + 1).trim() : '';
         if (rest) {
-            return {kind: 'builtin-emote', emoteKey, target: rest};
+            return { kind: 'builtin-emote', emoteKey, target: rest };
         }
-        return {kind: 'builtin-emote', emoteKey};
+        return { kind: 'builtin-emote', emoteKey };
     }
 
     // Custom emote: /me [action]
     if (trimmed.startsWith('/me ')) {
-        return {kind: 'emote', content: trimmed.slice(4)};
+        return { kind: 'emote', content: trimmed.slice(4) };
     }
 
     // Whisper commands: /whisper [email] [message]
@@ -707,13 +707,13 @@ export function parseCommand(raw: string): ParsedCommand {
             const rest = trimmed.slice(cmd.length);
             const si = rest.indexOf(' ');
             if (si > 0) {
-                return {kind: 'whisper', target: rest.slice(0, si), content: rest.slice(si + 1)};
+                return { kind: 'whisper', target: rest.slice(0, si), content: rest.slice(si + 1) };
             }
         }
     }
 
     // invite, reply, inspect, help are client-only commands handled by getLocalCommand()
-    return {kind: 'error', error: 'Unknown command'};
+    return { kind: 'error', error: 'Unknown command' };
 }
 
 export function formatEmoteForViewer(

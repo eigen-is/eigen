@@ -1,7 +1,7 @@
-import {validateCommand} from '../../validation';
-import {EMOTE_COMMANDS, getEmoteCommand, isEmoteCommand, resolveEmoteKey} from './emotes';
+import { validateCommand } from '../../validation';
+import { EMOTE_COMMANDS, getEmoteCommand, isEmoteCommand, resolveEmoteKey } from './emotes';
 
-export {getEmoteCommand, isEmoteCommand, resolveEmoteKey};
+export { getEmoteCommand, isEmoteCommand, resolveEmoteKey };
 
 // All valid slash command strings
 export const SLASH_COMMANDS = [
@@ -19,12 +19,12 @@ export const SLASH_COMMANDS = [
 
 // Help entries for the suggestion popup — priority commands first, then emotes alphabetically
 export const COMMANDS_HELP = [
-    {cmd: '/help', desc: 'List of available slash commands'},
-    {cmd: '/whisper, /tell [User] [Message]', desc: 'Send private message'},
-    {cmd: '/reply [Message]', desc: 'Reply to the last whisper'},
-    {cmd: '/invite [User]', desc: 'Invite user to the room'},
-    {cmd: '/inspect, /look, /finger [User]', desc: 'Inspect a user'},
-    {cmd: '/me [action]', desc: 'Perform a custom emote'},
+    { cmd: '/help', desc: 'List of available slash commands' },
+    { cmd: '/whisper, /tell [User] [Message]', desc: 'Send private message' },
+    { cmd: '/reply [Message]', desc: 'Reply to the last whisper' },
+    { cmd: '/invite [User]', desc: 'Invite user to the room' },
+    { cmd: '/inspect, /look, /finger [User]', desc: 'Inspect a user' },
+    { cmd: '/me [action]', desc: 'Perform a custom emote' },
     ...[...EMOTE_COMMANDS]
         .sort((a, b) => a.key.localeCompare(b.key))
         .map((c) => ({
@@ -60,25 +60,25 @@ export function getLocalCommand(raw: string): LocalCommand {
     const validation = validateCommand(trimmed);
 
     if (!validation.valid) {
-        return {kind: 'error', error: validation.error};
+        return { kind: 'error', error: validation.error };
     }
 
-    if (validation.kind === 'help') return {kind: 'help'};
+    if (validation.kind === 'help') return { kind: 'help' };
 
     for (const cmd of ['/inspect ', '/look ', '/finger ']) {
         if (trimmed.startsWith(cmd)) {
             const target = trimmed.slice(cmd.length).trim();
-            if (target) return {kind: 'inspect', target};
+            if (target) return { kind: 'inspect', target };
         }
     }
 
     if (trimmed.startsWith('/invite ')) {
         const target = trimmed.slice(8).trim();
-        if (target) return {kind: 'invite', target};
+        if (target) return { kind: 'invite', target };
     }
 
     if (trimmed.startsWith('/reply ')) {
-        return {kind: 'reply', content: trimmed.slice(7)};
+        return { kind: 'reply', content: trimmed.slice(7) };
     }
 
     return null;

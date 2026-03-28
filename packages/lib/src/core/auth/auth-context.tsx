@@ -1,7 +1,7 @@
-import {useQueryClient} from '@tanstack/react-query';
-import {LoadingScreen} from '@workspace/ui/components/layout/pages';
-import React, {createContext, type ReactNode, useEffect, useState} from 'react';
-import {authClient} from './hooks/use-auth-client.ts';
+import { useQueryClient } from '@tanstack/react-query';
+import { LoadingScreen } from '@workspace/ui/components/layout/pages';
+import React, { createContext, type ReactNode, useEffect, useState } from 'react';
+import { authClient } from './hooks/use-auth-client.ts';
 
 export type AuthUser = {
     id: string;
@@ -23,7 +23,7 @@ export type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({children}: { children: ReactNode }): React.ReactElement {
+export function AuthProvider({ children }: { children: ReactNode }): React.ReactElement {
     const [user, setUser] = useState<AuthUser | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const queryClient = useQueryClient();
@@ -47,23 +47,23 @@ export function AuthProvider({children}: { children: ReactNode }): React.ReactEl
 
     const login = async (email: string, password: string) => {
         try {
-            const {data, error} = await authClient.signIn.email({
+            const { data, error } = await authClient.signIn.email({
                 email,
                 password,
             });
 
             if (error) {
-                return {success: false, error};
+                return { success: false, error };
             }
 
             if (data) {
                 setUser(data.user);
-                return {success: true};
+                return { success: true };
             }
 
-            return {success: false, error: {message: 'Unknown error'}};
+            return { success: false, error: { message: 'Unknown error' } };
         } catch (error) {
-            return {success: false, error};
+            return { success: false, error };
         }
     };
 
@@ -72,12 +72,11 @@ export function AuthProvider({children}: { children: ReactNode }): React.ReactEl
             await authClient.signOut();
             setUser(null);
             queryClient.removeQueries();
-        } catch {
-        }
+        } catch {}
     };
 
     return isLoading ? (
-        <LoadingScreen/>
+        <LoadingScreen />
     ) : (
         <AuthContext.Provider
             value={{

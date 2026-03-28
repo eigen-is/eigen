@@ -1,19 +1,19 @@
-import {TooltipProvider} from '@radix-ui/react-tooltip';
-import {HotkeysProvider, useHotkey} from '@tanstack/react-hotkeys';
-import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
-import {AuthProvider} from '@workspace/lib/auth/auth-context.tsx';
+import { TooltipProvider } from '@radix-ui/react-tooltip';
+import { HotkeysProvider, useHotkey } from '@tanstack/react-hotkeys';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { AuthProvider } from '@workspace/lib/auth/auth-context.tsx';
 import type React from 'react';
-import {lazy, Suspense, useState} from 'react';
-import {printDocument} from '../../../lib/printElement.ts';
-import {ErrorBoundary} from '../../error-boundary.tsx';
-import {Toaster} from '../../sonner.tsx';
-import {PreviewProvider} from '../preview-provider/preview-provider.tsx';
-import {SSEProvider} from '../sse-provider';
-import {UploadProvider} from '../upload-provider/upload-provider.tsx';
-import {ThemeProvider} from './theme-provider.tsx';
+import { lazy, Suspense, useState } from 'react';
+import { printDocument } from '../../../lib/printElement.ts';
+import { ErrorBoundary } from '../../error-boundary.tsx';
+import { Toaster } from '../../sonner.tsx';
+import { PreviewProvider } from '../preview-provider/preview-provider.tsx';
+import { SSEProvider } from '../sse-provider';
+import { UploadProvider } from '../upload-provider/upload-provider.tsx';
+import { ThemeProvider } from './theme-provider.tsx';
 
 const ReactQueryDevtools = import.meta.env.DEV
-    ? lazy(() => import('@tanstack/react-query-devtools').then((m) => ({default: m.ReactQueryDevtools})))
+    ? lazy(() => import('@tanstack/react-query-devtools').then((m) => ({ default: m.ReactQueryDevtools })))
     : () => null;
 
 type EigenAppProps = {
@@ -28,7 +28,7 @@ function GlobalHotkeys() {
     return null;
 }
 
-export function EigenApp({children}: EigenAppProps) {
+export function EigenApp({ children }: EigenAppProps) {
     const [queryClient] = useState(
         () =>
             new QueryClient({
@@ -50,15 +50,15 @@ export function EigenApp({children}: EigenAppProps) {
                             <SSEProvider>
                                 <UploadProvider>
                                     <PreviewProvider>
-                                        <GlobalHotkeys/>
+                                        <GlobalHotkeys />
                                         <ErrorBoundary>{children}</ErrorBoundary>
-                                        <Toaster/>
+                                        <Toaster />
                                     </PreviewProvider>
                                 </UploadProvider>
                             </SSEProvider>
                         </ThemeProvider>
                         <Suspense>
-                            <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left"/>
+                            <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left" />
                         </Suspense>
                     </AuthProvider>
                 </QueryClientProvider>

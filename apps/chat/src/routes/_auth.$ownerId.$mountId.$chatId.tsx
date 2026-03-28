@@ -1,15 +1,15 @@
-import {createFileRoute} from '@tanstack/react-router';
-import {useChatRoom} from '@workspace/lib/chat';
-import {ChatMessageInput, ChatMessageList, Toolbar, TooltipButton} from '@workspace/ui';
-import {Column, ColumnLayout} from '@workspace/ui/components/layout/app/column-layout.tsx';
-import {DriveAccessDialog} from '@workspace/ui/components/layout/drive/drive-access-dialog';
-import {DriveRenameItem} from '@workspace/ui/components/layout/drive/drive-rename-item';
-import {DriveShareSummary} from '@workspace/ui/components/layout/drive/drive-share-summary';
-import {Pencil, UserRoundPlus} from 'lucide-react';
-import {useState} from 'react';
+import { createFileRoute } from '@tanstack/react-router';
+import { useChatRoom } from '@workspace/lib/chat';
+import { ChatMessageInput, ChatMessageList, Toolbar, TooltipButton } from '@workspace/ui';
+import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
+import { DriveAccessDialog } from '@workspace/ui/components/layout/drive/drive-access-dialog';
+import { DriveRenameItem } from '@workspace/ui/components/layout/drive/drive-rename-item';
+import { DriveShareSummary } from '@workspace/ui/components/layout/drive/drive-share-summary';
+import { Pencil, UserRoundPlus } from 'lucide-react';
+import { useState } from 'react';
 
 function ChatView() {
-    const {ownerId, mountId, chatId} = Route.useParams();
+    const { ownerId, mountId, chatId } = Route.useParams();
     const chat = useChatRoom(ownerId, mountId, chatId);
 
     const [accessDialogOpen, setAccessDialogOpen] = useState(false);
@@ -78,7 +78,7 @@ function ChatView() {
                 path={chat.chatPath ?? null}
             />
 
-            <DriveRenameItem path={chat.chatPath ?? null} open={renameDialogOpen} onOpenChange={setRenameDialogOpen}/>
+            <DriveRenameItem path={chat.chatPath ?? null} open={renameDialogOpen} onOpenChange={setRenameDialogOpen} />
         </>
     );
 }

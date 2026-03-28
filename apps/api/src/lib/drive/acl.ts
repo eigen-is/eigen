@@ -1,7 +1,7 @@
-import {parseOwnerId} from '@workspace/lib/types';
-import {type DriveACL, type DrivePath, isCollabType} from '@workspace/lib/types/drive';
-import type {User} from 'better-auth/types';
-import type {Memberships} from '../user/';
+import { parseOwnerId } from '@workspace/lib/types';
+import { type DriveACL, type DrivePath, isCollabType } from '@workspace/lib/types/drive';
+import type { User } from 'better-auth/types';
+import type { Memberships } from '../user/';
 
 export function canReadFromAncestors(ancestors: DrivePath[], user: User, memberships: Memberships): boolean {
     for (const path of ancestors) {
@@ -115,7 +115,7 @@ export function filterRedundantACL(
             for (const entry of ancestor.acl) {
                 const key = entry.id.toLowerCase();
                 if (!inherited.has(key)) {
-                    inherited.set(key, {read: entry.read, write: entry.write});
+                    inherited.set(key, { read: entry.read, write: entry.write });
                 }
             }
         }
@@ -157,5 +157,5 @@ export function filterRedundantACL(
         }
     }
 
-    return {filtered, removed};
+    return { filtered, removed };
 }

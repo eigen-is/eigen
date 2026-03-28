@@ -2,7 +2,7 @@
 
 function goldenRatioIndices(n: number): number[] {
     const phi = (Math.sqrt(5) - 1) / 2; // golden ratio conjugate ≈ 0.6180339887
-    return Array.from({length: n}, (_, i) => i).sort((a, b) => ((a * phi) % 1) - ((b * phi) % 1));
+    return Array.from({ length: n }, (_, i) => i).sort((a, b) => ((a * phi) % 1) - ((b * phi) % 1));
 }
 
 function goldenRatioShuffle<T>(arr: T[]): T[] {
@@ -262,7 +262,7 @@ export const EIGEN_ACCENT_COLOR_ROW = 5;
 export const EIGEN_STICKIES_COLOR_ROW = 1;
 
 export const EIGEN_COLORS = EIGEN_COLORS_MAP.map((col, i) =>
-    col.map((hex, s) => ({label: `${EIGEN_COLOR_NAMES[i]}-${EIGEN_COLOR_STEPS[s]}`, value: hex})),
+    col.map((hex, s) => ({ label: `${EIGEN_COLOR_NAMES[i]}-${EIGEN_COLOR_STEPS[s]}`, value: hex })),
 ) as EigenColor[][];
 export const EIGEN_ACCENT_COLORS = EIGEN_COLORS.map((col) => col[EIGEN_ACCENT_COLOR_ROW]) as EigenColor[];
 export const EIGEN_ACCENT_COLORS_SHUFFLED = goldenRatioShuffle(EIGEN_ACCENT_COLORS);

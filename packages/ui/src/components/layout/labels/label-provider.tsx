@@ -1,5 +1,5 @@
-import type {Label} from '@workspace/lib/types/label';
-import {createContext, type ReactNode, useContext} from 'react';
+import type { Label } from '@workspace/lib/types/label';
+import { createContext, type ReactNode, useContext } from 'react';
 
 type LabelContextType = {
     addLabel: (labelData: Omit<Label, 'id'>) => Promise<void>;
@@ -31,7 +31,7 @@ type LabelProviderProps = {
 };
 
 // The actual provider component
-export function LabelProvider({children, onAddLabel, onUpdateLabel, onDeleteLabel}: LabelProviderProps) {
+export function LabelProvider({ children, onAddLabel, onUpdateLabel, onDeleteLabel }: LabelProviderProps) {
     // These functions will be implemented by the consuming application
     // and passed to the provider via props
 

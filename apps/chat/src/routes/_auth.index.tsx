@@ -1,19 +1,19 @@
-import {createFileRoute, redirect, useNavigate} from '@tanstack/react-router';
-import {useAuth} from '@workspace/lib/auth';
-import {useChats, useCreateChat} from '@workspace/lib/chat';
-import {DEFAULT_MOUNT_ID, useRootFolder} from '@workspace/lib/drive';
-import {EmptyState} from '@workspace/ui';
-import {Button} from '@workspace/ui/components/button';
-import {DriveCreateItemDialog} from '@workspace/ui/components/layout/drive/drive-create-folder-item';
-import {MessageSquare, Plus} from 'lucide-react';
-import {useEffect, useState} from 'react';
+import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
+import { useAuth } from '@workspace/lib/auth';
+import { useChats, useCreateChat } from '@workspace/lib/chat';
+import { DEFAULT_MOUNT_ID, useRootFolder } from '@workspace/lib/drive';
+import { EmptyState } from '@workspace/ui';
+import { Button } from '@workspace/ui/components/button';
+import { DriveCreateItemDialog } from '@workspace/ui/components/layout/drive/drive-create-folder-item';
+import { MessageSquare, Plus } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 function ChatIndex() {
-    const {user} = useAuth();
+    const { user } = useAuth();
     const navigate = useNavigate();
     const mountId = DEFAULT_MOUNT_ID;
-    const {data} = useChats(user?.id || '');
-    const {data: root} = useRootFolder(user?.id || '', mountId);
+    const { data } = useChats(user?.id || '');
+    const { data: root } = useRootFolder(user?.id || '', mountId);
     const [createChatOpen, setCreateChatOpen] = useState(false);
     const createChatMutation = useCreateChat(user?.id || '', mountId);
 
@@ -56,10 +56,10 @@ function ChatIndex() {
             <>
                 <EmptyState
                     message="No chats yet"
-                    icon={<MessageSquare className="h-12 w-12"/>}
+                    icon={<MessageSquare className="h-12 w-12" />}
                     action={
                         <Button onClick={() => setCreateChatOpen(true)}>
-                            <Plus className="h-4 w-4 mr-2"/>
+                            <Plus className="h-4 w-4 mr-2" />
                             Create your first chat
                         </Button>
                     }
@@ -78,14 +78,14 @@ function ChatIndex() {
         );
     }
 
-    return <EmptyState message="Select a chat from the sidebar"/>;
+    return <EmptyState message="Select a chat from the sidebar" />;
 }
 
 export const Route = createFileRoute('/_auth/')({
-    beforeLoad: ({context}) => {
+    beforeLoad: ({ context }) => {
         const userId = context.auth?.user?.id;
         if (!userId) {
-            throw redirect({to: '/login'});
+            throw redirect({ to: '/login' });
         }
     },
     component: ChatIndex,

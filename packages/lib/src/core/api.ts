@@ -1,5 +1,5 @@
-import type {app} from '@apps/api';
-import {treaty} from '@elysiajs/eden';
+import type { app } from '@apps/api';
+import { treaty } from '@elysiajs/eden';
 import {
     DRIVE_TYPE_CHAT,
     DRIVE_TYPE_DOC,

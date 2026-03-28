@@ -1,10 +1,10 @@
-import {SortableContext, useSortable, verticalListSortingStrategy} from '@dnd-kit/sortable';
-import {CSS} from '@dnd-kit/utilities';
-import {TooltipButton} from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
-import {Pencil, Plus} from 'lucide-react';
+import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
+import { Pencil, Plus } from 'lucide-react';
 import type * as Y from 'yjs';
-import {StickyCard} from './card';
-import type {CardItem, ColumnItem} from './types';
+import { StickyCard } from './card';
+import type { CardItem, ColumnItem } from './types';
 
 type ColumnProps = {
     column: ColumnItem;
@@ -21,21 +21,21 @@ type ColumnProps = {
 };
 
 export function Column({
-                           column,
-                           cards,
-                           canWrite = true,
-                           isDropAnimating,
-                           onAddCard,
-                           onEditColumn,
-                           onCardContextMenu,
-                           isMobile,
-                           yjsDoc,
-                           ownerId,
-                           mountId,
-                       }: ColumnProps) {
-    const {attributes, listeners, setNodeRef, transform, transition, isDragging} = useSortable({
+    column,
+    cards,
+    canWrite = true,
+    isDropAnimating,
+    onAddCard,
+    onEditColumn,
+    onCardContextMenu,
+    isMobile,
+    yjsDoc,
+    ownerId,
+    mountId,
+}: ColumnProps) {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
         id: column.id,
-        data: {type: 'column', column},
+        data: { type: 'column', column },
         disabled: !canWrite,
     });
 
@@ -56,7 +56,7 @@ export function Column({
         >
             <div
                 className={`h-10 pl-3 font-medium text-sm bg-muted flex-shrink-0 flex items-center justify-between ${canWrite ? 'cursor-grab touch-none' : ''}`}
-                {...(canWrite ? {...attributes, ...listeners} : {})}
+                {...(canWrite ? { ...attributes, ...listeners } : {})}
             >
                 <span className="truncate flex-1">{column.title}</span>
                 {canWrite && (
@@ -111,7 +111,7 @@ export function Column({
                         onClick={() => onAddCard(column.id)}
                         className="mt-2 flex items-center gap-1 text-sm text-muted-foreground hover:bg-muted px-2 py-1.5 rounded-sm w-full"
                     >
-                        <Plus size={16}/>
+                        <Plus size={16} />
                         <span>Add a sticky</span>
                     </button>
                 )}

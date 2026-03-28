@@ -1,95 +1,109 @@
-'use strict';
+import libmime from 'libmime';
 
-const libmime = require('libmime');
+type HeaderLine = {
+    key: string;
+    line: string;
+};
 
-/**
- * Class Headers to parse and handle message headers. Headers instance allows to
- * check existing, delete or add new headers
- */
+type HeaderConfig = {
+    Iconv?: unknown;
+};
+
+type DecodedHeader = {
+    value?: string;
+    params?: Record<string, string>;
+};
+
 class Headers {
-    constructor(headers, config) {
-        config = config || {};
+    changed: boolean;
+    headers: string | Buffer | null;
+    parsed: boolean;
+    lines: HeaderLine[];
+    mbox: string | null;
+    http: string | null;
+    libmime: InstanceType<typeof libmime.Libmime>;
+
+    constructor(headers: HeaderLine[] | string | Buffer, config?: HeaderConfig) {
+        const cfg = config || {};
 
         if (Array.isArray(headers)) {
-            // already using parsed headers
             this.changed = true;
-            this.headers = false;
+            this.headers = null;
             this.parsed = true;
             this.lines = headers;
         } else {
-            // using original string/buffer headers
             this.changed = false;
             this.headers = headers;
             this.parsed = false;
-            this.lines = false;
+            this.lines = [];
         }
-        this.mbox = false;
-        this.http = false;
+        this.mbox = null;
+        this.http = null;
 
-        this.libmime = new libmime.Libmime({Iconv: config.Iconv});
+        this.libmime = new libmime.Libmime({ Iconv: cfg.Iconv });
     }
 
-    hasHeader(key) {
+    hasHeader(key: string): boolean {
         if (!this.parsed) {
             this._parseHeaders();
         }
         key = this._normalizeHeader(key);
-        return typeof this.lines.find(line => line.key === key) === 'object';
+        return typeof this.lines.find((line) => line.key === key) === 'object';
     }
 
-    get(key) {
+    get(key: string): string[] {
         if (!this.parsed) {
             this._parseHeaders();
         }
         key = this._normalizeHeader(key);
-        let lines = this.lines.filter(line => line.key === key).map(line => line.line);
+        const lines = this.lines.filter((line) => line.key === key).map((line) => line.line);
 
         return lines;
     }
 
-    getDecoded(key) {
+    getDecoded(key: string): DecodedHeader[] {
         return this.get(key)
-            .map(line => this.libmime.decodeHeader(line))
-            .filter(line => line && line.value);
+            .map((line) => this.libmime.decodeHeader(line) as DecodedHeader)
+            .filter((line) => line?.value);
     }
 
-    getFirst(key) {
+    getFirst(key: string): string {
         if (!this.parsed) {
             this._parseHeaders();
         }
         key = this._normalizeHeader(key);
-        let header = this.lines.find(line => line.key === key);
+        const header = this.lines.find((line) => line.key === key);
         if (!header) {
             return '';
         }
-        return ((this.libmime.decodeHeader(header.line) || {}).value || '').toString().trim();
+        return ((this.libmime.decodeHeader(header.line) as DecodedHeader | null)?.value || '').toString().trim();
     }
 
-    getList() {
+    getList(): HeaderLine[] {
         if (!this.parsed) {
             this._parseHeaders();
         }
         return this.lines;
     }
 
-    add(key, value, index) {
+    add(key: string, value: string | number | Buffer | undefined, index?: number): void {
         if (typeof value === 'undefined') {
             return;
         }
 
+        let strValue: string;
         if (typeof value === 'number') {
-            value = value.toString();
+            strValue = value.toString();
+        } else if (typeof value === 'string') {
+            strValue = Buffer.from(value).toString('binary');
+        } else {
+            strValue = value.toString('binary');
         }
 
-        if (typeof value === 'string') {
-            value = Buffer.from(value);
-        }
-
-        value = value.toString('binary');
-        this.addFormatted(key, this.libmime.foldLines(key + ': ' + value.replace(/\r?\n/g, ''), 76, false), index);
+        this.addFormatted(key, this.libmime.foldLines(`${key}: ${strValue.replace(/\r?\n/g, '')}`, 76, false), index);
     }
 
-    addFormatted(key, line, index) {
+    addFormatted(key: string, line: string | Buffer | undefined, index?: number): void {
         if (!this.parsed) {
             this._parseHeaders();
         }
@@ -100,13 +114,16 @@ class Headers {
             return;
         }
 
+        let lineStr: string;
         if (typeof line !== 'string') {
-            line = line.toString('binary');
+            lineStr = line.toString('binary');
+        } else {
+            lineStr = line;
         }
 
-        let header = {
+        const header: HeaderLine = {
             key: this._normalizeHeader(key),
-            line
+            line: lineStr,
         };
 
         if (index < 1) {
@@ -118,7 +135,7 @@ class Headers {
         }
     }
 
-    remove(key) {
+    remove(key: string): void {
         if (!this.parsed) {
             this._parseHeaders();
         }
@@ -131,11 +148,11 @@ class Headers {
         }
     }
 
-    update(key, value, relativeIndex) {
+    update(key: string, value: string | number | Buffer | undefined, relativeIndex?: number): void {
         if (!this.parsed) {
             this._parseHeaders();
         }
-        let keyName = key;
+        const keyName = key;
         let index = 0;
         key = this._normalizeHeader(key);
         let relativeIndexCount = 0;
@@ -159,9 +176,11 @@ class Headers {
         this.add(keyName, value, index);
     }
 
-    build(lineEnd) {
+    build(lineEnd?: string): Buffer {
         if (!this.changed && !lineEnd) {
-            return typeof this.headers === 'string' ? Buffer.from(this.headers, 'binary') : this.headers;
+            return typeof this.headers === 'string'
+                ? Buffer.from(this.headers, 'binary')
+                : this.headers || Buffer.alloc(0);
         }
 
         if (!this.parsed) {
@@ -170,7 +189,8 @@ class Headers {
 
         lineEnd = lineEnd || '\r\n';
 
-        let headers = this.lines.map(line => line.line.replace(/\r?\n/g, lineEnd)).join(lineEnd) + `${lineEnd}${lineEnd}`;
+        let headers =
+            `${this.lines.map((line) => line.line.replace(/\r?\n/g, lineEnd!)).join(lineEnd)}${lineEnd}${lineEnd}`;
 
         if (this.mbox) {
             headers = this.mbox + lineEnd + headers;
@@ -183,52 +203,52 @@ class Headers {
         return Buffer.from(headers, 'binary');
     }
 
-    _normalizeHeader(key) {
+    _normalizeHeader(key: string): string {
         return (key || '').toLowerCase().trim();
     }
 
-    _parseHeaders() {
+    _parseHeaders(): void {
         if (!this.headers) {
             this.lines = [];
             this.parsed = true;
             return;
         }
 
-        let lines = this.headers
+        const rawLines = this.headers
             .toString('binary')
             .replace(/[\r\n]+$/, '')
             .split(/\r?\n/);
 
-        for (let i = lines.length - 1; i >= 0; i--) {
-            let chr = lines[i].charAt(0);
+        const result: (string | HeaderLine)[] = [...rawLines];
+
+        for (let i = result.length - 1; i >= 0; i--) {
+            const entry = result[i] as string;
+            const chr = entry.charAt(0);
             if (i && (chr === ' ' || chr === '\t')) {
-                lines[i - 1] += '\r\n' + lines[i];
-                lines.splice(i, 1);
+                result[i - 1] = `${result[i - 1] as string}\r\n${entry}`;
+                result.splice(i, 1);
             } else {
-                let line = lines[i];
+                const line = entry;
                 if (!i && /^From /i.test(line)) {
-                    // mbox file
                     this.mbox = line;
-                    lines.splice(i, 1);
+                    result.splice(i, 1);
                     continue;
                 } else if (!i && /^POST /i.test(line)) {
-                    // HTTP POST request
                     this.http = line;
-                    lines.splice(i, 1);
+                    result.splice(i, 1);
                     continue;
                 }
-                let key = this._normalizeHeader(line.substr(0, line.indexOf(':')));
-                lines[i] = {
+                const key = this._normalizeHeader(line.slice(0, line.indexOf(':')));
+                result[i] = {
                     key,
-                    line
+                    line,
                 };
             }
         }
 
-        this.lines = lines;
+        this.lines = result as HeaderLine[];
         this.parsed = true;
     }
 }
 
-// expose to the world
-module.exports = Headers;
+export default Headers;

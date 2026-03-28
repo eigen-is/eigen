@@ -1,4 +1,4 @@
-import {createContext, useContext} from 'react';
+import { createContext, useContext } from 'react';
 
 export type LayoutContextType = {
     appName: string;
@@ -14,14 +14,11 @@ export type LayoutContextType = {
 
 export const LayoutContext = createContext<LayoutContextType>({
     appName: '',
-    setAppName: () => {
-    },
+    setAppName: () => {},
     documentTitle: '',
-    setDocumentTitle: () => {
-    },
+    setDocumentTitle: () => {},
     sidebarOpen: false,
-    setSidebarOpen: () => {
-    },
+    setSidebarOpen: () => {},
     sidebarMode: 'collapsible',
     isMobile: false,
     isTablet: false,
@@ -32,11 +29,11 @@ export function useLayout() {
 }
 
 export function useApp() {
-    const {appName, setAppName} = useLayout();
-    return {appName, setAppName};
+    const { appName, setAppName } = useLayout();
+    return { appName, setAppName };
 }
 
 export function useSidebar() {
-    const {sidebarOpen, setSidebarOpen} = useLayout();
-    return {sidebarOpen, setSidebarOpen};
+    const { sidebarOpen, setSidebarOpen } = useLayout();
+    return { sidebarOpen, setSidebarOpen };
 }
