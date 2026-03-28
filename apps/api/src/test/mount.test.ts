@@ -104,7 +104,7 @@ describe('Mount (local-key storage)', () => {
 
         const content = await mount.readFile(fileId);
         expect(content).not.toBeNull();
-        expect(Buffer.from(content!).toString()).toBe('file content');
+        expect(await content!.text()).toBe('file content');
     });
 
     test('duplicate name throws 409', async () => {
@@ -221,7 +221,7 @@ describe('Mount (local path-based storage)', () => {
 
         const content = await mount.readFile(fileId);
         expect(content).not.toBeNull();
-        expect(Buffer.from(content!).toString()).toBe('path-based content');
+        expect(await content!.text()).toBe('path-based content');
     });
 
     test('rename folder renames physical directory', async () => {
