@@ -60,8 +60,8 @@
 - Use clear names instead of comments
 - Keep markdown files concise, focused and up-to-date
 
-## LLM.md
-- LLM.md is the single source of truth for the project
-- Update LLM.md whenever project structure, architecture or major decisions change
+## CLAUDE.md
+- CLAUDE.md is the single source of truth for the project
+- Update CLAUDE.md whenever project structure, architecture or major decisions change
 - Keep it concise and focused, reference other docs, files and directories when needed
 - Remove verbose or outdated information
