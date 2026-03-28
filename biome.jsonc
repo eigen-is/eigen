@@ -39,8 +39,7 @@
         "useLiteralKeys": "off"
       },
       "suspicious": {
-        "noAssignInExpressions": "off",
-        "noDocumentCookie": "off"
+        "noAssignInExpressions": "off"
       },
       "a11y": {
         "recommended": false
