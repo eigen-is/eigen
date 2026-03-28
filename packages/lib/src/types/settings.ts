@@ -40,6 +40,20 @@ export type ServerSettings = {
     };
 };
 
+export type MountResponse = {
+    id: string;
+    name: string;
+    storageType: string;
+    maxSizeMB: number;
+    enabled: boolean;
+};
+
+export type HomeSizeResponse = {
+    mailAndContacts: { used: number; max: number };
+    drive: { default: { used: number; max: number } };
+    total: { used: number; max: number };
+};
+
 export function mapStorageType(type: ServerStorageType): MountSettings['storageType'] {
     switch (type) {
         case 'local-id':

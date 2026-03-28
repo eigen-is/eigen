@@ -1,5 +1,7 @@
-import {beforeAll, describe, expect, test} from 'bun:test';
-import {authedRequest, driveGet, drivePost, drivePut, getTestContext} from './setup';
+import { beforeAll, describe, expect, test } from 'bun:test';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import type { EffectiveMember } from '../lib/drive/acl-propagation';
+import { assertJson, authedRequest, driveGet, drivePost, drivePut, findOrFail, getTestContext } from './setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 const BOB_EMAIL = 'bob@test.eigen.is';
@@ -16,9 +18,9 @@ describe('Effective Members', () => {
 
     beforeAll(async () => {
         ctx = await getTestContext();
-        const {data: mounts} = await ctx.alice.api.drive({ownerId: ctx.alice.user.id}).mounts.get();
+        const { data: mounts } = await ctx.alice.api.drive({ ownerId: ctx.alice.user.id }).mounts.get();
         mountId = mounts![0].id;
-        const root = await driveGet(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root');
+        const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root');
         rootId = root.id;
     });
 
@@ -26,15 +28,19 @@ describe('Effective Members', () => {
         let folderId: string;
 
         beforeAll(async () => {
-            const folder = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId,
-                `folder/${rootId}`, {folderName: 'members-test'});
+            const folder = await drivePost<DrivePath>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                mountId,
+                `folder/${rootId}`,
+                { folderName: 'members-test' },
+            );
             folderId = folder.id;
         });
 
         test('returns owner as the only member', async () => {
             const res = await getEffectiveMembers(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, folderId);
-            expect(res.status).toBe(200);
-            const members = await res.json() as any[];
+            const members = await assertJson<EffectiveMember[]>(res);
             expect(members).toHaveLength(1);
             expect(members[0].email).toBe(ctx.alice.user.email);
             expect(members[0].read).toBe(true);
@@ -46,43 +52,43 @@ describe('Effective Members', () => {
         let folderId: string;
 
         beforeAll(async () => {
-            const folder = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId,
-                `folder/${rootId}`, {folderName: 'direct-acl-test'});
+            const folder = await drivePost<DrivePath>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                mountId,
+                `folder/${rootId}`,
+                { folderName: 'direct-acl-test' },
+            );
             folderId = folder.id;
 
-            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId,
-                `path/${folderId}/acl`, {
-                    acl: [
-                        {id: BOB_EMAIL, read: true, write: true},
-                        {id: CHARLIE_EMAIL, read: true, write: false},
-                    ]
-                });
+            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${folderId}/acl`, {
+                acl: [
+                    { id: BOB_EMAIL, read: true, write: true },
+                    { id: CHARLIE_EMAIL, read: true, write: false },
+                ],
+            });
         });
 
         test('includes owner and all ACL entries', async () => {
             const res = await getEffectiveMembers(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, folderId);
-            const members = await res.json() as any[];
+            const members = await assertJson<EffectiveMember[]>(res);
             expect(members).toHaveLength(3);
 
-            const alice = members.find((m: any) => m.email === ctx.alice.user.email);
-            const bob = members.find((m: any) => m.email === BOB_EMAIL);
-            const charlie = members.find((m: any) => m.email === CHARLIE_EMAIL);
+            const alice = findOrFail(members, (m) => m.email === ctx.alice.user.email);
+            const bob = findOrFail(members, (m) => m.email === BOB_EMAIL);
+            const charlie = findOrFail(members, (m) => m.email === CHARLIE_EMAIL);
 
-            expect(alice).toBeTruthy();
             expect(alice.write).toBe(true);
 
-            expect(bob).toBeTruthy();
             expect(bob.write).toBe(true);
 
-            expect(charlie).toBeTruthy();
             expect(charlie.read).toBe(true);
             expect(charlie.write).toBe(false);
         });
 
         test('shared user can also query effective members', async () => {
             const res = await getEffectiveMembers(ctx.bob.user.sessionToken, ctx.alice.user.id, mountId, folderId);
-            expect(res.status).toBe(200);
-            const members = await res.json() as any[];
+            const members = await assertJson<EffectiveMember[]>(res);
             expect(members).toHaveLength(3);
         });
     });
@@ -92,35 +98,46 @@ describe('Effective Members', () => {
         let childId: string;
 
         beforeAll(async () => {
-            const parent = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId,
-                `folder/${rootId}`, {folderName: 'parent-inherit'});
+            const parent = await drivePost<DrivePath>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                mountId,
+                `folder/${rootId}`,
+                { folderName: 'parent-inherit' },
+            );
             parentId = parent.id;
 
-            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId,
-                `path/${parentId}/acl`, {acl: [{id: BOB_EMAIL, read: true, write: true}]});
+            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${parentId}/acl`, {
+                acl: [{ id: BOB_EMAIL, read: true, write: true }],
+            });
 
-            const child = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId,
-                `folder/${parentId}`, {folderName: 'child-inherit'});
+            const child = await drivePost<DrivePath>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                mountId,
+                `folder/${parentId}`,
+                { folderName: 'child-inherit' },
+            );
             childId = child.id;
         });
 
         test('child inherits parent ACL entries', async () => {
             const res = await getEffectiveMembers(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, childId);
-            const members = await res.json() as any[];
+            const members = await assertJson<EffectiveMember[]>(res);
 
-            const bob = members.find((m: any) => m.email === BOB_EMAIL);
-            expect(bob).toBeTruthy();
+            const bob = findOrFail(members, (m) => m.email === BOB_EMAIL);
             expect(bob.read).toBe(true);
             expect(bob.write).toBe(true);
         });
 
         test('child direct ACL merges with inherited (most permissive wins)', async () => {
             // Give Charlie read-only on child
-            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId,
-                `path/${childId}/acl`, {acl: [{id: CHARLIE_EMAIL, read: true, write: false}]});
+            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${childId}/acl`, {
+                acl: [{ id: CHARLIE_EMAIL, read: true, write: false }],
+            });
 
             const res = await getEffectiveMembers(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, childId);
-            const members = await res.json() as any[];
+            const members = await assertJson<EffectiveMember[]>(res);
 
             // Bob from parent + Charlie from child + Alice as owner
             expect(members).toHaveLength(3);
@@ -132,38 +149,51 @@ describe('Effective Members', () => {
         let chatId: string;
 
         beforeAll(async () => {
-            const doc = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId,
-                `folder/${rootId}/doc`, {fileName: 'members-doc'});
+            const doc = await drivePost<DrivePath>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                mountId,
+                `folder/${rootId}/doc`,
+                { fileName: 'members-doc' },
+            );
             docId = doc.id;
 
             // Share doc with Bob
-            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId,
-                `path/${docId}/acl`, {acl: [{id: BOB_EMAIL, read: true, write: true}]});
+            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${docId}/acl`, {
+                acl: [{ id: BOB_EMAIL, read: true, write: true }],
+            });
 
             // Create chat inside the doc
-            const contents = await driveGet(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `folder/${docId}`);
-            const chatFolder = contents.find((p: any) => p.name === 'chat');
+            const contents = await driveGet<DrivePath[]>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                mountId,
+                `folder/${docId}`,
+            );
+            const chatFolder = findOrFail(contents, (p) => p.name === 'chat');
 
-            const chat = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId,
-                `folder/${chatFolder.id}/chat`, {fileName: 'embedded-chat'});
+            const chat = await drivePost<DrivePath>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                mountId,
+                `folder/${chatFolder.id}/chat`,
+                { fileName: 'embedded-chat' },
+            );
             chatId = chat.id;
         });
 
         test('chat effective members includes doc ACL entries', async () => {
             const res = await getEffectiveMembers(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, chatId);
-            const members = await res.json() as any[];
+            const members = await assertJson<EffectiveMember[]>(res);
 
-            const alice = members.find((m: any) => m.email === ctx.alice.user.email);
-            const bob = members.find((m: any) => m.email === BOB_EMAIL);
-            expect(alice).toBeTruthy();
-            expect(bob).toBeTruthy();
+            findOrFail(members, (m) => m.email === ctx.alice.user.email);
+            findOrFail(members, (m) => m.email === BOB_EMAIL);
         });
 
         test('shared user can query chat effective members', async () => {
             const res = await getEffectiveMembers(ctx.bob.user.sessionToken, ctx.alice.user.id, mountId, chatId);
-            expect(res.status).toBe(200);
-            const members = await res.json() as any[];
-            expect(members.find((m: any) => m.email === BOB_EMAIL)).toBeTruthy();
+            const members = await assertJson<EffectiveMember[]>(res);
+            findOrFail(members, (m) => m.email === BOB_EMAIL);
         });
     });
 
@@ -171,27 +201,39 @@ describe('Effective Members', () => {
         let folderId: string;
 
         beforeAll(async () => {
-            const parent = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId,
-                `folder/${rootId}`, {folderName: 'dedup-parent'});
+            const parent = await drivePost<DrivePath>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                mountId,
+                `folder/${rootId}`,
+                { folderName: 'dedup-parent' },
+            );
 
             // Bob as viewer on parent
-            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId,
-                `path/${parent.id}/acl`, {acl: [{id: BOB_EMAIL, read: true, write: false}]});
+            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${parent.id}/acl`, {
+                acl: [{ id: BOB_EMAIL, read: true, write: false }],
+            });
 
-            const child = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId,
-                `folder/${parent.id}`, {folderName: 'dedup-child'});
+            const child = await drivePost<DrivePath>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                mountId,
+                `folder/${parent.id}`,
+                { folderName: 'dedup-child' },
+            );
             folderId = child.id;
 
             // Bob as editor on child — should merge to editor (most permissive)
-            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId,
-                `path/${folderId}/acl`, {acl: [{id: BOB_EMAIL, read: true, write: true}]});
+            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${folderId}/acl`, {
+                acl: [{ id: BOB_EMAIL, read: true, write: true }],
+            });
         });
 
         test('duplicate entries are merged with most permissive winning', async () => {
             const res = await getEffectiveMembers(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, folderId);
-            const members = await res.json() as any[];
+            const members = await assertJson<EffectiveMember[]>(res);
 
-            const bobs = members.filter((m: any) => m.email === BOB_EMAIL);
+            const bobs = members.filter((m) => m.email === BOB_EMAIL);
             expect(bobs).toHaveLength(1);
             expect(bobs[0].write).toBe(true);
         });
@@ -201,8 +243,13 @@ describe('Effective Members', () => {
         let folderId: string;
 
         beforeAll(async () => {
-            const folder = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId,
-                `folder/${rootId}`, {folderName: 'perm-members-test'});
+            const folder = await drivePost<DrivePath>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                mountId,
+                `folder/${rootId}`,
+                { folderName: 'perm-members-test' },
+            );
             folderId = folder.id;
         });
 
@@ -212,7 +259,12 @@ describe('Effective Members', () => {
         });
 
         test('nonexistent path gets 404', async () => {
-            const res = await getEffectiveMembers(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'nonexistent');
+            const res = await getEffectiveMembers(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                mountId,
+                'nonexistent',
+            );
             expect(res.status).toBe(404);
         });
     });

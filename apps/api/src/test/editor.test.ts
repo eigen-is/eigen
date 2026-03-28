@@ -1,5 +1,6 @@
-import {beforeAll, describe, expect, test} from 'bun:test';
-import {authedRequest, driveGet, driveUpload, getTestContext} from './setup';
+import { beforeAll, describe, expect, test } from 'bun:test';
+import type { DrivePath, EditorContent, EditorSaveResult } from '@workspace/lib/types/drive';
+import { authedRequest, driveGet, driveUpload, getTestContext } from './setup';
 
 describe('Editor', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -9,36 +10,36 @@ describe('Editor', () => {
     beforeAll(async () => {
         ctx = await getTestContext();
         mountId = 'default';
-        const root: any = await driveGet(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root');
+        const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root');
         rootId = root.id;
     });
 
     async function uploadTextFile(name: string, content: string, mimeType = 'text/plain') {
-        const file = new File([content], name, {type: mimeType});
-        return driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, rootId, file);
+        const file = new File([content], name, { type: mimeType });
+        return driveUpload<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, rootId, file);
     }
 
-    async function editorGet(pathId: string): Promise<{status: number; data: any}> {
-        const res = await authedRequest(
-            ctx.alice.user.sessionToken,
-            `/editor/${ctx.alice.user.id}/${mountId}/${pathId}/content`
-        );
-        return {status: res.status, data: await res.json()};
-    }
-
-    async function editorPut(pathId: string, body: Record<string, unknown>): Promise<{status: number; data: any}> {
+    async function editorGet(pathId: string): Promise<{ status: number; data: EditorContent }> {
         const res = await authedRequest(
             ctx.alice.user.sessionToken,
             `/editor/${ctx.alice.user.id}/${mountId}/${pathId}/content`,
-            {method: 'PUT', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)}
         );
-        return {status: res.status, data: await res.json()};
+        return { status: res.status, data: await res.json() };
+    }
+
+    async function editorPut(pathId: string, body: Record<string, unknown>): Promise<{ status: number; data: EditorSaveResult }> {
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/editor/${ctx.alice.user.id}/${mountId}/${pathId}/content`,
+            { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
+        );
+        return { status: res.status, data: await res.json() };
     }
 
     describe('GET content', () => {
         test('returns markdown editMode for .md files', async () => {
             const uploaded = await uploadTextFile('test.md', '# Hello\n\nWorld', 'text/markdown');
-            const {status, data} = await editorGet(uploaded.id);
+            const { status, data } = await editorGet(uploaded.id);
             expect(status).toBe(200);
             expect(data.editMode).toBe('markdown');
             expect(data.content).toBe('# Hello\n\nWorld');
@@ -48,7 +49,7 @@ describe('Editor', () => {
         test('extracts frontmatter from markdown', async () => {
             const content = '---\ntitle: Test\nauthor: Alice\n---\n# Hello';
             const uploaded = await uploadTextFile('frontmatter.md', content, 'text/markdown');
-            const {data} = await editorGet(uploaded.id);
+            const { data } = await editorGet(uploaded.id);
             expect(data.editMode).toBe('markdown');
             expect(data.frontmatter).toBe('title: Test\nauthor: Alice');
             expect(data.content).toBe('# Hello');
@@ -56,46 +57,46 @@ describe('Editor', () => {
 
         test('returns code editMode for .json files', async () => {
             const uploaded = await uploadTextFile('config.json', '{"key": "value"}', 'application/json');
-            const {data} = await editorGet(uploaded.id);
+            const { data } = await editorGet(uploaded.id);
             expect(data.editMode).toBe('code');
             expect(data.content).toBe('{"key": "value"}');
         });
 
         test('returns code editMode for .ts files', async () => {
             const uploaded = await uploadTextFile('app.ts', 'const x: number = 1;', 'text/typescript');
-            const {data} = await editorGet(uploaded.id);
+            const { data } = await editorGet(uploaded.id);
             expect(data.editMode).toBe('code');
         });
 
         test('returns code editMode for .sh files', async () => {
             const uploaded = await uploadTextFile('run.sh', '#!/bin/bash\necho hello', 'text/x-shellscript');
-            const {data} = await editorGet(uploaded.id);
+            const { data } = await editorGet(uploaded.id);
             expect(data.editMode).toBe('code');
         });
 
         test('returns plaintext editMode for .txt files', async () => {
             const uploaded = await uploadTextFile('notes.txt', 'Some notes');
-            const {data} = await editorGet(uploaded.id);
+            const { data } = await editorGet(uploaded.id);
             expect(data.editMode).toBe('plaintext');
         });
 
         test('returns 400 for unsupported file types', async () => {
-            const file = new File([new Uint8Array([0xFF, 0xD8, 0xFF])], 'photo.jpg', {type: 'image/jpeg'});
+            const file = new File([new Uint8Array([0xff, 0xd8, 0xff])], 'photo.jpg', { type: 'image/jpeg' });
             const uploaded = await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, rootId, file);
             const res = await authedRequest(
                 ctx.alice.user.sessionToken,
-                `/editor/${ctx.alice.user.id}/${mountId}/${uploaded.id}/content`
+                `/editor/${ctx.alice.user.id}/${mountId}/${uploaded.id}/content`,
             );
             expect(res.status).toBe(400);
         });
 
         test('returns 400 for non-UTF-8 files', async () => {
             const buf = new Uint8Array([0x80, 0x81, 0x82, 0x83]);
-            const file = new File([buf], 'binary.txt', {type: 'text/plain'});
+            const file = new File([buf], 'binary.txt', { type: 'text/plain' });
             const uploaded = await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, rootId, file);
             const res = await authedRequest(
                 ctx.alice.user.sessionToken,
-                `/editor/${ctx.alice.user.id}/${mountId}/${uploaded.id}/content`
+                `/editor/${ctx.alice.user.id}/${mountId}/${uploaded.id}/content`,
             );
             expect(res.status).toBe(400);
         });
@@ -104,10 +105,11 @@ describe('Editor', () => {
     describe('PUT content', () => {
         test('saves content when updatedAt matches', async () => {
             const uploaded = await uploadTextFile('editable.txt', 'original');
-            const {data: initial} = await editorGet(uploaded.id);
-            const updatedAt = initial.updatedAt instanceof Date ? initial.updatedAt.toISOString() : String(initial.updatedAt);
+            const { data: initial } = await editorGet(uploaded.id);
+            const updatedAt =
+                initial.updatedAt instanceof Date ? initial.updatedAt.toISOString() : String(initial.updatedAt);
 
-            const {status, data} = await editorPut(uploaded.id, {
+            const { status, data } = await editorPut(uploaded.id, {
                 content: 'modified',
                 expectedUpdatedAt: updatedAt,
             });
@@ -116,29 +118,31 @@ describe('Editor', () => {
             expect(data.updatedAt).toBeDefined();
 
             // Verify content was saved
-            const {data: reloaded} = await editorGet(uploaded.id);
+            const { data: reloaded } = await editorGet(uploaded.id);
             expect(reloaded.content).toBe('modified');
         });
 
         test('returns conflict when updatedAt is stale', async () => {
             const uploaded = await uploadTextFile('conflict.txt', 'original');
-            const {data: initial} = await editorGet(uploaded.id);
-            const updatedAt = initial.updatedAt instanceof Date ? initial.updatedAt.toISOString() : String(initial.updatedAt);
+            const { data: initial } = await editorGet(uploaded.id);
+            const updatedAt =
+                initial.updatedAt instanceof Date ? initial.updatedAt.toISOString() : String(initial.updatedAt);
 
             // Wait so updatedAt will differ after save
-            await new Promise(r => setTimeout(r, 1100));
+            await new Promise((r) => setTimeout(r, 1100));
 
             // First save succeeds and bumps updatedAt
-            const {data: saved} = await editorPut(uploaded.id, {content: 'version2', expectedUpdatedAt: updatedAt});
+            const { data: saved } = await editorPut(uploaded.id, { content: 'version2', expectedUpdatedAt: updatedAt });
             expect(saved.conflict).toBe(false);
 
             // Verify the first save actually changed updatedAt
-            const {data: refreshed} = await editorGet(uploaded.id);
-            const newUpdatedAt = refreshed.updatedAt instanceof Date ? refreshed.updatedAt.toISOString() : String(refreshed.updatedAt);
+            const { data: refreshed } = await editorGet(uploaded.id);
+            const newUpdatedAt =
+                refreshed.updatedAt instanceof Date ? refreshed.updatedAt.toISOString() : String(refreshed.updatedAt);
             expect(newUpdatedAt).not.toBe(updatedAt);
 
             // Second save with original (now stale) updatedAt returns conflict
-            const {data} = await editorPut(uploaded.id, {
+            const { data } = await editorPut(uploaded.id, {
                 content: 'version3',
                 expectedUpdatedAt: updatedAt, // stale!
             });
@@ -148,31 +152,33 @@ describe('Editor', () => {
 
         test('force save ignores stale updatedAt', async () => {
             const uploaded = await uploadTextFile('force.txt', 'original');
-            const {data: initial} = await editorGet(uploaded.id);
-            const updatedAt = initial.updatedAt instanceof Date ? initial.updatedAt.toISOString() : String(initial.updatedAt);
+            const { data: initial } = await editorGet(uploaded.id);
+            const updatedAt =
+                initial.updatedAt instanceof Date ? initial.updatedAt.toISOString() : String(initial.updatedAt);
 
-            await new Promise(r => setTimeout(r, 1100));
+            await new Promise((r) => setTimeout(r, 1100));
 
             // First save bumps updatedAt
-            await editorPut(uploaded.id, {content: 'version2', expectedUpdatedAt: updatedAt});
+            await editorPut(uploaded.id, { content: 'version2', expectedUpdatedAt: updatedAt });
 
             // Force save with stale updatedAt
-            const {data} = await editorPut(uploaded.id, {
+            const { data } = await editorPut(uploaded.id, {
                 content: 'forced',
                 expectedUpdatedAt: updatedAt,
                 force: true,
             });
             expect(data.conflict).toBe(false);
 
-            const {data: reloaded} = await editorGet(uploaded.id);
+            const { data: reloaded } = await editorGet(uploaded.id);
             expect(reloaded.content).toBe('forced');
         });
 
         test('reattaches frontmatter for markdown', async () => {
             const content = '---\ntitle: Test\n---\n# Hello';
             const uploaded = await uploadTextFile('fm-save.md', content, 'text/markdown');
-            const {data: initial} = await editorGet(uploaded.id);
-            const updatedAt = initial.updatedAt instanceof Date ? initial.updatedAt.toISOString() : String(initial.updatedAt);
+            const { data: initial } = await editorGet(uploaded.id);
+            const updatedAt =
+                initial.updatedAt instanceof Date ? initial.updatedAt.toISOString() : String(initial.updatedAt);
 
             await editorPut(uploaded.id, {
                 content: '# Updated',
@@ -180,7 +186,7 @@ describe('Editor', () => {
                 expectedUpdatedAt: updatedAt,
             });
 
-            const {data: reloaded} = await editorGet(uploaded.id);
+            const { data: reloaded } = await editorGet(uploaded.id);
             expect(reloaded.frontmatter).toBe('title: Test');
             expect(reloaded.content).toBe('# Updated');
         });

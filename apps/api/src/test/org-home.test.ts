@@ -1,10 +1,10 @@
-import {beforeAll, describe, expect, test} from 'bun:test';
-import {getTestContext} from './setup';
-import {getHome} from '../lib/home/get-home';
-import {getOrgExists} from '../lib/org/org';
-import {orgOwnerId} from '@workspace/lib/types';
-import {getAuthDrizzleDb} from '../lib/auth/auth';
-import {organization} from '../../auth-schema';
+import { beforeAll, describe, expect, test } from 'bun:test';
+import { orgOwnerId } from '@workspace/lib/types';
+import { organization } from '../../auth-schema';
+import { getAuthDrizzleDb } from '../lib/auth/auth';
+import { getHome } from '../lib/home/get-home';
+import { getOrgExists } from '../lib/org/org';
+import { getTestContext } from './setup';
 
 describe('OrgHome', () => {
     let orgId: string;
@@ -12,7 +12,7 @@ describe('OrgHome', () => {
     beforeAll(async () => {
         await getTestContext();
         const db = getAuthDrizzleDb();
-        const org = db.select({id: organization.id}).from(organization).get();
+        const org = db.select({ id: organization.id }).from(organization).get();
         if (!org) throw new Error('No organization found in test DB');
         orgId = org.id;
     });
@@ -35,8 +35,8 @@ describe('OrgHome', () => {
         try {
             await getHome(orgOwnerId('00000000000000000000000000000000'));
             expect(true).toBe(false);
-        } catch (e: any) {
-            expect(e.status).toBe(404);
+        } catch (e) {
+            expect((e as { status: number }).status).toBe(404);
         }
     });
 });

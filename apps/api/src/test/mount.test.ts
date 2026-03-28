@@ -1,16 +1,19 @@
-import {afterAll, beforeAll, describe, expect, test} from 'bun:test';
-import {existsSync, mkdirSync, rmSync} from 'node:fs';
-import {join} from 'path';
-import {buildStorageKey, createDefaultMountConfig, Mount} from '../lib/mount/mount';
-import {getUniqueFileName} from '../lib/drive/naming';
-import {type DatabaseConfig, ManagedDatabase, type SchemaType} from '../lib/core';
-import {LocalStorage} from '../lib/storage/local-storage';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../lib/core';
+import { getUniqueFileName } from '../lib/drive/naming';
+import { buildStorageKey, createDefaultMountConfig, Mount } from '../lib/mount/mount';
+import { LocalStorage } from '../lib/storage/local-storage';
 
-const TEST_DIR = join(import.meta.dir, '../../../../data-test/test-mount-' + Date.now());
+const TEST_DIR = join(import.meta.dir, `../../../../data-test/test-mount-${Date.now()}`);
 const OWNER_ID = 'test-owner-id';
 
 function createGetLocalDatabase(baseDir: string) {
-    return async <S extends SchemaType>(config: DatabaseConfig<S>, relativePath: string): Promise<ManagedDatabase<S>> => {
+    return async <S extends SchemaType>(
+        config: DatabaseConfig<S>,
+        relativePath: string,
+    ): Promise<ManagedDatabase<S>> => {
         const fullPath = join(baseDir, relativePath);
         const db = new ManagedDatabase(config, fullPath);
         await db.open(0);
@@ -19,14 +22,13 @@ function createGetLocalDatabase(baseDir: string) {
 }
 
 beforeAll(() => {
-    mkdirSync(TEST_DIR, {recursive: true});
+    mkdirSync(TEST_DIR, { recursive: true });
 });
 
 afterAll(() => {
     try {
-        rmSync(TEST_DIR, {recursive: true, force: true});
-    } catch {
-    }
+        rmSync(TEST_DIR, { recursive: true, force: true });
+    } catch {}
 });
 
 describe('buildStorageKey', () => {
@@ -88,7 +90,7 @@ describe('Mount (local-key storage)', () => {
         expect(folder!.type).toBe('folder');
 
         const children = await mount.listFolder(rootId);
-        expect(children.some(c => c.id === folderId)).toBe(true);
+        expect(children.some((c) => c.id === folderId)).toBe(true);
     });
 
     test('create file stores data', async () => {
@@ -117,7 +119,7 @@ describe('Mount (local-key storage)', () => {
 
     test('rename path', async () => {
         const folderId = await mount.createFolder(rootId, 'OldName');
-        await mount.updatePath(folderId, {name: 'NewName'});
+        await mount.updatePath(folderId, { name: 'NewName' });
         const folder = await mount.getPath(folderId);
         expect(folder!.name).toBe('NewName');
     });
@@ -227,7 +229,7 @@ describe('Mount (local path-based storage)', () => {
         await mount.createFile(folderId, 'inside.txt', 'text/plain', 5, Buffer.from('hello'));
         expect(existsSync(join(mount.dataDir, 'RenameMe'))).toBe(true);
 
-        await mount.updatePath(folderId, {name: 'Renamed'});
+        await mount.updatePath(folderId, { name: 'Renamed' });
         expect(existsSync(join(mount.dataDir, 'RenameMe'))).toBe(false);
         expect(existsSync(join(mount.dataDir, 'Renamed'))).toBe(true);
         expect(existsSync(join(mount.dataDir, 'Renamed', 'inside.txt'))).toBe(true);
@@ -240,7 +242,7 @@ describe('Mount (local path-based storage)', () => {
         const fileId = await mount.createFile(srcFolder, 'move.txt', 'text/plain', data.length, data);
         expect(existsSync(join(mount.dataDir, 'Source', 'move.txt'))).toBe(true);
 
-        await mount.updatePath(fileId, {parentId: dstFolder});
+        await mount.updatePath(fileId, { parentId: dstFolder });
         expect(existsSync(join(mount.dataDir, 'Source', 'move.txt'))).toBe(false);
         expect(existsSync(join(mount.dataDir, 'Destination', 'move.txt'))).toBe(true);
     });
@@ -321,12 +323,14 @@ describe('Name validation', () => {
     });
 
     test('rejects .. as file name', async () => {
-        expect(mount.createFile(rootId, '..', 'text/plain', 0, undefined)).rejects.toThrow('Invalid file or folder name');
+        expect(mount.createFile(rootId, '..', 'text/plain', 0, undefined)).rejects.toThrow(
+            'Invalid file or folder name',
+        );
     });
 
     test('rejects .. on rename', async () => {
         const id = await mount.createFolder(rootId, 'ValidName');
-        expect(mount.updatePath(id, {name: '..'})).rejects.toThrow('Invalid file or folder name');
+        expect(mount.updatePath(id, { name: '..' })).rejects.toThrow('Invalid file or folder name');
     });
 
     test('allows dotfiles', async () => {
