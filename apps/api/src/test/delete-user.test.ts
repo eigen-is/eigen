@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import type { OrgMember } from '@workspace/lib/types/people';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import type { OrgMember } from '@workspace/lib/types/people';
 import { assertJson, authedRequest, findOrFail, getTestContext, TEST_DATA_DIR } from './setup';
 
 describe('Delete user', () => {

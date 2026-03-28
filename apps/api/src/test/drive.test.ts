@@ -1,5 +1,16 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import {
+    DRIVE_TYPE_DOC,
+    DRIVE_TYPE_SHEETS,
+    DRIVE_TYPE_SLIDES,
+    DRIVE_TYPE_STICKIES,
+    type DrivePath,
+    type MountInfo,
+    type OrgTeam,
+    teamOwnerId,
+} from '@workspace/lib/types';
+import { getServerConfig } from '../lib/config/server-config';
+import {
     assertJson,
     authedRequest,
     driveDelete,
@@ -12,17 +23,6 @@ import {
     findOrFail,
     getTestContext,
 } from './setup';
-import {
-    type DrivePath,
-    type MountInfo,
-    type OrgTeam,
-    DRIVE_TYPE_DOC,
-    DRIVE_TYPE_SHEETS,
-    DRIVE_TYPE_SLIDES,
-    DRIVE_TYPE_STICKIES,
-    teamOwnerId,
-} from '@workspace/lib/types';
-import { getServerConfig } from '../lib/config/server-config';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 const BOB_EMAIL = 'bob@test.eigen.is';
