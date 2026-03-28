@@ -378,7 +378,7 @@ export default class Drive {
         if (renamedItem) this.emit(SSEventType.DRIVE_PATH_RENAMED, renamedItem);
     }
 
-    async downloadFile(mountId: string, pathId: string): Promise<ArrayBuffer | null> {
+    async downloadFile(mountId: string, pathId: string) {
         const mount = this.getMount(mountId);
         const path = await mount.getPath(pathId);
         if (!path || path.type !== DRIVE_TYPE_FILE) {
@@ -412,12 +412,12 @@ export default class Drive {
         if (!editMode) throw new ApiError(400, 'File type not supported for inline editing');
         if (path.size > MAX_INLINE_EDIT_SIZE) throw new ApiError(413, 'File too large for inline editing');
 
-        const data = await mount.readFile(pathId);
-        if (!data) throw new ApiError(404, 'File content not found');
+        const file = await mount.readFile(pathId);
+        if (!file) throw new ApiError(404, 'File content not found');
 
         let content: string;
         try {
-            content = new TextDecoder('utf-8', { fatal: true }).decode(data);
+            content = new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer());
         } catch {
             throw new ApiError(400, 'File contains invalid UTF-8 encoding');
         }

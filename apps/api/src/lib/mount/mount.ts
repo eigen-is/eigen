@@ -21,7 +21,7 @@ import { createAsyncSingleton } from '../../utils/singleton';
 import { getS3Config } from '../config/server-config';
 import { ApiError, type DatabaseConfig, ManagedDatabase, type SchemaType } from '../core';
 import { deleteThumbnail } from '../shared/thumbnails';
-import { LocalKeyStorage, LocalStorage, S3Storage, type StorageBackend } from '../storage';
+import { LocalKeyStorage, LocalStorage, S3Storage, type StorageBackend, type StorageFile } from '../storage';
 import { MOUNT_DB_CONFIG } from './db-config';
 import type * as schema from './schema';
 import { labels, paths, pathsToLabels } from './schema';
@@ -513,11 +513,11 @@ export class Mount {
         }
     }
 
-    async readFile(pathId: string): Promise<ArrayBuffer | null> {
+    async readFile(pathId: string): Promise<StorageFile | null> {
         const storageKey = await this.getStorageKey(pathId);
         const file = this.storage.read(storageKey);
         if (await file.exists()) {
-            return await file.arrayBuffer();
+            return file;
         }
         return null;
     }
@@ -538,11 +538,6 @@ export class Mount {
         const hash = await this.computeHash(data);
         await this.db.update(paths).set({ size, hash, updatedAt: new Date() }).where(eq(paths.id, pathId));
         return written;
-    }
-
-    async getStorageFile(pathId: string): Promise<BunFile> {
-        const storageKey = await this.getStorageKey(pathId);
-        return this.storage.read(storageKey) as BunFile;
     }
 
     getTempPath(pathId: string): string {
