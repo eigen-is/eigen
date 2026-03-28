@@ -161,7 +161,10 @@ export function EmailDraft({ email, to, onDelete: _onDelete, sendDraft, onAutoSa
     useEffect(() => {
         if (!email?.id) return;
         return () => {
-            onAutoSaveRef.current?.(getCurrentDraft()).catch(() => {});
+            const current = getCurrentDraft();
+            if (getEmailDraftStatus(current).isSaveable) {
+                onAutoSaveRef.current?.(current).catch(() => {});
+            }
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps -- save on unmount only
     }, [email?.id]);
