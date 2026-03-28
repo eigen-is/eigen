@@ -1,15 +1,11 @@
+import type { BunFile } from 'bun';
 import type { Email } from '@workspace/lib/types/mail';
 import DOMPurify from 'isomorphic-dompurify';
 import { simpleParser } from './mail-parser';
 
-export async function parseEml(
-    messageId: string,
-    mailbox: string,
-    content: Buffer,
-    size: number,
-): Promise<Email | null> {
+export async function parseEml(messageId: string, mailbox: string, file: BunFile): Promise<Email | null> {
     try {
-        const parsedMail = await simpleParser(content, {});
+        const parsedMail = await simpleParser(Buffer.from(await file.arrayBuffer()), {});
 
         if (parsedMail.html) {
             parsedMail.html = DOMPurify.sanitize(parsedMail.html, { FORCE_BODY: true });
@@ -21,7 +17,7 @@ export async function parseEml(
             id: messageId,
             filename: '',
             mailbox,
-            size,
+            size: file.size,
             isRead: false,
             isFlagged: false,
             isDraft: false,
