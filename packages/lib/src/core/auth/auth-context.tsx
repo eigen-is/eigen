@@ -1,5 +1,4 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { LoadingScreen } from '@workspace/ui/components/layout/pages';
 import React, { createContext, type ReactNode, useEffect, useState } from 'react';
 import { authClient } from './hooks/use-auth-client.ts';
 
@@ -23,7 +22,10 @@ export type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: ReactNode }): React.ReactElement {
+export function AuthProvider({
+    children,
+    loadingFallback = null,
+}: { children: ReactNode; loadingFallback?: ReactNode }): React.ReactElement {
     const [user, setUser] = useState<AuthUser | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const queryClient = useQueryClient();
@@ -76,7 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }): React.React
     };
 
     return isLoading ? (
-        <LoadingScreen />
+        <>{loadingFallback}</>
     ) : (
         <AuthContext.Provider
             value={{

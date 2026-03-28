@@ -30,4 +30,4 @@ merge cleanly.
 
 ## Fortune-Sheet Integration
 
-See [FORTUNE-SHEETS-TODO.md](FORTUNE-SHEETS-TODO.md) for the refactoring audit.
+See [FORTUNE-SHEETS-TODO.md](TODO-FORTUNE-SHEETS.md) for the refactoring audit.
