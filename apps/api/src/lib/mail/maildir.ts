@@ -167,8 +167,8 @@ export default class Maildir {
             throw new ApiError(404, `Target mailbox '${targetMailbox}' not found`);
         }
 
-        const { content } = await this.store.readMessage(email.mailbox, email.filename);
-        await this.store.deliverAtomic(content, targetMailbox);
+        const text = await this.store.readMessageText(email.mailbox, email.filename);
+        await this.store.deliverAtomic(text, targetMailbox);
         await this.syncMailbox(targetMailbox);
     }
 
