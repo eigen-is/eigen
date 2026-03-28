@@ -2,7 +2,7 @@
 
 > **TLDR**: Monorepo with Bun + Elysia + React 19 + TanStack. Types go in `packages/lib/src/types/`. Hooks go in
 `packages/lib/src/core/[domain]/hooks/`. Routes go in `apps/api/src/routes/`. Use `type` not `interface`. English
-> everywhere. No JSDoc. Run `bun run typecheck && bun run test` after changes. No migrations needed — data is throwaway
+> everywhere. No JSDoc. Run `bun run check` (lint + typecheck + test) after changes. No migrations needed — data is throwaway
 > during dev.
 
 ## Code Style
@@ -70,9 +70,11 @@ URL params use hyphens (`application-eigendoc`), database uses slashes.
 ```bash
 bun run serve          # All apps + API
 bun serve:mail         # Single app + API
+bun run lint           # Lint + format check (biome)
+bun run lint:fix       # Auto-fix lint + format issues
 bun run typecheck      # Type check all packages
 bun run test           # Run API tests
-bun run check          # typecheck + test
+bun run check          # lint + typecheck + test
 ```
 
 - **Never run package install commands** — ask the user
