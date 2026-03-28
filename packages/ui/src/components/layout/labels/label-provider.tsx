@@ -1,11 +1,11 @@
-import {createContext, ReactNode, useContext} from 'react';
 import type {Label} from '@workspace/lib/types/label';
+import {createContext, type ReactNode, useContext} from 'react';
 
 type LabelContextType = {
     addLabel: (labelData: Omit<Label, 'id'>) => Promise<void>;
     updateLabel: (label: Label) => Promise<void>;
     deleteLabel: (labelId: string) => Promise<void>;
-}
+};
 
 // Create the context with default values
 const LabelContext = createContext<LabelContextType>({
@@ -28,15 +28,10 @@ type LabelProviderProps = {
     onAddLabel?: (labelData: Omit<Label, 'id'>) => Promise<void>;
     onUpdateLabel?: (label: Label) => Promise<void>;
     onDeleteLabel?: (labelId: string) => Promise<void>;
-}
+};
 
 // The actual provider component
-export function LabelProvider({
-                                  children,
-                                  onAddLabel,
-                                  onUpdateLabel,
-                                  onDeleteLabel
-                              }: LabelProviderProps) {
+export function LabelProvider({children, onAddLabel, onUpdateLabel, onDeleteLabel}: LabelProviderProps) {
     // These functions will be implemented by the consuming application
     // and passed to the provider via props
 

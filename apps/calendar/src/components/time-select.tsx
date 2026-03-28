@@ -1,7 +1,7 @@
-import {useRef, useEffect, useState} from 'react';
-import {Popover, PopoverContent, PopoverTrigger} from '@workspace/ui/components/popover';
-import {Input} from '@workspace/ui/components/input';
-import {cn} from '@workspace/ui/lib/utils';
+import { Input } from '@workspace/ui/components/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
+import { cn } from '@workspace/ui/lib/utils';
+import { useEffect, useRef, useState } from 'react';
 
 function generateTimeSlots(): string[] {
     const slots: string[] = [];
@@ -17,7 +17,7 @@ const TIME_SLOTS = generateTimeSlots();
 
 export function timeToMinutes(time: string): number {
     const [h, m] = time.split(':').map(Number);
-    if (isNaN(h) || isNaN(m)) return -1;
+    if (Number.isNaN(h) || Number.isNaN(m)) return -1;
     return h * 60 + m;
 }
 
@@ -40,49 +40,50 @@ type TimeSelectProps = {
     onChange: (value: string) => void;
     referenceTime?: string;
     minTime?: string;
-}
+};
 
-export function TimeSelect({value, onChange, referenceTime, minTime}: TimeSelectProps) {
+export function TimeSelect({ value, onChange, referenceTime, minTime }: TimeSelectProps) {
     const [open, setOpen] = useState(false);
     const [inputValue, setInputValue] = useState(value);
     const listRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
     const refMinutes = referenceTime ? timeToMinutes(referenceTime) : null;
     const minMinutes = minTime ? timeToMinutes(minTime) : -1;
-    
+
     // Generate time slots with day offset for accurate duration calculation, limited to 23:45 max duration
-    const filteredTimeSlots = minMinutes >= 0 
-        ? (() => {
-            const slots: Array<{time: string, dayOffset: number}> = [];
-            const maxDuration = 23 * 60 + 45; // 23 hours 45 minutes in minutes
-            const maxSlots = 95; // 23:45 / 15 minutes = 95 intervals
-            
-            // Generate time slots starting from minTime in 15-minute intervals
-            for (let i = 0; i <= maxSlots; i++) {
-                const totalMinutes = minMinutes + (i * 15);
-                const duration = 15 + (i * 15); // Always 15 minutes minimum, then add intervals
-                
-                if (duration > maxDuration) break;
-                
-                // Handle wrap to next day
-                let dayOffset = 0;
-                let timeMinutes = totalMinutes;
-                
-                if (totalMinutes >= 24 * 60) {
-                    dayOffset = Math.floor(totalMinutes / (24 * 60));
-                    timeMinutes = totalMinutes % (24 * 60);
-                }
-                
-                const hours = Math.floor(timeMinutes / 60);
-                const minutes = timeMinutes % 60;
-                const timeString = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
-                
-                slots.push({time: timeString, dayOffset});
-            }
-            
-            return slots;
-        })()
-        : TIME_SLOTS.map(time => ({time, dayOffset: 0}));
+    const filteredTimeSlots =
+        minMinutes >= 0
+            ? (() => {
+                  const slots: Array<{ time: string; dayOffset: number }> = [];
+                  const maxDuration = 23 * 60 + 45; // 23 hours 45 minutes in minutes
+                  const maxSlots = 95; // 23:45 / 15 minutes = 95 intervals
+
+                  // Generate time slots starting from minTime in 15-minute intervals
+                  for (let i = 0; i <= maxSlots; i++) {
+                      const totalMinutes = minMinutes + i * 15;
+                      const duration = 15 + i * 15; // Always 15 minutes minimum, then add intervals
+
+                      if (duration > maxDuration) break;
+
+                      // Handle wrap to next day
+                      let dayOffset = 0;
+                      let timeMinutes = totalMinutes;
+
+                      if (totalMinutes >= 24 * 60) {
+                          dayOffset = Math.floor(totalMinutes / (24 * 60));
+                          timeMinutes = totalMinutes % (24 * 60);
+                      }
+
+                      const hours = Math.floor(timeMinutes / 60);
+                      const minutes = timeMinutes % 60;
+                      const timeString = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+
+                      slots.push({ time: timeString, dayOffset });
+                  }
+
+                  return slots;
+              })()
+            : TIME_SLOTS.map((time) => ({ time, dayOffset: 0 }));
 
     useEffect(() => {
         setInputValue(value);
@@ -93,23 +94,23 @@ export function TimeSelect({value, onChange, referenceTime, minTime}: TimeSelect
             // Use setTimeout to ensure the popover is fully rendered
             setTimeout(() => {
                 if (!listRef.current) return;
-                
+
                 const valueInMinutes = timeToMinutes(value);
                 if (valueInMinutes === -1) return; // Don't scroll if value is invalid
-                
+
                 // Always find the closest time slot
                 const target = filteredTimeSlots.reduce((prev, curr) => {
                     const prevDiff = Math.abs(timeToMinutes(prev.time) - valueInMinutes);
                     const currDiff = Math.abs(timeToMinutes(curr.time) - valueInMinutes);
                     return prevDiff < currDiff ? prev : curr;
                 });
-                
-                const idx = filteredTimeSlots.findIndex(slot => slot.time === target.time);
-                
+
+                const idx = filteredTimeSlots.findIndex((slot) => slot.time === target.time);
+
                 if (idx >= 0) {
                     const el = listRef.current.children[idx] as HTMLElement;
                     if (el) {
-                        el.scrollIntoView({block: 'center'});
+                        el.scrollIntoView({ block: 'center' });
                     }
                 }
             }, 100);
@@ -121,7 +122,7 @@ export function TimeSelect({value, onChange, referenceTime, minTime}: TimeSelect
         if (isValidTime(trimmed)) {
             // Format the time to ensure proper display (e.g., "9:10" -> "09:10")
             const [h, m] = trimmed.split(':');
-            const formattedTime = `${String(parseInt(h)).padStart(2, '0')}:${m.padStart(2, '0')}`;
+            const formattedTime = `${String(parseInt(h, 10)).padStart(2, '0')}:${m.padStart(2, '0')}`;
             onChange(formattedTime);
         } else {
             setInputValue(value);
@@ -149,9 +150,9 @@ export function TimeSelect({value, onChange, referenceTime, minTime}: TimeSelect
                 </div>
             </PopoverTrigger>
             <PopoverContent className="w-[180px] p-0" align="start" onOpenAutoFocus={(e: Event) => e.preventDefault()}>
-                <div 
-                    ref={listRef} 
-                    className="max-h-[240px] overflow-y-auto p-1" 
+                <div
+                    ref={listRef}
+                    className="max-h-[240px] overflow-y-auto p-1"
                     tabIndex={-1}
                     onWheel={(e: React.WheelEvent<HTMLDivElement>) => {
                         // Ensure mouse wheel events work for scrolling
@@ -164,7 +165,7 @@ export function TimeSelect({value, onChange, referenceTime, minTime}: TimeSelect
                             type="button"
                             className={cn(
                                 'w-full text-left px-3 py-1.5 text-sm rounded-sm hover:bg-accent cursor-pointer',
-                                slot.time === value && 'bg-accent font-medium'
+                                slot.time === value && 'bg-accent font-medium',
                             )}
                             onClick={() => {
                                 onChange(slot.time);
@@ -175,7 +176,7 @@ export function TimeSelect({value, onChange, referenceTime, minTime}: TimeSelect
                             {slot.time}
                             {refMinutes != null && (
                                 <span className="text-muted-foreground ml-2 text-xs">
-                                    {formatDuration(refMinutes, timeToMinutes(slot.time) + (slot.dayOffset * 24 * 60))}
+                                    {formatDuration(refMinutes, timeToMinutes(slot.time) + slot.dayOffset * 24 * 60)}
                                 </span>
                             )}
                         </button>

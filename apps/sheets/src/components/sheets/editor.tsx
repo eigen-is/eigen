@@ -1,19 +1,22 @@
-import {useMemo, useRef} from 'react';
 import {Workbook, type WorkbookInstance} from '@workspace/fortune-sheet';
+import type {DrivePath} from '@workspace/lib/types/drive';
+import {LoadingState} from '@workspace/ui';
+import {useMemo, useRef} from 'react';
 import {useSheet} from './hooks/use-sheet';
 import {ToolbarLeftItems, ToolbarRightItems} from './toolbar';
-import {LoadingState} from '@workspace/ui';
-import type {DrivePath} from '@workspace/lib/types/drive';
 
 type SheetEditorProps = {
     ownerId: string;
     path: DrivePath;
     canWrite: boolean;
     onAccessDialogOpen: () => void;
-}
+};
 
 const TOOLBAR_ITEMS = [
-    'undo', 'redo', 'format-painter', 'clear-format',
+    'undo',
+    'redo',
+    'format-painter',
+    'clear-format',
     '|',
     'font',
     '|',
@@ -21,34 +24,60 @@ const TOOLBAR_ITEMS = [
     '|',
     'format',
     '|',
-    'bold', 'italic', 'strike-through', 'underline',
+    'bold',
+    'italic',
+    'strike-through',
+    'underline',
     '|',
-    'font-color', 'background', 'border', 'merge-cell',
+    'font-color',
+    'background',
+    'border',
+    'merge-cell',
     '|',
-    'horizontal-align', 'vertical-align', 'text-wrap',
+    'horizontal-align',
+    'vertical-align',
+    'text-wrap',
     '|',
-    'freeze', 'conditionFormat', 'filter',
-    'quick-formula', 'search',
+    'freeze',
+    'conditionFormat',
+    'filter',
+    'quick-formula',
+    'search',
 ];
 
 export function SheetEditor({ownerId, path, canWrite, onAccessDialogOpen}: SheetEditorProps) {
     const workbookRef = useRef<WorkbookInstance>(null);
 
-    const {
-        initialData,
-        synced,
-        handleOp,
-        onDataChange,
-        handleRestore,
-    } = useSheet(ownerId, path.mountId, path.id, workbookRef);
+    const {initialData, synced, handleOp, onDataChange, handleRestore} = useSheet(
+        ownerId,
+        path.mountId,
+        path.id,
+        workbookRef,
+    );
 
-    const leftItems = useMemo(() => (
-        <ToolbarLeftItems path={path} canWrite={canWrite} onAccessDialogOpen={onAccessDialogOpen} onRestore={handleRestore}/>
-    ), [path, canWrite, onAccessDialogOpen, handleRestore]);
+    const leftItems = useMemo(
+        () => (
+            <ToolbarLeftItems
+                path={path}
+                canWrite={canWrite}
+                onAccessDialogOpen={onAccessDialogOpen}
+                onRestore={handleRestore}
+            />
+        ),
+        [path, canWrite, onAccessDialogOpen, handleRestore],
+    );
 
-    const rightItems = useMemo(() => (
-        <ToolbarRightItems path={path} canWrite={canWrite} onAccessDialogOpen={onAccessDialogOpen} onRestore={handleRestore}/>
-    ), [path, canWrite, onAccessDialogOpen, handleRestore]);
+    const rightItems = useMemo(
+        () => (
+            <ToolbarRightItems
+                path={path}
+                canWrite={canWrite}
+                onAccessDialogOpen={onAccessDialogOpen}
+                onRestore={handleRestore}
+            />
+        ),
+        [path, canWrite, onAccessDialogOpen, handleRestore],
+    );
 
     if (!synced || !initialData) {
         return <LoadingState/>;

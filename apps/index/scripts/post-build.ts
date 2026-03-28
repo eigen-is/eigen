@@ -1,5 +1,5 @@
-import {copyFileSync, existsSync, readFileSync, writeFileSync} from 'fs';
-import {join} from 'path';
+import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 
 function postBuild() {
     const distDir = join(process.cwd(), '../../dist/index');
@@ -18,7 +18,9 @@ function postBuild() {
     const linkMatches = indexHtmlContent.matchAll(/<link[^>]*rel="stylesheet"[^>]*href="([^"]+)"[^>]*>/g);
 
     const scriptSrc = scriptMatch ? scriptMatch[1] : '/src/main.tsx';
-    const cssLinks = Array.from(linkMatches).map(match => match[0]).join('\n    ');
+    const cssLinks = Array.from(linkMatches)
+        .map((match) => match[0])
+        .join('\n    ');
 
     // Read the PHP template
     const indexPhpTemplate = readFileSync(join(process.cwd(), 'index.php'), 'utf-8');
@@ -26,15 +28,12 @@ function postBuild() {
     // Replace the script src and add CSS links
     let indexPhpContent = indexPhpTemplate.replace(
         '<script src="/src/main.tsx" type="module"></script>',
-        `<script src="${scriptSrc}" type="module"></script>`
+        `<script src="${scriptSrc}" type="module"></script>`,
     );
 
     // Add CSS links before </head>
     if (cssLinks) {
-        indexPhpContent = indexPhpContent.replace(
-            '</head>',
-            `    ${cssLinks}\n</head>`
-        );
+        indexPhpContent = indexPhpContent.replace('</head>', `    ${cssLinks}\n</head>`);
     }
 
     // Write the updated index.php

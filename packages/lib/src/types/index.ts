@@ -9,7 +9,7 @@ export * from './mail';
 export * from './mount';
 export * from './notification';
 export * from './owner';
-export * from './sse';
 export * from './people';
 export * from './public';
 export * from './settings';
+export * from './sse';

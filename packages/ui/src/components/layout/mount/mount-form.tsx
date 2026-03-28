@@ -1,11 +1,11 @@
-import {useState} from 'react';
-import {Input} from '../../input';
-import {Button} from '../../button';
-import {Label} from '../../label';
-import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '../../select';
-import {Alert, AlertDescription} from '../../alert';
-import {AlertTriangle, CheckCircle2, Loader2, Wifi} from 'lucide-react';
-import type {S3Config} from '@workspace/lib/types';
+import type { S3Config } from '@workspace/lib/types';
+import { AlertTriangle, CheckCircle2, Loader2, Wifi } from 'lucide-react';
+import { useState } from 'react';
+import { Alert, AlertDescription } from '../../alert';
+import { Button } from '../../button';
+import { Input } from '../../input';
+import { Label } from '../../label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../select';
 
 export type MountFormValues = {
     name: string;
@@ -14,7 +14,7 @@ export type MountFormValues = {
     s3Config?: S3Config;
 };
 
-type S3CheckResult = {ok: boolean; message: string} | null;
+type S3CheckResult = { ok: boolean; message: string } | null;
 
 type MountFormProps = {
     defaultStorageType?: MountFormValues['storageType'];
@@ -22,7 +22,7 @@ type MountFormProps = {
     initialValues?: Partial<MountFormValues>;
     onSubmit: (values: MountFormValues) => void | Promise<void>;
     onCancel?: () => void;
-    onS3Check?: (config: S3Config) => Promise<{ok: boolean; message: string}>;
+    onS3Check?: (config: S3Config) => Promise<{ ok: boolean; message: string }>;
     submitLabel?: string;
     isEdit?: boolean;
 };
@@ -47,10 +47,10 @@ export function MountForm({
 }: MountFormProps) {
     const [name, setName] = useState(initialValues?.name ?? '');
     const [storageType, setStorageType] = useState<MountFormValues['storageType']>(
-        initialValues?.storageType ?? defaultStorageType
+        initialValues?.storageType ?? defaultStorageType,
     );
     const [maxSizeMB, setMaxSizeMB] = useState(initialValues?.maxSizeMB ?? defaultMaxSizeMB);
-    const [s3Config, setS3Config] = useState<S3Config>(initialValues?.s3Config ?? {...EMPTY_S3});
+    const [s3Config, setS3Config] = useState<S3Config>(initialValues?.s3Config ?? { ...EMPTY_S3 });
     const [s3Check, setS3Check] = useState<S3CheckResult>(null);
     const [s3Checking, setS3Checking] = useState(false);
     const [submitting, setSubmitting] = useState(false);
@@ -71,14 +71,14 @@ export function MountForm({
             const result = await onS3Check(s3Config);
             setS3Check(result);
         } catch {
-            setS3Check({ok: false, message: 'Connection check failed'});
+            setS3Check({ ok: false, message: 'Connection check failed' });
         } finally {
             setS3Checking(false);
         }
     };
 
     const updateS3 = (field: keyof S3Config, value: string) => {
-        setS3Config(prev => ({...prev, [field]: value}));
+        setS3Config((prev) => ({ ...prev, [field]: value }));
         setS3Check(null);
     };
 
@@ -105,7 +105,7 @@ export function MountForm({
                 <Label>Name</Label>
                 <Input
                     value={name}
-                    onChange={e => setName(e.target.value)}
+                    onChange={(e) => setName(e.target.value)}
                     placeholder="e.g. Shared Files"
                     autoFocus={!isEdit}
                 />
@@ -115,7 +115,7 @@ export function MountForm({
                 <Label>Storage Type</Label>
                 <Select value={storageType} onValueChange={handleStorageTypeChange} disabled={isEdit}>
                     <SelectTrigger>
-                        <SelectValue/>
+                        <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem value="local">Local (full names)</SelectItem>
@@ -131,7 +131,7 @@ export function MountForm({
                     type="number"
                     min={10}
                     value={maxSizeMB}
-                    onChange={e => setMaxSizeMB(e.target.valueAsNumber || 10)}
+                    onChange={(e) => setMaxSizeMB(e.target.valueAsNumber || 10)}
                 />
             </div>
 
@@ -141,9 +141,10 @@ export function MountForm({
 
                     {isEdit && (
                         <Alert>
-                            <AlertTriangle className="h-4 w-4"/>
+                            <AlertTriangle className="h-4 w-4" />
                             <AlertDescription>
-                                Changing S3 settings on an existing mount can break access to stored files. Test the connection before saving.
+                                Changing S3 settings on an existing mount can break access to stored files. Test the
+                                connection before saving.
                             </AlertDescription>
                         </Alert>
                     )}
@@ -153,7 +154,7 @@ export function MountForm({
                             <Label>Endpoint</Label>
                             <Input
                                 value={s3Config.endpoint}
-                                onChange={e => updateS3('endpoint', e.target.value)}
+                                onChange={(e) => updateS3('endpoint', e.target.value)}
                                 placeholder="https://s3.amazonaws.com"
                             />
                         </div>
@@ -161,7 +162,7 @@ export function MountForm({
                             <Label>Bucket</Label>
                             <Input
                                 value={s3Config.bucket}
-                                onChange={e => updateS3('bucket', e.target.value)}
+                                onChange={(e) => updateS3('bucket', e.target.value)}
                                 placeholder="my-bucket"
                             />
                         </div>
@@ -169,7 +170,7 @@ export function MountForm({
                             <Label>Prefix</Label>
                             <Input
                                 value={s3Config.prefix}
-                                onChange={e => updateS3('prefix', e.target.value)}
+                                onChange={(e) => updateS3('prefix', e.target.value)}
                                 placeholder="optional/path"
                             />
                         </div>
@@ -177,7 +178,7 @@ export function MountForm({
                             <Label>Region</Label>
                             <Input
                                 value={s3Config.region}
-                                onChange={e => updateS3('region', e.target.value)}
+                                onChange={(e) => updateS3('region', e.target.value)}
                                 placeholder="us-east-1"
                             />
                         </div>
@@ -185,7 +186,7 @@ export function MountForm({
                             <Label>Access Key ID</Label>
                             <Input
                                 value={s3Config.accessKeyId}
-                                onChange={e => updateS3('accessKeyId', e.target.value)}
+                                onChange={(e) => updateS3('accessKeyId', e.target.value)}
                                 placeholder="AKIA..."
                             />
                         </div>
@@ -194,7 +195,7 @@ export function MountForm({
                             <Input
                                 type="password"
                                 value={s3Config.secretAccessKey}
-                                onChange={e => updateS3('secretAccessKey', e.target.value)}
+                                onChange={(e) => updateS3('secretAccessKey', e.target.value)}
                                 placeholder="••••••••"
                             />
                         </div>
@@ -209,20 +210,22 @@ export function MountForm({
                             disabled={!s3Valid || s3Checking}
                         >
                             {s3Checking ? (
-                                <Loader2 className="h-4 w-4 mr-1 animate-spin"/>
+                                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
                             ) : (
-                                <Wifi className="h-4 w-4 mr-1"/>
+                                <Wifi className="h-4 w-4 mr-1" />
                             )}
                             Test Connection
                         </Button>
 
                         {/* Hardcoded green is intentional: no theme token for success state */}
                         {s3Check && (
-                            <span className={`text-sm flex items-center gap-1 ${s3Check.ok ? 'text-green-600 dark:text-green-400' : 'text-destructive'}`}>
+                            <span
+                                className={`text-sm flex items-center gap-1 ${s3Check.ok ? 'text-green-600 dark:text-green-400' : 'text-destructive'}`}
+                            >
                                 {s3Check.ok ? (
-                                    <CheckCircle2 className="h-4 w-4"/>
+                                    <CheckCircle2 className="h-4 w-4" />
                                 ) : (
-                                    <AlertTriangle className="h-4 w-4"/>
+                                    <AlertTriangle className="h-4 w-4" />
                                 )}
                                 {s3Check.message}
                             </span>
@@ -233,7 +236,9 @@ export function MountForm({
 
             <div className="flex items-center justify-end gap-2 pt-2">
                 {onCancel && (
-                    <Button variant="outline" onClick={onCancel}>Cancel</Button>
+                    <Button variant="outline" onClick={onCancel}>
+                        Cancel
+                    </Button>
                 )}
                 <Button onClick={handleSubmit} disabled={!canSubmit || submitting}>
                     {submitting ? 'Saving...' : submitLabel}

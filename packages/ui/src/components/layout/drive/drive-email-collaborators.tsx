@@ -1,13 +1,13 @@
-import {useEffect, useState} from 'react';
-import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
-import {Button} from '@workspace/ui/components/button';
-import {Input} from '@workspace/ui/components/input';
-import {Textarea} from '@workspace/ui/components/textarea';
-import {Label} from '@workspace/ui/components/label';
-import {Checkbox} from '@workspace/ui/components/checkbox';
-import {useEmailCollaborators} from '@workspace/lib/drive';
 import {getDocumentUrl} from '@workspace/lib/api';
+import {useEmailCollaborators} from '@workspace/lib/drive';
 import type {DrivePath} from '@workspace/lib/types/drive';
+import {Button} from '@workspace/ui/components/button';
+import {Checkbox} from '@workspace/ui/components/checkbox';
+import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
+import {Input} from '@workspace/ui/components/input';
+import {Label} from '@workspace/ui/components/label';
+import {Textarea} from '@workspace/ui/components/textarea';
+import {useEffect, useState} from 'react';
 
 type DriveEmailCollaboratorsProps = {
     path: DrivePath;
@@ -38,15 +38,18 @@ export function DriveEmailCollaborators({path, open, onOpenChange}: DriveEmailCo
         const documentUrl = getDocumentUrl(path);
         if (!documentUrl) return;
 
-        emailMutation.mutate({
-            pathId: path.id,
-            subject,
-            message,
-            documentUrl,
-            sendCopyToSelf,
-        }, {
-            onSuccess: () => onOpenChange(false),
-        });
+        emailMutation.mutate(
+            {
+                pathId: path.id,
+                subject,
+                message,
+                documentUrl,
+                sendCopyToSelf,
+            },
+            {
+                onSuccess: () => onOpenChange(false),
+            },
+        );
     };
 
     return (
@@ -61,7 +64,7 @@ export function DriveEmailCollaborators({path, open, onOpenChange}: DriveEmailCo
                         <Input
                             id="email-subject"
                             value={subject}
-                            onChange={e => setSubject(e.target.value)}
+                            onChange={(e) => setSubject(e.target.value)}
                             maxLength={200}
                         />
                     </div>
@@ -72,7 +75,7 @@ export function DriveEmailCollaborators({path, open, onOpenChange}: DriveEmailCo
                             autoFocus
                             placeholder="Write a message..."
                             value={message}
-                            onChange={e => setMessage(e.target.value)}
+                            onChange={(e) => setMessage(e.target.value)}
                             className="min-h-[100px] resize-none"
                             maxLength={5000}
                         />
@@ -81,7 +84,7 @@ export function DriveEmailCollaborators({path, open, onOpenChange}: DriveEmailCo
                         <Checkbox
                             id="email-copy-self"
                             checked={sendCopyToSelf}
-                            onCheckedChange={v => setSendCopyToSelf(v === true)}
+                            onCheckedChange={(v) => setSendCopyToSelf(v === true)}
                         />
                         <Label htmlFor="email-copy-self" className="text-sm font-normal">
                             Send copy to self
@@ -92,7 +95,10 @@ export function DriveEmailCollaborators({path, open, onOpenChange}: DriveEmailCo
                     <Button variant="outline" onClick={() => onOpenChange(false)} disabled={emailMutation.isPending}>
                         Cancel
                     </Button>
-                    <Button onClick={handleSend} disabled={!subject.trim() || !message.trim() || emailMutation.isPending}>
+                    <Button
+                        onClick={handleSend}
+                        disabled={!subject.trim() || !message.trim() || emailMutation.isPending}
+                    >
                         {emailMutation.isPending ? 'Sending...' : 'Send'}
                     </Button>
                 </DialogFooter>

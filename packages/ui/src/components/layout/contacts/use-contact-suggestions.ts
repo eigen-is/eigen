@@ -1,14 +1,11 @@
-import {useMemo} from 'react';
-import {ContactSuggestion} from './types';
-import {useContacts} from '@workspace/lib/contacts';
-import {usePublicConfig} from '@workspace/lib/public';
+import { useContacts } from '@workspace/lib/contacts';
+import { usePublicConfig } from '@workspace/lib/public';
+import { useMemo } from 'react';
+import type { ContactSuggestion } from './types';
 
-export function useContactSuggestions(
-    query: string,
-    onlyEigenIsMails: boolean = false
-) {
-    const {data: contacts, isLoading, error} = useContacts();
-    const {data: config} = usePublicConfig();
+export function useContactSuggestions(query: string, onlyEigenIsMails: boolean = false) {
+    const { data: contacts, isLoading, error } = useContacts();
+    const { data: config } = usePublicConfig();
     const domain = config?.domain ?? 'eigen.is';
 
     const lowerQuery = query.toLowerCase().split(',').pop()?.trim() || '';
@@ -19,15 +16,14 @@ export function useContactSuggestions(
         const results: ContactSuggestion[] = [];
 
         for (const contact of contacts) {
-
             const fullName = `${contact.firstName} ${contact.lastName}`.toLowerCase();
             const nameMatch = fullName.includes(lowerQuery);
-            const emailMatch = contact.email.find(email => email.toLowerCase().includes(lowerQuery));
+            const emailMatch = contact.email.find((email) => email.toLowerCase().includes(lowerQuery));
 
             if (nameMatch || emailMatch) {
                 let bestEmail = emailMatch || contact.email[0] || '';
 
-                const eigenIsMail = contact.email.find(email => email.endsWith(`@${domain}`));
+                const eigenIsMail = contact.email.find((email) => email.endsWith(`@${domain}`));
 
                 if (eigenIsMail && !emailMatch) {
                     bestEmail = eigenIsMail;
@@ -45,7 +41,7 @@ export function useContactSuggestions(
                     id: contact.id,
                     displayName: `${contact.firstName} ${contact.lastName}`,
                     email: bestEmail,
-                    allEmails: contact.email
+                    allEmails: contact.email,
                 });
             }
         }
@@ -56,6 +52,6 @@ export function useContactSuggestions(
     return {
         suggestions,
         isLoading,
-        error
+        error,
     };
 }

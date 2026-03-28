@@ -1,13 +1,19 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
-import {LoadingState, NotFound} from "@workspace/ui";
+import {openDocument} from '@workspace/lib/api';
 import {useFolderContent, usePathInfo} from '@workspace/lib/drive';
-import {useContext, useEffect} from "react";
-import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
-import {DrivePath, DriveSearchParams, isDocumentType, isFolderType, isInlineEditable} from "@workspace/lib/types/drive";
-import {useLayout} from "@workspace/ui/components/layout/app/layout-context.tsx";
-import {DriveContext} from "./__root";
+import {
+    type DrivePath,
+    type DriveSearchParams,
+    isDocumentType,
+    isFolderType,
+    isInlineEditable,
+} from '@workspace/lib/types/drive';
+import {LoadingState, NotFound} from '@workspace/ui';
+import {useLayout} from '@workspace/ui/components/layout/app/layout-context.tsx';
+import {DriveLayout} from '@workspace/ui/components/layout/drive/drive-layout';
 import {usePreview} from '@workspace/ui/components/layout/preview-provider';
-import {openDocument} from "@workspace/lib/api";
+import {useContext, useEffect} from 'react';
+import {DriveContext} from './__root';
 
 export const Route = createFileRoute('/_auth/fs/$ownerId/$mountId/$pathId')({
     component: DriveRoute,
@@ -31,7 +37,7 @@ function DriveRoute() {
         if (pathId === 'root' && rootPath) {
             navigate({
                 to: Route.fullPath,
-                params: {ownerId: rootPath.ownerId, mountId: rootPath.mountId, pathId: rootPath.id}
+                params: {ownerId: rootPath.ownerId, mountId: rootPath.mountId, pathId: rootPath.id},
             });
         }
     }, [pathId, rootPath, navigate, ownerId]);
@@ -43,7 +49,7 @@ function DriveRoute() {
     const {
         data: folderContents = [],
         isLoading: isFolderContentLoading,
-        error: isFolderContentLoadingError
+        error: isFolderContentLoadingError,
     } = useFolderContent(ownerId, mountId, skipDataFetch ? '' : pathId);
     const {data: selectedPath = null} = usePathInfo(ownerId, mountId, pid);
     const {data: currentPath = null} = usePathInfo(ownerId, mountId, pathId);
@@ -60,13 +66,13 @@ function DriveRoute() {
             navigate({
                 to: Route.fullPath,
                 params: {ownerId, mountId, pathId: path.id},
-                search: {pid: undefined}
+                search: {pid: undefined},
             });
         } else {
             navigate({
                 to: Route.fullPath,
                 params: {ownerId, mountId, pathId},
-                search: {pid: path.id}
+                search: {pid: path.id},
             });
         }
     };
@@ -80,12 +86,15 @@ function DriveRoute() {
             navigate({
                 to: Route.fullPath,
                 params: {ownerId, mountId, pathId: path.id},
-                search: {pid: undefined}
+                search: {pid: undefined},
             });
         } else if (isDocumentType(path.type)) {
             openDocument(path);
         } else if (isInlineEditable(path.mimeType, path.name)) {
-            navigate({to: '/edit/$ownerId/$mountId/$pathId', params: {ownerId: path.ownerId, mountId: path.mountId, pathId: path.id}});
+            navigate({
+                to: '/edit/$ownerId/$mountId/$pathId',
+                params: {ownerId: path.ownerId, mountId: path.mountId, pathId: path.id},
+            });
         } else {
             openPreview(path, folderContents);
         }
@@ -96,18 +105,18 @@ function DriveRoute() {
         navigate({
             to: Route.fullPath,
             params: {ownerId, mountId, pathId},
-            search: {pid: undefined}
+            search: {pid: undefined},
         });
     };
 
     // Callback called by DriveLayout after actions
-    const handleAfterAction = (actionType: string, data: any) => {
+    const handleAfterAction = (actionType: string, data: Record<string, unknown>) => {
         // Navigate away from deleted item if it was selected
         if (actionType === 'delete' && pid === data.id) {
             navigate({
                 to: Route.fullPath,
                 params: {ownerId, mountId, pathId: pathId},
-                search: {pid: undefined}
+                search: {pid: undefined},
             });
         }
     };

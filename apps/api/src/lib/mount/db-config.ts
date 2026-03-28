@@ -8,7 +8,8 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
     migrations: [
         {
             version: 1,
-            up: (db) => db.exec(`
+            up: (db) =>
+                db.exec(`
                 CREATE TABLE IF NOT EXISTS paths (
                     id TEXT PRIMARY KEY,
                     file TEXT NOT NULL DEFAULT '',
@@ -53,7 +54,7 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
                 CREATE INDEX IF NOT EXISTS idx_paths_type_parentId ON paths(type, parentId);
                 CREATE INDEX IF NOT EXISTS idx_paths_to_labels_pathId ON paths_to_labels(pathId);
                 CREATE INDEX IF NOT EXISTS idx_paths_to_labels_labelId ON paths_to_labels(labelId);
-            `)
-        }
-    ]
+            `),
+        },
+    ],
 };

@@ -3,7 +3,7 @@ export type EigenFont = {
     family: string;
     category: 'sans-serif' | 'serif' | 'monospace' | 'hand-drawn';
     weights: number[];
-}
+};
 
 export const EIGEN_FONTS: EigenFont[] = [
     {name: 'Inter', family: "'Inter', sans-serif", category: 'sans-serif', weights: [400, 500, 600, 700]},
@@ -15,6 +15,6 @@ export const EIGEN_FONTS: EigenFont[] = [
 export const DEFAULT_FONT = EIGEN_FONTS[0];
 
 export function getFontFamily(fontName: string): string {
-    const font = EIGEN_FONTS.find(f => f.name === fontName);
+    const font = EIGEN_FONTS.find((f) => f.name === fontName);
     return font?.family ?? `'${fontName}', sans-serif`;
 }

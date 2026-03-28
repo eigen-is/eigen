@@ -1,9 +1,9 @@
-import {type QueryClient, useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
-import {settingsApi} from '@workspace/lib/api';
-import type {S3Config} from '@workspace/lib/types';
-import {settingsKeys} from './use-server-settings';
-import {AppError, onMutationError} from '../../api-error';
-import {toast} from 'sonner';
+import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { settingsApi } from '@workspace/lib/api';
+import type { S3Config } from '@workspace/lib/types';
+import { toast } from 'sonner';
+import { AppError, onMutationError } from '../../api-error';
+import { settingsKeys } from './use-server-settings';
 
 const s3ConfigKeys = {
     all: [...settingsKeys.all, 's3config'] as const,
@@ -38,5 +38,5 @@ export function useUpdateServerS3Config() {
 }
 
 export function invalidateServerS3Config(queryClient: QueryClient): void {
-    queryClient.invalidateQueries({queryKey: s3ConfigKeys.all});
+    queryClient.invalidateQueries({ queryKey: s3ConfigKeys.all });
 }

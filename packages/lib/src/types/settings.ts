@@ -1,4 +1,4 @@
-import type {S3Config} from './mount';
+import type { S3Config } from './mount';
 
 export type MountSettings = {
     storageType: 'local' | 'local-key' | 's3';
@@ -42,8 +42,11 @@ export type ServerSettings = {
 
 export function mapStorageType(type: ServerStorageType): MountSettings['storageType'] {
     switch (type) {
-        case 'local-id': return 'local-key';
-        case 'local-fullnames': return 'local';
-        case 's3': return 's3';
+        case 'local-id':
+            return 'local-key';
+        case 'local-fullnames':
+            return 'local';
+        case 's3':
+            return 's3';
     }
 }

@@ -1,14 +1,14 @@
 import * as fs from 'node:fs';
 import {eq} from 'drizzle-orm';
-import {getUserById} from './user';
-import {getUserHomePath} from '../config/paths';
-import {evictHome} from '../home/get-home';
-import {removeEntriesForTarget} from '../share/registry';
-import {auth, getAuthDrizzleDb} from '../auth/auth';
-import {ApiError} from '../core';
-import {shareRegistry} from '../share/schema';
-import {getEigenDb} from '../share/db';
 import {member, teamMember} from '../../../auth-schema';
+import {auth, getAuthDrizzleDb} from '../auth/auth';
+import {getUserHomePath} from '../config/paths';
+import {ApiError} from '../core';
+import {evictHome} from '../home/get-home';
+import {getEigenDb} from '../share/db';
+import {removeEntriesForTarget} from '../share/registry';
+import {shareRegistry} from '../share/schema';
+import {getUserById} from './user';
 
 export async function deleteUserCompletely(userId: string, requestHeaders: Headers): Promise<void> {
     const user = await getUserById(userId);
@@ -27,9 +27,7 @@ export async function deleteUserCompletely(userId: string, requestHeaders: Heade
 
     // 3. Clean up share registry — entries FROM this user and TO this user
     const eigenDb = await getEigenDb();
-    eigenDb.delete(shareRegistry)
-        .where(eq(shareRegistry.fromUserId, userId))
-        .run();
+    eigenDb.delete(shareRegistry).where(eq(shareRegistry.fromUserId, userId)).run();
     await removeEntriesForTarget(user.email);
 
     // 4. Remove org/team memberships explicitly (PRAGMA foreign_keys is OFF by default

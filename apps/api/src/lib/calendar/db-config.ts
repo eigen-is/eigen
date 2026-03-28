@@ -8,7 +8,8 @@ export const CALENDAR_DB_CONFIG: DatabaseConfig<typeof schema> = {
     migrations: [
         {
             version: 1,
-            up: (db) => db.exec(`
+            up: (db) =>
+                db.exec(`
                 CREATE TABLE IF NOT EXISTS calendars (
                     id TEXT PRIMARY KEY,
                     name TEXT NOT NULL,
@@ -66,7 +67,7 @@ export const CALENDAR_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     createdAt INTEGER DEFAULT (unixepoch()),
                     updatedAt INTEGER DEFAULT (unixepoch())
                 );
-            `)
-        }
-    ]
+            `),
+        },
+    ],
 };

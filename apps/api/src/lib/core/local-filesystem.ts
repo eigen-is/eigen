@@ -1,7 +1,7 @@
-import type {BunFile} from 'bun';
-import * as path from 'path';
 import * as fs from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
+import * as path from 'node:path';
+import type {BunFile} from 'bun';
 
 export class LocalFilesystem {
     private baseDir: string;
@@ -65,7 +65,7 @@ export class LocalFilesystem {
         const fullPath = this.getFilePath(dirPath);
         try {
             const entries = await fsPromises.readdir(fullPath, {withFileTypes: true});
-            return entries.filter(e => e.isFile()).map(e => e.name);
+            return entries.filter((e) => e.isFile()).map((e) => e.name);
         } catch {
             return [];
         }
@@ -75,7 +75,7 @@ export class LocalFilesystem {
         const fullPath = this.getFilePath(dirPath);
         try {
             const entries = await fsPromises.readdir(fullPath, {withFileTypes: true});
-            return entries.filter(e => e.isDirectory()).map(e => e.name);
+            return entries.filter((e) => e.isDirectory()).map((e) => e.name);
         } catch {
             return [];
         }
@@ -166,12 +166,12 @@ export class LocalFilesystem {
                     fs.mkdirSync(dir, {recursive: true});
                 }
                 return Bun.write(fullPath, data);
-            }
+            },
         };
     }
 
     watch(relativePath: string, callback: fs.WatchListener<string>): fs.FSWatcher {
-        return fs.watch(this.getFilePath(relativePath), callback)
+        return fs.watch(this.getFilePath(relativePath), callback);
     }
 
     pathJoin(...paths: string[]): string {

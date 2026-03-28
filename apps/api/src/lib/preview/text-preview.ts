@@ -1,30 +1,63 @@
-import {getTextPreviewMode, type TextPreviewMode} from '@workspace/lib/constants';
+import { getTextPreviewMode, type TextPreviewMode } from '@workspace/lib/constants';
 import DOMPurify from 'isomorphic-dompurify';
 
 const LANGUAGE_MAP: Record<string, string> = {
-    '.js': 'javascript', '.jsx': 'javascript', '.mjs': 'javascript', '.cjs': 'javascript',
-    '.ts': 'typescript', '.tsx': 'typescript', '.mts': 'typescript', '.cts': 'typescript',
-    '.py': 'python', '.rs': 'rust', '.go': 'go', '.rb': 'ruby', '.php': 'php',
-    '.java': 'java', '.c': 'c', '.cpp': 'cpp', '.h': 'c', '.hpp': 'cpp',
-    '.swift': 'swift', '.kt': 'kotlin', '.scala': 'scala', '.sql': 'sql',
-    '.sh': 'bash', '.bash': 'bash', '.zsh': 'bash', '.fish': 'bash',
-    '.json': 'json', '.yaml': 'yaml', '.yml': 'yaml', '.xml': 'xml',
-    '.html': 'html', '.htm': 'html', '.css': 'css', '.csv': 'plaintext',
-    '.graphql': 'graphql', '.gql': 'graphql',
-    '.svelte': 'html', '.vue': 'html', '.astro': 'html',
-    '.r': 'r', '.lua': 'lua', '.zig': 'zig', '.dart': 'dart',
-    '.diff': 'diff', '.patch': 'diff',
-    '.md': 'markdown', '.markdown': 'markdown',
+    '.js': 'javascript',
+    '.jsx': 'javascript',
+    '.mjs': 'javascript',
+    '.cjs': 'javascript',
+    '.ts': 'typescript',
+    '.tsx': 'typescript',
+    '.mts': 'typescript',
+    '.cts': 'typescript',
+    '.py': 'python',
+    '.rs': 'rust',
+    '.go': 'go',
+    '.rb': 'ruby',
+    '.php': 'php',
+    '.java': 'java',
+    '.c': 'c',
+    '.cpp': 'cpp',
+    '.h': 'c',
+    '.hpp': 'cpp',
+    '.swift': 'swift',
+    '.kt': 'kotlin',
+    '.scala': 'scala',
+    '.sql': 'sql',
+    '.sh': 'bash',
+    '.bash': 'bash',
+    '.zsh': 'bash',
+    '.fish': 'bash',
+    '.json': 'json',
+    '.yaml': 'yaml',
+    '.yml': 'yaml',
+    '.xml': 'xml',
+    '.html': 'html',
+    '.htm': 'html',
+    '.css': 'css',
+    '.csv': 'plaintext',
+    '.graphql': 'graphql',
+    '.gql': 'graphql',
+    '.svelte': 'html',
+    '.vue': 'html',
+    '.astro': 'html',
+    '.r': 'r',
+    '.lua': 'lua',
+    '.zig': 'zig',
+    '.dart': 'dart',
+    '.diff': 'diff',
+    '.patch': 'diff',
+    '.md': 'markdown',
+    '.markdown': 'markdown',
     '.dockerfile': 'dockerfile',
-    '.toml': 'ini', '.ini': 'ini', '.conf': 'ini', '.cfg': 'ini',
+    '.toml': 'ini',
+    '.ini': 'ini',
+    '.conf': 'ini',
+    '.cfg': 'ini',
 };
 
 function escapeHtml(text: string): string {
-    return text
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
+    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function getLanguageFromFileName(fileName: string): string | undefined {
@@ -41,20 +74,24 @@ export type TextPreviewResult = {
     mode: TextPreviewMode;
 };
 
-export async function generateTextPreview(content: string, mimeType: string, fileName: string): Promise<TextPreviewResult> {
+export async function generateTextPreview(
+    content: string,
+    mimeType: string,
+    fileName: string,
+): Promise<TextPreviewResult> {
     const mode = getTextPreviewMode(mimeType, fileName)!;
 
     if (mode === 'markdown') {
         const MarkdownIt = (await import('markdown-it')).default;
-        const md = new MarkdownIt({html: false, linkify: true, typographer: true});
-        const body = DOMPurify.sanitize(md.render(content), {FORCE_BODY: true});
-        return {body, mode};
+        const md = new MarkdownIt({ html: false, linkify: true, typographer: true });
+        const body = DOMPurify.sanitize(md.render(content), { FORCE_BODY: true });
+        return { body, mode };
     }
 
     if (mode === 'code') {
         try {
-            const {createLowlight} = await import('lowlight');
-            const {common} = await import('lowlight');
+            const { createLowlight } = await import('lowlight');
+            const { common } = await import('lowlight');
             const lowlight = createLowlight(common);
 
             const lang = getLanguageFromFileName(fileName);
@@ -66,23 +103,25 @@ export async function generateTextPreview(content: string, mimeType: string, fil
                 const tree = lowlight.highlightAuto(content);
                 highlighted = toHtml(tree);
             }
-            return {body: `<pre><code>${highlighted}</code></pre>`, mode};
+            return { body: `<pre><code>${highlighted}</code></pre>`, mode };
         } catch {
-            return {body: `<pre><code>${escapeHtml(content)}</code></pre>`, mode};
+            return { body: `<pre><code>${escapeHtml(content)}</code></pre>`, mode };
         }
     }
 
     // plaintext
-    return {body: `<pre><code>${escapeHtml(content)}</code></pre>`, mode};
+    return { body: `<pre><code>${escapeHtml(content)}</code></pre>`, mode };
 }
 
-function toHtml(tree: {
+type HastNode = {
     type: string;
-    children?: any[];
+    children?: HastNode[];
     value?: string;
     tagName?: string;
-    properties?: Record<string, any>
-}): string {
+    properties?: Record<string, unknown>;
+};
+
+function toHtml(tree: HastNode): string {
     if (tree.type === 'text') return escapeHtml(tree.value || '');
     if (tree.type === 'element' && tree.tagName) {
         const props = tree.properties || {};

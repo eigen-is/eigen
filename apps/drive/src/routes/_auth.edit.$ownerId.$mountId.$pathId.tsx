@@ -1,6 +1,6 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
-import {NativeFileEditor} from "../components/editor/native-file-editor";
-import {usePathInfo} from "@workspace/lib/drive";
+import {usePathInfo} from '@workspace/lib/drive';
+import {NativeFileEditor} from '../components/editor/native-file-editor';
 
 export const Route = createFileRoute('/_auth/edit/$ownerId/$mountId/$pathId')({
     component: EditRoute,

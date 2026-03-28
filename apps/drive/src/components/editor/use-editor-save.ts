@@ -1,6 +1,6 @@
-import {useCallback, useEffect, useRef, useState} from 'react';
-import {useHotkey} from '@tanstack/react-hotkeys';
-import {useFileSave} from '@workspace/lib/editor';
+import { useHotkey } from '@tanstack/react-hotkeys';
+import { useFileSave } from '@workspace/lib/editor';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 type SaveState = 'saved' | 'saving' | 'unsaved' | 'conflict';
 
@@ -13,7 +13,7 @@ type EditorSaveOptions = {
     getFrontmatter?: () => string | undefined;
 };
 
-export function useEditorSave({ownerId, mountId, pathId, updatedAt, getContent, getFrontmatter}: EditorSaveOptions) {
+export function useEditorSave({ ownerId, mountId, pathId, updatedAt, getContent, getFrontmatter }: EditorSaveOptions) {
     const [saveState, setSaveState] = useState<SaveState>('saved');
     const [showConflict, setShowConflict] = useState(false);
     const updatedAtRef = useRef(updatedAt);
@@ -25,30 +25,33 @@ export function useEditorSave({ownerId, mountId, pathId, updatedAt, getContent, 
         setSaveState('unsaved');
     }, []);
 
-    const doSave = useCallback(async (force = false): Promise<boolean> => {
-        if (!isDirtyRef.current && !force) return true;
-        setSaveState('saving');
-        try {
-            const result = await fileSave.mutateAsync({
-                content: getContent(),
-                frontmatter: getFrontmatter?.(),
-                expectedUpdatedAt: updatedAtRef.current,
-                force,
-            });
-            if (result.conflict) {
-                setSaveState('conflict');
-                setShowConflict(true);
+    const doSave = useCallback(
+        async (force = false): Promise<boolean> => {
+            if (!isDirtyRef.current && !force) return true;
+            setSaveState('saving');
+            try {
+                const result = await fileSave.mutateAsync({
+                    content: getContent(),
+                    frontmatter: getFrontmatter?.(),
+                    expectedUpdatedAt: updatedAtRef.current,
+                    force,
+                });
+                if (result.conflict) {
+                    setSaveState('conflict');
+                    setShowConflict(true);
+                    return false;
+                }
+                if (result.updatedAt) updatedAtRef.current = result.updatedAt;
+                isDirtyRef.current = false;
+                setSaveState('saved');
+                return true;
+            } catch {
+                setSaveState('unsaved');
                 return false;
             }
-            if (result.updatedAt) updatedAtRef.current = result.updatedAt;
-            isDirtyRef.current = false;
-            setSaveState('saved');
-            return true;
-        } catch {
-            setSaveState('unsaved');
-            return false;
-        }
-    }, [fileSave, getContent, getFrontmatter]);
+        },
+        [fileSave, getContent, getFrontmatter],
+    );
 
     useHotkey('Mod+S', (e) => {
         e.preventDefault();

@@ -1,32 +1,32 @@
-import {useEffect, useMemo, useState} from 'react';
-import {AlignLeft, Calendar, Clock, MapPin, UsersRound} from 'lucide-react';
-import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
+import {useAuth} from '@workspace/lib/auth';
+import {useCalendars, useCreateEvent, useSharedCalendars} from '@workspace/lib/calendar';
+import type {Attendee} from '@workspace/lib/types/calendar';
 import {Button} from '@workspace/ui/components/button';
+import {Checkbox} from '@workspace/ui/components/checkbox';
+import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
 import {Input} from '@workspace/ui/components/input';
-import {Textarea} from '@workspace/ui/components/textarea';
 import {Label} from '@workspace/ui/components/label';
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@workspace/ui/components/select';
-import {Checkbox} from '@workspace/ui/components/checkbox';
-import {useCalendars, useCreateEvent, useSharedCalendars} from '@workspace/lib/calendar';
-import {useAuth} from '@workspace/lib/auth';
-import type {Attendee} from '@workspace/lib/types/calendar';
+import {Textarea} from '@workspace/ui/components/textarea';
+import {AlignLeft, Calendar, Clock, MapPin, UsersRound} from 'lucide-react';
+import {useEffect, useMemo, useState} from 'react';
+import {AttendeeEditor} from './attendee-editor';
 import {RecurrencePicker} from './recurrence-picker';
 import {addMinutes, roundToNext15Minutes, TimeSelect, timeToMinutes} from './time-select';
-import {AttendeeEditor} from './attendee-editor';
 
 type CalendarOption = {
     id: string;
     name: string;
     color: string;
     ownerId: string;
-}
+};
 
 type CreateEventDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     defaultDate?: Date;
     defaultCalendarId?: string;
-}
+};
 
 function toLocalDateString(date: Date): string {
     const y = date.getFullYear();
@@ -46,10 +46,15 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
     const {data: sharedCalendars = []} = useSharedCalendars(ownerId);
 
     const calendarOptions = useMemo(() => {
-        const options: CalendarOption[] = calendars.map(c => ({id: c.id, name: c.name, color: c.color, ownerId}));
+        const options: CalendarOption[] = calendars.map((c) => ({id: c.id, name: c.name, color: c.color, ownerId}));
         for (const sc of sharedCalendars) {
             if (sc.permission === 'write') {
-                options.push({id: sc.calendarId, name: sc.calendarName, color: sc.color || sc.calendarColor, ownerId: sc.ownerUserId});
+                options.push({
+                    id: sc.calendarId,
+                    name: sc.calendarName,
+                    color: sc.color || sc.calendarColor,
+                    ownerId: sc.ownerUserId,
+                });
             }
         }
         return options;
@@ -68,18 +73,18 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
     const [attendees, setAttendees] = useState<Attendee[]>([]);
     const [isLoading, setIsLoading] = useState(false);
 
-    const selectedCal = calendarOptions.find(c => `${c.ownerId}:${c.id}` === selectedCalKey);
+    const selectedCal = calendarOptions.find((c) => `${c.ownerId}:${c.id}` === selectedCalKey);
     const createEvent = useCreateEvent(selectedCal?.ownerId || ownerId);
 
     useEffect(() => {
         if (open) {
             const now = new Date();
             const rounded = roundToNext15Minutes(now);
-            
+
             // Use the date from defaultDate if provided, otherwise use today's date
             const targetDate = defaultDate ? new Date(defaultDate) : rounded;
             targetDate.setHours(rounded.getHours(), rounded.getMinutes(), 0, 0);
-            
+
             const dateStr = toLocalDateString(targetDate);
             const start = toTimeString(targetDate);
             const end = addMinutes(start, 30);
@@ -88,7 +93,7 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
             setDescription('');
             setLocation('');
             const defaultCal = defaultCalendarId
-                ? calendarOptions.find(c => c.id === defaultCalendarId)
+                ? calendarOptions.find((c) => c.id === defaultCalendarId)
                 : calendarOptions[0];
             setSelectedCalKey(defaultCal ? `${defaultCal.ownerId}:${defaultCal.id}` : '');
             setAllDay(false);
@@ -103,12 +108,12 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
 
     const handleStartTimeChange = (newStart: string) => {
         setStartTime(newStart);
-        
+
         // Calculate minimum end time (start + 15 minutes)
         const minEnd = addMinutes(newStart, 15);
         const currentEndMinutes = timeToMinutes(endTime);
         const minEndMinutes = timeToMinutes(minEnd);
-        
+
         // If current end time is before the new minimum, update it to minimum + 15 minutes
         // Otherwise, keep the current end time if it's still valid
         if (currentEndMinutes < minEndMinutes) {
@@ -129,8 +134,8 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
             let endTimestamp: number;
 
             if (allDay) {
-                const sd = new Date(startDate + 'T00:00:00Z');
-                const ed = new Date(endDate + 'T00:00:00Z');
+                const sd = new Date(`${startDate}T00:00:00Z`);
+                const ed = new Date(`${endDate}T00:00:00Z`);
                 ed.setUTCDate(ed.getUTCDate() + 1);
                 startTimestamp = Math.floor(sd.getTime() / 1000);
                 endTimestamp = Math.floor(ed.getTime() / 1000);
@@ -182,23 +187,39 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
                         <div className="flex-1 space-y-3">
                             {allDay ? (
                                 <div className="flex items-center gap-2">
-                                    <Input type="date" value={startDate}
-                                           onChange={(e) => setStartDate(e.target.value)} className="flex-1 h-8 text-sm"/>
+                                    <Input
+                                        type="date"
+                                        value={startDate}
+                                        onChange={(e) => setStartDate(e.target.value)}
+                                        className="flex-1 h-8 text-sm"
+                                    />
                                     <span className="text-muted-foreground text-sm">to</span>
-                                    <Input type="date" value={endDate}
-                                           onChange={(e) => setEndDate(e.target.value)} className="flex-1 h-8 text-sm"/>
+                                    <Input
+                                        type="date"
+                                        value={endDate}
+                                        onChange={(e) => setEndDate(e.target.value)}
+                                        className="flex-1 h-8 text-sm"
+                                    />
                                 </div>
                             ) : (
                                 <div className="flex items-center gap-2">
-                                    <Input type="date" value={startDate}
-                                           onChange={(e) => {
-                                               setStartDate(e.target.value);
-                                               setEndDate(e.target.value);
-                                           }}
-                                           className="h-8 text-sm"/>
+                                    <Input
+                                        type="date"
+                                        value={startDate}
+                                        onChange={(e) => {
+                                            setStartDate(e.target.value);
+                                            setEndDate(e.target.value);
+                                        }}
+                                        className="h-8 text-sm"
+                                    />
                                     <TimeSelect value={startTime} onChange={handleStartTimeChange}/>
                                     <span className="text-muted-foreground text-sm">–</span>
-                                    <TimeSelect value={endTime} onChange={setEndTime} referenceTime={startTime} minTime={getMinEndTime()}/>
+                                    <TimeSelect
+                                        value={endTime}
+                                        onChange={setEndTime}
+                                        referenceTime={startTime}
+                                        minTime={getMinEndTime()}
+                                    />
                                 </div>
                             )}
 
@@ -222,11 +243,16 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
                                 <RecurrencePicker
                                     value={rruleString}
                                     onChange={setRruleString}
-                                    startDate={new Date(startDate + 'T00:00:00')}
+                                    startDate={new Date(`${startDate}T00:00:00`)}
                                 />
                                 {!allDay && (
                                     <span className="text-xs text-muted-foreground ml-auto">
-                                        {Intl.DateTimeFormat().resolvedOptions().timeZone.split('/').pop()?.replace(/_/g, ' ')} time zone
+                                        {Intl.DateTimeFormat()
+                                            .resolvedOptions()
+                                            .timeZone.split('/')
+                                            .pop()
+                                            ?.replace(/_/g, ' ')}{' '}
+                                        time zone
                                     </span>
                                 )}
                             </div>
@@ -276,8 +302,10 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
                                     {calendarOptions.map((cal) => (
                                         <SelectItem key={`${cal.ownerId}:${cal.id}`} value={`${cal.ownerId}:${cal.id}`}>
                                             <div className="flex items-center gap-2">
-                                                <div className="h-3 w-3 rounded-full shrink-0"
-                                                     style={{backgroundColor: cal.color}}/>
+                                                <div
+                                                    className="h-3 w-3 rounded-full shrink-0"
+                                                    style={{backgroundColor: cal.color}}
+                                                />
                                                 {cal.name}
                                             </div>
                                         </SelectItem>

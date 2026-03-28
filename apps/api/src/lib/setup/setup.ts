@@ -1,16 +1,16 @@
-import {drizzle} from "drizzle-orm/bun-sqlite";
-import {auth} from "../auth/auth";
+import { randomBytes } from 'node:crypto';
+import { existsSync, mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { drizzle } from 'drizzle-orm/bun-sqlite';
+import { auth } from '../auth/auth';
+import { getServerDataPath } from '../config/paths';
 import {
-    getServerConfig,
     isSetupRequired as checkSetupRequired,
+    getServerConfig,
+    type ServerConfig,
     saveServerConfig,
-    type ServerConfig
-} from "../config/server-config";
-import {updateServerSettings} from "../config/server-settings";
-import {existsSync, mkdirSync} from "fs";
-import {dirname} from "path";
-import {randomBytes} from "crypto";
-import {getServerDataPath} from "../config/paths";
+} from '../config/server-config';
+import { updateServerSettings } from '../config/server-settings';
 
 export const isSetupRequired = checkSetupRequired;
 
@@ -19,7 +19,7 @@ async function initializeDatabaseSchema(): Promise<void> {
     const dataDir = dirname(dbPath);
 
     if (!existsSync(dataDir)) {
-        mkdirSync(dataDir, {recursive: true});
+        mkdirSync(dataDir, { recursive: true });
     }
 
     const db = drizzle(dbPath);
@@ -216,41 +216,41 @@ export async function getSetupStatus() {
 
     if (!setupRequired) {
         const config = getServerConfig();
-        return {setupRequired: false, domain: config?.domain};
+        return { setupRequired: false, domain: config?.domain };
     }
 
-    return {setupRequired: true};
+    return { setupRequired: true };
 }
 
 export async function completeSetup(input: SetupInput): Promise<SetupResult> {
     if (!isSetupRequired()) {
-        return {success: false, error: "Setup has already been completed"};
+        return { success: false, error: 'Setup has already been completed' };
     }
 
     if (!input.domain) {
-        return {success: false, error: "Domain is required"};
+        return { success: false, error: 'Domain is required' };
     }
 
     if (!input.orgName) {
-        return {success: false, error: "Organization name is required"};
+        return { success: false, error: 'Organization name is required' };
     }
 
     if (!input.storageType) {
-        return {success: false, error: "Storage type is required"};
+        return { success: false, error: 'Storage type is required' };
     }
 
     if (input.storageType === 's3') {
         if (!input.s3Bucket || !input.s3Region || !input.s3AccessKeyId || !input.s3SecretAccessKey) {
-            return {success: false, error: "S3 configuration requires bucket, region, access key, and secret key"};
+            return { success: false, error: 'S3 configuration requires bucket, region, access key, and secret key' };
         }
     }
 
     if (!input.adminEmail || !input.adminPassword || !input.adminName) {
-        return {success: false, error: "Admin email, password, and name are required"};
+        return { success: false, error: 'Admin email, password, and name are required' };
     }
 
     if (input.adminPassword.length < 8) {
-        return {success: false, error: "Password must be at least 8 characters long"};
+        return { success: false, error: 'Password must be at least 8 characters long' };
     }
 
     try {
@@ -262,7 +262,7 @@ export async function completeSetup(input: SetupInput): Promise<SetupResult> {
                 password: input.adminPassword,
                 name: input.adminName,
                 role: 'admin',
-            }
+            },
         });
 
         if (!user) {
@@ -270,7 +270,10 @@ export async function completeSetup(input: SetupInput): Promise<SetupResult> {
         }
 
         // Create default organization via better-auth API
-        const orgSlug = input.orgName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+        const orgSlug = input.orgName
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-|-$/g, '');
         const org = await auth.api.createOrganization({
             body: {
                 name: input.orgName,
@@ -289,36 +292,39 @@ export async function completeSetup(input: SetupInput): Promise<SetupResult> {
             orgId: org.id,
             storage: {
                 type: input.storageType,
-                s3: input.storageType === 's3' ? {
-                    bucket: input.s3Bucket!,
-                    region: input.s3Region!,
-                    accessKeyId: input.s3AccessKeyId!,
-                    secretAccessKey: input.s3SecretAccessKey!,
-                    endpoint: input.s3Endpoint ?? '',
-                    prefix: '',
-                } : undefined
+                s3:
+                    input.storageType === 's3'
+                        ? {
+                              bucket: input.s3Bucket!,
+                              region: input.s3Region!,
+                              accessKeyId: input.s3AccessKeyId!,
+                              secretAccessKey: input.s3SecretAccessKey!,
+                              endpoint: input.s3Endpoint ?? '',
+                              prefix: '',
+                          }
+                        : undefined,
             },
             secret: randomBytes(32).toString('base64'),
             setupCompleted: true,
-            setupCompletedAt: new Date().toISOString()
+            setupCompletedAt: new Date().toISOString(),
         };
 
         await saveServerConfig(serverConfig);
 
         await updateServerSettings({
-            defaults: {mount: {storageType: input.storageType}}
+            defaults: { mount: { storageType: input.storageType } },
         });
 
         return {
             success: true,
-            message: "Setup completed successfully",
-            user: {id: user.user.id, email: user.user.email, name: user.user.name}
+            message: 'Setup completed successfully',
+            user: { id: user.user.id, email: user.user.email, name: user.user.name },
         };
     } catch (error) {
         console.error('Setup failed:', error);
         return {
             success: false,
-            error: error instanceof Error ? error.message : 'Setup failed'
+            error: error instanceof Error ? error.message : 'Setup failed',
         };
     }
 }

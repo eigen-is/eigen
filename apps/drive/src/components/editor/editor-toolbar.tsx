@@ -1,17 +1,17 @@
-import {Fragment} from 'react';
-import {ArrowLeft} from "lucide-react";
-import {Button} from "@workspace/ui/components/button";
+import {useBreadcrumb} from '@workspace/lib/drive';
+import type {DrivePath} from '@workspace/lib/types/drive';
+import {Toolbar, TooltipButton} from '@workspace/ui';
 import {
     Breadcrumb,
     BreadcrumbItem,
     BreadcrumbLink,
     BreadcrumbList,
     BreadcrumbPage,
-    BreadcrumbSeparator
-} from "@workspace/ui/components/breadcrumb";
-import {Toolbar, TooltipButton} from "@workspace/ui";
-import {useBreadcrumb} from "@workspace/lib/drive";
-import type {DrivePath} from "@workspace/lib/types/drive";
+    BreadcrumbSeparator,
+} from '@workspace/ui/components/breadcrumb';
+import {Button} from '@workspace/ui/components/button';
+import {ArrowLeft} from 'lucide-react';
+import {Fragment} from 'react';
 
 type ViewToolbarProps = {
     path: DrivePath;
@@ -47,7 +47,9 @@ export function ViewToolbar({path, canWrite, onEdit, onClose}: ViewToolbarProps)
                 </Breadcrumb>
             </div>
             {canWrite && (
-                <Button size="sm" onClick={onEdit}>Edit</Button>
+                <Button size="sm" onClick={onEdit}>
+                    Edit
+                </Button>
             )}
         </Toolbar>
     );
@@ -69,7 +71,9 @@ export function EditToolbar({onBack, onCancel, onSave, isSaving, children}: Edit
                 {children}
             </div>
             <div className="flex items-center gap-2">
-                <Button size="sm" variant="secondary" onClick={onCancel}>Cancel</Button>
+                <Button size="sm" variant="secondary" onClick={onCancel}>
+                    Cancel
+                </Button>
                 <Button size="sm" disabled={isSaving} onClick={onSave}>
                     {isSaving ? 'Saving...' : 'Save'}
                 </Button>

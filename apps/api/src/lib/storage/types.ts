@@ -1,6 +1,6 @@
-import type {BunFile, S3File} from 'bun';
+import type { BunFile, S3File } from 'bun';
 
-export type {S3Config} from '@workspace/lib/types';
+export type { S3Config } from '@workspace/lib/types';
 
 export interface StorageBackend {
     read(key: string): BunFile | S3File;

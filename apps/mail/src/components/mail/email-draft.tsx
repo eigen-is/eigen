@@ -1,55 +1,51 @@
-import {EmailDraft as EmailDraftType} from "@workspace/lib/types/mail";
-import {ContactAutosuggest, Toolbar, TooltipButton} from "@workspace/ui";
-import {ConfirmDialog} from "@workspace/ui/components/layout/delete/confirm-dialog";
-import {Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle} from "@workspace/ui/components/dialog";
-import {Button} from "@workspace/ui/components/button";
-import {Input} from "@workspace/ui/components/input";
-import {Textarea} from "@workspace/ui/components/textarea";
-import {useCallback, useEffect, useMemo, useRef, useState} from "react";
-import {createDraftEmail} from "@workspace/lib/mail";
-import {useAuth} from "@workspace/lib/auth";
-import {Send, Trash2} from "lucide-react";
+import {useAuth} from '@workspace/lib/auth';
+import {createDraftEmail} from '@workspace/lib/mail';
+import type {EmailDraft as EmailDraftType} from '@workspace/lib/types/mail';
+import {ContactAutosuggest, Toolbar, TooltipButton} from '@workspace/ui';
+import {Button} from '@workspace/ui/components/button';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@workspace/ui/components/dialog';
+import {Input} from '@workspace/ui/components/input';
+import {ConfirmDialog} from '@workspace/ui/components/layout/delete/confirm-dialog';
+import {Textarea} from '@workspace/ui/components/textarea';
+import {Send, Trash2} from 'lucide-react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 
 export function getEmailDraftStatus(draft: EmailDraftType) {
     // Check if draft is sendable (to field is not empty)
-    const isSendable = !!(draft.to &&
-        draft.to.text &&
-        draft.to.text.trim() !== '');
+    const isSendable = !!(draft.to?.text && draft.to.text.trim() !== '');
 
     // Check if draft is saveable (at least one of subject, to, cc, bcc, or text is not empty)
     const isSaveable = !!(
         (draft.subject && draft.subject.toString().trim() !== '') ||
-        (draft.to && draft.to.text && draft.to.text.trim() !== '') ||
-        (draft.cc && draft.cc.text && draft.cc.text.trim() !== '') ||
-        (draft.bcc && draft.bcc.text && draft.bcc.text.trim() !== '') ||
+        (draft.to?.text && draft.to.text.trim() !== '') ||
+        (draft.cc?.text && draft.cc.text.trim() !== '') ||
+        (draft.bcc?.text && draft.bcc.text.trim() !== '') ||
         (draft.text && draft.text.trim() !== '')
     );
 
     return {isSendable, isSaveable};
 }
 
-export function EmailDraftToolbar({onDelete, isSending, hasId}: {
+export function EmailDraftToolbar({
+                                      onDelete,
+                                      isSending,
+                                      hasId,
+                                  }: {
     onDelete: () => void;
     isSending: boolean;
     hasId: boolean;
 }) {
     return (
         <Toolbar>
-            <TooltipButton
-                icon={Send}
-                tooltipText="Send"
-                type="submit"
-                form="draft-form"
-                disabled={isSending}
-            />
-            {hasId && (
-                <TooltipButton
-                    icon={Trash2}
-                    tooltipText="Delete"
-                    onClick={onDelete}
-                    disabled={isSending}
-                />
-            )}
+            <TooltipButton icon={Send} tooltipText="Send" type="submit" form="draft-form" disabled={isSending}/>
+            {hasId && <TooltipButton icon={Trash2} tooltipText="Delete" onClick={onDelete} disabled={isSending}/>}
         </Toolbar>
     );
 }
@@ -58,17 +54,11 @@ type EmailDraftProps = {
     email: EmailDraftType | null;
     to?: string;
     onDelete: (mail: EmailDraftType) => void;
-    sendDraft: (mail: EmailDraftType) => Promise<any>;
-    onAutoSave?: (mail: EmailDraftType) => Promise<any>;
-}
+    sendDraft: (mail: EmailDraftType) => Promise<unknown>;
+    onAutoSave?: (mail: EmailDraftType) => Promise<unknown>;
+};
 
-export function EmailDraft({
-                               email,
-                               to,
-                               onDelete,
-                               sendDraft,
-                               onAutoSave,
-                           }: EmailDraftProps) {
+export function EmailDraft({email, to, onDelete: _onDelete, sendDraft, onAutoSave}: EmailDraftProps) {
     // Create refs for the input fields
     const toFieldRef = useRef<HTMLInputElement>(null);
     const subjectFieldRef = useRef<HTMLInputElement>(null);
@@ -87,7 +77,8 @@ export function EmailDraft({
             ...d,
             from: {
                 value: [{name: auth.user!.name || '', address: auth.user!.email || ''}],
-                html: '', text: '',
+                html: '',
+                text: '',
             },
             ...(to ? {to: {value: [{name: '', address: to}], html: to, text: to}} : {}),
         };
@@ -120,41 +111,47 @@ export function EmailDraft({
                 return [];
             }
             // field can be a comma separated list of email addresses
-            return field.split(',').map(value => {
+            return field.split(',').map((value) => {
                 // value can be name <address> but also only address
                 const [name, address] = value.split('<');
                 if (!address) {
                     return {
                         name: '',
-                        address: name.trim()
+                        address: name.trim(),
                     };
                 }
                 return {
                     name: name.trim(),
-                    address: address.trim().replace('>', '')
+                    address: address.trim().replace('>', ''),
                 };
             });
-        }
+        };
 
         return {
             ...draft,
-            to: toFieldRef.current?.value ? {
-                value: convertStringToEmailAddressArray(toFieldRef.current?.value || ''),
-                text: toFieldRef.current?.value || '',
-                html: toFieldRef.current?.value || '',
-            } : undefined,
-            cc: ccFieldRef.current?.value ? {
-                value: convertStringToEmailAddressArray(ccFieldRef.current?.value || ''),
-                text: ccFieldRef.current?.value || '',
-                html: ccFieldRef.current?.value || '',
-            } : undefined,
-            bcc: bccFieldRef.current?.value ? {
-                value: convertStringToEmailAddressArray(bccFieldRef.current?.value || ''),
-                text: bccFieldRef.current?.value || '',
-                html: bccFieldRef.current?.value || '',
-            } : undefined,
+            to: toFieldRef.current?.value
+                ? {
+                    value: convertStringToEmailAddressArray(toFieldRef.current?.value || ''),
+                    text: toFieldRef.current?.value || '',
+                    html: toFieldRef.current?.value || '',
+                }
+                : undefined,
+            cc: ccFieldRef.current?.value
+                ? {
+                    value: convertStringToEmailAddressArray(ccFieldRef.current?.value || ''),
+                    text: ccFieldRef.current?.value || '',
+                    html: ccFieldRef.current?.value || '',
+                }
+                : undefined,
+            bcc: bccFieldRef.current?.value
+                ? {
+                    value: convertStringToEmailAddressArray(bccFieldRef.current?.value || ''),
+                    text: bccFieldRef.current?.value || '',
+                    html: bccFieldRef.current?.value || '',
+                }
+                : undefined,
             subject: subjectFieldRef.current?.value || '',
-            text: textareaRef.current?.value || ''
+            text: textareaRef.current?.value || '',
         };
     }, [draft]);
 
@@ -182,7 +179,7 @@ export function EmailDraft({
     const handleSendEmail = async () => {
         const toValue = toFieldRef.current?.value.trim();
         if (!toValue) {
-            setAlertMessage("Please specify at least one recipient.");
+            setAlertMessage('Please specify at least one recipient.');
             return;
         }
 
@@ -190,7 +187,7 @@ export function EmailDraft({
         const bodyEmpty = !textareaRef.current?.value.trim();
 
         if (subjectEmpty && bodyEmpty) {
-            setAlertMessage("Please add a subject or message.");
+            setAlertMessage('Please add a subject or message.');
             return;
         }
 
@@ -206,17 +203,20 @@ export function EmailDraft({
         <div className="flex flex-col h-full w-full">
             {/* Email Form */}
             <div className="flex-1 overflow-auto">
-                <form id="draft-form" className="flex flex-col h-full" onSubmit={(e) => {
-                    e.preventDefault();
-                    handleSendEmail();
-                }}>
+                <form
+                    id="draft-form"
+                    className="flex flex-col h-full"
+                    onSubmit={(e) => {
+                        e.preventDefault();
+                        handleSendEmail();
+                    }}
+                >
                     <div className="space-y-1 px-4 py-2">
-
                         {/* To field */}
                         <div className="flex items-center border-b">
                             <div className="w-16 text-sm text-muted-foreground py-2">To:</div>
                             <ContactAutosuggest
-                                initialValue={draft.to?.text || ""}
+                                initialValue={draft.to?.text || ''}
                                 onChange={() => {
                                     // Value is read from ref on submit
                                 }}
@@ -234,7 +234,7 @@ export function EmailDraft({
                         <div className="flex items-center border-b">
                             <div className="w-16 text-sm text-muted-foreground py-2">Cc:</div>
                             <ContactAutosuggest
-                                initialValue={draft.cc?.text || ""}
+                                initialValue={draft.cc?.text || ''}
                                 onChange={() => {
                                     // Value is read from ref on submit
                                 }}
@@ -252,7 +252,7 @@ export function EmailDraft({
                         <div className="flex items-center border-b">
                             <div className="w-16 text-sm text-muted-foreground py-2">Bcc:</div>
                             <ContactAutosuggest
-                                initialValue={draft.bcc?.text || ""}
+                                initialValue={draft.bcc?.text || ''}
                                 onChange={() => {
                                     // Value is read from ref on submit
                                 }}
@@ -283,7 +283,7 @@ export function EmailDraft({
                             <Input
                                 id="subject"
                                 ref={subjectFieldRef}
-                                defaultValue={draft.subject ? String(draft.subject) : ""}
+                                defaultValue={draft.subject ? String(draft.subject) : ''}
                                 className="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
                                 disabled={isSending}
                             />
@@ -295,7 +295,7 @@ export function EmailDraft({
                         <Textarea
                             className="w-full h-full min-h-[200px] border-none resize-none focus-visible:ring-0 bg-transparent p-0"
                             placeholder="Write your message here..."
-                            defaultValue={draft.text || ""}
+                            defaultValue={draft.text || ''}
                             ref={textareaRef}
                             disabled={isSending}
                         />

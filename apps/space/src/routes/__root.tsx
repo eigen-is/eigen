@@ -1,11 +1,11 @@
-import {createRootRouteWithContext, Outlet} from '@tanstack/react-router'
-import {AuthContextType, useAuth} from "@workspace/lib/auth";
-import {AppShell} from "@workspace/ui/components/layout/app/app-shell.tsx";
-import {SpaceSidebar} from "../components/space/space-sidebar";
+import {createRootRouteWithContext, Outlet} from '@tanstack/react-router';
+import {type AuthContextType, useAuth} from '@workspace/lib/auth';
+import {AppShell} from '@workspace/ui/components/layout/app/app-shell.tsx';
+import {SpaceSidebar} from '../components/space/space-sidebar';
 
 type MyRouterContext = {
     auth: AuthContextType;
-}
+};
 
 function SpaceRoot() {
     const {user} = useAuth();

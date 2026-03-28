@@ -1,6 +1,6 @@
-import {ToggleGroupItem} from "../../toggle-group.tsx";
-import {Tooltip, TooltipContent, TooltipTrigger,} from "../../tooltip.tsx";
-import {LucideIcon} from "lucide-react";
+import type { LucideIcon } from 'lucide-react';
+import { ToggleGroupItem } from '../../toggle-group.tsx';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../tooltip.tsx';
 
 export type TooltipToggleProps = {
     icon: LucideIcon;
@@ -10,19 +10,19 @@ export type TooltipToggleProps = {
     disabled?: boolean;
     className?: string;
     onClick?: () => void;
-    "aria-label"?: string;
-}
+    'aria-label'?: string;
+};
 
 export const TooltipToggle = ({
-                                  icon: Icon,
-                                  tooltipText,
-                                  value,
-                                  pressed,
-                                  disabled = false,
-                                  className = "h-8 w-8",
-                                  onClick,
-                                  "aria-label": ariaLabel
-                              }: TooltipToggleProps) => {
+    icon: Icon,
+    tooltipText,
+    value,
+    pressed: _pressed,
+    disabled = false,
+    className = 'h-8 w-8',
+    onClick,
+    'aria-label': ariaLabel,
+}: TooltipToggleProps) => {
     return (
         <Tooltip>
             <TooltipTrigger asChild>
@@ -36,7 +36,7 @@ export const TooltipToggle = ({
                         onClick?.();
                     }}
                 >
-                    <Icon className="h-4 w-4"/>
+                    <Icon className="h-4 w-4" />
                 </ToggleGroupItem>
             </TooltipTrigger>
             <TooltipContent>{tooltipText}</TooltipContent>

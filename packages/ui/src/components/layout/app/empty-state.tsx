@@ -1,4 +1,4 @@
-import {type ReactNode} from "react";
+import type {ReactNode} from 'react';
 
 type EmptyStateProps = {
     message?: string;
@@ -7,7 +7,7 @@ type EmptyStateProps = {
 };
 
 export function EmptyState({
-    message = "Within this void, all possibilities are yet unobserved.",
+                               message = 'Within this void, all possibilities are yet unobserved.',
     icon,
     action,
 }: EmptyStateProps) {

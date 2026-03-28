@@ -1,17 +1,17 @@
-import {Home} from "./home.ts";
-import type {User} from "better-auth/types";
-import {getUserHomePath} from "../config/paths.ts";
-import {Contacts} from "../contacts/contacts.ts";
-import Maildir from "../mail/maildir.ts";
-import {Drive} from "../drive";
-import {JsonStore, LocalFilesystem} from "../core";
-import {Calendar} from "../calendar/calendar";
-import {NotificationCenter} from "../notification-center/notification-center";
-import type {UserSettings} from "@workspace/lib/types/settings";
-import {getServerSettings, mapStorageType} from "../config/server-settings";
+import type { UserSettings } from '@workspace/lib/types/settings';
+import type { User } from 'better-auth/types';
+import { Calendar } from '../calendar/calendar';
+import { getUserHomePath } from '../config/paths.ts';
+import { getServerSettings, mapStorageType } from '../config/server-settings';
+import { Contacts } from '../contacts/contacts.ts';
+import { JsonStore, LocalFilesystem } from '../core';
+import { Drive } from '../drive';
+import Maildir from '../mail/maildir.ts';
+import { NotificationCenter } from '../notification-center/notification-center';
+import { Home } from './home.ts';
 
 export class UserHome extends Home {
-    declare public settings: JsonStore<UserSettings>;
+    public declare settings: JsonStore<UserSettings>;
 
     constructor(user: User, cleanUp?: () => void) {
         super(user, cleanUp);
@@ -37,8 +37,8 @@ export class UserHome extends Home {
                         storageType: mapStorageType(serverSettings.defaults.mount.storageType),
                         maxSizeMB: serverSettings.quotas.defaultMountMaxSizeMB,
                         enabled: true,
-                    }
-                }
+                    },
+                },
             });
         }
         return super.init(true);

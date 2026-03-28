@@ -1,12 +1,12 @@
-import {createFileRoute, redirect, useNavigate} from '@tanstack/react-router'
-import {useAuth} from "@workspace/lib/auth";
-import {useChats, useCreateChat} from "@workspace/lib/chat";
-import {DEFAULT_MOUNT_ID, useRootFolder} from "@workspace/lib/drive";
-import {Button} from "@workspace/ui/components/button";
-import {EmptyState} from "@workspace/ui";
-import {MessageSquare, Plus} from "lucide-react";
-import {DriveCreateItemDialog} from "@workspace/ui/components/layout/drive/drive-create-folder-item";
-import {useEffect, useState} from "react";
+import {createFileRoute, redirect, useNavigate} from '@tanstack/react-router';
+import {useAuth} from '@workspace/lib/auth';
+import {useChats, useCreateChat} from '@workspace/lib/chat';
+import {DEFAULT_MOUNT_ID, useRootFolder} from '@workspace/lib/drive';
+import {EmptyState} from '@workspace/ui';
+import {Button} from '@workspace/ui/components/button';
+import {DriveCreateItemDialog} from '@workspace/ui/components/layout/drive/drive-create-folder-item';
+import {MessageSquare, Plus} from 'lucide-react';
+import {useEffect, useState} from 'react';
 
 function ChatIndex() {
     const {user} = useAuth();
@@ -26,8 +26,8 @@ function ChatIndex() {
                 params: {
                     ownerId: chat?.ownerId || '',
                     mountId: chat?.mountId || '',
-                    chatId: chat?.id || ''
-                }
+                    chatId: chat?.id || '',
+                },
             });
         }
     }, [data, navigate]);
@@ -45,8 +45,8 @@ function ChatIndex() {
                 params: {
                     ownerId: user?.id || '',
                     mountId: mountId,
-                    chatId: newPath.id
-                }
+                    chatId: newPath.id,
+                },
             });
         }
     };
@@ -78,9 +78,7 @@ function ChatIndex() {
         );
     }
 
-    return (
-        <EmptyState message="Select a chat from the sidebar"/>
-    );
+    return <EmptyState message="Select a chat from the sidebar"/>;
 }
 
 export const Route = createFileRoute('/_auth/')({
@@ -91,4 +89,4 @@ export const Route = createFileRoute('/_auth/')({
         }
     },
     component: ChatIndex,
-})
+});

@@ -1,16 +1,18 @@
-import {useCallback, useEffect, useRef, useState} from 'react';
+import type { Op, Sheet, WorkbookInstance } from '@workspace/fortune-sheet';
+import { getCollabWebSocketUrl } from '@workspace/lib/api';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
-import {WebsocketProvider} from 'y-websocket';
-import {getCollabWebSocketUrl} from '@workspace/lib/api';
-import type {Op, Sheet, WorkbookInstance} from '@workspace/fortune-sheet';
 
-const DEFAULT_SHEETS: Sheet[] = [{
-    name: 'Sheet1',
-    id: 'sheet-1',
-    order: 0,
-    celldata: [],
-    config: {},
-}];
+const DEFAULT_SHEETS: Sheet[] = [
+    {
+        name: 'Sheet1',
+        id: 'sheet-1',
+        order: 0,
+        celldata: [],
+        config: {},
+    },
+];
 
 export function useSheet(
     ownerId: string,
@@ -157,49 +159,51 @@ export function useSheet(
         latestDataRef.current = data;
     }, []);
 
-    const handleRestore = useCallback((state: Uint8Array) => {
-        const doc = docRef.current;
-        if (!doc) return;
+    const handleRestore = useCallback(
+        (state: Uint8Array) => {
+            const doc = docRef.current;
+            if (!doc) return;
 
-        const tempDoc = new Y.Doc();
-        Y.applyUpdate(tempDoc, state);
+            const tempDoc = new Y.Doc();
+            Y.applyUpdate(tempDoc, state);
 
-        const allKeys = new Set([...doc.share.keys(), ...tempDoc.share.keys()]);
+            const allKeys = new Set([...doc.share.keys(), ...tempDoc.share.keys()]);
 
-        doc.transact(() => {
-            for (const key of allKeys) {
-                const localType = doc.get(key);
-                if (localType instanceof Y.Map) {
-                    const json = tempDoc.getMap(key).toJSON();
-                    for (const k of [...localType.keys()]) localType.delete(k);
-                    for (const [k, v] of Object.entries(json)) {
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        localType.set(k, v as any);
+            doc.transact(() => {
+                for (const key of allKeys) {
+                    const localType = doc.get(key);
+                    if (localType instanceof Y.Map) {
+                        const json = tempDoc.getMap(key).toJSON();
+                        for (const k of [...localType.keys()]) localType.delete(k);
+                        for (const [k, v] of Object.entries(json)) {
+                            localType.set(k, v as never);
+                        }
+                    } else if (localType instanceof Y.Array) {
+                        const json = tempDoc.getArray(key).toJSON();
+                        localType.delete(0, localType.length);
+                        localType.push(json);
                     }
-                } else if (localType instanceof Y.Array) {
-                    const json = tempDoc.getArray(key).toJSON();
-                    localType.delete(0, localType.length);
-                    localType.push(json);
                 }
-            }
-        });
-        tempDoc.destroy();
+            });
+            tempDoc.destroy();
 
-        const stateMap = doc.getMap('state');
-        const snapshot = stateMap.get('snapshot') as string | undefined;
-        if (snapshot) {
-            try {
-                const data = JSON.parse(snapshot) as Sheet[];
-                latestDataRef.current = data;
-                setInitialData(data);
-                if (workbookRef.current) {
-                    workbookRef.current.updateSheet(data);
+            const stateMap = doc.getMap('state');
+            const snapshot = stateMap.get('snapshot') as string | undefined;
+            if (snapshot) {
+                try {
+                    const data = JSON.parse(snapshot) as Sheet[];
+                    latestDataRef.current = data;
+                    setInitialData(data);
+                    if (workbookRef.current) {
+                        workbookRef.current.updateSheet(data);
+                    }
+                } catch (e) {
+                    console.error('[sheet] handleRestore: failed:', e);
                 }
-            } catch (e) {
-                console.error('[sheet] handleRestore: failed:', e);
             }
-        }
-    }, [workbookRef]);
+        },
+        [workbookRef],
+    );
 
     return {
         initialData,

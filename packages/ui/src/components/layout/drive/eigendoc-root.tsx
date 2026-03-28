@@ -1,11 +1,11 @@
 import {Outlet} from '@tanstack/react-router';
 import {useAuth} from '@workspace/lib/auth';
-import {AppShell} from '../app/app-shell';
 import {DEFAULT_MOUNT_ID, useRootFolder} from '@workspace/lib/drive';
-import {createContext} from 'react';
 import type {DriveContextType} from '@workspace/lib/types/drive';
-import {EigenDocSidebar} from './eigendoc-sidebar';
+import {createContext} from 'react';
+import {AppShell} from '../app/app-shell';
 import type {EigenDocAppConfig} from './eigendoc-config';
+import {EigenDocSidebar} from './eigendoc-sidebar';
 
 export const EigenDocDriveContext = createContext<DriveContextType>({
     rootPath: null,
@@ -14,9 +14,9 @@ export const EigenDocDriveContext = createContext<DriveContextType>({
 
 type EigenDocRootProps = {
     config: EigenDocAppConfig;
-    rootRoute: { useNavigate: () => any };
+    rootRoute: { useNavigate: () => (opts: { to: string }) => unknown };
     isFullScreen?: boolean;
-}
+};
 
 export function EigenDocRoot({config, rootRoute, isFullScreen = false}: EigenDocRootProps) {
     const {user} = useAuth();
@@ -37,15 +37,19 @@ export function EigenDocRoot({config, rootRoute, isFullScreen = false}: EigenDoc
             appName={config.appName}
             rootRoute={rootRoute}
             sidebarMode={isFullScreen ? 'none' : 'collapsible'}
-            sidebar={!isFullScreen ? ({condensed, isMobile, onClose}) => (
-                <EigenDocSidebar
-                    config={config}
-                    condensed={condensed}
-                    isMobile={isMobile}
-                    onClose={onClose}
-                    rootPath={rootPath}
-                />
-            ) : undefined}
+            sidebar={
+                !isFullScreen
+                    ? ({condensed, isMobile, onClose}) => (
+                        <EigenDocSidebar
+                            config={config}
+                            condensed={condensed}
+                            isMobile={isMobile}
+                            onClose={onClose}
+                            rootPath={rootPath}
+                        />
+                    )
+                    : undefined
+            }
         >
             <EigenDocDriveContext.Provider value={{rootPath, mountId}}>
                 <Outlet/>

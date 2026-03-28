@@ -1,11 +1,15 @@
 import {ApiError} from '../core';
 import {getHome} from '../home';
-import {getMemberships} from '../user';
-import {getMaxUploadSize} from './server-settings';
-import {resolveUserQuotas, type ResolvedQuotas} from './quota';
 import type {Home} from '../home/home';
+import {getMemberships} from '../user';
+import {type ResolvedQuotas, resolveUserQuotas} from './quota';
+import {getMaxUploadSize} from './server-settings';
 
-async function resolveQuotas(ownerId: string, userId: string, mountId: string): Promise<{home: Home; quotas: ResolvedQuotas}> {
+async function resolveQuotas(
+    ownerId: string,
+    userId: string,
+    mountId: string,
+): Promise<{ home: Home; quotas: ResolvedQuotas }> {
     const home = await getHome(ownerId);
     const mountConfig = home.drive.getMountConfig(mountId);
     const {teamIds} = await getMemberships(userId);
@@ -23,7 +27,6 @@ export async function getUploadMaxSize(ownerId: string, userId: string, mountId:
     }
     return Math.min(maxUpload, remainingQuota);
 }
-
 
 export async function enforceAvatarUpload(userId: string, fileSize: number): Promise<void> {
     if (fileSize > getMaxUploadSize()) {

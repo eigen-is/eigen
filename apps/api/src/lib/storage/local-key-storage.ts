@@ -1,7 +1,7 @@
-import type {BunFile} from 'bun';
 import * as fs from 'node:fs';
-import * as path from 'path';
-import type {StorageBackend} from './types';
+import * as path from 'node:path';
+import type { BunFile } from 'bun';
+import type { StorageBackend } from './types';
 
 export class LocalKeyStorage implements StorageBackend {
     private dataDir: string;
@@ -9,7 +9,7 @@ export class LocalKeyStorage implements StorageBackend {
     constructor(baseDir: string) {
         this.dataDir = path.resolve(baseDir, 'data');
         if (!fs.existsSync(this.dataDir)) {
-            fs.mkdirSync(this.dataDir, {recursive: true});
+            fs.mkdirSync(this.dataDir, { recursive: true });
         }
     }
 
@@ -27,7 +27,7 @@ export class LocalKeyStorage implements StorageBackend {
 
     async write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
         const filePath = this.getFilePath(key);
-        return await Bun.write(filePath, data, {createPath: true});
+        return await Bun.write(filePath, data, { createPath: true });
     }
 
     async delete(key: string): Promise<boolean> {

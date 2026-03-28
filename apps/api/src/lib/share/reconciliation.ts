@@ -1,7 +1,7 @@
-import type {User} from 'better-auth/types';
-import {getHome} from '../home';
-import {getMemberships, getUserById} from '../user';
-import {getEntriesForTarget, removeEntriesForTarget} from './registry';
+import type { User } from 'better-auth/types';
+import { getHome } from '../home';
+import { getMemberships, getUserById } from '../user';
+import { getEntriesForTarget, removeEntriesForTarget } from './registry';
 
 export async function reconcileSharesForNewUser(user: User): Promise<void> {
     const fromUserIds = await getEntriesForTarget(user.email);
@@ -85,7 +85,7 @@ function pullPendingInvitations(
             status: event.status,
             sequence: event.sequence,
             data: {
-                organizer: {userId: ownerHome.user.id, email: ownerHome.user.email, name: ownerHome.user.name},
+                organizer: { userId: ownerHome.user.id, email: ownerHome.user.email, name: ownerHome.user.name },
                 organizerEventId: event.id,
                 attendees: event.data?.attendees,
             },

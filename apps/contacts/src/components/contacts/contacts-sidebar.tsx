@@ -1,28 +1,24 @@
-import {UserRoundPlus, UsersRound} from 'lucide-react';
 import {Link} from '@tanstack/react-router';
-import {Button} from "@workspace/ui/components/button";
+import {useLabels} from '@workspace/lib/contacts';
+import type {Label} from '@workspace/lib/types/label';
+import {EigenLoader, StorageUsage} from '@workspace/ui';
+import {Button} from '@workspace/ui/components/button';
 import {LabelManager} from '@workspace/ui/components/layout/labels/label-manager';
+import {SidebarHeader} from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import {SidebarItem} from '@workspace/ui/components/layout/sidebar/sidebar-item';
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
-import {SidebarHeader} from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import {Separator} from '@workspace/ui/components/separator';
-import {type Label} from "@workspace/lib/types/label";
-import {useLabels} from '@workspace/lib/contacts';
-import {EigenLoader, StorageUsage} from "@workspace/ui";
+import {UserRoundPlus, UsersRound} from 'lucide-react';
 
 type ContactsSidebarProps = {
     condensed?: boolean;
     onClose?: () => void;
     isMobile?: boolean;
     onAssignLabel?: (contactIds: string[], labelId: string) => void;
-}
+};
 
 export function ContactsSidebar({condensed = false, onClose, isMobile = false, onAssignLabel}: ContactsSidebarProps) {
-    const {
-        data: labels = [],
-        isLoading: loading,
-        error
-    } = useLabels();
+    const {data: labels = [], isLoading: loading, error} = useLabels();
 
     const getLabelPath = (label: Label) => `/label/${label.id.toLowerCase()}`;
 
@@ -31,8 +27,12 @@ export function ContactsSidebar({condensed = false, onClose, isMobile = false, o
             {isMobile && <SidebarHeader appName="contacts" onClose={onClose}/>}
 
             <div className="px-3 py-2">
-                <Button variant="default" size={condensed ? "icon" : "default"} asChild
-                        className={`${condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}`}>
+                <Button
+                    variant="default"
+                    size={condensed ? 'icon' : 'default'}
+                    asChild
+                    className={`${condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}`}
+                >
                     <Link to="/new">
                         <UserRoundPlus className="h-4 w-4"/>
                         {!condensed && <span>Create contact</span>}
@@ -58,8 +58,9 @@ export function ContactsSidebar({condensed = false, onClose, isMobile = false, o
                 ) : loading ? (
                     <EigenLoader/>
                 ) : labels.length === 0 ? (
-                    <div className="px-3 py-2 text-sm text-muted-foreground">No labels found. Add one with the +
-                        button.</div>
+                    <div className="px-3 py-2 text-sm text-muted-foreground">
+                        No labels found. Add one with the + button.
+                    </div>
                 ) : (
                     <LabelManager
                         labels={labels}
@@ -72,10 +73,7 @@ export function ContactsSidebar({condensed = false, onClose, isMobile = false, o
                 )}
             </div>
 
-            <StorageUsage
-                className="mt-auto"
-                condensed={condensed}
-            />
+            <StorageUsage className="mt-auto" condensed={condensed}/>
         </div>
     );
 }

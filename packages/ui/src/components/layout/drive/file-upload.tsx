@@ -1,20 +1,20 @@
+import {getDriveFileUploadUrl} from '@workspace/lib/api';
 import {useRef} from 'react';
-import {useUpload} from "../../layout/upload-provider/upload-provider";
-import {uploadWithProgress} from "../upload-provider/upload-with-progress";
-import {getDriveFileUploadUrl} from "@workspace/lib/api";
+import {useUpload} from '../../layout/upload-provider/upload-provider';
+import {uploadWithProgress} from '../upload-provider/upload-with-progress';
 
 export type UploadResult = {
     success: boolean;
     fileName: string;
     error?: unknown;
-}
+};
 
 export type FileUploadOptions = {
     uploadUrl?: string;
     onSuccess?: (result: UploadResult) => void;
     onError?: (result: UploadResult) => void;
     additionalHeaders?: Record<string, string>;
-}
+};
 
 // Custom hook for file upload functionality
 export function useFileUpload(ownerId: string, mountId: string, folderId: string, options: FileUploadOptions = {}) {
@@ -43,8 +43,8 @@ export function useFileUpload(ownerId: string, mountId: string, folderId: string
             }
 
             const headers = {
-                'credentials': 'include',
-                ...options.additionalHeaders
+                credentials: 'include',
+                ...options.additionalHeaders,
             };
 
             // Use uploadWithProgress with the appropriate options
@@ -80,7 +80,7 @@ export function useFileUpload(ownerId: string, mountId: string, folderId: string
                     }
 
                     return result;
-                }
+                },
             });
         } catch (err: unknown) {
             uploadHandler.error();
@@ -111,6 +111,6 @@ export function useFileUpload(ownerId: string, mountId: string, folderId: string
         fileInputRef,
         handleFileUpload,
         processFiles,
-        handleFileChange
+        handleFileChange,
     };
 }

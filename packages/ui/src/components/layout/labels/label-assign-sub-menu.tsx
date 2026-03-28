@@ -1,24 +1,24 @@
-import {Check, Minus, Tag} from 'lucide-react';
+import type {Label} from '@workspace/lib/types/label';
 import {
     DropdownMenuItem,
     DropdownMenuSub,
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import type {Label} from '@workspace/lib/types/label';
+import {Check, Minus, Tag} from 'lucide-react';
 
 type LabelAssignSubMenuProps = {
     labels: Label[];
     assignedLabelIds: string[];
     partialLabelIds?: string[];
     onToggleLabel: (labelId: string) => void;
-}
+};
 
 export function LabelAssignSubMenu({
                                        labels,
                                        assignedLabelIds,
                                        partialLabelIds = [],
-                                       onToggleLabel
+                                       onToggleLabel,
                                    }: LabelAssignSubMenuProps) {
     if (labels.length === 0) return null;
 

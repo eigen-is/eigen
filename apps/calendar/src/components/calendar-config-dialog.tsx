@@ -1,27 +1,27 @@
-import {useEffect, useState} from 'react';
-import {z} from 'zod';
-import {useForm} from 'react-hook-form';
 import {zodResolver} from '@hookform/resolvers/zod';
+import {useAuth} from '@workspace/lib/auth';
+import {useCreateCalendar, useDeleteCalendar, useUpdateCalendar} from '@workspace/lib/calendar';
+import {EIGEN_ACCENT_COLORS_SHUFFLED} from '@workspace/lib/constants/colors';
+import type {CalendarItem, CalendarShare} from '@workspace/lib/types/calendar';
+import {Button} from '@workspace/ui/components/button';
 import {
     Dialog,
     DialogContent,
     DialogDescription,
     DialogFooter,
     DialogHeader,
-    DialogTitle
+    DialogTitle,
 } from '@workspace/ui/components/dialog';
 import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage} from '@workspace/ui/components/form';
 import {Input} from '@workspace/ui/components/input';
-import {Button} from '@workspace/ui/components/button';
-import {Popover, PopoverContent, PopoverTrigger} from '@workspace/ui/components/popover';
-import {ColorPicker} from '@workspace/ui/components/layout/media/color-picker';
 import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
+import {ColorPicker} from '@workspace/ui/components/layout/media/color-picker';
+import {Popover, PopoverContent, PopoverTrigger} from '@workspace/ui/components/popover';
 import {Separator} from '@workspace/ui/components/separator';
-import {useCreateCalendar, useDeleteCalendar, useUpdateCalendar} from '@workspace/lib/calendar';
-import {useAuth} from '@workspace/lib/auth';
-import type {CalendarItem, CalendarShare} from '@workspace/lib/types/calendar';
+import {useEffect, useState} from 'react';
+import {useForm} from 'react-hook-form';
+import {z} from 'zod';
 import {CalendarShareEditor} from './calendar-share-editor';
-import {EIGEN_ACCENT_COLORS_SHUFFLED} from '@workspace/lib/constants/colors';
 
 const calendarFormSchema = z.object({
     name: z.string().min(1, {message: 'Calendar name is required.'}),
@@ -35,7 +35,7 @@ type CalendarConfigDialogProps = {
     onOpenChange: (open: boolean) => void;
     calendar: CalendarItem | null;
     calendarCount?: number;
-}
+};
 
 export function CalendarConfigDialog({open, onOpenChange, calendar, calendarCount = 0}: CalendarConfigDialogProps) {
     const {user} = useAuth();
@@ -56,7 +56,7 @@ export function CalendarConfigDialog({open, onOpenChange, calendar, calendarCoun
             ? {name: calendar.name, color: calendar.color}
             : {
                 name: '',
-                color: EIGEN_ACCENT_COLORS_SHUFFLED[calendarCount % EIGEN_ACCENT_COLORS_SHUFFLED.length].value
+                color: EIGEN_ACCENT_COLORS_SHUFFLED[calendarCount % EIGEN_ACCENT_COLORS_SHUFFLED.length].value,
             },
     });
 
@@ -114,9 +114,7 @@ export function CalendarConfigDialog({open, onOpenChange, calendar, calendarCoun
                     <DialogHeader>
                         <DialogTitle>{isEditMode ? 'Edit Calendar' : 'New Calendar'}</DialogTitle>
                         <DialogDescription>
-                            {isEditMode
-                                ? 'Edit calendar settings and sharing.'
-                                : 'Create a new calendar.'}
+                            {isEditMode ? 'Edit calendar settings and sharing.' : 'Create a new calendar.'}
                         </DialogDescription>
                     </DialogHeader>
 
@@ -177,10 +175,7 @@ export function CalendarConfigDialog({open, onOpenChange, calendar, calendarCoun
                             {isEditMode && (
                                 <>
                                     <Separator/>
-                                    <CalendarShareEditor
-                                        shares={shares}
-                                        onChange={setShares}
-                                    />
+                                    <CalendarShareEditor shares={shares} onChange={setShares}/>
                                 </>
                             )}
 
@@ -196,8 +191,12 @@ export function CalendarConfigDialog({open, onOpenChange, calendar, calendarCoun
                                         Delete
                                     </Button>
                                 )}
-                                <Button type="button" variant="outline" onClick={() => onOpenChange(false)}
-                                        disabled={isLoading}>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => onOpenChange(false)}
+                                    disabled={isLoading}
+                                >
                                     Cancel
                                 </Button>
                                 <Button type="submit" disabled={isLoading || form.formState.isSubmitting}>

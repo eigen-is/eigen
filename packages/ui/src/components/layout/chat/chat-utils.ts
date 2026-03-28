@@ -1,4 +1,4 @@
-import {resolveEmoteKey, getEmoteCommand} from '@workspace/lib/chat';
+import {getEmoteCommand, resolveEmoteKey} from '@workspace/lib/chat';
 
 export function getAtSuggestQuery(text: string): string | null {
     const atIdx = text.lastIndexOf('@');
@@ -16,7 +16,7 @@ export type SlashTargetContext = {
     query: string;
     mode: 'members' | 'contacts';
     appendSpace: boolean;
-}
+};
 
 export function getSlashTargetQuery(text: string): SlashTargetContext | null {
     const trimmed = text.trimStart();

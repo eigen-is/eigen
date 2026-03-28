@@ -1,14 +1,14 @@
-import {Elysia, sse} from "elysia";
-import {betterAuth} from "./auth";
-import {getHome} from "../lib/home";
-import type {SSEvent} from "@workspace/lib/types/sse";
-import {requireSelf} from "../lib/core/access";
+import type { SSEvent } from '@workspace/lib/types/sse';
+import { Elysia, sse } from 'elysia';
+import { requireSelf } from '../lib/core/access';
+import { getHome } from '../lib/home';
+import { betterAuth } from './auth';
 
 // SSE is personal-only — each user subscribes to their own Home's event stream.
 // TODO: to support team SSE, add a separate /sse/team/:teamId/events route with team membership check.
-export const sseRouter = new Elysia({name: "sse"})
-    .use(betterAuth)
-    .get('/sse/:ownerId/events', async ({params, user}) => {
+export const sseRouter = new Elysia({ name: 'sse' }).use(betterAuth).get(
+    '/sse/:ownerId/events',
+    async ({ params, user }) => {
         requireSelf(params.ownerId, user.id);
         let home = await getHome(user.id);
 
@@ -31,7 +31,7 @@ export const sseRouter = new Elysia({name: "sse"})
 
                 // Send initial keepalive immediately to prevent Apache proxy timeout
                 try {
-                    controller.enqueue({event: 'keepalive'});
+                    controller.enqueue({ event: 'keepalive' });
                 } catch {
                     isClosed = true;
                 }
@@ -46,8 +46,7 @@ export const sseRouter = new Elysia({name: "sse"})
                             console.log(`[SSE] Home recreated for ${user.id}, re-subscribing`);
                             try {
                                 home.unsubscribeSSE(listener!);
-                            } catch {
-                            }
+                            } catch {}
                             currentHome.subscribeSSE(listener!);
                             home = currentHome;
                         }
@@ -61,7 +60,7 @@ export const sseRouter = new Elysia({name: "sse"})
                         return;
                     }
                     try {
-                        controller.enqueue({event: 'keepalive'});
+                        controller.enqueue({ event: 'keepalive' });
                     } catch {
                         isClosed = true;
                     }
@@ -73,13 +72,14 @@ export const sseRouter = new Elysia({name: "sse"})
                 if (listener) {
                     try {
                         home.unsubscribeSSE(listener);
-                    } catch {
-                    }
+                    } catch {}
                 }
-            }
+            },
         });
 
         return sse(stream);
-    }, {
-        auth: true
-    });
+    },
+    {
+        auth: true,
+    },
+);

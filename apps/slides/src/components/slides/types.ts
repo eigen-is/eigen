@@ -9,7 +9,7 @@ type BaseObject = {
     borderColor: string;
     borderWidth: number;
     borderRadius: number;
-}
+};
 
 export type TextObject = BaseObject & {
     type: 'text';
@@ -26,13 +26,13 @@ export type TextObject = BaseObject & {
     lineHeight: number;
     highlightColor: string;
     backgroundColor: string;
-}
+};
 
 export type ImageObject = BaseObject & {
     type: 'image';
     mediaName: string;
     objectFit: 'contain' | 'cover' | 'fill';
-}
+};
 
 export type SlideObject = TextObject | ImageObject;
 
@@ -41,13 +41,13 @@ export type SlideItem = {
     objectIds: string[];
     backgroundColor: string;
     backgroundMediaName: string;
-}
+};
 
 export type DeckData = {
     slides: Record<string, SlideItem>;
     objects: Record<string, SlideObject>;
     slideOrder: string[];
-}
+};
 
 export const SLIDE_ASPECT_RATIO = 16 / 9;
 export const SLIDE_BASE_WIDTH = 1920;

@@ -1,20 +1,20 @@
-import type {QueryClient} from '@tanstack/react-query';
-import type {SSEvent} from '@workspace/lib/types/sse';
-import {SSEventType} from '@workspace/lib/types/sse';
+import type { QueryClient } from '@tanstack/react-query';
+import type { SSEvent } from '@workspace/lib/types/sse';
+import { SSEventType } from '@workspace/lib/types/sse';
 import {
     invalidateAclSharedOrUnshared,
     invalidateAclUpdated,
     invalidateItemCreated,
     invalidateItemDeleted,
     invalidatePathMoved,
-    invalidatePathRenamed
+    invalidatePathRenamed,
 } from './hooks/use-drive';
 
 export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient, userId?: string): boolean {
     if (!event?.type?.startsWith('drive:')) return false;
     if (!('path' in event)) return false;
 
-    const {path} = event;
+    const { path } = event;
 
     switch (event.type) {
         case SSEventType.DRIVE_ACL_SHARED:

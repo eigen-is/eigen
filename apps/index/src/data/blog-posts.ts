@@ -4,7 +4,7 @@ export type BlogPost = {
     date: string;
     summary: string;
     content: string;
-}
+};
 
 const blogFiles = import.meta.glob('./blog/*.md', {eager: true, query: '?raw', import: 'default'});
 
@@ -24,7 +24,10 @@ function parseFrontmatter(markdown: string): { data: Record<string, string>; con
         const colonIndex = line.indexOf(':');
         if (colonIndex !== -1) {
             const key = line.substring(0, colonIndex).trim();
-            data[key] = line.substring(colonIndex + 1).trim().replace(/^["']|["']$/g, '');
+            data[key] = line
+                .substring(colonIndex + 1)
+                .trim()
+                .replace(/^["']|["']$/g, '');
         }
     }
 
@@ -56,7 +59,7 @@ function parseBlogPosts(): BlogPost[] {
 export const blogPosts: BlogPost[] = parseBlogPosts();
 
 export function getBlogPost(id: string): BlogPost | undefined {
-    return blogPosts.find(post => post.id === id);
+    return blogPosts.find((post) => post.id === id);
 }
 
 export function getLatestBlogPost(): BlogPost | undefined {

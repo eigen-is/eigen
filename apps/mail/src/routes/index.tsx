@@ -1,4 +1,4 @@
-import {createFileRoute, redirect} from '@tanstack/react-router'
+import {createFileRoute, redirect} from '@tanstack/react-router';
 
 export const Route = createFileRoute('/')({
     beforeLoad: () => {
@@ -6,8 +6,8 @@ export const Route = createFileRoute('/')({
             to: '/$filterType/$filterId',
             params: {
                 filterType: 'box',
-                filterId: 'inbox'
-            }
+                filterId: 'inbox',
+            },
         });
     },
-})
+});

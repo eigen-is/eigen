@@ -1,15 +1,15 @@
 import {useNavigate} from '@tanstack/react-router';
-import {DEFAULT_MOUNT_ID, usePathInfo, useSharedPaths} from '@workspace/lib/drive';
-import {DriveLayout} from './drive-layout';
-import {type DrivePath, type DriveSearchParams, isDocumentType} from '@workspace/lib/types/drive';
-import {useAuth} from '@workspace/lib/auth';
-import {useLayout} from '../app/layout-context';
 import {openDocument} from '@workspace/lib/api';
-import {NotFound} from '../app/not-found';
-import {LoadingState} from '../app/loading-state';
+import {useAuth} from '@workspace/lib/auth';
+import {DEFAULT_MOUNT_ID, usePathInfo, useSharedPaths} from '@workspace/lib/drive';
+import {type DrivePath, type DriveSearchParams, isDocumentType} from '@workspace/lib/types/drive';
 import {useContext} from 'react';
-import {EigenDocDriveContext} from './eigendoc-root';
+import {useLayout} from '../app/layout-context';
+import {LoadingState} from '../app/loading-state';
+import {NotFound} from '../app/not-found';
+import {DriveLayout} from './drive-layout';
 import type {EigenDocAppConfig} from './eigendoc-config';
+import {EigenDocDriveContext} from './eigendoc-root';
 
 type EigenDocSharedViewProps = {
     config: EigenDocAppConfig;
@@ -19,7 +19,7 @@ type EigenDocSharedViewProps = {
     mid?: string;
     onNavigate: (search: DriveSearchParams) => void;
     onNavigateBack: () => void;
-}
+};
 
 export function EigenDocSharedView({config, to, pid, uid, mid, onNavigate, onNavigateBack}: EigenDocSharedViewProps) {
     const {rootPath} = useContext(EigenDocDriveContext);
@@ -32,10 +32,10 @@ export function EigenDocSharedView({config, to, pid, uid, mid, onNavigate, onNav
     const {
         data: unfilteredFolderContents = [],
         isLoading: isFolderContentLoading,
-        error: isFolderContentLoadingError
+        error: isFolderContentLoadingError,
     } = useSharedPaths(ownerId, to as 'by-me' | 'with-me');
 
-    const folderContents = unfilteredFolderContents?.filter(path => path.type === config.driveType) || [];
+    const folderContents = unfilteredFolderContents?.filter((path) => path.type === config.driveType) || [];
 
     const onRowSelect = (path: DrivePath) => {
         if (isMobile && isDocumentType(path.type)) {

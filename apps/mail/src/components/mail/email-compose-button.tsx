@@ -1,13 +1,13 @@
-import {Button} from "@workspace/ui/components/button";
-import {MailPlus} from "lucide-react";
-import {useMatch, useNavigate} from "@tanstack/react-router";
+import {useMatch, useNavigate} from '@tanstack/react-router';
+import {Button} from '@workspace/ui/components/button';
+import {MailPlus} from 'lucide-react';
 
 // Import route to get correct path information
 import {Route as FilterRoute} from '../../routes/_auth.$filterType.$filterId';
 
 type EmailComposeButtonProps = {
     condensed: boolean;
-}
+};
 
 export function EmailComposeButton({condensed}: EmailComposeButtonProps) {
     const match = useMatch({
@@ -31,7 +31,7 @@ export function EmailComposeButton({condensed}: EmailComposeButtonProps) {
     return (
         <Button
             variant="default"
-            size={condensed ? "icon" : "default"}
+            size={condensed ? 'icon' : 'default'}
             className={`${condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}`}
             onClick={handleComposeClick}
         >

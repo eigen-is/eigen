@@ -5,4 +5,4 @@ export const peopleKeys = {
     teams: (orgId: string) => [...peopleKeys.org(orgId), 'teams'] as const,
     teamMembers: (orgId: string, teamId: string) => [...peopleKeys.org(orgId), 'team-members', teamId] as const,
     activeMember: () => [...peopleKeys.all, 'active-member'] as const,
-}
+};

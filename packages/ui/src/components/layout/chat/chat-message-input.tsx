@@ -1,12 +1,12 @@
+import {COMMANDS_HELP, commandNeedsSpace, SLASH_COMMANDS} from '@workspace/lib/chat';
+import type {RoomMember} from '@workspace/lib/types/chat';
+import {Paperclip, Send, X} from 'lucide-react';
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {Button} from "../../button";
-import {Paperclip, Send, X} from "lucide-react";
-import {cn} from "../../../lib/utils";
-import {getAtSuggestQuery, getSlashTargetQuery} from "./chat-utils";
-import type {RoomMember} from "@workspace/lib/types/chat";
-import {ChatPlayerSuggest} from "./chat-player-suggest";
-import {ChatSlashSuggest} from "./chat-slash-suggest";
-import {COMMANDS_HELP, SLASH_COMMANDS, commandNeedsSpace} from "@workspace/lib/chat";
+import {cn} from '../../../lib/utils';
+import {Button} from '../../button';
+import {ChatPlayerSuggest} from './chat-player-suggest';
+import {ChatSlashSuggest} from './chat-slash-suggest';
+import {getAtSuggestQuery, getSlashTargetQuery} from './chat-utils';
 
 type ChatMessageInputProps = {
     onSend: (rawContent: string, files?: File[]) => void;
@@ -18,8 +18,8 @@ type ChatMessageInputProps = {
     currentUserEmail?: string;
     messageCount?: number;
     className?: string;
-    onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>, content: string) => boolean | void;
-}
+    onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>, content: string) => boolean | undefined;
+};
 
 export function ChatMessageInput({
                                      onSend,
@@ -65,11 +65,11 @@ export function ChatMessageInput({
     const suggestOpen = atQuery !== null;
 
     const handlePlayerSelect = useCallback((email: string) => {
-        setContent(prev => {
+        setContent((prev) => {
             const atIdx = prev.lastIndexOf('@');
             if (atIdx === -1) return prev;
             if (atIdx > 0 && !/[\s,.]/.test(prev[atIdx - 1])) return prev;
-            return prev.slice(0, atIdx) + email + ' ';
+            return `${prev.slice(0, atIdx) + email} `;
         });
         setSelectedSuggestIdx(0);
     }, []);
@@ -79,11 +79,11 @@ export function ChatMessageInput({
     const handleSuggestItemsChange = useCallback((count: number, emails: string[]) => {
         suggestCountRef.current = count;
         suggestEmailsRef.current = emails;
-        if (count > 0) setSelectedSuggestIdx(prev => Math.min(prev, count - 1));
+        if (count > 0) setSelectedSuggestIdx((prev) => Math.min(prev, count - 1));
     }, []);
 
     const closeSuggest = useCallback(() => {
-        setContent(prev => {
+        setContent((prev) => {
             const atIdx = prev.lastIndexOf('@');
             return atIdx === -1 ? prev : prev.slice(0, atIdx);
         });
@@ -113,7 +113,7 @@ export function ChatMessageInput({
     const handleSlashItemsChange = useCallback((count: number, cmds: string[]) => {
         slashSuggestCountRef.current = count;
         slashSuggestCmdsRef.current = cmds;
-        if (count > 0) setSelectedSlashIdx(prev => Math.min(prev, count - 1));
+        if (count > 0) setSelectedSlashIdx((prev) => Math.min(prev, count - 1));
     }, []);
 
     // ── Slash target suggest (emote/whisper/invite targets) ─────────────
@@ -132,23 +132,26 @@ export function ChatMessageInput({
         }
         // For emotes/whisper/inspect: room members minus self
         const selfEmail = currentUserEmail.toLowerCase();
-        return roomMembers.filter(m => m.email.toLowerCase() !== selfEmail);
+        return roomMembers.filter((m) => m.email.toLowerCase() !== selfEmail);
     }, [slashTarget, roomMembers, currentUserEmail]);
 
-    const handleSlashTargetSelect = useCallback((email: string) => {
-        const shouldAppendSpace = slashTarget?.appendSpace ?? false;
-        setContent(prev => {
-            const spaceIdx = prev.indexOf(' ');
-            if (spaceIdx <= 0) return prev;
-            return prev.slice(0, spaceIdx + 1) + email + (shouldAppendSpace ? ' ' : '');
-        });
-        setSelectedTargetIdx(0);
-    }, [slashTarget?.appendSpace]);
+    const handleSlashTargetSelect = useCallback(
+        (email: string) => {
+            const shouldAppendSpace = slashTarget?.appendSpace ?? false;
+            setContent((prev) => {
+                const spaceIdx = prev.indexOf(' ');
+                if (spaceIdx <= 0) return prev;
+                return prev.slice(0, spaceIdx + 1) + email + (shouldAppendSpace ? ' ' : '');
+            });
+            setSelectedTargetIdx(0);
+        },
+        [slashTarget?.appendSpace],
+    );
 
     const handleSlashTargetItemsChange = useCallback((count: number, emails: string[]) => {
         slashTargetCountRef.current = count;
         slashTargetEmailsRef.current = emails;
-        if (count > 0) setSelectedTargetIdx(prev => Math.min(prev, count - 1));
+        if (count > 0) setSelectedTargetIdx((prev) => Math.min(prev, count - 1));
     }, []);
 
     // ── Keyboard handling ───────────────────────────────────────────────
@@ -157,12 +160,12 @@ export function ChatMessageInput({
         if (slashSuggestOpen && slashSuggestCountRef.current > 0) {
             if (e.key === 'ArrowDown') {
                 e.preventDefault();
-                setSelectedSlashIdx(i => Math.min(i + 1, slashSuggestCountRef.current - 1));
+                setSelectedSlashIdx((i) => Math.min(i + 1, slashSuggestCountRef.current - 1));
                 return;
             }
             if (e.key === 'ArrowUp') {
                 e.preventDefault();
-                setSelectedSlashIdx(i => Math.max(i - 1, 0));
+                setSelectedSlashIdx((i) => Math.max(i - 1, 0));
                 return;
             }
             if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
@@ -185,12 +188,12 @@ export function ChatMessageInput({
         if (slashTargetOpen && slashTargetCountRef.current > 0) {
             if (e.key === 'ArrowDown') {
                 e.preventDefault();
-                setSelectedTargetIdx(i => Math.min(i + 1, slashTargetCountRef.current - 1));
+                setSelectedTargetIdx((i) => Math.min(i + 1, slashTargetCountRef.current - 1));
                 return;
             }
             if (e.key === 'ArrowUp') {
                 e.preventDefault();
-                setSelectedTargetIdx(i => Math.max(i - 1, 0));
+                setSelectedTargetIdx((i) => Math.max(i - 1, 0));
                 return;
             }
             if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
@@ -205,7 +208,7 @@ export function ChatMessageInput({
                 e.preventDefault();
                 setSelectedTargetIdx(0);
                 // Remove the target part, keep the command
-                setContent(prev => {
+                setContent((prev) => {
                     const spaceIdx = prev.indexOf(' ');
                     return spaceIdx > 0 ? prev.slice(0, spaceIdx) : prev;
                 });
@@ -218,14 +221,14 @@ export function ChatMessageInput({
             if (e.key === 'ArrowDown') {
                 e.preventDefault();
                 if (suggestCountRef.current > 0) {
-                    setSelectedSuggestIdx(i => Math.min(i + 1, suggestCountRef.current - 1));
+                    setSelectedSuggestIdx((i) => Math.min(i + 1, suggestCountRef.current - 1));
                 }
                 return;
             }
             if (e.key === 'ArrowUp') {
                 e.preventDefault();
                 if (suggestCountRef.current > 0) {
-                    setSelectedSuggestIdx(i => Math.max(i - 1, 0));
+                    setSelectedSuggestIdx((i) => Math.max(i - 1, 0));
                 }
                 return;
             }
@@ -260,34 +263,38 @@ export function ChatMessageInput({
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newFiles = e.target.files ? Array.from(e.target.files) : [];
         if (newFiles.length > 0) {
-            setFiles(prev => [...prev, ...newFiles]);
+            setFiles((prev) => [...prev, ...newFiles]);
         }
         if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
     const removeFile = (index: number) => {
-        setFiles(prev => prev.filter((_, i) => i !== index));
+        setFiles((prev) => prev.filter((_, i) => i !== index));
     };
 
     if (readOnly) {
         return (
-            <div className={cn("border-t px-5 py-3", className)}>
+            <div className={cn('border-t px-5 py-3', className)}>
                 <p className="text-xs text-muted-foreground text-center py-2">{readOnlyMessage}</p>
             </div>
         );
     }
 
     return (
-        <div className={cn("border-t px-5 py-3", className)}>
+        <div className={cn('border-t px-5 py-3', className)}>
             {files.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-2">
                     {files.map((file, i) => (
-                        <div key={i}
-                             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-muted text-xs border">
+                        <div
+                            key={i}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-muted text-xs border"
+                        >
                             <Paperclip className="h-3 w-3 text-muted-foreground"/>
                             <span className="truncate max-w-[150px]">{file.name}</span>
-                            <button onClick={() => removeFile(i)}
-                                    className="text-muted-foreground hover:text-foreground">
+                            <button
+                                onClick={() => removeFile(i)}
+                                className="text-muted-foreground hover:text-foreground"
+                            >
                                 <X className="h-3 w-3"/>
                             </button>
                         </div>
@@ -295,13 +302,7 @@ export function ChatMessageInput({
                 </div>
             )}
             <div className="flex items-end gap-2 relative">
-                <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    className="hidden"
-                    onChange={handleFileSelect}
-                />
+                <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect}/>
                 <Button
                     variant="ghost"
                     size="icon"
@@ -344,7 +345,7 @@ export function ChatMessageInput({
                     onChange={(e) => {
                         setContent(e.target.value);
                         e.target.style.height = 'auto';
-                        e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+                        e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
                     }}
                     onKeyDown={handleKeyDown}
                     placeholder={placeholder}

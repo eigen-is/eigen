@@ -1,16 +1,14 @@
-import {app} from "./app";
-import {shutdownAllHomes} from "./lib/home";
+import {app} from './app';
+import {shutdownAllHomes} from './lib/home';
 
 const server = app.listen({
     port: 8000,
     maxRequestBodySize: 1024 * 1024 * 1024, // 1 GB — per-file limits enforced by streaming parser
 });
 
-export type {App as app} from "./app";
+export type {App as app} from './app';
 
-console.log(
-    `🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`,
-);
+console.log(`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`);
 
 async function gracefulShutdown(signal: string) {
     console.log(`\n${signal} received, shutting down gracefully...`);

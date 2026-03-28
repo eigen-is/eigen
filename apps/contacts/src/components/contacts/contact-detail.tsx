@@ -1,102 +1,92 @@
-import {Building, Calendar, Mail, MapPin, MoreVertical, Pencil, Phone, Printer, Trash2} from 'lucide-react';
-import {type Address, type Contact} from "@workspace/lib/types/contact";
-import {type Label} from "@workspace/lib/types/label";
-import {Button} from "@workspace/ui/components/button";
+import {Link} from '@tanstack/react-router';
+import {getMailComposeUrl} from '@workspace/lib/api';
+import {useLabels} from '@workspace/lib/contacts';
+import {useOpenWriteEmailTo} from '@workspace/lib/mail';
+import type {Address, Contact} from '@workspace/lib/types/contact';
+import type {Label} from '@workspace/lib/types/label';
+import {Toolbar, TooltipButton, UserAvatar} from '@workspace/ui';
+import {Badge} from '@workspace/ui/components/badge';
+import {Button} from '@workspace/ui/components/button';
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
-} from "@workspace/ui/components/dropdown-menu";
-import {Badge} from "@workspace/ui/components/badge";
-import {Link} from '@tanstack/react-router';
-import {useLabels} from '@workspace/lib/contacts';
-import {Toolbar, TooltipButton, UserAvatar} from "@workspace/ui";
+} from '@workspace/ui/components/dropdown-menu';
 import {EigenLoader} from '@workspace/ui/components/layout/braket/eigen-loader.tsx';
-import {useOpenWriteEmailTo} from "@workspace/lib/mail";
 import {printDocument} from '@workspace/ui/lib/printElement';
-import {getMailComposeUrl} from "@workspace/lib/api";
+import {Building, Calendar, Mail, MapPin, MoreVertical, Pencil, Phone, Printer, Trash2} from 'lucide-react';
 
 type ContactDetailToolbarProps = {
     contact: Contact;
     filterType?: string;
     filterId?: string;
     onDeleteClick: () => void;
-}
+};
 
 export function ContactDetailToolbar({contact, filterType, filterId, onDeleteClick}: ContactDetailToolbarProps) {
     const openWriteEmailTo = useOpenWriteEmailTo();
 
     return (
         <Toolbar>
-        <div className="flex items-center gap-1 ml-auto">
-            <Link
-                to="/edit/$filterType/$filterId"
-                params={{
-                    filterType: filterType || 'filter',
-                    filterId: filterId || 'all'
-                }}
-                search={{
-                    contactId: contact.id
-                }}
-            >
-                <TooltipButton
-                    icon={Pencil}
-                    tooltipText="Edit"
-                    className="h-8 w-8"
-                />
-            </Link>
-            <TooltipButton
-                icon={Trash2}
-                tooltipText="Delete"
-                onClick={onDeleteClick}
-            />
+            <div className="flex items-center gap-1 ml-auto">
+                <Link
+                    to="/edit/$filterType/$filterId"
+                    params={{
+                        filterType: filterType || 'filter',
+                        filterId: filterId || 'all',
+                    }}
+                    search={{
+                        contactId: contact.id,
+                    }}
+                >
+                    <TooltipButton icon={Pencil} tooltipText="Edit" className="h-8 w-8"/>
+                </Link>
+                <TooltipButton icon={Trash2} tooltipText="Delete" onClick={onDeleteClick}/>
 
-            <div className="h-6 w-[1px] bg-border mx-1"/>
+                <div className="h-6 w-[1px] bg-border mx-1"/>
 
-            <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" title="More actions">
-                        <MoreVertical className="h-4 w-4"/>
-                    </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                    {contact.email && contact.email.length > 0 && (
-                        <DropdownMenuItem
-                            onClick={() => openWriteEmailTo(contact.email[0])}
-                        >
-                            <Mail className="mr-2"/>
-                            Send email
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" title="More actions">
+                            <MoreVertical className="h-4 w-4"/>
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                        {contact.email && contact.email.length > 0 && (
+                            <DropdownMenuItem onClick={() => openWriteEmailTo(contact.email[0])}>
+                                <Mail className="mr-2"/>
+                                Send email
+                            </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem onClick={printDocument}>
+                            <Printer className="mr-2"/>
+                            Print
                         </DropdownMenuItem>
-                    )}
-                    <DropdownMenuItem onClick={printDocument}>
-                        <Printer className="mr-2"/>
-                        Print
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator/>
-                    <DropdownMenuItem asChild className="cursor-pointer">
-                        <Link
-                            to="/edit/$filterType/$filterId"
-                            params={{
-                                filterType: filterType || 'filter',
-                                filterId: filterId || 'all'
-                            }}
-                            search={{
-                                contactId: contact.id
-                            }}
-                        >
-                            <Pencil className="mr-2"/>
-                            Edit
-                        </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={onDeleteClick}>
-                        <Trash2 className="mr-2"/>
-                        Delete
-                    </DropdownMenuItem>
-                </DropdownMenuContent>
-            </DropdownMenu>
-        </div>
+                        <DropdownMenuSeparator/>
+                        <DropdownMenuItem asChild className="cursor-pointer">
+                            <Link
+                                to="/edit/$filterType/$filterId"
+                                params={{
+                                    filterType: filterType || 'filter',
+                                    filterId: filterId || 'all',
+                                }}
+                                search={{
+                                    contactId: contact.id,
+                                }}
+                            >
+                                <Pencil className="mr-2"/>
+                                Edit
+                            </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={onDeleteClick}>
+                            <Trash2 className="mr-2"/>
+                            Delete
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            </div>
         </Toolbar>
     );
 }
@@ -104,14 +94,10 @@ export function ContactDetailToolbar({contact, filterType, filterId, onDeleteCli
 type ContactDetailProps = {
     contact: Contact;
     onDelete: (id: string) => void;
-}
+};
 
-export function ContactDetail({contact, onDelete}: ContactDetailProps) {
-    const {
-        data: labels = [],
-        isLoading: labelsLoading,
-        error: labelsError
-    } = useLabels();
+export function ContactDetail({contact, onDelete: _onDelete}: ContactDetailProps) {
+    const {data: labels = [], isLoading: labelsLoading, error: labelsError} = useLabels();
 
     const formatPhoneNumber = (phone: string) => {
         return phone; // You might want to add formatting logic here
@@ -120,13 +106,7 @@ export function ContactDetail({contact, onDelete}: ContactDetailProps) {
     const formatAddress = (address: Address) => {
         if (!address) return '';
 
-        const parts = [
-            address.street,
-            address.city,
-            address.state,
-            address.zipCode,
-            address.country
-        ].filter(Boolean);
+        const parts = [address.street, address.city, address.state, address.zipCode, address.country].filter(Boolean);
 
         return parts.join(', ');
     };
@@ -138,13 +118,11 @@ export function ContactDetail({contact, onDelete}: ContactDetailProps) {
         return new Intl.DateTimeFormat('en-US', {
             year: 'numeric',
             month: 'long',
-            day: 'numeric'
+            day: 'numeric',
         }).format(date);
     };
 
-    const contactLabels = contact.labels
-        ? labels.filter(label => contact.labels?.includes(label.id))
-        : [];
+    const contactLabels = contact.labels ? labels.filter((label) => contact.labels?.includes(label.id)) : [];
 
     return (
         <div className="h-full flex flex-col overflow-hidden" data-document="contact-detail">
@@ -183,7 +161,9 @@ export function ContactDetail({contact, onDelete}: ContactDetailProps) {
                                         {label.name}
                                     </Badge>
                                 ))
-                            ) : labelsLoading ? (<EigenLoader/>) : labelsError ? (
+                            ) : labelsLoading ? (
+                                <EigenLoader/>
+                            ) : labelsError ? (
                                 <p className="text-sm text-destructive">Error loading labels</p>
                             ) : null}
                         </div>
@@ -201,8 +181,7 @@ export function ContactDetail({contact, onDelete}: ContactDetailProps) {
                                     </h4>
                                     {contact.email.map((email: string, index: number) => (
                                         <div key={index} className="pl-6">
-                                            <a className="text-primary hover:underline"
-                                               href={getMailComposeUrl(email)}>
+                                            <a className="text-primary hover:underline" href={getMailComposeUrl(email)}>
                                                 {email}
                                             </a>
                                         </div>
@@ -252,36 +231,33 @@ export function ContactDetail({contact, onDelete}: ContactDetailProps) {
                             )}
                         </div>
 
-                        {contact.address && contact.address.length > 0 && Object.keys(contact.address[0]).length > 0 && (
-                            <div className="space-y-4">
-                                <h3 className="text-lg font-semibold border-b pb-2">Addresses</h3>
+                        {contact.address &&
+                            contact.address.length > 0 &&
+                            Object.keys(contact.address[0]).length > 0 && (
+                                <div className="space-y-4">
+                                    <h3 className="text-lg font-semibold border-b pb-2">Addresses</h3>
 
-                                {contact.address.map((address: Address, index: number) => (
-                                    <div key={index} className="space-y-2">
-                                        <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
-                                            <MapPin className="h-4 w-4"/>
-                                            Address {contact.address && contact.address.length > 1 ? index + 1 : ''}
-                                        </h4>
-                                        <div className="pl-6">
-                                            {formatAddress(address)}
+                                    {contact.address.map((address: Address, index: number) => (
+                                        <div key={index} className="space-y-2">
+                                            <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                                                <MapPin className="h-4 w-4"/>
+                                                Address {contact.address && contact.address.length > 1 ? index + 1 : ''}
+                                            </h4>
+                                            <div className="pl-6">{formatAddress(address)}</div>
                                         </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
+                                    ))}
+                                </div>
+                            )}
 
                         {contact.notes && (
                             <div className="space-y-4">
                                 <h3 className="text-lg font-semibold border-b pb-2">Notes</h3>
-                                <div className="whitespace-pre-wrap">
-                                    {contact.notes}
-                                </div>
+                                <div className="whitespace-pre-wrap">{contact.notes}</div>
                             </div>
                         )}
                     </div>
                 </div>
             </div>
-
         </div>
     );
 }

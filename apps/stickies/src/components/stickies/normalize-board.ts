@@ -1,4 +1,4 @@
-import * as Y from 'yjs';
+import type * as Y from 'yjs';
 
 export function normalizeBoard(yjsDoc: Y.Doc) {
     const columnsMap = yjsDoc.getMap('columns');
@@ -11,8 +11,8 @@ export function normalizeBoard(yjsDoc: Y.Doc) {
     for (const columnId of columnIds) {
         const columnValue = columnsMap.get(columnId);
         if (!columnValue) continue;
-        const column = columnValue as Y.Map<any>;
-        const taskIdsArray = column.get('taskIds') as Y.Array<any>;
+        const column = columnValue as Y.Map<unknown>;
+        const taskIdsArray = column.get('taskIds') as Y.Array<string>;
         if (!taskIdsArray) continue;
         for (const taskId of taskIdsArray.toArray() as string[]) {
             if (!taskToColumns[taskId]) {
@@ -28,8 +28,8 @@ export function normalizeBoard(yjsDoc: Y.Doc) {
             const colId = columns[i];
             const columnValue = columnsMap.get(colId);
             if (!columnValue) continue;
-            const column = columnValue as Y.Map<any>;
-            const taskIdsArray = column.get('taskIds') as Y.Array<any>;
+            const column = columnValue as Y.Map<unknown>;
+            const taskIdsArray = column.get('taskIds') as Y.Array<string>;
             const idx = (taskIdsArray.toArray() as string[]).indexOf(taskId);
             if (idx !== -1) {
                 taskIdsArray.delete(idx, 1);
@@ -40,8 +40,8 @@ export function normalizeBoard(yjsDoc: Y.Doc) {
     if (columnIds.length > 0) {
         const firstColumnValue = columnsMap.get(columnIds[0]);
         if (firstColumnValue) {
-            const firstColumn = firstColumnValue as Y.Map<any>;
-            const firstTaskIdsArray = firstColumn.get('taskIds') as Y.Array<any>;
+            const firstColumn = firstColumnValue as Y.Map<unknown>;
+            const firstTaskIdsArray = firstColumn.get('taskIds') as Y.Array<string>;
             for (const taskId of taskIds) {
                 if (!taskToColumns[taskId] || taskToColumns[taskId].length === 0) {
                     firstTaskIdsArray.push([taskId]);

@@ -13,10 +13,14 @@ export const comments = sqliteTable('comments', {
     createdAt: integer('createdAt', {mode: 'timestamp'}).notNull().default(sql`(unixepoch())`),
 });
 
-export const commentMentions = sqliteTable('comment_mentions', {
-    chatName: text('chatName').notNull(),
-    email: text('email').notNull(),
-}, (table) => ({
-    pk: primaryKey({columns: [table.chatName, table.email]}),
-    emailIdx: index('idx_mentions_email').on(table.email),
-}));
+export const commentMentions = sqliteTable(
+    'comment_mentions',
+    {
+        chatName: text('chatName').notNull(),
+        email: text('email').notNull(),
+    },
+    (table) => ({
+        pk: primaryKey({columns: [table.chatName, table.email]}),
+        emailIdx: index('idx_mentions_email').on(table.email),
+    }),
+);

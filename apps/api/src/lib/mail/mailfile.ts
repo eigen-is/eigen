@@ -1,27 +1,29 @@
-import type {AddressObject} from "@workspace/lib/types/mail"
+import type { AddressObject } from '@workspace/lib/types/mail';
 
 export type EmlInput = {
-    id: string
-    from?: AddressObject
-    to?: AddressObject
-    cc?: AddressObject
-    bcc?: AddressObject
-    subject: string
-    text: string
-    html: string
-    date?: Date
-}
+    id: string;
+    from?: AddressObject;
+    to?: AddressObject;
+    cc?: AddressObject;
+    bcc?: AddressObject;
+    subject: string;
+    text: string;
+    html: string;
+    date?: Date;
+};
 
 function formatAddresses(field: AddressObject | undefined): string {
-    if (!field?.value || !Array.isArray(field.value)) return ''
-    return field.value.map(addr => {
-        if (addr.name && addr.address) return `${addr.name.trim()} <${addr.address.trim()}>`
-        return addr.address || addr.name || ''
-    }).join(', ')
+    if (!field?.value || !Array.isArray(field.value)) return '';
+    return field.value
+        .map((addr) => {
+            if (addr.name && addr.address) return `${addr.name.trim()} <${addr.address.trim()}>`;
+            return addr.address || addr.name || '';
+        })
+        .join(', ');
 }
 
 export function createEmlContent(input: EmlInput): string {
-    const date = input.date ? input.date.toUTCString() : new Date().toUTCString()
+    const date = input.date ? input.date.toUTCString() : new Date().toUTCString();
 
     const boundary = `boundary-${crypto.randomUUID()}`;
 
@@ -33,8 +35,8 @@ export function createEmlContent(input: EmlInput): string {
         `Date: ${date}`,
         `Message-ID: <${input.id}@eigen.local>`,
         `MIME-Version: 1.0`,
-        `Content-Type: multipart/alternative; boundary="${boundary}"`
-    ]
+        `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    ];
 
     const body = [
         ``,
@@ -48,8 +50,8 @@ export function createEmlContent(input: EmlInput): string {
         ``,
         input.html || '',
         ``,
-        `--${boundary}--`
-    ]
+        `--${boundary}--`,
+    ];
 
-    return [...headers, ...body].join('\r\n')
+    return [...headers, ...body].join('\r\n');
 }

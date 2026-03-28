@@ -1,11 +1,11 @@
-import type {CalendarItem, CalendarShare} from '@workspace/lib/types/calendar';
-import type {SSEvent} from '@workspace/lib/types/sse';
-import {parseOwnerId} from '@workspace/lib/types';
-import {getMemberships, getUserByEmail} from '../user/';
-import type {Home} from '../home';
-import {atHome, getHome} from '../home';
-import {getTeamMembers} from '../team';
-import {addRegistryEntry} from '../share';
+import { parseOwnerId } from '@workspace/lib/types';
+import type { CalendarItem, CalendarShare } from '@workspace/lib/types/calendar';
+import type { SSEvent } from '@workspace/lib/types/sse';
+import type { Home } from '../home';
+import { atHome, getHome } from '../home';
+import { addRegistryEntry } from '../share';
+import { getTeamMembers } from '../team';
+import { getMemberships, getUserByEmail } from '../user/';
 
 export async function notifySharedCalendarUsers(
     ownerHome: Home,
@@ -81,11 +81,7 @@ export async function propagateCalendarShare(
             const targetEmail = targetHome.user.email;
             const memberships = await getMemberships(userId);
 
-            const permission = ownerHome.calendar.checkPermission(
-                calendar.id,
-                targetEmail,
-                memberships.teamIds,
-            );
+            const permission = ownerHome.calendar.checkPermission(calendar.id, targetEmail, memberships.teamIds);
 
             if (permission) {
                 targetHome.calendar.receiveShare(

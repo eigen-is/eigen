@@ -1,6 +1,6 @@
-import type {DrivePath} from "@workspace/lib/types/drive";
-import {useRenamePath} from "@workspace/lib/drive";
-import {DriveCreateItemDialog} from "./drive-create-folder-item";
+import {useRenamePath} from '@workspace/lib/drive';
+import type {DrivePath} from '@workspace/lib/types/drive';
+import {DriveCreateItemDialog} from './drive-create-folder-item';
 
 export type DriveRenameItemProps = {
     path: DrivePath | null;
@@ -8,20 +8,18 @@ export type DriveRenameItemProps = {
     onOpenChange: (open: boolean) => void;
     onSave?: (newName: string) => void;
     onCancel?: () => void;
-    onAfterAction?: (actionType: string, data: any) => void;
-}
+    onAfterAction?: (actionType: string, data: Record<string, unknown>) => void;
+};
 
-export function DriveRenameItem({
-                                    path,
-                                    open,
-                                    onOpenChange,
-                                    onSave,
-                                    onCancel,
-                                    onAfterAction,
-                                }: DriveRenameItemProps) {
+export function DriveRenameItem({path, open, onOpenChange, onSave, onCancel, onAfterAction}: DriveRenameItemProps) {
     if (!path) return null;
 
-    const renamePathMutation = useRenamePath(path.ownerId, path.mountId, path.parentId || undefined, path.mimeType || undefined);
+    const renamePathMutation = useRenamePath(
+        path.ownerId,
+        path.mountId,
+        path.parentId || undefined,
+        path.mimeType || undefined,
+    );
 
     const handleOpenChange = (nextOpen: boolean) => {
         onOpenChange(nextOpen);
@@ -31,7 +29,7 @@ export function DriveRenameItem({
     const handleRename = async (newName: string) => {
         // Extract extension from original name
         const original = path.name;
-        const dotIdx = original.lastIndexOf('.')
+        const dotIdx = original.lastIndexOf('.');
         let base = newName;
         let ext = '';
         // Only append extension for files (not folders)

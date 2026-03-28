@@ -1,20 +1,20 @@
 import {useNavigate} from '@tanstack/react-router';
-import {DEFAULT_MOUNT_ID, useMimeContent, usePathInfo} from '@workspace/lib/drive';
-import {DriveLayout} from './drive-layout';
-import {type DrivePath, isDocumentType} from '@workspace/lib/types/drive';
-import {useAuth} from '@workspace/lib/auth';
-import {useLayout} from '../app/layout-context';
 import {openDocument} from '@workspace/lib/api';
-import {NotFound} from '../app/not-found';
+import {useAuth} from '@workspace/lib/auth';
+import {DEFAULT_MOUNT_ID, useMimeContent, usePathInfo} from '@workspace/lib/drive';
+import {type DrivePath, isDocumentType} from '@workspace/lib/types/drive';
 import {useContext} from 'react';
-import {EigenDocDriveContext} from './eigendoc-root';
+import {useLayout} from '../app/layout-context';
+import {NotFound} from '../app/not-found';
+import {DriveLayout} from './drive-layout';
 import type {EigenDocAppConfig} from './eigendoc-config';
+import {EigenDocDriveContext} from './eigendoc-root';
 
 type EigenDocListViewProps = {
     config: EigenDocAppConfig;
     pid?: string;
     mid?: string;
-}
+};
 
 export function EigenDocListView({config, pid, mid}: EigenDocListViewProps) {
     const {rootPath} = useContext(EigenDocDriveContext);
@@ -27,7 +27,7 @@ export function EigenDocListView({config, pid, mid}: EigenDocListViewProps) {
     const {
         data: folderContents = [],
         isLoading: isFolderContentLoading,
-        error: isFolderContentLoadingError
+        error: isFolderContentLoadingError,
     } = useMimeContent(ownerId, config.mimeType);
 
     const onRowSelect = (path: DrivePath) => {

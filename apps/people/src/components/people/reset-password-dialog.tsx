@@ -1,16 +1,16 @@
-import {useEffect, useState} from 'react';
+import { useResetUserPassword } from '@workspace/lib/people';
+import { Button } from '@workspace/ui/components/button';
 import {
     Dialog,
     DialogContent,
     DialogDescription,
     DialogFooter,
     DialogHeader,
-    DialogTitle
+    DialogTitle,
 } from '@workspace/ui/components/dialog';
-import {Button} from '@workspace/ui/components/button';
-import {Input} from '@workspace/ui/components/input';
-import {Field, FieldContent, FieldGroup, FieldLabel} from '@workspace/ui/components/field';
-import {useResetUserPassword} from '@workspace/lib/people';
+import { Field, FieldContent, FieldGroup, FieldLabel } from '@workspace/ui/components/field';
+import { Input } from '@workspace/ui/components/input';
+import { useEffect, useState } from 'react';
 
 interface ResetPasswordDialogProps {
     open: boolean;
@@ -30,7 +30,7 @@ function generatePassword() {
     return password;
 }
 
-export function ResetPasswordDialog({open, onOpenChange, userId, userName}: ResetPasswordDialogProps) {
+export function ResetPasswordDialog({ open, onOpenChange, userId, userName }: ResetPasswordDialogProps) {
     const [password, setPassword] = useState(() => generatePassword());
     const resetPassword = useResetUserPassword();
 
@@ -41,7 +41,7 @@ export function ResetPasswordDialog({open, onOpenChange, userId, userName}: Rese
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!password || password.length < 8) return;
-        await resetPassword.mutateAsync({userId, newPassword: password});
+        await resetPassword.mutateAsync({ userId, newPassword: password });
         onOpenChange(false);
     };
 
@@ -59,14 +59,20 @@ export function ResetPasswordDialog({open, onOpenChange, userId, userName}: Rese
                         <Field>
                             <FieldLabel htmlFor="new-password">New password</FieldLabel>
                             <FieldContent>
-                                <Input id="new-password" value={password}
-                                       onChange={e => setPassword(e.target.value)}
-                                       minLength={8} required/>
+                                <Input
+                                    id="new-password"
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    minLength={8}
+                                    required
+                                />
                             </FieldContent>
                         </Field>
                     </FieldGroup>
                     <DialogFooter>
-                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                            Cancel
+                        </Button>
                         <Button type="submit" disabled={resetPassword.isPending}>
                             {resetPassword.isPending ? 'Resetting...' : 'Reset password'}
                         </Button>

@@ -1,7 +1,13 @@
-import {useEffect, useState} from "react";
-import {LogOut, Menu, Palette, Settings, UserRound,} from "lucide-react";
-import {useRouter} from "@tanstack/react-router";
-import {Button} from "../../button.tsx";
+import { useRouter } from '@tanstack/react-router';
+import { getSpacePasswordUrl, getSpaceProfileUrl } from '@workspace/lib/api.ts';
+import { apps } from '@workspace/lib/apps.ts';
+import { useAuth } from '@workspace/lib/auth/auth-context.tsx';
+import { useUnreadNotificationCount } from '@workspace/lib/notification';
+import { useSpaceSettings, useUpdateSpaceSettings } from '@workspace/lib/space';
+import { LogOut, Menu, Palette, Settings, UserRound } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Button } from '../../button.tsx';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../dialog.tsx';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -14,47 +20,40 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
     DropdownMenuTrigger,
-} from "../../dropdown-menu.tsx";
-import {useAuth} from "@workspace/lib/auth/auth-context.tsx";
-import {Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,} from "../../dialog.tsx";
-import {apps} from "@workspace/lib/apps.ts";
-import {getSpacePasswordUrl, getSpaceProfileUrl} from "@workspace/lib/api.ts";
-import {useSpaceSettings, useUpdateSpaceSettings} from "@workspace/lib/space";
-import {UserItem} from "../user-item.tsx";
-import {AppLogo} from "./app-logo.tsx";
-import {UserAvatar} from "../user-avatar.tsx";
-import {useLayout} from "./layout-context.tsx";
-import {NotificationBell} from "./notification-bell.tsx";
-import {useUnreadNotificationCount} from "@workspace/lib/notification";
+} from '../../dropdown-menu.tsx';
+import { UserAvatar } from '../user-avatar.tsx';
+import { UserItem } from '../user-item.tsx';
+import { AppLogo } from './app-logo.tsx';
+import { useLayout } from './layout-context.tsx';
+import { NotificationBell } from './notification-bell.tsx';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TanStack Router's useNavigate has app-specific types
-type NavigateFunction = (...args: any[]) => any;
+type NavigateFunction = (opts: { to: string }) => unknown;
 
 type TopbarProps = {
     rootRoute: {
         useNavigate: () => NavigateFunction;
     };
-}
+};
 
-function UserDropdown({rootRoute}: { rootRoute: TopbarProps['rootRoute'] }) {
+function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
     const router = useRouter();
     const navigate = rootRoute.useNavigate();
     const auth = useAuth();
-    const {appName} = useLayout();
+    const { appName } = useLayout();
     const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
-    const {data: settings} = useSpaceSettings();
+    const { data: settings } = useSpaceSettings();
     const updateSettings = useUpdateSpaceSettings();
 
     const handleLogout = () => {
         auth.logout().then(() => {
             router.invalidate().finally(() => {
-                navigate({to: '/'});
+                navigate({ to: '/' });
                 setLogoutDialogOpen(false);
-            })
-        })
-    }
+            });
+        });
+    };
 
-    return auth.isAuthenticated ?
+    return auth.isAuthenticated ? (
         <>
             <Dialog open={logoutDialogOpen} onOpenChange={setLogoutDialogOpen}>
                 <DialogContent>
@@ -78,8 +77,7 @@ function UserDropdown({rootRoute}: { rootRoute: TopbarProps['rootRoute'] }) {
 
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                    <Button variant="ghost"
-                            className="relative h-8 w-8 rounded-full overflow-hidden p-0">
+                    <Button variant="ghost" className="relative h-8 w-8 rounded-full overflow-hidden p-0">
                         <UserAvatar
                             name={auth.user?.name}
                             email={auth.user?.email}
@@ -90,47 +88,45 @@ function UserDropdown({rootRoute}: { rootRoute: TopbarProps['rootRoute'] }) {
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="w-56" align="end" forceMount>
                     <DropdownMenuLabel className="font-normal">
-                        <UserItem
-                            name={auth.user?.name}
-                            email={auth.user?.email}
-                            className="p-0"
-                        />
+                        <UserItem name={auth.user?.name} email={auth.user?.email} className="p-0" />
                     </DropdownMenuLabel>
-                    <DropdownMenuSeparator/>
-                    {apps.map(app => {
+                    <DropdownMenuSeparator />
+                    {apps.map((app) => {
                         const isActive = app.name.toLowerCase() === appName.toLowerCase();
                         const Icon = app.icon;
                         return (
-                            <DropdownMenuItem key={app.name} asChild className={isActive ? "bg-muted font-medium" : ""}>
+                            <DropdownMenuItem key={app.name} asChild className={isActive ? 'bg-muted font-medium' : ''}>
                                 <a href={app.href}>
-                                    <Icon/>
+                                    <Icon />
                                     {app.name}
                                 </a>
                             </DropdownMenuItem>
                         );
                     })}
-                    <DropdownMenuSeparator/>
+                    <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>
                         <a href={getSpaceProfileUrl()}>
-                            <UserRound/>
+                            <UserRound />
                             Profile
                         </a>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
                         <a href={getSpacePasswordUrl()}>
-                            <Settings/>
+                            <Settings />
                             Settings
                         </a>
                     </DropdownMenuItem>
                     <DropdownMenuSub>
                         <DropdownMenuSubTrigger>
-                            <Palette/>
+                            <Palette />
                             Theme
                         </DropdownMenuSubTrigger>
                         <DropdownMenuSubContent>
                             <DropdownMenuRadioGroup
                                 value={settings?.theme ?? 'light'}
-                                onValueChange={(v) => updateSettings.mutate({theme: v as 'light' | 'dark' | 'system'})}
+                                onValueChange={(v) =>
+                                    updateSettings.mutate({ theme: v as 'light' | 'dark' | 'system' })
+                                }
                             >
                                 <DropdownMenuRadioItem value="light">Light</DropdownMenuRadioItem>
                                 <DropdownMenuRadioItem value="dark">Dark</DropdownMenuRadioItem>
@@ -138,21 +134,21 @@ function UserDropdown({rootRoute}: { rootRoute: TopbarProps['rootRoute'] }) {
                             </DropdownMenuRadioGroup>
                         </DropdownMenuSubContent>
                     </DropdownMenuSub>
-                    <DropdownMenuSeparator/>
+                    <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => setLogoutDialogOpen(true)}>
-                        <LogOut/>
+                        <LogOut />
                         Log out
                     </DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>
         </>
-        : null;
+    ) : null;
 }
 
-export function Topbar({rootRoute}: TopbarProps) {
-    const {appName, documentTitle, isMobile, sidebarMode, setSidebarOpen} = useLayout();
+export function Topbar({ rootRoute }: TopbarProps) {
+    const { appName, documentTitle, isMobile, sidebarMode, setSidebarOpen } = useLayout();
     const auth = useAuth();
-    const {data: unreadCount = 0} = useUnreadNotificationCount(auth.user?.id ?? '');
+    const { data: unreadCount = 0 } = useUnreadNotificationCount(auth.user?.id ?? '');
 
     useEffect(() => {
         const base = documentTitle ? `${documentTitle} — eigen|${appName}>` : `eigen|${appName}>`;
@@ -172,11 +168,11 @@ export function Topbar({rootRoute}: TopbarProps) {
                             onClick={() => setSidebarOpen(true)}
                             className="mr-2 text-white hover:bg-primary/20 hover:text-white"
                         >
-                            <Menu className="h-5 w-5"/>
+                            <Menu className="h-5 w-5" />
                             <span className="sr-only">Open menu</span>
                         </Button>
                     )}
-                    <AppLogo appName={appName.toLowerCase()}/>
+                    <AppLogo appName={appName.toLowerCase()} />
                 </div>
 
                 <div className="flex-1 flex justify-center min-w-0">
@@ -186,8 +182,8 @@ export function Topbar({rootRoute}: TopbarProps) {
                 </div>
 
                 <div className="flex items-center gap-1 px-4 shrink-0">
-                    <NotificationBell/>
-                    <UserDropdown rootRoute={rootRoute}/>
+                    <NotificationBell />
+                    <UserDropdown rootRoute={rootRoute} />
                 </div>
             </div>
         </header>

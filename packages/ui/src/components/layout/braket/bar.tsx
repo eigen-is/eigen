@@ -1,18 +1,14 @@
-import {cn} from "../../../lib/utils.ts";
+import {cn} from '../../../lib/utils.ts';
 
 interface BarProps {
-    className?: string
-    style?: React.CSSProperties
+    className?: string;
+    style?: React.CSSProperties;
 }
 
-export function Bar({
-                        className,
-                        style,
-                        ...props
-                    }: BarProps) {
+export function Bar({className, style, ...props}: BarProps) {
     return (
         <svg
-            className={cn("inline align-baseline overflow-visible", className)}
+            className={cn('inline align-baseline overflow-visible', className)}
             style={style}
             {...props}
             height="1em"
@@ -25,5 +21,5 @@ export function Bar({
         >
             <path d="m4 0 0 16"/>
         </svg>
-    )
+    );
 }

@@ -1,10 +1,10 @@
+import {getEmoteCommand, resolveEmoteKey} from '../core/chat/emotes';
 import {validateEmailTarget} from './email';
-import {resolveEmoteKey, getEmoteCommand} from '../core/chat/emotes';
 
 export type CommandValidationResult =
     | {
     valid: true;
-    kind: 'builtin-emote' | 'emote' | 'whisper' | 'reply' | 'invite' | 'help' | 'inspect'
+    kind: 'builtin-emote' | 'emote' | 'whisper' | 'reply' | 'invite' | 'help' | 'inspect';
 }
     | { valid: false; error: string };
 

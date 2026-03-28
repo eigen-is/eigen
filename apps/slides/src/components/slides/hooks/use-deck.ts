@@ -1,17 +1,44 @@
-import {useCallback, useEffect, useRef, useState} from 'react';
+import { getCollabWebSocketUrl } from '@workspace/lib/api';
+import { nanoid } from 'nanoid';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
-import {WebsocketProvider} from 'y-websocket';
-import {DeckData, DEFAULT_TEXT_OBJECT, SlideObject} from '../types';
-import {nanoid} from 'nanoid';
-import {normalizeDeck} from '../normalize-deck';
-import {getCollabWebSocketUrl} from '@workspace/lib/api';
+import { normalizeDeck } from '../normalize-deck';
+import { DEFAULT_TEXT_OBJECT, type DeckData, type SlideObject } from '../types';
 
 type ApplyTo = 'this' | 'this-and-following' | 'all';
 
-const OBJECT_FIELDS = ['id', 'slideId', 'type', 'x', 'y', 'w', 'h', 'rotation', 'borderColor', 'borderWidth', 'borderRadius', 'text', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'textDecoration', 'textAlign', 'verticalAlign', 'color', 'letterSpacing', 'lineHeight', 'highlightColor', 'backgroundColor', 'mediaName', 'objectFit'] as const;
+const OBJECT_FIELDS = [
+    'id',
+    'slideId',
+    'type',
+    'x',
+    'y',
+    'w',
+    'h',
+    'rotation',
+    'borderColor',
+    'borderWidth',
+    'borderRadius',
+    'text',
+    'fontFamily',
+    'fontSize',
+    'fontWeight',
+    'fontStyle',
+    'textDecoration',
+    'textAlign',
+    'verticalAlign',
+    'color',
+    'letterSpacing',
+    'lineHeight',
+    'highlightColor',
+    'backgroundColor',
+    'mediaName',
+    'objectFit',
+] as const;
 
-function yMapToObject(yMap: Y.Map<any>): Record<string, any> {
-    const obj: Record<string, any> = {};
+function yMapToObject(yMap: Y.Map<unknown>): Record<string, unknown> {
+    const obj: Record<string, unknown> = {};
     for (const field of OBJECT_FIELDS) {
         const val = yMap.get(field);
         if (val !== undefined) obj[field] = val;
@@ -20,7 +47,7 @@ function yMapToObject(yMap: Y.Map<any>): Record<string, any> {
 }
 
 export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
-    const [deck, setDeck] = useState<DeckData>({slides: {}, objects: {}, slideOrder: []});
+    const [deck, setDeck] = useState<DeckData>({ slides: {}, objects: {}, slideOrder: [] });
     const [activeSlideId, setActiveSlideId] = useState<string | null>(null);
 
     const docRef = useRef<Y.Doc | null>(null);
@@ -88,18 +115,18 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
                 slideOrder: slideOrderArray.toArray() as string[],
             };
             for (const [slideId, slideMapValue] of slidesMap) {
-                const slideMap = slideMapValue as Y.Map<any>;
-                const objIdsArray = slideMap.get('objectIds') as Y.Array<any>;
-                const objIds = objIdsArray ? objIdsArray.toArray() as string[] : [];
+                const slideMap = slideMapValue as Y.Map<unknown>;
+                const objIdsArray = slideMap.get('objectIds') as Y.Array<string>;
+                const objIds = objIdsArray ? (objIdsArray.toArray() as string[]) : [];
                 newState.slides[slideId] = {
                     id: slideId,
                     objectIds: objIds,
-                    backgroundColor: slideMap.get('backgroundColor') || '#ffffff',
-                    backgroundMediaName: slideMap.get('backgroundMediaName') || '',
+                    backgroundColor: (slideMap.get('backgroundColor') as string) || '#ffffff',
+                    backgroundMediaName: (slideMap.get('backgroundMediaName') as string) || '',
                 };
             }
             for (const [objId, objMapValue] of objectsMap) {
-                const objMap = objMapValue as Y.Map<any>;
+                const objMap = objMapValue as Y.Map<unknown>;
                 const obj = yMapToObject(objMap) as SlideObject;
                 newState.objects[objId] = obj;
             }
@@ -150,109 +177,124 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         setActiveSlideId(slideId);
     }, []);
 
-    const deleteSlide = useCallback((slideId: string) => {
-        const doc = docRef.current;
-        if (!doc) return;
-        doc.transact(() => {
-            const slidesMap = doc.getMap('slides');
-            const objectsMap = doc.getMap('objects');
-            const slideOrderArray = doc.getArray('slideOrder');
+    const deleteSlide = useCallback(
+        (slideId: string) => {
+            const doc = docRef.current;
+            if (!doc) return;
+            doc.transact(() => {
+                const slidesMap = doc.getMap('slides');
+                const objectsMap = doc.getMap('objects');
+                const slideOrderArray = doc.getArray('slideOrder');
 
-            const slideMap = slidesMap.get(slideId) as Y.Map<any> | undefined;
-            if (slideMap) {
-                const objIds = (slideMap.get('objectIds') as Y.Array<any>)?.toArray() as string[] || [];
-                for (const objId of objIds) objectsMap.delete(objId);
-            }
-
-            const order = slideOrderArray.toArray() as string[];
-            const idx = order.indexOf(slideId);
-            if (idx !== -1) slideOrderArray.delete(idx, 1);
-            slidesMap.delete(slideId);
-        });
-        if (activeSlideId === slideId) {
-            const remaining = deck.slideOrder.filter(id => id !== slideId);
-            setActiveSlideId(remaining[0] || null);
-        }
-    }, [activeSlideId, deck.slideOrder]);
-
-    const duplicateSlide = useCallback((slideId: string) => {
-        const doc = docRef.current;
-        if (!doc) return;
-        const slide = deck.slides[slideId];
-        if (!slide) return;
-
-        const newSlideId = `slide-${nanoid(6)}`;
-        doc.transact(() => {
-            const slidesMap = doc.getMap('slides');
-            const objectsMap = doc.getMap('objects');
-            const slideOrderArray = doc.getArray('slideOrder');
-
-            const newObjIds: string[] = [];
-            for (const objId of slide.objectIds) {
-                const srcObj = deck.objects[objId];
-                if (!srcObj) continue;
-                const newObjId = `obj-${nanoid(6)}`;
-                const objYMap = new Y.Map();
-                for (const [k, v] of Object.entries(srcObj)) {
-                    if (k === 'id') objYMap.set('id', newObjId);
-                    else if (k === 'slideId') objYMap.set('slideId', newSlideId);
-                    else objYMap.set(k, v);
+                const slideMap = slidesMap.get(slideId) as Y.Map<unknown> | undefined;
+                if (slideMap) {
+                    const objIds = ((slideMap.get('objectIds') as Y.Array<string>)?.toArray() as string[]) || [];
+                    for (const objId of objIds) objectsMap.delete(objId);
                 }
-                objectsMap.set(newObjId, objYMap);
-                newObjIds.push(newObjId);
+
+                const order = slideOrderArray.toArray() as string[];
+                const idx = order.indexOf(slideId);
+                if (idx !== -1) slideOrderArray.delete(idx, 1);
+                slidesMap.delete(slideId);
+            });
+            if (activeSlideId === slideId) {
+                const remaining = deck.slideOrder.filter((id) => id !== slideId);
+                setActiveSlideId(remaining[0] || null);
             }
+        },
+        [activeSlideId, deck.slideOrder],
+    );
 
-            const slideYMap = new Y.Map();
-            slideYMap.set('id', newSlideId);
-            slideYMap.set('backgroundColor', slide.backgroundColor);
-            slideYMap.set('backgroundMediaName', slide.backgroundMediaName || '');
-            const objIdsArr = new Y.Array();
-            objIdsArr.push(newObjIds);
-            slideYMap.set('objectIds', objIdsArr);
-            slidesMap.set(newSlideId, slideYMap);
+    const duplicateSlide = useCallback(
+        (slideId: string) => {
+            const doc = docRef.current;
+            if (!doc) return;
+            const slide = deck.slides[slideId];
+            if (!slide) return;
 
-            const order = slideOrderArray.toArray() as string[];
+            const newSlideId = `slide-${nanoid(6)}`;
+            doc.transact(() => {
+                const slidesMap = doc.getMap('slides');
+                const objectsMap = doc.getMap('objects');
+                const slideOrderArray = doc.getArray('slideOrder');
+
+                const newObjIds: string[] = [];
+                for (const objId of slide.objectIds) {
+                    const srcObj = deck.objects[objId];
+                    if (!srcObj) continue;
+                    const newObjId = `obj-${nanoid(6)}`;
+                    const objYMap = new Y.Map();
+                    for (const [k, v] of Object.entries(srcObj)) {
+                        if (k === 'id') objYMap.set('id', newObjId);
+                        else if (k === 'slideId') objYMap.set('slideId', newSlideId);
+                        else objYMap.set(k, v);
+                    }
+                    objectsMap.set(newObjId, objYMap);
+                    newObjIds.push(newObjId);
+                }
+
+                const slideYMap = new Y.Map();
+                slideYMap.set('id', newSlideId);
+                slideYMap.set('backgroundColor', slide.backgroundColor);
+                slideYMap.set('backgroundMediaName', slide.backgroundMediaName || '');
+                const objIdsArr = new Y.Array();
+                objIdsArr.push(newObjIds);
+                slideYMap.set('objectIds', objIdsArr);
+                slidesMap.set(newSlideId, slideYMap);
+
+                const order = slideOrderArray.toArray() as string[];
+                const idx = order.indexOf(slideId);
+                slideOrderArray.insert(idx + 1, [newSlideId]);
+            });
+            setActiveSlideId(newSlideId);
+        },
+        [deck],
+    );
+
+    const getTargetSlideIds = useCallback(
+        (slideId: string, applyTo: ApplyTo): string[] => {
+            if (applyTo === 'this') return [slideId];
+            const order = deck.slideOrder;
+            if (applyTo === 'all') return [...order];
             const idx = order.indexOf(slideId);
-            slideOrderArray.insert(idx + 1, [newSlideId]);
-        });
-        setActiveSlideId(newSlideId);
-    }, [deck]);
+            if (idx === -1) return [slideId];
+            return order.slice(idx);
+        },
+        [deck.slideOrder],
+    );
 
-    const getTargetSlideIds = useCallback((slideId: string, applyTo: ApplyTo): string[] => {
-        if (applyTo === 'this') return [slideId];
-        const order = deck.slideOrder;
-        if (applyTo === 'all') return [...order];
-        const idx = order.indexOf(slideId);
-        if (idx === -1) return [slideId];
-        return order.slice(idx);
-    }, [deck.slideOrder]);
+    const updateSlideBackground = useCallback(
+        (slideId: string, color: string, applyTo: ApplyTo = 'this') => {
+            const doc = docRef.current;
+            if (!doc) return;
+            const targetIds = getTargetSlideIds(slideId, applyTo);
+            doc.transact(() => {
+                const slidesMap = doc.getMap('slides');
+                for (const id of targetIds) {
+                    const slideMap = slidesMap.get(id) as Y.Map<unknown> | undefined;
+                    if (slideMap) slideMap.set('backgroundColor', color);
+                }
+            });
+        },
+        [getTargetSlideIds],
+    );
 
-    const updateSlideBackground = useCallback((slideId: string, color: string, applyTo: ApplyTo = 'this') => {
-        const doc = docRef.current;
-        if (!doc) return;
-        const targetIds = getTargetSlideIds(slideId, applyTo);
-        doc.transact(() => {
-            const slidesMap = doc.getMap('slides');
-            for (const id of targetIds) {
-                const slideMap = slidesMap.get(id) as Y.Map<any> | undefined;
-                if (slideMap) slideMap.set('backgroundColor', color);
-            }
-        });
-    }, [getTargetSlideIds]);
-
-    const updateSlideBackgroundImage = useCallback((slideId: string, mediaName: string, applyTo: ApplyTo = 'this') => {
-        const doc = docRef.current;
-        if (!doc) return;
-        const targetIds = getTargetSlideIds(slideId, applyTo);
-        doc.transact(() => {
-            const slidesMap = doc.getMap('slides');
-            for (const id of targetIds) {
-                const slideMap = slidesMap.get(id) as Y.Map<any> | undefined;
-                if (!slideMap) continue;
-                slideMap.set('backgroundMediaName', mediaName);
-            }
-        });
-    }, [getTargetSlideIds]);
+    const updateSlideBackgroundImage = useCallback(
+        (slideId: string, mediaName: string, applyTo: ApplyTo = 'this') => {
+            const doc = docRef.current;
+            if (!doc) return;
+            const targetIds = getTargetSlideIds(slideId, applyTo);
+            doc.transact(() => {
+                const slidesMap = doc.getMap('slides');
+                for (const id of targetIds) {
+                    const slideMap = slidesMap.get(id) as Y.Map<unknown> | undefined;
+                    if (!slideMap) continue;
+                    slideMap.set('backgroundMediaName', mediaName);
+                }
+            });
+        },
+        [getTargetSlideIds],
+    );
 
     const addObject = useCallback((slideId: string, obj: Omit<SlideObject, 'id' | 'slideId'>) => {
         const doc = docRef.current;
@@ -269,9 +311,9 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
             }
             objectsMap.set(objId, objYMap);
 
-            const slideMap = slidesMap.get(slideId) as Y.Map<any> | undefined;
+            const slideMap = slidesMap.get(slideId) as Y.Map<unknown> | undefined;
             if (slideMap) {
-                const objIdsArr = slideMap.get('objectIds') as Y.Array<any>;
+                const objIdsArr = slideMap.get('objectIds') as Y.Array<string>;
                 if (objIdsArr) objIdsArr.push([objId]);
             }
         });
@@ -283,7 +325,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         if (!doc) return;
         doc.transact(() => {
             const objectsMap = doc.getMap('objects');
-            const objMap = objectsMap.get(objId) as Y.Map<any> | undefined;
+            const objMap = objectsMap.get(objId) as Y.Map<unknown> | undefined;
             if (!objMap) return;
             for (const [k, v] of Object.entries(updates)) {
                 if (k === 'id' || k === 'slideId') continue;
@@ -292,81 +334,93 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         });
     }, []);
 
-    const moveObjectUp = useCallback((objId: string) => {
-        const doc = docRef.current;
-        if (!doc) return;
-        const obj = deck.objects[objId];
-        if (!obj) return;
-        doc.transact(() => {
-            const slidesMap = doc.getMap('slides');
-            const slideMap = slidesMap.get(obj.slideId) as Y.Map<any> | undefined;
-            if (!slideMap) return;
-            const objIdsArr = slideMap.get('objectIds') as Y.Array<any>;
-            if (!objIdsArr) return;
-            const arr = objIdsArr.toArray() as string[];
-            const idx = arr.indexOf(objId);
-            if (idx === -1 || idx === arr.length - 1) return;
-            objIdsArr.delete(idx, 1);
-            objIdsArr.insert(idx + 1, [objId]);
-        });
-    }, [deck.objects]);
+    const moveObjectUp = useCallback(
+        (objId: string) => {
+            const doc = docRef.current;
+            if (!doc) return;
+            const obj = deck.objects[objId];
+            if (!obj) return;
+            doc.transact(() => {
+                const slidesMap = doc.getMap('slides');
+                const slideMap = slidesMap.get(obj.slideId) as Y.Map<unknown> | undefined;
+                if (!slideMap) return;
+                const objIdsArr = slideMap.get('objectIds') as Y.Array<string>;
+                if (!objIdsArr) return;
+                const arr = objIdsArr.toArray() as string[];
+                const idx = arr.indexOf(objId);
+                if (idx === -1 || idx === arr.length - 1) return;
+                objIdsArr.delete(idx, 1);
+                objIdsArr.insert(idx + 1, [objId]);
+            });
+        },
+        [deck.objects],
+    );
 
-    const moveObjectDown = useCallback((objId: string) => {
-        const doc = docRef.current;
-        if (!doc) return;
-        const obj = deck.objects[objId];
-        if (!obj) return;
-        doc.transact(() => {
-            const slidesMap = doc.getMap('slides');
-            const slideMap = slidesMap.get(obj.slideId) as Y.Map<any> | undefined;
-            if (!slideMap) return;
-            const objIdsArr = slideMap.get('objectIds') as Y.Array<any>;
-            if (!objIdsArr) return;
-            const arr = objIdsArr.toArray() as string[];
-            const idx = arr.indexOf(objId);
-            if (idx <= 0) return;
-            objIdsArr.delete(idx, 1);
-            objIdsArr.insert(idx - 1, [objId]);
-        });
-    }, [deck.objects]);
+    const moveObjectDown = useCallback(
+        (objId: string) => {
+            const doc = docRef.current;
+            if (!doc) return;
+            const obj = deck.objects[objId];
+            if (!obj) return;
+            doc.transact(() => {
+                const slidesMap = doc.getMap('slides');
+                const slideMap = slidesMap.get(obj.slideId) as Y.Map<unknown> | undefined;
+                if (!slideMap) return;
+                const objIdsArr = slideMap.get('objectIds') as Y.Array<string>;
+                if (!objIdsArr) return;
+                const arr = objIdsArr.toArray() as string[];
+                const idx = arr.indexOf(objId);
+                if (idx <= 0) return;
+                objIdsArr.delete(idx, 1);
+                objIdsArr.insert(idx - 1, [objId]);
+            });
+        },
+        [deck.objects],
+    );
 
-    const moveObjectToFront = useCallback((objId: string) => {
-        const doc = docRef.current;
-        if (!doc) return;
-        const obj = deck.objects[objId];
-        if (!obj) return;
-        doc.transact(() => {
-            const slidesMap = doc.getMap('slides');
-            const slideMap = slidesMap.get(obj.slideId) as Y.Map<any> | undefined;
-            if (!slideMap) return;
-            const objIdsArr = slideMap.get('objectIds') as Y.Array<any>;
-            if (!objIdsArr) return;
-            const arr = objIdsArr.toArray() as string[];
-            const idx = arr.indexOf(objId);
-            if (idx === -1 || idx === arr.length - 1) return;
-            objIdsArr.delete(idx, 1);
-            objIdsArr.push([objId]);
-        });
-    }, [deck.objects]);
+    const moveObjectToFront = useCallback(
+        (objId: string) => {
+            const doc = docRef.current;
+            if (!doc) return;
+            const obj = deck.objects[objId];
+            if (!obj) return;
+            doc.transact(() => {
+                const slidesMap = doc.getMap('slides');
+                const slideMap = slidesMap.get(obj.slideId) as Y.Map<unknown> | undefined;
+                if (!slideMap) return;
+                const objIdsArr = slideMap.get('objectIds') as Y.Array<string>;
+                if (!objIdsArr) return;
+                const arr = objIdsArr.toArray() as string[];
+                const idx = arr.indexOf(objId);
+                if (idx === -1 || idx === arr.length - 1) return;
+                objIdsArr.delete(idx, 1);
+                objIdsArr.push([objId]);
+            });
+        },
+        [deck.objects],
+    );
 
-    const moveObjectToBack = useCallback((objId: string) => {
-        const doc = docRef.current;
-        if (!doc) return;
-        const obj = deck.objects[objId];
-        if (!obj) return;
-        doc.transact(() => {
-            const slidesMap = doc.getMap('slides');
-            const slideMap = slidesMap.get(obj.slideId) as Y.Map<any> | undefined;
-            if (!slideMap) return;
-            const objIdsArr = slideMap.get('objectIds') as Y.Array<any>;
-            if (!objIdsArr) return;
-            const arr = objIdsArr.toArray() as string[];
-            const idx = arr.indexOf(objId);
-            if (idx <= 0) return;
-            objIdsArr.delete(idx, 1);
-            objIdsArr.insert(0, [objId]);
-        });
-    }, [deck.objects]);
+    const moveObjectToBack = useCallback(
+        (objId: string) => {
+            const doc = docRef.current;
+            if (!doc) return;
+            const obj = deck.objects[objId];
+            if (!obj) return;
+            doc.transact(() => {
+                const slidesMap = doc.getMap('slides');
+                const slideMap = slidesMap.get(obj.slideId) as Y.Map<unknown> | undefined;
+                if (!slideMap) return;
+                const objIdsArr = slideMap.get('objectIds') as Y.Array<string>;
+                if (!objIdsArr) return;
+                const arr = objIdsArr.toArray() as string[];
+                const idx = arr.indexOf(objId);
+                if (idx <= 0) return;
+                objIdsArr.delete(idx, 1);
+                objIdsArr.insert(0, [objId]);
+            });
+        },
+        [deck.objects],
+    );
 
     const updateObjects = useCallback((objIds: string[], updates: Partial<SlideObject>) => {
         const doc = docRef.current;
@@ -374,7 +428,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         doc.transact(() => {
             const objectsMap = doc.getMap('objects');
             for (const objId of objIds) {
-                const objMap = objectsMap.get(objId) as Y.Map<any> | undefined;
+                const objMap = objectsMap.get(objId) as Y.Map<unknown> | undefined;
                 if (!objMap) continue;
                 for (const [k, v] of Object.entries(updates)) {
                     if (k === 'id' || k === 'slideId') continue;
@@ -391,12 +445,12 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
             const objectsMap = doc.getMap('objects');
             const slidesMap = doc.getMap('slides');
             for (const objId of objIds) {
-                const obj = objectsMap.get(objId) as Y.Map<any> | undefined;
+                const obj = objectsMap.get(objId) as Y.Map<unknown> | undefined;
                 if (obj) {
                     const slideId = obj.get('slideId') as string;
-                    const slideMap = slidesMap.get(slideId) as Y.Map<any> | undefined;
+                    const slideMap = slidesMap.get(slideId) as Y.Map<unknown> | undefined;
                     if (slideMap) {
-                        const objIdsArr = slideMap.get('objectIds') as Y.Array<any>;
+                        const objIdsArr = slideMap.get('objectIds') as Y.Array<string>;
                         if (objIdsArr) {
                             const arr = objIdsArr.toArray() as string[];
                             const idx = arr.indexOf(objId);
@@ -409,9 +463,12 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         });
     }, []);
 
-    const deleteObject = useCallback((objId: string) => {
-        deleteObjects([objId]);
-    }, [deleteObjects]);
+    const deleteObject = useCallback(
+        (objId: string) => {
+            deleteObjects([objId]);
+        },
+        [deleteObjects],
+    );
 
     return {
         deck,

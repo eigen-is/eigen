@@ -1,32 +1,32 @@
-import {useEffect, useState} from 'react';
+import { useAuth } from '@workspace/lib/auth';
+import { useCalendarAccess, useDeleteSharedCalendar, useUpdateSharedCalendar } from '@workspace/lib/calendar';
+import { parseOwnerId } from '@workspace/lib/types';
+import type { SharedCalendar } from '@workspace/lib/types/calendar';
+import { Button } from '@workspace/ui/components/button';
 import {
     Dialog,
     DialogContent,
     DialogDescription,
     DialogFooter,
     DialogHeader,
-    DialogTitle
+    DialogTitle,
 } from '@workspace/ui/components/dialog';
-import {Button} from '@workspace/ui/components/button';
-import {Popover, PopoverContent, PopoverTrigger} from '@workspace/ui/components/popover';
-import {ColorPicker} from '@workspace/ui/components/layout/media/color-picker';
-import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
-import {useCalendarAccess, useDeleteSharedCalendar, useUpdateSharedCalendar} from '@workspace/lib/calendar';
-import {useAuth} from '@workspace/lib/auth';
-import {parseOwnerId} from '@workspace/lib/types';
-import type {SharedCalendar} from '@workspace/lib/types/calendar';
-import {Label} from '@workspace/ui/components/label';
-import {UserItem} from '@workspace/ui/components/layout/user-item';
-import {Separator} from '@workspace/ui/components/separator';
+import { Label } from '@workspace/ui/components/label';
+import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
+import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker';
+import { UserItem } from '@workspace/ui/components/layout/user-item';
+import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
+import { Separator } from '@workspace/ui/components/separator';
+import { useEffect, useState } from 'react';
 
 type SharedCalendarConfigDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     sharedCalendar: SharedCalendar | null;
-}
+};
 
-export function SharedCalendarConfigDialog({open, onOpenChange, sharedCalendar}: SharedCalendarConfigDialogProps) {
-    const {user} = useAuth();
+export function SharedCalendarConfigDialog({ open, onOpenChange, sharedCalendar }: SharedCalendarConfigDialogProps) {
+    const { user } = useAuth();
     const ownerId = user?.id || '';
     const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
     const [colorPickerOpen, setColorPickerOpen] = useState(false);
@@ -35,7 +35,7 @@ export function SharedCalendarConfigDialog({open, onOpenChange, sharedCalendar}:
 
     const updateSharedCalendar = useUpdateSharedCalendar(ownerId);
     const deleteSharedCalendar = useDeleteSharedCalendar(ownerId);
-    const {data: accessData} = useCalendarAccess(
+    const { data: accessData } = useCalendarAccess(
         sharedCalendar?.ownerUserId || '',
         sharedCalendar?.calendarId || '',
         open && !!sharedCalendar,
@@ -95,7 +95,7 @@ export function SharedCalendarConfigDialog({open, onOpenChange, sharedCalendar}:
                                     <button
                                         type="button"
                                         className="h-9 w-9 rounded-md border border-input shrink-0"
-                                        style={{backgroundColor: color}}
+                                        style={{ backgroundColor: color }}
                                         disabled={isLoading}
                                     />
                                 </PopoverTrigger>
@@ -114,17 +114,23 @@ export function SharedCalendarConfigDialog({open, onOpenChange, sharedCalendar}:
 
                         {!isTeamCalendar && (
                             <>
-                                <Separator/>
+                                <Separator />
 
                                 <div>
                                     <Label className="text-sm font-semibold">People with access</Label>
                                     <div className="mt-2 space-y-3">
-                                        <UserItem userId={sharedCalendar.ownerUserId} label="Owner"/>
+                                        <UserItem userId={sharedCalendar.ownerUserId} label="Owner" />
                                         {accessData?.shares?.map((share, i) => (
                                             <UserItem
                                                 key={i}
                                                 email={share.targetId}
-                                                label={share.permission === 'write' ? 'Editor' : share.permission === 'read' ? 'Viewer' : share.permission}
+                                                label={
+                                                    share.permission === 'write'
+                                                        ? 'Editor'
+                                                        : share.permission === 'read'
+                                                          ? 'Viewer'
+                                                          : share.permission
+                                                }
                                             />
                                         ))}
                                     </div>
@@ -145,8 +151,12 @@ export function SharedCalendarConfigDialog({open, onOpenChange, sharedCalendar}:
                                 Remove
                             </Button>
                         )}
-                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)}
-                                disabled={isLoading}>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => onOpenChange(false)}
+                            disabled={isLoading}
+                        >
                             Cancel
                         </Button>
                         <Button onClick={handleSave} disabled={isLoading}>

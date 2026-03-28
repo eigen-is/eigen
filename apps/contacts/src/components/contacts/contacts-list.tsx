@@ -1,34 +1,34 @@
-import {useMemo, useRef} from 'react';
-import {cn} from '@workspace/ui/lib/utils';
-import {SearchBar} from '@workspace/ui/components/layout/search-bar/search-bar';
+import {useAuth} from '@workspace/lib/auth';
 import {useContacts} from '@workspace/lib/contacts';
-import {type Contact} from '@workspace/lib/types/contact';
+import type {Contact} from '@workspace/lib/types/contact';
+import type {Label} from '@workspace/lib/types/label';
+import {EmptyState, ErrorState, LoadingState} from '@workspace/ui';
+import {Button} from '@workspace/ui/components/button';
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuSeparator,
-    DropdownMenuTrigger
+    DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import {ArrowUpDown, Pencil, Trash2} from 'lucide-react';
-import {Button} from '@workspace/ui/components/button';
-import {EmptyState, ErrorState, LoadingState} from '@workspace/ui';
-import {UserItem} from '@workspace/ui/components/layout/user-item';
 import {ContextMenuAnchor, useContextMenu} from '@workspace/ui/components/layout/context-menu';
 import {LabelAssignSubMenu} from '@workspace/ui/components/layout/labels/label-assign-sub-menu';
+import {SearchBar} from '@workspace/ui/components/layout/search-bar/search-bar';
+import {UserItem} from '@workspace/ui/components/layout/user-item';
 import {useKeyboardListNavigation} from '@workspace/ui/hooks/use-keyboard-list-navigation';
-import {useListSelection} from '@workspace/ui/hooks/use-list-selection';
 import {useListDrag} from '@workspace/ui/hooks/use-list-drag';
-import type {Label} from '@workspace/lib/types/label';
-import {useAuth} from '@workspace/lib/auth';
+import {useListSelection} from '@workspace/ui/hooks/use-list-selection';
 import {Toolbar} from '@workspace/ui/index';
+import {cn} from '@workspace/ui/lib/utils';
+import {ArrowUpDown, Pencil, Trash2} from 'lucide-react';
+import {useMemo, useRef} from 'react';
 
 type ContactsListToolbarProps = {
     searchQuery: string;
     onSearchChange: (query: string) => void;
     sortBy: 'firstName' | 'lastName';
     onSortChange: (sort: 'firstName' | 'lastName') => void;
-}
+};
 
 export function ContactsListToolbar({searchQuery, onSearchChange, onSortChange}: ContactsListToolbarProps) {
     return (
@@ -47,12 +47,8 @@ export function ContactsListToolbar({searchQuery, onSearchChange, onSortChange}:
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => onSortChange('firstName')}>
-                        First name
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => onSortChange('lastName')}>
-                        Last name
-                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => onSortChange('firstName')}>First name</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => onSortChange('lastName')}>Last name</DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>
         </Toolbar>
@@ -70,7 +66,7 @@ type ContactsListProps = {
     onDelete?: (contacts: Contact[]) => void;
     onToggleLabel?: (contacts: Contact[], labelId: string) => void;
     onRowClick?: (contactId: string) => void;
-}
+};
 
 export function ContactsList({
                                  filterType = 'filter',
@@ -82,7 +78,7 @@ export function ContactsList({
                                  onEdit,
                                  onDelete,
                                  onToggleLabel,
-                                 onRowClick
+                                 onRowClick,
                              }: ContactsListProps) {
     const {user} = useAuth();
     const listRef = useRef<HTMLDivElement>(null);
@@ -94,9 +90,7 @@ export function ContactsList({
         if (!contacts.length) return [];
         let filtered = [...contacts];
         if (filterType === 'label' && filterId !== 'all') {
-            filtered = filtered.filter(contact =>
-                contact.labels && contact.labels.includes(filterId)
-            );
+            filtered = filtered.filter((contact) => contact.labels?.includes(filterId));
         }
         return filtered;
     }, [contacts, filterType, filterId]);
@@ -111,10 +105,11 @@ export function ContactsList({
     const searchedContacts = useMemo(() => {
         if (searchQuery.length === 0) return sortedContacts;
         const q = searchQuery.toLowerCase();
-        return sortedContacts.filter(contact =>
-            contact.firstName.toLowerCase().includes(q) ||
-            contact.lastName.toLowerCase().includes(q) ||
-            (contact.email && contact.email.some((email: string) => email.toLowerCase().includes(q)))
+        return sortedContacts.filter(
+            (contact) =>
+                contact.firstName.toLowerCase().includes(q) ||
+                contact.lastName.toLowerCase().includes(q) ||
+                contact.email?.some((email: string) => email.toLowerCase().includes(q)),
         );
     }, [sortedContacts, searchQuery]);
 
@@ -139,17 +134,20 @@ export function ContactsList({
     };
 
     const contextItems = contextMenu.item
-        ? (selection.selectedCount > 1 ? selection.selectedItems : [contextMenu.item])
+        ? selection.selectedCount > 1
+            ? selection.selectedItems
+            : [contextMenu.item]
         : [];
     const isSingleSelect = contextItems.length === 1;
-    const hasMe = contextItems.some(c => c.eigenId === user?.id);
+    const hasMe = contextItems.some((c) => c.eigenId === user?.id);
 
     const groupedContacts = useMemo(() => {
         const groups: Record<string, Contact[]> = {};
         for (const contact of searchedContacts) {
-            const firstChar = sortBy === 'firstName'
-                ? contact.firstName.charAt(0).toUpperCase()
-                : contact.lastName.charAt(0).toUpperCase();
+            const firstChar =
+                sortBy === 'firstName'
+                    ? contact.firstName.charAt(0).toUpperCase()
+                    : contact.lastName.charAt(0).toUpperCase();
             if (!groups[firstChar]) groups[firstChar] = [];
             groups[firstChar].push(contact);
         }
@@ -162,12 +160,7 @@ export function ContactsList({
 
     return (
         <div className="w-full flex flex-col flex-1 overflow-hidden">
-            <div
-                className="flex-1 overflow-y-auto outline-none"
-                ref={listRef}
-                tabIndex={0}
-                onKeyDown={handleKeyDown}
-            >
+            <div className="flex-1 overflow-y-auto outline-none" ref={listRef} onKeyDown={handleKeyDown}>
                 {isLoading ? (
                     <LoadingState/>
                 ) : groupedContacts.length === 0 ? (
@@ -186,9 +179,10 @@ export function ContactsList({
                                             <div
                                                 key={contact.id}
                                                 className={cn(
-                                                    "flex items-center gap-3 px-6 py-3 eigen-list-item",
-                                                    (activeContactId === contact.id || selectedIndex === flatIndex) && "eigen-list-item-active",
-                                                    selection.isSelected(contact.id) && "eigen-list-item-selected",
+                                                    'flex items-center gap-3 px-6 py-3 eigen-list-item',
+                                                    (activeContactId === contact.id || selectedIndex === flatIndex) &&
+                                                    'eigen-list-item-active',
+                                                    selection.isSelected(contact.id) && 'eigen-list-item-selected',
                                                 )}
                                                 onClick={(e) => {
                                                     selection.handleItemClick(contact.id, e);
@@ -200,10 +194,16 @@ export function ContactsList({
                                                 {...drag.getDragProps(contact)}
                                             >
                                                 <UserItem
-                                                    name={sortBy === 'firstName'
-                                                        ? `${contact.firstName} ${contact.lastName}`
-                                                        : `${contact.lastName}, ${contact.firstName}`}
-                                                    email={contact.email && contact.email.length > 0 ? contact.email[0] : undefined}
+                                                    name={
+                                                        sortBy === 'firstName'
+                                                            ? `${contact.firstName} ${contact.lastName}`
+                                                            : `${contact.lastName}, ${contact.firstName}`
+                                                    }
+                                                    email={
+                                                        contact.email && contact.email.length > 0
+                                                            ? contact.email[0]
+                                                            : undefined
+                                                    }
                                                     imageUrl={contact.avatar}
                                                     className="flex-1"
                                                 />
@@ -218,45 +218,54 @@ export function ContactsList({
 
                 <ContextMenuAnchor contextMenu={contextMenu} className="min-w-[200px]">
                     {isSingleSelect && onEdit && contextMenu.item && (
-                        <DropdownMenuItem onClick={() => {
-                            onEdit(contextMenu.item!);
-                            contextMenu.close();
-                        }}>
+                        <DropdownMenuItem
+                            onClick={() => {
+                                onEdit(contextMenu.item!);
+                                contextMenu.close();
+                            }}
+                        >
                             <Pencil className="h-4 w-4 mr-2"/> Edit
                         </DropdownMenuItem>
                     )}
                     {onDelete && !hasMe && contextItems.length > 0 && (
-                        <DropdownMenuItem onClick={() => {
-                            onDelete(contextItems);
-                            contextMenu.close();
-                        }}>
+                        <DropdownMenuItem
+                            onClick={() => {
+                                onDelete(contextItems);
+                                contextMenu.close();
+                            }}
+                        >
                             <Trash2 className="h-4 w-4 mr-2"/>
                             {isSingleSelect ? 'Delete' : `Delete ${contextItems.length} contacts`}
                         </DropdownMenuItem>
                     )}
-                    {onToggleLabel && contextItems.length > 0 && labels.length > 0 && (() => {
-                        const allLabelIds = labels.map(l => l.id);
-                        const assignedToAll = allLabelIds.filter(lid =>
-                            contextItems.every(c => (c.labels || []).includes(lid))
-                        );
-                        const assignedToSome = allLabelIds.filter(lid =>
-                            !assignedToAll.includes(lid) && contextItems.some(c => (c.labels || []).includes(lid))
-                        );
-                        return (
-                            <>
-                                <DropdownMenuSeparator/>
-                                <LabelAssignSubMenu
-                                    labels={labels}
-                                    assignedLabelIds={assignedToAll}
-                                    partialLabelIds={assignedToSome}
-                                    onToggleLabel={(labelId) => {
-                                        onToggleLabel(contextItems, labelId);
-                                        contextMenu.close();
-                                    }}
-                                />
-                            </>
-                        );
-                    })()}
+                    {onToggleLabel &&
+                        contextItems.length > 0 &&
+                        labels.length > 0 &&
+                        (() => {
+                            const allLabelIds = labels.map((l) => l.id);
+                            const assignedToAll = allLabelIds.filter((lid) =>
+                                contextItems.every((c) => (c.labels || []).includes(lid)),
+                            );
+                            const assignedToSome = allLabelIds.filter(
+                                (lid) =>
+                                    !assignedToAll.includes(lid) &&
+                                    contextItems.some((c) => (c.labels || []).includes(lid)),
+                            );
+                            return (
+                                <>
+                                    <DropdownMenuSeparator/>
+                                    <LabelAssignSubMenu
+                                        labels={labels}
+                                        assignedLabelIds={assignedToAll}
+                                        partialLabelIds={assignedToSome}
+                                        onToggleLabel={(labelId) => {
+                                            onToggleLabel(contextItems, labelId);
+                                            contextMenu.close();
+                                        }}
+                                    />
+                                </>
+                            );
+                        })()}
                 </ContextMenuAnchor>
             </div>
         </div>

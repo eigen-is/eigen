@@ -8,9 +8,9 @@
  *
  * Usage:  bun run apps/api/src/scripts/migrate-users.ts
  */
-import {Database} from "bun:sqlite";
-import * as path from "path";
-import * as fs from "node:fs";
+import { Database } from 'bun:sqlite';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 function getDataRoot(): string {
     return process.env['EIGEN_DATA_ROOT'] || './../../data';
@@ -19,7 +19,7 @@ function getDataRoot(): string {
 function getServerDataPath(filename: string): string {
     const serverData = path.join(getDataRoot(), 'server');
     if (!fs.existsSync(serverData)) {
-        fs.mkdirSync(serverData, {recursive: true});
+        fs.mkdirSync(serverData, { recursive: true });
     }
     return path.join(serverData, filename);
 }
@@ -36,7 +36,7 @@ if (!fs.existsSync(newDbPath)) {
     process.exit(1);
 }
 
-const oldDb = new Database(oldDbPath, {readonly: true});
+const oldDb = new Database(oldDbPath, { readonly: true });
 const newDb = new Database(newDbPath);
 
 type UserRow = {
@@ -70,18 +70,18 @@ type AccountRow = {
     updated_at: number;
 };
 
-const oldUsers = oldDb.query("SELECT * FROM user").all() as UserRow[];
+const oldUsers = oldDb.query('SELECT * FROM user').all() as UserRow[];
 console.log(`Found ${oldUsers.length} user(s) in users_current.db`);
 
-const defaultOrg = newDb.query("SELECT id FROM organization LIMIT 1").get() as { id: string } | null;
+const defaultOrg = newDb.query('SELECT id FROM organization LIMIT 1').get() as { id: string } | null;
 if (!defaultOrg) {
-    console.error("No organization found in users3.db — run setup first.");
+    console.error('No organization found in users3.db — run setup first.');
     process.exit(1);
 }
 console.log(`Default organization: ${defaultOrg.id}`);
 
 const existingEmails = new Set(
-    (newDb.query("SELECT email FROM user").all() as { email: string }[]).map(r => r.email.toLowerCase())
+    (newDb.query('SELECT email FROM user').all() as { email: string }[]).map((r) => r.email.toLowerCase()),
 );
 
 let migrated = 0;
@@ -103,9 +103,11 @@ const insertMember = newDb.prepare(`
 `);
 
 const existingMembers = new Set(
-    (newDb.query("SELECT user_id FROM member WHERE organization_id = ?").all(defaultOrg.id) as {
-        user_id: string
-    }[]).map(r => r.user_id)
+    (
+        newDb.query('SELECT user_id FROM member WHERE organization_id = ?').all(defaultOrg.id) as {
+            user_id: string;
+        }[]
+    ).map((r) => r.user_id),
 );
 
 for (const user of oldUsers) {
@@ -115,21 +117,39 @@ for (const user of oldUsers) {
         continue;
     }
 
-    const accounts = oldDb.query("SELECT * FROM account WHERE user_id = ?").all(user.id) as AccountRow[];
+    const accounts = oldDb.query('SELECT * FROM account WHERE user_id = ?').all(user.id) as AccountRow[];
 
     newDb.transaction(() => {
         insertUser.run(
-            user.id, user.name, user.email, user.email_verified, user.image,
-            user.created_at, user.updated_at, user.two_factor_enabled,
-            user.role, user.banned, user.ban_reason, user.ban_expires
+            user.id,
+            user.name,
+            user.email,
+            user.email_verified,
+            user.image,
+            user.created_at,
+            user.updated_at,
+            user.two_factor_enabled,
+            user.role,
+            user.banned,
+            user.ban_reason,
+            user.ban_expires,
         );
 
         for (const acc of accounts) {
             insertAccount.run(
-                acc.id, acc.account_id, acc.provider_id, acc.user_id,
-                acc.access_token, acc.refresh_token, acc.id_token,
-                acc.access_token_expires_at, acc.refresh_token_expires_at,
-                acc.scope, acc.password, acc.created_at, acc.updated_at
+                acc.id,
+                acc.account_id,
+                acc.provider_id,
+                acc.user_id,
+                acc.access_token,
+                acc.refresh_token,
+                acc.id_token,
+                acc.access_token_expires_at,
+                acc.refresh_token_expires_at,
+                acc.scope,
+                acc.password,
+                acc.created_at,
+                acc.updated_at,
             );
         }
 

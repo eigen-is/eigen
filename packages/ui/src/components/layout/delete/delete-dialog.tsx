@@ -1,5 +1,5 @@
-import {Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,} from "./../../dialog";
-import {Button} from "./../../button";
+import {Button} from './../../button';
+import {Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle} from './../../dialog';
 
 export type DeleteDialogProps = {
     open: boolean;
@@ -10,7 +10,7 @@ export type DeleteDialogProps = {
     onDelete: () => void;
     cancelText?: string;
     deleteText?: string;
-}
+};
 
 export function DeleteDialog({
                                  open,
@@ -19,8 +19,8 @@ export function DeleteDialog({
                                  description,
                                  itemName,
                                  onDelete,
-                                 cancelText = "Cancel",
-                                 deleteText = "Delete"
+                                 cancelText = 'Cancel',
+                                 deleteText = 'Delete',
                              }: DeleteDialogProps) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -28,9 +28,13 @@ export function DeleteDialog({
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
                     <DialogDescription>
-                        {itemName
-                            ? <>{description} <strong>{itemName}</strong></>
-                            : <>{description}</>}
+                        {itemName ? (
+                            <>
+                                {description} <strong>{itemName}</strong>
+                            </>
+                        ) : (
+                            description
+                        )}
                     </DialogDescription>
                 </DialogHeader>
                 <DialogFooter>

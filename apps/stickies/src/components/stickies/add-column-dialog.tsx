@@ -1,16 +1,16 @@
-import {useState} from 'react';
-import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
+import {useAuth} from '@workspace/lib/auth';
 import {Button} from '@workspace/ui/components/button';
+import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
 import {Input} from '@workspace/ui/components/input';
 import {Label} from '@workspace/ui/components/label';
-import {ColumnItem} from './types';
-import {useAuth} from '@workspace/lib/auth';
+import {useState} from 'react';
+import type {ColumnItem} from './types';
 
 type AddColumnDialogProps = {
     isOpen: boolean;
     onClose: () => void;
     onAddColumn: (column: Omit<ColumnItem, 'id' | 'taskIds'>) => void;
-}
+};
 
 export function AddColumnDialog({isOpen, onClose, onAddColumn}: AddColumnDialogProps) {
     const [title, setTitle] = useState('');

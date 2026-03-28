@@ -1,45 +1,45 @@
-import {useEffect, useState} from 'react'
-import {LoadingState} from '@workspace/ui'
-import {Button} from '@workspace/ui/components/button'
-import {Input} from '@workspace/ui/components/input'
-import {Label} from '@workspace/ui/components/label'
-import {RadioGroup, RadioGroupItem} from '@workspace/ui/components/radio-group'
-import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@workspace/ui/components/card'
-import {setupApi} from '@workspace/lib/core/api'
+import { setupApi } from '@workspace/lib/core/api';
+import { LoadingState } from '@workspace/ui';
+import { Button } from '@workspace/ui/components/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@workspace/ui/components/card';
+import { Input } from '@workspace/ui/components/input';
+import { Label } from '@workspace/ui/components/label';
+import { RadioGroup, RadioGroupItem } from '@workspace/ui/components/radio-group';
+import { useEffect, useState } from 'react';
 
-type StorageType = 'local-id' | 'local-fullnames' | 's3'
+type StorageType = 'local-id' | 'local-fullnames' | 's3';
 
 interface SetupData {
-    domain: string
-    orgName: string
-    storageType: StorageType
-    s3Bucket: string
-    s3Region: string
-    s3AccessKeyId: string
-    s3SecretAccessKey: string
-    s3Endpoint: string
-    adminUsername: string
-    adminPassword: string
-    adminName: string
+    domain: string;
+    orgName: string;
+    storageType: StorageType;
+    s3Bucket: string;
+    s3Region: string;
+    s3AccessKeyId: string;
+    s3SecretAccessKey: string;
+    s3Endpoint: string;
+    adminUsername: string;
+    adminPassword: string;
+    adminName: string;
 }
 
 async function checkSetupStatus() {
-    const res = await setupApi.status.get()
-    return res.data as { setupRequired: boolean; domain?: string }
+    const res = await setupApi.status.get();
+    return res.data as { setupRequired: boolean; domain?: string };
 }
 
 async function completeSetup(data: SetupData) {
     const res = await setupApi.complete.post({
         ...data,
-        adminEmail: `${data.adminUsername}@${data.domain}`
-    })
-    return res.data as { success: boolean; error?: string; message?: string }
+        adminEmail: `${data.adminUsername}@${data.domain}`,
+    });
+    return res.data as { success: boolean; error?: string; message?: string };
 }
 
 export function SetupWizard() {
-    const [step, setStep] = useState<'loading' | 'config' | 'complete' | 'already-setup'>('loading')
-    const [error, setError] = useState<string | null>(null)
-    const [loading, setLoading] = useState(false)
+    const [step, setStep] = useState<'loading' | 'config' | 'complete' | 'already-setup'>('loading');
+    const [error, setError] = useState<string | null>(null);
+    const [loading, setLoading] = useState(false);
 
     const [formData, setFormData] = useState<SetupData>({
         domain: 'eigen.is',
@@ -52,55 +52,57 @@ export function SetupWizard() {
         s3Endpoint: '',
         adminUsername: '',
         adminPassword: '',
-        adminName: ''
-    })
+        adminName: '',
+    });
 
     useEffect(() => {
-        checkSetupStatus().then((status) => {
-            if (!status.setupRequired) {
-                setStep('already-setup')
-            } else {
-                setStep('config')
-            }
-        }).catch(() => {
-            setError('Failed to connect to server')
-            setStep('config')
-        })
-    }, [])
+        checkSetupStatus()
+            .then((status) => {
+                if (!status.setupRequired) {
+                    setStep('already-setup');
+                } else {
+                    setStep('config');
+                }
+            })
+            .catch(() => {
+                setError('Failed to connect to server');
+                setStep('config');
+            });
+    }, []);
 
     const updateField = (field: keyof SetupData) => (e: React.ChangeEvent<HTMLInputElement>) => {
-        setFormData(prev => ({...prev, [field]: e.target.value}))
-    }
+        setFormData((prev) => ({ ...prev, [field]: e.target.value }));
+    };
 
     const handleStorageTypeChange = (value: string) => {
-        setFormData(prev => ({...prev, storageType: value as StorageType}))
-    }
+        setFormData((prev) => ({ ...prev, storageType: value as StorageType }));
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault()
-        setLoading(true)
-        setError(null)
+        e.preventDefault();
+        setLoading(true);
+        setError(null);
 
         try {
-            const result = await completeSetup(formData)
+            const result = await completeSetup(formData);
             if (result.success) {
-                setStep('complete')
+                setStep('complete');
             } else {
-                setError(result.error || 'Setup failed')
+                setError(result.error || 'Setup failed');
             }
-        } catch (err) {
-            setError('Network error. Please try again.')
+        } catch (_err) {
+            setError('Network error. Please try again.');
         } finally {
-            setLoading(false)
+            setLoading(false);
         }
-    }
+    };
 
     if (step === 'loading') {
         return (
             <div className="min-h-screen flex items-center justify-center bg-background">
-                <LoadingState/>
+                <LoadingState />
             </div>
-        )
+        );
     }
 
     if (step === 'already-setup') {
@@ -109,18 +111,16 @@ export function SetupWizard() {
                 <Card className="w-full max-w-md">
                     <CardHeader className="text-center">
                         <CardTitle className="text-2xl">Already Configured</CardTitle>
-                        <CardDescription>
-                            Eigen has already been set up. Please proceed to login.
-                        </CardDescription>
+                        <CardDescription>Eigen has already been set up. Please proceed to login.</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <Button className="w-full" onClick={() => window.location.href = '/'}>
+                        <Button className="w-full" onClick={() => (window.location.href = '/')}>
                             Go to Login
                         </Button>
                     </CardContent>
                 </Card>
             </div>
-        )
+        );
     }
 
     if (step === 'complete') {
@@ -128,11 +128,14 @@ export function SetupWizard() {
             <div className="min-h-screen flex items-center justify-center bg-background p-4">
                 <Card className="w-full max-w-md">
                     <CardHeader className="text-center">
-                        <div
-                            className="mx-auto w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mb-4">
-                            <svg className="w-8 h-8 text-green-600" fill="none" viewBox="0 0 24 24"
-                                 stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/>
+                        <div className="mx-auto w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mb-4">
+                            <svg
+                                className="w-8 h-8 text-green-600"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                            >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                             </svg>
                         </div>
                         <CardTitle className="text-2xl">Setup Complete!</CardTitle>
@@ -141,13 +144,13 @@ export function SetupWizard() {
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <Button className="w-full" onClick={() => window.location.href = '/'}>
+                        <Button className="w-full" onClick={() => (window.location.href = '/')}>
                             Go to Login
                         </Button>
                     </CardContent>
                 </Card>
             </div>
-        )
+        );
     }
 
     return (
@@ -158,14 +161,11 @@ export function SetupWizard() {
                         <span className="text-2xl font-bold text-primary">E</span>
                     </div>
                     <CardTitle className="text-2xl">Welcome to Eigen</CardTitle>
-                    <CardDescription>
-                        Let's configure your instance
-                    </CardDescription>
+                    <CardDescription>Let's configure your instance</CardDescription>
                 </CardHeader>
                 <CardContent>
                     {error && (
-                        <div
-                            className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg mb-6">
+                        <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg mb-6">
                             {error}
                         </div>
                     )}
@@ -199,9 +199,7 @@ export function SetupWizard() {
                                     required
                                     className="mt-1.5"
                                 />
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    The name of your organization
-                                </p>
+                                <p className="text-xs text-muted-foreground mt-1">The name of your organization</p>
                             </div>
 
                             <div>
@@ -212,7 +210,7 @@ export function SetupWizard() {
                                     className="mt-3 space-y-2"
                                 >
                                     <div className="flex items-start space-x-3">
-                                        <RadioGroupItem value="local-id" id="local-id" className="mt-1"/>
+                                        <RadioGroupItem value="local-id" id="local-id" className="mt-1" />
                                         <Label htmlFor="local-id" className="flex-1 cursor-pointer font-normal">
                                             <div className="font-medium">Local storage (ID-based)</div>
                                             <p className="text-sm text-muted-foreground">
@@ -222,7 +220,7 @@ export function SetupWizard() {
                                     </div>
 
                                     <div className="flex items-start space-x-3">
-                                        <RadioGroupItem value="local-fullnames" id="local-fullnames" className="mt-1"/>
+                                        <RadioGroupItem value="local-fullnames" id="local-fullnames" className="mt-1" />
                                         <Label htmlFor="local-fullnames" className="flex-1 cursor-pointer font-normal">
                                             <div className="font-medium">Local storage (full names)</div>
                                             <p className="text-sm text-muted-foreground">
@@ -232,7 +230,7 @@ export function SetupWizard() {
                                     </div>
 
                                     <div className="flex items-start space-x-3">
-                                        <RadioGroupItem value="s3" id="s3" className="mt-1"/>
+                                        <RadioGroupItem value="s3" id="s3" className="mt-1" />
                                         <Label htmlFor="s3" className="flex-1 cursor-pointer font-normal">
                                             <div className="font-medium">S3-compatible storage</div>
                                             <p className="text-sm text-muted-foreground">
@@ -298,9 +296,7 @@ export function SetupWizard() {
                                             placeholder="https://s3.amazonaws.com"
                                             className="mt-1.5"
                                         />
-                                        <p className="text-xs text-muted-foreground mt-1">
-                                            Leave empty for AWS S3
-                                        </p>
+                                        <p className="text-xs text-muted-foreground mt-1">Leave empty for AWS S3</p>
                                     </div>
                                 </div>
                             )}
@@ -331,8 +327,7 @@ export function SetupWizard() {
                                         required
                                         className="rounded-r-none"
                                     />
-                                    <span
-                                        className="inline-flex items-center px-3 rounded-r-md border border-l-0 border-input bg-muted text-muted-foreground text-sm">
+                                    <span className="inline-flex items-center px-3 rounded-r-md border border-l-0 border-input bg-muted text-muted-foreground text-sm">
                                         @{formData.domain}
                                     </span>
                                 </div>
@@ -349,9 +344,7 @@ export function SetupWizard() {
                                     required
                                     className="mt-1.5"
                                 />
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    At least 8 characters
-                                </p>
+                                <p className="text-xs text-muted-foreground mt-1">At least 8 characters</p>
                             </div>
                         </div>
 
@@ -362,5 +355,5 @@ export function SetupWizard() {
                 </CardContent>
             </Card>
         </div>
-    )
+    );
 }

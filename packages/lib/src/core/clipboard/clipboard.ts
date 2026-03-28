@@ -1,5 +1,5 @@
-import type {DrivePath} from '../../types/drive';
 import type {EigenClipboardData} from '../../types/clipboard';
+import type {DrivePath} from '../../types/drive';
 import {getDriveDownloadUrl} from '../api';
 
 export const EIGEN_CLIPBOARD_MIME = 'application/eigen-clipboard';
@@ -9,7 +9,9 @@ function parseEigenJson(raw: string): EigenClipboardData | null {
     try {
         const data = JSON.parse(raw) as EigenClipboardData;
         if (data.version === 1 && Array.isArray(data.items)) return data;
-    } catch { /* invalid data */ }
+    } catch {
+        /* invalid data */
+    }
     return null;
 }
 
@@ -23,7 +25,9 @@ export function readEigenClipboard(clipboardData: DataTransfer): EigenClipboardD
         if (match?.[1]) {
             try {
                 return parseEigenJson(decodeURIComponent(match[1]));
-            } catch { /* invalid encoding */ }
+            } catch {
+                /* invalid encoding */
+            }
         }
     }
     return null;
@@ -62,11 +66,11 @@ export async function reUploadImage(
     sourceOwnerId: string,
     sourceMountId: string,
     mediaFolderId: string,
-    uploadFn: (args: {parentId: string; file: File}) => Promise<DrivePath | null>,
-    targetOwnerId: string,
-    targetMountId: string,
+    uploadFn: (args: { parentId: string; file: File }) => Promise<DrivePath | null>,
+    _targetOwnerId: string,
+    _targetMountId: string,
     fileName: string,
-): Promise<{mediaName: string; pathId: string; parentId: string} | null> {
+): Promise<{ mediaName: string; pathId: string; parentId: string } | null> {
     try {
         const downloadUrl = getDriveDownloadUrl(sourceOwnerId, sourceMountId, sourcePathId);
         const response = await fetch(downloadUrl, {credentials: 'include'});

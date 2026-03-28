@@ -8,7 +8,8 @@ export const COLLAB_DB_CONFIG: DatabaseConfig<typeof schema> = {
     migrations: [
         {
             version: 1,
-            up: (db) => db.exec(`
+            up: (db) =>
+                db.exec(`
                 CREATE TABLE IF NOT EXISTS doc_updates (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     updateData BLOB NOT NULL,
@@ -20,7 +21,7 @@ export const COLLAB_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     lastUpdateId INTEGER NOT NULL,
                     createdAt INTEGER DEFAULT (unixepoch())
                 );
-            `)
-        }
-    ]
+            `),
+        },
+    ],
 };

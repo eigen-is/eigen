@@ -133,7 +133,13 @@
       "Read(//tmp/**)",
       "Bash(sort -k5 -rn)",
       "WebFetch(domain:jsr.io)",
-      "Bash(xxd)"
+      "Bash(xxd)",
+      "Bash(bunx --bun @biomejs/biome lint --max-diagnostics=50 .)",
+      "Bash(bunx --bun @biomejs/biome lint --max-diagnostics=10000 .)",
+      "Bash(bunx --bun @biomejs/biome lint --max-diagnostics=5000 .)",
+      "Bash(bunx --bun @biomejs/biome lint --max-diagnostics=500 .)",
+      "Bash(bunx --bun @biomejs/biome lint --max-diagnostics=10 .)",
+      "Bash(bunx --bun @biomejs/biome lint --max-diagnostics=100 .)"
     ]
   },
   "enabledPlugins": {

@@ -54,12 +54,16 @@ export const CommentMark = Mark.create<CommentMarkOptions>({
 
     addCommands() {
         return {
-            setComment: (chatName: string) => ({commands}) => {
-                return commands.setMark(this.name, {chatName});
-            },
-            unsetComment: () => ({commands}) => {
-                return commands.unsetMark(this.name);
-            },
+            setComment:
+                (chatName: string) =>
+                    ({commands}) => {
+                        return commands.setMark(this.name, {chatName});
+                    },
+            unsetComment:
+                () =>
+                    ({commands}) => {
+                        return commands.unsetMark(this.name);
+                    },
         };
     },
 

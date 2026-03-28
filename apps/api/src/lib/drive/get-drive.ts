@@ -1,8 +1,8 @@
 import type {User} from 'better-auth/types';
-import {getHome} from '../home';
-import Drive from './drive';
-import SharedDrive from './sharedDrive';
 import {ApiError} from '../core/errors';
+import {getHome} from '../home';
+import type Drive from './drive';
+import SharedDrive from './sharedDrive';
 
 export async function getDrive(user: User): Promise<Drive> {
     const home = await getHome(user.id);
@@ -20,5 +20,4 @@ export async function getSharedDrive(ownerId: string, user: User): Promise<Drive
     } else {
         return getDrive(user);
     }
-
 }

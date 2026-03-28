@@ -1,19 +1,19 @@
-import {createRootRouteWithContext, Outlet} from '@tanstack/react-router'
-import {AuthContextType, useAuth} from "@workspace/lib/auth";
-import {AppShell} from "@workspace/ui/components/layout/app/app-shell.tsx";
-import {DriveSidebar} from '../components/drive/drive-sidebar';
+import {createRootRouteWithContext, Outlet} from '@tanstack/react-router';
+import {type AuthContextType, useAuth} from '@workspace/lib/auth';
 import {DEFAULT_MOUNT_ID, useRootFolder} from '@workspace/lib/drive';
+import type {DriveContextType} from '@workspace/lib/types/drive';
 import {ErrorState, LoadingState} from '@workspace/ui';
+import {AppShell} from '@workspace/ui/components/layout/app/app-shell.tsx';
 import {createContext} from 'react';
-import {DriveContextType} from '@workspace/lib/types/drive';
+import {DriveSidebar} from '../components/drive/drive-sidebar';
 
 export const DriveContext = createContext<DriveContextType>({
     rootPath: null,
-    mountId: DEFAULT_MOUNT_ID
+    mountId: DEFAULT_MOUNT_ID,
 });
 
 interface MyRouterContext {
-    auth: AuthContextType
+    auth: AuthContextType;
 }
 
 function DriveRoot() {
@@ -51,12 +51,7 @@ function DriveRoot() {
             appName="drive"
             rootRoute={Route}
             sidebar={({condensed, isMobile, onClose}) => (
-                <DriveSidebar
-                    condensed={condensed}
-                    isMobile={isMobile}
-                    onClose={onClose}
-                    rootPath={rootPath}
-                />
+                <DriveSidebar condensed={condensed} isMobile={isMobile} onClose={onClose} rootPath={rootPath}/>
             )}
         >
             <DriveContext.Provider value={{rootPath, mountId}}>

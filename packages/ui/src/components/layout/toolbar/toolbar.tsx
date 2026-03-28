@@ -1,8 +1,5 @@
-import {ReactNode} from "react";
+import type { ReactNode } from 'react';
 
 export function Toolbar({ children }: { children: ReactNode }) {
-    return  (
-        <div className="flex items-center justify-between w-full gap-1 no-print">
-        {children}
-    </div>);
+    return <div className="flex items-center justify-between w-full gap-1 no-print">{children}</div>;
 }

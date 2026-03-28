@@ -3,7 +3,7 @@ type NotFoundProps = {
 };
 
 export function NotFound({
-    message = "Encountering the null vector: a rendezvous with nothing at all.",
+    message = 'Encountering the null vector: a rendezvous with nothing at all.',
 }: NotFoundProps) {
     return (
         <div className="flex flex-col items-center justify-center h-full w-full gap-4 p-8 text-center">

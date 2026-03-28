@@ -1,4 +1,4 @@
-import * as Y from 'yjs';
+import type * as Y from 'yjs';
 
 export function normalizeDeck(yjsDoc: Y.Doc) {
     const slidesMap = yjsDoc.getMap('slides');
@@ -11,8 +11,8 @@ export function normalizeDeck(yjsDoc: Y.Doc) {
     for (const slideId of slideIds) {
         const slideValue = slidesMap.get(slideId);
         if (!slideValue) continue;
-        const slide = slideValue as Y.Map<any>;
-        const objIdsArray = slide.get('objectIds') as Y.Array<any>;
+        const slide = slideValue as Y.Map<unknown>;
+        const objIdsArray = slide.get('objectIds') as Y.Array<string>;
         if (!objIdsArray) continue;
         for (const objId of objIdsArray.toArray() as string[]) {
             if (!objectToSlides[objId]) objectToSlides[objId] = [];
@@ -26,8 +26,8 @@ export function normalizeDeck(yjsDoc: Y.Doc) {
             const sId = slides[i];
             const slideValue = slidesMap.get(sId);
             if (!slideValue) continue;
-            const slide = slideValue as Y.Map<any>;
-            const objIdsArray = slide.get('objectIds') as Y.Array<any>;
+            const slide = slideValue as Y.Map<unknown>;
+            const objIdsArray = slide.get('objectIds') as Y.Array<string>;
             const idx = (objIdsArray.toArray() as string[]).indexOf(objId);
             if (idx !== -1) objIdsArray.delete(idx, 1);
         }
@@ -36,7 +36,7 @@ export function normalizeDeck(yjsDoc: Y.Doc) {
     for (const objId of objectIds) {
         const objValue = objectsMap.get(objId);
         if (!objValue) continue;
-        const obj = objValue as Y.Map<any>;
+        const obj = objValue as Y.Map<unknown>;
         if (obj.get('type') === 'text' && !obj.get('fontFamily')) {
             obj.set('fontFamily', 'Inter');
         }
@@ -45,8 +45,8 @@ export function normalizeDeck(yjsDoc: Y.Doc) {
     if (slideIds.length > 0) {
         const firstSlideValue = slidesMap.get(slideIds[0]);
         if (firstSlideValue) {
-            const firstSlide = firstSlideValue as Y.Map<any>;
-            const firstObjIds = firstSlide.get('objectIds') as Y.Array<any>;
+            const firstSlide = firstSlideValue as Y.Map<unknown>;
+            const firstObjIds = firstSlide.get('objectIds') as Y.Array<string>;
             for (const objId of objectIds) {
                 if (!objectToSlides[objId] || objectToSlides[objId].length === 0) {
                     firstObjIds.push([objId]);

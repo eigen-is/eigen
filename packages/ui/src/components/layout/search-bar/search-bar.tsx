@@ -1,7 +1,7 @@
-import {Search} from 'lucide-react';
-import {cn} from "@workspace/ui/lib/utils";
-import {InputGroup, InputGroupAddon, InputGroupInput, InputGroupText} from "@workspace/ui/components/input-group";
-import {type ChangeEvent, useEffect, useRef, useState} from 'react';
+import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@workspace/ui/components/input-group';
+import { cn } from '@workspace/ui/lib/utils';
+import { Search } from 'lucide-react';
+import { type ChangeEvent, useEffect, useRef, useState } from 'react';
 
 export type SearchBarProps = {
     placeholder?: string;
@@ -11,24 +11,24 @@ export type SearchBarProps = {
     inputClassName?: string;
     maxWidth?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'full';
     debounceMs?: number;
-}
+};
 
 export function SearchBar({
-                              placeholder = "Search...",
-                              value,
-                              onChange,
-                              className,
-                              inputClassName,
-                              maxWidth = "sm",
-                              debounceMs = 200,
-                          }: SearchBarProps) {
+    placeholder = 'Search...',
+    value,
+    onChange,
+    className,
+    inputClassName,
+    maxWidth = 'sm',
+    debounceMs = 200,
+}: SearchBarProps) {
     const maxWidthClasses = {
         xs: 'max-w-xs',
         sm: 'max-w-sm',
         md: 'max-w-md',
         lg: 'max-w-lg',
         xl: 'max-w-xl',
-        full: 'max-w-full'
+        full: 'max-w-full',
     };
 
     const [displayValue, setDisplayValue] = useState(value);
@@ -54,15 +54,17 @@ export function SearchBar({
     };
 
     return (
-        <div className={cn("w-full", maxWidthClasses[maxWidth], className)}>
+        <div className={cn('w-full', maxWidthClasses[maxWidth], className)}>
             <InputGroup>
                 <InputGroupAddon align="inline-start">
-                    <InputGroupText><Search className="h-4 w-4"/></InputGroupText>
+                    <InputGroupText>
+                        <Search className="h-4 w-4" />
+                    </InputGroupText>
                 </InputGroupAddon>
                 <InputGroupInput
                     type="text"
                     placeholder={placeholder}
-                    className={cn("w-full", inputClassName)}
+                    className={cn('w-full', inputClassName)}
                     value={displayValue}
                     onChange={handleChange}
                     autoComplete="one-time-code"

@@ -1,16 +1,4 @@
 import {
-    Calendar,
-    FileText,
-    HardDrive,
-    LayoutDashboard,
-    Mail,
-    MessageSquare,
-    Presentation,
-    Sheet,
-    StickyNote,
-    UsersRound,
-} from "lucide-react";
-import {
     getCalendarAppUrl,
     getChatAppUrl,
     getContactsAppUrl,
@@ -21,7 +9,19 @@ import {
     getSlidesAppUrl,
     getSpaceAppUrl,
     getStickiesAppUrl,
-} from "@workspace/lib/api";
+} from '@workspace/lib/api';
+import {
+    Calendar,
+    FileText,
+    HardDrive,
+    LayoutDashboard,
+    Mail,
+    MessageSquare,
+    Presentation,
+    Sheet,
+    StickyNote,
+    UsersRound,
+} from 'lucide-react';
 
 const apps = [
     {

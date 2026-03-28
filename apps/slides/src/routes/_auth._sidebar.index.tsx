@@ -1,5 +1,5 @@
 import {createFileRoute} from '@tanstack/react-router';
-import {EigenDocListView, eigenDocValidateSearch, SLIDES_CONFIG} from "@workspace/ui/components/layout/drive";
+import {EigenDocListView, eigenDocValidateSearch, SLIDES_CONFIG} from '@workspace/ui/components/layout/drive';
 
 export const Route = createFileRoute('/_auth/_sidebar/')({
     component: DriveRoute,

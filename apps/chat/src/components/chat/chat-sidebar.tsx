@@ -1,18 +1,18 @@
-import {MessageSquare, Plus} from 'lucide-react';
-import {Button} from "@workspace/ui/components/button";
-import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
-import {SidebarItem} from '@workspace/ui/components/layout/sidebar/sidebar-item';
-import {SidebarHeader} from '@workspace/ui/components/layout/sidebar/sidebar-header';
+import {useNavigate} from '@tanstack/react-router';
 import {useChats, useCreateChat} from '@workspace/lib/chat';
-import {EigenLoader} from "@workspace/ui";
-import {DriveCreateItemDialog} from "@workspace/ui/components/layout/drive/drive-create-folder-item";
-import {useState} from "react";
-import {useNavigate} from "@tanstack/react-router";
-import type {DrivePath} from "@workspace/lib/types/drive";
-import {Separator} from "@workspace/ui/components/separator";
-import {usePublicConfig} from "@workspace/lib/public";
-import {usePeopleTeams} from "@workspace/lib/people";
-import {teamOwnerId} from "@workspace/lib/types";
+import {usePeopleTeams} from '@workspace/lib/people';
+import {usePublicConfig} from '@workspace/lib/public';
+import {teamOwnerId} from '@workspace/lib/types';
+import type {DrivePath} from '@workspace/lib/types/drive';
+import {EigenLoader} from '@workspace/ui';
+import {Button} from '@workspace/ui/components/button';
+import {DriveCreateItemDialog} from '@workspace/ui/components/layout/drive/drive-create-folder-item';
+import {SidebarHeader} from '@workspace/ui/components/layout/sidebar/sidebar-header';
+import {SidebarItem} from '@workspace/ui/components/layout/sidebar/sidebar-item';
+import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
+import {Separator} from '@workspace/ui/components/separator';
+import {MessageSquare, Plus} from 'lucide-react';
+import {useState} from 'react';
 
 type ChatSidebarProps = {
     condensed?: boolean;
@@ -21,7 +21,7 @@ type ChatSidebarProps = {
     ownerId: string;
     mountId: string;
     rootPath: DrivePath | null;
-}
+};
 
 function ChatItem({chat, condensed}: { chat: DrivePath; condensed: boolean }) {
     return (
@@ -37,7 +37,13 @@ function ChatItem({chat, condensed}: { chat: DrivePath; condensed: boolean }) {
 function TeamChatItems({teamId, condensed}: { teamId: string; condensed: boolean }) {
     const {data: chats} = useChats(teamOwnerId(teamId));
     if (!chats || chats.length === 0) return null;
-    return <>{chats.map(chat => <ChatItem key={chat.id} chat={chat} condensed={condensed}/>)}</>;
+    return (
+        <>
+            {chats.map((chat) => (
+                <ChatItem key={chat.id} chat={chat} condensed={condensed}/>
+            ))}
+        </>
+    );
 }
 
 export function ChatSidebar({
@@ -66,7 +72,7 @@ export function ChatSidebar({
         if (newPath) {
             navigate({
                 to: '/$ownerId/$mountId/$chatId',
-                params: {ownerId, mountId, chatId: newPath.id}
+                params: {ownerId, mountId, chatId: newPath.id},
             });
         }
     };
@@ -78,7 +84,7 @@ export function ChatSidebar({
             <div className="px-3 py-2">
                 <Button
                     variant="default"
-                    size={condensed ? "icon" : "default"}
+                    size={condensed ? 'icon' : 'default'}
                     className={`${condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}`}
                     onClick={() => setCreateChatOpen(true)}
                 >
@@ -96,9 +102,7 @@ export function ChatSidebar({
                     {chats.length === 0 ? (
                         <div className="px-3 py-2 text-xs text-muted-foreground">No chats yet</div>
                     ) : (
-                        chats.map(chat => (
-                            <ChatItem key={chat.id} chat={chat} condensed={condensed}/>
-                        ))
+                        chats.map((chat) => <ChatItem key={chat.id} chat={chat} condensed={condensed}/>)
                     )}
                 </SidebarSection>
             )}
@@ -106,8 +110,8 @@ export function ChatSidebar({
             {teams && teams.length > 0 && (
                 <>
                     <Separator/>
-                    <SidebarSection condensed={condensed} title={condensed ? undefined : "Shared Drives"}>
-                        {teams.map(team => (
+                    <SidebarSection condensed={condensed} title={condensed ? undefined : 'Shared Drives'}>
+                        {teams.map((team) => (
                             <TeamChatItems key={team.id} teamId={team.id} condensed={condensed}/>
                         ))}
                     </SidebarSection>

@@ -1,11 +1,11 @@
-import {useState} from "react";
-import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,} from "@workspace/ui/components/dialog";
-import {Button} from "@workspace/ui/components/button";
-import {Textarea} from "@workspace/ui/components/textarea";
-import {useChatRoom, useCreateChat} from "@workspace/lib/chat";
-import {ChatMessageInput, ChatMessageList} from "@workspace/ui";
-import {useMediaResolver} from "@workspace/lib/drive";
-import {chatApi} from "@workspace/lib/api";
+import {chatApi} from '@workspace/lib/api';
+import {useChatRoom, useCreateChat} from '@workspace/lib/chat';
+import {useMediaResolver} from '@workspace/lib/drive';
+import {ChatMessageInput, ChatMessageList} from '@workspace/ui';
+import {Button} from '@workspace/ui/components/button';
+import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
+import {Textarea} from '@workspace/ui/components/textarea';
+import {useState} from 'react';
 
 type CreateCommentDialogProps = {
     open: boolean;
@@ -15,7 +15,7 @@ type CreateCommentDialogProps = {
     chatFolderId: string;
     selectedText: string;
     onCommentCreated: (chatName: string) => void;
-}
+};
 
 export function CreateCommentDialog({
                                         open,
@@ -63,7 +63,7 @@ export function CreateCommentDialog({
                     {selectedText && (
                         <div className="rounded-lg bg-muted border-l-4 border-primary p-3">
                             <p className="text-sm text-muted-foreground italic">
-                                "{selectedText.length > 100 ? selectedText.slice(0, 100) + '…' : selectedText}"
+                                "{selectedText.length > 100 ? `${selectedText.slice(0, 100)}…` : selectedText}"
                             </p>
                         </div>
                     )}
@@ -71,8 +71,8 @@ export function CreateCommentDialog({
                         autoFocus
                         placeholder="Write a comment..."
                         value={comment}
-                        onChange={e => setComment(e.target.value)}
-                        onKeyDown={e => {
+                        onChange={(e) => setComment(e.target.value)}
+                        onKeyDown={(e) => {
                             if (e.key === 'Enter' && !e.shiftKey) {
                                 e.preventDefault();
                                 handleSubmit();
@@ -82,18 +82,11 @@ export function CreateCommentDialog({
                     />
                 </div>
                 <DialogFooter>
-                    <Button
-                        variant="outline"
-                        onClick={() => onOpenChange(false)}
-                        disabled={isSubmitting}
-                    >
+                    <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
                         Cancel
                     </Button>
-                    <Button
-                        onClick={handleSubmit}
-                        disabled={!comment.trim() || isSubmitting}
-                    >
-                        {isSubmitting ? "Commenting..." : "Comment"}
+                    <Button onClick={handleSubmit} disabled={!comment.trim() || isSubmitting}>
+                        {isSubmitting ? 'Commenting...' : 'Comment'}
                     </Button>
                 </DialogFooter>
             </DialogContent>
@@ -107,15 +100,9 @@ type ViewCommentDialogProps = {
     ownerId: string;
     mountId: string;
     chatName: string;
-}
+};
 
-export function ViewCommentDialog({
-                                      open,
-                                      onOpenChange,
-                                      ownerId,
-                                      mountId,
-                                      chatName,
-                                  }: ViewCommentDialogProps) {
+export function ViewCommentDialog({open, onOpenChange, ownerId, mountId, chatName}: ViewCommentDialogProps) {
     const {resolveChatId} = useMediaResolver();
     const chatId = resolveChatId(chatName);
     const chat = useChatRoom(ownerId, mountId, chatId || '');

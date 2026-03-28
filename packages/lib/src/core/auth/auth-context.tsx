@@ -1,7 +1,7 @@
-import React, {createContext, ReactNode, useEffect, useState} from 'react';
-import {authClient} from "./hooks/use-auth-client.ts";
-import {LoadingScreen} from '@workspace/ui/components/layout/pages';
 import {useQueryClient} from '@tanstack/react-query';
+import {LoadingScreen} from '@workspace/ui/components/layout/pages';
+import React, {createContext, type ReactNode, useEffect, useState} from 'react';
+import {authClient} from './hooks/use-auth-client.ts';
 
 export type AuthUser = {
     id: string;
@@ -76,7 +76,9 @@ export function AuthProvider({children}: { children: ReactNode }): React.ReactEl
         }
     };
 
-    return isLoading ? <LoadingScreen/> : (
+    return isLoading ? (
+        <LoadingScreen/>
+    ) : (
         <AuthContext.Provider
             value={{
                 isAuthenticated: !!user,
@@ -92,9 +94,9 @@ export function AuthProvider({children}: { children: ReactNode }): React.ReactEl
 }
 
 export function useAuth() {
-    const context = React.useContext(AuthContext)
+    const context = React.useContext(AuthContext);
     if (!context) {
-        throw new Error('useAuth must be used within an AuthProvider')
+        throw new Error('useAuth must be used within an AuthProvider');
     }
-    return context
+    return context;
 }

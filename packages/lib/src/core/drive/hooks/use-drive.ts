@@ -1,13 +1,13 @@
-import {type QueryClient, useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
-import {useCallback, useEffect, useRef, useState} from 'react';
-import type {DriveACL, DrivePath, DriveVisibility} from "@workspace/lib/types/drive";
-import {driveApi, getDriveFileUploadUrl} from "@workspace/lib/api";
-import {invalidateHomeSize} from '../../home';
-import {DEFAULT_MOUNT_ID} from "@workspace/lib/types/mount";
-import {AppError, onMutationError} from '../../api-error';
-import {toast} from 'sonner';
+import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { driveApi, getDriveFileUploadUrl } from '@workspace/lib/api';
+import type { DriveACL, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
+import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { toast } from 'sonner';
+import { AppError, onMutationError } from '../../api-error';
+import { invalidateHomeSize } from '../../home';
 
-export {DEFAULT_MOUNT_ID};
+export { DEFAULT_MOUNT_ID };
 
 // Define query keys for reuse
 export const driveKeys = {
@@ -16,18 +16,23 @@ export const driveKeys = {
     mounts: (ownerId: string) => [...driveKeys.owner(ownerId), 'mounts'] as const,
     root: (ownerId: string, mountId: string) => [...driveKeys.owner(ownerId), 'root', mountId] as const,
     folders: (ownerId: string) => [...driveKeys.owner(ownerId), 'folder'] as const,
-    folder: (ownerId: string, mountId: string, pathId: string) => [...driveKeys.folders(ownerId), mountId, pathId] as const,
+    folder: (ownerId: string, mountId: string, pathId: string) =>
+        [...driveKeys.folders(ownerId), mountId, pathId] as const,
     mimeTypes: (ownerId: string) => [...driveKeys.owner(ownerId), 'mime'] as const,
     mime: (ownerId: string, mimeType: string) => [...driveKeys.mimeTypes(ownerId), mimeType] as const,
     paths: (ownerId: string) => [...driveKeys.owner(ownerId), 'path'] as const,
     path: (ownerId: string, mountId: string, pathId: string) => [...driveKeys.paths(ownerId), mountId, pathId] as const,
     permissions: (ownerId: string) => [...driveKeys.owner(ownerId), 'permissions'] as const,
-    read: (ownerId: string, mountId: string, pathId: string) => [...driveKeys.permissions(ownerId), 'read', mountId, pathId] as const,
-    write: (ownerId: string, mountId: string, pathId: string) => [...driveKeys.permissions(ownerId), 'write', mountId, pathId] as const,
+    read: (ownerId: string, mountId: string, pathId: string) =>
+        [...driveKeys.permissions(ownerId), 'read', mountId, pathId] as const,
+    write: (ownerId: string, mountId: string, pathId: string) =>
+        [...driveKeys.permissions(ownerId), 'write', mountId, pathId] as const,
     shared: (ownerId: string, to: 'by-me' | 'with-me') => [...driveKeys.owner(ownerId), 'shared', to] as const,
     textPreviews: (ownerId: string) => [...driveKeys.owner(ownerId), 'text-preview'] as const,
-    textPreview: (ownerId: string, mountId: string, pathId: string) => [...driveKeys.textPreviews(ownerId), mountId, pathId] as const,
-    effectiveMembers: (ownerId: string, mountId: string, pathId: string) => [...driveKeys.owner(ownerId), 'effective-members', mountId, pathId] as const,
+    textPreview: (ownerId: string, mountId: string, pathId: string) =>
+        [...driveKeys.textPreviews(ownerId), mountId, pathId] as const,
+    effectiveMembers: (ownerId: string, mountId: string, pathId: string) =>
+        [...driveKeys.owner(ownerId), 'effective-members', mountId, pathId] as const,
 };
 
 // GET MOUNTS
@@ -35,7 +40,7 @@ export function useMounts(ownerId: string) {
     return useQuery({
         queryKey: driveKeys.mounts(ownerId),
         queryFn: async () => {
-            const response = await driveApi({ownerId}).mounts.get();
+            const response = await driveApi({ ownerId }).mounts.get();
             return response.data || [];
         },
         staleTime: Infinity,
@@ -48,7 +53,7 @@ export function useRootFolder(ownerId: string, mountId: string = DEFAULT_MOUNT_I
     return useQuery<DrivePath | null>({
         queryKey: driveKeys.root(ownerId, mountId),
         queryFn: async () => {
-            const response = await driveApi({ownerId})({mountId}).root.get();
+            const response = await driveApi({ ownerId })({ mountId }).root.get();
             return response.data || null;
         },
         staleTime: Infinity,
@@ -62,7 +67,7 @@ export function useFolderContent(ownerId: string, mountId: string, pathId: strin
         queryKey: driveKeys.folder(ownerId, mountId, pathId),
         queryFn: async () => {
             if (!pathId) return [];
-            const response = await driveApi({ownerId})({mountId}).folder({pathId}).get();
+            const response = await driveApi({ ownerId })({ mountId }).folder({ pathId }).get();
             if (response.error) {
                 throw new AppError(response);
             }
@@ -70,7 +75,7 @@ export function useFolderContent(ownerId: string, mountId: string, pathId: strin
         },
         enabled: !!pathId && !!ownerId && !!mountId,
         retry: 1,
-        staleTime: 1000 * 60 * 5 // 5 minutes
+        staleTime: 1000 * 60 * 5, // 5 minutes
     });
 }
 
@@ -78,13 +83,13 @@ export function useFolderContent(ownerId: string, mountId: string, pathId: strin
 // When a collaborator uploads a file, Yjs propagates the name before our cache updates.
 // findByName() triggers a single refetch per unknown name, preventing infinite loops.
 export function useFolderLookup(ownerId: string, mountId: string, folderId: string | null) {
-    const {data = [], refetch} = useFolderContent(ownerId, mountId, folderId || '');
+    const { data = [], refetch } = useFolderContent(ownerId, mountId, folderId || '');
     const attemptedRef = useRef(new Set<string>());
     const [refetchToken, setRefetchToken] = useState(0);
 
     useEffect(() => {
         for (const name of attemptedRef.current) {
-            if (data.some(f => f.name === name)) {
+            if (data.some((f) => f.name === name)) {
                 attemptedRef.current.delete(name);
             }
         }
@@ -94,16 +99,19 @@ export function useFolderLookup(ownerId: string, mountId: string, folderId: stri
         if (refetchToken > 0) refetch();
     }, [refetchToken, refetch]);
 
-    const findByName = useCallback((name: string): DrivePath | undefined => {
-        const item = data.find(f => f.name === name);
-        if (!item && name && folderId && !attemptedRef.current.has(name)) {
-            attemptedRef.current.add(name);
-            setRefetchToken(c => c + 1);
-        }
-        return item;
-    }, [data, folderId]);
+    const findByName = useCallback(
+        (name: string): DrivePath | undefined => {
+            const item = data.find((f) => f.name === name);
+            if (!item && name && folderId && !attemptedRef.current.has(name)) {
+                attemptedRef.current.add(name);
+                setRefetchToken((c) => c + 1);
+            }
+            return item;
+        },
+        [data, folderId],
+    );
 
-    return {contents: data, findByName};
+    return { contents: data, findByName };
 }
 
 // GET MIME CONTENTS (aggregates over all mounts)
@@ -112,7 +120,7 @@ export function useMimeContent(ownerId: string, mimeType: string) {
         queryKey: driveKeys.mime(ownerId, mimeType),
         queryFn: async () => {
             if (!mimeType) return [];
-            const response = await driveApi({ownerId}).mime({mimeType}).get();
+            const response = await driveApi({ ownerId }).mime({ mimeType }).get();
             if (response.error) {
                 throw new AppError(response);
             }
@@ -120,7 +128,7 @@ export function useMimeContent(ownerId: string, mimeType: string) {
         },
         enabled: !!mimeType && !!ownerId,
         retry: 1,
-        staleTime: 1000 * 60 * 5 // 5 minutes
+        staleTime: 1000 * 60 * 5, // 5 minutes
     });
 }
 
@@ -130,11 +138,11 @@ export function usePathInfo(ownerId: string, mountId: string, pathId: string | u
         queryKey: driveKeys.path(ownerId, mountId, pathId || ''),
         queryFn: async () => {
             if (!pathId) return null;
-            const response = await driveApi({ownerId})({mountId}).path({pathId}).get();
+            const response = await driveApi({ ownerId })({ mountId }).path({ pathId }).get();
             return response.data || null;
         },
         enabled: !!pathId && !!ownerId && !!mountId,
-        staleTime: 1000 * 60 * 5 // 5 minutes
+        staleTime: 1000 * 60 * 5, // 5 minutes
     });
 }
 
@@ -142,8 +150,8 @@ export function usePathInfo(ownerId: string, mountId: string, pathId: string | u
 export function useCreateFolder(ownerId: string, mountId: string = DEFAULT_MOUNT_ID) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({parentId, folderName}: { parentId: string, folderName: string }) => {
-            const response = await driveApi({ownerId})({mountId}).folder({pathId: parentId}).post({folderName});
+        mutationFn: async ({ parentId, folderName }: { parentId: string; folderName: string }) => {
+            const response = await driveApi({ ownerId })({ mountId }).folder({ pathId: parentId }).post({ folderName });
             if (response.error) throw new AppError(response);
             return response.data;
         },
@@ -156,7 +164,7 @@ export function useCreateFolder(ownerId: string, mountId: string = DEFAULT_MOUNT
 export function useUploadFile(ownerId: string, mountId: string = DEFAULT_MOUNT_ID) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({parentId, file}: { parentId: string, file: File }): Promise<DrivePath> => {
+        mutationFn: async ({ parentId, file }: { parentId: string; file: File }): Promise<DrivePath> => {
             const formData = new FormData();
             formData.append('file', file);
             const res = await fetch(getDriveFileUploadUrl(ownerId, mountId, parentId), {
@@ -165,7 +173,7 @@ export function useUploadFile(ownerId: string, mountId: string = DEFAULT_MOUNT_I
                 credentials: 'include',
             });
             if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
-            const data = await res.json() as DrivePath[];
+            const data = (await res.json()) as DrivePath[];
             return data[0];
         },
         onSuccess: (_data, variables) => invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId),
@@ -174,11 +182,16 @@ export function useUploadFile(ownerId: string, mountId: string = DEFAULT_MOUNT_I
 }
 
 // DELETE FOLDER
-export function useDeleteFolder(ownerId: string, mountId: string = DEFAULT_MOUNT_ID, parentId?: string, mimeType?: string) {
+export function useDeleteFolder(
+    ownerId: string,
+    mountId: string = DEFAULT_MOUNT_ID,
+    parentId?: string,
+    mimeType?: string,
+) {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (pathId: string) => {
-            const response = await driveApi({ownerId})({mountId}).folder({pathId}).delete();
+            const response = await driveApi({ ownerId })({ mountId }).folder({ pathId }).delete();
             if (response.error) throw new AppError(response);
             return response.data;
         },
@@ -188,11 +201,16 @@ export function useDeleteFolder(ownerId: string, mountId: string = DEFAULT_MOUNT
 }
 
 // DELETE FILE
-export function useDeleteFile(ownerId: string, mountId: string = DEFAULT_MOUNT_ID, parentId?: string, mimeType?: string) {
+export function useDeleteFile(
+    ownerId: string,
+    mountId: string = DEFAULT_MOUNT_ID,
+    parentId?: string,
+    mimeType?: string,
+) {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (pathId: string) => {
-            const response = await driveApi({ownerId})({mountId}).file({pathId}).delete();
+            const response = await driveApi({ ownerId })({ mountId }).file({ pathId }).delete();
             if (response.error) throw new AppError(response);
             return response.data;
         },
@@ -206,18 +224,23 @@ export function useDeletePaths(ownerId: string, mountId: string = DEFAULT_MOUNT_
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (paths: DrivePath[]) => {
-            const results = await Promise.allSettled(paths.map(async (path) => {
-                const response = path.type === 'folder'
-                    ? await driveApi({ownerId})({mountId}).folder({pathId: path.id}).delete()
-                    : await driveApi({ownerId})({mountId}).file({pathId: path.id}).delete();
-                if (response.error) throw new AppError(response);
-                return path;
-            }));
-            const succeeded = results.filter((r): r is PromiseFulfilledResult<DrivePath> => r.status === 'fulfilled').map(r => r.value);
+            const results = await Promise.allSettled(
+                paths.map(async (path) => {
+                    const response =
+                        path.type === 'folder'
+                            ? await driveApi({ ownerId })({ mountId }).folder({ pathId: path.id }).delete()
+                            : await driveApi({ ownerId })({ mountId }).file({ pathId: path.id }).delete();
+                    if (response.error) throw new AppError(response);
+                    return path;
+                }),
+            );
+            const succeeded = results
+                .filter((r): r is PromiseFulfilledResult<DrivePath> => r.status === 'fulfilled')
+                .map((r) => r.value);
             for (const path of succeeded) {
                 invalidateItemDeleted(queryClient, ownerId, mountId, path.id, path.parentId, path.mimeType);
             }
-            const failedCount = results.filter(r => r.status === 'rejected').length;
+            const failedCount = results.filter((r) => r.status === 'rejected').length;
             if (failedCount > 0) throw new Error(`Failed to delete ${failedCount} of ${paths.length} items`);
             return succeeded;
         },
@@ -228,25 +251,39 @@ export function useDeletePaths(ownerId: string, mountId: string = DEFAULT_MOUNT_
 export function useMovePath(ownerId: string, mountId: string = DEFAULT_MOUNT_ID, currentParentId?: string) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({pathId, targetParentId}: { pathId: string, targetParentId: string }) => {
-            const response = await driveApi({ownerId})({mountId}).path({pathId}).move.put({targetParentId});
+        mutationFn: async ({ pathId, targetParentId }: { pathId: string; targetParentId: string }) => {
+            const response = await driveApi({ ownerId })({ mountId }).path({ pathId }).move.put({ targetParentId });
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: (_data, variables) => invalidatePathMoved(queryClient, ownerId, mountId, variables.pathId, variables.targetParentId, currentParentId),
+        onSuccess: (_data, variables) =>
+            invalidatePathMoved(
+                queryClient,
+                ownerId,
+                mountId,
+                variables.pathId,
+                variables.targetParentId,
+                currentParentId,
+            ),
         onError: onMutationError,
     });
 }
 
-export function useRenamePath(ownerId: string, mountId: string = DEFAULT_MOUNT_ID, parentId?: string, mimeType?: string) {
+export function useRenamePath(
+    ownerId: string,
+    mountId: string = DEFAULT_MOUNT_ID,
+    parentId?: string,
+    mimeType?: string,
+) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({pathId, newName}: { pathId: string, newName: string }) => {
-            const response = await driveApi({ownerId})({mountId}).path({pathId}).rename.put({newName});
+        mutationFn: async ({ pathId, newName }: { pathId: string; newName: string }) => {
+            const response = await driveApi({ ownerId })({ mountId }).path({ pathId }).rename.put({ newName });
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: (_data, variables) => invalidatePathRenamed(queryClient, ownerId, mountId, variables.pathId, parentId, mimeType),
+        onSuccess: (_data, variables) =>
+            invalidatePathRenamed(queryClient, ownerId, mountId, variables.pathId, parentId, mimeType),
         onError: onMutationError,
     });
 }
@@ -255,28 +292,41 @@ export function useRenamePath(ownerId: string, mountId: string = DEFAULT_MOUNT_I
 export function useUpdateACL(ownerId: string, mountId: string = DEFAULT_MOUNT_ID, currentUserId?: string) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({path, acl, visibility, sharingRestricted}: {
-            path: DrivePath,
-            acl: DriveACL[],
-            visibility?: DriveVisibility,
-            sharingRestricted?: boolean,
+        mutationFn: async ({
+            path,
+            acl,
+            visibility,
+            sharingRestricted,
+        }: {
+            path: DrivePath;
+            acl: DriveACL[];
+            visibility?: DriveVisibility;
+            sharingRestricted?: boolean;
         }) => {
-            const response = await driveApi({ownerId})({mountId}).path({pathId: path.id}).acl.put({
+            const response = await driveApi({ ownerId })({ mountId }).path({ pathId: path.id }).acl.put({
                 acl,
                 visibility,
-                sharingRestricted
+                sharingRestricted,
             });
             if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: (_data, variables) => {
-            invalidateAclUpdated(queryClient, ownerId, variables.path.mountId, variables.path.id, variables.path.parentId);
+            invalidateAclUpdated(
+                queryClient,
+                ownerId,
+                variables.path.mountId,
+                variables.path.id,
+                variables.path.parentId,
+            );
             // Invalidate the current user's shared-with-me (ownerId is the document owner, not the current user)
             if (currentUserId && currentUserId !== ownerId) {
                 invalidateAclSharedOrUnshared(queryClient, currentUserId);
             }
             // Invalidate collab info so canWrite refreshes in document views
-            queryClient.invalidateQueries({queryKey: ['collab', 'info', ownerId, variables.path.mountId, variables.path.id]});
+            queryClient.invalidateQueries({
+                queryKey: ['collab', 'info', ownerId, variables.path.mountId, variables.path.id],
+            });
             toast.success('Sharing updated');
         },
         onError: onMutationError,
@@ -286,15 +336,24 @@ export function useUpdateACL(ownerId: string, mountId: string = DEFAULT_MOUNT_ID
 // EMAIL COLLABORATORS
 export function useEmailCollaborators(ownerId: string, mountId: string) {
     return useMutation({
-        mutationFn: async ({pathId, subject, message, documentUrl, sendCopyToSelf}: {
-            pathId: string,
-            subject: string,
-            message: string,
-            documentUrl: string,
-            sendCopyToSelf: boolean,
+        mutationFn: async ({
+            pathId,
+            subject,
+            message,
+            documentUrl,
+            sendCopyToSelf,
+        }: {
+            pathId: string;
+            subject: string;
+            message: string;
+            documentUrl: string;
+            sendCopyToSelf: boolean;
         }) => {
-            const response = await driveApi({ownerId})({mountId}).path({pathId})['email-collaborators'].post({
-                subject, message, documentUrl, sendCopyToSelf,
+            const response = await driveApi({ ownerId })({ mountId }).path({ pathId })['email-collaborators'].post({
+                subject,
+                message,
+                documentUrl,
+                sendCopyToSelf,
             });
             if (response.error) throw new AppError(response);
             return response.data;
@@ -309,12 +368,12 @@ export function useCheckReadPermission(ownerId: string, mountId: string, pathId:
     return useQuery({
         queryKey: driveKeys.read(ownerId, mountId, pathId || ''),
         queryFn: async () => {
-            if (!pathId) return {canRead: false};
-            const response = await driveApi({ownerId})({mountId}).path({pathId}).permissions.read.get();
-            return response.data || {canRead: false};
+            if (!pathId) return { canRead: false };
+            const response = await driveApi({ ownerId })({ mountId }).path({ pathId }).permissions.read.get();
+            return response.data || { canRead: false };
         },
         enabled: !!pathId && !!ownerId && !!mountId,
-        staleTime: 1000 * 60 * 5 // 5 minutes
+        staleTime: 1000 * 60 * 5, // 5 minutes
     });
 }
 
@@ -323,12 +382,12 @@ export function useCheckWritePermission(ownerId: string, mountId: string, pathId
     return useQuery({
         queryKey: driveKeys.write(ownerId, mountId, pathId || ''),
         queryFn: async () => {
-            if (!pathId) return {canWrite: false};
-            const response = await driveApi({ownerId})({mountId}).path({pathId}).permissions.write.get();
-            return response.data || {canWrite: false};
+            if (!pathId) return { canWrite: false };
+            const response = await driveApi({ ownerId })({ mountId }).path({ pathId }).permissions.write.get();
+            return response.data || { canWrite: false };
         },
         enabled: !!pathId && !!ownerId && !!mountId,
-        staleTime: 1000 * 60 * 5 // 5 minutes
+        staleTime: 1000 * 60 * 5, // 5 minutes
     });
 }
 
@@ -338,7 +397,7 @@ export function useEffectiveMembers(ownerId: string, mountId: string, pathId: st
         queryKey: driveKeys.effectiveMembers(ownerId, mountId, pathId || ''),
         queryFn: async () => {
             if (!pathId) return [];
-            const response = await driveApi({ownerId})({mountId}).path({pathId})['effective-members'].get();
+            const response = await driveApi({ ownerId })({ mountId }).path({ pathId })['effective-members'].get();
             return response.data || [];
         },
         enabled: !!pathId && !!ownerId && !!mountId,
@@ -351,11 +410,11 @@ export function useBreadcrumb(ownerId: string, mountId: string, pathId: string |
         queryKey: [...driveKeys.path(ownerId, mountId, pathId || ''), 'breadcrumb'],
         queryFn: async () => {
             if (!pathId) return [];
-            const response = await driveApi({ownerId})({mountId}).path({pathId}).breadcrumb.get();
+            const response = await driveApi({ ownerId })({ mountId }).path({ pathId }).breadcrumb.get();
             return response.data || [];
         },
         enabled: !!pathId && !!ownerId && !!mountId,
-        staleTime: 1000 * 60 * 5 // 5 minutes
+        staleTime: 1000 * 60 * 5, // 5 minutes
     });
 }
 
@@ -363,12 +422,15 @@ export function useBreadcrumb(ownerId: string, mountId: string, pathId: string |
 export function useCreateDoc(ownerId: string, mountId: string = DEFAULT_MOUNT_ID) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({parentId, fileName}: { parentId: string, fileName: string }): Promise<DrivePath> => {
-            const response = await driveApi({ownerId})({mountId}).folder({pathId: parentId}).doc.post({fileName});
+        mutationFn: async ({ parentId, fileName }: { parentId: string; fileName: string }): Promise<DrivePath> => {
+            const response = await driveApi({ ownerId })({ mountId })
+                .folder({ pathId: parentId })
+                .doc.post({ fileName });
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId, 'DRIVE_MIME_DOC'),
+        onSuccess: (_data, variables) =>
+            invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId, 'DRIVE_MIME_DOC'),
         onError: onMutationError,
     });
 }
@@ -377,12 +439,15 @@ export function useCreateDoc(ownerId: string, mountId: string = DEFAULT_MOUNT_ID
 export function useCreateStickies(ownerId: string, mountId: string = DEFAULT_MOUNT_ID) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({parentId, fileName}: { parentId: string, fileName: string }): Promise<DrivePath> => {
-            const response = await driveApi({ownerId})({mountId}).folder({pathId: parentId}).stickies.post({fileName});
+        mutationFn: async ({ parentId, fileName }: { parentId: string; fileName: string }): Promise<DrivePath> => {
+            const response = await driveApi({ ownerId })({ mountId })
+                .folder({ pathId: parentId })
+                .stickies.post({ fileName });
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId, 'DRIVE_MIME_STICKIES'),
+        onSuccess: (_data, variables) =>
+            invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId, 'DRIVE_MIME_STICKIES'),
         onError: onMutationError,
     });
 }
@@ -391,12 +456,15 @@ export function useCreateStickies(ownerId: string, mountId: string = DEFAULT_MOU
 export function useCreateSlides(ownerId: string, mountId: string = DEFAULT_MOUNT_ID) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({parentId, fileName}: { parentId: string, fileName: string }): Promise<DrivePath> => {
-            const response = await driveApi({ownerId})({mountId}).folder({pathId: parentId}).slides.post({fileName});
+        mutationFn: async ({ parentId, fileName }: { parentId: string; fileName: string }): Promise<DrivePath> => {
+            const response = await driveApi({ ownerId })({ mountId })
+                .folder({ pathId: parentId })
+                .slides.post({ fileName });
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId, 'DRIVE_MIME_SLIDES'),
+        onSuccess: (_data, variables) =>
+            invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId, 'DRIVE_MIME_SLIDES'),
         onError: onMutationError,
     });
 }
@@ -405,12 +473,15 @@ export function useCreateSlides(ownerId: string, mountId: string = DEFAULT_MOUNT
 export function useCreateSheets(ownerId: string, mountId: string = DEFAULT_MOUNT_ID) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({parentId, fileName}: { parentId: string, fileName: string }): Promise<DrivePath> => {
-            const response = await driveApi({ownerId})({mountId}).folder({pathId: parentId}).sheets.post({fileName});
+        mutationFn: async ({ parentId, fileName }: { parentId: string; fileName: string }): Promise<DrivePath> => {
+            const response = await driveApi({ ownerId })({ mountId })
+                .folder({ pathId: parentId })
+                .sheets.post({ fileName });
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId, 'DRIVE_MIME_SHEETS'),
+        onSuccess: (_data, variables) =>
+            invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId, 'DRIVE_MIME_SHEETS'),
         onError: onMutationError,
     });
 }
@@ -420,10 +491,10 @@ export function useSharedPaths(ownerId: string, to: 'by-me' | 'with-me') {
         queryKey: driveKeys.shared(ownerId, to),
         queryFn: async () => {
             if (to === 'by-me') {
-                const response = await driveApi({ownerId}).shared['by-me'].get();
+                const response = await driveApi({ ownerId }).shared['by-me'].get();
                 return response.data || [];
             } else {
-                const response = await driveApi({ownerId}).shared['with-me'].get();
+                const response = await driveApi({ ownerId }).shared['with-me'].get();
                 return response.data || [];
             }
         },
@@ -436,9 +507,9 @@ export function useTextPreview(ownerId: string, mountId: string, pathId: string,
     return useQuery({
         queryKey: driveKeys.textPreview(ownerId, mountId, pathId),
         queryFn: async () => {
-            const response = await driveApi({ownerId})({mountId}).file({pathId})['text-preview'].get();
+            const response = await driveApi({ ownerId })({ mountId }).file({ pathId })['text-preview'].get();
             if (response.error) throw new AppError(response);
-            return response.data as { body: string, mode: string } | null;
+            return response.data as { body: string; mode: string } | null;
         },
         enabled: enabled && !!pathId && !!ownerId && !!mountId,
         staleTime: 1000 * 60 * 5,
@@ -447,61 +518,93 @@ export function useTextPreview(ownerId: string, mountId: string, pathId: string,
 
 // SSE invalidation functions
 export function invalidateAclSharedOrUnshared(queryClient: QueryClient, ownerId: string): void {
-    queryClient.invalidateQueries({queryKey: driveKeys.shared(ownerId, 'with-me')});
+    queryClient.invalidateQueries({ queryKey: driveKeys.shared(ownerId, 'with-me') });
 }
 
-export function invalidateItemCreated(queryClient: QueryClient, ownerId: string, mountId: string, parentId: string | null | undefined, mimeType?: string | null): void {
+export function invalidateItemCreated(
+    queryClient: QueryClient,
+    ownerId: string,
+    mountId: string,
+    parentId: string | null | undefined,
+    mimeType?: string | null,
+): void {
     if (parentId) {
-        queryClient.invalidateQueries({queryKey: driveKeys.folder(ownerId, mountId, parentId)});
+        queryClient.invalidateQueries({ queryKey: driveKeys.folder(ownerId, mountId, parentId) });
     }
     if (mimeType) {
         const normalizedMimeType = mimeType.replace('/', '-');
-        queryClient.invalidateQueries({queryKey: driveKeys.mime(ownerId, normalizedMimeType)});
+        queryClient.invalidateQueries({ queryKey: driveKeys.mime(ownerId, normalizedMimeType) });
     }
     invalidateHomeSize(queryClient, ownerId);
 }
 
-export function invalidateItemDeleted(queryClient: QueryClient, ownerId: string, mountId: string, pathId: string, parentId: string | null | undefined, mimeType: string | null | undefined): void {
+export function invalidateItemDeleted(
+    queryClient: QueryClient,
+    ownerId: string,
+    mountId: string,
+    pathId: string,
+    parentId: string | null | undefined,
+    mimeType: string | null | undefined,
+): void {
     if (parentId) {
-        queryClient.invalidateQueries({queryKey: driveKeys.folder(ownerId, mountId, parentId)});
+        queryClient.invalidateQueries({ queryKey: driveKeys.folder(ownerId, mountId, parentId) });
     }
-    queryClient.removeQueries({queryKey: driveKeys.path(ownerId, mountId, pathId)});
+    queryClient.removeQueries({ queryKey: driveKeys.path(ownerId, mountId, pathId) });
     if (mimeType) {
         const normalizedMimeType = mimeType.replace('/', '-');
-        queryClient.invalidateQueries({queryKey: driveKeys.mime(ownerId, normalizedMimeType)});
+        queryClient.invalidateQueries({ queryKey: driveKeys.mime(ownerId, normalizedMimeType) });
     }
     invalidateHomeSize(queryClient, ownerId);
 }
 
-export function invalidatePathRenamed(queryClient: QueryClient, ownerId: string, mountId: string, pathId: string, parentId: string | null | undefined, mimeType: string | null | undefined): void {
-    queryClient.invalidateQueries({queryKey: driveKeys.path(ownerId, mountId, pathId)});
+export function invalidatePathRenamed(
+    queryClient: QueryClient,
+    ownerId: string,
+    mountId: string,
+    pathId: string,
+    parentId: string | null | undefined,
+    mimeType: string | null | undefined,
+): void {
+    queryClient.invalidateQueries({ queryKey: driveKeys.path(ownerId, mountId, pathId) });
     if (parentId) {
-        queryClient.invalidateQueries({queryKey: driveKeys.folder(ownerId, mountId, parentId)});
+        queryClient.invalidateQueries({ queryKey: driveKeys.folder(ownerId, mountId, parentId) });
     }
     if (mimeType) {
         const normalizedMimeType = mimeType.replace('/', '-');
-        queryClient.invalidateQueries({queryKey: driveKeys.mime(ownerId, normalizedMimeType)});
+        queryClient.invalidateQueries({ queryKey: driveKeys.mime(ownerId, normalizedMimeType) });
     }
 }
 
-export function invalidatePathMoved(queryClient: QueryClient, ownerId: string, mountId: string, pathId: string, parentId: string | null | undefined, oldParentId: string | null | undefined): void {
-    queryClient.invalidateQueries({queryKey: driveKeys.path(ownerId, mountId, pathId)});
+export function invalidatePathMoved(
+    queryClient: QueryClient,
+    ownerId: string,
+    mountId: string,
+    pathId: string,
+    parentId: string | null | undefined,
+    oldParentId: string | null | undefined,
+): void {
+    queryClient.invalidateQueries({ queryKey: driveKeys.path(ownerId, mountId, pathId) });
     if (parentId) {
-        queryClient.invalidateQueries({queryKey: driveKeys.folder(ownerId, mountId, parentId)});
+        queryClient.invalidateQueries({ queryKey: driveKeys.folder(ownerId, mountId, parentId) });
     }
     if (oldParentId) {
-        queryClient.invalidateQueries({queryKey: driveKeys.folder(ownerId, mountId, oldParentId)});
+        queryClient.invalidateQueries({ queryKey: driveKeys.folder(ownerId, mountId, oldParentId) });
     }
 }
 
-export function invalidateAclUpdated(queryClient: QueryClient, ownerId: string, mountId: string, pathId: string, parentId: string | null | undefined): void {
-    queryClient.invalidateQueries({queryKey: driveKeys.shared(ownerId, 'by-me')});
-    queryClient.invalidateQueries({queryKey: driveKeys.shared(ownerId, 'with-me')});
-    queryClient.invalidateQueries({queryKey: driveKeys.path(ownerId, mountId, pathId)});
-    queryClient.invalidateQueries({queryKey: driveKeys.read(ownerId, mountId, pathId)});
-    queryClient.invalidateQueries({queryKey: driveKeys.write(ownerId, mountId, pathId)});
+export function invalidateAclUpdated(
+    queryClient: QueryClient,
+    ownerId: string,
+    mountId: string,
+    pathId: string,
+    parentId: string | null | undefined,
+): void {
+    queryClient.invalidateQueries({ queryKey: driveKeys.shared(ownerId, 'by-me') });
+    queryClient.invalidateQueries({ queryKey: driveKeys.shared(ownerId, 'with-me') });
+    queryClient.invalidateQueries({ queryKey: driveKeys.path(ownerId, mountId, pathId) });
+    queryClient.invalidateQueries({ queryKey: driveKeys.read(ownerId, mountId, pathId) });
+    queryClient.invalidateQueries({ queryKey: driveKeys.write(ownerId, mountId, pathId) });
     if (parentId) {
-        queryClient.invalidateQueries({queryKey: driveKeys.folder(ownerId, mountId, parentId)});
+        queryClient.invalidateQueries({ queryKey: driveKeys.folder(ownerId, mountId, parentId) });
     }
 }
-

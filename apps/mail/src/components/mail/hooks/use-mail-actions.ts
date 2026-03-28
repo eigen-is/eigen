@@ -1,4 +1,5 @@
-import {useNavigate} from '@tanstack/react-router';
+import { useNavigate } from '@tanstack/react-router';
+import { useAuth } from '@workspace/lib/auth';
 import {
     createDraftEmail,
     useDeleteEmail,
@@ -6,18 +7,17 @@ import {
     useMoveEmail,
     useSendDraft,
     useToggleReadEmail,
-    useUpdateDraft
+    useUpdateDraft,
 } from '@workspace/lib/mail';
-import type {Email, EmailDraft} from '@workspace/lib/types/mail';
-import {toast} from 'sonner';
-import {format} from 'date-fns';
-import {useAuth} from '@workspace/lib/auth';
-import {Route} from '../../../routes/_auth.$filterType.$filterId';
+import type { Email, EmailDraft } from '@workspace/lib/types/mail';
+import { format } from 'date-fns';
+import { toast } from 'sonner';
+import { Route } from '../../../routes/_auth.$filterType.$filterId';
 
 export function useMailActions() {
-    const {filterType, filterId} = Route.useParams();
+    const { filterType, filterId } = Route.useParams();
     const navigate = useNavigate();
-    const {user} = useAuth();
+    const { user } = useAuth();
     const deleteMail = useDeleteEmail();
     const moveMail = useMoveEmail();
     const toggleMailRead = useToggleReadEmail();
@@ -28,7 +28,7 @@ export function useMailActions() {
     const navigateToList = () => {
         navigate({
             to: Route.fullPath,
-            params: {filterType, filterId},
+            params: { filterType, filterId },
             search: {},
         });
     };
@@ -36,13 +36,13 @@ export function useMailActions() {
     const handleRowClick = (emailId: string) => {
         navigate({
             to: Route.fullPath,
-            params: {filterType, filterId},
-            search: (prev) => ({...prev, mailId: emailId}),
+            params: { filterType, filterId },
+            search: (prev) => ({ ...prev, mailId: emailId }),
         });
     };
 
     const handleMoveEmail = async (mail: Email, mailbox: string) => {
-        await moveMail.mutateAsync({email: mail, mailbox});
+        await moveMail.mutateAsync({ email: mail, mailbox });
         navigateToList();
     };
 
@@ -56,24 +56,24 @@ export function useMailActions() {
         if (draft) {
             navigate({
                 to: Route.fullPath,
-                params: {filterType, filterId},
-                search: {mailId: draft.id},
+                params: { filterType, filterId },
+                search: { mailId: draft.id },
             });
         }
     };
 
     const handleDeleteEmail = async (mail: Email) => {
         if (mail.mailbox === 'Trash') {
-            return {needsConfirmation: true as const, emails: [mail]};
+            return { needsConfirmation: true as const, emails: [mail] };
         }
         await deleteMail.mutateAsync(mail);
         navigateToList();
-        return {needsConfirmation: false as const};
+        return { needsConfirmation: false as const };
     };
 
     const confirmDeleteEmails = async (pendingEmails: Email[]) => {
         if (pendingEmails.length > 0) {
-            await Promise.allSettled(pendingEmails.map(mail => deleteMail.mutateAsync(mail)));
+            await Promise.allSettled(pendingEmails.map((mail) => deleteMail.mutateAsync(mail)));
             navigateToList();
         }
     };
@@ -81,24 +81,24 @@ export function useMailActions() {
     const handleDeleteEmailById = async (emailId: string) => {
         const email = await getEmailById(emailId);
         if (email) return handleDeleteEmail(email);
-        return {needsConfirmation: false as const};
+        return { needsConfirmation: false as const };
     };
 
     const handleDeleteEmailsByIds = async (emailIds: string[]) => {
-        const emails = (await Promise.all(emailIds.map(id => getEmailById(id)))).filter((e): e is Email => !!e);
-        const trashEmails = emails.filter(e => e.mailbox === 'Trash');
-        const nonTrashEmails = emails.filter(e => e.mailbox !== 'Trash');
+        const emails = (await Promise.all(emailIds.map((id) => getEmailById(id)))).filter((e): e is Email => !!e);
+        const trashEmails = emails.filter((e) => e.mailbox === 'Trash');
+        const nonTrashEmails = emails.filter((e) => e.mailbox !== 'Trash');
 
         if (nonTrashEmails.length > 0) {
-            await Promise.allSettled(nonTrashEmails.map(mail => deleteMail.mutateAsync(mail)));
+            await Promise.allSettled(nonTrashEmails.map((mail) => deleteMail.mutateAsync(mail)));
         }
         if (trashEmails.length > 0) {
-            return {needsConfirmation: true as const, emails: trashEmails};
+            return { needsConfirmation: true as const, emails: trashEmails };
         }
         if (nonTrashEmails.length > 0) {
             navigateToList();
         }
-        return {needsConfirmation: false as const};
+        return { needsConfirmation: false as const };
     };
 
     const handleMoveEmailToFolderById = async (emailId: string, folderId: string) => {
@@ -107,8 +107,8 @@ export function useMailActions() {
     };
 
     const handleMoveEmailsToFolderByIds = async (emailIds: string[], folderId: string) => {
-        const emails = (await Promise.all(emailIds.map(id => getEmailById(id)))).filter((e): e is Email => !!e);
-        await Promise.allSettled(emails.map(mail => moveMail.mutateAsync({email: mail, mailbox: folderId})));
+        const emails = (await Promise.all(emailIds.map((id) => getEmailById(id)))).filter((e): e is Email => !!e);
+        await Promise.allSettled(emails.map((mail) => moveMail.mutateAsync({ email: mail, mailbox: folderId })));
         navigateToList();
     };
 
@@ -118,8 +118,8 @@ export function useMailActions() {
     };
 
     const handleArchiveEmailsByIds = async (emailIds: string[]) => {
-        const emails = (await Promise.all(emailIds.map(id => getEmailById(id)))).filter((e): e is Email => !!e);
-        await Promise.allSettled(emails.map(mail => moveMail.mutateAsync({email: mail, mailbox: 'Archive'})));
+        const emails = (await Promise.all(emailIds.map((id) => getEmailById(id)))).filter((e): e is Email => !!e);
+        await Promise.allSettled(emails.map((mail) => moveMail.mutateAsync({ email: mail, mailbox: 'Archive' })));
         navigateToList();
     };
 
@@ -129,8 +129,8 @@ export function useMailActions() {
     };
 
     const handleReportSpamByIds = async (emailIds: string[]) => {
-        const emails = (await Promise.all(emailIds.map(id => getEmailById(id)))).filter((e): e is Email => !!e);
-        await Promise.allSettled(emails.map(mail => moveMail.mutateAsync({email: mail, mailbox: 'Junk'})));
+        const emails = (await Promise.all(emailIds.map((id) => getEmailById(id)))).filter((e): e is Email => !!e);
+        await Promise.allSettled(emails.map((mail) => moveMail.mutateAsync({ email: mail, mailbox: 'Junk' })));
         navigateToList();
     };
 
@@ -141,49 +141,56 @@ export function useMailActions() {
     const handleReplyEmail = async (emailId: string) => {
         const email = await getEmailById(emailId);
         if (!email) {
-            toast.error("Could not load email");
+            toast.error('Could not load email');
             return;
         }
-        await handleNewDraftEmail(createDraftEmail({
-            to: email.replyTo || email.from,
-            subject: email.subject?.startsWith('RE:') ? email.subject : `RE: ${email.subject}`,
-            text: formatEmailQuote(email),
-        }));
+        await handleNewDraftEmail(
+            createDraftEmail({
+                to: email.replyTo || email.from,
+                subject: email.subject?.startsWith('RE:') ? email.subject : `RE: ${email.subject}`,
+                text: formatEmailQuote(email),
+            }),
+        );
     };
 
     const handleReplyAllEmail = async (emailId: string) => {
         const email = await getEmailById(emailId);
         if (!email) {
-            toast.error("Could not load email");
+            toast.error('Could not load email');
             return;
         }
         const myEmail = user?.email?.toLowerCase();
-        const toValues = Array.isArray(email.to) ? email.to.flatMap(t => t.value) : (email.to?.value || []);
-        const ccValues = Array.isArray(email.cc) ? email.cc.flatMap(c => c.value) : (email.cc?.value || []);
+        const toValues = Array.isArray(email.to) ? email.to.flatMap((t) => t.value) : email.to?.value || [];
+        const ccValues = Array.isArray(email.cc) ? email.cc.flatMap((c) => c.value) : email.cc?.value || [];
         const replyTo = (email.replyTo || email.from)?.value || [];
-        const allRecipients = [...replyTo, ...toValues, ...ccValues]
-            .filter(addr => addr.address?.toLowerCase() !== myEmail);
-        await handleNewDraftEmail(createDraftEmail({
-            to: {value: allRecipients, html: '', text: ''},
-            subject: email.subject?.startsWith('RE:') ? email.subject : `RE: ${email.subject}`,
-            text: formatEmailQuote(email),
-        }));
+        const allRecipients = [...replyTo, ...toValues, ...ccValues].filter(
+            (addr) => addr.address?.toLowerCase() !== myEmail,
+        );
+        await handleNewDraftEmail(
+            createDraftEmail({
+                to: { value: allRecipients, html: '', text: '' },
+                subject: email.subject?.startsWith('RE:') ? email.subject : `RE: ${email.subject}`,
+                text: formatEmailQuote(email),
+            }),
+        );
     };
 
     const handleForwardEmail = async (emailId: string) => {
         const email = await getEmailById(emailId);
         if (!email) {
-            toast.error("Could not load email");
+            toast.error('Could not load email');
             return;
         }
-        await handleNewDraftEmail(createDraftEmail({
-            subject: `FW: ${email.subject}`,
-            text: formatEmailQuote(email),
-        }));
+        await handleNewDraftEmail(
+            createDraftEmail({
+                subject: `FW: ${email.subject}`,
+                text: formatEmailQuote(email),
+            }),
+        );
     };
 
     const handleToggleMailRead = (email: Email, isRead: boolean) => {
-        toggleMailRead.mutate({email, isRead});
+        toggleMailRead.mutate({ email, isRead });
     };
 
     return {

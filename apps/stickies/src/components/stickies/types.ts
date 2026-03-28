@@ -6,7 +6,7 @@ export type CardItem = {
     creator: string;
     createdAt: number;
     chatName?: string;
-}
+};
 
 export type ColumnItem = {
     id: string;
@@ -14,10 +14,10 @@ export type ColumnItem = {
     taskIds: string[];
     creator: string;
     createdAt: number;
-}
+};
 
 export type BoardData = {
     tasks: Record<string, CardItem>;
     columns: Record<string, ColumnItem>;
     columnOrder: string[];
-}
+};

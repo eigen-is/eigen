@@ -1,14 +1,15 @@
-import {validateEmailAddress} from "../validation";
+import { validateEmailAddress } from '../validation';
 
 export type OwnerType = 'user' | 'team' | 'org';
 
 export type ParsedOwnerId = { type: OwnerType; id: string };
 
 export function parseOwnerId(ownerId: string): ParsedOwnerId {
-    let id = ownerId, type: OwnerType = 'user';
+    let id = ownerId,
+        type: OwnerType = 'user';
 
     if (validateEmailAddress(ownerId)) {
-        return {type: 'user', id: ownerId.toLowerCase()};
+        return { type: 'user', id: ownerId.toLowerCase() };
     }
 
     if (ownerId.startsWith('team_')) {
@@ -24,10 +25,10 @@ export function parseOwnerId(ownerId: string): ParsedOwnerId {
     // and may contain alphanumeric characters beyond hex. Do not restrict to [a-f].
     const uuidRegex = /^[0-9a-fA-Z]{32}$/i;
     if (!uuidRegex.test(id)) {
-        return {type: 'user', id: ''};
+        return { type: 'user', id: '' };
     }
 
-    return {id, type};
+    return { id, type };
 }
 
 export function userOwnerId(userId: string): string {

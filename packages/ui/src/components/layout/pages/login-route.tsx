@@ -1,6 +1,6 @@
-import {redirect} from '@tanstack/react-router'
-import {z} from 'zod'
-import {LoginPage} from './loginpage.tsx'
+import { redirect } from '@tanstack/react-router';
+import { z } from 'zod';
+import { LoginPage } from './loginpage.tsx';
 
 export const loginSearchSchema = z.object({
     redirect: z.string().optional().catch(''),
@@ -8,15 +8,18 @@ export const loginSearchSchema = z.object({
 
 export function createLoginRouteOptions(fallback = '/') {
     return {
-        component: () => <LoginPage/>,
+        component: () => <LoginPage />,
         validateSearch: loginSearchSchema,
-        beforeLoad: async ({context, search}: {
-            context: { auth: { isAuthenticated: boolean } },
-            search: { redirect?: string }
+        beforeLoad: async ({
+            context,
+            search,
+        }: {
+            context: { auth: { isAuthenticated: boolean } };
+            search: { redirect?: string };
         }) => {
             if (context.auth.isAuthenticated) {
-                throw redirect({to: search.redirect || fallback})
+                throw redirect({ to: search.redirect || fallback });
             }
         },
-    }
+    };
 }

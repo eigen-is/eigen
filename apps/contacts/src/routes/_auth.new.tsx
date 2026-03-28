@@ -1,8 +1,8 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
-import {ContactEdit, ContactEditToolbar, type ContactFormValues} from '../components/contacts/contact-edit';
-import {useAddContact} from '@workspace/lib/contacts';
-import {Column, ColumnLayout} from "@workspace/ui/components/layout/app/column-layout.tsx";
 import {emptyContact} from '@workspace/lib/constants/contact';
+import {useAddContact} from '@workspace/lib/contacts';
+import {Column, ColumnLayout} from '@workspace/ui/components/layout/app/column-layout.tsx';
+import {ContactEdit, ContactEditToolbar, type ContactFormValues} from '../components/contacts/contact-edit';
 
 export const Route = createFileRoute('/_auth/new')({
     component: NewContactRoute,
@@ -19,7 +19,7 @@ function NewContactRoute() {
             lastName: data.lastName || '',
             birthday: data.birthday?.toISOString(),
             labels: data.labels || [],
-            avatar: data.avatar ?? ''
+            avatar: data.avatar ?? '',
         };
 
         const newId = await addContactMutation.mutateAsync(contactData);
@@ -28,7 +28,7 @@ function NewContactRoute() {
             to: '/$filterType/$filterId',
             params: {
                 filterType: 'book',
-                filterId: 'all'
+                filterId: 'all',
             },
             search: newId && typeof newId === 'string' ? {contactId: newId} : {},
         });
@@ -39,19 +39,15 @@ function NewContactRoute() {
             to: '/$filterType/$filterId',
             params: {
                 filterType: 'book',
-                filterId: 'all'
-            }
+                filterId: 'all',
+            },
         });
     };
 
     return (
         <ColumnLayout mobileColumn="editor">
             <Column id="editor" width="flex" onBack={handleCancel} toolbar={<ContactEditToolbar isNew={true}/>}>
-                <ContactEdit
-                    contact={emptyContact}
-                    onSave={handleSave}
-                    onCancel={handleCancel}
-                />
+                <ContactEdit contact={emptyContact} onSave={handleSave} onCancel={handleCancel}/>
             </Column>
         </ColumnLayout>
     );

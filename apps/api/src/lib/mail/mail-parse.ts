@@ -1,14 +1,19 @@
-import type {Email} from '@workspace/lib/types/mail'
-import {simpleParser} from './mail-parser'
-import DOMPurify from 'isomorphic-dompurify'
+import type { Email } from '@workspace/lib/types/mail';
+import DOMPurify from 'isomorphic-dompurify';
+import { simpleParser } from './mail-parser';
 
-export async function parseEml(messageId: string, mailbox: string, content: string, size: number): Promise<Email | null> {
+export async function parseEml(
+    messageId: string,
+    mailbox: string,
+    content: string,
+    size: number,
+): Promise<Email | null> {
     try {
-        const parsedMail = await simpleParser(content, {})
+        const parsedMail = await simpleParser(content, {});
 
         if (parsedMail.html) {
-            parsedMail.html = DOMPurify.sanitize(parsedMail.html, {FORCE_BODY: true})
-            parsedMail.html = parsedMail.html.replace(/\s+/g, ' ').trim()
+            parsedMail.html = DOMPurify.sanitize(parsedMail.html, { FORCE_BODY: true });
+            parsedMail.html = parsedMail.html.replace(/\s+/g, ' ').trim();
         }
 
         return {
@@ -24,9 +29,9 @@ export async function parseEml(messageId: string, mailbox: string, content: stri
             hasAttachments: parsedMail.attachments?.length > 0,
             fromShort: parsedMail.from?.value[0]?.name || parsedMail.from?.value[0]?.address || 'Unknown',
             textShort: parsedMail.text || '',
-        } as Email
+        } as Email;
     } catch (error) {
-        console.error(`Error parsing message ${messageId}:`, error)
-        return null
+        console.error(`Error parsing message ${messageId}:`, error);
+        return null;
     }
 }

@@ -1,14 +1,14 @@
-import type {QueryClient} from '@tanstack/react-query';
-import type {SSEvent} from '@workspace/lib/types/sse';
-import {SSEventType} from '@workspace/lib/types/sse';
-import {invalidateMessages} from './hooks/use-chat';
-import {invalidateComments} from './hooks/use-comments';
+import type { QueryClient } from '@tanstack/react-query';
+import type { SSEvent } from '@workspace/lib/types/sse';
+import { SSEventType } from '@workspace/lib/types/sse';
+import { invalidateMessages } from './hooks/use-chat';
+import { invalidateComments } from './hooks/use-comments';
 
 export function handleChatSSEvent(event: SSEvent, queryClient: QueryClient): boolean {
     if (!event?.type?.startsWith('chat:')) return false;
     if (!('chat' in event)) return false;
 
-    const {chat} = event;
+    const { chat } = event;
 
     switch (event.type) {
         case SSEventType.CHAT_MESSAGE_POSTED:

@@ -1,9 +1,9 @@
-import {FileText, Presentation, Sheet, StickyNote} from 'lucide-react';
 import {DRIVE_TYPE_DOC, DRIVE_TYPE_SHEETS, DRIVE_TYPE_SLIDES, DRIVE_TYPE_STICKIES} from '@workspace/lib/types/drive';
+import {FileText, Presentation, Sheet, StickyNote} from 'lucide-react';
 import {DriveCreateDoc} from './drive-create-doc';
-import {DriveCreateStickies} from './drive-create-stickies';
-import {DriveCreateSlides} from './drive-create-slides';
 import {DriveCreateSheets} from './drive-create-sheets';
+import {DriveCreateSlides} from './drive-create-slides';
+import {DriveCreateStickies} from './drive-create-stickies';
 import type {EigenDocAppConfig} from './eigendoc-config';
 
 export const DOCS_CONFIG: EigenDocAppConfig = {

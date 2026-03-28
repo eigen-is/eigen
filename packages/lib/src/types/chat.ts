@@ -12,15 +12,15 @@ export type ChatMessage = {
     editedAt: Date | null;
     deletedAt: Date | null;
     createdAt: Date;
-}
+};
 
 export type RoomMember = {
     email: string;
     displayName: string;
-}
+};
 
 export type ChatReadState = {
     userId: string;
     lastReadMessageId: string | null;
     lastReadAt: Date | null;
-}
+};

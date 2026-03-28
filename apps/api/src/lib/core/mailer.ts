@@ -1,7 +1,7 @@
 import nodemailer from 'nodemailer';
 import type Mail from 'nodemailer/lib/mailer';
-import {getDomain} from '../config/server-config';
-import {isProduction} from '../config/env';
+import { isProduction } from '../config/env';
+import { getDomain } from '../config/server-config';
 
 // Outbound email types — the inbound parsing types live in packages/lib/types/mail.ts
 type OutboundAddress = {
@@ -36,10 +36,10 @@ function createTransport(): Mail {
 }
 
 export async function sendMail(message: OutboundMail): Promise<boolean> {
-    const from = message.from ?? {name: '', address: `noreply@${getDomain()}`};
+    const from = message.from ?? { name: '', address: `noreply@${getDomain()}` };
 
     if (!isProduction() && getDomain() === 'localhost') {
-        console.log('[DEV] Skipping email:', {from, to: message.to, subject: message.subject});
+        console.log('[DEV] Skipping email:', { from, to: message.to, subject: message.subject });
         return true;
     }
 
@@ -55,7 +55,7 @@ export async function sendMail(message: OutboundMail): Promise<boolean> {
     if (message.bcc?.length) mailOptions.bcc = message.bcc;
     if (message.html) mailOptions.html = message.html;
     if (message.attachments?.length) {
-        mailOptions.attachments = message.attachments.map(a => ({
+        mailOptions.attachments = message.attachments.map((a) => ({
             filename: a.filename,
             content: a.content,
             contentType: a.contentType,

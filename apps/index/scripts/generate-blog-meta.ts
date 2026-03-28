@@ -1,5 +1,5 @@
-import {readdirSync, readFileSync, writeFileSync} from 'fs';
-import {join} from 'path';
+import {readdirSync, readFileSync, writeFileSync} from 'node:fs';
+import {join} from 'node:path';
 
 interface BlogPostMeta {
     title: string;
@@ -27,7 +27,10 @@ function parseFrontmatter(markdown: string): { data: Record<string, string>; con
         const colonIndex = line.indexOf(':');
         if (colonIndex !== -1) {
             const key = line.substring(0, colonIndex).trim();
-            const value = line.substring(colonIndex + 1).trim().replace(/^["']|["']$/g, '');
+            const value = line
+                .substring(colonIndex + 1)
+                .trim()
+                .replace(/^["']|["']$/g, '');
             data[key] = value;
         }
     }
@@ -39,7 +42,7 @@ function generateBlogMeta() {
     const blogDir = join(process.cwd(), 'src', 'data', 'blog');
     const outputPath = join(process.cwd(), 'public', 'blog-meta.json');
 
-    const files = readdirSync(blogDir).filter(file => file.endsWith('.md'));
+    const files = readdirSync(blogDir).filter((file) => file.endsWith('.md'));
     const blogMeta: BlogMetaData = {};
 
     for (const file of files) {

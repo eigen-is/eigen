@@ -1,29 +1,29 @@
-import {type QueryClient, useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
-import {contactsApi} from "@workspace/lib/api.ts";
-import type {Label} from "@workspace/lib/types/label";
-import {contactKeys} from './use-contacts';
-import {useAuth} from '@workspace/lib/auth';
-import {AppError, onMutationError} from '../../api-error';
+import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { contactsApi } from '@workspace/lib/api.ts';
+import { useAuth } from '@workspace/lib/auth';
+import type { Label } from '@workspace/lib/types/label';
+import { AppError, onMutationError } from '../../api-error';
+import { contactKeys } from './use-contacts';
 
 // Define query keys for reuse
 export const labelKeys = {
     all: ['labels'] as const,
     owner: (ownerId: string) => [...labelKeys.all, ownerId] as const,
     lists: (ownerId: string) => [...labelKeys.owner(ownerId), 'list'] as const,
-    list: (ownerId: string, filters: string) => [...labelKeys.lists(ownerId), {filters}] as const,
+    list: (ownerId: string, filters: string) => [...labelKeys.lists(ownerId), { filters }] as const,
     details: (ownerId: string) => [...labelKeys.owner(ownerId), 'detail'] as const,
     detail: (ownerId: string, id: string) => [...labelKeys.details(ownerId), id] as const,
 };
 
 // Hook to fetch all labels
 export function useLabels() {
-    const {user} = useAuth();
+    const { user } = useAuth();
     const ownerId = user?.id || '';
 
     return useQuery({
         queryKey: labelKeys.lists(ownerId),
         queryFn: async () => {
-            const response = await contactsApi({ownerId}).labels.get();
+            const response = await contactsApi({ ownerId }).labels.get();
             return response.data || [];
         },
         staleTime: 5 * 60 * 1000, // 5 minutes
@@ -34,12 +34,12 @@ export function useLabels() {
 // Hook to add a label
 export function useAddLabel() {
     const queryClient = useQueryClient();
-    const {user} = useAuth();
+    const { user } = useAuth();
     const ownerId = user?.id || '';
 
     return useMutation({
         mutationFn: async (labelData: Omit<Label, 'id'>) => {
-            const response = await contactsApi({ownerId}).labels.post(labelData);
+            const response = await contactsApi({ ownerId }).labels.post(labelData);
             if (response.error) throw new AppError(response);
             return response.data;
         },
@@ -51,12 +51,12 @@ export function useAddLabel() {
 // Hook to update a label
 export function useUpdateLabel() {
     const queryClient = useQueryClient();
-    const {user} = useAuth();
+    const { user } = useAuth();
     const ownerId = user?.id || '';
 
     return useMutation({
         mutationFn: async (updatedLabel: Label) => {
-            const response = await contactsApi({ownerId}).labels({id: updatedLabel.id}).put({
+            const response = await contactsApi({ ownerId }).labels({ id: updatedLabel.id }).put({
                 name: updatedLabel.name,
                 color: updatedLabel.color,
             });
@@ -71,12 +71,12 @@ export function useUpdateLabel() {
 // Hook to delete a label
 export function useDeleteLabel() {
     const queryClient = useQueryClient();
-    const {user} = useAuth();
+    const { user } = useAuth();
     const ownerId = user?.id || '';
 
     return useMutation({
         mutationFn: async (labelId: string) => {
-            const response = await contactsApi({ownerId}).labels({id: labelId}).delete();
+            const response = await contactsApi({ ownerId }).labels({ id: labelId }).delete();
             if (response.error) throw new AppError(response);
             return response.data;
         },
@@ -87,17 +87,17 @@ export function useDeleteLabel() {
 
 // Invalidation functions (ownerId-scoped, used from mutation onSuccess)
 export function invalidateLabelCreated(queryClient: QueryClient, ownerId: string): void {
-    queryClient.invalidateQueries({queryKey: labelKeys.lists(ownerId)});
+    queryClient.invalidateQueries({ queryKey: labelKeys.lists(ownerId) });
 }
 
 export function invalidateLabelUpdated(queryClient: QueryClient, ownerId: string, labelId: string): void {
-    queryClient.invalidateQueries({queryKey: labelKeys.detail(ownerId, labelId)});
-    queryClient.invalidateQueries({queryKey: labelKeys.lists(ownerId)});
-    queryClient.invalidateQueries({queryKey: contactKeys.lists(ownerId)});
+    queryClient.invalidateQueries({ queryKey: labelKeys.detail(ownerId, labelId) });
+    queryClient.invalidateQueries({ queryKey: labelKeys.lists(ownerId) });
+    queryClient.invalidateQueries({ queryKey: contactKeys.lists(ownerId) });
 }
 
 export function invalidateLabelDeleted(queryClient: QueryClient, ownerId: string, labelId: string): void {
-    queryClient.removeQueries({queryKey: labelKeys.detail(ownerId, labelId)});
-    queryClient.invalidateQueries({queryKey: labelKeys.lists(ownerId)});
-    queryClient.invalidateQueries({queryKey: contactKeys.lists(ownerId)});
+    queryClient.removeQueries({ queryKey: labelKeys.detail(ownerId, labelId) });
+    queryClient.invalidateQueries({ queryKey: labelKeys.lists(ownerId) });
+    queryClient.invalidateQueries({ queryKey: contactKeys.lists(ownerId) });
 }

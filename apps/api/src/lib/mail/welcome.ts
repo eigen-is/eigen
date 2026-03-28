@@ -1,4 +1,4 @@
-import {getDomain} from '../config/server-config';
+import { getDomain } from '../config/server-config';
 
 export function welcomeMail(name: string, email: string) {
     return `From: Reinder Nijhoff <reinder@${getDomain()}> 

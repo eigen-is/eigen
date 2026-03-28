@@ -1,17 +1,17 @@
-import {useCallback, useRef, useState} from 'react';
-import {Check, CircleDashed, HelpCircle, Plus, X as XIcon} from 'lucide-react';
-import {Button} from '@workspace/ui/components/button';
+import type {Attendee} from '@workspace/lib/types/calendar';
+import {validateEmailAddress} from '@workspace/lib/validation';
 import {Badge} from '@workspace/ui/components/badge';
+import {Button} from '@workspace/ui/components/button';
 import {ContactAutosuggest} from '@workspace/ui/components/layout/contacts/contact-autosuggest';
 import {UserItem} from '@workspace/ui/components/layout/user-item';
-import {validateEmailAddress} from '@workspace/lib/validation';
-import type {Attendee} from '@workspace/lib/types/calendar';
+import {Check, CircleDashed, HelpCircle, Plus, X as XIcon} from 'lucide-react';
+import {useCallback, useRef, useState} from 'react';
 
 type AttendeeEditorProps = {
     attendees: Attendee[];
     onChange: (attendees: Attendee[]) => void;
     currentUserEmail?: string;
-}
+};
 
 const statusIcon: Record<Attendee['status'], typeof Check> = {
     accepted: Check,
@@ -31,43 +31,55 @@ export function AttendeeEditor({attendees, onChange, currentUserEmail}: Attendee
     const [input, setInput] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
 
-    const addAttendee = useCallback((email: string, name?: string) => {
-        const normalized = email.toLowerCase();
-        if (attendees.some(a => a.email.toLowerCase() === normalized)) return;
-        if (currentUserEmail && normalized === currentUserEmail.toLowerCase()) return;
-        onChange([...attendees, {email: normalized, name, status: 'pending', role: 'required'}]);
-    }, [attendees, onChange, currentUserEmail]);
+    const addAttendee = useCallback(
+        (email: string, name?: string) => {
+            const normalized = email.toLowerCase();
+            if (attendees.some((a) => a.email.toLowerCase() === normalized)) return;
+            if (currentUserEmail && normalized === currentUserEmail.toLowerCase()) return;
+            onChange([...attendees, {email: normalized, name, status: 'pending', role: 'required'}]);
+        },
+        [attendees, onChange, currentUserEmail],
+    );
 
-    const processInput = useCallback((value: string) => {
-        const emailMatch = value.match(/<(.+)>/);
-        if (emailMatch) {
-            const nameMatch = value.match(/^(.+?)\s*</);
-            addAttendee(emailMatch[1], nameMatch?.[1]);
-            return true;
-        }
-        if (validateEmailAddress(value.trim())) {
-            addAttendee(value.trim());
-            return true;
-        }
-        return false;
-    }, [addAttendee]);
+    const processInput = useCallback(
+        (value: string) => {
+            const emailMatch = value.match(/<(.+)>/);
+            if (emailMatch) {
+                const nameMatch = value.match(/^(.+?)\s*</);
+                addAttendee(emailMatch[1], nameMatch?.[1]);
+                return true;
+            }
+            if (validateEmailAddress(value.trim())) {
+                addAttendee(value.trim());
+                return true;
+            }
+            return false;
+        },
+        [addAttendee],
+    );
 
-    const handleContactSelected = useCallback((value: string) => {
-        if (value.includes('<') && value.includes('>')) {
-            if (processInput(value)) setInput('');
-            else setInput(value);
-        } else {
-            setInput(value);
-        }
-    }, [processInput]);
+    const handleContactSelected = useCallback(
+        (value: string) => {
+            if (value.includes('<') && value.includes('>')) {
+                if (processInput(value)) setInput('');
+                else setInput(value);
+            } else {
+                setInput(value);
+            }
+        },
+        [processInput],
+    );
 
     const handleAddClick = useCallback(() => {
         if (processInput(input)) setInput('');
     }, [input, processInput]);
 
-    const removeAttendee = useCallback((email: string) => {
-        onChange(attendees.filter(a => a.email !== email));
-    }, [attendees, onChange]);
+    const removeAttendee = useCallback(
+        (email: string) => {
+            onChange(attendees.filter((a) => a.email !== email));
+        },
+        [attendees, onChange],
+    );
 
     return (
         <div className="space-y-2">
@@ -121,7 +133,7 @@ export function AttendeeEditor({attendees, onChange, currentUserEmail}: Attendee
 type AttendeeListProps = {
     attendees: Attendee[];
     organizer?: { userId?: string; email: string; name?: string };
-}
+};
 
 export function AttendeeList({attendees, organizer}: AttendeeListProps) {
     return (
@@ -129,7 +141,9 @@ export function AttendeeList({attendees, organizer}: AttendeeListProps) {
             {organizer && (
                 <div className="flex items-center justify-between">
                     <UserItem email={organizer.email} name={organizer.name}/>
-                    <Badge variant="outline" className="text-xs">Organizer</Badge>
+                    <Badge variant="outline" className="text-xs">
+                        Organizer
+                    </Badge>
                 </div>
             )}
             {attendees.map((attendee) => {

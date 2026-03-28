@@ -1,9 +1,8 @@
-import type {User} from 'better-auth/types';
-
-import {getOrgDataPath} from '../config/paths';
-import {Home} from './home';
-import {parseOwnerId} from "@workspace/lib/types";
-import {ApiError, LocalFilesystem} from "../core";
+import { parseOwnerId } from '@workspace/lib/types';
+import type { User } from 'better-auth/types';
+import { getOrgDataPath } from '../config/paths';
+import { ApiError, LocalFilesystem } from '../core';
+import { Home } from './home';
 
 export function getSyntheticOrgUser(ownerId: string): User {
     const parsed = parseOwnerId(ownerId);
