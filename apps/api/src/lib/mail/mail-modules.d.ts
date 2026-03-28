@@ -1,7 +1,6 @@
 // Type declarations for untyped mail-related npm packages
 
 declare module 'libmime' {
-
     class Libmime {
         constructor(config?: { Iconv?: unknown });
         decodeHeader(line: string): { value?: string; params?: Record<string, string> } | null;

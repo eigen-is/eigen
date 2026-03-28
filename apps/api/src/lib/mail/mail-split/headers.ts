@@ -189,8 +189,7 @@ class Headers {
 
         lineEnd = lineEnd || '\r\n';
 
-        let headers =
-            `${this.lines.map((line) => line.line.replace(/\r?\n/g, lineEnd!)).join(lineEnd)}${lineEnd}${lineEnd}`;
+        let headers = `${this.lines.map((line) => line.line.replace(/\r?\n/g, lineEnd!)).join(lineEnd)}${lineEnd}${lineEnd}`;
 
         if (this.mbox) {
             headers = this.mbox + lineEnd + headers;
