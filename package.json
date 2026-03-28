@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "prepare": "git config core.hooksPath .githooks",
-    "serve": "bun --filter '*' dev",
+    "serve": "bun --workspaces dev",
     "serve:index": "bun --filter '@apps/api' --filter './apps/index' dev",
     "serve:mail": "bun --filter '@apps/api' --filter './apps/mail' dev",
     "serve:space": "bun --filter '@apps/api' --filter './apps/space' dev",
@@ -17,14 +17,14 @@
     "serve:slides": "bun --filter '@apps/api' --filter './apps/slides' dev",
     "serve:sheets": "bun --filter '@apps/api' --filter './apps/sheets' dev",
     "serve:setup": "bun --filter '@apps/api' --filter './apps/setup' dev",
-    "build": "bun --filter '*' build",
+    "build": "bun --workspaces build",
     "build:prod": "bun --filter './apps/*' build && bun --filter '@apps/api' buildfordocker",
     "lint": "bunx --bun @biomejs/biome check .",
     "lint:fix": "bunx --bun @biomejs/biome check --write .",
-    "typecheck": "bun --filter '*' typecheck",
-    "test": "bun --elide-lines=0 --filter '*' test",
-    "test:api": "bun --elide-lines=0 --filter '@apps/api' test",
-    "test:fortune-sheet": "bun --elide-lines=0 --filter '@workspace/fortune-sheet' test",
+    "typecheck": "bun run --sequential --workspaces typecheck",
+    "test": "bun --workspaces test",
+    "test:api": "bun --filter '@apps/api' test",
+    "test:fortune-sheet": "bun --filter '@workspace/fortune-sheet' test",
     "check": "bun run lint && bun run typecheck && bun run test"
   },
   "workspaces": [
