@@ -61,7 +61,7 @@ export async function getScreenPreview(mount: Mount, drivePath: DrivePath, embed
             };
         }
 
-        // Pass the storage file reference directly — generateImagePreview accepts BunFile
+        // Pass the storage file reference directly to avoid an extra copy
         const file = await mount.readFile(drivePath.id);
         if (!file) return null;
 
