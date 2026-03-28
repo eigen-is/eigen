@@ -50,29 +50,6 @@
       "./src/components/layout/*.ts",
       "./src/components/layout/*/index.ts"
     ],
-    "./components/layout/contacts": "./src/components/layout/contacts/index.ts",
-    "./components/layout/contacts/*": [
-      "./src/components/layout/contacts/*.tsx",
-      "./src/components/layout/contacts/*.ts"
-    ],
-    "./components/layout/chat": "./src/components/layout/chat/index.ts",
-    "./components/layout/chat/*": [
-      "./src/components/layout/chat/*.tsx",
-      "./src/components/layout/chat/*.ts"
-    ],
-    "./components/layout/drive": "./src/components/layout/drive/index.ts",
-    "./components/layout/drive/*": [
-      "./src/components/layout/drive/*.tsx",
-      "./src/components/layout/drive/*.ts"
-    ],
-    "./components/layout/context-menu": "./src/components/layout/context-menu/index.ts",
-    "./components/layout/context-menu/*": [
-      "./src/components/layout/context-menu/*.tsx",
-      "./src/components/layout/context-menu/*.ts"
-    ],
-    "./components/layout/pages": "./src/components/layout/pages/index.ts",
-    "./components/layout/app": "./src/components/layout/app/index.ts",
-    "./components/layout/braket": "./src/components/layout/braket/index.ts",
     "./hooks/*": "./src/hooks/*.ts"
   }
 }
