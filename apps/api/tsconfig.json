@@ -21,7 +21,6 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noPropertyAccessFromIndexSignature": true,
-    "incremental": true,
     "allowSyntheticDefaultImports": true
   }
 }

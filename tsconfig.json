@@ -13,6 +13,7 @@
     "noUncheckedSideEffectImports": true,
     "skipLibCheck": true,
     "noEmit": true,
+    "incremental": true,
     "isolatedModules": true,
     "allowImportingTsExtensions": true,
     "allowSyntheticDefaultImports": true
