@@ -10,7 +10,7 @@
     "moduleResolution": "bundler",
     "baseUrl": ".",
     "paths": {
-      "@workspace/lib/*": ["../../packages/lib/src/*"]
+      "@workspace/lib/*": ["../../packages/lib/src/core/*", "../../packages/lib/src/*"]
     },
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
