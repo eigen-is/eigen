@@ -14,7 +14,6 @@
       "!packages/fortune-sheet",
       "!apps/api/src/lib/mail/mail-parser",
       "!apps/api/src/lib/mail/mail-split",
-      "!apps/api/src/test",
       "!!dist",
       "!!coverage",
       "!!node_modules"

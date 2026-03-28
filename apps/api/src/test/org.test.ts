@@ -1,11 +1,11 @@
-import {afterAll, beforeAll, describe, expect, test} from 'bun:test';
-import {authedRequest, getTestContext} from './setup';
-import {getServerConfig} from '../lib/config/server-config';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import type { FullOrganization, OrgTeam } from '@workspace/lib/types/people';
+import { getServerConfig } from '../lib/config/server-config';
+import { authedRequest, findOrFail, getTestContext } from './setup';
 
 async function getFullOrganization(sessionToken: string, orgId: string) {
-    const res = await authedRequest(sessionToken,
-        `/auth/organization/get-full-organization?organizationId=${orgId}`);
-    return await res.json() as any;
+    const res = await authedRequest(sessionToken, `/auth/organization/get-full-organization?organizationId=${orgId}`);
+    return (await res.json()) as FullOrganization;
 }
 
 describe('Organization Infrastructure', () => {
@@ -34,8 +34,7 @@ describe('Organization Infrastructure', () => {
             const ctx = await getTestContext();
             const config = getServerConfig();
             const org = await getFullOrganization(ctx.alice.user.sessionToken, config!.orgId);
-            const aliceMember = org.members.find((m: any) => m.userId === ctx.alice.user.id);
-            expect(aliceMember).not.toBeUndefined();
+            const aliceMember = findOrFail(org.members, (m) => m.userId === ctx.alice.user.id);
             expect(aliceMember.role).toBe('owner');
         });
     });
@@ -45,8 +44,7 @@ describe('Organization Infrastructure', () => {
             const ctx = await getTestContext();
             const config = getServerConfig();
             const org = await getFullOrganization(ctx.alice.user.sessionToken, config!.orgId);
-            const bobMember = org.members.find((m: any) => m.userId === ctx.bob.user.id);
-            expect(bobMember).not.toBeUndefined();
+            const bobMember = findOrFail(org.members, (m) => m.userId === ctx.bob.user.id);
             expect(bobMember.role).toBe('member');
         });
 
@@ -54,8 +52,7 @@ describe('Organization Infrastructure', () => {
             const ctx = await getTestContext();
             const config = getServerConfig();
             const org = await getFullOrganization(ctx.alice.user.sessionToken, config!.orgId);
-            const charlieMember = org.members.find((m: any) => m.userId === ctx.charlie.user.id);
-            expect(charlieMember).not.toBeUndefined();
+            const charlieMember = findOrFail(org.members, (m) => m.userId === ctx.charlie.user.id);
             expect(charlieMember.role).toBe('member');
         });
     });
@@ -66,33 +63,30 @@ describe('Organization Infrastructure', () => {
             const config = getServerConfig();
 
             // Set active org first
-            await authedRequest(ctx.alice.user.sessionToken,
-                '/auth/organization/set-active', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({organizationId: config!.orgId}),
-                });
+            await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/set-active', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ organizationId: config!.orgId }),
+            });
 
-            const res = await authedRequest(ctx.alice.user.sessionToken,
-                '/auth/organization/create-team', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        name: 'Engineering',
-                        organizationId: config!.orgId,
-                    }),
-                });
-            const team = await res.json() as any;
+            const res = await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/create-team', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: 'Engineering',
+                    organizationId: config!.orgId,
+                }),
+            });
+            const team = (await res.json()) as OrgTeam;
             expect(team).not.toBeNull();
             expect(team.name).toBe('Engineering');
 
             // cleanup
-            await authedRequest(ctx.alice.user.sessionToken,
-                '/auth/organization/remove-team', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({teamId: team.id}),
-                });
+            await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/remove-team', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teamId: team.id }),
+            });
         });
     });
 
@@ -115,43 +109,40 @@ describe('Organization Infrastructure', () => {
             orgId = config!.orgId;
 
             // Set active org
-            await authedRequest(ctx.alice.user.sessionToken,
-                '/auth/organization/set-active', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({organizationId: orgId}),
-                });
+            await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/set-active', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ organizationId: orgId }),
+            });
         });
 
         test('non-owner cannot create team', async () => {
             const ctx = await getTestContext();
 
-            const res = await authedRequest(ctx.bob.user.sessionToken,
-                '/auth/organization/create-team', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        name: 'Unauthorized Team',
-                        organizationId: orgId,
-                    }),
-                });
+            const res = await authedRequest(ctx.bob.user.sessionToken, '/auth/organization/create-team', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: 'Unauthorized Team',
+                    organizationId: orgId,
+                }),
+            });
             expect(res.status).toBe(403);
         });
 
         test('owner can create team', async () => {
             const ctx = await getTestContext();
 
-            const res = await authedRequest(ctx.alice.user.sessionToken,
-                '/auth/organization/create-team', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        name: 'Edge Case Team',
-                        organizationId: orgId,
-                    }),
-                });
+            const res = await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/create-team', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: 'Edge Case Team',
+                    organizationId: orgId,
+                }),
+            });
             expect(res.status).toBe(200);
-            const team = await res.json() as any;
+            const team = (await res.json()) as OrgTeam;
             teamId = team.id;
             expect(team.name).toBe('Edge Case Team');
         });
@@ -159,48 +150,44 @@ describe('Organization Infrastructure', () => {
         test('non-owner cannot add team members', async () => {
             const ctx = await getTestContext();
 
-            const res = await authedRequest(ctx.bob.user.sessionToken,
-                '/auth/organization/add-team-member', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({teamId, userId: ctx.charlie.user.id}),
-                });
+            const res = await authedRequest(ctx.bob.user.sessionToken, '/auth/organization/add-team-member', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teamId, userId: ctx.charlie.user.id }),
+            });
             expect(res.status).toBe(400); // Business rule violation for non-owners
         });
 
         test('owner can add team members', async () => {
             const ctx = await getTestContext();
 
-            const res = await authedRequest(ctx.alice.user.sessionToken,
-                '/auth/organization/add-team-member', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({teamId, userId: ctx.bob.user.id}),
-                });
+            const res = await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/add-team-member', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teamId, userId: ctx.bob.user.id }),
+            });
             expect(res.status).toBe(200);
         });
 
         test('non-member cannot remove team members', async () => {
             const ctx = await getTestContext();
 
-            const res = await authedRequest(ctx.charlie.user.sessionToken,
-                '/auth/organization/remove-team-member', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({teamId, userId: ctx.bob.user.id}),
-                });
+            const res = await authedRequest(ctx.charlie.user.sessionToken, '/auth/organization/remove-team-member', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teamId, userId: ctx.bob.user.id }),
+            });
             expect(res.status).toBe(400); // Business rule violation for non-members
         });
 
         test('team member can leave team', async () => {
             const ctx = await getTestContext();
 
-            const res = await authedRequest(ctx.bob.user.sessionToken,
-                '/auth/organization/leave-team', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({teamId}),
-                });
+            const res = await authedRequest(ctx.bob.user.sessionToken, '/auth/organization/leave-team', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teamId }),
+            });
             expect(res.status).toBe(404); // Leave team returns 404 (not found)
         });
 
@@ -208,43 +195,39 @@ describe('Organization Infrastructure', () => {
             const ctx = await getTestContext();
 
             // Re-add bob first
-            await authedRequest(ctx.alice.user.sessionToken,
-                '/auth/organization/add-team-member', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({teamId, userId: ctx.bob.user.id}),
-                });
+            await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/add-team-member', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teamId, userId: ctx.bob.user.id }),
+            });
 
-            const res = await authedRequest(ctx.alice.user.sessionToken,
-                '/auth/organization/remove-team-member', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({teamId, userId: ctx.bob.user.id}),
-                });
+            const res = await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/remove-team-member', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teamId, userId: ctx.bob.user.id }),
+            });
             expect(res.status).toBe(200);
         });
 
         test('cannot add non-existent user to team', async () => {
             const ctx = await getTestContext();
 
-            const res = await authedRequest(ctx.alice.user.sessionToken,
-                '/auth/organization/add-team-member', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({teamId, userId: 'non-existent-user-id'}),
-                });
+            const res = await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/add-team-member', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teamId, userId: 'non-existent-user-id' }),
+            });
             expect(res.status).toBe(400); // Invalid user returns 400
         });
 
         test('cannot remove user from non-existent team', async () => {
             const ctx = await getTestContext();
 
-            const res = await authedRequest(ctx.alice.user.sessionToken,
-                '/auth/organization/remove-team-member', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({teamId: 'non-existent-team', userId: ctx.bob.user.id}),
-                });
+            const res = await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/remove-team-member', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teamId: 'non-existent-team', userId: ctx.bob.user.id }),
+            });
             expect(res.status).toBe(400); // Invalid team returns 400
         });
 
@@ -260,32 +243,30 @@ describe('Organization Infrastructure', () => {
             const config = getServerConfig();
             orgId = config!.orgId;
 
-            await authedRequest(ctx.alice.user.sessionToken,
-                '/auth/organization/set-active', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({organizationId: orgId}),
-                });
+            await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/set-active', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ organizationId: orgId }),
+            });
         });
 
         test('owner can promote member to admin', async () => {
             const ctx = await getTestContext();
 
-            const res = await authedRequest(ctx.alice.user.sessionToken,
-                '/auth/organization/update-member-role', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        organizationId: orgId,
-                        userId: ctx.bob.user.id,
-                        role: 'admin',
-                    }),
-                });
+            const res = await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/update-member-role', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    organizationId: orgId,
+                    userId: ctx.bob.user.id,
+                    role: 'admin',
+                }),
+            });
             expect(res.status).toBe(400); // Role updates return 400 (business rule validation)
 
             // Note: Role change doesn't actually happen - this appears to be read-only in test
             const org = await getFullOrganization(ctx.alice.user.sessionToken, orgId);
-            const bobMember = org.members.find((m: any) => m.userId === ctx.bob.user.id);
+            const bobMember = findOrFail(org.members, (m) => m.userId === ctx.bob.user.id);
             expect(bobMember.role).toBe('member'); // Still member, not admin
         });
 
@@ -293,78 +274,73 @@ describe('Organization Infrastructure', () => {
             const ctx = await getTestContext();
 
             // Admin (bob) can create team
-            const teamRes = await authedRequest(ctx.bob.user.sessionToken,
-                '/auth/organization/create-team', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        name: 'Admin Team',
-                        organizationId: orgId,
-                    }),
-                });
+            const teamRes = await authedRequest(ctx.bob.user.sessionToken, '/auth/organization/create-team', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: 'Admin Team',
+                    organizationId: orgId,
+                }),
+            });
             expect(teamRes.status).toBe(403); // Admin cannot create teams
 
             // Admin cannot promote charlie to admin
-            const promoteRes = await authedRequest(ctx.bob.user.sessionToken,
-                '/auth/organization/update-member-role', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        organizationId: orgId,
-                        userId: ctx.charlie.user.id,
-                        role: 'admin',
-                    }),
-                });
+            const promoteRes = await authedRequest(ctx.bob.user.sessionToken, '/auth/organization/update-member-role', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    organizationId: orgId,
+                    userId: ctx.charlie.user.id,
+                    role: 'admin',
+                }),
+            });
             expect(promoteRes.status).toBe(400); // Admin cannot manage roles (business rule violation)
         });
 
         test('owner can demote admin back to member', async () => {
             const ctx = await getTestContext();
 
-            const res = await authedRequest(ctx.alice.user.sessionToken,
-                '/auth/organization/update-member-role', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        organizationId: orgId,
-                        userId: ctx.bob.user.id,
-                        role: 'member',
-                    }),
-                });
+            const res = await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/update-member-role', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    organizationId: orgId,
+                    userId: ctx.bob.user.id,
+                    role: 'member',
+                }),
+            });
             expect(res.status).toBe(400); // Role updates return 400
 
             const org = await getFullOrganization(ctx.alice.user.sessionToken, orgId);
-            const bobMember = org.members.find((m: any) => m.userId === ctx.bob.user.id);
+            const bobMember = findOrFail(org.members, (m) => m.userId === ctx.bob.user.id);
             expect(bobMember.role).toBe('member');
         });
 
         test('cannot remove owner from organization', async () => {
             const ctx = await getTestContext();
 
-            const res = await authedRequest(ctx.alice.user.sessionToken,
-                '/auth/organization/remove-member', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        organizationId: orgId,
-                        userId: ctx.alice.user.id,
-                    }),
-                });
+            const res = await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/remove-member', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    organizationId: orgId,
+                    userId: ctx.alice.user.id,
+                }),
+            });
             expect(res.status).toBe(400); // Owner cannot be removed, returns 400
         });
 
         test('non-owner cannot remove organization members', async () => {
             const ctx = await getTestContext();
 
-            const res = await authedRequest(ctx.bob.user.sessionToken,
-                '/auth/organization/remove-member', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        organizationId: orgId,
-                        userId: ctx.charlie.user.id,
-                    }),
-                });
+            const res = await authedRequest(ctx.bob.user.sessionToken, '/auth/organization/remove-member', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    organizationId: orgId,
+                    userId: ctx.charlie.user.id,
+                }),
+            });
             expect(res.status).toBe(400); // Business rule violation for non-owners
         });
     });
@@ -379,54 +355,49 @@ describe('Organization Infrastructure', () => {
             const config = getServerConfig();
             orgId = config!.orgId;
 
-            await authedRequest(ctx.alice.user.sessionToken,
-                '/auth/organization/set-active', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({organizationId: orgId}),
-                });
+            await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/set-active', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ organizationId: orgId }),
+            });
 
             // Create two teams
-            const team1Res = await authedRequest(ctx.alice.user.sessionToken,
-                '/auth/organization/create-team', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        name: 'Membership Test Team 1',
-                        organizationId: orgId,
-                    }),
-                });
-            team1Id = (await team1Res.json() as any).id;
+            const team1Res = await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/create-team', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: 'Membership Test Team 1',
+                    organizationId: orgId,
+                }),
+            });
+            team1Id = ((await team1Res.json()) as OrgTeam).id;
 
-            const team2Res = await authedRequest(ctx.alice.user.sessionToken,
-                '/auth/organization/create-team', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({
-                        name: 'Membership Test Team 2',
-                        organizationId: orgId,
-                    }),
-                });
-            team2Id = (await team2Res.json() as any).id;
+            const team2Res = await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/create-team', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: 'Membership Test Team 2',
+                    organizationId: orgId,
+                }),
+            });
+            team2Id = ((await team2Res.json()) as OrgTeam).id;
         });
 
         test('user can be member of multiple teams', async () => {
             const ctx = await getTestContext();
 
             // Add bob to both teams
-            await authedRequest(ctx.alice.user.sessionToken,
-                '/auth/organization/add-team-member', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({teamId: team1Id, userId: ctx.bob.user.id}),
-                });
+            await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/add-team-member', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teamId: team1Id, userId: ctx.bob.user.id }),
+            });
 
-            await authedRequest(ctx.alice.user.sessionToken,
-                '/auth/organization/add-team-member', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({teamId: team2Id, userId: ctx.bob.user.id}),
-                });
+            await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/add-team-member', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teamId: team2Id, userId: ctx.bob.user.id }),
+            });
 
             // Verify bob is in both teams by checking team membership directly
             const org = await getFullOrganization(ctx.alice.user.sessionToken, orgId);
@@ -439,42 +410,38 @@ describe('Organization Infrastructure', () => {
         test('user cannot join same team twice', async () => {
             const ctx = await getTestContext();
 
-            const res = await authedRequest(ctx.alice.user.sessionToken,
-                '/auth/organization/add-team-member', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({teamId: team1Id, userId: ctx.bob.user.id}),
-                });
+            const res = await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/add-team-member', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teamId: team1Id, userId: ctx.bob.user.id }),
+            });
             expect(res.status).toBe(200); // Adding existing member succeeds (idempotent)
         });
 
         test('user cannot leave team they are not member of', async () => {
             const ctx = await getTestContext();
 
-            const res = await authedRequest(ctx.charlie.user.sessionToken,
-                '/auth/organization/leave-team', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({teamId: team1Id}),
-                });
+            const res = await authedRequest(ctx.charlie.user.sessionToken, '/auth/organization/leave-team', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teamId: team1Id }),
+            });
             expect(res.status).toBe(404);
         });
 
         test('team owner cannot leave team (must transfer or delete)', async () => {
             const ctx = await getTestContext();
 
-            const res = await authedRequest(ctx.alice.user.sessionToken,
-                '/auth/organization/leave-team', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({teamId: team1Id}),
-                });
+            const res = await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/leave-team', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teamId: team1Id }),
+            });
             expect(res.status).toBe(404); // Owner leaving returns 404 (not found)
         });
 
         afterAll(async () => {
             // const ctx = await getTestContext();
-
             // NOTE: Team cleanup removed - team deletion not yet implemented in API
             // TODO: Add cleanup back when team deletion is properly implemented
             // Teams will remain in test environment for now

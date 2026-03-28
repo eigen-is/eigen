@@ -1,17 +1,17 @@
-import {afterAll, beforeAll, describe, expect, test} from 'bun:test';
-import {mkdirSync, rmSync} from 'node:fs';
-import {join} from 'path';
-import {LocalStorage} from '../lib/storage/local-storage';
-import {LocalKeyStorage} from '../lib/storage/local-key-storage';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { mkdirSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { LocalKeyStorage } from '../lib/storage/local-key-storage';
+import { LocalStorage } from '../lib/storage/local-storage';
 
-const TEST_DIR = join(import.meta.dir, '../../../../data/test-storage-' + Date.now());
+const TEST_DIR = join(import.meta.dir, `../../../../data/test-storage-${Date.now()}`);
 
 beforeAll(() => {
-    mkdirSync(TEST_DIR, {recursive: true});
+    mkdirSync(TEST_DIR, { recursive: true });
 });
 
 afterAll(() => {
-    rmSync(TEST_DIR, {recursive: true, force: true});
+    rmSync(TEST_DIR, { recursive: true, force: true });
 });
 
 describe('LocalKeyStorage', () => {

@@ -3,3 +3,9 @@ export type PublicUser = {
     email: string;
     avatar?: string;
 };
+
+export type PublicConfig = {
+    domain: string;
+    orgName: string;
+    orgId: string;
+};

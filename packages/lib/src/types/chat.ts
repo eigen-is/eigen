@@ -24,3 +24,16 @@ export type ChatReadState = {
     lastReadMessageId: string | null;
     lastReadAt: Date | null;
 };
+
+export type CommentEntry = {
+    chatName: string;
+    status: 'open' | 'resolved';
+    resolvedBy: string | null;
+    resolvedAt: string | null;
+    lastAuthorEmail: string | null;
+    lastMessageSnippet: string | null;
+    lastActivityAt: string | null;
+    messageCount: number;
+    createdAt: string;
+    mentions: string[];
+};

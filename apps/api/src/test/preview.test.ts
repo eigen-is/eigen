@@ -1,7 +1,7 @@
-import {beforeAll, describe, expect, test} from 'bun:test';
-import {authedRequest, driveGet, driveUpload, getTestContext} from './setup';
-import {generateImagePreview} from '../lib/shared/thumbnails';
-import {isExiftoolCandidate} from '../lib/preview/exiftool-preview';
+import { beforeAll, describe, expect, test } from 'bun:test';
+import { isExiftoolCandidate } from '../lib/preview/exiftool-preview';
+import { generateImagePreview } from '../lib/shared/thumbnails';
+import { authedRequest, driveGet, driveUpload, getTestContext } from './setup';
 
 describe('Preview', () => {
     let token: string;
@@ -18,14 +18,14 @@ describe('Preview', () => {
     });
 
     async function uploadAndTextPreview(name: string, content: string, mimeType: string) {
-        const file = new File([content], name, {type: mimeType});
+        const file = new File([content], name, { type: mimeType });
         const uploaded = await driveUpload(token, ownerId, mountId, rootId, file);
         const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${uploaded.id}/text-preview`);
-        return {res, uploaded};
+        return { res, uploaded };
     }
 
     test('text file returns json body preview', async () => {
-        const {res} = await uploadAndTextPreview('test.txt', 'Hello world', 'text/plain');
+        const { res } = await uploadAndTextPreview('test.txt', 'Hello world', 'text/plain');
         expect(res.status).toBe(200);
         const data = await res.json();
         expect(data.body).toContain('Hello world');
@@ -33,7 +33,7 @@ describe('Preview', () => {
     });
 
     test('markdown file returns rendered body', async () => {
-        const {res} = await uploadAndTextPreview('test.md', '# Title\n\nSome **bold** text', 'text/markdown');
+        const { res } = await uploadAndTextPreview('test.md', '# Title\n\nSome **bold** text', 'text/markdown');
         expect(res.status).toBe(200);
         const data = await res.json();
         expect(data.body).toContain('<h1>Title</h1>');
@@ -42,7 +42,7 @@ describe('Preview', () => {
     });
 
     test('code file returns syntax highlighted body', async () => {
-        const {res} = await uploadAndTextPreview('test.json', '{"key": "value"}', 'application/json');
+        const { res } = await uploadAndTextPreview('test.json', '{"key": "value"}', 'application/json');
         expect(res.status).toBe(200);
         const data = await res.json();
         expect(data.body).toContain('key');
@@ -51,12 +51,12 @@ describe('Preview', () => {
 
     test('image file returns webp preview', async () => {
         const pngBytes = new Uint8Array([
-            137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,4,0,0,0,4,8,2,0,0,0,38,147,9,
-            41,0,0,0,9,112,72,89,115,0,0,3,232,0,0,3,232,1,181,123,82,107,0,0,0,17,73,68,65,84,
-            120,156,99,248,207,192,0,71,8,22,94,14,0,174,147,15,241,166,148,72,35,0,0,0,0,73,69,
-            78,68,174,66,96,130,
+            137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 4, 0, 0, 0, 4, 8, 2, 0, 0, 0, 38,
+            147, 9, 41, 0, 0, 0, 9, 112, 72, 89, 115, 0, 0, 3, 232, 0, 0, 3, 232, 1, 181, 123, 82, 107, 0, 0, 0, 17, 73,
+            68, 65, 84, 120, 156, 99, 248, 207, 192, 0, 71, 8, 22, 94, 14, 0, 174, 147, 15, 241, 166, 148, 72, 35, 0, 0,
+            0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
         ]);
-        const file = new File([pngBytes], 'pixel.png', {type: 'image/png'});
+        const file = new File([pngBytes], 'pixel.png', { type: 'image/png' });
         const uploaded = await driveUpload(token, ownerId, mountId, rootId, file);
         const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${uploaded.id}/preview`);
         expect(res.status).toBe(200);
@@ -64,7 +64,7 @@ describe('Preview', () => {
     });
 
     test('video file redirects to embed', async () => {
-        const file = new File(['fake video'], 'clip.mp4', {type: 'video/mp4'});
+        const file = new File(['fake video'], 'clip.mp4', { type: 'video/mp4' });
         const uploaded = await driveUpload(token, ownerId, mountId, rootId, file);
         const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${uploaded.id}/preview`);
         // Elysia redirect — check for 302 or the redirect URL in headers
@@ -73,26 +73,29 @@ describe('Preview', () => {
 
     test('unsupported file type returns 404', async () => {
         // Upload a file that has no preview support (non-image, non-text, non-video)
-        const file = new File(['dummy'], 'data.woff2', {type: 'font/woff2'});
+        const file = new File(['dummy'], 'data.woff2', { type: 'font/woff2' });
         const uploaded = await driveUpload(token, ownerId, mountId, rootId, file);
         const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${uploaded.id}/preview`);
         expect(res.status).toBe(404);
     });
 
     test('text file preview returns 404 from image preview endpoint', async () => {
-        const file = new File(['Hello'], 'check.txt', {type: 'text/plain'});
+        const file = new File(['Hello'], 'check.txt', { type: 'text/plain' });
         const uploaded = await driveUpload(token, ownerId, mountId, rootId, file);
         const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${uploaded.id}/preview`);
         expect(res.status).toBe(404);
     });
 
     test('nonexistent file returns 404', async () => {
-        const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/00000000-0000-0000-0000-000000000000/preview`);
+        const res = await authedRequest(
+            token,
+            `/drive/${ownerId}/${mountId}/file/00000000-0000-0000-0000-000000000000/preview`,
+        );
         expect(res.status).toBe(404);
     });
 
     test('text preview caches result on second request', async () => {
-        const {res: first, uploaded} = await uploadAndTextPreview('cached.txt', 'Cache test', 'text/plain');
+        const { res: first, uploaded } = await uploadAndTextPreview('cached.txt', 'Cache test', 'text/plain');
         expect(first.status).toBe(200);
 
         const second = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${uploaded.id}/text-preview`);
@@ -103,12 +106,12 @@ describe('Preview', () => {
 
     test('image preview is cached on second request', async () => {
         const pngBytes = new Uint8Array([
-            137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,4,0,0,0,4,8,2,0,0,0,38,147,9,
-            41,0,0,0,9,112,72,89,115,0,0,3,232,0,0,3,232,1,181,123,82,107,0,0,0,17,73,68,65,84,
-            120,156,99,248,207,192,0,71,8,22,94,14,0,174,147,15,241,166,148,72,35,0,0,0,0,73,69,
-            78,68,174,66,96,130,
+            137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 4, 0, 0, 0, 4, 8, 2, 0, 0, 0, 38,
+            147, 9, 41, 0, 0, 0, 9, 112, 72, 89, 115, 0, 0, 3, 232, 0, 0, 3, 232, 1, 181, 123, 82, 107, 0, 0, 0, 17, 73,
+            68, 65, 84, 120, 156, 99, 248, 207, 192, 0, 71, 8, 22, 94, 14, 0, 174, 147, 15, 241, 166, 148, 72, 35, 0, 0,
+            0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
         ]);
-        const file = new File([pngBytes], 'cached.png', {type: 'image/png'});
+        const file = new File([pngBytes], 'cached.png', { type: 'image/png' });
         const uploaded = await driveUpload(token, ownerId, mountId, rootId, file);
 
         const first = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${uploaded.id}/preview`);
@@ -121,12 +124,12 @@ describe('Preview', () => {
 
     test('upload image generates thumbnail', async () => {
         const pngBytes = new Uint8Array([
-            137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,4,0,0,0,4,8,2,0,0,0,38,147,9,
-            41,0,0,0,9,112,72,89,115,0,0,3,232,0,0,3,232,1,181,123,82,107,0,0,0,17,73,68,65,84,
-            120,156,99,248,207,192,0,71,8,22,94,14,0,174,147,15,241,166,148,72,35,0,0,0,0,73,69,
-            78,68,174,66,96,130,
+            137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 4, 0, 0, 0, 4, 8, 2, 0, 0, 0, 38,
+            147, 9, 41, 0, 0, 0, 9, 112, 72, 89, 115, 0, 0, 3, 232, 0, 0, 3, 232, 1, 181, 123, 82, 107, 0, 0, 0, 17, 73,
+            68, 65, 84, 120, 156, 99, 248, 207, 192, 0, 71, 8, 22, 94, 14, 0, 174, 147, 15, 241, 166, 148, 72, 35, 0, 0,
+            0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
         ]);
-        const file = new File([pngBytes], 'thumb-test.png', {type: 'image/png'});
+        const file = new File([pngBytes], 'thumb-test.png', { type: 'image/png' });
         const uploaded = await driveUpload(token, ownerId, mountId, rootId, file);
 
         // Thumbnail is generated in the background — poll for it
@@ -141,11 +144,11 @@ describe('Preview', () => {
 });
 
 describe('generateImagePreview', () => {
-    const tmpDir = '/tmp/eigen-preview-test-' + Date.now();
+    const tmpDir = `/tmp/eigen-preview-test-${Date.now()}`;
 
     async function writeTempFile(name: string, data: Buffer): Promise<string> {
-        const {mkdirSync} = await import('node:fs');
-        mkdirSync(tmpDir, {recursive: true});
+        const { mkdirSync } = await import('node:fs');
+        mkdirSync(tmpDir, { recursive: true });
         const filePath = `${tmpDir}/${name}`;
         await Bun.write(filePath, data);
         return filePath;
@@ -153,10 +156,10 @@ describe('generateImagePreview', () => {
 
     test('converts PNG file to WebP and returns dimensions', async () => {
         const pngBytes = Buffer.from([
-            137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,4,0,0,0,4,8,2,0,0,0,38,147,9,
-            41,0,0,0,9,112,72,89,115,0,0,3,232,0,0,3,232,1,181,123,82,107,0,0,0,17,73,68,65,84,
-            120,156,99,248,207,192,0,71,8,22,94,14,0,174,147,15,241,166,148,72,35,0,0,0,0,73,69,
-            78,68,174,66,96,130,
+            137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 4, 0, 0, 0, 4, 8, 2, 0, 0, 0, 38,
+            147, 9, 41, 0, 0, 0, 9, 112, 72, 89, 115, 0, 0, 3, 232, 0, 0, 3, 232, 1, 181, 123, 82, 107, 0, 0, 0, 17, 73,
+            68, 65, 84, 120, 156, 99, 248, 207, 192, 0, 71, 8, 22, 94, 14, 0, 174, 147, 15, 241, 166, 148, 72, 35, 0, 0,
+            0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
         ]);
         const filePath = await writeTempFile('test.png', pngBytes);
         const result = await generateImagePreview(filePath, 'image/png', 'test.png', tmpDir, 'test-png');
@@ -184,8 +187,11 @@ describe('generateImagePreview', () => {
 
     test('JPEG file produces WebP output', async () => {
         const sharp = (await import('sharp')).default;
-        const jpegBuf = await sharp({create: {width: 2, height: 2, channels: 3, background: {r: 0, g: 128, b: 255}}})
-            .jpeg().toBuffer();
+        const jpegBuf = await sharp({
+            create: { width: 2, height: 2, channels: 3, background: { r: 0, g: 128, b: 255 } },
+        })
+            .jpeg()
+            .toBuffer();
 
         const filePath = await writeTempFile('test.jpg', jpegBuf);
         const result = await generateImagePreview(filePath, 'image/jpeg', 'test.jpg', tmpDir, 'test-jpg');
@@ -195,11 +201,16 @@ describe('generateImagePreview', () => {
 
     test('respects maxSize option', async () => {
         const sharp = (await import('sharp')).default;
-        const largePng = await sharp({create: {width: 100, height: 100, channels: 3, background: {r: 255, g: 0, b: 0}}})
-            .png().toBuffer();
+        const largePng = await sharp({
+            create: { width: 100, height: 100, channels: 3, background: { r: 255, g: 0, b: 0 } },
+        })
+            .png()
+            .toBuffer();
 
         const filePath = await writeTempFile('large.png', largePng);
-        const result = await generateImagePreview(filePath, 'image/png', 'large.png', tmpDir, 'test-large', {maxSize: 32});
+        const result = await generateImagePreview(filePath, 'image/png', 'large.png', tmpDir, 'test-large', {
+            maxSize: 32,
+        });
         expect(result).not.toBeNull();
         expect(result!.width).toBe(100);
         expect(result!.height).toBe(100);

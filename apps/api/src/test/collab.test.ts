@@ -1,7 +1,9 @@
-import {beforeAll, describe, expect, test} from 'bun:test';
-import {authedRequest, driveGet, drivePost, getTestContext} from './setup';
+import { beforeAll, describe, expect, test } from 'bun:test';
+
+import { assertJson, authedRequest, driveGet, drivePost, getTestContext } from './setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
+type WebSocketResponse = Response & { webSocket?: WebSocket };
 
 describe('Collab', () => {
     let ctx: TestCtx;
@@ -12,7 +14,7 @@ describe('Collab', () => {
     beforeAll(async () => {
         ctx = await getTestContext();
 
-        const {data: mounts} = await ctx.alice.api.drive({ownerId: ctx.alice.user.id}).mounts.get();
+        const { data: mounts } = await ctx.alice.api.drive({ ownerId: ctx.alice.user.id }).mounts.get();
         expect(mounts).toBeDefined();
         expect(mounts!.length).toBeGreaterThan(0);
         aliceMountId = mounts![0].id;
@@ -22,24 +24,29 @@ describe('Collab', () => {
         expect(root.id).toBeDefined();
         aliceRootId = root.id;
 
-        const doc = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-            `folder/${aliceRootId}/doc`, {fileName: 'Collab Test Doc'});
+        const doc = await drivePost(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            aliceMountId,
+            `folder/${aliceRootId}/doc`,
+            { fileName: 'Collab Test Doc' },
+        );
         expect(doc.id).toBeDefined();
         docId = doc.id;
     });
 
     describe('Collab Info Endpoint', () => {
         test('info endpoint returns canRead, canWrite, path, folderContents for owner', async () => {
-            const res = await authedRequest(ctx.alice.user.sessionToken,
-                `/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}/info`);
-            expect(res.status).toBe(200);
-
-            const data = await res.json() as {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}/info`,
+            );
+            const data = await assertJson<{
                 canRead: boolean;
                 canWrite: boolean;
                 path: { id: string };
-                folderContents: unknown[]
-            };
+                folderContents: unknown[];
+            }>(res);
             expect(data.canRead).toBe(true);
             expect(data.canWrite).toBe(true);
             expect(data.path).toBeDefined();
@@ -49,44 +56,50 @@ describe('Collab', () => {
 
         test('info endpoint denies access without authentication', async () => {
             const res = await ctx.app.handle(
-                new Request(`http://localhost/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}/info`)
+                new Request(`http://localhost/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}/info`),
             );
             expect(res.status).not.toBe(200);
         });
 
         test('info endpoint denies access without read permission', async () => {
-            await authedRequest(ctx.alice.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${docId}/acl`, {
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${docId}/acl`,
+                {
                     method: 'PUT',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({acl: []}),
-                });
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ acl: [] }),
+                },
+            );
 
-            const res = await authedRequest(ctx.bob.user.sessionToken,
-                `/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}/info`);
-            expect(res.status).toBe(200);
-
-            const data = await res.json() as { canRead: boolean; canWrite: boolean; path: null };
+            const res = await authedRequest(
+                ctx.bob.user.sessionToken,
+                `/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}/info`,
+            );
+            const data = await assertJson<{ canRead: boolean; canWrite: boolean; path: null }>(res);
             expect(data.canRead).toBe(false);
             expect(data.canWrite).toBe(false);
             expect(data.path).toBeNull();
         });
 
         test('info endpoint grants access with shared read permission', async () => {
-            await authedRequest(ctx.alice.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${docId}/acl`, {
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${docId}/acl`,
+                {
                     method: 'PUT',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        acl: [{id: 'bob@test.eigen.is', read: true, write: false}],
+                        acl: [{ id: 'bob@test.eigen.is', read: true, write: false }],
                     }),
-                });
+                },
+            );
 
-            const res = await authedRequest(ctx.bob.user.sessionToken,
-                `/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}/info`);
-            expect(res.status).toBe(200);
-
-            const data = await res.json() as { canRead: boolean; canWrite: boolean; path: string };
+            const res = await authedRequest(
+                ctx.bob.user.sessionToken,
+                `/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}/info`,
+            );
+            const data = await assertJson<{ canRead: boolean; canWrite: boolean; path: string }>(res);
             expect(data.canRead).toBe(true);
             expect(data.canWrite).toBe(false);
             expect(data.path).toBeDefined();
@@ -98,10 +111,10 @@ describe('Collab', () => {
             const ws = ctx.app.handle(
                 new Request(`http://localhost/ws/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}`, {
                     headers: {
-                        'Upgrade': 'websocket',
-                        'Connection': 'Upgrade',
+                        Upgrade: 'websocket',
+                        Connection: 'Upgrade',
                     },
-                })
+                }),
             );
 
             const res = await ws;
@@ -109,36 +122,42 @@ describe('Collab', () => {
         });
 
         test('WebSocket authenticated connection attempt', async () => {
-            const wsRes = await authedRequest(ctx.alice.user.sessionToken,
-                `/ws/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}`, {
+            const wsRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/ws/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}`,
+                {
                     headers: {
-                        'Upgrade': 'websocket',
-                        'Connection': 'Upgrade',
+                        Upgrade: 'websocket',
+                        Connection: 'Upgrade',
                     },
-                });
+                },
+            );
 
             expect(wsRes.status).toBeGreaterThanOrEqual(100);
             expect(wsRes.status).toBeLessThan(600);
 
-            if (wsRes.status === 101 && (wsRes as any).webSocket) {
-                (wsRes as any).webSocket.close();
+            if (wsRes.status === 101 && (wsRes as WebSocketResponse).webSocket) {
+                (wsRes as WebSocketResponse).webSocket!.close();
             }
         });
 
         test('WebSocket ping-pong works if connected', async () => {
-            const wsRes = await authedRequest(ctx.alice.user.sessionToken,
-                `/ws/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}`, {
+            const wsRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/ws/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}`,
+                {
                     headers: {
-                        'Upgrade': 'websocket',
-                        'Connection': 'Upgrade',
+                        Upgrade: 'websocket',
+                        Connection: 'Upgrade',
                     },
-                });
+                },
+            );
 
             if (wsRes.status !== 101) {
                 return;
             }
 
-            const ws = (wsRes as any).webSocket!;
+            const ws = (wsRes as WebSocketResponse).webSocket!;
             const pongPromise = new Promise<string>((resolve) => {
                 ws.onmessage = (event: { data: string }) => {
                     if (event.data === 'pong') {
@@ -155,66 +174,81 @@ describe('Collab', () => {
         });
 
         test('WebSocket denies connection without read permission', async () => {
-            await authedRequest(ctx.alice.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${docId}/acl`, {
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${docId}/acl`,
+                {
                     method: 'PUT',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({acl: []}),
-                });
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ acl: [] }),
+                },
+            );
 
-            const wsRes = await authedRequest(ctx.bob.user.sessionToken,
-                `/ws/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}`, {
+            const wsRes = await authedRequest(
+                ctx.bob.user.sessionToken,
+                `/ws/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}`,
+                {
                     headers: {
-                        'Upgrade': 'websocket',
-                        'Connection': 'Upgrade',
+                        Upgrade: 'websocket',
+                        Connection: 'Upgrade',
                     },
-                });
+                },
+            );
 
             expect(wsRes.status).not.toBe(101);
         });
 
         test('WebSocket accepts connection with read permission if upgrade works', async () => {
-            await authedRequest(ctx.alice.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${docId}/acl`, {
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${docId}/acl`,
+                {
                     method: 'PUT',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        acl: [{id: 'bob@test.eigen.is', read: true, write: false}],
+                        acl: [{ id: 'bob@test.eigen.is', read: true, write: false }],
                     }),
-                });
+                },
+            );
 
-            const wsRes = await authedRequest(ctx.bob.user.sessionToken,
-                `/ws/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}`, {
+            const wsRes = await authedRequest(
+                ctx.bob.user.sessionToken,
+                `/ws/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}`,
+                {
                     headers: {
-                        'Upgrade': 'websocket',
-                        'Connection': 'Upgrade',
+                        Upgrade: 'websocket',
+                        Connection: 'Upgrade',
                     },
-                });
+                },
+            );
 
             expect(wsRes.status).toBeGreaterThanOrEqual(100);
             expect(wsRes.status).toBeLessThan(600);
 
-            if (wsRes.status === 101 && (wsRes as any).webSocket) {
-                (wsRes as any).webSocket.close();
+            if (wsRes.status === 101 && (wsRes as WebSocketResponse).webSocket) {
+                (wsRes as WebSocketResponse).webSocket!.close();
             }
         });
     });
 
     describe('Document Updates', () => {
         test('document accepts Yjs updates from write-enabled user if WebSocket connects', async () => {
-            const wsRes = await authedRequest(ctx.alice.user.sessionToken,
-                `/ws/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}`, {
+            const wsRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/ws/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}`,
+                {
                     headers: {
-                        'Upgrade': 'websocket',
-                        'Connection': 'Upgrade',
+                        Upgrade: 'websocket',
+                        Connection: 'Upgrade',
                     },
-                });
+                },
+            );
 
             if (wsRes.status !== 101) {
                 return;
             }
 
-            const ws = (wsRes as any).webSocket!;
+            const ws = (wsRes as WebSocketResponse).webSocket!;
             const updateReceived = new Promise<boolean>((resolve) => {
                 ws.onmessage = () => resolve(true);
             });
@@ -224,7 +258,7 @@ describe('Collab', () => {
 
             const received = await Promise.race([
                 updateReceived,
-                new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 3000))
+                new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 3000)),
             ]);
 
             ws.close();
@@ -233,28 +267,34 @@ describe('Collab', () => {
         });
 
         test('document syncs between multiple connected users if WebSocket works', async () => {
-            const aliceWsRes = await authedRequest(ctx.alice.user.sessionToken,
-                `/ws/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}`, {
+            const aliceWsRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/ws/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}`,
+                {
                     headers: {
-                        'Upgrade': 'websocket',
-                        'Connection': 'Upgrade',
+                        Upgrade: 'websocket',
+                        Connection: 'Upgrade',
                     },
-                });
+                },
+            );
 
-            const bobWsRes = await authedRequest(ctx.bob.user.sessionToken,
-                `/ws/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}`, {
+            const bobWsRes = await authedRequest(
+                ctx.bob.user.sessionToken,
+                `/ws/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}`,
+                {
                     headers: {
-                        'Upgrade': 'websocket',
-                        'Connection': 'Upgrade',
+                        Upgrade: 'websocket',
+                        Connection: 'Upgrade',
                     },
-                });
+                },
+            );
 
             if (aliceWsRes.status !== 101 || bobWsRes.status !== 101) {
                 return;
             }
 
-            const aliceWs = (aliceWsRes as any).webSocket!;
-            const bobWs = (bobWsRes as any).webSocket!;
+            const aliceWs = (aliceWsRes as WebSocketResponse).webSocket!;
+            const bobWs = (bobWsRes as WebSocketResponse).webSocket!;
 
             const bobReceivedUpdate = new Promise<boolean>((resolve) => {
                 bobWs.onmessage = () => resolve(true);
@@ -265,7 +305,7 @@ describe('Collab', () => {
 
             const received = await Promise.race([
                 bobReceivedUpdate,
-                new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 3000))
+                new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 3000)),
             ]);
 
             aliceWs.close();
@@ -275,25 +315,28 @@ describe('Collab', () => {
         });
 
         test('document rejects non-binary updates from client', async () => {
-            const wsRes = await authedRequest(ctx.alice.user.sessionToken,
-                `/ws/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}`, {
+            const wsRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/ws/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}`,
+                {
                     headers: {
-                        'Upgrade': 'websocket',
-                        'Connection': 'Upgrade',
+                        Upgrade: 'websocket',
+                        Connection: 'Upgrade',
                     },
-                });
+                },
+            );
 
             if (wsRes.status !== 101) {
                 return;
             }
 
-            const ws = (wsRes as any).webSocket!;
+            const ws = (wsRes as WebSocketResponse).webSocket!;
 
             // Sending string instead of binary Uint8Array
             ws.send('invalid string data');
 
             // Wait to see if connection is closed or maintained
-            await new Promise(resolve => setTimeout(resolve, 100));
+            await new Promise((resolve) => setTimeout(resolve, 100));
 
             expect(ws.readyState).toBeGreaterThan(0); // Should stay open despite invalid payload format
 
@@ -301,33 +344,39 @@ describe('Collab', () => {
         });
 
         test('read-only user WebSocket behavior if connected', async () => {
-            await authedRequest(ctx.alice.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${docId}/acl`, {
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${docId}/acl`,
+                {
                     method: 'PUT',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        acl: [{id: 'charlie@test.eigen.is', read: true, write: false}],
+                        acl: [{ id: 'charlie@test.eigen.is', read: true, write: false }],
                     }),
-                });
+                },
+            );
 
-            const wsRes = await authedRequest(ctx.charlie.user.sessionToken,
-                `/ws/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}`, {
+            const wsRes = await authedRequest(
+                ctx.charlie.user.sessionToken,
+                `/ws/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}`,
+                {
                     headers: {
-                        'Upgrade': 'websocket',
-                        'Connection': 'Upgrade',
+                        Upgrade: 'websocket',
+                        Connection: 'Upgrade',
                     },
-                });
+                },
+            );
 
             if (wsRes.status !== 101) {
                 return;
             }
 
-            const ws = (wsRes as any).webSocket!;
+            const ws = (wsRes as WebSocketResponse).webSocket!;
 
             const testUpdate = new Uint8Array([99, 99, 99]);
             ws.send(testUpdate);
 
-            await new Promise(resolve => setTimeout(resolve, 100));
+            await new Promise((resolve) => setTimeout(resolve, 100));
 
             ws.close();
 
@@ -337,78 +386,96 @@ describe('Collab', () => {
 
     describe('Permission Changes', () => {
         test('revoking read permission disconnects user if WebSocket connected', async () => {
-            await authedRequest(ctx.alice.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${docId}/acl`, {
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${docId}/acl`,
+                {
                     method: 'PUT',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        acl: [{id: 'bob@test.eigen.is', read: true, write: true}],
+                        acl: [{ id: 'bob@test.eigen.is', read: true, write: true }],
                     }),
-                });
+                },
+            );
 
-            const wsRes = await authedRequest(ctx.bob.user.sessionToken,
-                `/ws/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}`, {
+            const wsRes = await authedRequest(
+                ctx.bob.user.sessionToken,
+                `/ws/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}`,
+                {
                     headers: {
-                        'Upgrade': 'websocket',
-                        'Connection': 'Upgrade',
+                        Upgrade: 'websocket',
+                        Connection: 'Upgrade',
                     },
-                });
+                },
+            );
 
             if (wsRes.status !== 101) {
                 return;
             }
 
-            const ws = (wsRes as any).webSocket!;
+            const ws = (wsRes as WebSocketResponse).webSocket!;
 
-            await authedRequest(ctx.alice.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${docId}/acl`, {
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${docId}/acl`,
+                {
                     method: 'PUT',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({acl: []}),
-                });
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ acl: [] }),
+                },
+            );
 
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise((resolve) => setTimeout(resolve, 500));
 
             ws.close();
         });
 
         test('downgrading to read-only prevents write updates if WebSocket connected', async () => {
-            await authedRequest(ctx.alice.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${docId}/acl`, {
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${docId}/acl`,
+                {
                     method: 'PUT',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        acl: [{id: 'bob@test.eigen.is', read: true, write: true}],
+                        acl: [{ id: 'bob@test.eigen.is', read: true, write: true }],
                     }),
-                });
+                },
+            );
 
-            const wsRes = await authedRequest(ctx.bob.user.sessionToken,
-                `/ws/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}`, {
+            const wsRes = await authedRequest(
+                ctx.bob.user.sessionToken,
+                `/ws/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}`,
+                {
                     headers: {
-                        'Upgrade': 'websocket',
-                        'Connection': 'Upgrade',
+                        Upgrade: 'websocket',
+                        Connection: 'Upgrade',
                     },
-                });
+                },
+            );
 
             if (wsRes.status !== 101) {
                 return;
             }
 
-            const ws = (wsRes as any).webSocket!;
+            const ws = (wsRes as WebSocketResponse).webSocket!;
 
-            await authedRequest(ctx.alice.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${docId}/acl`, {
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${docId}/acl`,
+                {
                     method: 'PUT',
-                    headers: {'Content-Type': 'application/json'},
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        acl: [{id: 'bob@test.eigen.is', read: true, write: false}],
+                        acl: [{ id: 'bob@test.eigen.is', read: true, write: false }],
                     }),
-                });
+                },
+            );
 
             const testUpdate = new Uint8Array([77, 77, 77]);
             ws.send(testUpdate);
 
-            await new Promise(resolve => setTimeout(resolve, 100));
+            await new Promise((resolve) => setTimeout(resolve, 100));
 
             ws.close();
 
