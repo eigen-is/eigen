@@ -26,7 +26,7 @@ export class MaildirStore {
         }
 
         const subscriptions = `${STANDARD_MAILBOXES.filter((m) => m !== '').join('\n')}\n`;
-        await this.storage.file(this.storage.pathJoin(this.basePath, 'subscriptions')).write(subscriptions);
+        await this.storage.write(this.storage.pathJoin(this.basePath, 'subscriptions'), subscriptions);
     }
 
     async mailboxDirExists(mailbox: string): Promise<boolean> {
@@ -40,7 +40,7 @@ export class MaildirStore {
         await this.storage.mkdir(this.storage.pathJoin(mailboxPath, NEW));
         await this.storage.mkdir(this.storage.pathJoin(mailboxPath, TMP));
         if (mailbox !== '') {
-            await this.storage.file(this.storage.pathJoin(mailboxPath, 'maildirfolder')).write('');
+            await this.storage.write(this.storage.pathJoin(mailboxPath, 'maildirfolder'), '');
         }
     }
 
@@ -51,7 +51,7 @@ export class MaildirStore {
         const mailboxPath = this.mailboxDir(mailbox);
 
         const tmpPath = this.storage.pathJoin(mailboxPath, TMP, filename);
-        await this.storage.file(tmpPath).write(message);
+        await this.storage.write(tmpPath, message);
 
         const newPath = this.storage.pathJoin(mailboxPath, NEW, filename);
         await this.storage.rename(tmpPath, newPath);
@@ -75,7 +75,7 @@ export class MaildirStore {
         const mailboxPath = this.mailboxDir(mailbox);
 
         const tmpPath = this.storage.pathJoin(mailboxPath, TMP, filename);
-        await this.storage.file(tmpPath).write(message);
+        await this.storage.write(tmpPath, message);
 
         const curPath = this.storage.pathJoin(mailboxPath, CUR, filename);
         await this.storage.rename(tmpPath, curPath);
@@ -109,7 +109,7 @@ export class MaildirStore {
 
     getMessageFile(mailbox: string, filename: string): BunFile {
         const filePath = this.storage.pathJoin(this.mailboxDir(mailbox), CUR, filename);
-        return this.storage.read(filePath);
+        return this.storage.file(filePath);
     }
 
     async moveMessage(fromMailbox: string, fromFilename: string, toMailbox: string): Promise<void> {

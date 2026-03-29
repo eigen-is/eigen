@@ -319,7 +319,7 @@ export class Contacts {
         if (/[/\\]/.test(filename) || filename.includes('..')) {
             return null;
         }
-        const file = this.storage.read(`avatars/${filename}`);
+        const file = this.storage.file(`avatars/${filename}`);
         if (!(await file.exists())) {
             return null;
         }
