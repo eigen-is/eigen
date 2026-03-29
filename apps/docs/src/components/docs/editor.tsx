@@ -36,6 +36,7 @@ import { CreateCommentDialog, ViewCommentDialog } from './comment-dialog';
 import { EditorToolbar } from './editor-toolbar';
 import { CommentMark } from './extensions/comment-mark';
 import { ResizableImage } from './extensions/resizable-image';
+import { SmallMark } from './extensions/small-mark';
 
 const lowlight = createLowlight(common);
 const A4_WIDTH_PX = 794; // 210mm at 96dpi
@@ -174,6 +175,7 @@ const TiptapEditor = ({
                 Underline,
                 Subscript,
                 Superscript,
+                SmallMark,
                 Typography,
                 TextStyle,
                 Color,

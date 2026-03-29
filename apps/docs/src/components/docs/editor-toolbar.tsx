@@ -28,6 +28,7 @@ import { Separator } from '@workspace/ui/components/separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
 import { printDocument } from '@workspace/ui/lib/printElement';
 import {
+    ALargeSmall,
     AlignCenter,
     AlignLeft,
     AlignRight,
@@ -219,6 +220,9 @@ export const EditorToolbar = ({
                                         </DropdownMenuItem>
                                         <DropdownMenuItem onClick={() => editor.chain().focus().toggleStrike().run()}>
                                             <Strikethrough className="h-4 w-4 mr-2" /> Strikethrough
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => editor.chain().focus().toggleSmall().run()}>
+                                            <ALargeSmall className="h-4 w-4 mr-2" /> Small
                                         </DropdownMenuItem>
                                     </DropdownMenuSubContent>
                                 </DropdownMenuSub>
@@ -443,6 +447,13 @@ export const EditorToolbar = ({
                             active={editor.isActive('subscript')}
                             preventFocusLoss
                             onClick={() => editor.chain().focus().toggleSubscript().run()}
+                        />
+                        <TooltipButton
+                            icon={ALargeSmall}
+                            tooltipText={`Small (${formatForDisplay('Mod+Shift+S')})`}
+                            active={editor.isActive('small')}
+                            preventFocusLoss
+                            onClick={() => editor.chain().focus().toggleSmall().run()}
                         />
                     </div>
 
