@@ -30,3 +30,8 @@ export async function requireTeamAdmin(userId: string, teamId: string): Promise<
     const access = await requireTeamAccess(userId, teamId);
     if (access !== 'admin') throw new ApiError(403, 'Admin or owner role required');
 }
+
+export async function requireAdmin(userId: string): Promise<void> {
+    const role = await getOrgRole(userId);
+    if (role !== 'admin' && role !== 'owner') throw new ApiError(403, 'Admin or owner role required');
+}

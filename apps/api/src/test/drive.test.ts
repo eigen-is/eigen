@@ -2174,23 +2174,27 @@ describe('Drive', () => {
                 imageFile,
             );
 
-            const res = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${aliceMountId}/thumb/${uploaded.id}.webp`,
-            );
-            expect(res.status).toBe(200);
-            expect(res.headers.get('content-type')).toBe('image/webp');
-            expect(res.headers.get('cache-control')).toContain('public');
+            // Thumbnail generation is async — poll until ready
+            let res: Response | undefined;
+            for (let i = 0; i < 20; i++) {
+                res = await authedRequest(
+                    ctx.alice.user.sessionToken,
+                    `/drive/${ctx.alice.user.id}/${aliceMountId}/thumb/${uploaded.id}.webp`,
+                );
+                if (res.status === 200) break;
+                await new Promise((r) => setTimeout(r, 250));
+            }
+            expect(res!.status).toBe(200);
+            expect(res!.headers.get('content-type')).toBe('image/webp');
+            expect(res!.headers.get('cache-control')).toContain('public');
         });
 
-        test('thumbnail returns empty for non-existent file', async () => {
+        test('thumbnail returns 404 for non-existent file', async () => {
             const res = await authedRequest(
                 ctx.alice.user.sessionToken,
                 `/drive/${ctx.alice.user.id}/${aliceMountId}/thumb/non-existent.webp`,
             );
-            expect(res.status).toBe(200);
-            const body = await res.arrayBuffer();
-            expect(body.byteLength).toBe(0);
+            expect(res.status).toBe(404);
         });
     });
 

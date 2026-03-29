@@ -1,5 +1,6 @@
 import Elysia, { t } from 'elysia';
 import { getPublicConfig } from '../lib/config/server-config.ts';
+import { setCacheHeaders } from '../lib/core/http';
 import { generateFallbackSvg, getAvatarByEmailOrId, getPublicInfo } from '../lib/space/public';
 import { waitlist } from '../lib/space/waitlist';
 
@@ -8,14 +9,12 @@ export const publicRouter = new Elysia({ name: 'public' })
         const avatar = await getAvatarByEmailOrId(params.emailOrId);
 
         if (avatar) {
-            set.headers['Cache-Control'] = 'public, max-age=86400';
-            set.headers['Expires'] = new Date(Date.now() + 86400000).toUTCString();
+            setCacheHeaders(set, 86400);
             set.headers['Content-Type'] = 'image/webp';
             return avatar;
         }
 
-        set.headers['Cache-Control'] = 'public, max-age=3600';
-        set.headers['Expires'] = new Date(Date.now() + 3600000).toUTCString();
+        setCacheHeaders(set, 3600);
         set.headers['Content-Type'] = 'image/svg+xml';
         return await generateFallbackSvg(params.emailOrId);
     })
