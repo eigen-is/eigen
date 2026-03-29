@@ -447,16 +447,13 @@ const TiptapEditor = ({
     useEffect(() => {
         if (!editor) return;
         const onUpdate = () => {
-            if (!editor.isFocused) setSidebarContext('document');
-            else if (editor.isActive('figure')) setSidebarContext('figure');
+            if (editor.isActive('figure')) setSidebarContext('figure');
             else if (editor.isActive('table')) setSidebarContext('table');
             else setSidebarContext('document');
         };
         editor.on('selectionUpdate', onUpdate);
-        editor.on('blur', onUpdate);
         return () => {
             editor.off('selectionUpdate', onUpdate);
-            editor.off('blur', onUpdate);
         };
     }, [editor]);
 
