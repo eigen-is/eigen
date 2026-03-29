@@ -161,7 +161,9 @@
       "Bash(time npx:*)",
       "WebFetch(domain:tiptap.dev)",
       "WebFetch(domain:discuss.prosemirror.net)",
-      "WebFetch(domain:api.github.com)"
+      "WebFetch(domain:api.github.com)",
+      "WebFetch(domain:www.inngest.com)",
+      "WebFetch(domain:dhwaneetbhatt.com)"
     ]
   },
   "enabledPlugins": {
