@@ -365,6 +365,33 @@ const drag = useListDrag({ selection, getId: (item) => item.id, dragType: 'my-ty
 | `EmailList`    | `apps/mail/src/components/mail/email-list.tsx`            | `email`      |
 | `ContactsList` | `apps/contacts/src/components/contacts/contacts-list.tsx` | `contact`    |
 
+## Keyboard Shortcuts
+
+`@tanstack/react-hotkeys` for global shortcuts. `Mod` = Cmd (Mac) / Ctrl (Windows).
+
+| Shortcut             | Action                    | Location                         |
+|----------------------|---------------------------|----------------------------------|
+| `Mod+B`              | Toggle sidebar            | `packages/ui/.../sidebar.tsx`    |
+| `Mod+P`              | Print                     | `eigen-app.tsx`                  |
+| `Mod+S`              | Save (Inline Editor)      | `use-editor-save.ts`            |
+| `Escape`             | Close preview             | `file-preview.tsx`               |
+| `ArrowLeft/Right`    | Navigate preview          | `file-preview.tsx`               |
+| `Mod+Z`              | Undo (Stickies, Slides)   | `board.tsx`, `slides/editor.tsx` |
+| `Mod+Y` / `Mod+Shift+Z` | Redo (Stickies, Slides) | `board.tsx`, `slides/editor.tsx` |
+| `Delete`/`Backspace` | Delete selected (Slides)  | `slides/editor.tsx`              |
+| `Escape`             | Deselect (Slides)         | `slides/editor.tsx`              |
+| `Arrow keys`         | Nudge selected (Slides)   | `slides/editor.tsx`              |
+
+Use `@tanstack/react-hotkeys` for global shortcuts and `formatForDisplay()` for tooltip labels. Keep manual
+listeners for stateful navigation (`use-keyboard-list-navigation.ts`) and framework-specific contexts (Tiptap).
+
+```tsx
+import { useHotkey, formatForDisplay } from '@tanstack/react-hotkeys';
+
+useHotkey('Mod+S', () => save(), { enabled: canSave });
+const label = formatForDisplay('Mod+S'); // "⌘S" on Mac, "Ctrl+S" on Windows
+```
+
 ## File Locations
 
 | Component                 | File                                                              |
