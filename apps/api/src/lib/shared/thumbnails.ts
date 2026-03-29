@@ -54,8 +54,19 @@ export async function generateImagePreview(
     return new Promise((resolve) => {
         const worker = new Worker(new URL('./thumbnail-worker', import.meta.url).href);
 
-        worker.onmessage = (event: MessageEvent) => {
+        const cleanup = () => {
+            clearTimeout(timeout);
             worker.terminate();
+        };
+
+        const timeout = setTimeout(() => {
+            console.error(`[thumbnail-worker] Timeout for ${pathId}`);
+            cleanup();
+            resolve(null);
+        }, 30_000);
+
+        worker.onmessage = (event: MessageEvent) => {
+            cleanup();
             if (!event.data.ok) {
                 resolve(null);
                 return;
@@ -69,7 +80,7 @@ export async function generateImagePreview(
 
         worker.onerror = (err) => {
             console.error(`[thumbnail-worker] Error for ${pathId}:`, err);
-            worker.terminate();
+            cleanup();
             resolve(null);
         };
 
