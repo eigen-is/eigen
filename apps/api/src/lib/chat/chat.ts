@@ -180,7 +180,7 @@ export class ChatRoom {
         return message;
     }
 
-    async getMessages(limit: number = 50, beforeId?: string): Promise<ChatMessage[]> {
+    private async getMessages(limit: number = 50, beforeId?: string): Promise<ChatMessage[]> {
         let rows: ChatMessage[];
         if (beforeId) {
             const beforeMsg = await this.db

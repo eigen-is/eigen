@@ -544,14 +544,14 @@ export class Mount {
         return path.join(this.tmpDir, pathId.replace(/\//g, '_'));
     }
 
-    async downloadToTemp(storageKey: string, tempId: string): Promise<string> {
+    private async downloadToTemp(storageKey: string, tempId: string): Promise<string> {
         const tempPath = this.getTempPath(tempId);
         const file = this.storage.read(storageKey);
         await Bun.write(tempPath, file);
         return tempPath;
     }
 
-    async uploadFromTemp(storageKey: string, tempId: string): Promise<void> {
+    private async uploadFromTemp(storageKey: string, tempId: string): Promise<void> {
         const tempPath = this.getTempPath(tempId);
         const tempFile = Bun.file(tempPath);
         if (await tempFile.exists()) {
@@ -569,7 +569,7 @@ export class Mount {
         } catch {}
     }
 
-    get isRemote(): boolean {
+    private get isRemote(): boolean {
         return this.config.storageType !== 'local-key' && this.config.storageType !== 'local';
     }
 

@@ -32,10 +32,10 @@ export class Home {
     protected _calendar!: Calendar;
     protected _notifications!: NotificationCenter;
 
-    protected initialized: boolean = false;
-    protected initializationStarted: boolean = false;
-    protected initWaiters: ((home: Home) => void)[] = [];
-    protected timeout: Timer | undefined;
+    private initialized: boolean = false;
+    private initializationStarted: boolean = false;
+    private initWaiters: ((home: Home) => void)[] = [];
+    private timeout: Timer | undefined;
     private _destructing: boolean = false;
 
     get destructing(): boolean {

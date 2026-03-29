@@ -54,7 +54,7 @@ class NodeStreamer extends Transform {
         callback();
     }
 
-    processIncoming(data: StreamData, callback: TransformCallback): void {
+    private processIncoming(data: StreamData, callback: TransformCallback): void {
         const dataObj = data as { type: string; value?: Buffer; node?: MimeNode };
 
         if (this.decoder && dataObj.type === 'body') {
@@ -95,7 +95,7 @@ class NodeStreamer extends Transform {
         callback();
     }
 
-    createDecoder(node: MimeNode): StreamerNodeInfo {
+    private createDecoder(node: MimeNode): StreamerNodeInfo {
         this.decoder = node.getDecoder() as DecoderStream;
 
         let decoder: DecoderStream = this.decoder;

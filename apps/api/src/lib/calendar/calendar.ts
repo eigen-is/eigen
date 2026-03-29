@@ -368,7 +368,7 @@ export class Calendar {
         return event;
     }
 
-    public getEventById(id: string): CalendarEvent | null {
+    private getEventById(id: string): CalendarEvent | null {
         const row = this.db.select().from(schema.events).where(eq(schema.events.id, id)).get();
         return row ? dbEventToCalendarEvent(row) : null;
     }
@@ -827,7 +827,7 @@ export class Calendar {
 
     // --- Invitations ---
 
-    public findLinkedEvent(orgEventId: string, orgUserId: string): CalendarEvent | null {
+    private findLinkedEvent(orgEventId: string, orgUserId: string): CalendarEvent | null {
         const row = this.db
             .select()
             .from(schema.events)
@@ -1000,7 +1000,7 @@ export class Calendar {
         if (updated) this.incrementCtag(updated.calendarId);
     }
 
-    public incrementSequence(eventId: string): void {
+    private incrementSequence(eventId: string): void {
         this.db
             .update(schema.events)
             .set({
@@ -1077,7 +1077,7 @@ export class Calendar {
         }
     }
 
-    public removeOccurrence(eventId: string, recurrenceDate: string): void {
+    private removeOccurrence(eventId: string, recurrenceDate: string): void {
         const parent = this.getEventById(eventId);
         if (!parent) throw new ApiError(404, 'Event not found');
 
@@ -1151,7 +1151,7 @@ export class Calendar {
         }
     }
 
-    public removeThisAndFuture(eventId: string, recurrenceDate: string): void {
+    private removeThisAndFuture(eventId: string, recurrenceDate: string): void {
         const event = this.getEventById(eventId);
         if (!event) throw new ApiError(404, 'Event not found');
         if (!event.rrule) throw new ApiError(400, 'Not a recurring event');
