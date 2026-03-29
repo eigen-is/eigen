@@ -68,9 +68,13 @@ async function navigateToNotification(notification: Notification): Promise<void>
         case 'calendar-invite-cancelled':
             window.location.href = getCalendarAppUrl();
             return;
-        case 'mail':
-            window.location.href = getMailAppUrl('box/inbox');
+        case 'mail': {
+            const mailId = notification.tag?.startsWith('mail:') ? notification.tag.slice(5) : null;
+            window.location.href = getMailAppUrl(
+                mailId ? `box/inbox?mailId=${encodeURIComponent(mailId)}` : 'box/inbox',
+            );
             return;
+        }
     }
 }
 
