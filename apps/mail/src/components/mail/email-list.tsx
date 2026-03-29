@@ -109,7 +109,7 @@ export function EmailList({
 
     return (
         <div className="w-full h-full flex flex-col overflow-hidden bg-background">
-            <div className="flex-1 overflow-y-auto outline-none" onKeyDown={handleKeyDown} ref={tableRef}>
+            <div className="flex-1 overflow-y-auto outline-none" tabIndex={0} onKeyDown={handleKeyDown} ref={tableRef}>
                 <div className="w-full">
                     {filteredEmails.length > 0 ? (
                         <div className="divide-y divide-border">

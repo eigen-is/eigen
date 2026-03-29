@@ -160,7 +160,7 @@ export function ContactsList({
 
     return (
         <div className="w-full flex flex-col flex-1 overflow-hidden">
-            <div className="flex-1 overflow-y-auto outline-none" ref={listRef} onKeyDown={handleKeyDown}>
+            <div className="flex-1 overflow-y-auto outline-none" tabIndex={0} ref={listRef} onKeyDown={handleKeyDown}>
                 {isLoading ? (
                     <LoadingState />
                 ) : groupedContacts.length === 0 ? (
