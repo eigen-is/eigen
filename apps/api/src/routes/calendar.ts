@@ -124,23 +124,20 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
     .get(
         '/calendar/:ownerId/event-range/:from/:to',
         async ({ params, user }) => {
-            const from = Number(params.from);
-            const to = Number(params.to);
-            if (!from || !to) throw new ApiError(400, 'Invalid from/to parameters');
             const cal = await resolveCalendar(user, params.ownerId);
-            return cal.getEventsInRange(from, to);
+            return cal.getEventsInRange(params.from, params.to);
         },
-        { auth: true },
+        {
+            params: t.Object({ ownerId: t.String(), from: t.Numeric(), to: t.Numeric() }),
+            auth: true,
+        },
     )
 
     .get(
         '/calendar/:ownerId/calendars/:calId/event-range/:from/:to',
         async ({ params, user }) => {
-            const from = Number(params.from);
-            const to = Number(params.to);
-            if (!from || !to) throw new ApiError(400, 'Invalid from/to parameters');
             const { calendar, permission } = await resolveCalendarForEvents(user, params.ownerId, params.calId);
-            const events = calendar.getEventsInRange(from, to, params.calId);
+            const events = calendar.getEventsInRange(params.from, params.to, params.calId);
             if (permission === 'free-busy') {
                 return events.map(
                     (e): FreeBusyBlock => ({
@@ -153,7 +150,10 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             }
             return events;
         },
-        { auth: true },
+        {
+            params: t.Object({ ownerId: t.String(), calId: t.String(), from: t.Numeric(), to: t.Numeric() }),
+            auth: true,
+        },
     )
 
     .post(

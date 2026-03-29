@@ -980,7 +980,11 @@ export default class Drive {
                 if (thumbnail) {
                     await mount.updatePath(pathId, {
                         thumbnail: thumbnail.fileName,
-                        details: { ...(uploadedFile.details ?? {}), width: thumbnail.width, height: thumbnail.height },
+                        details: {
+                            ...(uploadedFile.details ?? {}),
+                            width: thumbnail.width,
+                            height: thumbnail.height,
+                        },
                     });
                     this.emit(SSEventType.DRIVE_FILE_UPLOADED, (await mount.getPath(pathId))!);
                 }

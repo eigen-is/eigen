@@ -1,5 +1,7 @@
 import type { S3Config } from '@workspace/lib/types';
-import { type DeepPartial, JsonStore, LocalFilesystem } from '../core';
+import type { DeepPartial } from '../core';
+import { JsonStore } from '../core/json-store';
+import { LocalFilesystem } from '../core/local-filesystem';
 import { getServerDataPath } from './paths';
 
 export type { S3Config };

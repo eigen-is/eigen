@@ -2,15 +2,10 @@ import { Elysia, t } from 'elysia';
 import { getS3Config, updateServerConfig } from '../lib/config/server-config';
 import { getServerSettings, updateServerSettings } from '../lib/config/server-settings';
 import { ApiError } from '../lib/core';
+import { requireAdmin } from '../lib/core/access';
 import { checkS3Connection } from '../lib/storage/s3-storage';
-import { getOrgRole } from '../lib/user';
 import { deleteUserCompletely } from '../lib/user/delete-user';
 import { betterAuth } from './auth';
-
-async function requireAdmin(userId: string) {
-    const role = await getOrgRole(userId);
-    if (role !== 'admin' && role !== 'owner') throw new ApiError(403, 'Admin or owner role required');
-}
 
 export const settingsRouter = new Elysia({ name: 'settings' })
     .use(betterAuth)

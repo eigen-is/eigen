@@ -2,6 +2,7 @@ import { Elysia, t } from 'elysia';
 import { enforceAvatarUpload } from '../lib/config/enforcement';
 import { getContacts } from '../lib/contacts/contacts';
 import { requireSelf } from '../lib/core/access';
+import { setCacheHeaders } from '../lib/core/http';
 import { betterAuth } from './auth';
 
 const AddressSchema = t.Object({
@@ -141,8 +142,7 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
             requireSelf(params.ownerId, user.id);
             try {
                 const data = await (await getContacts(user)).downloadAvatar(params.filename);
-                set.headers['Cache-Control'] = 'public, max-age=900';
-                set.headers['Expires'] = new Date(Date.now() + 900000).toUTCString();
+                setCacheHeaders(set, 900);
                 set.headers['Content-Type'] = 'image/webp';
                 return new Response(data);
             } catch (_e) {
