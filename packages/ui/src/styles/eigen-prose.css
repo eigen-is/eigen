@@ -88,6 +88,20 @@
         letter-spacing: 0.01em;
     }
 
+    /* Figures */
+
+    figure {
+        margin: 0.75em 0;
+    }
+
+    figcaption {
+        font-size: 0.75rem;
+        color: var(--color-muted-foreground);
+        text-align: center;
+        margin-top: 0.125em;
+        outline: none;
+    }
+
     /* Lists */
 
     ul {
@@ -143,6 +157,10 @@
         height: auto;
         display: block;
         margin: 0.75em 0;
+    }
+
+    figure img {
+        margin: 0;
     }
 
     /* Tables */
