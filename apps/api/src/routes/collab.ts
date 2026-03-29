@@ -147,6 +147,8 @@ export const collabRouter = new Elysia({
         },
     )
 
+    // Bun does not await async open(), so messages and close can fire before setup
+    // completes. The `opened` promise gates message/close until open() is done.
     .ws('/ws/collab/:ownerId/:mountId/:pathId', {
         auth: true,
         params: t.Object({
@@ -157,9 +159,9 @@ export const collabRouter = new Elysia({
 
         async open(ws) {
             const data = ws.data as unknown as CollabWsData;
-            let resolveOpened!: () => void;
+            let resolve: () => void;
             data.opened = new Promise((r) => {
-                resolveOpened = r;
+                resolve = r;
             });
 
             try {
@@ -184,10 +186,10 @@ export const collabRouter = new Elysia({
                 data.collabDocument = document;
                 data.pingInterval = keepWebSocketAlive(user, rawWs, () => cleanupSession(data, rawWs));
             } catch (err) {
-                console.error('Error getting document:', err);
-                ws.close(1008, 'Failed to get document');
+                console.error('Error opening collab session:', err);
+                ws.close(1008, 'Failed to open document');
             } finally {
-                resolveOpened();
+                resolve!();
             }
         },
 
@@ -199,21 +201,23 @@ export const collabRouter = new Elysia({
 
             const data = ws.data as unknown as CollabWsData;
             if (data.opened) await data.opened;
-            if (!data.user || !data.collabDocument) return;
+
+            const { user, drive, collabDocument } = data;
+            if (!user || !drive || !collabDocument) return;
 
             try {
                 const update = message instanceof Uint8Array ? message : new Uint8Array(message as Buffer);
                 const { mountId, pathId } = data.params;
-                const drive = data.drive ?? (await getSharedDrive(data.params.ownerId, data.user));
-                const canWrite = await drive.canWrite(mountId, pathId, data.user);
-                data.collabDocument.handleMessage(ws as unknown as ServerWebSocket<undefined>, update, canWrite);
+                const canWrite = await drive.canWrite(mountId, pathId, user);
+                collabDocument.handleMessage(ws as unknown as ServerWebSocket<undefined>, update, canWrite);
             } catch (err) {
-                console.error('Error processing message:', err);
+                console.error('Error processing collab message:', err);
             }
         },
 
-        close(ws) {
+        async close(ws) {
             const data = ws.data as unknown as CollabWsData;
+            if (data.opened) await data.opened;
             cleanupSession(data, ws as unknown as ServerWebSocket<undefined>);
         },
     });
