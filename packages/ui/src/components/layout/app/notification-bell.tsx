@@ -54,6 +54,14 @@ function resolveLink(notification: Notification): string | null {
     }
 }
 
+function parseCalendarInviteTag(tag: string | null): { eventId: string; startTime: number } | null {
+    if (!tag) return null;
+    const parts = tag.split(':');
+    if (parts[0] !== 'calendar-invite' || !parts[1]) return null;
+    const startTime = parts[2] ? Number(parts[2]) : 0;
+    return { eventId: parts[1], startTime };
+}
+
 async function navigateToNotification(notification: Notification): Promise<void> {
     switch (notification.type) {
         case 'share':
@@ -61,11 +69,38 @@ async function navigateToNotification(notification: Notification): Promise<void>
         case 'mention-comment':
             window.location.href = await resolveDriveLink(notification.tag);
             return;
-        case 'calendar-share':
-        case 'calendar-unshare':
         case 'calendar-invite':
         case 'calendar-invite-updated':
-        case 'calendar-invite-cancelled':
+        case 'calendar-invite-cancelled': {
+            const parsed = parseCalendarInviteTag(notification.tag);
+            if (parsed?.startTime) {
+                const eventDate = new Date(parsed.startTime * 1000);
+                const year = eventDate.getFullYear();
+                const month = eventDate.getMonth();
+                const firstOfMonth = new Date(year, month, 1);
+                const startDay = firstOfMonth.getDay();
+                const startDate = new Date(firstOfMonth);
+                startDate.setDate(startDate.getDate() - (startDay === 0 ? 6 : startDay - 1));
+                const lastOfMonth = new Date(year, month + 1, 0);
+                const endDay = lastOfMonth.getDay();
+                const endDate = new Date(lastOfMonth);
+                if (endDay !== 0) endDate.setDate(endDate.getDate() + (7 - endDay));
+                const from = Math.floor(
+                    new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate()).getTime() / 1000,
+                );
+                const to = Math.floor(
+                    new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59).getTime() / 1000,
+                );
+                window.location.href = getCalendarAppUrl(
+                    `view/month/${from}/${to}?eventId=${encodeURIComponent(parsed.eventId)}`,
+                );
+            } else {
+                window.location.href = getCalendarAppUrl();
+            }
+            return;
+        }
+        case 'calendar-share':
+        case 'calendar-unshare':
             window.location.href = getCalendarAppUrl();
             return;
         case 'mail': {
