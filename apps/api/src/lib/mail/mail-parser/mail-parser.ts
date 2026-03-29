@@ -236,9 +236,8 @@ type CidEntry = {
 // --- Decoder classes ---
 
 class IconvDecoder extends Transform {
-    stream: Transform;
-    inputEnded: boolean;
-    endCb: TransformCallback | null;
+    private stream: Transform;
+    private endCb: TransformCallback | null;
 
     constructor(Iconv: unknown, charset: string) {
         super();
@@ -248,13 +247,11 @@ class IconvDecoder extends Transform {
         }
         this.stream = new (Iconv as new (from: string, to: string) => Transform)(charset, 'UTF-8//TRANSLIT//IGNORE');
 
-        this.inputEnded = false;
         this.endCb = null;
 
         this.stream.on('error', (err: Error) => this.emit('error', err));
         this.stream.on('data', (chunk: Buffer) => this.push(chunk));
         this.stream.on('end', () => {
-            this.inputEnded = true;
             if (typeof this.endCb === 'function') {
                 this.endCb();
             }
@@ -273,9 +270,9 @@ class IconvDecoder extends Transform {
 }
 
 class JPDecoder extends Transform {
-    charset: string;
-    chunks: Buffer[];
-    chunklen: number;
+    private charset: string;
+    private chunks: Buffer[];
+    private chunklen: number;
 
     constructor(charset: string) {
         super();
@@ -415,7 +412,7 @@ class MailParser extends Transform {
         this.libmime = new libmime.Libmime({ Iconv: this.options.Iconv });
     }
 
-    getDecoder(): Decoder {
+    private getDecoder(): Decoder {
         if (this.options.Iconv) {
             const Iconv = this.options.Iconv;
             return {
@@ -437,7 +434,7 @@ class MailParser extends Transform {
         }
     }
 
-    readData(): void {
+    private readData(): void {
         if (this.hasFailed) {
             return;
         }
@@ -462,7 +459,7 @@ class MailParser extends Transform {
         });
     }
 
-    endStream(): void {
+    private endStream(): void {
         this.finished = true;
 
         if (this.curnode && (this.curnode as MimeTreeNode).decoder) {
@@ -499,7 +496,7 @@ class MailParser extends Transform {
         };
     }
 
-    cleanup(done: () => void): void {
+    private cleanup(done: () => void): void {
         const finish = () => {
             try {
                 const t = this.getTextContent();
@@ -523,7 +520,7 @@ class MailParser extends Transform {
         }
     }
 
-    processHeaders(lines: Array<{ key: string; line: string }>): Headers {
+    private processHeaders(lines: Array<{ key: string; line: string }>): Headers {
         const headers: Map<string, unknown[]> = new Map();
         for (const line of lines || []) {
             let key = line.key;
@@ -670,7 +667,7 @@ class MailParser extends Transform {
         return result;
     }
 
-    parseListHeader(key: string, value: string): Record<string, Record<string, string>> | null {
+    private parseListHeader(key: string, value: string): Record<string, Record<string, string>> | null {
         const addresses = addressparser(value) as ParsedAddress[];
         const response: Record<string, string> = {};
         const data = addresses
@@ -701,7 +698,7 @@ class MailParser extends Transform {
         return null;
     }
 
-    parsePriority(value: string): 'normal' | 'low' | 'high' {
+    private parsePriority(value: string): 'normal' | 'low' | 'high' {
         value = value.toLowerCase().trim();
         if (!Number.isNaN(parseInt(value, 10))) {
             const num = parseInt(value, 10) || 0;
@@ -725,7 +722,7 @@ class MailParser extends Transform {
         return 'normal';
     }
 
-    ensureMessageIDFormat(value: string): string | null {
+    private ensureMessageIDFormat(value: string): string | null {
         if (!value.length) {
             return null;
         }
@@ -741,7 +738,7 @@ class MailParser extends Transform {
         return value;
     }
 
-    decodeAddresses(addresses: ParsedAddress[]): void {
+    private decodeAddresses(addresses: ParsedAddress[]): void {
         const processedAddress = new WeakSet<ParsedAddress>();
         for (let i = 0; i < addresses.length; i++) {
             const address = addresses[i];
@@ -787,7 +784,7 @@ class MailParser extends Transform {
         }
     }
 
-    createNode(node: SplitterChunk): MimeTreeNode {
+    private createNode(node: SplitterChunk): MimeTreeNode {
         let contentType = node.contentType;
         const disposition = node.disposition;
         const encoding = node.encoding;
@@ -880,7 +877,7 @@ class MailParser extends Transform {
         return newNode;
     }
 
-    getTextContent(): MessageText {
+    private getTextContent(): MessageText {
         const text: string[] = [];
         const html: string[] = [];
         const processNode = (alternative: boolean, level: number, node: MimeTreeNode): void => {
@@ -1006,7 +1003,7 @@ class MailParser extends Transform {
         return response;
     }
 
-    processChunk(data: SplitterChunk, done: (err?: Error) => void): void {
+    private processChunk(data: SplitterChunk, done: (err?: Error) => void): void {
         let partId: string | null = null;
         if (data._parentBoundary) {
             partId = this._getPartId(data._parentBoundary);
@@ -1212,7 +1209,7 @@ class MailParser extends Transform {
         process.nextTick(done);
     }
 
-    _getPartId(parentBoundary: string): string {
+    private _getPartId(parentBoundary: string): string {
         let boundaryIndex = this.boundaries.findIndex((item) => item.name === parentBoundary);
         if (boundaryIndex === -1) {
             this.boundaries.push({ name: parentBoundary, count: 1 });
@@ -1228,7 +1225,7 @@ class MailParser extends Transform {
         return partId;
     }
 
-    getAddressesHTML(value: ParsedAddress[]): string {
+    private getAddressesHTML(value: ParsedAddress[]): string {
         const formatSingleLevel = (addresses: ParsedAddress[]): string =>
             addresses
                 .map((address) => {
@@ -1262,7 +1259,7 @@ class MailParser extends Transform {
         return formatSingleLevel(([] as ParsedAddress[]).concat(value || []));
     }
 
-    getAddressesText(value: ParsedAddress[]): string {
+    private getAddressesText(value: ParsedAddress[]): string {
         const formatSingleLevel = (addresses: ParsedAddress[]): string =>
             addresses
                 .map((address) => {
@@ -1347,7 +1344,7 @@ class MailParser extends Transform {
         process.nextTick(processNext);
     }
 
-    textToHtml(str: string): string {
+    private textToHtml(str: string): string {
         if (this.options.skipTextToHtml) {
             return '';
         }

@@ -163,7 +163,7 @@ export class MaildirStore {
         this.watchers = [];
     }
 
-    mailboxDir(mailbox: string): string {
+    private mailboxDir(mailbox: string): string {
         if (mailbox === '' || mailbox === 'INBOX') return this.basePath;
         if (/[^a-zA-Z0-9._\- /]/.test(mailbox) || mailbox.includes('..')) {
             throw new Error(`Invalid mailbox name: ${mailbox}`);
