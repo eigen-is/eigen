@@ -137,7 +137,7 @@ function RichContent({ text, className }: { text: string; className?: string }) 
                     href={token.value}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-primary hover:underline break-all"
+                    className="text-link hover:underline break-all"
                 >
                     {token.value}
                 </a>,
