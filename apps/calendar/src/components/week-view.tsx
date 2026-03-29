@@ -1,7 +1,7 @@
 import { useAuth } from '@workspace/lib/auth';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { cn } from '@workspace/ui/lib/utils';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     formatEventTime,
     getCalendarColor,
@@ -35,10 +35,12 @@ export function WeekView({
     const [selectedEvent, setSelectedEvent] = useState<CalendarEventOccurrence | null>(null);
     const [detailOpen, setDetailOpen] = useState(false);
 
+    const didAutoOpen = useRef(false);
     useEffect(() => {
-        if (!initialEventId || events.length === 0) return;
-        const match = events.find((e) => e.id === initialEventId);
-        if (match && !selectedEvent) {
+        if (!initialEventId || events.length === 0 || didAutoOpen.current) return;
+        const match = events.find((e) => e.id === initialEventId || e.data?.organizerEventId === initialEventId);
+        if (match) {
+            didAutoOpen.current = true;
             setSelectedEvent(match);
             setDetailOpen(true);
         }
