@@ -16,6 +16,7 @@ type CollabWsData = {
     drive?: Drive | SharedDrive;
     collabDocument?: CollabDocument;
     pingInterval?: ReturnType<typeof setInterval>;
+    opened?: Promise<void>;
 };
 
 function cleanupSession(data: CollabWsData, ws: ServerWebSocket<undefined>) {
@@ -156,20 +157,25 @@ export const collabRouter = new Elysia({
 
         async open(ws) {
             const data = ws.data as unknown as CollabWsData;
-            const user = data.user;
-            if (!user) {
-                ws.close(1008, 'Authentication failed');
-                return;
-            }
-
-            const { ownerId, mountId, pathId } = data.params;
-            const drive = await getSharedDrive(ownerId, user);
-            if (!drive || !(await drive.canRead(mountId, pathId, user))) {
-                ws.close(1008, 'Authentication failed');
-                return;
-            }
+            let resolveOpened!: () => void;
+            data.opened = new Promise((r) => {
+                resolveOpened = r;
+            });
 
             try {
+                const user = data.user;
+                if (!user) {
+                    ws.close(1008, 'Authentication failed');
+                    return;
+                }
+
+                const { ownerId, mountId, pathId } = data.params;
+                const drive = await getSharedDrive(ownerId, user);
+                if (!drive || !(await drive.canRead(mountId, pathId, user))) {
+                    ws.close(1008, 'Authentication failed');
+                    return;
+                }
+
                 const document = await drive.getCollabDocument(mountId, pathId);
                 const rawWs = ws as unknown as ServerWebSocket<undefined>;
                 document.subscribe(user, rawWs);
@@ -180,6 +186,8 @@ export const collabRouter = new Elysia({
             } catch (err) {
                 console.error('Error getting document:', err);
                 ws.close(1008, 'Failed to get document');
+            } finally {
+                resolveOpened();
             }
         },
 
@@ -190,6 +198,7 @@ export const collabRouter = new Elysia({
             }
 
             const data = ws.data as unknown as CollabWsData;
+            if (data.opened) await data.opened;
             if (!data.user || !data.collabDocument) return;
 
             try {
