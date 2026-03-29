@@ -1,8 +1,8 @@
+import type { ViewMode } from '@workspace/lib/calendar';
 import { Button } from '@workspace/ui/components/button';
 import { Toolbar } from '@workspace/ui/components/layout/toolbar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import type { ViewMode } from './calendar-utils';
 
 type CalendarToolbarProps = {
     currentDate: Date;

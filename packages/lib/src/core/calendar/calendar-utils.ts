@@ -1,4 +1,4 @@
-import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
+import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '../../types/calendar';
 
 export type ViewMode = 'month' | 'week';
 
