@@ -13,10 +13,14 @@ import { WeekView } from '../components/week-view';
 
 export const Route = createFileRoute('/_auth/view/$mode/$from/$to')({
     component: CalendarView,
+    validateSearch: (search: Record<string, unknown>) => ({
+        eventId: typeof search.eventId === 'string' ? search.eventId : undefined,
+    }),
 });
 
 function CalendarView() {
     const { mode, from: fromStr, to: toStr } = Route.useParams();
+    const { eventId } = Route.useSearch();
     const navigate = useNavigate();
     const { user } = useAuth();
     const ownerId = user?.id || '';
@@ -57,6 +61,7 @@ function CalendarView() {
             navigate({
                 to: '/view/$mode/$from/$to',
                 params: { mode: newMode, from: String(newFrom), to: String(newTo) },
+                search: { eventId: undefined },
             });
         },
         [navigate],
@@ -129,6 +134,7 @@ function CalendarView() {
                         calendars={calendars}
                         sharedCalendars={sharedCalendars}
                         onDayClick={handleDayClick}
+                        initialEventId={eventId}
                     />
                 ) : (
                     <WeekView
@@ -137,6 +143,7 @@ function CalendarView() {
                         calendars={calendars}
                         sharedCalendars={sharedCalendars}
                         onDayClick={handleDayClick}
+                        initialEventId={eventId}
                     />
                 )}
 
