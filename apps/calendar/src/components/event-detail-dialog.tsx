@@ -1,5 +1,12 @@
 import { useAuth } from '@workspace/lib/auth';
-import { useCreateEvent, useDeleteEvent, useRsvp, useUpdateEvent } from '@workspace/lib/calendar';
+import {
+    occurrenceDateToString,
+    parseOccurrenceDate,
+    useCreateEvent,
+    useDeleteEvent,
+    useRsvp,
+    useUpdateEvent,
+} from '@workspace/lib/calendar';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
@@ -21,7 +28,6 @@ import {
 import { useState } from 'react';
 import { RRule } from 'rrule';
 import { AttendeeList } from './attendee-editor';
-import { occurrenceDateToString, parseOccurrenceDate } from './calendar-utils';
 import { EditEventDialog } from './edit-event-dialog';
 import { rruleToText } from './recurrence-picker';
 import type { RecurringAction } from './recurring-action-dialog';

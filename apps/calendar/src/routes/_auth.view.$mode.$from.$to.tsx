@@ -1,12 +1,18 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
-import { useAllSharedCalendarEvents, useCalendars, useEvents, useSharedCalendars } from '@workspace/lib/calendar';
+import {
+    getMonthRange,
+    getWeekRange,
+    useAllSharedCalendarEvents,
+    useCalendars,
+    useEvents,
+    useSharedCalendars,
+    type ViewMode,
+} from '@workspace/lib/calendar';
 import { LoadingState } from '@workspace/ui';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout';
 import { useCallback, useMemo, useState } from 'react';
 import { CalendarToolbar } from '../components/calendar-toolbar';
-import type { ViewMode } from '../components/calendar-utils';
-import { getMonthRange, getWeekRange } from '../components/calendar-utils';
 import { CreateEventDialog } from '../components/create-event-dialog';
 import { MonthView } from '../components/month-view';
 import { WeekView } from '../components/week-view';

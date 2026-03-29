@@ -1,7 +1,4 @@
 import { useAuth } from '@workspace/lib/auth';
-import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
-import { cn } from '@workspace/ui/lib/utils';
-import { useEffect, useMemo, useRef, useState } from 'react';
 import {
     formatEventTime,
     getCalendarColor,
@@ -11,7 +8,10 @@ import {
     getMonthRange,
     isToday,
     WEEKDAY_HEADERS,
-} from './calendar-utils';
+} from '@workspace/lib/calendar';
+import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
+import { cn } from '@workspace/ui/lib/utils';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { EventDetailDialog } from './event-detail-dialog';
 
 type MonthViewProps = {
