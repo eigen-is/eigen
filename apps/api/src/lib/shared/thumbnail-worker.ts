@@ -1,6 +1,6 @@
 import * as path from 'node:path';
 import sharp from 'sharp';
-import { cleanupExtract, extractEmbeddedPreview, isExiftoolCandidate } from '../preview/exiftool-preview';
+import { cleanupExtract, extractEmbeddedPreview } from '../preview/exiftool-preview';
 
 type WorkerInput = {
     source: string | ArrayBuffer;
@@ -15,16 +15,12 @@ type WorkerOutput = { ok: true; data: ArrayBuffer; width: number; height: number
 
 type ImageResult = { data: Buffer; width: number; height: number };
 
-function resolveSource(source: string | ArrayBuffer): Buffer | string {
-    return typeof source === 'string' ? source : Buffer.from(source);
-}
-
 async function sharpResize(
     source: Buffer | string,
     options: { maxSize: number; quality: number; fit: 'inside' | 'cover' },
 ): Promise<ImageResult | null> {
     try {
-        const image = typeof source === 'string' ? sharp(source) : sharp(source);
+        const image = sharp(source);
         const metadata = await image.metadata();
 
         if (!metadata.width || !metadata.height) return null;
@@ -63,9 +59,7 @@ async function heicToJpeg(source: Buffer | string): Promise<Buffer | null> {
 }
 
 async function processImage(input: WorkerInput): Promise<ImageResult | null> {
-    const source = resolveSource(input.source);
-
-    if (!isExiftoolCandidate(input.mimeType, input.fileName)) return null;
+    const source = typeof input.source === 'string' ? input.source : Buffer.from(input.source);
 
     const result = await sharpResize(source, input.options);
     if (result) return result;
