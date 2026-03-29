@@ -18,13 +18,15 @@ import TextAlign from '@tiptap/extension-text-align';
 import TextStyle from '@tiptap/extension-text-style';
 import Typography from '@tiptap/extension-typography';
 import Underline from '@tiptap/extension-underline';
+import { Selection } from '@tiptap/pm/state';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { getCollabWebSocketUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
-import { EIGEN_CLIPBOARD_MIME, needsReUpload, readEigenClipboard, reUploadImage } from '@workspace/lib/clipboard';
+import { needsReUpload, readEigenClipboard, reUploadImage, writeEigenClipboard } from '@workspace/lib/clipboard';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import { MediaResolverProvider, useMediaResolver, useUploadFile } from '@workspace/lib/drive';
+import { useMediaQuery } from '@workspace/lib/media';
 import type { EigenClipboardData, EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Column, LoadingState } from '@workspace/ui';
@@ -35,8 +37,10 @@ import * as Y from 'yjs';
 import { CreateCommentDialog, ViewCommentDialog } from './comment-dialog';
 import { EditorToolbar } from './editor-toolbar';
 import { CommentMark } from './extensions/comment-mark';
-import { ResizableImage } from './extensions/resizable-image';
+import { Figure } from './extensions/figure';
 import { SmallMark } from './extensions/small-mark';
+import { FigurePropertiesPanel } from './figure-properties-panel';
+import { TablePropertiesPanel } from './table-properties-panel';
 
 const lowlight = createLowlight(common);
 const A4_WIDTH_PX = 794; // 210mm at 96dpi
@@ -191,13 +195,14 @@ const TiptapEditor = ({
                 Link.configure({
                     openOnClick: true,
                     HTMLAttributes: {
-                        class: 'text-blue-600 underline cursor-pointer',
+                        class: 'underline cursor-pointer',
+                        style: 'color: var(--color-link)',
                         target: '_blank',
                         rel: 'noopener noreferrer',
                     },
                     validate: (href) => /^(https?:|mailto:|tel:|\/)/i.test(href),
                 }),
-                ResizableImage,
+                Figure,
                 Highlight.configure({
                     multicolor: true,
                 }),
@@ -288,13 +293,18 @@ const TiptapEditor = ({
 
                     return doc.body.innerHTML;
                 },
-                handleDrop: (_view, event) => {
+                handleDrop: (view, event) => {
                     if (!event.dataTransfer) return false;
                     const files = Array.from(event.dataTransfer.files);
                     const imageFile = files.find((f) => f.type.startsWith('image/'));
                     if (imageFile && mediaFolderIdRef.current) {
                         event.preventDefault();
-                        handleImageUpload(imageFile);
+                        const dropPos = view.posAtCoords({ left: event.clientX, top: event.clientY });
+                        if (dropPos) {
+                            const tr = view.state.tr.setSelection(Selection.near(view.state.doc.resolve(dropPos.pos)));
+                            view.dispatch(tr);
+                        }
+                        handleImageUpload(imageFile).catch(() => {});
                         return true;
                     }
                     return false;
@@ -308,7 +318,7 @@ const TiptapEditor = ({
                         if (imageItem) {
                             event.preventDefault();
                             const width = imageItem.meta?.width as number | undefined;
-                            handleEigenImagePaste(imageItem, width);
+                            handleEigenImagePaste(imageItem, width).catch(() => {});
                             return true;
                         }
                     }
@@ -317,7 +327,7 @@ const TiptapEditor = ({
                     const imageFile = files.find((f) => f.type.startsWith('image/'));
                     if (imageFile && mediaFolderIdRef.current) {
                         event.preventDefault();
-                        handleImageUpload(imageFile);
+                        handleImageUpload(imageFile).catch(() => {});
                         return true;
                     }
                     return false;
@@ -331,11 +341,17 @@ const TiptapEditor = ({
 
     const handleImageUpload = async (file: File) => {
         if (!mediaFolderIdRef.current || !file.type.startsWith('image/')) return;
-        const mediaFolderId = mediaFolderIdRef.current;
-
-        const result = await uploadFile.mutateAsync({ parentId: mediaFolderId, file });
+        const result = await uploadFile.mutateAsync({ parentId: mediaFolderIdRef.current, file });
         if (result && editorRef.current) {
-            editorRef.current.chain().focus().setResizableImage({ mediaName: result.name }).run();
+            editorRef.current.chain().focus().setFigure({ mediaName: result.name }).run();
+        }
+    };
+
+    const handleReplaceImage = async (file: File) => {
+        if (!mediaFolderIdRef.current || !file.type.startsWith('image/') || !editorRef.current) return;
+        const result = await uploadFile.mutateAsync({ parentId: mediaFolderIdRef.current, file });
+        if (result) {
+            editorRef.current.chain().focus().updateAttributes('figure', { mediaName: result.name, width: null }).run();
         }
     };
 
@@ -353,28 +369,35 @@ const TiptapEditor = ({
                 item.mediaName,
             );
             if (result && editorRef.current) {
-                editorRef.current.chain().focus().setResizableImage({ mediaName: result.mediaName, width }).run();
+                editorRef.current
+                    .chain()
+                    .focus()
+                    .setFigure({ mediaName: result.mediaName, width, caption: item.caption })
+                    .run();
                 return;
             }
         }
         if (editorRef.current) {
-            editorRef.current.chain().focus().setResizableImage({ mediaName: item.mediaName, width }).run();
+            editorRef.current
+                .chain()
+                .focus()
+                .setFigure({ mediaName: item.mediaName, width, caption: item.caption })
+                .run();
         }
     };
 
     useEffect(() => {
         if (!editor) return;
-        const handleCopy = (e: ClipboardEvent) => {
+        const handleCopyOrCut = (e: ClipboardEvent) => {
             if (!editor.isFocused) return;
             const { from, to } = editor.state.selection;
             if (from === to) return;
 
             const items: EigenClipboardData['items'] = [];
             editor.state.doc.nodesBetween(from, to, (node) => {
-                if (node.type.name === 'resizableImage' && node.attrs.mediaName) {
+                if (node.type.name === 'figure' && node.attrs.mediaName) {
                     const mediaPath = resolveMediaPath(node.attrs.mediaName);
                     if (mediaPath) {
-                        const width = node.attrs.width ?? undefined;
                         items.push({
                             type: 'image',
                             mediaName: node.attrs.mediaName,
@@ -382,24 +405,25 @@ const TiptapEditor = ({
                             sourceParentId: mediaPath.parentId,
                             sourceOwnerId: mediaPath.ownerId,
                             sourceMountId: mediaPath.mountId,
-                            meta: { width },
+                            caption: node.attrs.caption || undefined,
+                            meta: { width: node.attrs.width ?? undefined },
                         });
                     }
                 }
             });
 
-            const text = editor.state.doc.textBetween(from, to, '\n');
-            if (text.trim()) {
-                items.push({ type: 'text', text: text.trim() });
-            }
-
             if (items.length > 0) {
-                const data: EigenClipboardData = { version: 1, items };
-                e.clipboardData?.setData(EIGEN_CLIPBOARD_MIME, JSON.stringify(data));
+                const text = editor.state.doc.textBetween(from, to, '\n').trim();
+                e.preventDefault();
+                writeEigenClipboard(e, { version: 1, items }, text || undefined);
             }
         };
-        document.addEventListener('copy', handleCopy);
-        return () => document.removeEventListener('copy', handleCopy);
+        document.addEventListener('copy', handleCopyOrCut);
+        document.addEventListener('cut', handleCopyOrCut);
+        return () => {
+            document.removeEventListener('copy', handleCopyOrCut);
+            document.removeEventListener('cut', handleCopyOrCut);
+        };
     }, [editor, resolveMediaPath]);
 
     const handleAddComment = () => {
@@ -416,7 +440,28 @@ const TiptapEditor = ({
         editor.chain().focus().setComment(chatName).run();
     };
 
+    const [sidebarContext, setSidebarContext] = useState<'document' | 'figure' | 'table'>('document');
+    const lastPanelRef = useRef<'figure' | 'table'>('figure');
+    if (sidebarContext !== 'document') lastPanelRef.current = sidebarContext;
+
+    useEffect(() => {
+        if (!editor) return;
+        const onUpdate = () => {
+            if (editor.isActive('figure')) setSidebarContext('figure');
+            else if (editor.isActive('table')) setSidebarContext('table');
+            else setSidebarContext('document');
+        };
+        editor.on('selectionUpdate', onUpdate);
+        return () => {
+            editor.off('selectionUpdate', onUpdate);
+        };
+    }, [editor]);
+
+    const isWide = !useMediaQuery('(max-width: 1200px)');
+
     if (!editor) return null;
+
+    const showSidebar = isWide && access.canWrite && sidebarContext !== 'document';
 
     return (
         <>
@@ -434,26 +479,43 @@ const TiptapEditor = ({
                     />
                 }
             >
-                <div
-                    ref={scrollContainerRef}
-                    className={`h-full w-full overflow-y-scroll bg-muted p-4 ${needsScale ? 'overflow-x-hidden' : ''}`}
-                >
+                <div className="h-full relative overflow-hidden">
                     <div
-                        data-document="true"
-                        className={`grid p-[2cm] bg-white text-black rounded-lg shadow-sm shadow-transparent w-[210mm] print:shadow-none ${needsScale ? '' : 'min-h-full m-auto'}`}
-                        ref={documentRef}
-                        style={
-                            needsScale
-                                ? {
-                                      transform: `scale(${canvasScale})`,
-                                      transformOrigin: 'top left',
-                                      marginBottom: -(1 - canvasScale) * docHeight,
-                                  }
-                                : undefined
-                        }
+                        ref={scrollContainerRef}
+                        className={`h-full w-full overflow-y-scroll bg-muted p-4 ${needsScale ? 'overflow-x-hidden' : ''}`}
                     >
-                        <EditorContent editor={editor} className="h-full tiptap-wrapper" />
+                        <div
+                            data-document="true"
+                            className={`grid p-[2cm] bg-white text-black rounded-lg shadow-sm shadow-transparent w-[210mm] print:shadow-none ${needsScale ? '' : 'min-h-full m-auto'}`}
+                            ref={documentRef}
+                            style={
+                                needsScale
+                                    ? {
+                                          transform: `scale(${canvasScale})`,
+                                          transformOrigin: 'top left',
+                                          marginBottom: -(1 - canvasScale) * docHeight,
+                                      }
+                                    : undefined
+                            }
+                        >
+                            <EditorContent editor={editor} className="h-full tiptap-wrapper" />
+                        </div>
                     </div>
+                    {isWide && access.canWrite && (
+                        <div
+                            className={`absolute inset-y-0 right-0 transition-transform duration-200 ease-in-out ${showSidebar ? 'translate-x-0' : 'translate-x-full'}`}
+                        >
+                            {lastPanelRef.current === 'figure' ? (
+                                <FigurePropertiesPanel
+                                    key={editor.state.selection.from}
+                                    editor={editor}
+                                    onReplaceImage={handleReplaceImage}
+                                />
+                            ) : (
+                                <TablePropertiesPanel editor={editor} />
+                            )}
+                        </div>
+                    )}
                 </div>
             </Column>
 

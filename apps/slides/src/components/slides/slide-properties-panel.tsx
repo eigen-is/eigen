@@ -1,17 +1,18 @@
 import { useMediaResolver } from '@workspace/lib/drive';
 import { Button } from '@workspace/ui/components/button';
-import { Input } from '@workspace/ui/components/input';
 import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker';
 import { FontPicker } from '@workspace/ui/components/layout/media/font-picker';
-import { PropertiesPanel, PropertyRow, PropertySection } from '@workspace/ui/components/layout/properties-panel';
+import {
+    AlignmentPicker,
+    PropertiesPanel,
+    PropertyNumberInput,
+    PropertyRow,
+    PropertySection,
+} from '@workspace/ui/components/layout/properties-panel';
 import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Toggle } from '@workspace/ui/components/toggle';
 import {
-    AlignCenter,
-    AlignJustify,
-    AlignLeft,
-    AlignRight,
     AlignVerticalJustifyCenter,
     AlignVerticalJustifyEnd,
     AlignVerticalJustifyStart,
@@ -204,33 +205,22 @@ function TextProperties({
                 </div>
 
                 <div className="flex items-center gap-1 pt-1">
-                    <Toggle
-                        size="sm"
-                        pressed={textAlign === 'left'}
-                        onPressedChange={() => onUpdate({ textAlign: 'left' })}
-                    >
-                        <AlignLeft className="h-4 w-4" />
-                    </Toggle>
-                    <Toggle
-                        size="sm"
-                        pressed={textAlign === 'center'}
-                        onPressedChange={() => onUpdate({ textAlign: 'center' })}
-                    >
-                        <AlignCenter className="h-4 w-4" />
-                    </Toggle>
-                    <Toggle
-                        size="sm"
-                        pressed={textAlign === 'right'}
-                        onPressedChange={() => onUpdate({ textAlign: 'right' })}
-                    >
-                        <AlignRight className="h-4 w-4" />
-                    </Toggle>
+                    <AlignmentPicker
+                        value={isMixed(textAlign) ? undefined : (textAlign as 'left' | 'center' | 'right' | undefined)}
+                        onChange={(a) => onUpdate({ textAlign: a })}
+                    />
                     <Toggle
                         size="sm"
                         pressed={textAlign === 'justify'}
                         onPressedChange={() => onUpdate({ textAlign: 'justify' })}
                     >
-                        <AlignJustify className="h-4 w-4" />
+                        {/* Keep justify inline since AlignmentPicker only handles left/center/right */}
+                        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <title>Justify</title>
+                            <line x1="3" y1="6" x2="21" y2="6" />
+                            <line x1="3" y1="12" x2="21" y2="12" />
+                            <line x1="3" y1="18" x2="21" y2="18" />
+                        </svg>
                     </Toggle>
                 </div>
 
@@ -468,6 +458,32 @@ function ColorRow({
     );
 }
 
+function MergedNumberInput({
+    value,
+    onChange,
+    min,
+    max,
+    step,
+}: {
+    value: MergedValue<number>;
+    onChange: (v: number) => void;
+    min?: number;
+    max?: number;
+    step?: number;
+}) {
+    const mixed = isMixed(value);
+    return (
+        <PropertyNumberInput
+            value={mixed ? undefined : value}
+            onChange={onChange}
+            min={min}
+            max={max}
+            step={step}
+            placeholder={mixed ? '—' : undefined}
+        />
+    );
+}
+
 type ApplyTo = 'this' | 'this-and-following' | 'all';
 
 type SlideBackgroundPanelProps = {
@@ -593,55 +609,5 @@ export function SlideBackgroundPanel({
                 </div>
             </div>
         </PropertiesPanel>
-    );
-}
-
-function MergedNumberInput({
-    value,
-    onChange,
-    min,
-    max,
-    step,
-}: {
-    value: MergedValue<number>;
-    onChange: (v: number) => void;
-    min?: number;
-    max?: number;
-    step?: number;
-}) {
-    const mixed = isMixed(value);
-    const [localValue, setLocalValue] = useState(() => (mixed ? '' : String(value ?? '')));
-    const [focused, setFocused] = useState(false);
-
-    const externalStr = mixed ? '' : String(value ?? '');
-    if (!focused && localValue !== externalStr) {
-        setLocalValue(externalStr);
-    }
-
-    return (
-        <Input
-            type="number"
-            className="h-7 text-xs"
-            value={focused ? localValue : externalStr}
-            placeholder={mixed ? '—' : undefined}
-            onChange={(e) => {
-                const raw = e.target.value;
-                setLocalValue(raw);
-                if (raw !== '' && raw !== '-') {
-                    const v = Number(raw);
-                    if (!Number.isNaN(v)) onChange(v);
-                }
-            }}
-            onFocus={() => setFocused(true)}
-            onBlur={() => {
-                setFocused(false);
-                if (localValue === '' || localValue === '-') {
-                    setLocalValue(externalStr);
-                }
-            }}
-            min={min}
-            max={max}
-            step={step}
-        />
     );
 }
