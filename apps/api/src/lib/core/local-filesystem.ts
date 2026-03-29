@@ -21,11 +21,7 @@ export class LocalFilesystem {
         return resolved;
     }
 
-    read(filePath: string): BunFile {
-        return Bun.file(this.getFilePath(filePath));
-    }
-
-    async write(filePath: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
+    async write(filePath: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile | string): Promise<number> {
         const fullPath = this.getFilePath(filePath);
         const dir = path.dirname(fullPath);
         if (!fs.existsSync(dir)) {
@@ -50,11 +46,11 @@ export class LocalFilesystem {
     }
 
     async exists(filePath: string): Promise<boolean> {
-        return await this.read(filePath).exists();
+        return await this.file(filePath).exists();
     }
 
     async size(filePath: string): Promise<number | null> {
-        const file = this.read(filePath);
+        const file = this.file(filePath);
         if (await file.exists()) {
             return file.size;
         }
@@ -109,7 +105,7 @@ export class LocalFilesystem {
     }
 
     async fileExists(filePath: string): Promise<boolean> {
-        return await this.read(filePath).exists();
+        return await this.file(filePath).exists();
     }
 
     async dirSize(dirPath: string): Promise<number> {
@@ -150,23 +146,8 @@ export class LocalFilesystem {
         await fsPromises.unlink(fullPath);
     }
 
-    file(filePath: string) {
-        const fullPath = this.getFilePath(filePath);
-        const bunFile = Bun.file(fullPath);
-        return {
-            exists: () => bunFile.exists(),
-            arrayBuffer: () => bunFile.arrayBuffer(),
-            text: () => bunFile.text(),
-            json: () => bunFile.json(),
-            size: bunFile.size,
-            write: async (data: Buffer | Uint8Array | ArrayBuffer | string) => {
-                const dir = path.dirname(fullPath);
-                if (!fs.existsSync(dir)) {
-                    fs.mkdirSync(dir, { recursive: true });
-                }
-                return Bun.write(fullPath, data);
-            },
-        };
+    file(filePath: string): BunFile {
+        return Bun.file(this.getFilePath(filePath));
     }
 
     watch(relativePath: string, callback: fs.WatchListener<string>): fs.FSWatcher {

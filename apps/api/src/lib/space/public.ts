@@ -2,6 +2,7 @@ import { parseOwnerId } from '@workspace/lib/types';
 import type { PublicUser } from '@workspace/lib/types/public';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import type { User } from 'better-auth/types';
+import type { BunFile } from 'bun';
 import { ApiError } from '../core';
 import { getHome } from '../home';
 import { getTeam } from '../team';
@@ -33,7 +34,7 @@ export async function getPublicInfo(emailOrId: string): Promise<PublicUser> {
     throw new ApiError(404, 'User not found');
 }
 
-export async function getAvatarByEmailOrId(emailOrId: string): Promise<ArrayBuffer | null> {
+export async function getAvatarByEmailOrId(emailOrId: string): Promise<BunFile | null> {
     const user = await getUserByEmailOrId(emailOrId);
     if (!user?.image) return null;
 
@@ -43,7 +44,7 @@ export async function getAvatarByEmailOrId(emailOrId: string): Promise<ArrayBuff
     const home = await getHome(user.id);
     const file = home.fs.file(`eigen.contacts/avatars/${filename}`);
     if (await file.exists()) {
-        return file.arrayBuffer();
+        return file;
     }
     return null;
 }
