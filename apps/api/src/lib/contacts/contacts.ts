@@ -302,7 +302,6 @@ export class Contacts {
         const result = await generateImagePreview(buffer, file.type, file.name, '', 'avatar', {
             maxSize: 512,
             quality: 80,
-            format: 'webp',
             fit: 'cover',
         });
 

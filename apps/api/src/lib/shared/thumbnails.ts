@@ -7,21 +7,19 @@ import type { StorageFile } from '../storage';
 
 type ImageSource = StorageFile | Buffer | string;
 
-export type ThumbnailOptions = {
+type ThumbnailOptions = {
     maxSize?: number;
     quality?: number;
-    format?: 'webp' | 'jpeg';
     fit?: 'inside' | 'cover';
 };
 
 const DEFAULT_OPTIONS: Required<ThumbnailOptions> = {
     maxSize: 512,
     quality: 80,
-    format: 'webp',
     fit: 'inside',
 };
 
-export type ImageResult = ImageDimensions & {
+type ImageResult = ImageDimensions & {
     data: Buffer;
 };
 
@@ -49,10 +47,7 @@ async function sharpResize(source: ImageSource, options?: ThumbnailOptions): Pro
             withoutEnlargement: opts.fit === 'inside',
         });
 
-        const data =
-            opts.format === 'webp'
-                ? await resized.webp({ quality: opts.quality }).toBuffer()
-                : await resized.jpeg({ quality: opts.quality }).toBuffer();
+        const data = await resized.webp({ quality: opts.quality }).toBuffer();
 
         return { data, width, height };
     } catch {
@@ -125,8 +120,8 @@ export async function generateImagePreview(
     }
 }
 
-export function getThumbnailPath(thumbsDir: string, pathId: string, format: 'webp' | 'jpeg' = 'webp'): string {
-    return path.join(thumbsDir, `${pathId}.${format}`);
+function getThumbnailPath(thumbsDir: string, pathId: string): string {
+    return path.join(thumbsDir, `${pathId}.webp`);
 }
 
 export async function saveThumbnail(
@@ -146,44 +141,26 @@ export async function saveThumbnail(
         fs.mkdirSync(thumbsDir, { recursive: true });
     }
 
-    const thumbPath = getThumbnailPath(thumbsDir, pathId, opts.format);
+    const thumbPath = getThumbnailPath(thumbsDir, pathId);
     await Bun.write(thumbPath, result.data);
 
-    return { ...result, fileName: `${pathId}.${opts.format}` };
+    return { ...result, fileName: `${pathId}.webp` };
 }
 
 export async function deleteThumbnail(thumbsDir: string, pathId: string): Promise<void> {
-    const webpPath = getThumbnailPath(thumbsDir, pathId, 'webp');
-    const jpegPath = getThumbnailPath(thumbsDir, pathId, 'jpeg');
-
     try {
-        const webpFile = Bun.file(webpPath);
-        if (await webpFile.exists()) {
-            await webpFile.delete();
-        }
-    } catch {}
-
-    try {
-        const jpegFile = Bun.file(jpegPath);
-        if (await jpegFile.exists()) {
-            await jpegFile.delete();
+        const file = Bun.file(getThumbnailPath(thumbsDir, pathId));
+        if (await file.exists()) {
+            await file.delete();
         }
     } catch {}
 }
 
 export async function getThumbnail(thumbsDir: string, pathId: string): Promise<Buffer | null> {
-    const webpPath = getThumbnailPath(thumbsDir, pathId, 'webp');
-    const jpegPath = getThumbnailPath(thumbsDir, pathId, 'jpeg');
-
     try {
-        const webpFile = Bun.file(webpPath);
-        if (await webpFile.exists()) {
-            return Buffer.from(await webpFile.arrayBuffer());
-        }
-
-        const jpegFile = Bun.file(jpegPath);
-        if (await jpegFile.exists()) {
-            return Buffer.from(await jpegFile.arrayBuffer());
+        const file = Bun.file(getThumbnailPath(thumbsDir, pathId));
+        if (await file.exists()) {
+            return Buffer.from(await file.arrayBuffer());
         }
     } catch {}
 
