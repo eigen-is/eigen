@@ -230,7 +230,7 @@ class MessageSplitter extends Transform {
         });
     }
 
-    compareBoundary(line: Buffer, startpos: number, boundary: Buffer): number | false {
+    private compareBoundary(line: Buffer, startpos: number, boundary: Buffer): number | false {
         if (line.length < boundary.length + 3 + startpos || line.length > boundary.length + 6 + startpos) {
             return false;
         }
@@ -264,7 +264,7 @@ class MessageSplitter extends Transform {
         return 2;
     }
 
-    checkBoundary(line: Buffer): number | false {
+    private checkBoundary(line: Buffer): number | false {
         let startpos = 0;
         if (line.length >= 1 && (line[0] === 0x0d || line[0] === 0x0a)) {
             startpos++;
@@ -288,7 +288,7 @@ class MessageSplitter extends Transform {
         return false;
     }
 
-    processLine(line: Buffer | null, final: boolean, next: ProcessLineCallback): void {
+    private processLine(line: Buffer | null, final: boolean, next: ProcessLineCallback): void {
         let flush = false;
 
         if (this.line && line) {
@@ -417,7 +417,7 @@ class MessageSplitter extends Transform {
         next(null, null);
     }
 
-    newNode(parent?: MimeNode | null): void {
+    private newNode(parent?: MimeNode | null): void {
         this.node = new MimeNode(parent ?? null, this.config);
         this.state = HEAD;
         this.nodeCounter++;

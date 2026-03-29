@@ -67,7 +67,7 @@ export class JsonStore<T extends Record<string, unknown>> {
         return this.data;
     }
 
-    async save(): Promise<void> {
+    private async save(): Promise<void> {
         const json = JSON.stringify(this.data, null, 2);
         const tmpFile = `${this.filename}.tmp`;
         await this.fs.write(tmpFile, json);

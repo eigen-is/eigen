@@ -109,7 +109,7 @@ export class ManagedDatabase<S extends SchemaType> {
         return this.getTotalChanges() !== this.lastSyncedChanges;
     }
 
-    async sync(): Promise<void> {
+    private async sync(): Promise<void> {
         if (!this.isDirty || !this.callbacks.onSync) return;
 
         this.rawDb?.run('PRAGMA wal_checkpoint(PASSIVE);');

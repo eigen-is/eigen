@@ -53,7 +53,7 @@ class NodeRewriter extends Transform {
         callback();
     }
 
-    processIncoming(data: RewriteData | MimeNode, callback: TransformCallback): void {
+    private processIncoming(data: RewriteData | MimeNode, callback: TransformCallback): void {
         const dataObj = data as RewriteData;
 
         if (this.decoder && dataObj.type === 'body') {
@@ -85,7 +85,7 @@ class NodeRewriter extends Transform {
         callback();
     }
 
-    createDecodePair(node: MimeNode): DecodePairResult {
+    private createDecodePair(node: MimeNode): DecodePairResult {
         this.decoder = node.getDecoder() as DecoderStream;
 
         if (['base64', 'quoted-printable'].includes(node.encoding)) {

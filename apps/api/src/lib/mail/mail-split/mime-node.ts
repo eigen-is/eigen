@@ -80,7 +80,7 @@ class MimeNode {
         this.childPartNumbers = 0;
     }
 
-    getPartNr(provided?: string): PartNrSegment[] {
+    private getPartNr(provided?: string): PartNrSegment[] {
         if (provided) {
             return ([] as PartNrSegment[])
                 .concat(this.partNr || [])
@@ -213,68 +213,6 @@ class MimeNode {
         }
 
         (this.headers as Headers).update('Content-Type', this.libmime.buildHeaderValue(this._parsedContentType));
-    }
-
-    setCharset(charset?: string): void {
-        if (!this.headers) {
-            this.parseHeaders();
-        }
-
-        charset = (charset || '').toLowerCase().trim();
-
-        if (charset === 'ascii') {
-            charset = '';
-        }
-
-        const ctParams = this._parsedContentType.params;
-        if (!charset) {
-            if (!this._parsedContentType.value) {
-                return;
-            }
-            delete ctParams['charset'];
-        } else {
-            ctParams['charset'] = charset;
-        }
-
-        if (!this._parsedContentType.value) {
-            this._parsedContentType.value = 'text/plain';
-        }
-
-        (this.headers as Headers).update('Content-Type', this.libmime.buildHeaderValue(this._parsedContentType));
-    }
-
-    setFilename(filename?: string): void {
-        if (!this.headers) {
-            this.parseHeaders();
-        }
-
-        this.filename = (filename || '').toLowerCase().trim();
-
-        const ctParams = this._parsedContentType.params;
-        const dispParams = this._parsedContentDisposition.params;
-
-        if (ctParams['name']) {
-            delete ctParams['name'];
-            (this.headers as Headers).update('Content-Type', this.libmime.buildHeaderValue(this._parsedContentType));
-        }
-
-        if (!this.filename) {
-            if (!this._parsedContentDisposition.value) {
-                return;
-            }
-            delete dispParams['filename'];
-        } else {
-            dispParams['filename'] = this.filename;
-        }
-
-        if (!this._parsedContentDisposition.value) {
-            this._parsedContentDisposition.value = 'attachment';
-        }
-
-        (this.headers as Headers).update(
-            'Content-Disposition',
-            this.libmime.buildHeaderValue(this._parsedContentDisposition),
-        );
     }
 
     getDecoder(): Transform | PassThrough {

@@ -116,7 +116,7 @@ export class Contacts {
         return total;
     }
 
-    public async setContactLabels(contactId: string, labels: string[]) {
+    private async setContactLabels(contactId: string, labels: string[]) {
         this.db.transaction((tx) => {
             tx.delete(schema.contactsToLabels).where(eq(schema.contactsToLabels.contactId, contactId)).run();
             for (const labelId of labels) {

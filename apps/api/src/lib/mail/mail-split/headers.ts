@@ -9,11 +9,6 @@ type HeaderConfig = {
     Iconv?: unknown;
 };
 
-type DecodedHeader = {
-    value?: string;
-    params?: Record<string, string>;
-};
-
 class Headers {
     changed: boolean;
     headers: string | Buffer | null;
@@ -43,14 +38,6 @@ class Headers {
         this.libmime = new libmime.Libmime({ Iconv: cfg.Iconv });
     }
 
-    hasHeader(key: string): boolean {
-        if (!this.parsed) {
-            this._parseHeaders();
-        }
-        key = this._normalizeHeader(key);
-        return typeof this.lines.find((line) => line.key === key) === 'object';
-    }
-
     get(key: string): string[] {
         if (!this.parsed) {
             this._parseHeaders();
@@ -59,12 +46,6 @@ class Headers {
         const lines = this.lines.filter((line) => line.key === key).map((line) => line.line);
 
         return lines;
-    }
-
-    getDecoded(key: string): DecodedHeader[] {
-        return this.get(key)
-            .map((line) => this.libmime.decodeHeader(line) as DecodedHeader)
-            .filter((line) => line?.value);
     }
 
     getFirst(key: string): string {
@@ -76,7 +57,7 @@ class Headers {
         if (!header) {
             return '';
         }
-        return ((this.libmime.decodeHeader(header.line) as DecodedHeader | null)?.value || '').toString().trim();
+        return ((this.libmime.decodeHeader(header.line) as { value?: string } | null)?.value || '').toString().trim();
     }
 
     getList(): HeaderLine[] {
@@ -86,7 +67,7 @@ class Headers {
         return this.lines;
     }
 
-    add(key: string, value: string | number | Buffer | undefined, index?: number): void {
+    private add(key: string, value: string | number | Buffer | undefined, index?: number): void {
         if (typeof value === 'undefined') {
             return;
         }
@@ -103,7 +84,7 @@ class Headers {
         this.addFormatted(key, this.libmime.foldLines(`${key}: ${strValue.replace(/\r?\n/g, '')}`, 76, false), index);
     }
 
-    addFormatted(key: string, line: string | Buffer | undefined, index?: number): void {
+    private addFormatted(key: string, line: string | Buffer | undefined, index?: number): void {
         if (!this.parsed) {
             this._parseHeaders();
         }
@@ -132,19 +113,6 @@ class Headers {
             this.lines.push(header);
         } else {
             this.lines.splice(index, 0, header);
-        }
-    }
-
-    remove(key: string): void {
-        if (!this.parsed) {
-            this._parseHeaders();
-        }
-        key = this._normalizeHeader(key);
-        for (let i = this.lines.length - 1; i >= 0; i--) {
-            if (this.lines[i].key === key) {
-                this.changed = true;
-                this.lines.splice(i, 1);
-            }
         }
     }
 
@@ -202,11 +170,11 @@ class Headers {
         return Buffer.from(headers, 'binary');
     }
 
-    _normalizeHeader(key: string): string {
+    private _normalizeHeader(key: string): string {
         return (key || '').toLowerCase().trim();
     }
 
-    _parseHeaders(): void {
+    private _parseHeaders(): void {
         if (!this.headers) {
             this.lines = [];
             this.parsed = true;
