@@ -25,6 +25,7 @@ import {
 import { SSEventType } from '@workspace/lib/types/sse';
 import { validateACLEntries, validateEmailAddress } from '@workspace/lib/validation';
 import type { User } from 'better-auth/types';
+import type { BunFile } from 'bun';
 import { eq } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { createAsyncSingleton } from '../../utils/singleton';
@@ -466,11 +467,10 @@ export default class Drive {
         return getTextPreviewData(mount, path);
     }
 
-    async getThumbnail(mountId: string, fileName: string): Promise<ArrayBuffer | null> {
+    async getThumbnail(mountId: string, fileName: string): Promise<BunFile | null> {
         const mount = this.getMount(mountId);
         const pathId = fileName.split('.')[0];
-        const data = await getThumbnail(mount.thumbsDir, pathId);
-        return data ? new Uint8Array(data).buffer : null;
+        return getThumbnail(mount.thumbsDir, pathId);
     }
 
     async getMimeTypeContents(
