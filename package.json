@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "prepare": "git config core.hooksPath .githooks",
-    "serve": "bun --workspaces dev",
+    "serve": "bun --filter './apps/*' dev",
     "serve:index": "bun --filter '@apps/api' --filter './apps/index' dev",
     "serve:mail": "bun --filter '@apps/api' --filter './apps/mail' dev",
     "serve:space": "bun --filter '@apps/api' --filter './apps/space' dev",
