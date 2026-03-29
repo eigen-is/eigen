@@ -155,7 +155,10 @@
       "Bash(bunx:*)",
       "Bash(echo \"Updated $f\")",
       "Bash(chmod:*)",
-      "Bash(./.githooks/pre-commit 2>&1)"
+      "Bash(./.githooks/pre-commit 2>&1)",
+      "Bash(sort -t'│' -k2 -rn)",
+      "Bash(sort -t: -k2 -rn)",
+      "Bash(time npx:*)"
     ]
   },
   "enabledPlugins": {
