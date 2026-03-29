@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { ImageDimensions } from '@workspace/lib/types/drive';
+import type { BunFile } from 'bun';
 import { isExiftoolCandidate } from '../preview/exiftool-preview';
 import type { StorageFile } from '../storage';
 
@@ -118,12 +119,10 @@ export async function deleteThumbnail(thumbsDir: string, pathId: string): Promis
     } catch {}
 }
 
-export async function getThumbnail(thumbsDir: string, pathId: string): Promise<Buffer | null> {
+export async function getThumbnail(thumbsDir: string, pathId: string): Promise<BunFile | null> {
     try {
         const file = Bun.file(getThumbnailPath(thumbsDir, pathId));
-        if (await file.exists()) {
-            return Buffer.from(await file.arrayBuffer());
-        }
+        if (await file.exists()) return file;
     } catch {}
 
     return null;
