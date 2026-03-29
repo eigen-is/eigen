@@ -159,7 +159,9 @@
       "Bash(sort -t'│' -k2 -rn)",
       "Bash(sort -t: -k2 -rn)",
       "Bash(time npx:*)",
-      "WebFetch(domain:tiptap.dev)"
+      "WebFetch(domain:tiptap.dev)",
+      "WebFetch(domain:discuss.prosemirror.net)",
+      "WebFetch(domain:api.github.com)"
     ]
   },
   "enabledPlugins": {
