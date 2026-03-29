@@ -1,8 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { ImageDimensions } from '@workspace/lib/types/drive';
-import sharp from 'sharp';
-import { cleanupExtract, extractEmbeddedPreview, isExiftoolCandidate } from '../preview/exiftool-preview';
+import { isExiftoolCandidate } from '../preview/exiftool-preview';
 import type { StorageFile } from '../storage';
 
 type ImageSource = StorageFile | Buffer | string;
@@ -23,54 +22,6 @@ type ImageResult = ImageDimensions & {
     data: Buffer;
 };
 
-async function toBuffer(source: ImageSource): Promise<Buffer> {
-    if (Buffer.isBuffer(source)) return source;
-    if (typeof source === 'string') return Buffer.from(await Bun.file(source).arrayBuffer());
-    return Buffer.from(await source.arrayBuffer());
-}
-
-async function sharpResize(source: ImageSource, options?: ThumbnailOptions): Promise<ImageResult | null> {
-    const opts = { ...DEFAULT_OPTIONS, ...options };
-    try {
-        // sharp accepts file paths directly (zero-copy) or Buffers
-        const image = typeof source === 'string' ? sharp(source) : sharp(await toBuffer(source));
-        const metadata = await image.metadata();
-
-        if (!metadata.width || !metadata.height) return null;
-        if (metadata.width > 12000 || metadata.height > 12000) return null;
-
-        const { width, height } = metadata;
-
-        const resized = image.resize(opts.maxSize, opts.maxSize, {
-            fit: opts.fit,
-            position: 'center',
-            withoutEnlargement: opts.fit === 'inside',
-        });
-
-        const data = await resized.webp({ quality: opts.quality }).toBuffer();
-
-        return { data, width, height };
-    } catch {
-        return null;
-    }
-}
-
-async function heicToJpeg(source: ImageSource): Promise<Buffer | null> {
-    try {
-        // @ts-expect-error -- no type declarations available for heic-convert
-        const convert = (await import('heic-convert')).default as (opts: {
-            buffer: Buffer;
-            format: string;
-            quality: number;
-        }) => Promise<ArrayBuffer>;
-        const buffer = await toBuffer(source);
-        const output = await convert({ buffer, format: 'JPEG', quality: 0.8 });
-        return Buffer.from(output);
-    } catch {
-        return null;
-    }
-}
-
 export async function generateImagePreview(
     source: ImageSource,
     mimeType: string,
@@ -81,43 +32,54 @@ export async function generateImagePreview(
 ): Promise<ImageResult | null> {
     if (!isExiftoolCandidate(mimeType, fileName)) return null;
 
-    // Try sharp first — handles JPEG, PNG, WebP, GIF, TIFF, and HEIC (if libvips supports it)
-    const result = await sharpResize(source, options);
-    if (result) return result;
+    const opts = { ...DEFAULT_OPTIONS, ...options };
 
-    // Sharp failed on HEIC — convert to JPEG first, then resize
-    if (mimeType === 'image/heic' || mimeType === 'image/heif') {
-        const jpeg = await heicToJpeg(source);
-        if (jpeg) {
-            const converted = await sharpResize(jpeg, options);
-            if (converted) return converted;
-        }
-    }
-
-    // Sharp + HEIC conversion both failed — try exiftool (needs a file on disk)
-    let filePath: string;
-    let tempFile: string | null = null;
-
+    // Resolve source for transfer to the worker:
+    // - String paths and BunFile paths are passed as-is — worker/sharp reads from disk (zero-copy)
+    // - S3File/Buffer → arrayBuffer for zero-copy transfer via postMessage
+    let resolvedSource: string | ArrayBuffer;
     if (typeof source === 'string') {
-        filePath = source;
+        resolvedSource = source;
+    } else if (Buffer.isBuffer(source)) {
+        resolvedSource = source.buffer.slice(source.byteOffset, source.byteOffset + source.byteLength) as ArrayBuffer;
+    } else if (!('bucket' in source) && source.name) {
+        // BunFile — pass its local file path so the worker/sharp can read directly from disk
+        resolvedSource = source.name;
     } else {
-        tempFile = path.join(tmpDir, `${pathId}-src.tmp`);
-        await Bun.write(tempFile, await toBuffer(source));
-        filePath = tempFile;
+        // S3File — download to buffer, transfer zero-copy to worker
+        resolvedSource = await source.arrayBuffer();
     }
 
-    try {
-        const extractPath = await extractEmbeddedPreview(filePath, tmpDir, pathId);
-        if (!extractPath) return null;
+    return new Promise((resolve) => {
+        const worker = new Worker(new URL('./thumbnail-worker.ts', import.meta.url).href);
 
-        try {
-            return await sharpResize(extractPath, options);
-        } finally {
-            await cleanupExtract(extractPath);
+        worker.onmessage = (event: MessageEvent) => {
+            worker.terminate();
+            if (!event.data.ok) {
+                resolve(null);
+                return;
+            }
+            resolve({
+                data: Buffer.from(event.data.data),
+                width: event.data.width,
+                height: event.data.height,
+            });
+        };
+
+        worker.onerror = (err) => {
+            console.error(`[thumbnail-worker] Error for ${pathId}:`, err);
+            worker.terminate();
+            resolve(null);
+        };
+
+        const message = { source: resolvedSource, mimeType, fileName, tmpDir, pathId, options: opts };
+
+        if (resolvedSource instanceof ArrayBuffer) {
+            worker.postMessage(message, [resolvedSource]);
+        } else {
+            worker.postMessage(message);
         }
-    } finally {
-        if (tempFile) await cleanupExtract(tempFile);
-    }
+    });
 }
 
 function getThumbnailPath(thumbsDir: string, pathId: string): string {
