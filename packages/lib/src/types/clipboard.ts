@@ -11,6 +11,7 @@ export type EigenClipboardImageItem = {
     sourceParentId: string | null;
     sourceOwnerId: string;
     sourceMountId: string;
+    caption?: string;
     meta?: Record<string, unknown>;
 };
 

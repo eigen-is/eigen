@@ -639,81 +639,14 @@ export const EditorToolbar = ({
                         )}
 
                         {/* Table */}
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button
-                                    variant={editor.isActive('table') ? 'secondary' : 'ghost'}
-                                    size="icon"
-                                    className="h-8 w-8"
-                                    onMouseDown={(e) => e.preventDefault()}
-                                >
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <Table className="h-4 w-4" />
-                                        </TooltipTrigger>
-                                        <TooltipContent>Table</TooltipContent>
-                                    </Tooltip>
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent>
-                                {!editor.isActive('table') ? (
-                                    <DropdownMenuItem
-                                        onClick={() =>
-                                            editor
-                                                .chain()
-                                                .focus()
-                                                .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
-                                                .run()
-                                        }
-                                    >
-                                        Insert 3×3 table
-                                    </DropdownMenuItem>
-                                ) : (
-                                    <>
-                                        <DropdownMenuItem onClick={() => editor.chain().focus().addColumnAfter().run()}>
-                                            Add column after
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem
-                                            onClick={() => editor.chain().focus().addColumnBefore().run()}
-                                        >
-                                            Add column before
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => editor.chain().focus().deleteColumn().run()}>
-                                            Delete column
-                                        </DropdownMenuItem>
-                                        <DropdownMenuSeparator />
-                                        <DropdownMenuItem onClick={() => editor.chain().focus().addRowAfter().run()}>
-                                            Add row after
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => editor.chain().focus().addRowBefore().run()}>
-                                            Add row before
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => editor.chain().focus().deleteRow().run()}>
-                                            Delete row
-                                        </DropdownMenuItem>
-                                        <DropdownMenuSeparator />
-                                        <DropdownMenuItem
-                                            onClick={() => editor.chain().focus().toggleHeaderRow().run()}
-                                        >
-                                            Toggle header row
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => editor.chain().focus().mergeCells().run()}>
-                                            Merge cells
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => editor.chain().focus().splitCell().run()}>
-                                            Split cell
-                                        </DropdownMenuItem>
-                                        <DropdownMenuSeparator />
-                                        <DropdownMenuItem
-                                            onClick={() => editor.chain().focus().deleteTable().run()}
-                                            className="text-destructive"
-                                        >
-                                            Delete table
-                                        </DropdownMenuItem>
-                                    </>
-                                )}
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+                        <TooltipButton
+                            icon={Table}
+                            tooltipText="Insert table"
+                            preventFocusLoss
+                            onClick={() =>
+                                editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
+                            }
+                        />
 
                         {/* Image upload */}
                         {onImageUpload && (
