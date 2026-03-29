@@ -52,7 +52,7 @@ export async function generateImagePreview(
     }
 
     return new Promise((resolve) => {
-        const worker = new Worker(new URL('./thumbnail-worker.ts', import.meta.url).href);
+        const worker = new Worker(new URL('./thumbnail-worker.ts', import.meta.url));
 
         worker.onmessage = (event: MessageEvent) => {
             worker.terminate();

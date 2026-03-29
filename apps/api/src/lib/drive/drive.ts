@@ -33,6 +33,7 @@ import { ChatRoom } from '../chat';
 import CollabDocument from '../collab/collabDocument';
 import { getDomain } from '../config/server-config';
 import { ApiError, type DatabaseConfig, type ManagedDatabase, type SchemaType } from '../core';
+import { contentDisposition } from '../core/http';
 import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
 import { createDefaultMountConfig, createMountConfig, Mount } from '../mount';
@@ -382,6 +383,22 @@ export default class Drive {
     async downloadFile(mountId: string, pathId: string) {
         const mount = this.getMount(mountId);
         return await mount.readFile(pathId);
+    }
+
+    async serveFile(mountId: string, pathId: string, disposition: 'attachment' | 'inline'): Promise<Response> {
+        const mount = this.getMount(mountId);
+        const path = await mount.getPath(pathId);
+        if (!path || path.type !== DRIVE_TYPE_FILE) throw new ApiError(404, 'File not found');
+        const file = await mount.readFile(pathId);
+        if (!file) throw new ApiError(404, 'File not found');
+        return new Response(file, {
+            headers: {
+                'Content-Type': path.mimeType || 'application/octet-stream',
+                'Content-Disposition': contentDisposition(disposition, path.details?.originalName || path.name),
+                'Cache-Control': 'public, max-age=86400',
+                Expires: new Date(Date.now() + 86400000).toUTCString(),
+            },
+        });
     }
 
     async writeFileContent(mountId: string, pathId: string, data: Buffer): Promise<DrivePath> {

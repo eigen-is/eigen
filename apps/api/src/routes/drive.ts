@@ -1,6 +1,5 @@
 import { Elysia, t } from 'elysia';
 import { getUploadMaxSize } from '../lib/config/enforcement';
-import { contentDisposition } from '../lib/core';
 import { getSharedDrive } from '../lib/drive';
 import { getHome } from '../lib/home';
 import { betterAuth } from './auth';
@@ -164,50 +163,17 @@ export const driveRouter = new Elysia({ name: 'drive' })
     )
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/download',
-        async ({ params, user, set }) => {
+        async ({ params, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
-            const path = await drive.getPath(params.mountId, params.pathId);
-            if (!path || path.type !== 'file') {
-                set.status = 404;
-                return 'File not found';
-            }
-            const file = await drive.downloadFile(params.mountId, params.pathId);
-            if (!file) {
-                set.status = 404;
-                return 'File not found';
-            }
-            return new Response(file, {
-                headers: {
-                    'Content-Disposition': contentDisposition('attachment', path.details?.originalName || path.name),
-                    'Cache-Control': 'public, max-age=86400',
-                    Expires: new Date(Date.now() + 86400000).toUTCString(),
-                },
-            });
+            return drive.serveFile(params.mountId, params.pathId, 'attachment');
         },
         { auth: true },
     )
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/embed/:fileName',
-        async ({ params, user, set }) => {
+        async ({ params, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
-            const path = await drive.getPath(params.mountId, params.pathId);
-            if (!path || path.type !== 'file') {
-                set.status = 404;
-                return 'File not found';
-            }
-            const file = await drive.downloadFile(params.mountId, params.pathId);
-            if (!file) {
-                set.status = 404;
-                return 'File not found';
-            }
-            return new Response(file, {
-                headers: {
-                    'Content-Type': path.mimeType || 'application/octet-stream',
-                    'Content-Disposition': 'inline',
-                    'Cache-Control': 'public, max-age=86400',
-                    Expires: new Date(Date.now() + 86400000).toUTCString(),
-                },
-            });
+            return drive.serveFile(params.mountId, params.pathId, 'inline');
         },
         { auth: true },
     )
@@ -373,11 +339,16 @@ export const driveRouter = new Elysia({ name: 'drive' })
     .get(
         '/drive/:ownerId/:mountId/thumb/:fileName',
         async ({ params, user, set }) => {
+            const drive = await getSharedDrive(params.ownerId, user);
+            const file = await drive.getThumbnail(params.mountId, params.fileName);
+            if (!file) {
+                set.status = 404;
+                return 'No thumbnail available';
+            }
             set.headers['Cache-Control'] = 'public, max-age=86400';
             set.headers['Expires'] = new Date(Date.now() + 86400000).toUTCString();
             set.headers['Content-Type'] = 'image/webp';
-            const drive = await getSharedDrive(params.ownerId, user);
-            return await drive.getThumbnail(params.mountId, params.fileName);
+            return file;
         },
         { auth: true },
     );
