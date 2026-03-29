@@ -1,7 +1,7 @@
 import { useAuth } from '@workspace/lib/auth';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { cn } from '@workspace/ui/lib/utils';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
     formatEventTime,
     getCalendarColor,
@@ -20,12 +20,29 @@ type WeekViewProps = {
     calendars: CalendarItem[];
     sharedCalendars?: SharedCalendar[];
     onDayClick?: (date: Date) => void;
+    initialEventId?: string;
 };
 
-export function WeekView({ currentDate, events, calendars, sharedCalendars, onDayClick }: WeekViewProps) {
+export function WeekView({
+    currentDate,
+    events,
+    calendars,
+    sharedCalendars,
+    onDayClick,
+    initialEventId,
+}: WeekViewProps) {
     const { user } = useAuth();
     const [selectedEvent, setSelectedEvent] = useState<CalendarEventOccurrence | null>(null);
     const [detailOpen, setDetailOpen] = useState(false);
+
+    useEffect(() => {
+        if (!initialEventId || events.length === 0) return;
+        const match = events.find((e) => e.id === initialEventId);
+        if (match && !selectedEvent) {
+            setSelectedEvent(match);
+            setDetailOpen(true);
+        }
+    }, [initialEventId, events]);
 
     const { startDate, endDate } = useMemo(() => getWeekRange(currentDate), [currentDate]);
     const days = useMemo(() => getDaysInRange(startDate, endDate), [startDate, endDate]);
