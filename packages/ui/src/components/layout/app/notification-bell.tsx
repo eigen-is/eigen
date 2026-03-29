@@ -1,5 +1,6 @@
 import { driveApi, getCalendarAppUrl, getDocumentUrl, getDriveAppUrl, getMailAppUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth/auth-context.tsx';
+import { getMonthRange } from '@workspace/lib/calendar';
 import { formatTimeAgo } from '@workspace/lib/date';
 import {
     useDismissNotification,
@@ -74,23 +75,7 @@ async function navigateToNotification(notification: Notification): Promise<void>
         case 'calendar-invite-cancelled': {
             const parsed = parseCalendarInviteTag(notification.tag);
             if (parsed?.startTime) {
-                const eventDate = new Date(parsed.startTime * 1000);
-                const year = eventDate.getFullYear();
-                const month = eventDate.getMonth();
-                const firstOfMonth = new Date(year, month, 1);
-                const startDay = firstOfMonth.getDay();
-                const startDate = new Date(firstOfMonth);
-                startDate.setDate(startDate.getDate() - (startDay === 0 ? 6 : startDay - 1));
-                const lastOfMonth = new Date(year, month + 1, 0);
-                const endDay = lastOfMonth.getDay();
-                const endDate = new Date(lastOfMonth);
-                if (endDay !== 0) endDate.setDate(endDate.getDate() + (7 - endDay));
-                const from = Math.floor(
-                    new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate()).getTime() / 1000,
-                );
-                const to = Math.floor(
-                    new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate(), 23, 59, 59).getTime() / 1000,
-                );
+                const { from, to } = getMonthRange(new Date(parsed.startTime * 1000));
                 window.location.href = getCalendarAppUrl(
                     `view/month/${from}/${to}?eventId=${encodeURIComponent(parsed.eventId)}`,
                 );

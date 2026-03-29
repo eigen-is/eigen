@@ -1,5 +1,5 @@
 import { createFileRoute, redirect } from '@tanstack/react-router';
-import { getMonthRange } from 'src/components/calendar-utils';
+import { getMonthRange } from '@workspace/lib/calendar';
 
 export const Route = createFileRoute('/')({
     beforeLoad: ({ context }) => {

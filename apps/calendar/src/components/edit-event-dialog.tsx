@@ -1,5 +1,7 @@
 import { useAuth } from '@workspace/lib/auth';
 import {
+    occurrenceDateToString,
+    parseOccurrenceDate,
     useCalendars,
     useCreateEvent,
     useDeleteEvent,
@@ -24,7 +26,6 @@ import { AlignLeft, Calendar, Clock, MapPin, UsersRound } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { RRule } from 'rrule';
 import { AttendeeEditor, AttendeeList } from './attendee-editor';
-import { occurrenceDateToString, parseOccurrenceDate } from './calendar-utils';
 import { RecurrencePicker } from './recurrence-picker';
 import type { RecurringAction } from './recurring-action-dialog';
 import { RecurringActionDialog } from './recurring-action-dialog';
