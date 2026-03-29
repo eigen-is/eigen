@@ -1,5 +1,6 @@
 import { Elysia, t } from 'elysia';
 import { getUploadMaxSize } from '../lib/config/enforcement';
+import { setCacheHeaders } from '../lib/core/http';
 import { getSharedDrive } from '../lib/drive';
 import { getHome } from '../lib/home';
 import { betterAuth } from './auth';
@@ -191,8 +192,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
                 set.redirect = result.url;
                 return;
             }
-            set.headers['Cache-Control'] = 'public, max-age=86400';
-            set.headers['Expires'] = new Date(Date.now() + 86400000).toUTCString();
+            setCacheHeaders(set, 86400);
             set.headers['Content-Type'] = result.contentType;
             return result.data;
         },
@@ -345,8 +345,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
                 set.status = 404;
                 return 'No thumbnail available';
             }
-            set.headers['Cache-Control'] = 'public, max-age=86400';
-            set.headers['Expires'] = new Date(Date.now() + 86400000).toUTCString();
+            setCacheHeaders(set, 86400);
             set.headers['Content-Type'] = 'image/webp';
             return file;
         },

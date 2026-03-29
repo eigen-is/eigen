@@ -1,5 +1,5 @@
 import { Elysia, t } from 'elysia';
-import { contentDisposition } from '../lib/core';
+import { contentDisposition, setCacheHeaders } from '../lib/core';
 import { requireLocalhost, requireSelf } from '../lib/core/access';
 import {
     mailboxCreate,
@@ -87,8 +87,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
         '/mail/:ownerId/message/:id/download',
         async ({ params, user, set }) => {
             requireSelf(params.ownerId, user.id);
-            set.headers['Cache-Control'] = 'public, max-age=86400';
-            set.headers['Expires'] = new Date(Date.now() + 86400000).toUTCString();
+            setCacheHeaders(set, 86400);
             set.headers['Content-Type'] = 'message/rfc822';
             set.headers['Content-Transfer-Encoding'] = 'binary';
             set.headers['Content-Disposition'] = contentDisposition('attachment', `${params.id}.eml`);
@@ -218,8 +217,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
         '/mail/:ownerId/message/:id/attachment/:index/:fileName',
         async ({ params, user, set }) => {
             requireSelf(params.ownerId, user.id);
-            set.headers['Cache-Control'] = 'public, max-age=86400';
-            set.headers['Expires'] = new Date(Date.now() + 86400000).toUTCString();
+            setCacheHeaders(set, 86400);
             set.headers['Content-Type'] = 'application/octet-stream';
             set.headers['Content-Disposition'] = contentDisposition('attachment', params.fileName);
             const attachment = await messageGetAttachment(user, params.id, Number(params.index));

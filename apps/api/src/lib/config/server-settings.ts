@@ -1,5 +1,7 @@
 import type { ServerSettings } from '@workspace/lib/types/settings';
-import { type DeepPartial, JsonStore, LocalFilesystem } from '../core';
+import type { DeepPartial } from '../core';
+import { JsonStore } from '../core/json-store';
+import { LocalFilesystem } from '../core/local-filesystem';
 import { getServerDataPath } from './paths';
 import { getStorageType, isSetupCompleted } from './server-config';
 

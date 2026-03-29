@@ -139,6 +139,72 @@ export class Home {
         this.sseListeners = this.sseListeners.filter((l) => l !== listener);
     }
 
+    public createSSEStream(getHome: (userId: string) => Promise<Home>): ReadableStream<SSEvent | { event: string }> {
+        let keepalive: Timer | null = null;
+        let listener: ((event: SSEvent) => void) | null = null;
+        let isClosed = false;
+        let currentHome: Home = this;
+
+        return new ReadableStream({
+            start: (controller) => {
+                listener = (event: SSEvent) => {
+                    if (isClosed || controller.desiredSize === null) return;
+                    try {
+                        controller.enqueue(event);
+                    } catch {
+                        isClosed = true;
+                    }
+                };
+
+                currentHome.subscribeSSE(listener);
+
+                try {
+                    controller.enqueue({ event: 'keepalive' });
+                } catch {
+                    isClosed = true;
+                }
+
+                keepalive = setInterval(async () => {
+                    if (isClosed) return;
+
+                    // Re-acquire Home if it was recreated externally
+                    try {
+                        const freshHome = await getHome(this.user.id);
+                        if (freshHome !== currentHome) {
+                            console.log(`[SSE] Home recreated for ${this.user.id}, re-subscribing`);
+                            try {
+                                currentHome.unsubscribeSSE(listener!);
+                            } catch {}
+                            freshHome.subscribeSSE(listener!);
+                            currentHome = freshHome;
+                        }
+                    } catch (e) {
+                        console.error(`[SSE] Failed to get Home for ${this.user.id}:`, e);
+                    }
+
+                    if (controller.desiredSize === null) {
+                        isClosed = true;
+                        return;
+                    }
+                    try {
+                        controller.enqueue({ event: 'keepalive' });
+                    } catch {
+                        isClosed = true;
+                    }
+                }, 15000);
+            },
+            cancel: () => {
+                isClosed = true;
+                if (keepalive) clearInterval(keepalive);
+                if (listener) {
+                    try {
+                        currentHome.unsubscribeSSE(listener);
+                    } catch {}
+                }
+            },
+        });
+    }
+
     public async size(teamIds: string[] = []) {
         const [mail, contacts, driveDefault] = await Promise.all([
             this._mail?.size(),

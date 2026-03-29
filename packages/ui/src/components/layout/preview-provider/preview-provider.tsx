@@ -25,8 +25,7 @@ export type PreviewMode = 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'fallba
 function getPreviewMode(path: DrivePath): PreviewMode {
     const mime = path.mimeType || '';
 
-    if (mime.startsWith('image/') && !isExiftoolExtension(path.name)) return 'image';
-    if (isExiftoolExtension(path.name)) return path.thumbnail ? 'image' : 'fallback';
+    if (mime.startsWith('image/') || isExiftoolExtension(path.name)) return 'image';
     if (mime.startsWith('video/')) return 'video';
     if (mime.startsWith('audio/')) return 'audio';
     if (mime === 'application/pdf') return 'pdf';

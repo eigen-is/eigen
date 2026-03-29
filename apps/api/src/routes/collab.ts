@@ -15,9 +15,21 @@ type CollabWsData = {
     params: { ownerId: string; mountId: string; pathId: string };
     drive?: Drive | SharedDrive;
     collabDocument?: CollabDocument;
-    collabCleaned?: boolean;
     pingInterval?: ReturnType<typeof setInterval>;
 };
+
+function cleanupSession(data: CollabWsData, ws: ServerWebSocket<undefined>) {
+    if (data.pingInterval) clearInterval(data.pingInterval);
+    data.pingInterval = undefined;
+    if (data.user && data.collabDocument) {
+        try {
+            data.collabDocument.unsubscribe(data.user, ws);
+        } catch (err) {
+            console.error('Error unsubscribing from document:', err);
+        }
+    }
+    data.collabDocument = undefined;
+}
 
 // Collab routes allow cross-owner access (collaborative editing on shared/team drives).
 // Access control is enforced by getSharedDrive() → SharedDrive ACL checks.
@@ -25,7 +37,7 @@ export const collabRouter = new Elysia({
     name: 'collab',
     websocket: {
         perMessageDeflate: true,
-        maxPayloadLength: 4 * 1024 * 1024, // 4 MB
+        maxPayloadLength: 4 * 1024 * 1024,
     },
 })
     .use(betterAuth)
@@ -134,7 +146,6 @@ export const collabRouter = new Elysia({
         },
     )
 
-    // WebSocket endpoint for collaborative editing
     .ws('/ws/collab/:ownerId/:mountId/:pathId', {
         auth: true,
         params: t.Object({
@@ -152,7 +163,6 @@ export const collabRouter = new Elysia({
             }
 
             const { ownerId, mountId, pathId } = data.params;
-
             const drive = await getSharedDrive(ownerId, user);
             if (!drive || !(await drive.canRead(mountId, pathId, user))) {
                 ws.close(1008, 'Authentication failed');
@@ -166,20 +176,7 @@ export const collabRouter = new Elysia({
 
                 data.drive = drive;
                 data.collabDocument = document;
-                data.collabCleaned = false;
-
-                const cleanup = () => {
-                    if (data.collabCleaned) return;
-                    data.collabCleaned = true;
-                    if (data.pingInterval) clearInterval(data.pingInterval);
-                    try {
-                        document.unsubscribe(user, rawWs);
-                    } catch (err) {
-                        console.error('Error unsubscribing from document:', err);
-                    }
-                };
-
-                data.pingInterval = keepWebSocketAlive(user, rawWs, cleanup);
+                data.pingInterval = keepWebSocketAlive(user, rawWs, () => cleanupSession(data, rawWs));
             } catch (err) {
                 console.error('Error getting document:', err);
                 ws.close(1008, 'Failed to get document');
@@ -193,27 +190,14 @@ export const collabRouter = new Elysia({
             }
 
             const data = ws.data as unknown as CollabWsData;
-            const user = data.user;
-            if (!user) {
-                ws.close(1008, 'Authentication failed');
-                return;
-            }
+            if (!data.user || !data.collabDocument) return;
 
             try {
                 const update = message instanceof Uint8Array ? message : new Uint8Array(message as Buffer);
                 const { mountId, pathId } = data.params;
-
-                // drive is cached at open; fallback to fresh lookup if message arrives before open completes
-                const drive = data.drive ?? (await getSharedDrive(data.params.ownerId, user));
-                let document = data.collabDocument;
-                if (!document) {
-                    if (!(await drive.canRead(mountId, pathId, user))) return;
-                    document = await drive.getCollabDocument(mountId, pathId);
-                    data.collabDocument = document;
-                }
-
-                const canWrite = await drive.canWrite(mountId, pathId, user);
-                document.handleMessage(ws as unknown as ServerWebSocket<undefined>, update, canWrite);
+                const drive = data.drive ?? (await getSharedDrive(data.params.ownerId, data.user));
+                const canWrite = await drive.canWrite(mountId, pathId, data.user);
+                data.collabDocument.handleMessage(ws as unknown as ServerWebSocket<undefined>, update, canWrite);
             } catch (err) {
                 console.error('Error processing message:', err);
             }
@@ -221,19 +205,6 @@ export const collabRouter = new Elysia({
 
         close(ws) {
             const data = ws.data as unknown as CollabWsData;
-            if (data.collabCleaned) return;
-            data.collabCleaned = true;
-
-            if (data.pingInterval) clearInterval(data.pingInterval);
-
-            const user = data.user;
-            const document = data.collabDocument;
-            if (user && document) {
-                try {
-                    document.unsubscribe(user, ws as unknown as ServerWebSocket<undefined>);
-                } catch (err) {
-                    console.error('Error unsubscribing from document:', err);
-                }
-            }
+            cleanupSession(data, ws as unknown as ServerWebSocket<undefined>);
         },
     });

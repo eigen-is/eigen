@@ -4,6 +4,7 @@ import { useTextPreview } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isDocumentType, isInlineEditable } from '@workspace/lib/types/drive';
 import { ChevronLeft, ChevronRight, Download, ExternalLink, Loader2, X } from 'lucide-react';
+import { useState } from 'react';
 import type { PreviewMode } from '../preview-provider/preview-provider';
 import { getFileIcon } from './file-icon-helper';
 
@@ -213,9 +214,8 @@ function ProgressiveImage({
     alt: string;
     aspectRatio?: number;
 }) {
-    // Use CSS min() to compute "object-fit: contain" dimensions so the element
-    // matches the visible image area exactly — clicks beside a portrait image
-    // reach the close handler instead of being swallowed by stopPropagation.
+    const [previewReady, setPreviewReady] = useState(false);
+
     const style: React.CSSProperties = aspectRatio
         ? {
               width: `min(90vw, calc((100vh - 7rem) * ${aspectRatio}))`,
@@ -223,14 +223,21 @@ function ProgressiveImage({
           }
         : { width: '90vw', height: 'calc(100vh - 7rem)' };
 
-    if (!thumbnailUrl) {
-        return <img src={previewUrl} alt={alt} className="rounded object-contain" style={style} />;
-    }
-
     return (
         <div className="relative" style={style}>
-            <img src={thumbnailUrl} alt={alt} className="w-full h-full rounded object-contain" />
-            <img src={previewUrl} alt={alt} className="absolute inset-0 w-full h-full rounded object-contain" />
+            {/* Thumbnail: always visible until preview is ready */}
+            {thumbnailUrl && (
+                <img src={thumbnailUrl} alt={alt} className="absolute inset-0 w-full h-full rounded object-contain" />
+            )}
+            {/* Full preview: loads in background, fades in on top when ready */}
+            <img
+                key={previewUrl}
+                src={previewUrl}
+                alt={alt}
+                className="absolute inset-0 w-full h-full rounded object-contain transition-opacity duration-300"
+                style={{ opacity: previewReady ? 1 : 0 }}
+                onLoad={() => setPreviewReady(true)}
+            />
         </div>
     );
 }

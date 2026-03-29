@@ -1,3 +1,7 @@
+export function setCacheHeaders(set: { headers: Record<string, string | number> }, maxAgeSeconds: number): void {
+    set.headers['Cache-Control'] = `public, max-age=${maxAgeSeconds}`;
+}
+
 export function contentDisposition(type: 'attachment' | 'inline', fileName: string): string {
     const ascii = fileName.replace(/[^\x20-\x7E]/g, '_');
     const encoded = encodeURIComponent(fileName);
