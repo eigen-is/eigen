@@ -58,7 +58,7 @@ function parseCalendarInviteTag(tag: string | null): { eventId: string; startTim
     if (!tag) return null;
     const parts = tag.split(':');
     if (parts[0] !== 'calendar-invite' || !parts[1]) return null;
-    const startTime = parts[2] ? Number(parts[2]) : 0;
+    const startTime = parts[2] ? Number(parts[2]) || 0 : 0;
     return { eventId: parts[1], startTime };
 }
 
