@@ -158,7 +158,8 @@
       "Bash(./.githooks/pre-commit 2>&1)",
       "Bash(sort -t'│' -k2 -rn)",
       "Bash(sort -t: -k2 -rn)",
-      "Bash(time npx:*)"
+      "Bash(time npx:*)",
+      "WebFetch(domain:tiptap.dev)"
     ]
   },
   "enabledPlugins": {
