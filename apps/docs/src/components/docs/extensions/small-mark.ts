@@ -28,10 +28,4 @@ export const SmallMark = Mark.create({
                 },
         };
     },
-
-    addKeyboardShortcuts() {
-        return {
-            'Mod-Shift-s': () => this.editor.commands.toggleSmall(),
-        };
-    },
 });

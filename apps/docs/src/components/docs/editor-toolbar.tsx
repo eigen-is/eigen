@@ -450,7 +450,7 @@ export const EditorToolbar = ({
                         />
                         <TooltipButton
                             icon={ALargeSmall}
-                            tooltipText={`Small (${formatForDisplay('Mod+Shift+S')})`}
+                            tooltipText="Small"
                             active={editor.isActive('small')}
                             preventFocusLoss
                             onClick={() => editor.chain().focus().toggleSmall().run()}

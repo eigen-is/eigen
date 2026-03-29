@@ -83,6 +83,11 @@
         font-size: 0.75em;
     }
 
+    small {
+        font-size: 0.75rem;
+        letter-spacing: 0.01em;
+    }
+
     /* Lists */
 
     ul {
@@ -391,11 +396,6 @@
 
     blockquote {
         margin-bottom: 1em;
-    }
-
-    small {
-        font-size: 0.75rem;
-        letter-spacing: 0.01em;
     }
 }
 
