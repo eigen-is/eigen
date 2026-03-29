@@ -130,7 +130,7 @@ export const Figure = Node.create({
                         alt: img.getAttribute('alt'),
                         mediaName: img.getAttribute('data-media-name'),
                         caption: figcaption?.textContent || null,
-                        alignment: el.getAttribute('data-alignment') || null,
+                        alignment: el.getAttribute('data-alignment') || 'center',
                     };
                 },
                 priority: 60,
