@@ -59,7 +59,7 @@ export async function propagateInvitation(
                 type: 'calendar-invite',
                 actorEmail: organizerHome.user.email,
                 title: `New invitation: ${event.title}`,
-                tag: `calendar-invite:${event.id}`,
+                tag: `calendar-invite:${event.id}:${event.startTime}`,
             });
         } catch (error) {
             console.error('Failed to send invitation:', error);
@@ -78,7 +78,7 @@ export async function propagateInvitation(
                 type: 'calendar-invite-cancelled',
                 actorEmail: organizerHome.user.email,
                 title: `Cancelled: ${event.title}`,
-                tag: `calendar-invite:${event.id}`,
+                tag: `calendar-invite:${event.id}:${event.startTime}`,
             });
         } catch (error) {
             console.error('Failed to cancel invitation:', error);
@@ -109,7 +109,7 @@ export async function propagateInvitation(
                 type: 'calendar-invite-updated',
                 actorEmail: organizerHome.user.email,
                 title: `Updated: ${event.title}`,
-                tag: `calendar-invite:${event.id}`,
+                tag: `calendar-invite:${event.id}:${event.startTime}`,
             });
         } catch (error) {
             console.error('Failed to update invitation:', error);
@@ -146,7 +146,7 @@ export async function propagateCancellation(organizerHome: Home, event: Calendar
                 type: 'calendar-invite-cancelled',
                 actorEmail: organizerHome.user.email,
                 title: `Cancelled: ${event.title}`,
-                tag: `calendar-invite:${event.id}`,
+                tag: `calendar-invite:${event.id}:${event.startTime}`,
             });
         } catch (error) {
             console.error('Failed to propagate cancellation:', error);
