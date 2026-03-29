@@ -51,7 +51,8 @@ export function ShadowContent({
         color: #333;
         line-height: 1.5;
       }
-      a { color: #0066cc; }
+      a { color: #2563eb; text-decoration: none; }
+      a:hover { text-decoration: underline; }
       img { max-width: 100%; height: auto; }
 
       /* Add prose-like styling for better readability */

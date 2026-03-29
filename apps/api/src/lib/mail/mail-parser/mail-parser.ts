@@ -29,19 +29,19 @@ linkify.add('@', {
         const tail = text.slice(pos);
         const re = self.re as Record<string, RegExp>;
 
-        if (!re['twitter']) {
-            re['twitter'] = new RegExp(`^([a-zA-Z0-9_]){1,15}(?!_)(?=$|${re['src_ZPCc']})`);
+        if (!re['bluesky']) {
+            re['bluesky'] = new RegExp(`^([a-zA-Z0-9_][a-zA-Z0-9._-]*[a-zA-Z0-9])(?=$|${re['src_ZPCc']})`);
         }
-        if (re['twitter'].test(tail)) {
+        if (re['bluesky'].test(tail)) {
             if (pos >= 2 && tail[pos - 2] === '@') {
                 return false;
             }
-            return tail.match(re['twitter'])![0].length;
+            return tail.match(re['bluesky'])![0].length;
         }
         return 0;
     },
     normalize(match: { url: string }) {
-        match.url = `https://twitter.com/${match.url.replace(/^@/, '')}`;
+        match.url = `https://bsky.app/profile/${match.url.replace(/^@/, '')}`;
     },
 });
 
