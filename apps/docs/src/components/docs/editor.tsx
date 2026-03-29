@@ -447,13 +447,16 @@ const TiptapEditor = ({
     useEffect(() => {
         if (!editor) return;
         const onUpdate = () => {
-            if (editor.isActive('figure')) setSidebarContext('figure');
+            if (!editor.isFocused) setSidebarContext('document');
+            else if (editor.isActive('figure')) setSidebarContext('figure');
             else if (editor.isActive('table')) setSidebarContext('table');
             else setSidebarContext('document');
         };
         editor.on('selectionUpdate', onUpdate);
+        editor.on('blur', onUpdate);
         return () => {
             editor.off('selectionUpdate', onUpdate);
+            editor.off('blur', onUpdate);
         };
     }, [editor]);
 
@@ -483,6 +486,12 @@ const TiptapEditor = ({
                     <div
                         ref={scrollContainerRef}
                         className={`h-full w-full overflow-y-scroll bg-muted p-4 ${needsScale ? 'overflow-x-hidden' : ''}`}
+                        onClick={(e) => {
+                            if (e.target === scrollContainerRef.current) {
+                                // Move cursor to end (deselects any NodeSelection) then blur
+                                editor.chain().focus('end').blur().run();
+                            }
+                        }}
                     >
                         <div
                             data-document="true"
