@@ -86,13 +86,16 @@ const EXIFTOOL_EXTENSIONS = new Set([
     '.heif',
 ]);
 
-export type TextPreviewMode = 'markdown' | 'plaintext' | 'code';
+export type TextPreviewMode = 'markdown' | 'plaintext' | 'code' | 'eigendoc';
+
+const EIGEN_COLLAB_MIMES = new Set(['application/eigendoc']);
 
 function getExtension(fileName: string): string {
     return fileName.slice(fileName.lastIndexOf('.')).toLowerCase();
 }
 
 export function getTextPreviewMode(mimeType: string, fileName: string): TextPreviewMode | null {
+    if (EIGEN_COLLAB_MIMES.has(mimeType)) return 'eigendoc';
     const ext = getExtension(fileName);
     if (mimeType === 'text/markdown' || ext === '.md' || ext === '.markdown') return 'markdown';
     if (mimeType === 'text/plain' || ext === '.txt') return 'plaintext';

@@ -1,8 +1,10 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { DRIVE_MIME_DOC } from '@workspace/lib/types/drive';
 import type { Mount } from '../mount';
 import { generateImagePreview } from '../shared/thumbnails';
+import { generateEigendocPreview } from './eigendoc-preview';
 import { isExiftoolCandidate } from './exiftool-preview';
 import { generateTextPreview, isTextPreviewSupported, type TextPreviewResult } from './text-preview';
 
@@ -106,4 +108,26 @@ export async function getTextPreviewData(mount: Mount, drivePath: DrivePath): Pr
     // Write to cache
     await Bun.write(cacheFile, JSON.stringify(result));
     return result;
+}
+
+export async function getCollabPreviewData(
+    mount: Mount,
+    drivePath: DrivePath,
+    baseUrl?: string,
+): Promise<TextPreviewResult | null> {
+    const mime = drivePath.mimeType || '';
+
+    // Eigendoc previews are fast (pure CPU) and Yjs edits don't update drivePath.updatedAt,
+    // so we always regenerate instead of caching
+    if (mime === DRIVE_MIME_DOC) {
+        try {
+            const body = await generateEigendocPreview(mount, drivePath, baseUrl);
+            return body ? { body, mode: 'eigendoc' } : null;
+        } catch (err) {
+            console.error(`[preview] Failed to generate eigendoc preview for ${drivePath.id}:`, err);
+            return null;
+        }
+    }
+
+    return null;
 }

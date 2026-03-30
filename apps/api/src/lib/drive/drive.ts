@@ -37,7 +37,7 @@ import { contentDisposition } from '../core/http';
 import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
 import { createDefaultMountConfig, createMountConfig, Mount } from '../mount';
-import { getScreenPreview, getTextPreviewData } from '../preview/preview-cache';
+import { getCollabPreviewData, getScreenPreview, getTextPreviewData } from '../preview/preview-cache';
 import { getThumbnail, saveThumbnail } from '../shared/thumbnails';
 import { getTeamMembers } from '../team';
 import { getMemberships, type Memberships } from '../user/';
@@ -477,10 +477,11 @@ export default class Drive {
         return getScreenPreview(mount, path, embedUrl);
     }
 
-    async getTextPreview(mountId: string, pathId: string) {
+    async getTextPreview(mountId: string, pathId: string, baseUrl?: string) {
         const mount = this.getMount(mountId);
         const path = await mount.getPath(pathId);
         if (!path || path.type === 'folder') return null;
+        if (path.type === DRIVE_TYPE_DOC) return getCollabPreviewData(mount, path, baseUrl);
         return getTextPreviewData(mount, path);
     }
 
