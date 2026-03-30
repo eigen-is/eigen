@@ -17,6 +17,7 @@ function FigureView({ node, updateAttributes, selected, editor }: NodeViewProps)
     const imageRef = useRef<HTMLImageElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const [aspectRatio, setAspectRatio] = useState<number | null>(null);
+    const imageProcessed = useRef(false);
 
     const { resolveMediaUrl } = useMediaResolver();
 
@@ -35,17 +36,33 @@ function FigureView({ node, updateAttributes, selected, editor }: NodeViewProps)
     }, []);
 
     const handleImageLoad = useCallback(() => {
-        if (imageRef.current && aspectRatio === null) {
-            const ratio = imageRef.current.naturalWidth / imageRef.current.naturalHeight;
-            setAspectRatio(ratio);
+        if (!imageRef.current || imageProcessed.current) return;
+        imageProcessed.current = true;
 
-            const naturalWidth = imageRef.current.naturalWidth;
-            const maxWidth = getMaxWidth();
-            if (!node.attrs.width && naturalWidth > maxWidth) {
-                updateAttributes({ width: Math.round(maxWidth) });
+        const nw = imageRef.current.naturalWidth;
+        const nh = imageRef.current.naturalHeight;
+        const maxWidth = getMaxWidth();
+
+        if (nw > 0 && nh > 0) {
+            setAspectRatio(nw / nh);
+            if (!node.attrs.width) {
+                updateAttributes({ width: Math.round(Math.min(nw, maxWidth)) });
             }
+            return;
         }
-    }, [aspectRatio, getMaxWidth, node.attrs.width, updateAttributes]);
+
+        // SVGs without explicit dimensions report 0x0 — set a width, then read
+        // the rendered aspect ratio after the browser lays out using the viewBox
+        if (!node.attrs.width) {
+            updateAttributes({ width: Math.round(maxWidth === Infinity ? 400 : maxWidth) });
+        }
+        requestAnimationFrame(() => {
+            if (!imageRef.current) return;
+            const w = imageRef.current.clientWidth;
+            const h = imageRef.current.clientHeight;
+            if (w > 0 && h > 0) setAspectRatio(w / h);
+        });
+    }, [getMaxWidth, node.attrs.width, updateAttributes]);
 
     const alignmentClass =
         alignment === 'center' ? 'items-center' : alignment === 'right' ? 'items-end' : 'items-start';
