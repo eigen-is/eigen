@@ -166,7 +166,10 @@
       "WebFetch(domain:dhwaneetbhatt.com)",
       "Bash(npm view:*)",
       "Bash(for pkg:*)",
-      "Read(//Users/reinder/Documents/GitHub/eigen/node_modules/.bun/@tiptap+$pkg@3.21.0*/node_modules/@tiptap/$pkg/dist/**)"
+      "Read(//Users/reinder/Documents/GitHub/eigen/node_modules/.bun/@tiptap+$pkg@3.21.0*/node_modules/@tiptap/$pkg/dist/**)",
+      "Bash(tr ';' '\\\\n')",
+      "Bash(mkdir -p /tmp/eigen-ws-test)",
+      "Bash(cp /Users/reinder/Documents/GitHub/eigen/apps/api/build/index.js /tmp/eigen-ws-test/)"
     ]
   },
   "enabledPlugins": {
