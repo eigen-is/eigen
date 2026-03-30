@@ -19,6 +19,9 @@ services:
       COOKIE_DOMAIN: localhost
       TRUSTED_NETWORKS: "127.0.0.0/8,::1,172.16.0.0/12"
 
+  postfix:
+    profiles: ["production"]
+
   mailpit:
     image: axllent/mailpit
     ports:

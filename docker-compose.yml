@@ -47,6 +47,33 @@ services:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
 
+  postfix:
+    build:
+      context: docker/postfix
+    ports:
+      - "25:25"
+    volumes:
+      - ./data/dkim:/data/dkim
+      - ./data/certs:/certs:ro
+      - postfix-queue:/var/spool/postfix
+    environment:
+      DOMAIN: ${DOMAIN}
+      SMTP_RELAY_HOST: ${SMTP_RELAY_HOST:-}
+      SMTP_RELAY_PORT: ${SMTP_RELAY_PORT:-587}
+      SMTP_RELAY_USER: ${SMTP_RELAY_USER:-}
+      SMTP_RELAY_PASSWORD: ${SMTP_RELAY_PASSWORD:-}
+    depends_on:
+      eigen-api:
+        condition: service_healthy
+    restart: unless-stopped
+    networks: [eigen]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+volumes:
+  postfix-queue:
+
 networks:
   eigen:
     driver: bridge
