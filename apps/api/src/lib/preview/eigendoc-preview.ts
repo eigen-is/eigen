@@ -3,17 +3,17 @@ import { COLLAB_DB_CONFIG } from '../collab/db-config';
 import { loadYjsState } from '../collab/yjs-loader';
 import type { Mount } from '../mount';
 
-// All tiptap/ProseMirror imports MUST be lazy (require inside function, not top-level import).
+// All tiptap/ProseMirror imports MUST be lazy (dynamic import, not top-level import).
 // ProseMirror extensions reference DOM APIs in parseHTML. With `bun build`, top-level imports
 // are evaluated eagerly at startup, which crashes the server before any route is registered.
 // Because this module is imported via: collab.ts → drive.ts → preview-cache.ts → here,
 // a crash here kills all routes including WebSocket collab.
 let extensions: unknown[] | null = null;
 
-function getExtensions() {
+async function getExtensions() {
     if (!extensions) {
-        const { common, createLowlight } = require('lowlight');
-        const { getDocExtensions } = require('@workspace/lib/docs/eigendoc');
+        const { common, createLowlight } = await import('lowlight');
+        const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
         extensions = getDocExtensions({ lowlight: createLowlight(common) });
     }
     return extensions;
@@ -23,10 +23,9 @@ export async function generateEigendocPreview(mount: Mount, drivePath: DrivePath
     const dataDbPath = await mount.getChildByName(drivePath.id, 'data.db');
     if (!dataDbPath) return '';
 
-    const { renderToHTMLString } = require('@tiptap/static-renderer/pm/html-string');
-    const { yXmlFragmentToProsemirrorJSON } = require('@tiptap/y-tiptap');
-    const DOMPurifyModule = require('isomorphic-dompurify');
-    const DOMPurify = DOMPurifyModule.default || DOMPurifyModule;
+    const { renderToHTMLString } = await import('@tiptap/static-renderer/pm/html-string');
+    const { yXmlFragmentToProsemirrorJSON } = await import('@tiptap/y-tiptap');
+    const DOMPurify = (await import('isomorphic-dompurify')).default;
 
     // Open (or reuse) the database — don't close it, as a collab session may share
     // this instance. Mount.closeAllDatabases handles cleanup on shutdown.
@@ -42,7 +41,7 @@ export async function generateEigendocPreview(mount: Mount, drivePath: DrivePath
 
     const html = renderToHTMLString({
         content: pmJson,
-        extensions: getExtensions(),
+        extensions: await getExtensions(),
         options: {
             nodeMapping: {
                 figure: ({ node }: { node: { attrs: Record<string, unknown> } }) => {
