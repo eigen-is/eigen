@@ -1,15 +1,20 @@
-import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
-import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
-import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import DOMPurify from 'isomorphic-dompurify';
-import { common, createLowlight } from 'lowlight';
 import { COLLAB_DB_CONFIG } from '../collab/db-config';
 import { loadYjsState } from '../collab/yjs-loader';
 import type { Mount } from '../mount';
 
-const lowlight = createLowlight(common);
-const extensions = getDocExtensions({ lowlight });
+// Lazy-initialized: tiptap/ProseMirror extensions reference DOM APIs in parseHTML,
+// which crashes when evaluated at module load time in a bundled (bun build) environment.
+let extensions: unknown[] | null = null;
+
+function getExtensions() {
+    if (!extensions) {
+        const { common, createLowlight } = require('lowlight');
+        const { getDocExtensions } = require('@workspace/lib/docs/eigendoc');
+        extensions = getDocExtensions({ lowlight: createLowlight(common) });
+    }
+    return extensions;
+}
 
 export async function generateEigendocPreview(mount: Mount, drivePath: DrivePath, baseUrl = ''): Promise<string> {
     const dataDbPath = await mount.getChildByName(drivePath.id, 'data.db');
@@ -17,6 +22,11 @@ export async function generateEigendocPreview(mount: Mount, drivePath: DrivePath
 
     // Open (or reuse) the database — don't close it, as a collab session may share
     // this instance. Mount.closeAllDatabases handles cleanup on shutdown.
+    const { renderToHTMLString } = require('@tiptap/static-renderer/pm/html-string');
+    const { yXmlFragmentToProsemirrorJSON } = require('@tiptap/y-tiptap');
+    const DOMPurifyModule = require('isomorphic-dompurify');
+    const DOMPurify = DOMPurifyModule.default || DOMPurifyModule;
+
     const managedDb = await mount.openDatabase(COLLAB_DB_CONFIG, dataDbPath.id);
     const ydoc = loadYjsState(managedDb);
     const pmJson = yXmlFragmentToProsemirrorJSON(ydoc.getXmlFragment('default'));
@@ -28,7 +38,7 @@ export async function generateEigendocPreview(mount: Mount, drivePath: DrivePath
 
     const html = renderToHTMLString({
         content: pmJson,
-        extensions,
+        extensions: getExtensions(),
         options: {
             nodeMapping: {
                 figure: ({ node }: { node: { attrs: Record<string, unknown> } }) => {
