@@ -9,9 +9,17 @@ SQLite. There's no server-side way to:
 2. Export documents to PDF or other formats
 3. Import DOCX files by converting them to eigendoc format
 
-All rendering currently happens client-side via tiptap/React.
+## Key Enabler: Tiptap 3
 
-## Architecture Overview
+The docs app has been upgraded to tiptap 3, which includes `@tiptap/static-renderer` — a server-side HTML renderer that
+uses the **same extension definitions** as the editor. No DOM required, no duplicate rendering logic.
+
+```
+Yjs binary → Y.Doc → PM JSON → renderToHTMLString(json, extensions) → HTML
+                                 ↑ same extensions as the editor
+```
+
+## Architecture
 
 ```
                   ┌──────────────────────────────┐
@@ -25,15 +33,14 @@ All rendering currently happens client-side via tiptap/React.
                   │         Y.Doc instance         │
                   └──────────┬───────────────────┘
                              │
-              yXmlFragmentToProsemirrorJSON()    ← y-prosemirror (pure JS, no DOM)
+              yXmlFragmentToProsemirrorJSON()    ← @tiptap/y-tiptap (pure JS)
                              │
                   ┌──────────▼───────────────────┐
                   │     ProseMirror JSON          │
-                  │  { type: "doc", content: [...] } │
                   └──────┬──────────────┬────────┘
                          │              │
-           generateHTML() with          │
-           shared extension defs        │
+        renderToHTMLString()            │
+        with shared extensions          │
                          │              │
                   ┌──────▼──────┐  ┌───▼────────────┐
                   │    HTML     │  │  DOCX export    │
@@ -56,144 +63,114 @@ All rendering currently happens client-side via tiptap/React.
                   │     ProseMirror JSON          │
                   └──────┬───────────────────────┘
                          │
-              prosemirrorJSONToYDoc()     ← y-prosemirror
+              prosemirrorJSONToYDoc()     ← @tiptap/y-tiptap
                          │
                   ┌──────▼───────────────────────┐
                   │     Y.Doc → binary updates     │
                   └────────────────────────────────┘
 ```
 
-## Current State
+## Shared Extensions
 
-| What | Where | DOM required? |
-|------|-------|---------------|
-| Yjs doc loading | `CollabDocument.init()` in `apps/api/src/lib/collab/collabDocument.ts` | No |
-| Yjs → PM JSON | `yXmlFragmentToProsemirrorJSON()` from `y-prosemirror` | No |
-| PM JSON → HTML | `generateHTML()` from `@tiptap/core` | **Yes** (uses `DOMSerializer`) |
-| Tiptap extensions | `apps/docs/src/components/docs/extensions/` + StarterKit | Mixed (Figure uses React) |
-| Text previews | `apps/api/src/lib/preview/text-preview.ts` | No (markdown-it + DOMPurify) |
-| Media resolution | `mediaName` → folder lookup → `getDrivePreviewUrl()` | No |
-
-### Key Constraint
-
-`@tiptap/core`'s `generateHTML()` calls `DOMSerializer.fromSchema(schema).serializeFragment()` which requires
-`document.implementation.createHTMLDocument()` — a browser API. This does **not** work in Bun.
-
-## Proposed Approach: Custom JSON-to-HTML Serializer
-
-### Why Not Use Existing Solutions?
-
-| Option | Issue |
-|--------|-------|
-| `@tiptap/core` `generateHTML()` | Requires browser DOM |
-| `@tiptap/static-renderer` | Tiptap 3 only; docs app uses tiptap 2 |
-| JSDOM/happy-dom polyfill | Heavy dependency, fragile, slow |
-| Upgrade docs to tiptap 3 | Large migration, out of scope for this |
-
-### The Approach
-
-Write a lightweight **ProseMirror JSON → HTML string** serializer that runs in pure JavaScript (no DOM). Each node/mark
-type maps to an HTML render function. The render functions are **shared** between frontend parseHTML/renderHTML
-definitions and the server-side serializer.
-
-### Shared Extension Definitions
-
-Move the schema-relevant parts of each tiptap extension into a shared package that both frontend and backend can import.
-This avoids duplicating node/mark → HTML mappings.
+The critical insight: tiptap 3's `renderToHTMLString` accepts the same extension array as the editor. To avoid
+duplication, extract the extension list into a shared module:
 
 ```
 packages/lib/src/core/docs/
-├── schema.ts              # Shared node/mark HTML mappings
-└── html-serializer.ts     # ProseMirror JSON → HTML string (pure JS)
+├── extensions.ts          # Shared tiptap extension list (no React, no DOM)
+└── yjs-loader.ts          # Load Y.Doc from SQLite (shared by all eigen file types)
 ```
 
-**schema.ts** defines the HTML output for each node/mark type as pure data (no DOM, no React):
+**extensions.ts** exports the extension list used by both the editor and the server renderer:
 
 ```typescript
-export type NodeMapping = {
-    tag: string;
-    attrs?: (node: { attrs: Record<string, unknown> }) => Record<string, string>;
-    selfClosing?: boolean;
-};
+import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
+import Highlight from '@tiptap/extension-highlight';
+import { TaskItem, TaskList } from '@tiptap/extension-list';
+import Subscript from '@tiptap/extension-subscript';
+import Superscript from '@tiptap/extension-superscript';
+import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table';
+import TextAlign from '@tiptap/extension-text-align';
+import { Color, FontFamily, TextStyle } from '@tiptap/extension-text-style';
+import Typography from '@tiptap/extension-typography';
+import StarterKit from '@tiptap/starter-kit';
 
-export type MarkMapping = {
-    tag: string;
-    attrs?: (mark: { attrs: Record<string, unknown> }) => Record<string, string>;
-};
-
-export const nodeMapping: Record<string, NodeMapping> = {
-    paragraph:   { tag: 'p' },
-    heading:     { tag: 'h', attrs: (n) => ({ _tag: `h${n.attrs.level}` }) },
-    blockquote:  { tag: 'blockquote' },
-    bulletList:  { tag: 'ul' },
-    orderedList: { tag: 'ol' },
-    listItem:    { tag: 'li' },
-    taskList:    { tag: 'ul', attrs: () => ({ 'data-type': 'taskList' }) },
-    taskItem:    { tag: 'li', attrs: (n) => ({
-        'data-type': 'taskItem',
-        'data-checked': String(n.attrs.checked),
-    }) },
-    codeBlock:   { tag: 'pre' },
-    table:       { tag: 'table' },
-    tableRow:    { tag: 'tr' },
-    tableCell:   { tag: 'td' },
-    tableHeader: { tag: 'th' },
-    horizontalRule: { tag: 'hr', selfClosing: true },
-    hardBreak:   { tag: 'br', selfClosing: true },
-    figure:      { tag: 'figure' },
-};
-
-export const markMapping: Record<string, MarkMapping> = {
-    bold:          { tag: 'strong' },
-    italic:        { tag: 'em' },
-    underline:     { tag: 'u' },
-    strike:        { tag: 's' },
-    code:          { tag: 'code' },
-    subscript:     { tag: 'sub' },
-    superscript:   { tag: 'sup' },
-    small:         { tag: 'small' },
-    highlight:     { tag: 'mark', attrs: (m) => (
-        m.attrs.color ? { style: `background-color: ${m.attrs.color}` } : {}
-    ) },
-    link:          { tag: 'a', attrs: (m) => ({
-        href: String(m.attrs.href),
-        target: '_blank',
-        rel: 'noopener noreferrer',
-    }) },
-    textStyle:     { tag: 'span', attrs: (m) => {
-        const styles: string[] = [];
-        if (m.attrs.color) styles.push(`color: ${m.attrs.color}`);
-        if (m.attrs.fontFamily) styles.push(`font-family: ${m.attrs.fontFamily}`);
-        return styles.length ? { style: styles.join('; ') } : {};
-    }},
-};
+export function getDocExtensions(options?: { lowlight?: unknown }) {
+    return [
+        StarterKit.configure({
+            undoRedo: false,
+            codeBlock: false,
+            link: {
+                HTMLAttributes: {
+                    target: '_blank',
+                    rel: 'noopener noreferrer',
+                },
+            },
+        }),
+        Subscript,
+        Superscript,
+        Typography,
+        TextStyle,
+        Color,
+        FontFamily,
+        TaskList,
+        TaskItem.configure({ nested: true }),
+        TextAlign.configure({ types: ['heading', 'paragraph'] }),
+        Highlight.configure({ multicolor: true }),
+        ...(options?.lowlight
+            ? [CodeBlockLowlight.configure({ lowlight: options.lowlight })]
+            : []),
+        Table,
+        TableRow,
+        TableCell,
+        TableHeader,
+    ];
+}
 ```
 
-**html-serializer.ts** walks ProseMirror JSON and produces HTML strings. Uses `escapeHtml()` for all text content and
-attribute values to prevent XSS. Output is additionally sanitized via DOMPurify before serving.
-
-### Media Resolution
-
-The `figure` node stores a `mediaName` attribute (e.g., `photo.jpg`), not a URL. Server-side, the serializer needs a
-`resolveMediaUrl` callback:
-
-```typescript
-const html = serializeDoc(pmJson, {
-    resolveMediaUrl: (mediaName) => {
-        const file = drive.findFileByName(mediaFolderId, mediaName);
-        return file ? `/drive/${ownerId}/${mountId}/file/${file.id}/embed/${file.name}` : null;
-    },
-});
-```
-
-This matches the client-side `MediaResolverProvider` pattern but without React context.
-
-### Code Highlight in Previews
-
-Code blocks need syntax highlighting. The backend already has `lowlight` (used for text previews). The serializer can
-optionally highlight code blocks using `lowlight.highlight()` + `hast-util-to-html`.
+The editor adds editor-specific extensions on top (Collaboration, CollaborationCaret, Figure, CommentMark, SmallMark,
+TableWidthClamp). The server renderer uses the base list + custom `nodeMapping` overrides for Figure.
 
 ## Use Case 1: Quick Preview
+
+### Server-Side Rendering
+
+```typescript
+import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
+import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
+import { getDocExtensions } from '@workspace/lib/docs/extensions';
+
+async function renderDocPreview(
+    drive: Drive, mountId: string, pathId: string
+): Promise<string> {
+    // Load Yjs state from eigendoc's SQLite
+    const ydoc = await loadYjsDoc(drive, mountId, pathId);
+    const fragment = ydoc.getXmlFragment('default');
+    const pmJson = yXmlFragmentToProsemirrorJSON(fragment);
+
+    // Resolve media folder for figure images
+    const mediaFolder = await drive.findMediaFolder(mountId, pathId);
+
+    const html = renderToHTMLString({
+        content: pmJson,
+        extensions: getDocExtensions({ lowlight }),
+        options: {
+            nodeMapping: {
+                // Custom rendering for figure nodes (media URL resolution)
+                figure: ({ node }) => {
+                    const url = resolveMediaUrl(mediaFolder, node.attrs.mediaName);
+                    const img = url ? `<img src="${escapeAttr(url)}" alt="${escapeAttr(node.attrs.alt || '')}" />` : '';
+                    const caption = node.attrs.caption
+                        ? `<figcaption>${escapeHtml(node.attrs.caption)}</figcaption>` : '';
+                    return `<figure>${img}${caption}</figure>`;
+                },
+            },
+        },
+    });
+
+    return DOMPurify.sanitize(html);
+}
+```
 
 ### API Endpoint
 
@@ -201,18 +178,15 @@ optionally highlight code blocks using `lowlight.highlight()` + `hast-util-to-ht
 GET /collab/:ownerId/:mountId/:pathId/preview
 ```
 
-Returns sanitized HTML suitable for the preview pane. Wraps output in the `eigen-prose` class for consistent styling.
+Returns sanitized HTML wrapped in `eigen-prose` class for consistent styling.
 
 ### Loading Without Active Collab Session
 
-For previews, we don't need a full `CollabDocument` with WebSocket subscriptions. We just need to load the Yjs state
-from the eigendoc's SQLite database:
+For previews, we don't need a full `CollabDocument` with WebSocket subscriptions. A lightweight loader reads the Yjs
+state directly from the eigendoc's SQLite database:
 
 ```typescript
-import * as Y from 'yjs';
-import { yXmlFragmentToProsemirrorJSON } from 'y-prosemirror';
-
-function loadYjsDocFromDb(db: Database): Y.Doc {
+function loadYjsDoc(db: Database): Y.Doc {
     const doc = new Y.Doc();
     const snapshot = db.query('SELECT stateData FROM docSnapshots ORDER BY id DESC LIMIT 1').get();
     if (snapshot) Y.applyUpdate(doc, snapshot.stateData);
@@ -225,32 +199,18 @@ function loadYjsDocFromDb(db: Database): Y.Doc {
 }
 ```
 
-Then extract ProseMirror JSON and serialize:
-
-```typescript
-const fragment = ydoc.getXmlFragment('default');
-const pmJson = yXmlFragmentToProsemirrorJSON(fragment);
-const html = serializeDoc(pmJson, { resolveMediaUrl });
-return DOMPurify.sanitize(html);
-```
-
 ## Use Case 2: DOCX Import
 
 ### Pipeline
 
 ```
-DOCX file
-  → mammoth (DOCX → clean HTML)
-  → ProseMirror DOMParser (HTML → PM JSON)   // needs DOM — use happy-dom
-  → prosemirrorJSONToYDoc (PM JSON → Y.Doc)  // y-prosemirror, pure JS
-  → store as eigendoc
+DOCX file → mammoth (DOCX → HTML) → ProseMirror DOMParser → PM JSON → Y.Doc → eigendoc
 ```
 
 ### Why Mammoth?
 
 - Produces clean, semantic HTML (headings, lists, tables, images)
 - Ignores decorative styling that doesn't map to our schema
-- Supports custom style maps for enterprise DOCX templates
 - Lightweight, no system dependencies (unlike LibreOffice)
 - Works in Bun/Node
 
@@ -260,16 +220,24 @@ DOCX files embed images as binary blobs. During import, mammoth extracts images 
 image is saved to the eigendoc's media folder, and the HTML `<img>` gets a `data-media-name` attribute that the Figure
 extension's `parseHTML` picks up.
 
-### HTML → ProseMirror JSON (requires minimal DOM)
+### HTML → ProseMirror JSON
 
-ProseMirror's `DOMParser.fromSchema(schema).parse(domNode)` needs a DOM. For server-side, use `happy-dom` (lighter
-than JSDOM, Bun-compatible). This is the **only** step that requires a DOM polyfill, and only for DOCX import — not for
-preview rendering.
+ProseMirror's `DOMParser.fromSchema(schema).parse(domNode)` needs a DOM. For server-side, use `happy-dom` (Bun-
+compatible). This is the **only** step that requires a DOM polyfill, and only for DOCX import.
+
+The schema is built from the shared extensions:
+
+```typescript
+import { getSchema } from '@tiptap/core';
+import { getDocExtensions } from '@workspace/lib/docs/extensions';
+
+const schema = getSchema(getDocExtensions());
+```
 
 ### PM JSON → Y.Doc
 
 ```typescript
-import { prosemirrorJSONToYDoc } from 'y-prosemirror';
+import { prosemirrorJSONToYDoc } from '@tiptap/y-tiptap';
 
 const ydoc = prosemirrorJSONToYDoc(schema, pmJson);
 const update = Y.encodeStateAsUpdate(ydoc);
@@ -280,100 +248,80 @@ const update = Y.encodeStateAsUpdate(ydoc);
 
 ### Option A: Via HTML (simpler)
 
-Use the HTML serializer from Use Case 1, then convert to DOCX via `html-to-docx`.
+Use `renderToHTMLString` from Use Case 1, then convert to DOCX via `html-to-docx`.
 
 ### Option B: Direct (better fidelity)
 
-`prosemirror-docx` serializes ProseMirror documents directly to DOCX, preserving more structure. Requires defining
-serializers for each node/mark type.
+`prosemirror-docx` serializes ProseMirror documents directly to DOCX, preserving more structure.
 
 ## Other Collab Document Types
 
-Each document type stores content differently in Yjs:
+Each type stores content differently in Yjs:
 
 | Type | Yjs structure | Rendering approach |
 |------|---------------|-------------------|
-| eigendoc | `Y.XmlFragment` (ProseMirror) | PM JSON → HTML serializer (this proposal) |
+| eigendoc | `Y.XmlFragment` (ProseMirror) | `renderToHTMLString` with shared extensions |
 | eigenslides | `Y.Map` with slides/objects/order | Custom: iterate slides, render positioned elements |
 | eigenstickies | `Y.Map` with cards/columns | Custom: iterate columns/cards, render kanban HTML |
 | eigensheets | `Y.Map` with cell data | Custom: iterate cells, render HTML table |
 
-### Shared Pattern
-
-```
-packages/lib/src/core/docs/
-├── yjs-loader.ts          # Shared: load Y.Doc from SQLite database
-├── eigendoc.ts            # PM JSON extraction + HTML serializer
-├── eigenslides.ts         # DeckData extraction + HTML serializer
-├── eigenstickies.ts       # Board extraction + HTML serializer
-└── eigensheets.ts         # Cell data extraction + HTML table serializer
-```
+The Yjs loader (`loadYjsDoc`) is shared across all types. Only the extraction and rendering steps are type-specific.
 
 ## Dependencies
 
 ### Already Available
 
-| Package | Used in | Purpose |
-|---------|---------|---------|
-| `yjs` | API server | Yjs document handling |
-| `y-prosemirror` | docs frontend | Yjs ↔ ProseMirror JSON conversion |
-| `lowlight` | API + docs frontend | Code syntax highlighting |
-| `markdown-it` | API server | Markdown rendering |
-| `isomorphic-dompurify` | API server | HTML sanitization |
+| Package | Purpose |
+|---------|---------|
+| `yjs` | Yjs document handling (API server) |
+| `@tiptap/y-tiptap` | Yjs ↔ ProseMirror JSON (docs frontend, add to API) |
+| `@tiptap/core` + extensions | Schema + rendering (docs frontend, add to API) |
+| `lowlight` | Code syntax highlighting (API + frontend) |
+| `isomorphic-dompurify` | HTML sanitization (API server) |
 
-### New Dependencies Needed
+### New Dependencies
 
-| Package | Purpose | Size | When |
-|---------|---------|------|------|
-| `mammoth` | DOCX → HTML import | ~200KB | Phase 2 |
-| `happy-dom` | Minimal DOM for DOCX import only | ~1MB | Phase 2 |
-| `prosemirror-model` | Schema + Node types for DOCX import | ~100KB | Phase 2 |
-| `prosemirror-docx` | PM → DOCX export (optional) | ~50KB | Phase 3 |
-
-**Note:** `y-prosemirror` needs to be added to the API server's dependencies (currently only in docs frontend). The
-HTML serializer itself (Phase 1) needs **zero** new dependencies.
+| Package | Purpose | When |
+|---------|---------|------|
+| `@tiptap/static-renderer` | Server-side HTML rendering (no DOM) | Phase 1 |
+| `mammoth` | DOCX → HTML import | Phase 2 |
+| `happy-dom` | Minimal DOM for DOCX import DOMParser | Phase 2 |
+| `prosemirror-docx` | PM → DOCX export (optional) | Phase 3 |
 
 ## Implementation Order
 
-### Phase 1: Quick Preview (eigendoc only)
+### Phase 1: Quick Preview
 
-1. Create `packages/lib/src/core/docs/html-serializer.ts` — pure JS, no DOM
-2. Add `y-prosemirror` to API server dependencies
-3. Create lightweight Yjs doc loader (reuse existing `CollabDocument` DB schema)
+1. Extract shared extension list to `packages/lib/src/core/docs/extensions.ts`
+2. Add `@tiptap/static-renderer` + `@tiptap/y-tiptap` to API server
+3. Create Yjs doc loader utility
 4. Add `GET /collab/:ownerId/:mountId/:pathId/preview` endpoint
 5. Wire into Drive's preview system
+6. Update docs editor to import from shared extensions
 
 ### Phase 2: DOCX Import
 
-1. Add `mammoth` + `happy-dom` + `prosemirror-model` to API server
-2. Create shared ProseMirror schema definition (for DOMParser)
-3. Create DOCX → eigendoc conversion pipeline
-4. Handle image extraction → media folder
-5. Add `POST /drive/:ownerId/:mountId/import-docx` endpoint
+1. Add `mammoth` + `happy-dom` to API server
+2. Create DOCX → eigendoc conversion pipeline (uses shared schema via `getSchema(getDocExtensions())`)
+3. Handle image extraction → media folder
+4. Add `POST /drive/:ownerId/:mountId/import-docx` endpoint
 
 ### Phase 3: DOCX Export
 
 1. Evaluate `prosemirror-docx` vs `html-to-docx`
-2. Create PM JSON → DOCX pipeline
-3. Add `GET /collab/:ownerId/:mountId/:pathId/export/docx` endpoint
+2. Add export endpoint
 
 ### Phase 4: Other Document Types
 
-1. Eigenslides HTML serializer
-2. Eigenstickies HTML serializer
-3. Eigensheets HTML table serializer
+1. Eigenslides, eigenstickies, eigensheets HTML serializers (custom per type)
 
 ## Edge Cases
 
 - **Empty documents**: Return minimal HTML or empty string
 - **Missing media**: `resolveMediaUrl` returns null → render placeholder or skip image
 - **Corrupt Yjs state**: Wrap `Y.applyUpdate()` in try/catch, return error state
-- **Large documents**: Stream HTML generation for documents with many nodes
-- **Concurrent edits during preview**: Load a snapshot, not the live doc — previews are eventually consistent
+- **Concurrent edits during preview**: Load a snapshot — previews are eventually consistent
 - **Code blocks without language**: Fall back to plain text (no highlighting)
-- **Nested tables**: The serializer handles recursive node traversal naturally
-- **Custom marks (comments)**: Skip comment marks in preview (they reference chat threads)
-- **Text alignment**: Map `textAlign` attribute to `style="text-align: ..."` on the tag
-- **Font/color styles**: Preserve inline styles from `textStyle` mark via the style attribute
-- **Task lists**: Render checkboxes as Unicode characters or disabled input elements
-- **DOCX round-trip fidelity**: Import is lossy by design — complex DOCX formatting is simplified to match our schema
+- **Custom marks (comments)**: Skip in preview (they reference chat threads)
+- **DOCX round-trip fidelity**: Import is lossy by design — complex formatting simplified to match our schema
+- **New custom nodes**: Added once in the shared extension list, automatically available in both editor and server
