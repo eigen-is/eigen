@@ -27,7 +27,14 @@ export type OutboundMail = {
     attachments?: OutboundAttachment[];
 };
 
-function createTransport(): Mail {
+export function createTransport(): Mail {
+    if (process.env['SMTP_HOST']) {
+        return nodemailer.createTransport({
+            host: process.env['SMTP_HOST'],
+            port: Number(process.env['SMTP_PORT'] || 25),
+            secure: false,
+        });
+    }
     return nodemailer.createTransport({
         sendmail: true,
         newline: 'unix',
