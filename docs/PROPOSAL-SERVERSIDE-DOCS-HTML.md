@@ -70,99 +70,170 @@ Yjs binary → Y.Doc → PM JSON → renderToHTMLString(json, extensions) → HT
                   └────────────────────────────────┘
 ```
 
-## Shared Extensions
+## Directory Structure
 
-The critical insight: tiptap 3's `renderToHTMLString` accepts the same extension array as the editor. To avoid
-duplication, extract the extension list into a shared module:
+All shared document processing code lives in `packages/lib/src/docs/`. This code has **no React dependency** and works
+in both browser and server (Bun) contexts.
 
 ```
-packages/lib/src/core/docs/
-├── extensions.ts          # Shared tiptap extension list (no React, no DOM)
-└── yjs-loader.ts          # Load Y.Doc from SQLite (shared by all eigen file types)
+packages/lib/src/docs/
+├── yjs.ts                          # Shared: load Y.Doc from any eigen file's SQLite db
+│
+├── eigendoc/
+│   ├── extensions.ts               # getDocExtensions() — shared tiptap extension list
+│   ├── nodes/
+│   │   ├── figure.ts               # Figure node (schema: attrs, parseHTML, renderHTML, commands)
+│   │   ├── comment-mark.ts         # Comment mark (schema only, no click handler)
+│   │   └── small-mark.ts           # Small mark
+│   └── index.ts                    # Re-exports
+│
+├── eigenslides/
+│   ├── types.ts                    # DeckData, SlideItem, SlideObject types
+│   ├── extract.ts                  # extractDeckData(ydoc) → DeckData
+│   ├── render.ts                   # renderSlidesToHTML(data, options) → string
+│   └── index.ts
+│
+├── eigenstickies/
+│   ├── types.ts                    # Board, Column, Card types
+│   ├── extract.ts                  # extractBoard(ydoc) → Board
+│   ├── render.ts                   # renderBoardToHTML(data, options) → string
+│   └── index.ts
+│
+└── eigensheets/
+    ├── types.ts                    # Sheet, Cell types
+    ├── extract.ts                  # extractSheet(ydoc) → Sheet
+    ├── render.ts                   # renderSheetToHTML(data, options) → string
+    └── index.ts
 ```
 
-**extensions.ts** exports the extension list used by both the editor and the server renderer:
+### What Stays in the Apps
+
+Editor-only code (React components, UI interactions, WebSocket handling) stays in the app:
+
+```
+apps/docs/src/components/docs/
+├── extensions/
+│   ├── figure-view.tsx             # React NodeView (resize handles, image loading, drag)
+│   ├── figure.ts                   # Extends shared FigureNode + adds ReactNodeViewRenderer
+│   ├── comment-mark.ts             # Extends shared CommentMark + adds click handler plugin
+│   └── table-width-clamp.ts        # Editor-only: clamps table column widths to page
+├── editor.tsx                      # Imports getDocExtensions() + adds editor-only extensions
+├── editor-toolbar.tsx
+├── figure-properties-panel.tsx
+└── table-properties-panel.tsx
+```
+
+### The Split Principle
+
+| Shared (`packages/lib/src/docs/`) | App-only (`apps/docs/`, `apps/api/`) |
+|---|---|
+| Node/mark **schema** (attrs, parseHTML, renderHTML) | React NodeViews (FigureView) |
+| Extension list (`getDocExtensions()`) | Collaboration, CollaborationCaret |
+| Yjs doc loading from SQLite | TableWidthClamp (editor UX) |
+| Types and data extraction | Editor UI (toolbar, panels) |
+| HTML rendering (via static-renderer) | WebSocket handling |
+
+### How Extension Splitting Works
+
+The Figure extension demonstrates the pattern. The **schema** is shared (attributes, parseHTML, renderHTML, commands).
+The **React NodeView** is editor-only:
 
 ```typescript
-import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
-import Highlight from '@tiptap/extension-highlight';
-import { TaskItem, TaskList } from '@tiptap/extension-list';
-import Subscript from '@tiptap/extension-subscript';
-import Superscript from '@tiptap/extension-superscript';
-import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table';
-import TextAlign from '@tiptap/extension-text-align';
-import { Color, FontFamily, TextStyle } from '@tiptap/extension-text-style';
-import Typography from '@tiptap/extension-typography';
-import StarterKit from '@tiptap/starter-kit';
+// packages/lib/src/docs/eigendoc/nodes/figure.ts
+// Pure schema — no React, no DOM, works on server
+export const FigureNode = Node.create({
+    name: 'figure',
+    group: 'block',
+    atom: true,
+    draggable: true,
+    addAttributes() { /* mediaName, src, alt, caption, width, alignment */ },
+    parseHTML() { /* figure, img[data-media-name], img[src] */ },
+    renderHTML() { /* figure > img + figcaption */ },
+    addCommands() { /* setFigure */ },
+});
+```
 
-export function getDocExtensions(options?: { lowlight?: unknown }) {
-    return [
-        StarterKit.configure({
-            undoRedo: false,
-            codeBlock: false,
-            link: {
-                HTMLAttributes: {
-                    target: '_blank',
-                    rel: 'noopener noreferrer',
-                },
-            },
-        }),
-        Subscript,
-        Superscript,
-        Typography,
-        TextStyle,
-        Color,
-        FontFamily,
-        TaskList,
-        TaskItem.configure({ nested: true }),
-        TextAlign.configure({ types: ['heading', 'paragraph'] }),
-        Highlight.configure({ multicolor: true }),
-        ...(options?.lowlight
-            ? [CodeBlockLowlight.configure({ lowlight: options.lowlight })]
-            : []),
-        Table,
-        TableRow,
-        TableCell,
-        TableHeader,
-    ];
+```typescript
+// apps/docs/src/components/docs/extensions/figure.ts
+// Editor extension — extends shared schema with React NodeView
+import { FigureNode } from '@workspace/lib/docs/eigendoc';
+
+export const Figure = FigureNode.extend({
+    addNodeView() {
+        return ReactNodeViewRenderer(FigureView);
+    },
+});
+```
+
+The server renderer uses `FigureNode` directly (gets correct HTML from `renderHTML`). The editor uses `Figure` which
+adds the interactive resize/drag UI on top. New attributes or parseHTML rules are added once in the shared definition.
+
+### Pattern for Non-ProseMirror Types
+
+Slides, stickies, and sheets don't use tiptap — they store custom JSON in Yjs `Y.Map` structures. Each module follows
+the same pattern: **types** → **extract** → **render**.
+
+```typescript
+// packages/lib/src/docs/eigenslides/extract.ts
+export function extractDeckData(ydoc: Y.Doc): DeckData {
+    const slides = ydoc.getMap('slides');
+    const objects = ydoc.getMap('objects');
+    const slideOrder = ydoc.getArray('slideOrder');
+    return { slides: slides.toJSON(), objects: objects.toJSON(), slideOrder: slideOrder.toArray() };
+}
+
+// packages/lib/src/docs/eigenslides/render.ts
+export function renderSlidesToHTML(data: DeckData, options?: RenderOptions): string {
+    return data.slideOrder.map(id => renderSlide(data.slides[id], data.objects, options)).join('');
 }
 ```
 
-The editor adds editor-specific extensions on top (Collaboration, CollaborationCaret, Figure, CommentMark, SmallMark,
-TableWidthClamp). The server renderer uses the base list + custom `nodeMapping` overrides for Figure.
+## Shared Yjs Loader
 
-## Use Case 1: Quick Preview
+All eigen file types store Yjs state in the same SQLite schema (`docUpdates` + `docSnapshots` tables). The loader is
+shared:
+
+```typescript
+// packages/lib/src/docs/yjs.ts
+import * as Y from 'yjs';
+
+export function loadYjsState(db: { query: (sql: string) => { all: () => any[]; get: () => any } }): Y.Doc {
+    const doc = new Y.Doc();
+    const snapshot = db.query('SELECT stateData FROM docSnapshots ORDER BY id DESC LIMIT 1').get();
+    if (snapshot) Y.applyUpdate(doc, snapshot.stateData as Uint8Array);
+    const updates = db.query(
+        `SELECT updateData FROM docUpdates WHERE id > ${snapshot?.id || 0} ORDER BY id`,
+    ).all();
+    for (const update of updates) Y.applyUpdate(doc, update.updateData as Uint8Array);
+    return doc;
+}
+```
+
+## Use Case 1: Quick Preview (eigendoc)
 
 ### Server-Side Rendering
 
 ```typescript
 import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
 import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
-import { getDocExtensions } from '@workspace/lib/docs/extensions';
+import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
+import { loadYjsState } from '@workspace/lib/docs/yjs';
 
-async function renderDocPreview(
-    drive: Drive, mountId: string, pathId: string
-): Promise<string> {
-    // Load Yjs state from eigendoc's SQLite
-    const ydoc = await loadYjsDoc(drive, mountId, pathId);
-    const fragment = ydoc.getXmlFragment('default');
-    const pmJson = yXmlFragmentToProsemirrorJSON(fragment);
-
-    // Resolve media folder for figure images
-    const mediaFolder = await drive.findMediaFolder(mountId, pathId);
+async function renderDocPreview(drive: Drive, mountId: string, pathId: string): Promise<string> {
+    const db = await drive.openDatabase(mountId, pathId);
+    const ydoc = loadYjsState(db);
+    const pmJson = yXmlFragmentToProsemirrorJSON(ydoc.getXmlFragment('default'));
 
     const html = renderToHTMLString({
         content: pmJson,
         extensions: getDocExtensions({ lowlight }),
         options: {
             nodeMapping: {
-                // Custom rendering for figure nodes (media URL resolution)
                 figure: ({ node }) => {
-                    const url = resolveMediaUrl(mediaFolder, node.attrs.mediaName);
-                    const img = url ? `<img src="${escapeAttr(url)}" alt="${escapeAttr(node.attrs.alt || '')}" />` : '';
-                    const caption = node.attrs.caption
-                        ? `<figcaption>${escapeHtml(node.attrs.caption)}</figcaption>` : '';
-                    return `<figure>${img}${caption}</figure>`;
+                    const url = resolveMediaUrl(node.attrs.mediaName);
+                    const img = url ? `<img src="${escapeAttr(url)}" />` : '';
+                    const cap = node.attrs.caption ? `<figcaption>${escapeHtml(node.attrs.caption)}</figcaption>` : '';
+                    return `<figure>${img}${cap}</figure>`;
                 },
             },
         },
@@ -179,25 +250,6 @@ GET /collab/:ownerId/:mountId/:pathId/preview
 ```
 
 Returns sanitized HTML wrapped in `eigen-prose` class for consistent styling.
-
-### Loading Without Active Collab Session
-
-For previews, we don't need a full `CollabDocument` with WebSocket subscriptions. A lightweight loader reads the Yjs
-state directly from the eigendoc's SQLite database:
-
-```typescript
-function loadYjsDoc(db: Database): Y.Doc {
-    const doc = new Y.Doc();
-    const snapshot = db.query('SELECT stateData FROM docSnapshots ORDER BY id DESC LIMIT 1').get();
-    if (snapshot) Y.applyUpdate(doc, snapshot.stateData);
-    const updates = db.query(
-        'SELECT updateData FROM docUpdates WHERE id > ? ORDER BY id',
-        [snapshot?.id || 0],
-    ).all();
-    for (const update of updates) Y.applyUpdate(doc, update.updateData);
-    return doc;
-}
-```
 
 ## Use Case 2: DOCX Import
 
@@ -229,7 +281,7 @@ The schema is built from the shared extensions:
 
 ```typescript
 import { getSchema } from '@tiptap/core';
-import { getDocExtensions } from '@workspace/lib/docs/extensions';
+import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 
 const schema = getSchema(getDocExtensions());
 ```
@@ -241,7 +293,6 @@ import { prosemirrorJSONToYDoc } from '@tiptap/y-tiptap';
 
 const ydoc = prosemirrorJSONToYDoc(schema, pmJson);
 const update = Y.encodeStateAsUpdate(ydoc);
-// Store in eigendoc's database
 ```
 
 ## Use Case 3: DOCX Export
@@ -254,19 +305,6 @@ Use `renderToHTMLString` from Use Case 1, then convert to DOCX via `html-to-docx
 
 `prosemirror-docx` serializes ProseMirror documents directly to DOCX, preserving more structure.
 
-## Other Collab Document Types
-
-Each type stores content differently in Yjs:
-
-| Type | Yjs structure | Rendering approach |
-|------|---------------|-------------------|
-| eigendoc | `Y.XmlFragment` (ProseMirror) | `renderToHTMLString` with shared extensions |
-| eigenslides | `Y.Map` with slides/objects/order | Custom: iterate slides, render positioned elements |
-| eigenstickies | `Y.Map` with cards/columns | Custom: iterate columns/cards, render kanban HTML |
-| eigensheets | `Y.Map` with cell data | Custom: iterate cells, render HTML table |
-
-The Yjs loader (`loadYjsDoc`) is shared across all types. Only the extraction and rendering steps are type-specific.
-
 ## Dependencies
 
 ### Already Available
@@ -274,7 +312,7 @@ The Yjs loader (`loadYjsDoc`) is shared across all types. Only the extraction an
 | Package | Purpose |
 |---------|---------|
 | `yjs` | Yjs document handling (API server) |
-| `@tiptap/y-tiptap` | Yjs ↔ ProseMirror JSON (docs frontend, add to API) |
+| `@tiptap/y-tiptap` | Yjs <-> ProseMirror JSON (docs frontend, add to API) |
 | `@tiptap/core` + extensions | Schema + rendering (docs frontend, add to API) |
 | `lowlight` | Code syntax highlighting (API + frontend) |
 | `isomorphic-dompurify` | HTML sanitization (API server) |
@@ -284,26 +322,27 @@ The Yjs loader (`loadYjsDoc`) is shared across all types. Only the extraction an
 | Package | Purpose | When |
 |---------|---------|------|
 | `@tiptap/static-renderer` | Server-side HTML rendering (no DOM) | Phase 1 |
-| `mammoth` | DOCX → HTML import | Phase 2 |
+| `mammoth` | DOCX -> HTML import | Phase 2 |
 | `happy-dom` | Minimal DOM for DOCX import DOMParser | Phase 2 |
-| `prosemirror-docx` | PM → DOCX export (optional) | Phase 3 |
+| `prosemirror-docx` | PM -> DOCX export (optional) | Phase 3 |
 
 ## Implementation Order
 
 ### Phase 1: Quick Preview
 
-1. Extract shared extension list to `packages/lib/src/core/docs/extensions.ts`
-2. Add `@tiptap/static-renderer` + `@tiptap/y-tiptap` to API server
-3. Create Yjs doc loader utility
-4. Add `GET /collab/:ownerId/:mountId/:pathId/preview` endpoint
-5. Wire into Drive's preview system
-6. Update docs editor to import from shared extensions
+1. Create `packages/lib/src/docs/` directory structure
+2. Move Figure/CommentMark/SmallMark schemas to shared, keep React views in app
+3. Create `getDocExtensions()` in shared, update docs editor to import from it
+4. Create `loadYjsState()` shared Yjs loader
+5. Add `@tiptap/static-renderer` + shared tiptap deps to API server
+6. Add `GET /collab/:ownerId/:mountId/:pathId/preview` endpoint
+7. Wire into Drive's preview system
 
 ### Phase 2: DOCX Import
 
 1. Add `mammoth` + `happy-dom` to API server
-2. Create DOCX → eigendoc conversion pipeline (uses shared schema via `getSchema(getDocExtensions())`)
-3. Handle image extraction → media folder
+2. Create DOCX -> eigendoc conversion pipeline (uses shared schema via `getSchema(getDocExtensions())`)
+3. Handle image extraction -> media folder
 4. Add `POST /drive/:ownerId/:mountId/import-docx` endpoint
 
 ### Phase 3: DOCX Export
@@ -313,12 +352,14 @@ The Yjs loader (`loadYjsDoc`) is shared across all types. Only the extraction an
 
 ### Phase 4: Other Document Types
 
-1. Eigenslides, eigenstickies, eigensheets HTML serializers (custom per type)
+1. Create `eigenslides/` types + extract + render
+2. Create `eigenstickies/` types + extract + render
+3. Create `eigensheets/` types + extract + render
 
 ## Edge Cases
 
 - **Empty documents**: Return minimal HTML or empty string
-- **Missing media**: `resolveMediaUrl` returns null → render placeholder or skip image
+- **Missing media**: `resolveMediaUrl` returns null -> render placeholder or skip image
 - **Corrupt Yjs state**: Wrap `Y.applyUpdate()` in try/catch, return error state
 - **Concurrent edits during preview**: Load a snapshot — previews are eventually consistent
 - **Code blocks without language**: Fall back to plain text (no highlighting)
