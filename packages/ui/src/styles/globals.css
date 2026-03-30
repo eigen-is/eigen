@@ -3,6 +3,8 @@
 @import "./eigen-prose.css";
 
 @source "../../../apps/**/*.{ts,tsx}";
+@source "../../../packages/fortune-sheet/src/components/**/*.{ts,tsx}";
+@source "../../../packages/lib/**/*.{ts,tsx}";
 @source "../../../components/**/*.{ts,tsx}";
 @source "../**/*.{ts,tsx}";
 
