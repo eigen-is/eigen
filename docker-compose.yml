@@ -1,61 +1,99 @@
 services:
-  # API Server - Bun backend with WebSocket support
-  api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: api
-    image: eigen/api:latest
-    container_name: eigen-api
-    ports:
-      - "8000:8000"
-    volumes:
-      - eigen-user-data:/app/data/home
-      - eigen-server-data:/app/data/server
-    environment:
-      - NODE_ENV=production
-      - PRODUCTION=${PRODUCTION:-1}
-      - COOKIE_DOMAIN=${COOKIE_DOMAIN:-.eigen.is}
-    networks:
-      - eigen-network
-    restart: unless-stopped
-    healthcheck:
-      test: [ "CMD-SHELL", "bun run -e \"fetch('http://localhost:8000/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))\"" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
-
-  # nginx - Web server for static files and reverse proxy
-  nginx:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: nginx
-    image: eigen/nginx:latest
-    container_name: eigen-nginx
+  caddy:
+    image: caddy:2-alpine
     ports:
       - "80:80"
       - "443:443"
-    depends_on:
-      api:
-        condition: service_healthy
-    networks:
-      - eigen-network
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./docker/caddy/export-certs.sh:/usr/local/bin/export-certs.sh:ro
+      - ./dist:/www:ro
+      - ./caddy-data:/data
+      - ./data/certs:/shared-certs
+    env_file: .env.production
+    environment:
+      DOMAIN: ${DOMAIN}
+      CADDY_ACME_EMAIL: "email ${ACME_EMAIL:-admin@${DOMAIN}}"
+    command: sh -c "/usr/local/bin/export-certs.sh & caddy run --config /etc/caddy/Caddyfile --adapter caddyfile"
     restart: unless-stopped
-    healthcheck:
-      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost/health || exit 1" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
+    networks: [eigen]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
 
-networks:
-  eigen-network:
-    driver: bridge
+  eigen-api:
+    build:
+      context: .
+      dockerfile: docker/api/Dockerfile
+    user: "1000:1000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      PRODUCTION: 1
+      EIGEN_DATA_ROOT: /app/data
+      DOMAIN: ${DOMAIN}
+      SMTP_HOST: postfix
+      SMTP_PORT: 25
+      COOKIE_DOMAIN: .${DOMAIN}
+      TRUSTED_NETWORKS: "127.0.0.0/8,::1,172.16.0.0/12"
+    restart: unless-stopped
+    networks: [eigen]
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  postfix:
+    build:
+      context: docker/postfix
+    ports:
+      - "25:25"
+    volumes:
+      - ./data/dkim:/data/dkim
+      - ./data/certs:/certs:ro
+      - postfix-queue:/var/spool/postfix
+    environment:
+      DOMAIN: ${DOMAIN}
+      SMTP_RELAY_HOST: ${SMTP_RELAY_HOST:-}
+      SMTP_RELAY_PORT: ${SMTP_RELAY_PORT:-587}
+      SMTP_RELAY_USER: ${SMTP_RELAY_USER:-}
+      SMTP_RELAY_PASSWORD: ${SMTP_RELAY_PASSWORD:-}
+    depends_on:
+      eigen-api:
+        condition: service_healthy
+    restart: unless-stopped
+    networks: [eigen]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  dovecot:
+    build:
+      context: docker/dovecot
+    ports:
+      - "993:993"
+    volumes:
+      - ./data:/data
+      - ./data/certs:/certs
+    environment:
+      DOMAIN: ${DOMAIN}
+    depends_on:
+      eigen-api:
+        condition: service_healthy
+    restart: unless-stopped
+    networks: [eigen]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
 
 volumes:
-  eigen-user-data:
-    driver: local
-  eigen-server-data:
-    driver: local
+  postfix-queue:
+
+networks:
+  eigen:
+    driver: bridge
