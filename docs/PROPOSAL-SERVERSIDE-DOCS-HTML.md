@@ -72,13 +72,12 @@ Yjs binary → Y.Doc → PM JSON → renderToHTMLString(json, extensions) → HT
 
 ## Directory Structure
 
-All shared document processing code lives in `packages/lib/src/docs/`. This code has **no React dependency** and works
-in both browser and server (Bun) contexts.
+Shared schema, types, and rendering code lives in `packages/lib/src/docs/`. This code has **no React dependency**, no
+I/O, and works in both browser and server (Bun) contexts. Backend-only code (Yjs loading from SQLite, API endpoints)
+stays in `apps/api/`.
 
 ```
-packages/lib/src/docs/
-├── yjs.ts                          # Shared: load Y.Doc from any eigen file's SQLite db
-│
+packages/lib/src/docs/                    # Schema, types, rendering (NO React, NO I/O)
 ├── eigendoc/
 │   ├── extensions.ts               # getDocExtensions() — shared tiptap extension list
 │   ├── nodes/
@@ -125,13 +124,12 @@ apps/docs/src/components/docs/
 
 ### The Split Principle
 
-| Shared (`packages/lib/src/docs/`) | App-only (`apps/docs/`, `apps/api/`) |
-|---|---|
-| Node/mark **schema** (attrs, parseHTML, renderHTML) | React NodeViews (FigureView) |
-| Extension list (`getDocExtensions()`) | Collaboration, CollaborationCaret |
-| Yjs doc loading from SQLite | TableWidthClamp (editor UX) |
-| Types and data extraction | Editor UI (toolbar, panels) |
-| HTML rendering (via static-renderer) | WebSocket handling |
+| Shared (`packages/lib/src/docs/`) | Frontend (`apps/docs/`) | Backend (`apps/api/`) |
+|---|---|---|
+| Node/mark **schema** (attrs, parseHTML, renderHTML) | React NodeViews (FigureView) | Yjs doc loading from SQLite |
+| Extension list (`getDocExtensions()`) | Collaboration, CollaborationCaret | Preview/export endpoints |
+| Types and data extraction functions | TableWidthClamp (editor UX) | DOCX import pipeline |
+| | Editor UI (toolbar, panels) | Media URL resolution |
 
 ### How Extension Splitting Works
 
@@ -188,26 +186,37 @@ export function renderSlidesToHTML(data: DeckData, options?: RenderOptions): str
 }
 ```
 
-## Shared Yjs Loader
+## Yjs Loader (Backend)
 
-All eigen file types store Yjs state in the same SQLite schema (`docUpdates` + `docSnapshots` tables). The loader is
-shared:
+All eigen file types store Yjs state in the same SQLite schema (`docUpdates` + `docSnapshots` tables). The loader lives
+in the API server next to the existing `CollabDocument`:
+
+```
+apps/api/src/lib/collab/
+├── collabDocument.ts               # Existing: full collab session (WebSocket, subscriptions)
+├── yjs-loader.ts                   # New: lightweight read-only Yjs state loading
+└── schema.ts                       # Existing: DB schema
+```
 
 ```typescript
-// packages/lib/src/docs/yjs.ts
+// apps/api/src/lib/collab/yjs-loader.ts
 import * as Y from 'yjs';
 
-export function loadYjsState(db: { query: (sql: string) => { all: () => any[]; get: () => any } }): Y.Doc {
+export function loadYjsState(db: Database): Y.Doc {
     const doc = new Y.Doc();
     const snapshot = db.query('SELECT stateData FROM docSnapshots ORDER BY id DESC LIMIT 1').get();
     if (snapshot) Y.applyUpdate(doc, snapshot.stateData as Uint8Array);
     const updates = db.query(
-        `SELECT updateData FROM docUpdates WHERE id > ${snapshot?.id || 0} ORDER BY id`,
+        'SELECT updateData FROM docUpdates WHERE id > ? ORDER BY id',
+        [snapshot?.id || 0],
     ).all();
     for (const update of updates) Y.applyUpdate(doc, update.updateData as Uint8Array);
     return doc;
 }
 ```
+
+This is a lightweight alternative to `CollabDocument` — no WebSocket subscriptions, no undo manager, no update tracking.
+Just load the state and return.
 
 ## Use Case 1: Quick Preview (eigendoc)
 
@@ -330,10 +339,10 @@ Use `renderToHTMLString` from Use Case 1, then convert to DOCX via `html-to-docx
 
 ### Phase 1: Quick Preview
 
-1. Create `packages/lib/src/docs/` directory structure
+1. Create `packages/lib/src/docs/eigendoc/` — shared extension list + node/mark schemas
 2. Move Figure/CommentMark/SmallMark schemas to shared, keep React views in app
 3. Create `getDocExtensions()` in shared, update docs editor to import from it
-4. Create `loadYjsState()` shared Yjs loader
+4. Create `apps/api/src/lib/collab/yjs-loader.ts` — lightweight read-only Yjs state loading
 5. Add `@tiptap/static-renderer` + shared tiptap deps to API server
 6. Add `GET /collab/:ownerId/:mountId/:pathId/preview` endpoint
 7. Wire into Drive's preview system
