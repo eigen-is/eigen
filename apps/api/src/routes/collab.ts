@@ -37,7 +37,7 @@ function cleanupSession(data: CollabWsData, ws: ServerWebSocket<undefined>) {
 export const collabRouter = new Elysia({
     name: 'collab',
     websocket: {
-        perMessageDeflate: false,
+        perMessageDeflate: true,
         maxPayloadLength: 4 * 1024 * 1024,
     },
 })
