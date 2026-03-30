@@ -28,7 +28,7 @@
     "@tiptap/react": "^3.21.0",
     "@tiptap/starter-kit": "^3.21.0",
     "@tiptap/y-tiptap": "^3.0.2",
-    "lowlight": "^3.1.0",
+    "lowlight": "^3.3.0",
     "y-websocket": "^3.0.0",
     "yjs": "^13.6.27"
   }

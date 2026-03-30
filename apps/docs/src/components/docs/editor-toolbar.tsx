@@ -1,5 +1,6 @@
 import { formatForDisplay } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
+import { yDocToProsemirrorJSON } from '@tiptap/y-tiptap';
 import { EIGEN_FONTS, getFontFamily } from '@workspace/lib/constants/fonts';
 import { useMediaQuery } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -66,7 +67,6 @@ import {
     UserRoundPlus,
 } from 'lucide-react';
 import { useRef, useState } from 'react';
-import { yDocToProsemirrorJSON } from 'y-prosemirror';
 import * as Y from 'yjs';
 
 type EditorToolbarProps = {
