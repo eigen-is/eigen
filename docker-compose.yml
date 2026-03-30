@@ -72,6 +72,25 @@ services:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
 
+  dovecot:
+    build:
+      context: docker/dovecot
+    ports:
+      - "993:993"
+    volumes:
+      - ./data:/data
+      - ./data/certs:/certs
+    environment:
+      DOMAIN: ${DOMAIN}
+    depends_on:
+      eigen-api:
+        condition: service_healthy
+    restart: unless-stopped
+    networks: [eigen]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
 volumes:
   postfix-queue:
 
