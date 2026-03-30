@@ -34,7 +34,7 @@ export async function generateEigendocPreview(mount: Mount, drivePath: DrivePath
                 figure: ({ node }: { node: { attrs: Record<string, unknown> } }) => {
                     const mediaName = node.attrs['mediaName'] as string | null;
                     const src = node.attrs['src'] as string | null;
-                    const alt = escape(String(node.attrs['alt'] || ''));
+                    const alt = escapeHtml(String(node.attrs['alt'] || ''));
                     const caption = node.attrs['caption'] as string | null;
                     const rawWidth = node.attrs['width'];
                     const width =
@@ -53,9 +53,9 @@ export async function generateEigendocPreview(mount: Mount, drivePath: DrivePath
 
                     const imgStyle = width ? `width: ${width}px; ` : '';
                     const img = imgSrc
-                        ? `<img src="${escape(imgSrc)}" alt="${alt}" style="${imgStyle}max-width: 100%" />`
+                        ? `<img src="${escapeHtml(imgSrc)}" alt="${alt}" style="${imgStyle}max-width: 100%" />`
                         : '';
-                    const cap = caption ? `<figcaption>${escape(caption)}</figcaption>` : '';
+                    const cap = caption ? `<figcaption>${escapeHtml(caption)}</figcaption>` : '';
                     const align = alignment || 'center';
                     const justify = align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start';
                     return `<figure style="display: flex; flex-direction: column; align-items: ${justify}">${img}${cap}</figure>`;
@@ -67,7 +67,7 @@ export async function generateEigendocPreview(mount: Mount, drivePath: DrivePath
     return DOMPurify.sanitize(html, { FORCE_BODY: true });
 }
 
-function escape(text: string): string {
+function escapeHtml(text: string): string {
     return text
         .replace(/&/g, '&amp;')
         .replace(/"/g, '&quot;')
