@@ -40,6 +40,7 @@ import { EditorToolbar } from './editor-toolbar';
 import { CommentMark } from './extensions/comment-mark';
 import { Figure } from './extensions/figure';
 import { SmallMark } from './extensions/small-mark';
+import { TableWidthClamp } from './extensions/table-width-clamp';
 import { FigurePropertiesPanel } from './figure-properties-panel';
 import { TablePropertiesPanel } from './table-properties-panel';
 
@@ -215,6 +216,7 @@ const TiptapEditor = ({
                 Table.configure({
                     resizable: true,
                 }),
+                TableWidthClamp,
                 TableRow,
                 TableCell,
                 TableHeader,
