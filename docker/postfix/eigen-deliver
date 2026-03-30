@@ -1,0 +1,17 @@
+#!/bin/sh
+# Called by Postfix pipe transport for each incoming message.
+# Reads message from stdin, POSTs to Eigen API.
+# Returns sysexits codes so Postfix bounces vs defers correctly.
+RECIPIENT="$1"
+HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+    -H "Content-Type: application/octet-stream" \
+    --data-binary @- \
+    --max-time 30 \
+    "http://eigen-api:8000/mail/deliver/${RECIPIENT}")
+
+case "$HTTP_CODE" in
+    200|201) exit 0 ;;       # Success
+    404)     exit 67 ;;      # EX_NOUSER — unknown recipient, permanent bounce
+    4[0-9][0-9]) exit 65 ;;  # EX_DATAERR — other client error, permanent
+    *)       exit 75 ;;      # EX_TEMPFAIL — server error or unreachable, defer + retry
+esac
