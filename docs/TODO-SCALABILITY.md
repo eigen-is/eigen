@@ -141,7 +141,7 @@ Real-time collaborative editing engine running in-memory on API servers.
 
 ```
 docker-compose.yml
-├── nginx/
+├── caddy/
 ├── api-gateway/
 ├── redis/
 ├── api-server/

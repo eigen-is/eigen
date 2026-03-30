@@ -97,7 +97,7 @@ app.route('MKCALENDAR', '/dav/*', handler)
 app.route('PROPPATCH', '/dav/*', handler)
 ```
 
-**CORS**: Handled at nginx level — `/dav/*` is proxied separately without CORS headers (see Discovery Flow).
+**CORS**: Handled at Caddy level — `/dav/*` is proxied separately without CORS headers (see Discovery Flow).
 Elysia's CORS middleware only applies to `/eigen/*` requests, so no interference with CalDAV methods.
 
 **Body parsing note**: Elysia parses JSON by default. CalDAV sends `application/xml` bodies. The `/dav/*` routes
@@ -199,28 +199,19 @@ Apple Calendar **requires** `/.well-known/caldav`. Thunderbird does not auto-dis
 
 ### Reverse proxy handling
 
-Production runs at `api.eigen.is` (API) and `eigen.is/...` (apps). The reverse proxy (nginx/Caddy) in front of
-`api.eigen.is` needs two additions:
+Production uses Caddy as reverse proxy. The `Caddyfile` in the repo already includes both CalDAV routes:
 
-```nginx
-# CalDAV discovery — on the domain clients connect to
-location = /.well-known/caldav {
-    return 301 /dav/;
+```
+# In Caddyfile (already configured)
+handle /dav/* {
+    reverse_proxy eigen-api:8000
 }
-
-# CalDAV proxy — no CORS headers, pass WebDAV methods through
-location /dav/ {
-    proxy_pass http://127.0.0.1:8000/dav/;
-    proxy_http_version 1.1;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
+handle /.well-known/caldav {
+    redir /dav/ 301
 }
 ```
 
-No CORS headers on `/dav/*` — CalDAV clients are native apps, not browsers. The `Caddyfile` in the repo already
-includes `/dav/*` proxy and `/.well-known/caldav` redirect.
+No CORS headers on `/dav/*` — CalDAV clients are native apps, not browsers.
 
 ### Sharding compatibility
 
@@ -588,7 +579,7 @@ ical.js is wired up. Schema changes are small.
 | Recurrence in REPORT | Medium | Return raw master+exceptions, NOT expanded. Existing expansion logic reused only for time-range filtering |
 | Shared calendar proxying | Medium | Encode owner in collection URL. Reuse `resolveCalendarForEvents()` for access control |
 | Body parsing (Elysia JSON default vs XML) | Low | Read raw body as text on `/dav/*`. Exclude from JSON parsing |
-| CORS interference | Low | nginx proxies `/dav/*` separately — no CORS headers applied |
+| CORS interference | Low | Caddy proxies `/dav/*` separately — no CORS headers applied |
 | Performance (large calendars) | Low | SQLite is fast. ctag prevents unnecessary syncs. No pagination needed |
 
 ## Dependencies
