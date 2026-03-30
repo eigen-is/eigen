@@ -8,6 +8,11 @@ import {
     DRIVE_MIME_SHEETS,
     DRIVE_MIME_SLIDES,
     DRIVE_MIME_STICKIES,
+    DRIVE_TYPE_CHAT,
+    DRIVE_TYPE_DOC,
+    DRIVE_TYPE_SHEETS,
+    DRIVE_TYPE_SLIDES,
+    DRIVE_TYPE_STICKIES,
     type DriveContainerType,
     type DrivePath,
     type MountConfig,
@@ -676,54 +681,18 @@ export class Mount {
     ): Promise<DrivePath[]> {
         const conditions = [];
         if (mimeTypePrefix) {
-            conditions.push(sql`${paths.mimeType}
-            LIKE
-            ${`${mimeTypePrefix}%`}`);
+            conditions.push(sql`${paths.mimeType} LIKE ${`${mimeTypePrefix}%`}`);
         }
         if (options?.excludeDocumentChildren) {
-            conditions.push(sql`${paths.parentId}
-            NOT IN (
+            conditions.push(sql`${paths.parentId} NOT IN (
                 WITH RECURSIVE doc_tree AS (
-                    SELECT
-            ${paths.id}
-            FROM
-            ${paths}
-            WHERE
-            ${paths.type}
-            IN
-            (
-            'doc',
-            'stickies',
-            'slides',
-            'sheets',
-            'chat'
-            )
-            UNION
-            ALL
-            SELECT
-            p
-            .
-            id
-            FROM
-            ${paths}
-            p
-            INNER
-            JOIN
-            doc_tree
-            dt
-            ON
-            p
-            .
-            parentId
-            =
-            dt
-            .
-            id
-            )
-            SELECT
-            id
-            FROM
-            doc_tree
+                    SELECT ${paths.id} FROM ${paths}
+                    WHERE ${paths.type} IN (${DRIVE_TYPE_DOC}, ${DRIVE_TYPE_STICKIES}, ${DRIVE_TYPE_SLIDES}, ${DRIVE_TYPE_SHEETS}, ${DRIVE_TYPE_CHAT})
+                    UNION ALL
+                    SELECT p.id FROM ${paths} p
+                    INNER JOIN doc_tree dt ON p.parentId = dt.id
+                )
+                SELECT id FROM doc_tree
             )`);
         }
 
