@@ -72,6 +72,8 @@ import * as Y from 'yjs';
 type EditorToolbarProps = {
     editor: Editor;
     canWrite: boolean;
+    canUndo: boolean;
+    canRedo: boolean;
     onAccessDialogOpen: () => void;
     path: DrivePath;
     onAddComment?: () => void;
@@ -84,6 +86,8 @@ export const EditorToolbar = ({
     editor,
     path,
     canWrite,
+    canUndo,
+    canRedo,
     onAccessDialogOpen,
     onAddComment,
     onImageUpload,
@@ -165,13 +169,13 @@ export const EditorToolbar = ({
                             <DropdownMenuContent align="start">
                                 <DropdownMenuItem
                                     onClick={() => editor.chain().focus().undo().run()}
-                                    disabled={!editor.can().undo()}
+                                    disabled={!canUndo}
                                 >
                                     <Undo className="h-4 w-4 mr-2" /> Undo
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                     onClick={() => editor.chain().focus().redo().run()}
-                                    disabled={!editor.can().redo()}
+                                    disabled={!canRedo}
                                 >
                                     <Redo className="h-4 w-4 mr-2" /> Redo
                                 </DropdownMenuItem>
@@ -328,13 +332,13 @@ export const EditorToolbar = ({
                         <TooltipButton
                             icon={Undo}
                             tooltipText={`Undo (${formatForDisplay('Mod+Z')})`}
-                            disabled={!editor.can().undo()}
+                            disabled={!canUndo}
                             onClick={() => editor.chain().focus().undo().run()}
                         />
                         <TooltipButton
                             icon={Redo}
                             tooltipText={`Redo (${formatForDisplay('Mod+Y')})`}
-                            disabled={!editor.can().redo()}
+                            disabled={!canRedo}
                             onClick={() => editor.chain().focus().redo().run()}
                         />
                     </div>

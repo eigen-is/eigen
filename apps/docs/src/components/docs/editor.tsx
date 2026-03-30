@@ -32,6 +32,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { Column, LoadingState } from '@workspace/ui';
 import { common, createLowlight } from 'lowlight';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { yUndoPluginKey } from 'y-prosemirror';
 import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
 import { CreateCommentDialog, ViewCommentDialog } from './comment-dialog';
@@ -128,6 +129,8 @@ const TiptapEditor = ({
     const [viewCommentChatName, setViewCommentChatName] = useState<string | null>(null);
     const [canvasScale, setCanvasScale] = useState(1);
     const [docHeight, setDocHeight] = useState(0);
+    const [canUndo, setCanUndo] = useState(false);
+    const [canRedo, setCanRedo] = useState(false);
     const needsScale = canvasScale < 1;
     const documentRef = useRef<HTMLDivElement>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -339,6 +342,25 @@ const TiptapEditor = ({
 
     editorRef.current = editor;
 
+    useEffect(() => {
+        if (!editor) return;
+        const pluginState = yUndoPluginKey.getState(editor.state);
+        if (!pluginState?.undoManager) return;
+        const um = pluginState.undoManager;
+        const update = () => {
+            setCanUndo(um.undoStack.length > 0);
+            setCanRedo(um.redoStack.length > 0);
+        };
+        um.on('stack-item-added', update);
+        um.on('stack-item-popped', update);
+        um.on('stack-cleared', update);
+        return () => {
+            um.off('stack-item-added', update);
+            um.off('stack-item-popped', update);
+            um.off('stack-cleared', update);
+        };
+    }, [editor]);
+
     const handleImageUpload = async (file: File) => {
         if (!mediaFolderIdRef.current || !file.type.startsWith('image/')) return;
         const result = await uploadFile.mutateAsync({ parentId: mediaFolderIdRef.current, file });
@@ -473,6 +495,8 @@ const TiptapEditor = ({
                         editor={editor}
                         path={path}
                         canWrite={access.canWrite}
+                        canUndo={canUndo}
+                        canRedo={canRedo}
                         onAccessDialogOpen={onAccessDialogOpen}
                         onAddComment={chatFolderId ? handleAddComment : undefined}
                         onImageUpload={mediaFolderId ? handleImageUpload : undefined}
