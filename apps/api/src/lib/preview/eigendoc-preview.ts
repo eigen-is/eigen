@@ -3,8 +3,11 @@ import { COLLAB_DB_CONFIG } from '../collab/db-config';
 import { loadYjsState } from '../collab/yjs-loader';
 import type { Mount } from '../mount';
 
-// Lazy-initialized: tiptap/ProseMirror extensions reference DOM APIs in parseHTML,
-// which crashes when evaluated at module load time in a bundled (bun build) environment.
+// All tiptap/ProseMirror imports MUST be lazy (require inside function, not top-level import).
+// ProseMirror extensions reference DOM APIs in parseHTML. With `bun build`, top-level imports
+// are evaluated eagerly at startup, which crashes the server before any route is registered.
+// Because this module is imported via: collab.ts → drive.ts → preview-cache.ts → here,
+// a crash here kills all routes including WebSocket collab.
 let extensions: unknown[] | null = null;
 
 function getExtensions() {
@@ -20,12 +23,13 @@ export async function generateEigendocPreview(mount: Mount, drivePath: DrivePath
     const dataDbPath = await mount.getChildByName(drivePath.id, 'data.db');
     if (!dataDbPath) return '';
 
-    // Open (or reuse) the database — don't close it, as a collab session may share
-    // this instance. Mount.closeAllDatabases handles cleanup on shutdown.
     const { renderToHTMLString } = require('@tiptap/static-renderer/pm/html-string');
     const { yXmlFragmentToProsemirrorJSON } = require('@tiptap/y-tiptap');
     const DOMPurifyModule = require('isomorphic-dompurify');
     const DOMPurify = DOMPurifyModule.default || DOMPurifyModule;
+
+    // Open (or reuse) the database — don't close it, as a collab session may share
+    // this instance. Mount.closeAllDatabases handles cleanup on shutdown.
 
     const managedDb = await mount.openDatabase(COLLAB_DB_CONFIG, dataDbPath.id);
     const ydoc = loadYjsState(managedDb);
