@@ -32,6 +32,7 @@ bun --filter './apps/chat' build
 bun --filter './apps/slides' build
 bun --filter './apps/sheets' build
 bun --filter './apps/people' build
+bun --filter './apps/setup' build
 
 # Build API server
 echo ""
