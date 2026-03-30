@@ -4,6 +4,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_DOC } from '@workspace/lib/types/drive';
 import type { Mount } from '../mount';
 import { generateImagePreview } from '../shared/thumbnails';
+import { generateEigendocPreview } from './eigendoc-preview';
 import { isExiftoolCandidate } from './exiftool-preview';
 import { generateTextPreview, isTextPreviewSupported, type TextPreviewResult } from './text-preview';
 
@@ -120,7 +121,6 @@ export async function getCollabPreviewData(
     // so we always regenerate instead of caching
     if (mime === DRIVE_MIME_DOC) {
         try {
-            const { generateEigendocPreview } = await import('./eigendoc-preview');
             const body = await generateEigendocPreview(mount, drivePath, baseUrl);
             return body ? { body, mode: 'eigendoc' } : null;
         } catch (err) {
