@@ -1,22 +1,13 @@
-import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCaret from '@tiptap/extension-collaboration-caret';
-import Highlight from '@tiptap/extension-highlight';
-import { TaskItem, TaskList } from '@tiptap/extension-list';
-import Subscript from '@tiptap/extension-subscript';
-import Superscript from '@tiptap/extension-superscript';
-import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table';
-import TextAlign from '@tiptap/extension-text-align';
-import { Color, FontFamily, TextStyle } from '@tiptap/extension-text-style';
-import Typography from '@tiptap/extension-typography';
 import { Selection } from '@tiptap/pm/state';
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
-import StarterKit from '@tiptap/starter-kit';
 import { yUndoPluginKey } from '@tiptap/y-tiptap';
 import { getCollabWebSocketUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { needsReUpload, readEigenClipboard, reUploadImage, writeEigenClipboard } from '@workspace/lib/clipboard';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
+import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import { MediaResolverProvider, useMediaResolver, useUploadFile } from '@workspace/lib/drive';
 import { useMediaQuery } from '@workspace/lib/media';
 import type { EigenClipboardData, EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
@@ -30,7 +21,6 @@ import { CreateCommentDialog, ViewCommentDialog } from './comment-dialog';
 import { EditorToolbar } from './editor-toolbar';
 import { CommentMark } from './extensions/comment-mark';
 import { Figure } from './extensions/figure';
-import { SmallMark } from './extensions/small-mark';
 import { TableWidthClamp } from './extensions/table-width-clamp';
 import { FigurePropertiesPanel } from './figure-properties-panel';
 import { TablePropertiesPanel } from './table-properties-panel';
@@ -161,50 +151,9 @@ const TiptapEditor = ({
         {
             editable: access.canWrite,
             extensions: [
-                StarterKit.configure({
-                    undoRedo: false,
-                    codeBlock: false,
-                    dropcursor: {
-                        color: 'var(--color-primary)',
-                        width: 2,
-                    },
-                    link: {
-                        openOnClick: true,
-                        HTMLAttributes: {
-                            class: 'underline cursor-pointer',
-                            style: 'color: var(--color-link)',
-                            target: '_blank',
-                            rel: 'noopener noreferrer',
-                        },
-                        validate: (href: string) => /^(https?:|mailto:|tel:|\/)/i.test(href),
-                    },
-                }),
-                Subscript,
-                Superscript,
-                SmallMark,
-                Typography,
-                TextStyle,
-                Color,
-                FontFamily,
-                TaskList,
-                TaskItem.configure({ nested: true }),
-                TextAlign.configure({
-                    types: ['heading', 'paragraph'],
-                }),
+                ...getDocExtensions({ lowlight, exclude: ['figure', 'comment'] }),
                 Figure,
-                Highlight.configure({
-                    multicolor: true,
-                }),
-                CodeBlockLowlight.configure({
-                    lowlight,
-                }),
-                Table.configure({
-                    resizable: true,
-                }),
                 TableWidthClamp,
-                TableRow,
-                TableCell,
-                TableHeader,
                 CommentMark.configure({
                     onCommentClick: handleCommentClick,
                 }),
