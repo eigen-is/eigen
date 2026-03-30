@@ -48,8 +48,12 @@ export const app = new Elysia()
         }),
     )
     .state('requestStart', 0)
-    .onBeforeHandle(({ store }) => {
+    .onBeforeHandle(({ store, request }) => {
         store.requestStart = Bun.nanoseconds();
+        if (new URL(request.url).pathname.startsWith('/ws/')) {
+            console.log('[WS]', request.method, new URL(request.url).pathname);
+            console.log('[WS] Headers:', JSON.stringify(Object.fromEntries(request.headers.entries()), null, 2));
+        }
     })
     .onAfterResponse(({ store, request, set }) => {
         const ms = (Bun.nanoseconds() - store.requestStart) / 1_000_000;
