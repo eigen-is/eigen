@@ -353,11 +353,11 @@ const TiptapEditor = ({
         };
         um.on('stack-item-added', update);
         um.on('stack-item-popped', update);
-        um.on('stack-cleared', update);
+        um.on('stack-item-updated', update);
         return () => {
             um.off('stack-item-added', update);
             um.off('stack-item-popped', update);
-            um.off('stack-cleared', update);
+            um.off('stack-item-updated', update);
         };
     }, [editor]);
 
