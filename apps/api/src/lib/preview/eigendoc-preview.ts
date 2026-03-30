@@ -4,10 +4,11 @@ import { loadYjsState } from '../collab/yjs-loader';
 import type { Mount } from '../mount';
 
 // All tiptap/ProseMirror imports MUST be lazy (dynamic import, not top-level import).
-// ProseMirror extensions reference DOM APIs in parseHTML. With `bun build`, top-level imports
-// are evaluated eagerly at startup, which crashes the server before any route is registered.
-// Because this module is imported via: collab.ts → drive.ts → preview-cache.ts → here,
-// a crash here kills all routes including WebSocket collab.
+// With `bun build`, top-level imports cause module-level code in the tiptap/ProseMirror
+// dependency tree to be eagerly evaluated at startup. Some of these modules reference
+// DOM globals (document, window) at the module level, crashing the server before any
+// route is registered. This module is reachable via collab.ts → drive.ts → preview-cache.ts,
+// so a crash here kills all routes including WebSocket collab.
 let cachedExtensions: Awaited<ReturnType<typeof loadExtensions>> | null = null;
 
 async function loadExtensions() {
