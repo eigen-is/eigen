@@ -3,36 +3,96 @@ import { COLLAB_DB_CONFIG } from '../collab/db-config';
 import { loadYjsState } from '../collab/yjs-loader';
 import type { Mount } from '../mount';
 
-// All tiptap/ProseMirror imports MUST be lazy (dynamic import, not top-level import).
-// With `bun build`, top-level imports cause module-level code in the tiptap/ProseMirror
-// dependency tree to be eagerly evaluated at startup. Some of these modules reference
-// DOM globals (document, window) at the module level, crashing the server before any
-// route is registered. This module is reachable via collab.ts → drive.ts → preview-cache.ts,
-// so a crash here kills all routes including WebSocket collab.
-let cachedExtensions: Awaited<ReturnType<typeof loadExtensions>> | null = null;
+// All tiptap/ProseMirror imports MUST be lazy (dynamic import, not top-level).
+// `bun build` bundles workspace packages (@workspace/lib) inline but keeps node_modules
+// external. If tiptap packages are imported at the top level — even indirectly via a
+// workspace package — their module-level code referencing DOM globals (document, window)
+// is eagerly evaluated at startup, crashing the server before any route is registered.
+// This module is reachable via collab.ts → drive.ts → preview-cache.ts, so a crash here
+// kills all routes including WebSocket collab.
+//
+// Solution: import tiptap packages directly (they're external/node_modules) via dynamic
+// import() inside the function body. Do NOT import @workspace/lib/docs/eigendoc here —
+// it's a workspace package that gets inlined, dragging in top-level tiptap imports.
+// The extension list below mirrors getDocExtensions() from packages/lib.
 
-async function loadExtensions() {
-    const { common, createLowlight } = await import('lowlight');
-    const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
-    return getDocExtensions({ lowlight: createLowlight(common) });
+let cached: Awaited<ReturnType<typeof loadDeps>> | null = null;
+
+async function loadDeps() {
+    const [
+        { common, createLowlight },
+        { default: StarterKit },
+        { default: CodeBlockLowlight },
+        { default: Highlight },
+        { TaskItem, TaskList },
+        { default: Subscript },
+        { default: Superscript },
+        { Table, TableRow, TableCell, TableHeader },
+        { default: TextAlign },
+        { TextStyle, Color, FontFamily },
+        { default: Typography },
+        { renderToHTMLString },
+        { yXmlFragmentToProsemirrorJSON },
+        DOMPurifyModule,
+    ] = await Promise.all([
+        import('lowlight'),
+        import('@tiptap/starter-kit'),
+        import('@tiptap/extension-code-block-lowlight'),
+        import('@tiptap/extension-highlight'),
+        import('@tiptap/extension-list'),
+        import('@tiptap/extension-subscript'),
+        import('@tiptap/extension-superscript'),
+        import('@tiptap/extension-table'),
+        import('@tiptap/extension-text-align'),
+        import('@tiptap/extension-text-style'),
+        import('@tiptap/extension-typography'),
+        import('@tiptap/static-renderer/pm/html-string'),
+        import('@tiptap/y-tiptap'),
+        import('isomorphic-dompurify'),
+    ]);
+
+    const lowlight = createLowlight(common);
+    const extensions = [
+        StarterKit.configure({ undoRedo: false, codeBlock: false }),
+        Subscript,
+        Superscript,
+        Typography,
+        TextStyle,
+        Color,
+        FontFamily,
+        TaskList,
+        TaskItem.configure({ nested: true }),
+        TextAlign.configure({ types: ['heading', 'paragraph'] }),
+        Highlight.configure({ multicolor: true }),
+        CodeBlockLowlight.configure({ lowlight }),
+        Table,
+        TableRow,
+        TableCell,
+        TableHeader,
+    ];
+
+    const DOMPurify = DOMPurifyModule.default || DOMPurifyModule;
+    return {
+        extensions,
+        renderToHTMLString,
+        yXmlFragmentToProsemirrorJSON,
+        sanitize: (html: string) => DOMPurify.sanitize(html, { FORCE_BODY: true }),
+    };
 }
 
-async function getExtensions() {
-    if (!cachedExtensions) cachedExtensions = await loadExtensions();
-    return cachedExtensions;
+async function getDeps() {
+    if (!cached) cached = await loadDeps();
+    return cached;
 }
 
 export async function generateEigendocPreview(mount: Mount, drivePath: DrivePath, baseUrl = ''): Promise<string> {
     const dataDbPath = await mount.getChildByName(drivePath.id, 'data.db');
     if (!dataDbPath) return '';
 
-    const { renderToHTMLString } = await import('@tiptap/static-renderer/pm/html-string');
-    const { yXmlFragmentToProsemirrorJSON } = await import('@tiptap/y-tiptap');
-    const DOMPurify = (await import('isomorphic-dompurify')).default;
+    const { extensions, renderToHTMLString, yXmlFragmentToProsemirrorJSON, sanitize } = await getDeps();
 
     // Open (or reuse) the database — don't close it, as a collab session may share
     // this instance. Mount.closeAllDatabases handles cleanup on shutdown.
-
     const managedDb = await mount.openDatabase(COLLAB_DB_CONFIG, dataDbPath.id);
     const ydoc = loadYjsState(managedDb);
     const pmJson = yXmlFragmentToProsemirrorJSON(ydoc.getXmlFragment('default'));
@@ -44,7 +104,7 @@ export async function generateEigendocPreview(mount: Mount, drivePath: DrivePath
 
     const html = renderToHTMLString({
         content: pmJson,
-        extensions: await getExtensions(),
+        extensions,
         options: {
             nodeMapping: {
                 figure: ({ node }: { node: { attrs: Record<string, unknown> } }) => {
@@ -80,7 +140,7 @@ export async function generateEigendocPreview(mount: Mount, drivePath: DrivePath
         },
     });
 
-    return DOMPurify.sanitize(html, { FORCE_BODY: true });
+    return sanitize(html);
 }
 
 function escapeHtml(text: string): string {
