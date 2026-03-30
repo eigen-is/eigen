@@ -1,5 +1,5 @@
 {
-    email {$ACME_EMAIL}
+    {$CADDY_ACME_EMAIL:}
 }
 
 (app) {

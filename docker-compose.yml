@@ -11,9 +11,10 @@ services:
       - ./dist:/www:ro
       - ./caddy-data:/data
       - ./data/certs:/shared-certs
+    env_file: .env.production
     environment:
       DOMAIN: ${DOMAIN}
-      ACME_EMAIL: ${ACME_EMAIL:-}
+      CADDY_ACME_EMAIL: "email ${ACME_EMAIL:-admin@${DOMAIN}}"
     command: sh -c "/usr/local/bin/export-certs.sh & caddy run --config /etc/caddy/Caddyfile --adapter caddyfile"
     restart: unless-stopped
     networks: [eigen]
