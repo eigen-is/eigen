@@ -25,6 +25,7 @@ import { reconcileSharesForNewTeamMember, reconcileSharesForNewUser } from '../s
 
 export const trustedOrigins = [
     'http://localhost',
+    'https://localhost',
     'http://localhost:3000',
     'http://localhost:3001',
     'http://localhost:3002',
