@@ -53,7 +53,7 @@ export async function generateEigendocPreview(mount: Mount, drivePath: DrivePath
 
                     const imgStyle = width ? `width: ${width}px; ` : '';
                     const img = imgSrc
-                        ? `<img src="${escapeHtml(imgSrc)}" alt="${alt}" style="${imgStyle}max-width: 100%" />`
+                        ? `<img src="${escapeHtml(imgSrc)}" alt="${alt}" loading="lazy" style="${imgStyle}max-width: 100%" />`
                         : '';
                     const cap = caption ? `<figcaption>${escapeHtml(caption)}</figcaption>` : '';
                     const align = alignment || 'center';

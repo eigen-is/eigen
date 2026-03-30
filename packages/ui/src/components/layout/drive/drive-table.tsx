@@ -9,7 +9,7 @@ import { DropdownMenuItem, DropdownMenuSeparator } from '@workspace/ui/component
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@workspace/ui/components/table';
 import { cn } from '@workspace/ui/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
-import { ArrowRight, ChevronLeft, Download, Pencil, Trash2, UserRoundPlus } from 'lucide-react';
+import { ArrowRight, ChevronLeft, Download, Eye, Pencil, Trash2, UserRoundPlus } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useKeyboardListNavigation } from '../../../hooks/use-keyboard-list-navigation';
@@ -288,6 +288,18 @@ export function DriveTable({
                             Open
                         </DropdownMenuItem>
                     )}
+                {isSingleSelect && onQuickLook && contextMenu.item && !isFolderType(contextMenu.item.type) && (
+                    <DropdownMenuItem
+                        onClick={() => {
+                            onQuickLook?.(contextMenu.item!);
+                            contextMenu.close();
+                        }}
+                        className="flex items-center"
+                    >
+                        <Eye className="h-4 w-4 mr-2" />
+                        Quick preview
+                    </DropdownMenuItem>
+                )}
                 {isSingleSelect && onDownload && contextMenu.item?.type === 'file' && (
                     <DropdownMenuItem
                         onClick={() => {
