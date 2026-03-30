@@ -62,9 +62,28 @@ subdomain (`api.eigen.is`). This matches the existing Docker local pattern, elim
 separate subdomain, and keeps everything on one domain / one TLS cert. The frontend build uses
 `VITE_API_HOST=https://${DOMAIN}/eigen` (set in `.env.production`).
 
+**`VITE_APP_*_URL` derivation:** The frontend needs 11 per-app URLs for cross-app navigation (e.g.,
+`VITE_APP_MAIL_URL`, `VITE_APP_DRIVE_URL`). Rather than requiring users to set 15+ env vars, the
+build script derives them automatically from `DOMAIN`:
+
+```bash
+# In build script or .env.production generation
+VITE_APP_MAIL_URL=https://${DOMAIN}/mail
+VITE_APP_DRIVE_URL=https://${DOMAIN}/drive
+VITE_APP_DOCS_URL=https://${DOMAIN}/docs
+# ... (all apps follow the pattern https://${DOMAIN}/${app})
+```
+
+The `.env.example` template auto-generates these from `DOMAIN`. Users only set `DOMAIN` — the rest
+is derived.
+
 **Caddyfile:**
 
 ```
+{
+    email {$ACME_EMAIL}
+}
+
 # Snippet for SPA apps — reuse for each frontend app
 (app) {
     handle_path /{args[0]}/* {
@@ -75,8 +94,20 @@ separate subdomain, and keeps everything on one domain / one TLS cert. The front
 }
 
 {$DOMAIN} {
-    # API + WebSocket + SSE
-    handle /eigen/* {
+    # Compression
+    encode gzip zstd
+
+    # Security headers (applied globally, before handle blocks)
+    header X-Frame-Options SAMEORIGIN
+    header X-Content-Type-Options nosniff
+    header Strict-Transport-Security "max-age=63072000; includeSubDomains"
+
+    # Cache static assets (applied globally)
+    @static path *.js *.css *.png *.jpg *.svg *.woff2 *.ttf
+    header @static Cache-Control "public, max-age=31536000, immutable"
+
+    # API — strip /eigen/ prefix, proxy to backend
+    handle_path /eigen/* {
         reverse_proxy eigen-api:8000 {
             flush_interval -1
             header_up X-Real-IP {remote_host}
@@ -85,7 +116,7 @@ separate subdomain, and keeps everything on one domain / one TLS cert. The front
         }
     }
 
-    # CalDAV
+    # CalDAV — keep /dav/ prefix (API routes include it)
     handle /dav/* {
         reverse_proxy eigen-api:8000
     }
@@ -105,6 +136,7 @@ separate subdomain, and keeps everything on one domain / one TLS cert. The front
     import app sheets
     import app space
     import app people
+    import app setup
 
     # Landing page (fallback)
     handle {
@@ -112,16 +144,12 @@ separate subdomain, and keeps everything on one domain / one TLS cert. The front
         try_files {path} /index.html
         file_server
     }
-
-    # Cache static assets
-    @static path *.js *.css *.png *.jpg *.svg *.woff2 *.ttf
-    header @static Cache-Control "public, max-age=31536000, immutable"
-
-    # Security headers
-    header X-Frame-Options SAMEORIGIN
-    header X-Content-Type-Options nosniff
 }
 ```
+
+**Note:** `handle_path /eigen/*` strips the `/eigen/` prefix before proxying — the backend receives
+requests at `/` (e.g., `/eigen/mail/deliver/user` → `/mail/deliver/user`). This matches the existing
+nginx behavior. `handle /dav/*` preserves the prefix because the CalDAV routes are mounted at `/dav/`.
 
 **Cert export:** Caddy manages Let's Encrypt certs internally. Dovecot and Postfix need the same certs
 for TLS. A background script in the Caddy container copies certs to `./data/certs/` every 12 hours:
@@ -173,7 +201,7 @@ as before.
 
 ```
 POST /internal/auth/verify
-Restriction: requireLocalhost (Docker bridge counts as local)
+Restriction: requireInternalNetwork (see "requireLocalhost for Docker" below)
 Body: { "email": "user@domain.com", "password": "secret" }
 Response: { "userId": "uuid-...", "email": "user@domain.com" }
     or 401 Unauthorized
@@ -220,14 +248,25 @@ Postfix uses a custom transport (`eigen`) that pipes the message to a delivery s
 ```bash
 #!/bin/sh
 # /usr/local/bin/eigen-deliver
-# Called by Postfix for each incoming message. Reads from stdin.
+# Called by Postfix pipe transport for each incoming message. Reads from stdin.
+# Returns sysexits codes so Postfix knows whether to bounce or defer.
 RECIPIENT="$1"
-exec curl -sf -X POST \
+HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
     -H "Content-Type: application/octet-stream" \
     --data-binary @- \
     --max-time 30 \
-    "http://eigen-api:8000/mail/deliver/${RECIPIENT}"
+    "http://eigen-api:8000/mail/deliver/${RECIPIENT}")
+
+case "$HTTP_CODE" in
+    200|201) exit 0 ;;       # Success
+    404)     exit 67 ;;      # EX_NOUSER — unknown recipient, permanent bounce
+    4[0-9][0-9]) exit 65 ;;  # EX_DATAERR — other client error, permanent bounce
+    *)       exit 75 ;;      # EX_TEMPFAIL — server error / unreachable, defer + retry
+esac
 ```
+
+If the API is down, Postfix defers the message and retries (default: 5 days, exponential backoff).
+Unknown recipients get an immediate bounce rather than filling the deferred queue.
 
 **Outgoing mail flow:**
 
@@ -268,6 +307,8 @@ fi
 myhostname = ${DOMAIN}
 mydomain = ${DOMAIN}
 myorigin = $mydomain
+# mydestination excludes $mydomain — virtual_mailbox_domains handles it.
+# If both contain the domain, Postfix rejects it as a conflict.
 mydestination = localhost
 mynetworks = 127.0.0.0/8 172.16.0.0/12
 
@@ -292,13 +333,18 @@ milter_protocol = 6
 smtpd_milters = inet:localhost:8891
 non_smtpd_milters = inet:localhost:8891
 
-# Anti-spam basics
+# Logging — Postfix 3.4+ supports logging to stdout (required for Docker)
+maillog_file = /dev/stdout
+
+# Anti-spam
 smtpd_helo_required = yes
+smtpd_delay_reject = yes
 smtpd_recipient_restrictions =
     permit_mynetworks,
     reject_unauth_destination,
     reject_invalid_hostname,
-    reject_non_fqdn_sender
+    reject_non_fqdn_sender,
+    reject_unknown_sender_domain
 ```
 
 **Transport definition (`master.cf`):**
@@ -328,17 +374,20 @@ IMAP client → Dovecot :993 (TLS)
 
 ```bash
 #!/bin/bash
-# Dovecot checkpassword auth against Eigen API
-# Reads: username\0password\0 from fd 3
-# Success: set env + exec post-login
-# Failure: exit 1
+# Dovecot checkpassword auth against Eigen API.
+# Protocol: reads username\0password\0 from fd 3.
+# Success: set env + exec post-login. Failure: exit 1.
+# Requires: bash (for read -d), curl, jq.
 
 read -d $'\0' -r username <&3
 read -d $'\0' -r password <&3
 
+# Build JSON safely via jq to prevent shell injection
+json_body=$(jq -nc --arg e "$username" --arg p "$password" '{email: $e, password: $p}')
+
 response=$(curl -sf -X POST \
     -H "Content-Type: application/json" \
-    -d "{\"email\":\"${username}\",\"password\":\"${password}\"}" \
+    -d "$json_body" \
     "http://eigen-api:8000/internal/auth/verify" 2>/dev/null)
 
 if [ $? -ne 0 ]; then
@@ -358,6 +407,8 @@ export userdb_mail="maildir:/data/home/${user_id}/eigen.mail/Maildir"
 
 exec "$@"
 ```
+
+**Dockerfile must install:** `bash`, `curl`, `jq` (alpine: `apk add bash curl jq`).
 
 **Dovecot config:**
 
@@ -382,10 +433,13 @@ userdb {
     driver = prefetch
 }
 
-# Namespace with standard mailboxes
+# Mail location (fallback template — checkpassword overrides per-user)
+mail_location = maildir:~/Maildir
+
+# Namespace — separator must be "." to match Maildir++ dot-prefix layout (.Sent/, .Drafts/)
 namespace inbox {
     inbox = yes
-    separator = /
+    separator = .
 
     mailbox Sent {
         auto = subscribe
@@ -417,22 +471,37 @@ info_log_path = /dev/stderr
 mail_fsync = optimized
 ```
 
+**Cert bootstrapping:** On first deploy, Caddy takes a few seconds to obtain certs from Let's Encrypt.
+Dovecot's entrypoint script must wait for `/certs/cert.pem` to exist before starting:
+
+```bash
+#!/bin/sh
+# docker/dovecot/entrypoint.sh
+echo "Waiting for TLS certificate..."
+while [ ! -f /certs/cert.pem ]; do sleep 2; done
+echo "Certificate found. Starting Dovecot."
+exec dovecot -F
+```
+
 **Coexistence with Eigen:** Both Eigen and Dovecot access the same Maildir. This is safe because:
 - Eigen delivers to `new/`, Dovecot moves to `cur/` and assigns UIDs
 - Flag changes by either side are filename renames — atomic on Linux
 - `mail.db` is a rebuild-safe cache — Eigen's sync engine reconciles on next access
 - See `docs/IMAP.md` for the full coexistence protocol
 
-**requireLocalhost for Docker:** The `requireLocalhost()` check in `access.ts` currently checks for
-`127.0.0.1`, `::1`, and `::ffff:127.0.0.1`. In Docker, containers connect via the bridge network
-(172.x.x.x). The auth endpoint and mail delivery endpoint need to accept connections from the Docker
-network. Two options:
+**requireLocalhost for Docker (Phase 1 prerequisite):** The `requireLocalhost()` check in `access.ts`
+currently only accepts `127.0.0.1`, `::1`, and `::ffff:127.0.0.1`. In Docker, containers connect via
+the bridge network (`172.x.x.x`). **This must be fixed before Postfix delivery or Dovecot auth will
+work.** Both the mail delivery endpoint and the internal auth endpoint depend on it.
 
-1. Add the Docker bridge subnet (`172.16.0.0/12`) to `requireLocalhost` — simple but broadens trust
-2. Use a shared secret header (`X-Internal-Secret`) — more secure
+Add a `TRUSTED_NETWORKS` env var (default: `127.0.0.0/8,::1,172.16.0.0/12`) and update
+`requireLocalhost` to accept connections from any configured trusted CIDR. In production Docker, the
+`172.16.0.0/12` range covers all bridge networks and is purely internal.
 
-Recommendation: use option 1 with a configurable `TRUSTED_NETWORKS` env var that defaults to
-`127.0.0.0/8,::1,172.16.0.0/12`. In production Docker, all these are internal.
+The `DOMAIN` env var for the API container must match the domain set in the setup wizard
+(`config.json`). If they diverge, Postfix will accept mail for a domain the API doesn't recognize.
+The API should either validate consistency on startup or use `DOMAIN` as an override for
+`getDomain()`.
 
 ## CalDAV
 
@@ -460,6 +529,16 @@ The infrastructure (Caddy routing, auth endpoint) supports it from day one.
 
 ## Docker Compose
 
+**Replaces:** The existing `docker-compose.yml`, `Dockerfile`, and `nginx.conf` in the repo root.
+The old files used nginx + named Docker volumes. The new setup uses Caddy + bind mounts. The old
+env files (`.env.docker.local`, `.env.eigen`) are replaced by `.env.production` and
+`.env.example` (which derives `VITE_APP_*_URL` vars from `DOMAIN`).
+
+**UID consistency:** The API runs as UID 1000 (`user: "1000:1000"` in compose). Dovecot's
+checkpassword script also uses `userdb_uid=1000`. Both containers access the same `./data/` bind
+mount. If these UIDs diverge, file permission errors will occur. The API Dockerfile must not
+override this with a different user.
+
 ```yaml
 services:
   caddy:
@@ -475,6 +554,7 @@ services:
       - ./data/certs:/shared-certs
     environment:
       DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
     restart: unless-stopped
     networks: [eigen]
 
@@ -482,6 +562,7 @@ services:
     build:
       context: .
       dockerfile: docker/api/Dockerfile
+    user: "1000:1000"
     volumes:
       - ./data:/app/data
     environment:
@@ -491,6 +572,7 @@ services:
       SMTP_HOST: postfix
       SMTP_PORT: 25
       COOKIE_DOMAIN: .${DOMAIN}
+      TRUSTED_NETWORKS: "127.0.0.0/8,::1,172.16.0.0/12"
     restart: unless-stopped
     networks: [eigen]
     healthcheck:
@@ -498,29 +580,37 @@ services:
       interval: 30s
       timeout: 3s
       retries: 3
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
 
   postfix:
     build:
-      context: .
-      dockerfile: docker/postfix/Dockerfile
+      context: docker/postfix
     ports:
       - "25:25"
     volumes:
       - ./data/dkim:/data/dkim
       - ./data/certs:/certs:ro
+      - postfix-queue:/var/spool/postfix
     environment:
       DOMAIN: ${DOMAIN}
       SMTP_RELAY_HOST: ${SMTP_RELAY_HOST:-}
       SMTP_RELAY_PORT: ${SMTP_RELAY_PORT:-587}
       SMTP_RELAY_USER: ${SMTP_RELAY_USER:-}
       SMTP_RELAY_PASSWORD: ${SMTP_RELAY_PASSWORD:-}
+    depends_on:
+      eigen-api:
+        condition: service_healthy
     restart: unless-stopped
     networks: [eigen]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
 
   dovecot:
     build:
-      context: .
-      dockerfile: docker/dovecot/Dockerfile
+      context: docker/dovecot
     ports:
       - "993:993"
     volumes:
@@ -528,8 +618,17 @@ services:
       - ./data/certs:/certs:ro
     environment:
       DOMAIN: ${DOMAIN}
+    depends_on:
+      eigen-api:
+        condition: service_healthy
     restart: unless-stopped
     networks: [eigen]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+volumes:
+  postfix-queue:    # Persists mail queue across container recreation
 
 networks:
   eigen:
@@ -610,7 +709,7 @@ No email, no IMAP, no CalDAV clients. Pure app development. Same as today.
 
 ### 2. Integration Testing (Docker)
 
-Full stack with **mailpit** (catches all outbound mail, provides a web UI):
+Full stack locally. Each phase adds more testable services:
 
 ```yaml
 # docker-compose.dev.yml
@@ -618,9 +717,10 @@ services:
   caddy:
     environment:
       DOMAIN: localhost
+      ACME_EMAIL: ""
     ports:
       - "80:80"
-      # No 443 — Caddy uses HTTP for localhost
+      # Caddy serves HTTP on localhost (no Let's Encrypt)
 
   mailpit:
     image: axllent/mailpit
@@ -635,22 +735,44 @@ services:
       SMTP_PORT: 1025
 
   postfix:
-    profiles: ["disabled"]    # Skip in dev
+    profiles: ["disabled"]    # Replaced by mailpit in dev
 
   dovecot:
-    # Still runs — test IMAP with Thunderbird at localhost:993
+    # Runs for IMAP testing — generates self-signed cert on first start
     environment:
       DOMAIN: localhost
+    volumes:
+      - ./data/certs/dev:/certs    # Dev certs (self-signed, generated by entrypoint)
 ```
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 ```
 
-- Web UI: `http://localhost`
-- Caught mail: `http://localhost:8025`
-- IMAP test: `localhost:993` in Thunderbird (self-signed cert)
-- CalDAV test: `http://localhost/dav/` in Thunderbird/DAVx5
+**What you can test at each phase:**
+
+| Phase | What works locally | How to test |
+|-------|-------------------|-------------|
+| **1 (now)** | Full web app via Docker | `http://localhost` |
+| **2 (email)** | Send mail → mailpit catches it | Send from Eigen, check `http://localhost:8025` |
+| **2 (email)** | Receive mail (simulated) | `curl -X POST --data-binary @test.eml http://localhost/eigen/mail/deliver/you@localhost` |
+| **3 (IMAP)** | Thunderbird reads Eigen mailbox | Connect to `localhost:993` (accept self-signed cert) |
+| **3 (IMAP)** | Flag sync | Mark read in Thunderbird ↔ check Eigen web UI |
+| **4 (CalDAV)** | Calendar sync | Thunderbird: add CalDAV account at `http://localhost/dav/` |
+| **4 (CalDAV)** | CalDAV debugging | `curl -u user@localhost:pass -X PROPFIND http://localhost/dav/calendars/` |
+
+**Self-signed certs for local Dovecot:** The dev Dovecot entrypoint generates a self-signed cert if
+`/certs/cert.pem` doesn't exist:
+
+```bash
+# In docker/dovecot/entrypoint.sh (dev path)
+if [ ! -f /certs/cert.pem ]; then
+    openssl req -x509 -newkey rsa:2048 -keyout /certs/key.pem -out /certs/cert.pem \
+        -days 365 -nodes -subj "/CN=localhost"
+fi
+```
+
+Thunderbird will warn about the self-signed cert — accept it once and it works.
 
 ### 3. Production
 
@@ -677,30 +799,48 @@ cd /opt/eigen
 # 2. Configure
 cp .env.example .env.production
 nano .env.production
-#   DOMAIN=eigen.is
+#   DOMAIN=eigen.is          (only required setting — VITE_APP_*_URL derived from this)
 #   ACME_EMAIL=admin@eigen.is
-#   VITE_API_HOST=https://eigen.is/eigen
-#   COOKIE_DOMAIN=.eigen.is
 #   SMTP_RELAY_HOST=smtp-relay.brevo.com   (optional)
 #   SMTP_RELAY_USER=...                     (optional)
 #   SMTP_RELAY_PASSWORD=...                 (optional)
 
-# 3. Build frontend (requires bun on host — see Docker-only alternative below)
-bun install && bun run build:prod
+# 3. Set DNS FIRST — Caddy needs DNS to point at the server for Let's Encrypt
+#    Add A record: eigen.is → <server-ip>
+#    Add MX record: eigen.is → 10 eigen.is
+#    Verify: dig eigen.is A   (must return your server IP)
 
-# 4. Start
+# 4. Build frontend
+#    Option A (bun on host — faster):
+bun install && bun run build:prod
+#    Option B (Docker-only — no bun required):
+#    Uses multi-stage build inside Docker, see docker/caddy/Dockerfile
+
+# 5. Start
 docker compose up -d
 
-# 5. Check DKIM DNS record
-docker compose logs postfix | grep "Add this DNS record"
+# 6. Complete setup wizard
+#    Open https://eigen.is → first-run wizard creates admin account + org
+#    (The setup app is served by Caddy alongside the other frontend apps)
 
-# 6. Set DNS records (see DNS Configuration section)
+# 7. Configure DKIM (after Postfix starts)
+docker compose logs postfix | grep "Add this DNS TXT record"
+#    Add the DKIM, SPF, and DMARC records (see DNS Configuration section)
 
-# 7. Open https://eigen.is → complete setup wizard
+# 8. Set rDNS (PTR) via Hetzner control panel → must resolve to eigen.is
 ```
 
-**Docker-only build (no bun on host):** For self-hosters who don't want to install bun, the Caddy
-Dockerfile can include a multi-stage build that compiles the frontend inside Docker:
+**Let's Encrypt staging:** For testing, add this to the Caddyfile global block to avoid rate limits:
+```
+{ acme_ca https://acme-staging-v02.api.letsencrypt.org/directory }
+```
+Remove it once DNS is confirmed working. Production rate limit: 5 failed authorizations per hour.
+
+**Setup app in Docker:** The setup app must be included in the frontend build and served by Caddy
+at `/setup/*`. After setup completes, it redirects to the login page. The setup route is only active
+when `config.json` has `setupCompleted: false`.
+
+**Docker-only build (no bun on host):** The Caddy Dockerfile can include a multi-stage build:
 
 ```dockerfile
 FROM oven/bun:1-slim AS frontend
@@ -713,7 +853,7 @@ COPY --from=frontend /app/dist /www
 COPY Caddyfile /etc/caddy/Caddyfile
 ```
 
-This makes the build slower but removes all host dependencies besides Docker and git.
+This removes all host dependencies besides Docker and git.
 
 ### Updates
 
@@ -732,11 +872,19 @@ This can be wrapped in a single script:
 set -e
 cd /opt/eigen
 git pull
+
+# Source production env vars (VITE_* must be correct for the frontend build)
+set -a && source .env.production && set +a
+
 bun install
 bun run build:prod
 docker compose up -d --build
 echo "Updated. Check: docker compose ps"
 ```
+
+**Note:** `docker compose up -d --build` recreates containers sequentially. Active SSE and WebSocket
+connections will drop and auto-reconnect within a few seconds. For a self-hosted deployment this
+brief interruption is acceptable.
 
 ### Rollback
 
@@ -748,17 +896,29 @@ docker compose up -d --build
 
 ## Backup & Recovery
 
-**Hot backup** (SQLite WAL mode supports concurrent reads):
+**Backup script:** SQLite databases use WAL mode. A plain `tar` during writes may capture an
+inconsistent `.db` + `-wal` pair. The backup script forces a WAL checkpoint first via the API,
+then tars:
 
 ```bash
 #!/bin/bash
 # scripts/backup.sh
+set -e
 BACKUP_DIR="/opt/eigen/backups"
 mkdir -p "$BACKUP_DIR"
+
+# Checkpoint all SQLite databases (flush WAL to main DB)
+docker compose exec eigen-api curl -sf http://localhost:8000/internal/checkpoint || true
+
 tar -czf "${BACKUP_DIR}/eigen-$(date +%Y%m%d-%H%M%S).tar.gz" \
     -C /opt/eigen data/ .env.production
 echo "Backup complete: ${BACKUP_DIR}"
 ```
+
+The `/internal/checkpoint` endpoint (Phase 1 work) iterates all open ManagedDatabase instances and
+runs `PRAGMA wal_checkpoint(TRUNCATE)`. If the endpoint is not yet implemented, the `|| true`
+fallback still produces a usable backup — SQLite WAL snapshots are recoverable, just not guaranteed
+consistent under heavy writes.
 
 **Restore:**
 
@@ -807,12 +967,13 @@ ufw enable
 
 Migrate from bare-metal to Docker. No new features — just cleaner deployment.
 
+- [ ] **Update `requireLocalhost` to support `TRUSTED_NETWORKS` env var** (prerequisite for all Docker inter-container communication — mail delivery and IMAP auth depend on this)
 - [ ] Caddyfile + cert export script
-- [ ] Update `docker-compose.yml` (Caddy replaces nginx)
+- [ ] Update `docker-compose.yml` (Caddy replaces nginx, with `depends_on` ordering)
 - [ ] `docker-compose.dev.yml` for local testing
-- [ ] `.env.example` with all config vars
+- [ ] `.env.example` with all config vars (DOMAIN, ACME_EMAIL, VITE_API_HOST, COOKIE_DOMAIN, VITE_APP_*_URL, relay vars)
 - [ ] `scripts/setup.sh`, `scripts/update.sh`, `scripts/backup.sh`
-- [ ] Update `requireLocalhost` to support `TRUSTED_NETWORKS` env var
+- [ ] `/internal/checkpoint` endpoint for safe backups
 - [ ] Test: `docker compose up` serves the full app with HTTPS
 
 ### Phase 2: Email (Postfix)
@@ -825,21 +986,20 @@ Migrate from bare-metal to Docker. No new features — just cleaner deployment.
 - [ ] DNS record documentation / check script
 - [ ] Test: receive mail, send mail (via relay), verify DKIM/SPF
 
-### Phase 3: IMAP (Dovecot)
+### Phase 3: IMAP (Dovecot) + App-Specific Passwords
+
+App-specific passwords ship with Dovecot — IMAP clients store passwords in plaintext config, so
+users must not use their primary password. This is a security prerequisite, not a separate phase.
 
 - [ ] Dovecot Dockerfile + config
 - [ ] `eigen-checkpassword` auth script
 - [ ] `POST /internal/auth/verify` endpoint in Eigen API
 - [ ] TLS cert sharing (Caddy → Dovecot via `data/certs/`)
+- [ ] UI in Space settings to generate/revoke app passwords (better-auth API key plugin)
+- [ ] Documentation for IMAP client setup (Thunderbird, Apple Mail)
 - [ ] Test: Thunderbird connects to IMAP, sees inbox, flags sync
 
-### Phase 4: App-Specific Passwords
-
-- [ ] UI in Space settings to generate/revoke app passwords
-- [ ] Expose better-auth API key plugin endpoints
-- [ ] Documentation for IMAP/CalDAV client setup
-
-### Phase 5: CalDAV
+### Phase 4: CalDAV
 
 See `docs/RESEARCH_CALDAV.md` for the complete implementation plan.
 
@@ -847,9 +1007,10 @@ See `docs/RESEARCH_CALDAV.md` for the complete implementation plan.
 - [ ] Phase 1: Read-only CalDAV (PROPFIND, GET, REPORT)
 - [ ] Phase 2: Read-write CalDAV (PUT, DELETE, MKCALENDAR)
 - [ ] Phase 3: Shared & team calendar proxying
+- [ ] Documentation for CalDAV client setup (Apple Calendar, Thunderbird, DAVx5)
 - [ ] Test: Apple Calendar / Thunderbird / DAVx5 sync
 
-### Phase 6: SMTP Submission (Port 587) — Future
+### Phase 5: SMTP Submission (Port 587) — Future
 
 Allow IMAP clients to send mail directly via SMTP (not just the web UI).
 
