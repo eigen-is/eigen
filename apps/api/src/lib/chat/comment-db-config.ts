@@ -65,6 +65,7 @@ export const COMMENT_INDEX_DB_CONFIG: DatabaseConfig<typeof commentSchema> = {
             )
                 );
             CREATE INDEX IF NOT EXISTS idx_mentions_email ON comment_mentions(email);
+            CREATE INDEX IF NOT EXISTS idx_comments_status ON comments(status);
         `),
         },
     ],

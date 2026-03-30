@@ -1,26 +1,18 @@
-import CharacterCount from '@tiptap/extension-character-count';
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import Collaboration from '@tiptap/extension-collaboration';
-import CollaborationCursor from '@tiptap/extension-collaboration-cursor';
-import Color from '@tiptap/extension-color';
-import FontFamily from '@tiptap/extension-font-family';
+import CollaborationCaret from '@tiptap/extension-collaboration-caret';
 import Highlight from '@tiptap/extension-highlight';
-import Link from '@tiptap/extension-link';
+import { TaskItem, TaskList } from '@tiptap/extension-list';
 import Subscript from '@tiptap/extension-subscript';
 import Superscript from '@tiptap/extension-superscript';
-import Table from '@tiptap/extension-table';
-import TableCell from '@tiptap/extension-table-cell';
-import TableHeader from '@tiptap/extension-table-header';
-import TableRow from '@tiptap/extension-table-row';
-import TaskItem from '@tiptap/extension-task-item';
-import TaskList from '@tiptap/extension-task-list';
+import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table';
 import TextAlign from '@tiptap/extension-text-align';
-import TextStyle from '@tiptap/extension-text-style';
+import { Color, FontFamily, TextStyle } from '@tiptap/extension-text-style';
 import Typography from '@tiptap/extension-typography';
-import Underline from '@tiptap/extension-underline';
 import { Selection } from '@tiptap/pm/state';
-import { EditorContent, useEditor } from '@tiptap/react';
+import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
+import { yUndoPluginKey } from '@tiptap/y-tiptap';
 import { getCollabWebSocketUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { needsReUpload, readEigenClipboard, reUploadImage, writeEigenClipboard } from '@workspace/lib/clipboard';
@@ -32,7 +24,6 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { Column, LoadingState } from '@workspace/ui';
 import { common, createLowlight } from 'lowlight';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { yUndoPluginKey } from 'y-prosemirror';
 import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
 import { CreateCommentDialog, ViewCommentDialog } from './comment-dialog';
@@ -130,8 +121,6 @@ const TiptapEditor = ({
     const [viewCommentChatName, setViewCommentChatName] = useState<string | null>(null);
     const [canvasScale, setCanvasScale] = useState(1);
     const [docHeight, setDocHeight] = useState(0);
-    const [canUndo, setCanUndo] = useState(false);
-    const [canRedo, setCanRedo] = useState(false);
     const needsScale = canvasScale < 1;
     const documentRef = useRef<HTMLDivElement>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -173,14 +162,23 @@ const TiptapEditor = ({
             editable: access.canWrite,
             extensions: [
                 StarterKit.configure({
-                    history: false,
+                    undoRedo: false,
                     codeBlock: false,
                     dropcursor: {
                         color: 'var(--color-primary)',
                         width: 2,
                     },
+                    link: {
+                        openOnClick: true,
+                        HTMLAttributes: {
+                            class: 'underline cursor-pointer',
+                            style: 'color: var(--color-link)',
+                            target: '_blank',
+                            rel: 'noopener noreferrer',
+                        },
+                        validate: (href: string) => /^(https?:|mailto:|tel:|\/)/i.test(href),
+                    },
                 }),
-                Underline,
                 Subscript,
                 Superscript,
                 SmallMark,
@@ -188,23 +186,10 @@ const TiptapEditor = ({
                 TextStyle,
                 Color,
                 FontFamily,
-                CharacterCount,
+                TaskList,
+                TaskItem.configure({ nested: true }),
                 TextAlign.configure({
                     types: ['heading', 'paragraph'],
-                }),
-                TaskList,
-                TaskItem.configure({
-                    nested: true,
-                }),
-                Link.configure({
-                    openOnClick: true,
-                    HTMLAttributes: {
-                        class: 'underline cursor-pointer',
-                        style: 'color: var(--color-link)',
-                        target: '_blank',
-                        rel: 'noopener noreferrer',
-                    },
-                    validate: (href) => /^(https?:|mailto:|tel:|\/)/i.test(href),
                 }),
                 Figure,
                 Highlight.configure({
@@ -226,7 +211,7 @@ const TiptapEditor = ({
                 Collaboration.configure({
                     document: yDoc,
                 }),
-                CollaborationCursor.configure({
+                CollaborationCaret.configure({
                     provider,
                     user: {
                         name: auth.user!.name,
@@ -344,24 +329,18 @@ const TiptapEditor = ({
 
     editorRef.current = editor;
 
-    useEffect(() => {
-        if (!editor) return;
-        const pluginState = yUndoPluginKey.getState(editor.state);
-        if (!pluginState?.undoManager) return;
-        const um = pluginState.undoManager;
-        const update = () => {
-            setCanUndo(um.undoStack.length > 0);
-            setCanRedo(um.redoStack.length > 0);
-        };
-        um.on('stack-item-added', update);
-        um.on('stack-item-popped', update);
-        um.on('stack-item-updated', update);
-        return () => {
-            um.off('stack-item-added', update);
-            um.off('stack-item-popped', update);
-            um.off('stack-item-updated', update);
-        };
-    }, [editor]);
+    const { canUndo, canRedo } = useEditorState({
+        editor,
+        selector: ({ editor: e }) => {
+            if (!e) return { canUndo: false, canRedo: false };
+            const pluginState = yUndoPluginKey.getState(e.state);
+            const um = pluginState?.undoManager;
+            return {
+                canUndo: (um?.undoStack.length ?? 0) > 0,
+                canRedo: (um?.redoStack.length ?? 0) > 0,
+            };
+        },
+    });
 
     const handleImageUpload = async (file: File) => {
         if (!mediaFolderIdRef.current || !file.type.startsWith('image/')) return;

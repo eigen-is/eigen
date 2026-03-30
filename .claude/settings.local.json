@@ -163,7 +163,10 @@
       "WebFetch(domain:discuss.prosemirror.net)",
       "WebFetch(domain:api.github.com)",
       "WebFetch(domain:www.inngest.com)",
-      "WebFetch(domain:dhwaneetbhatt.com)"
+      "WebFetch(domain:dhwaneetbhatt.com)",
+      "Bash(npm view:*)",
+      "Bash(for pkg:*)",
+      "Read(//Users/reinder/Documents/GitHub/eigen/node_modules/.bun/@tiptap+$pkg@3.21.0*/node_modules/@tiptap/$pkg/dist/**)"
     ]
   },
   "enabledPlugins": {

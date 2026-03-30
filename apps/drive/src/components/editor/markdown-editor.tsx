@@ -1,12 +1,7 @@
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight';
 import Image from '@tiptap/extension-image';
-import LinkExtension from '@tiptap/extension-link';
-import { Table } from '@tiptap/extension-table';
-import { TableCell } from '@tiptap/extension-table-cell';
-import { TableHeader } from '@tiptap/extension-table-header';
-import { TableRow } from '@tiptap/extension-table-row';
-import TaskItem from '@tiptap/extension-task-item';
-import TaskList from '@tiptap/extension-task-list';
+import { TaskItem, TaskList } from '@tiptap/extension-list';
+import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table';
 import Typography from '@tiptap/extension-typography';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -40,7 +35,10 @@ function detectLineEnding(content: string): string {
 function useMarkdownExtensions(content: string) {
     const bulletMarker = detectBulletMarker(content);
     return [
-        StarterKit.configure({ codeBlock: false }),
+        StarterKit.configure({
+            codeBlock: false,
+            link: { openOnClick: false },
+        }),
         Markdown.configure({
             html: true,
             tightLists: true,
@@ -51,7 +49,6 @@ function useMarkdownExtensions(content: string) {
         Typography,
         TaskList,
         TaskItem.configure({ nested: true }),
-        LinkExtension.configure({ openOnClick: false }),
         Image,
         CodeBlockLowlight.configure({ lowlight }),
         Table.configure({ resizable: false }),
