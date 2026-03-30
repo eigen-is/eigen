@@ -8,15 +8,17 @@ import type { Mount } from '../mount';
 // are evaluated eagerly at startup, which crashes the server before any route is registered.
 // Because this module is imported via: collab.ts → drive.ts → preview-cache.ts → here,
 // a crash here kills all routes including WebSocket collab.
-let extensions: unknown[] | null = null;
+let cachedExtensions: Awaited<ReturnType<typeof loadExtensions>> | null = null;
+
+async function loadExtensions() {
+    const { common, createLowlight } = await import('lowlight');
+    const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
+    return getDocExtensions({ lowlight: createLowlight(common) });
+}
 
 async function getExtensions() {
-    if (!extensions) {
-        const { common, createLowlight } = await import('lowlight');
-        const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
-        extensions = getDocExtensions({ lowlight: createLowlight(common) });
-    }
-    return extensions;
+    if (!cachedExtensions) cachedExtensions = await loadExtensions();
+    return cachedExtensions;
 }
 
 export async function generateEigendocPreview(mount: Mount, drivePath: DrivePath, baseUrl = ''): Promise<string> {
