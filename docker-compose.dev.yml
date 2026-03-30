@@ -1,0 +1,27 @@
+# Dev overrides: HTTP-only, mailpit for catching mail, self-signed certs
+services:
+  caddy:
+    environment:
+      DOMAIN: localhost
+      ACME_EMAIL: ""
+    ports:
+      - "80:80"
+    command: caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+
+  eigen-api:
+    user: ""
+    environment:
+      PRODUCTION: 0
+      EIGEN_DATA_ROOT: /app/data
+      DOMAIN: localhost
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      COOKIE_DOMAIN: localhost
+      TRUSTED_NETWORKS: "127.0.0.0/8,::1,172.16.0.0/12"
+
+  mailpit:
+    image: axllent/mailpit
+    ports:
+      - "8025:8025"
+      - "1025:1025"
+    networks: [eigen]
