@@ -36,7 +36,9 @@ export async function generateEigendocPreview(mount: Mount, drivePath: DrivePath
                     const src = node.attrs['src'] as string | null;
                     const alt = escape(String(node.attrs['alt'] || ''));
                     const caption = node.attrs['caption'] as string | null;
-                    const width = node.attrs['width'] as number | null;
+                    const rawWidth = node.attrs['width'];
+                    const width =
+                        typeof rawWidth === 'number' && Number.isFinite(rawWidth) ? Math.round(rawWidth) : null;
                     const alignment = node.attrs['alignment'] as string | null;
 
                     let imgSrc: string | null = null;
@@ -66,5 +68,10 @@ export async function generateEigendocPreview(mount: Mount, drivePath: DrivePath
 }
 
 function escape(text: string): string {
-    return text.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
 }
