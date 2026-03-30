@@ -52,3 +52,4 @@ next-env.d.ts
 .env
 
 /data/test*
+/caddy-data/
