@@ -70,6 +70,10 @@
     z-index: 20;
 }
 
+.tiptap .tableWrapper {
+    overflow: hidden;
+}
+
 .tiptap .tableWrapper table {
     table-layout: auto;
 }
