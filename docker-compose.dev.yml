@@ -3,7 +3,7 @@ services:
   caddy:
     environment:
       DOMAIN: localhost
-      ACME_EMAIL: ""
+      CADDY_ACME_EMAIL: ""
     ports:
       - "80:80"
     command: caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
