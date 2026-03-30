@@ -38,6 +38,7 @@ export const CONTACTS_DB_CONFIG: DatabaseConfig<typeof schema> = {
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_contacts_eigenId ON contacts(eigenId);
+                CREATE INDEX IF NOT EXISTS idx_contacts_to_labels_labelId ON contacts_to_labels(labelId);
             `),
         },
     ],
