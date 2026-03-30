@@ -17,11 +17,11 @@ the eigen type from the file's MIME type and validates that the requested format
 
 ```
 POST /drive/:ownerId/:mountId/file/:pathId/export/:format
-  Body: { options? }
-  Returns: { jobId } | binary (for fast exports)
+  Returns: binary file (Content-Disposition: attachment)
 ```
 
-The server checks the file's MIME and dispatches to the correct pipeline:
+Synchronous — the response IS the exported file. The server checks the file's MIME and dispatches to the correct
+pipeline. Returns 400 if the format is not supported for the file type.
 
 | MIME | Supported `:format` values |
 |------|---------------------------|
@@ -30,8 +30,6 @@ The server checks the file's MIME and dispatches to the correct pipeline:
 | `application/eigensheets` | `xlsx`, `csv` |
 | `application/eigenstickies` | `pdf` |
 
-Returns 400 if the format is not supported for the file's type.
-
 ### Import
 
 Creates a new eigen file in the target folder from an uploaded file.
@@ -39,7 +37,7 @@ Creates a new eigen file in the target folder from an uploaded file.
 ```
 POST /drive/:ownerId/:mountId/folder/:parentId/import/:format
   Body: multipart/form-data (uploaded file)
-  Returns: { jobId } | DrivePath (for fast imports)
+  Returns: DrivePath (the created eigen file)
 ```
 
 | `:format` | Creates (MIME) |
@@ -48,119 +46,99 @@ POST /drive/:ownerId/:mountId/folder/:parentId/import/:format
 | `pptx` | `application/eigenslides` |
 | `xlsx` | `application/eigensheets` |
 
-### Job Status (shared)
+### Why Synchronous?
+
+The original proposal had an async job system with polling. After review, this adds significant complexity (job
+tracking, status routes, download routes, server restart recovery) for marginal benefit. The actual heavy work is:
+
+- **DOCX export**: PM serialization + image embedding. Fast for most documents (< 1s). For large docs with many
+  images, the bottleneck is I/O (reading images from disk), not CPU.
+- **PPTX/XLSX export**: Similar — serialization is fast, I/O dominates.
+- **Import**: mammoth + DOM parsing. CPU-bound but typically < 5s even for large files.
+- **PDF**: The only truly heavy operation (headless browser). Deferred to a later phase.
+
+For the initial implementation, synchronous responses are simpler and sufficient. The route handler runs the export
+in a Worker to avoid blocking the event loop, but the HTTP connection stays open until the result is ready. If PDF
+export later proves too slow for synchronous responses, we can add an async job system specifically for that format.
+
+### Frontend Integration
+
+Export is triggered from the Drive context menu (already has Open, Download, etc.) and from a menu in each editor app.
+The frontend sends the POST request and initiates a file download from the response.
+
+Import is triggered from the Drive toolbar — an "Import" button that opens a file picker filtered by supported
+formats. After upload, the new file appears in the current folder.
+
+## Worker Architecture
+
+Export and import run in Bun Workers to avoid blocking the main thread. The pattern matches the existing thumbnail
+worker: spawn a worker per request, send input via `postMessage`, receive the result, terminate the worker.
+
+### Data Flow
+
+Workers can't access Mount or Database instances. The main thread pre-reads the necessary data and transfers it:
 
 ```
-GET  /drive/:ownerId/:mountId/jobs/:jobId/status
-  Returns: { status: 'pending' | 'processing' | 'done' | 'error', progress?, downloadUrl?, result?: DrivePath }
+Main thread (has Mount access):
+  1. Load Yjs state → Uint8Array
+  2. List media files → Array<{ name, path }>
+  3. Transfer to worker via postMessage
 
-GET  /drive/:ownerId/:mountId/jobs/:jobId/download
-  Returns: binary file (export only)
+Worker (pure computation):
+  1. Apply Yjs state → Y.Doc → PM JSON
+  2. For each image needed: read from file path (local) or use provided buffer (S3)
+  3. Serialize to target format
+  4. postMessage result buffer back (transferable)
 ```
 
-### Why Async Jobs?
+For **local storage**, pass file paths to the worker — it reads images on demand from disk. This avoids loading all
+media into memory at once (a document with 50 images at 2MB each = 100MB). For **S3 storage**, the main thread
+downloads images to temp files and passes the paths.
 
-Some operations are fast (eigendoc → DOCX with no images: < 100ms). Others are slow (large PPTX with many images,
-XLSX with thousands of rows). Rather than two different APIs, we use a single pattern:
-
-- **Fast path**: If the export completes within ~2 seconds, return the result directly in the POST response
-- **Slow path**: If it takes longer, return `{ jobId }` immediately and process in a worker
-
-The client always checks: if the response has a `jobId`, poll for status. If it has binary data or a `DrivePath`,
-use it directly.
-
-## Job Worker System
-
-### Architecture
-
-```
-Route handler (main thread)
-  │
-  ├─ Fast path: complete inline, return result
-  │
-  └─ Slow path: spawn Worker, return jobId
-       │
-       Worker thread
-         ├─ postMessage({ type: 'progress', progress: 0.5 })
-         ├─ postMessage({ type: 'done', buffer: ArrayBuffer }, [buffer])
-         └─ or: postMessage({ type: 'error', message: '...' })
-       │
-       Main thread receives worker messages
-         ├─ Updates job status (in-memory Map, not DB — jobs are ephemeral)
-         ├─ Writes result file to temp dir
-         └─ Client polls /status, then /download
-```
-
-### Implementation
+### File Structure
 
 ```
 apps/api/src/lib/jobs/
-├── job-manager.ts          # JobManager: tracks active jobs, spawns workers
-├── export-worker.ts        # Worker entry point for exports
-└── import-worker.ts        # Worker entry point for imports
+├── job-manager.ts              # Shared: spawn worker, Promise wrapper, timeout, cleanup
+├── export-worker.ts            # Worker entry point for all exports
+└── import-worker.ts            # Worker entry point for all imports
+
+apps/api/src/lib/export/
+├── docx/
+│   ├── docx-export.ts          # Eigendoc → DOCX
+│   └── docx-serializers.ts     # Custom node/mark serializers
+├── pptx/
+│   └── pptx-export.ts          # Eigenslides → PPTX
+├── xlsx/
+│   └── xlsx-export.ts          # Eigensheets → XLSX
+└── csv/
+    └── csv-export.ts           # Eigensheets → CSV
+
+apps/api/src/lib/import/
+├── docx/
+│   └── docx-import.ts          # DOCX → eigendoc
+├── pptx/
+│   └── pptx-import.ts          # PPTX → eigenslides
+└── xlsx/
+    └── xlsx-import.ts          # XLSX → eigensheets
 ```
 
-The `JobManager` is simple — an in-memory Map of job state. No database needed. Jobs expire after 10 minutes (the
-download URL is temporary). This follows the same pattern as the existing thumbnail worker.
+`job-manager.ts` contains the shared worker lifecycle logic (spawn, message handling, timeout, cleanup). Export and
+import directories contain format-specific serialization/parsing code that runs inside the workers.
 
-```typescript
-// Simplified job manager concept
-class JobManager {
-    private jobs = new Map<string, Job>();
-
-    startExport(jobId: string, input: ExportInput): void {
-        const worker = new Worker(new URL('./export-worker', import.meta.url).href);
-        this.jobs.set(jobId, { status: 'processing', worker });
-
-        worker.onmessage = (event) => {
-            if (event.data.type === 'progress') {
-                this.jobs.get(jobId)!.progress = event.data.progress;
-            }
-            if (event.data.type === 'done') {
-                // Write buffer to temp file, update status
-            }
-        };
-
-        worker.postMessage(input);
-
-        // Auto-cleanup after 10 minutes
-        setTimeout(() => this.cleanup(jobId), 10 * 60 * 1000);
-    }
-}
-```
-
-### Worker Data Flow
-
-Workers can't access Mount or Database instances (those aren't transferable). Instead, the main thread pre-reads the
-data and sends it to the worker:
-
-```
-Main thread:
-  1. Load Yjs state → binary (Uint8Array)
-  2. Read media files → Map<name, ArrayBuffer>
-  3. postMessage({ yjsState, mediaFiles, format, options }, [...transferables])
-
-Worker:
-  1. Apply Yjs state → Y.Doc → PM JSON (or extract Yjs maps for slides/sheets)
-  2. Serialize to target format (DOCX/PPTX/XLSX)
-  3. postMessage({ type: 'done', buffer }, [buffer])
-```
-
-This keeps I/O on the main thread (where Mount is available) and CPU-heavy serialization on the worker.
+Workers are separate build entry points in `buildfordocker` (like `thumbnail-worker.ts`).
 
 ### When to Use Workers
-
-Not every operation needs a worker. Guidelines:
 
 | Operation | Worker? | Reason |
 |-----------|---------|--------|
 | Eigendoc → HTML preview | No | Fast (< 50ms), pure string concatenation |
-| Eigendoc → DOCX (no images) | No | Fast (< 200ms) |
-| Eigendoc → DOCX (with images) | Yes | Image embedding is slow for many/large images |
+| Eigendoc → DOCX | Yes | Image embedding, PM serialization |
 | Eigenslides → PPTX | Yes | Image-heavy, layout computation |
-| Eigensheets → XLSX | Maybe | Fast for small sheets, slow for thousands of rows |
-| DOCX → eigendoc import | Yes | mammoth + DOM parsing + image extraction |
-| Any → PDF | Yes | Requires headless browser or heavy rendering |
+| Eigensheets → XLSX | Yes | Can be large |
+| Eigensheets → CSV | No | Simple string serialization |
+| Any import | Yes | mammoth/DOM parsing, image extraction |
+| Any → PDF | Yes | Headless browser |
 
 ## Phase 1: Quick Preview (Done)
 
@@ -179,7 +157,7 @@ Eigendoc HTML preview is implemented and deployed. Key files:
 `eigendoc-preview.ts` imports tiptap/ProseMirror packages that reference DOM globals at the module level. With
 `bun build`, these crash the server at startup. The solution: `--splitting` in the build command, combined with a
 dynamic `await import('./eigendoc-preview')` in `preview-cache.ts`. This produces a separate chunk that only loads when
-a preview is actually requested. The same `--splitting` mechanism works for export/import workers.
+a preview is actually requested. The same `--splitting` mechanism handles export/import worker chunks.
 
 ### Extension Split Pattern
 
@@ -193,7 +171,9 @@ a preview is actually requested. The same `--splitting` mechanism works for expo
 
 ### Eigendoc → DOCX
 
-**Library**: `prosemirror-docx` (curvenote) — serializes ProseMirror documents directly to DOCX.
+**Library**: `prosemirror-docx` (curvenote) — serializes ProseMirror documents directly to DOCX via the `docx`
+package (9.6.1, 5.6k stars). Note: `prosemirror-docx` is a thin wrapper — if it falls behind on ProseMirror
+compatibility, we can use `docx` directly with a custom PM tree walker.
 
 Why not HTML → DOCX: PM JSON → DOCX preserves structural information (custom attributes, alignment semantics) that
 gets lost in HTML. Custom nodes need explicit handling either way — better to read node attributes directly.
@@ -211,59 +191,50 @@ Custom serializers needed:
 | `textAlign` | Paragraph alignment |
 | `color` / `fontFamily` | Run-level formatting |
 
-**Dependencies**: `prosemirror-docx`, `docx` (peer dep)
+Image handling: the worker reads images from file paths on demand (not pre-loaded into memory). For each `figure`
+node with a `mediaName`, the serializer reads the file from the media folder path provided by the main thread.
+
+**Dependencies**: `prosemirror-docx`, `docx`
 
 ### Eigenslides → PPTX
 
-**Library**: `pptxgenjs` (3.2k stars) — pure JS, creates PPTX from JavaScript objects.
+**Library**: `pptxgenjs` (3.2k stars) — pure JS PPTX generation.
 
-Pipeline: Yjs → extract slide data → map objects to pptxgenjs shapes. Each slide's text boxes, images, and shapes map
-to pptxgenjs primitives. Percentage-based coordinates (eigenslides format) convert directly to pptxgenjs's
-percentage-based positioning.
+Pipeline: Yjs → extract slide data (Y.Map structures) → map objects to pptxgenjs shapes. Note: eigenslides uses
+percentage-based coordinates on a 1920x1080 canvas. `pptxgenjs` supports percentage positioning via `{ x: '10%' }`
+syntax — verify exact coordinate mapping during implementation.
 
 **Dependencies**: `pptxgenjs`
 
 ### Eigensheets → XLSX
 
-**Library**: `exceljs` (15k stars) or `xlsx-populate` — pure JS, streaming support for large sheets.
+**Library**: `exceljs` (15k stars) — pure JS, streaming support for large sheets.
 
-Pipeline: Yjs → extract sheet data (cells, formulas, formatting) → write to XLSX workbook. Fortune-sheet's cell format
-maps to Excel cell styles.
+Pipeline: Yjs → extract sheet data → write to XLSX workbook. Note: fortune-sheet uses Luckysheet's internal cell data
+model which differs significantly from Excel's. Key mapping challenges:
+- Cell formatting (fortune-sheet's `ct` object → exceljs style properties)
+- Merged cells (`mc` config → exceljs `worksheet.mergeCells()`)
+- Formulas (fortune-sheet syntax may differ from Excel — needs testing)
+- Conditional formatting (likely lossy — simplify or skip)
 
 **Dependencies**: `exceljs`
 
 ### Eigensheets → CSV
 
-Simple: extract sheet data, serialize to CSV string. No library needed.
+Simple: extract sheet data, serialize to CSV string. No external library needed.
 
-### PDF Export (All Types)
+### PDF Export
 
-Two approaches:
+Deferred to a later phase. PDF requires a headless browser (Puppeteer/Playwright) to render HTML previews to PDF.
+This is the only operation that's genuinely too slow for synchronous responses and would benefit from an async job
+system. When implemented:
 
-1. **HTML → PDF via headless browser**: Use Puppeteer/Playwright to render the HTML preview to PDF. Heavy but accurate.
-2. **Library-based**: `pdf-lib` for simple documents, but limited for complex layouts.
+- Reuse `generateEigendocPreview()` HTML → Puppeteer `page.pdf()`
+- For slides: render each slide to an HTML page → multi-page PDF
+- For sheets: render HTML table → Puppeteer PDF
+- Always runs in a worker with a generous timeout (60s)
 
-For eigendocs: reuse `generateEigendocPreview()` HTML → Puppeteer PDF. For slides: render each slide to HTML → PDF
-pages. For sheets: XLSX → PDF via headless LibreOffice, or render HTML table → Puppeteer.
-
-PDF is the heaviest operation — always runs in a worker.
-
-### File Structure
-
-```
-apps/api/src/lib/export/
-├── export-manager.ts       # Job management, worker spawning
-├── export-worker.ts        # Worker entry point (dispatches by format)
-├── docx/
-│   ├── docx-export.ts      # Eigendoc → DOCX
-│   └── docx-serializers.ts # Custom node/mark serializers
-├── pptx/
-│   └── pptx-export.ts      # Eigenslides → PPTX
-├── xlsx/
-│   └── xlsx-export.ts      # Eigensheets → XLSX
-└── csv/
-    └── csv-export.ts       # Eigensheets → CSV
-```
+**Dependencies** (future): `puppeteer` or `playwright`
 
 ## Phase 3: Import
 
@@ -278,48 +249,40 @@ DOCX upload
   → mammoth.convertToHtml(buffer, { convertImage })
     → extract images → save to media/ folder
     → HTML with <img data-media-name="...">
-  → DOMPurify.sanitize(html)
-  → happy-dom DOMParser → DOM tree
+  → DOMPurify.sanitize(html)  (isomorphic-dompurify, already installed)
+  → jsdom DOMParser → DOM tree  (jsdom already externalized in build)
   → ProseMirror DOMParser.fromSchema(schema).parse(dom)
-  → PM JSON → prosemirrorJSONToYDoc() → Y.Doc → write to data.db
+    → schema built from getDocExtensions()
+    → FigureNode.parseHTML picks up data-media-name attributes
+  → PM JSON
+  → prosemirrorJSONToYDoc()  (from y-prosemirror, NOT @tiptap/y-tiptap)
+  → Y.encodeStateAsUpdate(ydoc)
+  → create eigendoc via Drive.createDoc() + write Yjs state to data.db
 ```
 
-`happy-dom` provides the minimal DOM needed for ProseMirror's DOMParser. Only used for import.
+DOM requirement: ProseMirror's `DOMParser.fromSchema(schema).parse(dom)` needs a DOM. Use `jsdom` — it's already a
+dependency via `isomorphic-dompurify` and externalized in the build command. No need to add `happy-dom`.
 
-**Dependencies**: `mammoth`, `happy-dom`
+Yjs write: use `Drive.createDoc()` to create the eigendoc folder structure, then write the Yjs state to `data.db`
+using the same schema as `CollabDocument`. This ensures the new file is compatible with the collab system.
+
+**Dependencies**: `mammoth`, `y-prosemirror` (for `prosemirrorJSONToYDoc`)
 
 ### PPTX → Eigenslides
 
-**Library**: `pptx2json` or manual OOXML parsing via `jszip` + XML parser.
+**Library**: manual OOXML parsing via `jszip` + XML parser.
 
-PPTX is a zip of XML files. Extract slides, parse shapes/text/images, map to eigenslides' Yjs data model. Images are
-extracted and saved to the doc's media folder.
+PPTX is a zip of XML files. Extract slides, parse shapes/text/images, map to eigenslides' Yjs data model (Y.Map
+structures for slides, objects, slideOrder). Images extracted and saved to the doc's media folder.
+
+**Dependencies**: `jszip` (likely already available transitively)
 
 ### XLSX → Eigensheets
 
 **Library**: `exceljs` (same as export — read and write).
 
-Parse workbook, extract cells/formulas/formatting, map to fortune-sheet's Yjs data model.
-
-### File Structure
-
-```
-apps/api/src/lib/import/
-├── import-manager.ts       # Job management, worker spawning
-├── import-worker.ts        # Worker entry point
-├── docx/
-│   └── docx-import.ts      # DOCX → eigendoc
-├── pptx/
-│   └── pptx-import.ts      # PPTX → eigenslides
-└── xlsx/
-    └── xlsx-import.ts       # XLSX → eigensheets
-```
-
-### Route
-
-```
-POST /drive/:ownerId/:mountId/folder/:parentId/import/docx
-```
+Parse workbook, extract cells/formulas/formatting, map to fortune-sheet's Yjs data model. Same mapping challenges as
+export but in reverse.
 
 ## Dependencies Summary
 
@@ -328,11 +291,11 @@ POST /drive/:ownerId/:mountId/folder/:parentId/import/docx
 | Package | Purpose |
 |---------|---------|
 | `yjs` | Yjs document handling |
-| `@tiptap/y-tiptap` | Yjs ↔ ProseMirror JSON |
+| `@tiptap/y-tiptap` | Yjs → ProseMirror JSON (`yXmlFragmentToProsemirrorJSON`) |
 | `@tiptap/core` + extensions | Schema + rendering |
 | `@tiptap/static-renderer` | Server-side HTML rendering |
 | `lowlight` | Code syntax highlighting |
-| `isomorphic-dompurify` | HTML sanitization |
+| `isomorphic-dompurify` | HTML sanitization (includes jsdom) |
 
 ### New Dependencies
 
@@ -341,9 +304,9 @@ POST /drive/:ownerId/:mountId/folder/:parentId/import/docx
 | `prosemirror-docx` | PM → DOCX serialization | 2 (export) |
 | `docx` | DOCX generation (peer dep) | 2 (export) |
 | `pptxgenjs` | PPTX generation | 2 (export) |
-| `exceljs` | XLSX read/write | 2 (export) + 3 (import) |
+| `exceljs` | XLSX read/write | 2 + 3 |
 | `mammoth` | DOCX → HTML | 3 (import) |
-| `happy-dom` | Minimal DOM for ProseMirror DOMParser | 3 (import) |
+| `y-prosemirror` | `prosemirrorJSONToYDoc()` for import | 3 (import) |
 
 ## Edge Cases
 
@@ -354,6 +317,7 @@ POST /drive/:ownerId/:mountId/folder/:parentId/import/docx
 - **Code blocks**: No syntax highlighting in DOCX/PPTX (monospace + gray background only)
 - **Comment marks**: Stripped from export (internal-only, references chat threads)
 - **Round-trip fidelity**: Import is lossy by design — complex formatting simplified to match our schema
-- **Large files**: Worker + timeout (30s default, configurable). Client sees progress via polling
-- **Cancelled exports**: Worker terminated, temp files cleaned up
-- **Multiple concurrent exports**: JobManager limits concurrent workers (default: 2 per user)
+- **Large images in export**: Worker reads images from disk paths on demand — not pre-loaded into memory
+- **Upload size limits**: Import route must call `getUploadMaxSize()` for quota enforcement
+- **Worker timeout**: 30s default for export/import workers. Worker is terminated on timeout, error returned
+- **Server restart during export**: Export is synchronous — the HTTP connection drops and the client retries
