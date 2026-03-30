@@ -219,8 +219,8 @@ location /dav/ {
 }
 ```
 
-No CORS headers on `/dav/*` — CalDAV clients are native apps, not browsers. The `nginx.conf` in the repo is for
-local Docker dev only and is not the production config.
+No CORS headers on `/dav/*` — CalDAV clients are native apps, not browsers. The `Caddyfile` in the repo already
+includes `/dav/*` proxy and `/.well-known/caldav` redirect.
 
 ### Sharding compatibility
 
@@ -609,7 +609,7 @@ fast-xml-parser            -- XML parse (for PROPFIND/REPORT request bodies)
 | `apps/api/src/lib/calendar/db-config.ts` | Migration v2 |
 | `apps/api/src/lib/calendar/calendar.ts` | New methods: `getEventByUri`, `getRawEvents*`, `upsertFromIcs`, `deleteByUri`, tombstones |
 | `apps/api/src/app.ts` | Add `caldavRouter` |
-| `nginx.conf` | Add `/.well-known/caldav` redirect + `/dav/` proxy block |
+| `Caddyfile` | Already has `/.well-known/caldav` redirect + `/dav/` proxy |
 | `packages/lib/src/types/calendar.ts` | Add `icsBlob`, `eventCtag` to `CalendarEvent` type |
 | `apps/api/src/lib/auth/auth.ts` | Add `apiKey()` plugin to better-auth config |
 
