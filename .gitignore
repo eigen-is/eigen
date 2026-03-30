@@ -52,3 +52,9 @@ next-env.d.ts
 .env
 
 /data/test*
+/caddy-data/
+# Docker deployment
+.env.production
+/data/certs/
+/data/dkim/
+/backups/

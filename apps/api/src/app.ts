@@ -13,6 +13,7 @@ import { contactsRouter } from './routes/contacts';
 import { driveRouter } from './routes/drive.ts';
 import { editorRouter } from './routes/editor';
 import { homeRouter } from './routes/home.ts';
+import { internalRouter } from './routes/internal';
 import { mailRouter } from './routes/mail';
 import { notificationRouter } from './routes/notification';
 import { publicRouter } from './routes/public';
@@ -76,6 +77,7 @@ export const app = new Elysia()
     .use(editorRouter)
     .use(notificationRouter)
     .use(sseRouter)
+    .use(internalRouter)
 
     .onError(({ error, set, code }) => {
         if (code === 'VALIDATION') return;

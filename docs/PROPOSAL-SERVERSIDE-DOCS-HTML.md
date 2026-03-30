@@ -76,69 +76,60 @@ worker: spawn a worker per request, send input via `postMessage`, receive the re
 
 ### Data Flow
 
-Workers can't access Mount or Database instances. The main thread pre-reads the necessary data and transfers it:
+The export runs on the main thread (not in a separate export worker) because it needs Mount access for reading files.
+Image conversion is offloaded to the existing thumbnail worker — one worker call per image.
 
 ```
-Main thread (has Mount access):
-  1. Load Yjs state → Uint8Array
-  2. List media files → Array<{ name, path }>
-  3. Transfer to worker via postMessage
-
-Worker (pure computation):
-  1. Apply Yjs state → Y.Doc → PM JSON
-  2. For each image needed: read from file path (local) or use provided buffer (S3)
-  3. Serialize to target format
-  4. postMessage result buffer back (transferable)
+Main thread:
+  1. Load Yjs state → Y.Doc → PM JSON
+  2. Walk PM tree via prosemirror-docx serializers
+  3. For each figure node with a mediaName:
+     a. Read original file from media folder (mount.readFile)
+     b. Send to thumbnail worker with outputFormat: 'png'
+     c. Receive PNG buffer + dimensions
+     d. Embed as ImageRun in DOCX
+  4. Generate final .docx buffer via Packer.toBuffer()
+  5. Return as HTTP response
 ```
 
-For **local storage**, pass file paths to the worker — it reads images on demand from disk. This avoids loading all
-media into memory at once (a document with 50 images at 2MB each = 100MB). For **S3 storage**, the main thread
-downloads images to temp files and passes the paths.
+Images are converted one at a time via the thumbnail worker, not pre-loaded into memory. This keeps memory usage
+proportional to a single image, not the total media size.
 
 ### File Structure
 
 ```
-apps/api/src/lib/jobs/
-├── job-manager.ts              # Shared: spawn worker, Promise wrapper, timeout, cleanup
-├── export-worker.ts            # Worker entry point for all exports
-└── import-worker.ts            # Worker entry point for all imports
-
 apps/api/src/lib/export/
-├── docx/
-│   ├── docx-export.ts          # Eigendoc → DOCX
-│   └── docx-serializers.ts     # Custom node/mark serializers
-├── pptx/
-│   └── pptx-export.ts          # Eigenslides → PPTX
-├── xlsx/
-│   └── xlsx-export.ts          # Eigensheets → XLSX
-└── csv/
-    └── csv-export.ts           # Eigensheets → CSV
+├── docx-export.ts              # Eigendoc → DOCX (serializers + export function)
+├── pptx-export.ts              # Eigenslides → PPTX
+├── xlsx-export.ts              # Eigensheets → XLSX
+└── csv-export.ts               # Eigensheets → CSV
 
 apps/api/src/lib/import/
-├── docx/
-│   └── docx-import.ts          # DOCX → eigendoc
-├── pptx/
-│   └── pptx-import.ts          # PPTX → eigenslides
-└── xlsx/
-    └── xlsx-import.ts          # XLSX → eigensheets
+├── docx-import.ts              # DOCX → eigendoc
+├── pptx-import.ts              # PPTX → eigenslides
+└── xlsx-import.ts              # XLSX → eigensheets
 ```
 
-`job-manager.ts` contains the shared worker lifecycle logic (spawn, message handling, timeout, cleanup). Export and
-import directories contain format-specific serialization/parsing code that runs inside the workers.
+Export/import functions run on the main thread (they need Mount access). CPU-heavy image conversion is offloaded to
+the existing thumbnail worker. No new worker entry points needed.
 
-Workers are separate build entry points in `buildfordocker` (like `thumbnail-worker.ts`).
+Same build constraint as preview: export files import tiptap/prosemirror packages, so `--splitting` keeps them in
+separate chunks loaded on demand via dynamic `await import()`.
 
-### When to Use Workers
+### Thumbnail Worker Reuse
 
-| Operation | Worker? | Reason |
-|-----------|---------|--------|
-| Eigendoc → HTML preview | No | Fast (< 50ms), pure string concatenation |
-| Eigendoc → DOCX | Yes | Image embedding, PM serialization |
-| Eigenslides → PPTX | Yes | Image-heavy, layout computation |
-| Eigensheets → XLSX | Yes | Can be large |
-| Eigensheets → CSV | No | Simple string serialization |
-| Any import | Yes | mammoth/DOM parsing, image extraction |
-| Any → PDF | Yes | Headless browser |
+Export and import don't use separate workers. Instead, they reuse the existing **thumbnail worker** for image
+conversion. The thumbnail worker gains an `outputFormat` parameter (`'webp' | 'png'`) — the only change needed.
+
+| Operation | Runs on | Image conversion via |
+|-----------|---------|---------------------|
+| Eigendoc → HTML preview | Main thread | N/A (images are URLs) |
+| Eigendoc → DOCX | Main thread | Thumbnail worker (→ PNG) |
+| Eigenslides → PPTX | Main thread | Thumbnail worker (→ PNG) |
+| Eigensheets → XLSX | Main thread | N/A (no images) |
+| Eigensheets → CSV | Main thread | N/A |
+| Any import | Main thread | N/A (images stored as-is) |
+| Any → PDF | Worker (Puppeteer) | N/A (HTML rendered by browser) |
 
 ## Phase 1: Quick Preview (Done)
 
@@ -191,10 +182,39 @@ Custom serializers needed:
 | `textAlign` | Paragraph alignment |
 | `color` / `fontFamily` | Run-level formatting |
 
-Image handling: the worker reads images from file paths on demand (not pre-loaded into memory). For each `figure`
-node with a `mediaName`, the serializer reads the file from the media folder path provided by the main thread.
+#### Image Conversion
 
-**Dependencies**: `prosemirror-docx`, `docx`
+DOCX only supports PNG and JPEG natively. WebP, SVG, HEIC, AVIF, RAW formats (CR2, NEF, ARW, etc.) are NOT supported.
+The eigendoc media folder stores **original files** in any format, so every image must be converted before embedding.
+
+The existing thumbnail worker (`apps/api/src/lib/shared/thumbnail-worker.ts`) already solves this problem with a
+3-stage fallback chain: sharp → heic-convert → exiftool embedded preview extraction. It currently outputs WebP only.
+
+**Approach: extend the thumbnail worker with an `outputFormat` parameter.**
+
+The worker gains a new option: `outputFormat: 'webp' | 'png'`. The final sharp call switches between `.webp()` and
+`.png()` based on this parameter. Everything else stays the same — the 3-stage fallback, timeout, cleanup, dimension
+extraction. This means DOCX export gets the same broad format support as thumbnails (HEIC, RAW, SVG, etc.) for free.
+
+```
+Export pipeline for each figure node:
+  1. Main thread reads original file from media folder (mount.readFile)
+  2. Sends to thumbnail worker with outputFormat: 'png', maxSize: 1200
+  3. Worker converts any format → PNG via the existing 3-stage chain
+  4. Returns PNG buffer + dimensions
+  5. DOCX serializer embeds the PNG buffer as an ImageRun
+```
+
+SVG is a special case: the preview system serves SVG as-is (vector), but DOCX can't render SVG. The worker's sharp
+stage handles SVG rasterization natively (`sharp(svgBuffer).png()`), so SVG files go through the same pipeline.
+
+The `maxSize` parameter controls the output resolution. Thumbnails use small sizes (256px); DOCX export uses larger
+sizes (e.g. 1200px) for print-quality output while keeping file sizes reasonable.
+
+For the figure node's `width` attribute (pixels as set in the editor): the DOCX ImageRun uses the same pixel value
+(at 96 DPI). If the figure has no width, use the image's natural dimensions capped to page width (600px).
+
+**Dependencies**: `prosemirror-docx`, `docx` (no new image dependencies — reuses existing worker)
 
 ### Eigenslides → PPTX
 
@@ -317,7 +337,8 @@ export but in reverse.
 - **Code blocks**: No syntax highlighting in DOCX/PPTX (monospace + gray background only)
 - **Comment marks**: Stripped from export (internal-only, references chat threads)
 - **Round-trip fidelity**: Import is lossy by design — complex formatting simplified to match our schema
-- **Large images in export**: Worker reads images from disk paths on demand — not pre-loaded into memory
+- **Image format conversion**: All images converted to PNG via thumbnail worker before DOCX/PPTX embedding. Handles WebP, SVG, HEIC, RAW, AVIF, etc. through existing 3-stage fallback (sharp → heic-convert → exiftool)
+- **Large images in export**: Images converted one at a time via thumbnail worker — not pre-loaded into memory
 - **Upload size limits**: Import route must call `getUploadMaxSize()` for quota enforcement
 - **Worker timeout**: 30s default for export/import workers. Worker is terminated on timeout, error returned
 - **Server restart during export**: Export is synchronous — the HTTP connection drops and the client retries
