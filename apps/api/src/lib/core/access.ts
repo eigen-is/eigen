@@ -1,13 +1,42 @@
 import { getMemberships, getOrgRole } from '../user';
 import { ApiError } from './errors';
 
+function ipv4ToNumber(ip: string): number {
+    return ip.split('.').reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0) >>> 0;
+}
+
+function normalizeIp(ip: string): string {
+    return ip.startsWith('::ffff:') ? ip.slice(7) : ip;
+}
+
+function matchesCidr(ip: string, entry: string): boolean {
+    const normalized = normalizeIp(ip);
+
+    if (!entry.includes('/')) return normalized === entry || ip === entry;
+
+    const [network, prefixStr] = entry.split('/');
+    const prefix = parseInt(prefixStr, 10);
+    // Only handle IPv4 CIDRs (sufficient for Docker bridge + localhost)
+    if (!network.includes('.') || !normalized.includes('.')) return false;
+
+    const mask = prefix === 0 ? 0 : (~0 << (32 - prefix)) >>> 0;
+    return (ipv4ToNumber(normalized) & mask) === (ipv4ToNumber(network) & mask);
+}
+
+const DEFAULT_TRUSTED = '127.0.0.0/8,::1';
+
+export function isIpTrusted(ip: string): boolean {
+    const networks = (process.env['TRUSTED_NETWORKS'] || DEFAULT_TRUSTED).split(',');
+    return networks.some((entry) => matchesCidr(ip, entry.trim()));
+}
+
 export function requireLocalhost(
     request: Request,
     server: { requestIP(req: Request): { address: string } | null } | null,
 ): void {
     const ip = server?.requestIP(request)?.address;
     if (!ip) return; // No server (e.g., tests using app.handle()) — allow
-    if (ip !== '127.0.0.1' && ip !== '::1' && ip !== '::ffff:127.0.0.1') {
+    if (!isIpTrusted(ip)) {
         throw new ApiError(403, 'Access denied: localhost only');
     }
 }
