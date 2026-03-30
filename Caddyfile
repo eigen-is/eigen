@@ -1,0 +1,61 @@
+{
+    email {$ACME_EMAIL}
+}
+
+(app) {
+    handle_path /{args[0]}/* {
+        root * /www/{args[0]}
+        try_files {path} /index.html
+        file_server
+    }
+}
+
+{$DOMAIN} {
+    encode gzip zstd
+
+    header X-Frame-Options SAMEORIGIN
+    header X-Content-Type-Options nosniff
+    header Strict-Transport-Security "max-age=63072000; includeSubDomains"
+
+    @static path *.js *.css *.png *.jpg *.svg *.woff2 *.ttf *.woff *.eot
+    header @static Cache-Control "public, max-age=31536000, immutable"
+
+    # API — strip /eigen/ prefix before proxying
+    handle_path /eigen/* {
+        reverse_proxy eigen-api:8000 {
+            flush_interval -1
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # CalDAV — keep /dav/ prefix (API routes include it)
+    handle /dav/* {
+        reverse_proxy eigen-api:8000
+    }
+    handle /.well-known/caldav {
+        redir /dav/ 301
+    }
+
+    # Frontend apps (SPA routing via snippet)
+    import app mail
+    import app drive
+    import app docs
+    import app contacts
+    import app calendar
+    import app chat
+    import app stickies
+    import app slides
+    import app sheets
+    import app space
+    import app people
+    import app setup
+
+    # Landing page (fallback)
+    handle {
+        root * /www/index
+        try_files {path} /index.html
+        file_server
+    }
+}
