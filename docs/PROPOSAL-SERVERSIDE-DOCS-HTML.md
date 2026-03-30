@@ -218,18 +218,52 @@ export function loadYjsState(db: Database): Y.Doc {
 This is a lightweight alternative to `CollabDocument` — no WebSocket subscriptions, no undo manager, no update tracking.
 Just load the state and return.
 
-## Use Case 1: Quick Preview (eigendoc)
+## Use Case 1: Quick Preview (all eigen doc types)
 
-### Server-Side Rendering
+### Integration with Existing Preview System
+
+No new routes needed. The existing `text-preview` system already handles cached HTML previews for text/markdown/code
+files via `GET /drive/:ownerId/:mountId/file/:pathId/text-preview`. Eigen document types plug into the same pipeline:
+
+```
+drive.getTextPreview(mountId, pathId)
+  → getTextPreviewData(mount, drivePath)
+      ├── text/markdown/code  → existing generateTextPreview()
+      ├── application/eigendoc      → generateEigendocPreview()
+      ├── application/eigenslides   → generateEigenslidesPreview()
+      ├── application/eigenstickies → generateEigenstickiesPreview()
+      └── application/eigensheets   → generateEigensheetsPreview()
+```
+
+The result is cached as JSON (`{ body: string, mode: string }`) in the mount's preview directory, keyed by
+`pathId + updatedAt`. Stale previews auto-invalidate when the document is edited.
+
+### Preview Location
+
+```
+apps/api/src/lib/preview/
+├── text-preview.ts                 # Existing: markdown, code, plaintext
+├── eigendoc-preview.ts             # New: eigendoc → HTML via static-renderer
+├── eigenslides-preview.ts          # New: slides → HTML
+├── eigenstickies-preview.ts        # New: stickies → HTML
+├── eigensheets-preview.ts          # New: sheets → HTML table
+└── preview-cache.ts                # Existing: cache layer (add eigen type support)
+```
+
+### Eigendoc Preview
 
 ```typescript
+// apps/api/src/lib/preview/eigendoc-preview.ts
 import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
 import { yXmlFragmentToProsemirrorJSON } from '@tiptap/y-tiptap';
+import DOMPurify from 'isomorphic-dompurify';
 import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
-import { loadYjsState } from '@workspace/lib/docs/yjs';
+import { loadYjsState } from '../collab/yjs-loader';
 
-async function renderDocPreview(drive: Drive, mountId: string, pathId: string): Promise<string> {
-    const db = await drive.openDatabase(mountId, pathId);
+export async function generateEigendocPreview(
+    mount: Mount, pathId: string, resolveMediaUrl: (name: string) => string | null,
+): Promise<string> {
+    const db = await mount.openDatabase(pathId);
     const ydoc = loadYjsState(db);
     const pmJson = yXmlFragmentToProsemirrorJSON(ydoc.getXmlFragment('default'));
 
@@ -241,7 +275,8 @@ async function renderDocPreview(drive: Drive, mountId: string, pathId: string): 
                 figure: ({ node }) => {
                     const url = resolveMediaUrl(node.attrs.mediaName);
                     const img = url ? `<img src="${escapeAttr(url)}" />` : '';
-                    const cap = node.attrs.caption ? `<figcaption>${escapeHtml(node.attrs.caption)}</figcaption>` : '';
+                    const cap = node.attrs.caption
+                        ? `<figcaption>${escapeHtml(node.attrs.caption)}</figcaption>` : '';
                     return `<figure>${img}${cap}</figure>`;
                 },
             },
@@ -252,13 +287,10 @@ async function renderDocPreview(drive: Drive, mountId: string, pathId: string): 
 }
 ```
 
-### API Endpoint
-
-```
-GET /collab/:ownerId/:mountId/:pathId/preview
-```
-
-Returns sanitized HTML wrapped in `eigen-prose` class for consistent styling.
+The frontend already calls `useTextPreview(ownerId, mountId, pathId)` which hits
+`GET /drive/:ownerId/:mountId/file/:pathId/text-preview`. The only change needed on the frontend: add
+`application/eigendoc` (and other eigen MIME types) to `getTextPreviewMode()` in
+`packages/lib/src/constants/` so the preview pane knows to request and render HTML for these types.
 
 ## Use Case 2: DOCX Import
 
@@ -344,8 +376,9 @@ Use `renderToHTMLString` from Use Case 1, then convert to DOCX via `html-to-docx
 3. Create `getDocExtensions()` in shared, update docs editor to import from it
 4. Create `apps/api/src/lib/collab/yjs-loader.ts` — lightweight read-only Yjs state loading
 5. Add `@tiptap/static-renderer` + shared tiptap deps to API server
-6. Add `GET /collab/:ownerId/:mountId/:pathId/preview` endpoint
-7. Wire into Drive's preview system
+6. Create `apps/api/src/lib/preview/eigendoc-preview.ts`
+7. Extend `getTextPreviewData()` in `preview-cache.ts` to handle eigen MIME types
+8. Add eigen MIME types to `getTextPreviewMode()` in `packages/lib/src/constants/`
 
 ### Phase 2: DOCX Import
 
