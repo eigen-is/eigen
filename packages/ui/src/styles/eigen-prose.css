@@ -4,7 +4,7 @@
 /* Base font — eigen-prose containers only (editors inherit from app) */
 .eigen-prose {
     font-family: var(--font-sans);
-    font-size: 15px;
+    font-size: 1rem;
     line-height: 1.7;
     color: #1a1a2e;
 }
@@ -299,6 +299,10 @@
 .tiptap {
     outline: none;
     min-height: 100%;
+    overflow-wrap: break-word;
+    white-space: break-spaces;
+    font-variant-ligatures: none;
+    font-feature-settings: "liga" 0;
 
     /* Tighter paragraph spacing for editors (vs wider prose spacing) */
 

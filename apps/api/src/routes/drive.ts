@@ -200,13 +200,15 @@ export const driveRouter = new Elysia({ name: 'drive' })
     )
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/text-preview',
-        async ({ params, user, set }) => {
+        async ({ params, user, set, request }) => {
             const drive = await getSharedDrive(params.ownerId, user);
-            const result = await drive.getTextPreview(params.mountId, params.pathId);
+            const origin = new URL(request.url).origin;
+            const result = await drive.getTextPreview(params.mountId, params.pathId, origin);
             if (!result) {
                 set.status = 404;
                 return { body: '', mode: 'plaintext' };
             }
+            set.headers['Cache-Control'] = 'no-cache';
             return result;
         },
         { auth: true },
