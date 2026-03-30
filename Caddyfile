@@ -3,6 +3,7 @@
 }
 
 (app) {
+    redir /{args[0]} /{args[0]}/ 308
     handle_path /{args[0]}/* {
         root * /www/{args[0]}
         try_files {path} /index.html
