@@ -46,6 +46,7 @@ export const MAIL_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     FOREIGN KEY (emailId) REFERENCES emails(id) ON DELETE CASCADE,
                     FOREIGN KEY (labelId) REFERENCES email_labels(id) ON DELETE CASCADE
                 );
+                CREATE INDEX IF NOT EXISTS idx_emails_to_labels_labelId ON emails_to_labels(labelId);
             `),
         },
     ],

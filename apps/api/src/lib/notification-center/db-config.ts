@@ -21,7 +21,7 @@ export const NOTIFICATION_CENTER_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     createdAt INTEGER NOT NULL DEFAULT (unixepoch())
                 );
 
-                CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read);
+                CREATE INDEX IF NOT EXISTS idx_notifications_read_createdAt ON notifications(read, createdAt);
                 CREATE INDEX IF NOT EXISTS idx_notifications_createdAt ON notifications(createdAt);
             `),
         },

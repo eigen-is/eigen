@@ -67,6 +67,8 @@ export const CALENDAR_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     createdAt INTEGER DEFAULT (unixepoch()),
                     updatedAt INTEGER DEFAULT (unixepoch())
                 );
+
+                CREATE INDEX IF NOT EXISTS idx_shared_calendars_ownerUserId ON shared_calendars(ownerUserId);
             `),
         },
     ],
