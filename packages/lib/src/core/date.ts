@@ -6,6 +6,17 @@ export function formatDate(date: Date | string | number): string {
     return new Date(date).toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
+export function formatDateTime(date: Date | string | number): string {
+    const d = new Date(date);
+    const isToday = d.toDateString() === new Date().toDateString();
+
+    if (isToday) {
+        return formatTime(d);
+    }
+
+    return `${formatDate(d)}, ${formatTime(d)}`;
+}
+
 export function formatTimeAgo(date: Date | string | number): string {
     const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
     if (seconds < 60) return 'just now';
@@ -17,14 +28,12 @@ export function formatTimeAgo(date: Date | string | number): string {
     return `${days}d ago`;
 }
 
-export function formatDateTime(date: Date | string | number): string {
+export function formatFullDateTime(date: Date | string | number): string {
     const d = new Date(date);
-    const now = new Date();
-    const isToday = d.toDateString() === now.toDateString();
+    const datePart = d.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' });
+    return `${datePart} at ${formatTime(d)}`;
+}
 
-    if (isToday) {
-        return formatTime(date);
-    }
-
-    return formatDate(date);
+export function formatInputDate(date: Date | string | number): string {
+    return new Date(date).toISOString().slice(0, 10);
 }

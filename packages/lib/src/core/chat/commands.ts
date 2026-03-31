@@ -57,6 +57,8 @@ export type LocalCommand =
 
 export function getLocalCommand(raw: string): LocalCommand {
     const trimmed = raw.trim();
+    if (!trimmed.startsWith('/')) return null;
+
     const validation = validateCommand(trimmed);
 
     if (!validation.valid) {
