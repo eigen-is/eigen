@@ -124,7 +124,7 @@ function localToUtcSeconds(
     return adjusted;
 }
 
-function dbEventToCalendarEvent(row: typeof schema.events.$inferSelect): CalendarEventRow {
+function dbEventToCalendarEvent(row: typeof schema.events.$inferSelect): CalendarEvent {
     return {
         id: row.id,
         calendarId: row.calendarId,
@@ -147,6 +147,12 @@ function dbEventToCalendarEvent(row: typeof schema.events.$inferSelect): Calenda
         createByUserId: row.createByUserId ?? null,
         createdAt: row.createdAt as number,
         updatedAt: row.updatedAt as number,
+    };
+}
+
+function dbEventToCalendarEventRow(row: typeof schema.events.$inferSelect): CalendarEventRow {
+    return {
+        ...dbEventToCalendarEvent(row),
         icsBlob: row.icsBlob ?? null,
         eventCtag: row.eventCtag ?? null,
     };
@@ -312,7 +318,7 @@ export class Calendar {
             icsBlob?: string | null;
         },
         user?: UserIdentity,
-    ): CalendarEventRow {
+    ): CalendarEvent {
         const cal = this.getCalendarById(calendarId);
         if (!cal) throw new ApiError(404, 'Calendar not found');
 
@@ -380,12 +386,13 @@ export class Calendar {
             propagateInvitation(this.home, event, user, [], event.data.attendees).catch(console.error);
         }
 
-        return event;
+        const { icsBlob: _ics, eventCtag: _ctag, ...calendarEvent } = event;
+        return calendarEvent;
     }
 
     private getEventById(id: string): CalendarEventRow | null {
         const row = this.db.select().from(schema.events).where(eq(schema.events.id, id)).get();
-        return row ? dbEventToCalendarEvent(row) : null;
+        return row ? dbEventToCalendarEventRow(row) : null;
     }
 
     public getEventByUri(calendarId: string, uri: string): CalendarEventRow | null {
@@ -394,7 +401,7 @@ export class Calendar {
             .from(schema.events)
             .where(and(eq(schema.events.calendarId, calendarId), eq(schema.events.uri, uri)))
             .get();
-        return row ? dbEventToCalendarEvent(row) : null;
+        return row ? dbEventToCalendarEventRow(row) : null;
     }
 
     public getRawEvents(calendarId: string): CalendarEventRow[] {
@@ -403,7 +410,7 @@ export class Calendar {
             .from(schema.events)
             .where(eq(schema.events.calendarId, calendarId))
             .all()
-            .map(dbEventToCalendarEvent);
+            .map(dbEventToCalendarEventRow);
     }
 
     public getRawEventsInRange(calendarId: string, from: number, to: number): CalendarEventRow[] {
@@ -421,7 +428,7 @@ export class Calendar {
                 ),
             )
             .all()
-            .map(dbEventToCalendarEvent);
+            .map(dbEventToCalendarEventRow);
 
         // 2. Recurring events — check if ANY occurrence falls in range
         const allRecurring = this.db
@@ -440,7 +447,7 @@ export class Calendar {
         const matchingRecurringIds = new Set<string>();
 
         for (const row of allRecurring) {
-            const evt = dbEventToCalendarEvent(row);
+            const evt = dbEventToCalendarEventRow(row);
             const occurrences = expandRecurrence(evt, from, to);
             if (occurrences.length > 0) {
                 matchingRecurring.push(evt);
@@ -456,7 +463,7 @@ export class Calendar {
                 .from(schema.events)
                 .where(and(eq(schema.events.calendarId, calendarId), sql`${schema.events.parentEventId} IS NOT NULL`))
                 .all()
-                .map(dbEventToCalendarEvent);
+                .map(dbEventToCalendarEventRow);
 
             for (const exc of allExceptions) {
                 if (exc.parentEventId && matchingRecurringIds.has(exc.parentEventId)) {
@@ -475,7 +482,7 @@ export class Calendar {
             .from(schema.events)
             .where(and(eq(schema.events.calendarId, calendarId), inArray(schema.events.uri, uris)))
             .all()
-            .map(dbEventToCalendarEvent);
+            .map(dbEventToCalendarEventRow);
     }
 
     public getChangedEventsSince(calendarId: string, sinceCtag: number): CalendarEventRow[] {
@@ -484,7 +491,7 @@ export class Calendar {
             .from(schema.events)
             .where(and(eq(schema.events.calendarId, calendarId), gt(schema.events.eventCtag, sinceCtag)))
             .all()
-            .map(dbEventToCalendarEvent);
+            .map(dbEventToCalendarEventRow);
     }
 
     public getDeletedEventsSince(calendarId: string, sinceCtag: number): { uri: string }[] {
@@ -522,7 +529,7 @@ export class Calendar {
             icsBlob?: string | null;
         },
         user?: UserIdentity,
-    ): CalendarEventRow {
+    ): CalendarEvent {
         const existing = this.getEventById(id);
         if (!existing) throw new ApiError(404, 'Event not found');
 
@@ -607,10 +614,12 @@ export class Calendar {
             propagateInvitation(this.home, withSequence, user, oldAttendees, withSequence.data!.attendees!).catch(
                 console.error,
             );
-            return withSequence;
+            const { icsBlob: _ics2, eventCtag: _ctag2, ...withSequenceEvent } = withSequence;
+            return withSequenceEvent;
         }
 
-        return updated;
+        const { icsBlob: _ics, eventCtag: _ctag, ...updatedEvent } = updated;
+        return updatedEvent;
     }
 
     public deleteEvent(id: string, user?: UserIdentity): void {

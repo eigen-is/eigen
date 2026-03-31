@@ -147,9 +147,7 @@ function handleSyncCollection(
         // Deleted events
         const deleted = calendar.getDeletedEventsSince(calendarId, sinceCtag);
         for (const d of deleted) {
-            responses.push(
-                `<D:response><D:href>${prefix}${d.uri}</D:href><D:status>HTTP/1.1 404 Not Found</D:status></D:response>`,
-            );
+            responses.push(response(`${prefix}${d.uri}`, [`<D:status>HTTP/1.1 404 Not Found</D:status>`]));
         }
     }
 
