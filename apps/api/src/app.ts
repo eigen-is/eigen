@@ -4,6 +4,7 @@ import swagger from '@elysiajs/swagger';
 import Elysia from 'elysia';
 import { rateLimit } from 'elysia-rate-limit';
 import { trustedOrigins } from './lib/auth/auth';
+import { caldavRouter } from './lib/caldav/caldav-router';
 import { ApiError } from './lib/core/errors';
 import { betterAuth } from './routes/auth';
 import { calendarRouter } from './routes/calendar';
@@ -78,6 +79,7 @@ export const app = new Elysia()
     .use(notificationRouter)
     .use(sseRouter)
     .use(internalRouter)
+    .use(caldavRouter)
 
     .onError(({ error, set, code }) => {
         if (code === 'VALIDATION') return;
