@@ -260,6 +260,14 @@ export function ChatMessageInput({
         }
     };
 
+    const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+        const pastedFiles = Array.from(e.clipboardData.files);
+        if (pastedFiles.length > 0) {
+            e.preventDefault();
+            setFiles((prev) => [...prev, ...pastedFiles]);
+        }
+    };
+
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newFiles = e.target.files ? Array.from(e.target.files) : [];
         if (newFiles.length > 0) {
@@ -348,6 +356,7 @@ export function ChatMessageInput({
                         e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
                     }}
                     onKeyDown={handleKeyDown}
+                    onPaste={handlePaste}
                     placeholder={placeholder}
                     disabled={disabled}
                     rows={1}
