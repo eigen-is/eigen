@@ -408,7 +408,12 @@ export class Calendar {
         const etag = computeEtag({ ...event, updatedAt: Math.floor(Date.now() / 1000) });
         this.db
             .update(schema.events)
-            .set({ updatedAt: sql`unixepoch()`, etag, eventCtag: this.getCalendarById(event.calendarId)?.ctag ?? 0 })
+            .set({
+                updatedAt: sql`unixepoch()`,
+                etag,
+                eventCtag: this.getCalendarById(event.calendarId)?.ctag ?? 0,
+                icsBlob: null, // Clear cached ICS so CalDAV regenerates with the new exception
+            })
             .where(eq(schema.events.id, id))
             .run();
     }
