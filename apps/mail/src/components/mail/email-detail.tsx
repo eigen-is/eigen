@@ -1,5 +1,6 @@
 import { getMailAttachmentUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
+import { formatFullDateTime } from '@workspace/lib/date';
 import type { AddressObject, Attachment, Email, MaildirMailbox } from '@workspace/lib/types/mail';
 import { Toolbar, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
@@ -9,7 +10,6 @@ import { UserItem } from '@workspace/ui/components/layout/user-item';
 import { Separator } from '@workspace/ui/components/separator';
 import { Table, TableBody, TableCell, TableRow } from '@workspace/ui/components/table';
 import { printDocument } from '@workspace/ui/lib/printElement';
-import { format } from 'date-fns';
 import { AlertTriangle, Archive, Forward, MoreVertical, Paperclip, Reply, ReplyAll, Trash2 } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { EmailContextMenu } from './email-context-menu';
@@ -207,7 +207,7 @@ export function EmailDetail({ email, toggleMailRead }: EmailDetailProps) {
     try {
         if (email.date) {
             const dateValue = new Date(email.date);
-            formattedDate = format(dateValue, "MMMM d, yyyy 'at' h:mm a");
+            formattedDate = formatFullDateTime(dateValue);
         }
     } catch (error) {
         console.error('Error formatting date:', error);

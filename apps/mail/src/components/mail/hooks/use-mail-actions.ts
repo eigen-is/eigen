@@ -1,5 +1,6 @@
 import { useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
+import { formatFullDateTime } from '@workspace/lib/date';
 import {
     createDraftEmail,
     useDeleteEmail,
@@ -10,7 +11,6 @@ import {
     useUpdateDraft,
 } from '@workspace/lib/mail';
 import type { Email, EmailDraft } from '@workspace/lib/types/mail';
-import { format } from 'date-fns';
 import { toast } from 'sonner';
 import { Route } from '../../../routes/_auth.$filterType.$filterId';
 
@@ -135,7 +135,7 @@ export function useMailActions() {
     };
 
     const formatEmailQuote = (email: Email) => {
-        return `\n\nOn ${format(new Date(email.date), "d MMM yyyy 'at' h:mm a")} ${email.from?.value[0]?.name} <${email.from?.value[0]?.address}> wrote:\n\n${email.text}`;
+        return `\n\nOn ${formatFullDateTime(new Date(email.date))} ${email.from?.value[0]?.name} <${email.from?.value[0]?.address}> wrote:\n\n${email.text}`;
     };
 
     const handleReplyEmail = async (emailId: string) => {

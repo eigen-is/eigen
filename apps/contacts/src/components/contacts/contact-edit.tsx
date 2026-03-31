@@ -2,6 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { getContactsAvatarUploadUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { useLabels } from '@workspace/lib/contacts';
+import { formatInputDate } from '@workspace/lib/date';
 import type { Contact } from '@workspace/lib/types/contact';
 import { Toolbar, UserAvatar } from '@workspace/ui';
 import { Badge } from '@workspace/ui/components/badge';
@@ -17,7 +18,6 @@ import { Input } from '@workspace/ui/components/input';
 import { useUpload } from '@workspace/ui/components/layout/upload-provider/upload-provider';
 import { uploadWithProgress } from '@workspace/ui/components/layout/upload-provider/upload-with-progress';
 import { Textarea } from '@workspace/ui/components/textarea';
-import { format } from 'date-fns';
 import { Camera, Plus, Trash2 } from 'lucide-react';
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -619,7 +619,7 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
                                                 <FormControl>
                                                     <Input
                                                         type="date"
-                                                        value={field.value ? format(field.value, 'yyyy-MM-dd') : ''}
+                                                        value={field.value ? formatInputDate(field.value) : ''}
                                                         onChange={(e) => {
                                                             const val = e.target.value;
                                                             field.onChange(val ? new Date(`${val}T00:00:00`) : null);
