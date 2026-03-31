@@ -37,10 +37,23 @@ export function parseIcs(icsText: string): ParsedEvent[] {
         const dtend = vevent.getFirstProperty('dtend');
         const allDay = event.startDate.isDate;
 
-        const startTime = Math.floor(event.startDate.toJSDate().getTime() / 1000);
-        const endTime = dtend
-            ? Math.floor(event.endDate.toJSDate().getTime() / 1000)
-            : startTime + (allDay ? 86400 : 3600);
+        // For all-day events (VALUE=DATE), construct UTC midnight manually.
+        // ical.js toJSDate() converts through local timezone, shifting the date.
+        let startTime: number;
+        let endTime: number;
+        if (allDay) {
+            const s = event.startDate;
+            startTime = Math.floor(Date.UTC(s.year, s.month - 1, s.day) / 1000);
+            if (dtend) {
+                const e = event.endDate;
+                endTime = Math.floor(Date.UTC(e.year, e.month - 1, e.day) / 1000);
+            } else {
+                endTime = startTime + 86400;
+            }
+        } else {
+            startTime = Math.floor(event.startDate.toJSDate().getTime() / 1000);
+            endTime = dtend ? Math.floor(event.endDate.toJSDate().getTime() / 1000) : startTime + 3600;
+        }
 
         const tzidRaw = dtstart?.getParameter('tzid') || null;
         const tzid = Array.isArray(tzidRaw) ? (tzidRaw[0] ?? null) : tzidRaw;
