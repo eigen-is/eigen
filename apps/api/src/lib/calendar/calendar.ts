@@ -378,6 +378,11 @@ export class Calendar {
         this.incrementCtag(calendarId);
         const event = this.getEventById(id)!;
 
+        // When creating an exception, touch the master event so its etag changes (CalDAV sync)
+        if (input.parentEventId) {
+            this.touchEvent(input.parentEventId);
+        }
+
         const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_CREATED, this.home.user.id);
         this.home.broadcast(sseEvent);
         notifySharedCalendarUsers(this.home, cal, sseEvent).catch(() => {});
@@ -393,6 +398,19 @@ export class Calendar {
     private getEventById(id: string): CalendarEventRow | null {
         const row = this.db.select().from(schema.events).where(eq(schema.events.id, id)).get();
         return row ? dbEventToCalendarEventRow(row) : null;
+    }
+
+    // Touch an event's updatedAt to change its etag — used when exceptions are created/deleted
+    // so CalDAV clients detect changes to the master event's .ics resource
+    private touchEvent(id: string): void {
+        const event = this.getEventById(id);
+        if (!event) return;
+        const etag = computeEtag({ ...event, updatedAt: Math.floor(Date.now() / 1000) });
+        this.db
+            .update(schema.events)
+            .set({ updatedAt: sql`unixepoch()`, etag, eventCtag: this.getCalendarById(event.calendarId)?.ctag ?? 0 })
+            .where(eq(schema.events.id, id))
+            .run();
     }
 
     public getEventByUri(calendarId: string, uri: string): CalendarEventRow | null {
@@ -647,6 +665,12 @@ export class Calendar {
             .run();
 
         this.db.delete(schema.events).where(eq(schema.events.id, id)).run();
+
+        // When deleting an exception, touch the master so its etag changes (CalDAV sync)
+        if (existing.parentEventId) {
+            this.touchEvent(existing.parentEventId);
+        }
+
         this.incrementCtag(existing.calendarId);
         const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_DELETED, this.home.user.id);
         this.home.broadcast(sseEvent);
