@@ -1,4 +1,5 @@
 import Elysia from 'elysia';
+import { ApiError } from '../core/errors';
 import { getHome } from '../home';
 import { authenticateBasic } from './auth';
 import { handleCalendarHomePropfind, handlePrincipalPropfind, handleRootPropfind } from './discovery';
@@ -7,14 +8,7 @@ import { handleMkcalendar, handleProppatch } from './proppatch';
 import { handleReport } from './report';
 import { handleDelete, handleGet, handlePut } from './resource';
 
-const DAV_HEADERS = {
-    DAV: '1, 2, 3, calendar-access',
-    Allow: 'OPTIONS, GET, PUT, DELETE, PROPFIND, PROPPATCH, REPORT, MKCALENDAR',
-};
-
 function parseDavPath(wildcard: string): { calendarId?: string; resourceUri?: string } {
-    // wildcard comes from Elysia's /dav/calendars/:ownerId/*
-    // Could be: "" (collection), "calId/" (calendar), "calId/event.ics" (resource)
     const parts = wildcard
         .replace(/^\/+|\/+$/g, '')
         .split('/')
@@ -26,16 +20,14 @@ function parseDavPath(wildcard: string): { calendarId?: string; resourceUri?: st
 }
 
 export const caldavRouter = new Elysia({ name: 'caldav' })
-    // OPTIONS — DAV capability advertisement (no auth needed)
-    .options('/dav/*', ({ set }) => {
-        Object.assign(set.headers, DAV_HEADERS);
-        return '';
+    // Add WWW-Authenticate header on 401 errors for CalDAV paths
+    .onError(({ set, request, error }) => {
+        if (error instanceof ApiError && error.status === 401 && new URL(request.url).pathname.startsWith('/dav')) {
+            set.status = 401;
+            set.headers['WWW-Authenticate'] = 'Basic realm="Eigen CalDAV"';
+            return 'Unauthorized';
+        }
     })
-    .options('/dav', ({ set }) => {
-        Object.assign(set.headers, DAV_HEADERS);
-        return '';
-    })
-
     // PROPFIND /dav/ — discovery root
     .route('PROPFIND', '/dav', async ({ request }) => {
         const user = await authenticateBasic(request);
@@ -46,7 +38,7 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         return handleRootPropfind(user.id);
     })
 
-    // PROPFIND /dav/principals/:ownerId/ (with or without trailing content)
+    // PROPFIND /dav/principals/:ownerId/
     .route('PROPFIND', '/dav/principals/:ownerId', async ({ request, params }) => {
         await authenticateBasic(request);
         return handlePrincipalPropfind(params.ownerId);
@@ -56,7 +48,7 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         return handlePrincipalPropfind(params.ownerId);
     })
 
-    // PROPFIND /dav/calendars/:ownerId/ — calendar home (list calendars)
+    // PROPFIND /dav/calendars/:ownerId/ — calendar home
     .route('PROPFIND', '/dav/calendars/:ownerId', async ({ request, params }) => {
         await authenticateBasic(request);
         const home = await getHome(params.ownerId);
@@ -71,14 +63,12 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         const { calendarId } = parseDavPath(params['*']);
 
         if (!calendarId) {
-            // Same as calendar home
             const home = await getHome(params.ownerId);
             const calendars = home.calendar.getCalendars();
             const depth = request.headers.get('Depth') || '0';
             return handleCalendarHomePropfind(params.ownerId, calendars, depth);
         }
 
-        // Calendar collection PROPFIND
         const home = await getHome(params.ownerId);
         const calendar = home.calendar.getCalendarById(calendarId);
         if (!calendar) return new Response('Not Found', { status: 404 });
@@ -87,7 +77,7 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         return handleCalendarPropfind(params.ownerId, calendar, events, depth);
     })
 
-    // GET /dav/calendars/:ownerId/:calendarId/:uri — fetch .ics resource
+    // GET .ics resource
     .get('/dav/calendars/:ownerId/*', async ({ request, params }) => {
         await authenticateBasic(request);
         const { calendarId, resourceUri } = parseDavPath(params['*']);
@@ -101,7 +91,7 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         return handleGet(event, allEvents);
     })
 
-    // PUT /dav/calendars/:ownerId/:calendarId/:uri — create or update .ics resource
+    // PUT .ics resource
     .put('/dav/calendars/:ownerId/*', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         const { calendarId, resourceUri } = parseDavPath(params['*']);
@@ -114,7 +104,7 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         return handlePut(home.calendar, calendarId, resourceUri, body, ifMatch, ifNoneMatch, user.id);
     })
 
-    // DELETE /dav/calendars/:ownerId/:calendarId/:uri — delete .ics resource
+    // DELETE .ics resource
     .delete('/dav/calendars/:ownerId/*', async ({ request, params }) => {
         await authenticateBasic(request);
         const { calendarId, resourceUri } = parseDavPath(params['*']);
@@ -125,7 +115,7 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         return handleDelete(home.calendar, calendarId, resourceUri, ifMatch);
     })
 
-    // REPORT /dav/calendars/:ownerId/:calendarId/ — calendar-query, multiget, sync-collection
+    // REPORT — calendar-query, multiget, sync-collection
     .route('REPORT', '/dav/calendars/:ownerId/*', async ({ request, params }) => {
         await authenticateBasic(request);
         const { calendarId } = parseDavPath(params['*']);
@@ -139,18 +129,15 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         return handleReport(home.calendar, calendarId, calendarItem, params.ownerId, body);
     })
 
-    // MKCALENDAR /dav/calendars/:ownerId/:calendarId/ — create a new calendar collection
+    // MKCALENDAR
     .route('MKCALENDAR', '/dav/calendars/:ownerId/*', async ({ request, params }) => {
         await authenticateBasic(request);
-        const { calendarId } = parseDavPath(params['*']);
-        if (!calendarId) return new Response('Bad Request', { status: 400 });
-
         const home = await getHome(params.ownerId);
         const body = await request.text();
         return handleMkcalendar(home.calendar, body);
     })
 
-    // PROPPATCH /dav/calendars/:ownerId/:calendarId/ — update calendar properties
+    // PROPPATCH
     .route('PROPPATCH', '/dav/calendars/:ownerId/*', async ({ request, params }) => {
         await authenticateBasic(request);
         const { calendarId } = parseDavPath(params['*']);
