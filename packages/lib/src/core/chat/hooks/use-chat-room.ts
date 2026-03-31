@@ -10,7 +10,7 @@ import {
     useUploadFile,
 } from '../../drive';
 import { COMMANDS_HELP, getLocalCommand, isUnknownCommand } from '../commands';
-import { useInviteToChat, useMessages, usePostMessage } from './use-chat';
+import { useDeleteMessage, useEditMessage, useInviteToChat, useMessages, usePostMessage } from './use-chat';
 
 let localIdCounter = 0;
 
@@ -28,6 +28,8 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
     const uploadFile = useUploadFile(ownerId, mountId);
     const { data: chatPath } = usePathInfo(ownerId, mountId, chatId);
     const inviteToChat = useInviteToChat(ownerId, mountId, chatId);
+    const deleteMessage = useDeleteMessage(ownerId, mountId, chatId);
+    const editMessage = useEditMessage(ownerId, mountId, chatId);
     const { data: writePermission } = useCheckWritePermission(ownerId, mountId, chatId);
     const readOnly = writePermission ? !writePermission.canWrite : false;
     const { data: chatContents = [] } = useFolderContent(ownerId, mountId, chatId);
@@ -171,6 +173,16 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
 
     const mediaFolderId = chatContents.find((item) => item.name === 'media')?.id ?? null;
 
+    const handleDeleteMessage = useCallback(
+        (messageId: string) => deleteMessage.mutateAsync(messageId),
+        [deleteMessage],
+    );
+
+    const handleEditMessage = useCallback(
+        (messageId: string, content: string) => editMessage.mutateAsync({ messageId, content }),
+        [editMessage],
+    );
+
     return {
         messages: allMessages,
         isLoading,
@@ -183,6 +195,8 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
         currentUserEmail: user?.email || '',
         mediaFolderId,
         handleSendMessage,
+        handleEditMessage,
+        handleDeleteMessage,
         hasOlderMessages: messagesQuery.hasNextPage,
         isFetchingOlderMessages: messagesQuery.isFetchingNextPage,
         fetchOlderMessages: messagesQuery.fetchNextPage,

@@ -1,7 +1,9 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useChatRoom } from '@workspace/lib/chat';
+import type { ChatMessage } from '@workspace/lib/types/chat';
 import { ChatMessageInput, ChatMessageList, Toolbar, TooltipButton } from '@workspace/ui';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
+import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
 import { DriveAccessDialog } from '@workspace/ui/components/layout/drive/drive-access-dialog';
 import { DriveRenameItem } from '@workspace/ui/components/layout/drive/drive-rename-item';
 import { DriveShareSummary } from '@workspace/ui/components/layout/drive/drive-share-summary';
@@ -14,6 +16,25 @@ function ChatView() {
 
     const [accessDialogOpen, setAccessDialogOpen] = useState(false);
     const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+    const [deleteTarget, setDeleteTarget] = useState<ChatMessage | null>(null);
+    const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+    const [focusTrigger, setFocusTrigger] = useState(0);
+
+    const handleDeleteConfirm = async () => {
+        if (!deleteTarget) return;
+        await chat.handleDeleteMessage(deleteTarget.id);
+        setDeleteTarget(null);
+    };
+
+    const endEditing = () => {
+        setEditingMessageId(null);
+        setFocusTrigger((n) => n + 1);
+    };
+
+    const handleSaveEdit = async (messageId: string, content: string) => {
+        await chat.handleEditMessage(messageId, content);
+        endEditing();
+    };
 
     const toolbar = (
         <Toolbar>
@@ -58,6 +79,11 @@ function ChatView() {
                             hasOlderMessages={chat.hasOlderMessages}
                             isFetchingOlderMessages={chat.isFetchingOlderMessages}
                             onLoadMore={chat.fetchOlderMessages}
+                            onEditMessage={(msg) => setEditingMessageId(msg.id)}
+                            onDeleteMessage={setDeleteTarget}
+                            editingMessageId={editingMessageId}
+                            onSaveEdit={handleSaveEdit}
+                            onCancelEdit={endEditing}
                         />
                         <ChatMessageInput
                             onSend={chat.handleSendMessage}
@@ -66,7 +92,25 @@ function ChatView() {
                             placeholder={`Message ${chat.chatName}`}
                             roomMembers={chat.roomMembers}
                             currentUserEmail={chat.currentUserEmail}
-                            messageCount={chat.messages.length}
+                            messageCount={chat.messages.length + focusTrigger}
+                            onKeyDown={(e, content) => {
+                                if (e.key === 'ArrowUp' && !content.trim()) {
+                                    const lastOwn = [...chat.messages]
+                                        .reverse()
+                                        .find(
+                                            (m) =>
+                                                m.authorId === chat.currentUserId &&
+                                                !m.deletedAt &&
+                                                m.type === 'message',
+                                        );
+                                    if (lastOwn) {
+                                        e.preventDefault();
+                                        setEditingMessageId(lastOwn.id);
+                                        return true;
+                                    }
+                                }
+                                return undefined;
+                            }}
                         />
                     </div>
                 </Column>
@@ -79,6 +123,14 @@ function ChatView() {
             />
 
             <DriveRenameItem path={chat.chatPath ?? null} open={renameDialogOpen} onOpenChange={setRenameDialogOpen} />
+
+            <DeleteDialog
+                open={!!deleteTarget}
+                onOpenChange={(open) => !open && setDeleteTarget(null)}
+                title="Delete Message"
+                description="Are you sure you want to delete this message? This cannot be undone."
+                onDelete={handleDeleteConfirm}
+            />
         </>
     );
 }
