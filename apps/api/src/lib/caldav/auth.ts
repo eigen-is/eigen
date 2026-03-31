@@ -30,6 +30,7 @@ export async function authenticateBasic(request: Request): Promise<CalDavUser> {
         throw new ApiError(401, 'Unauthorized');
     }
 
-    // TODO: validate password (app-specific passwords). For now, accept any password.
+    // SECURITY: password validation not yet implemented — accepts any password.
+    // CalDAV is not safe for production until app-specific passwords are added.
     return { id: user.id, email: user.email, name: user.name };
 }

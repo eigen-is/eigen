@@ -1,8 +1,7 @@
 import { XMLParser } from 'fast-xml-parser';
 import type { Calendar } from '../calendar/calendar';
-import { multistatus, propstatOk, response } from './xml-builder';
+import { multistatus, propstatOk, response, XML_CONTENT_TYPE } from './xml-builder';
 
-const XML_CONTENT_TYPE = 'application/xml; charset=utf-8';
 const parser = new XMLParser({ ignoreAttributes: false, removeNSPrefix: true });
 
 // MKCALENDAR /dav/calendars/:ownerId/:calendarId/
