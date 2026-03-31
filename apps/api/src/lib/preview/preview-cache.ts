@@ -116,13 +116,20 @@ export async function getCollabPreviewData(
 ): Promise<TextPreviewResult | null> {
     const mime = drivePath.mimeType || '';
 
-    // Eigendoc previews are fast (pure CPU) and Yjs edits don't update drivePath.updatedAt,
-    // so we always regenerate instead of caching
     if (mime === DRIVE_MIME_DOC) {
+        const cacheFile = path.join(mount.previewsDir, getTextCacheKey(drivePath.id, drivePath.updatedAt));
+
+        if (fs.existsSync(cacheFile)) {
+            return JSON.parse(await Bun.file(cacheFile).text()) as TextPreviewResult;
+        }
+
         try {
             const { generateEigendocPreview } = await import('./eigendoc-preview');
             const body = await generateEigendocPreview(mount, drivePath, baseUrl);
-            return body ? { body, mode: 'eigendoc' } : null;
+            if (!body) return null;
+            const result: TextPreviewResult = { body, mode: 'eigendoc' };
+            await Bun.write(cacheFile, JSON.stringify(result));
+            return result;
         } catch (err) {
             console.error(`[preview] Failed to generate eigendoc preview for ${drivePath.id}:`, err);
             return null;
