@@ -92,11 +92,14 @@ export const app = new Elysia()
     .use(internalRouter)
     .use(caldavRouter)
 
-    .onError(({ error, set, code }) => {
+    .onError(({ error, set, code, request }) => {
         if (code === 'VALIDATION') return;
         const err = error as Error;
         if (err instanceof ApiError) {
             set.status = err.status;
+            if (err.status === 401 && new URL(request.url).pathname.startsWith('/dav')) {
+                set.headers['WWW-Authenticate'] = 'Basic realm="Eigen CalDAV"';
+            }
             return err.message;
         }
         console.error('API Error:', err);
