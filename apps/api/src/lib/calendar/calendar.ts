@@ -355,7 +355,11 @@ export class Calendar {
                 id,
                 calendarId,
                 uid,
-                uri: input.uri || `${uid}.ics`,
+                uri:
+                    input.uri ||
+                    (input.parentEventId && input.recurrenceDate
+                        ? `${uid}-exc-${input.recurrenceDate}.ics`
+                        : `${uid}.ics`),
                 title: input.title.trim(),
                 description: input.description ?? null,
                 location: input.location ?? null,
@@ -1260,6 +1264,7 @@ export class Calendar {
                 recurrenceDate,
                 data: { ...parent.data, attendees },
                 createByUserId: parent.createByUserId,
+                uid: parent.uid,
             });
         }
     }
@@ -1280,6 +1285,7 @@ export class Calendar {
                 .where(eq(schema.events.id, existing.id))
                 .run();
             this.incrementCtag(parent.calendarId);
+            this.touchEvent(eventId); // Update master etag + clear icsBlob for CalDAV sync
         } else {
             const { startTime, endTime } = computeOccurrenceTimes(parent, recurrenceDate);
             this.createEvent(parent.calendarId, {
@@ -1290,6 +1296,7 @@ export class Calendar {
                 parentEventId: eventId,
                 recurrenceDate,
                 status: 'cancelled',
+                uid: parent.uid,
             });
         }
     }
