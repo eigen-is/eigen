@@ -1,3 +1,4 @@
+import { formatDateTime } from '@workspace/lib/date';
 import {
     DEFAULT_MOUNT_ID,
     type DrivePath,
@@ -8,7 +9,6 @@ import {
 import { DropdownMenuItem, DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@workspace/ui/components/table';
 import { cn } from '@workspace/ui/lib/utils';
-import { formatDistanceToNow } from 'date-fns';
 import { ArrowRight, ChevronLeft, Download, Eye, Pencil, Trash2, UserRoundPlus } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useMemo, useRef, useState } from 'react';
@@ -261,9 +261,7 @@ export function DriveTable({
                                     />
                                 </TableCell>
                                 <TableCell className="hidden sm:table-cell">
-                                    {item.updatedAt
-                                        ? formatDistanceToNow(new Date(item.updatedAt), { addSuffix: true })
-                                        : 'Unknown'}
+                                    {item.updatedAt ? formatDateTime(item.updatedAt) : 'Unknown'}
                                 </TableCell>
                             </TableRow>
                         );
