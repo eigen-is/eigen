@@ -1,10 +1,9 @@
-import type { CalendarEvent } from '@workspace/lib/types/calendar';
-import type { Calendar } from '../calendar/calendar';
+import type { Calendar, CalendarEventRow } from '../calendar/calendar';
 import { parseIcs } from './ical-parse';
 import { eventsToIcs } from './ical-serialize';
 
 // GET /dav/calendars/:ownerId/:calendarId/:uri
-export function handleGet(masterEvent: CalendarEvent, allEventsForUid: CalendarEvent[]): Response {
+export function handleGet(masterEvent: CalendarEventRow, allEventsForUid: CalendarEventRow[]): Response {
     const ics = eventsToIcs(allEventsForUid);
     return new Response(ics, {
         status: 200,
@@ -18,6 +17,7 @@ export function handleGet(masterEvent: CalendarEvent, allEventsForUid: CalendarE
 // PUT /dav/calendars/:ownerId/:calendarId/:uri
 export async function handlePut(
     calendar: Calendar,
+    ownerId: string,
     calendarId: string,
     uri: string,
     body: string,
@@ -40,7 +40,12 @@ export async function handlePut(
         }
     }
 
-    const parsed = parseIcs(body);
+    let parsed: ReturnType<typeof parseIcs>;
+    try {
+        parsed = parseIcs(body);
+    } catch {
+        return new Response('Bad Request: invalid iCalendar data', { status: 400 });
+    }
     if (!parsed.length) {
         return new Response('Bad Request: no VEVENT found', { status: 400 });
     }
@@ -94,7 +99,7 @@ export async function handlePut(
         status: 201,
         headers: {
             ETag: `"${newEvent.etag}"`,
-            Location: `/dav/calendars/${calendarId}/${uri}`,
+            Location: `/dav/calendars/${ownerId}/${calendarId}/${uri}`,
         },
     });
 }

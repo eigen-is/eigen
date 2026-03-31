@@ -1,8 +1,8 @@
-import type { CalendarEvent, CalendarItem } from '@workspace/lib/types/calendar';
-import type { Calendar } from '../calendar/calendar';
+import type { CalendarItem } from '@workspace/lib/types/calendar';
+import type { Calendar, CalendarEventRow } from '../calendar/calendar';
 import { eventsToIcs } from './ical-serialize';
 import { calendarDataProp, eventEtagProp, multistatus, propstatNotFound, propstatOk, response } from './xml-builder';
-import { parseReport } from './xml-parser';
+import { parseReport, type ReportRequest } from './xml-parser';
 
 const XML_CONTENT_TYPE = 'application/xml; charset=utf-8';
 
@@ -14,7 +14,12 @@ export function handleReport(
     ownerId: string,
     body: string,
 ): Response {
-    const report = parseReport(body);
+    let report: ReportRequest;
+    try {
+        report = parseReport(body);
+    } catch {
+        return new Response('Bad Request: invalid XML', { status: 400 });
+    }
 
     switch (report.type) {
         case 'calendar-query':
@@ -34,7 +39,7 @@ function handleCalendarQuery(
     ownerId: string,
     report: ReturnType<typeof parseReport>,
 ): Response {
-    let events: CalendarEvent[];
+    let events: CalendarEventRow[];
     if (report.timeRange) {
         events = calendar.getRawEventsInRange(calendarId, report.timeRange.start, report.timeRange.end);
     } else {
@@ -68,7 +73,7 @@ function handleCalendarMultiget(
 
     // Build a uid→all-events map for grouping exceptions with their master
     const allEvents = calendar.getRawEvents(calendarId);
-    const eventsByUid = new Map<string, CalendarEvent[]>();
+    const eventsByUid = new Map<string, CalendarEventRow[]>();
     for (const e of allEvents) {
         const group = eventsByUid.get(e.uid) ?? [];
         eventsByUid.set(e.uid, group);
@@ -159,7 +164,7 @@ function handleSyncCollection(
 }
 
 function buildEventResponses(
-    events: CalendarEvent[],
+    events: CalendarEventRow[],
     ownerId: string,
     calendarId: string,
     includeData: boolean,
@@ -167,7 +172,7 @@ function buildEventResponses(
     const prefix = `/dav/calendars/${ownerId}/${calendarId}/`;
 
     // Build uid→events map so master events can include their exceptions in the ICS
-    const eventsByUid = new Map<string, CalendarEvent[]>();
+    const eventsByUid = new Map<string, CalendarEventRow[]>();
     for (const e of events) {
         const group = eventsByUid.get(e.uid) ?? [];
         eventsByUid.set(e.uid, group);
