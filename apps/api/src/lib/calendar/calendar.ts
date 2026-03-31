@@ -10,7 +10,7 @@ import type {
     SharedCalendar,
 } from '@workspace/lib/types/calendar';
 import { SSEventType } from '@workspace/lib/types/sse';
-import { and, count, eq, gte, isNull, lte, sql } from 'drizzle-orm';
+import { and, count, eq, gt, gte, inArray, isNull, lte, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { RRule } from 'rrule';
 import { v4 as uuidv4 } from 'uuid';
@@ -40,6 +40,7 @@ function computeEtag(event: {
     timezone?: string | null;
     status: string;
     data?: EventData | null;
+    updatedAt?: number | null;
 }): string {
     const hash = createHash('md5');
     hash.update(
@@ -54,6 +55,7 @@ function computeEtag(event: {
             timezone: event.timezone,
             status: event.status,
             data: event.data,
+            updatedAt: event.updatedAt,
         }),
     );
     return hash.digest('hex');
@@ -333,6 +335,8 @@ export class Calendar {
             data: input.data,
         });
 
+        const currentCtag = cal.ctag ?? 0;
+
         this.db
             .insert(schema.events)
             .values({
@@ -354,6 +358,7 @@ export class Calendar {
                 etag,
                 data: input.data ?? null,
                 createByUserId: input.createByUserId ?? null,
+                eventCtag: currentCtag,
             })
             .run();
 
@@ -374,6 +379,62 @@ export class Calendar {
     private getEventById(id: string): CalendarEvent | null {
         const row = this.db.select().from(schema.events).where(eq(schema.events.id, id)).get();
         return row ? dbEventToCalendarEvent(row) : null;
+    }
+
+    public getEventByUri(calendarId: string, uri: string): CalendarEvent | null {
+        const row = this.db
+            .select()
+            .from(schema.events)
+            .where(and(eq(schema.events.calendarId, calendarId), eq(schema.events.uri, uri)))
+            .get();
+        return row ? dbEventToCalendarEvent(row) : null;
+    }
+
+    public getRawEvents(calendarId: string): CalendarEvent[] {
+        return this.db
+            .select()
+            .from(schema.events)
+            .where(eq(schema.events.calendarId, calendarId))
+            .all()
+            .map(dbEventToCalendarEvent);
+    }
+
+    public getEventsByUris(calendarId: string, uris: string[]): CalendarEvent[] {
+        if (!uris.length) return [];
+        return this.db
+            .select()
+            .from(schema.events)
+            .where(and(eq(schema.events.calendarId, calendarId), inArray(schema.events.uri, uris)))
+            .all()
+            .map(dbEventToCalendarEvent);
+    }
+
+    public getChangedEventsSince(calendarId: string, sinceCtag: number): CalendarEvent[] {
+        return this.db
+            .select()
+            .from(schema.events)
+            .where(and(eq(schema.events.calendarId, calendarId), gt(schema.events.eventCtag, sinceCtag)))
+            .all()
+            .map(dbEventToCalendarEvent);
+    }
+
+    public getDeletedEventsSince(calendarId: string, sinceCtag: number): { uri: string }[] {
+        return this.db
+            .select({ uri: schema.eventTombstones.uri })
+            .from(schema.eventTombstones)
+            .where(
+                and(
+                    eq(schema.eventTombstones.calendarId, calendarId),
+                    gt(schema.eventTombstones.deletedAtCtag, sinceCtag),
+                ),
+            )
+            .all();
+    }
+
+    public deleteByUri(calendarId: string, uri: string): void {
+        const event = this.getEventByUri(calendarId, uri);
+        if (!event) return;
+        this.deleteEvent(event.id);
     }
 
     public updateEvent(
@@ -438,6 +499,9 @@ export class Calendar {
             data,
         });
 
+        const updateCal = this.getCalendarById(existing.calendarId);
+        const updateCtag = updateCal?.ctag ?? 0;
+
         this.db
             .update(schema.events)
             .set({
@@ -452,6 +516,7 @@ export class Calendar {
                 status,
                 etag,
                 data,
+                eventCtag: updateCtag,
                 updatedAt: sql`unixepoch()`,
             })
             .where(eq(schema.events.id, id))
@@ -490,6 +555,16 @@ export class Calendar {
             // Organizer deleting = cancel for all attendees
             propagateCancellation(this.home, existing).catch(console.error);
         }
+
+        const deleteCal = this.getCalendarById(existing.calendarId);
+        this.db
+            .insert(schema.eventTombstones)
+            .values({
+                uri: existing.uri,
+                calendarId: existing.calendarId,
+                deletedAtCtag: (deleteCal?.ctag ?? 0) + 1,
+            })
+            .run();
 
         this.db.delete(schema.events).where(eq(schema.events.id, id)).run();
         this.incrementCtag(existing.calendarId);
