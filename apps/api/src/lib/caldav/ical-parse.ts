@@ -35,7 +35,7 @@ export function parseIcs(icsText: string): ParsedEvent[] {
 
         const dtstart = vevent.getFirstProperty('dtstart');
         const dtend = vevent.getFirstProperty('dtend');
-        const allDay = dtstart?.getParameter('value') === 'DATE';
+        const allDay = event.startDate.isDate;
 
         const startTime = Math.floor(event.startDate.toJSDate().getTime() / 1000);
         const endTime = dtend
