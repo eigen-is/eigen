@@ -31,6 +31,7 @@ export type CalendarItem = {
     color: string;
     isDefault: boolean;
     visible: boolean;
+    ctag: number;
     shares: CalendarShare[] | null;
     createdAt: number;
     updatedAt: number;

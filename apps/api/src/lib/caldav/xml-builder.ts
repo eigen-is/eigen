@@ -2,8 +2,6 @@ import type { CalendarItem } from '@workspace/lib/types/calendar';
 
 const NS = `xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CS="http://calendarserver.org/ns/" xmlns:ICAL="http://apple.com/ns/ical/"`;
 
-export type CalendarItemWithCtag = CalendarItem & { ctag: number };
-
 export function multistatus(responses: string[]): string {
     return `<?xml version="1.0" encoding="utf-8"?>\n<D:multistatus ${NS}>${responses.join('')}</D:multistatus>`;
 }
@@ -31,7 +29,7 @@ export function calendarHomeSetProp(userId: string): string {
 }
 
 // Calendar collection properties (for listing calendars)
-export function calendarCollectionProps(cal: CalendarItemWithCtag, _ownerId: string): string[] {
+export function calendarCollectionProps(cal: CalendarItem, _ownerId: string): string[] {
     return [
         `<D:resourcetype><D:collection/><C:calendar/></D:resourcetype>`,
         `<D:displayname>${escapeXml(cal.name)}</D:displayname>`,
