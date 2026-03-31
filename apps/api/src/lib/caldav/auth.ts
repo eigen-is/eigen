@@ -1,3 +1,4 @@
+import { ApiError } from '../core/errors';
 import { getUserByEmail } from '../user';
 
 export type CalDavUser = {
@@ -9,29 +10,19 @@ export type CalDavUser = {
 export async function authenticateBasic(request: Request): Promise<CalDavUser> {
     const authHeader = request.headers.get('Authorization');
     if (!authHeader?.startsWith('Basic ')) {
-        throw new Response('Unauthorized', {
-            status: 401,
-            headers: { 'WWW-Authenticate': 'Basic realm="Eigen CalDAV"' },
-        });
+        throw new ApiError(401, 'Unauthorized');
     }
 
     const decoded = atob(authHeader.slice(6));
     const colonIndex = decoded.indexOf(':');
     if (colonIndex === -1) {
-        throw new Response('Unauthorized', {
-            status: 401,
-            headers: { 'WWW-Authenticate': 'Basic realm="Eigen CalDAV"' },
-        });
+        throw new ApiError(401, 'Unauthorized');
     }
 
     const email = decoded.slice(0, colonIndex);
-
     const user = await getUserByEmail(email);
     if (!user) {
-        throw new Response('Unauthorized', {
-            status: 401,
-            headers: { 'WWW-Authenticate': 'Basic realm="Eigen CalDAV"' },
-        });
+        throw new ApiError(401, 'Unauthorized');
     }
 
     // TODO: validate password (app-specific passwords). For now, accept any password.

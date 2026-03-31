@@ -94,8 +94,6 @@ export const app = new Elysia()
 
     .onError(({ error, set, code }) => {
         if (code === 'VALIDATION') return;
-        // CalDAV (and other handlers) throw Response objects directly for protocol-level errors
-        if (error instanceof Response) return error;
         const err = error as Error;
         if (err instanceof ApiError) {
             set.status = err.status;

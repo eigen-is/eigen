@@ -1,6 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { app } from '../app';
-import { getTestContext } from './setup';
+import { app, getTestContext } from './setup';
 
 describe('CalDAV', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
