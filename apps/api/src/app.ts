@@ -4,6 +4,7 @@ import swagger from '@elysiajs/swagger';
 import Elysia from 'elysia';
 import { rateLimit } from 'elysia-rate-limit';
 import { trustedOrigins } from './lib/auth/auth';
+import { caldavRouter } from './lib/caldav/caldav-router';
 import { ApiError } from './lib/core/errors';
 import { betterAuth } from './routes/auth';
 import { calendarRouter } from './routes/calendar';
@@ -25,9 +26,20 @@ import { teamRouter } from './routes/team';
 
 const SLOW_REQUEST_MS = 200;
 
+const DAV_CAPABILITY_HEADERS = {
+    DAV: '1, 2, 3, calendar-access',
+    Allow: 'OPTIONS, GET, PUT, DELETE, PROPFIND, PROPPATCH, REPORT, MKCALENDAR',
+};
+
 export const app = new Elysia()
     .use(serverTiming())
     .use(swagger())
+    // Handle CalDAV OPTIONS before CORS intercepts them — CalDAV clients need DAV capability headers
+    .onRequest(({ request }) => {
+        if (request.method === 'OPTIONS' && new URL(request.url).pathname.startsWith('/dav')) {
+            return new Response(null, { status: 204, headers: DAV_CAPABILITY_HEADERS });
+        }
+    })
     .use(
         cors({
             origin: trustedOrigins,
@@ -78,12 +90,16 @@ export const app = new Elysia()
     .use(notificationRouter)
     .use(sseRouter)
     .use(internalRouter)
+    .use(caldavRouter)
 
-    .onError(({ error, set, code }) => {
+    .onError(({ error, set, code, request }) => {
         if (code === 'VALIDATION') return;
         const err = error as Error;
         if (err instanceof ApiError) {
             set.status = err.status;
+            if (err.status === 401 && new URL(request.url).pathname.startsWith('/dav')) {
+                set.headers['WWW-Authenticate'] = 'Basic realm="Eigen CalDAV"';
+            }
             return err.message;
         }
         console.error('API Error:', err);

@@ -292,4 +292,4 @@ export function chatGet<T = unknown>(token: string, ownerId: string, mountId: st
     return authedRequest(token, `/chat/${ownerId}/${mountId}/${path}`).then((r) => r.json() as Promise<T>);
 }
 
-export { TEST_DATA_DIR };
+export { app, TEST_DATA_DIR };
