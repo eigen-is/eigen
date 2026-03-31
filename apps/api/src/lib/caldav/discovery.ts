@@ -27,7 +27,7 @@ export function handlePrincipalPropfind(userId: string): Response {
 export function handleCalendarHomePropfind(ownerId: string, calendars: CalendarItem[], depth: string): Response {
     const responses: string[] = [
         // The home collection itself
-        response(`/dav/calendars/${ownerId}/`, [propstatOk(homeCollectionProps())]),
+        response(`/dav/calendars/${ownerId}/`, [propstatOk(homeCollectionProps(ownerId))]),
     ];
 
     if (depth === '1') {
