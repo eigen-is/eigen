@@ -3,6 +3,11 @@ import type { Attendee, CalendarEvent } from '@workspace/lib/types/calendar';
 // CalDAV serialization may receive events with an optional stored ICS blob for round-trip fidelity
 type SerializableEvent = CalendarEvent & { icsBlob?: string | null };
 
+// RFC 5545 §3.3.11 — escape TEXT values
+function escapeICalText(s: string): string {
+    return s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n').replace(/\r/g, '');
+}
+
 // RFC 5545 §3.1 — fold lines longer than 75 octets with CRLF + single space
 function foldLine(line: string): string {
     const bytes = new TextEncoder().encode(line);
@@ -84,7 +89,7 @@ function buildVEvent(event: SerializableEvent): string[] {
 
     prop('BEGIN:VEVENT');
     prop(`UID:${event.uid}`);
-    prop(`SUMMARY:${event.title}`);
+    prop(`SUMMARY:${escapeICalText(event.title)}`);
 
     // DTSTART / DTEND
     if (event.allDay) {
@@ -98,8 +103,8 @@ function buildVEvent(event: SerializableEvent): string[] {
         prop(`DTEND:${formatDateTimeUTC(event.endTime)}`);
     }
 
-    if (event.description) prop(`DESCRIPTION:${event.description}`);
-    if (event.location) prop(`LOCATION:${event.location}`);
+    if (event.description) prop(`DESCRIPTION:${escapeICalText(event.description)}`);
+    if (event.location) prop(`LOCATION:${escapeICalText(event.location)}`);
 
     prop(`STATUS:${event.status.toUpperCase()}`);
     prop(`SEQUENCE:${event.sequence}`);
@@ -129,7 +134,7 @@ function buildVEvent(event: SerializableEvent): string[] {
 
     // ATTENDEE lines
     for (const attendee of event.data?.attendees ?? []) {
-        const cn = attendee.name ? `;CN=${attendee.name}` : '';
+        const cn = attendee.name ? `;CN="${escapeICalText(attendee.name)}"` : '';
         prop(
             `ATTENDEE;ROLE=${mapAttendeeRole(attendee.role)};PARTSTAT=${mapAttendeeStatus(attendee.status)}${cn}:mailto:${attendee.email}`,
         );
@@ -138,7 +143,7 @@ function buildVEvent(event: SerializableEvent): string[] {
     // ORGANIZER
     const organizer = event.data?.organizer;
     if (organizer) {
-        const cn = organizer.name ? `;CN=${organizer.name}` : '';
+        const cn = organizer.name ? `;CN="${escapeICalText(organizer.name)}"` : '';
         prop(`ORGANIZER${cn}:mailto:${organizer.email}`);
     }
 
