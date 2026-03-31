@@ -58,6 +58,8 @@ export type CalendarEvent = {
     createByUserId: string | null;
     createdAt: number;
     updatedAt: number;
+    icsBlob: string | null;
+    eventCtag: number | null;
 };
 
 export type CalendarEventOccurrence = CalendarEvent & {

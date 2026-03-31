@@ -142,6 +142,8 @@ function dbEventToCalendarEvent(row: typeof schema.events.$inferSelect): Calenda
         createByUserId: row.createByUserId ?? null,
         createdAt: row.createdAt as number,
         updatedAt: row.updatedAt as number,
+        icsBlob: row.icsBlob ?? null,
+        eventCtag: row.eventCtag ?? null,
     };
 }
 
