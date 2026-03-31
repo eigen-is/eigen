@@ -763,6 +763,11 @@ export default class Drive {
         return mount.getChildByName(parentId, name);
     }
 
+    async touchUpdatedAt(mountId: string, pathId: string): Promise<void> {
+        const mount = this.getMount(mountId);
+        await mount.updatePath(pathId, {});
+    }
+
     async touchFile(mountId: string, parentId: string, name: string, mimeType: string): Promise<string> {
         const mount = this.getMount(mountId);
         return mount.touchFile(parentId, name, mimeType);
