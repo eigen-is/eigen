@@ -26,7 +26,7 @@ import { buildCalendarEvent } from './sse-events';
 type UserIdentity = { id: string; email: string; name?: string | null };
 
 // Internal type extending the shared CalendarEvent with CalDAV-only storage fields
-export type CalendarEventRow = CalendarEvent & { icsBlob: string | null; eventCtag: number | null };
+export type CalendarEventRow = CalendarEvent & { eventCtag: number | null };
 
 function getCalendarDatabase(home: Home): Promise<ManagedDatabase<typeof schema>> {
     return home.getLocalDatabase(CALENDAR_DB_CONFIG, PATHS.CALENDAR.DB);
@@ -153,7 +153,6 @@ function dbEventToCalendarEvent(row: typeof schema.events.$inferSelect): Calenda
 function dbEventToCalendarEventRow(row: typeof schema.events.$inferSelect): CalendarEventRow {
     return {
         ...dbEventToCalendarEvent(row),
-        icsBlob: row.icsBlob ?? null,
         eventCtag: row.eventCtag ?? null,
     };
 }
@@ -315,7 +314,6 @@ export class Calendar {
             createByUserId?: string | null;
             uid?: string | null;
             uri?: string | null;
-            icsBlob?: string | null;
         },
         user?: UserIdentity,
     ): CalendarEvent {
@@ -375,7 +373,6 @@ export class Calendar {
                 data: input.data ?? null,
                 createByUserId: input.createByUserId ?? null,
                 eventCtag: currentCtag,
-                icsBlob: input.icsBlob ?? null,
             })
             .run();
 
@@ -395,7 +392,7 @@ export class Calendar {
             propagateInvitation(this.home, event, user, [], event.data.attendees).catch(console.error);
         }
 
-        const { icsBlob: _ics, eventCtag: _ctag, ...calendarEvent } = event;
+        const { eventCtag: _ctag, ...calendarEvent } = event;
         return calendarEvent;
     }
 
@@ -416,7 +413,6 @@ export class Calendar {
                 updatedAt: sql`unixepoch()`,
                 etag,
                 eventCtag: this.getCalendarById(event.calendarId)?.ctag ?? 0,
-                icsBlob: null, // Clear cached ICS so CalDAV regenerates with the new exception
             })
             .where(eq(schema.events.id, id))
             .run();
@@ -553,7 +549,6 @@ export class Calendar {
             timezone?: string | null;
             status?: CalendarEvent['status'];
             data?: EventData | null;
-            icsBlob?: string | null;
         },
         user?: UserIdentity,
     ): CalendarEvent {
@@ -622,7 +617,6 @@ export class Calendar {
                 data,
                 eventCtag: updateCtag,
                 updatedAt: sql`unixepoch()`,
-                ...(input.icsBlob !== undefined ? { icsBlob: input.icsBlob } : {}),
             })
             .where(eq(schema.events.id, id))
             .run();
@@ -641,11 +635,11 @@ export class Calendar {
             propagateInvitation(this.home, withSequence, user, oldAttendees, withSequence.data!.attendees!).catch(
                 console.error,
             );
-            const { icsBlob: _ics2, eventCtag: _ctag2, ...withSequenceEvent } = withSequence;
+            const { eventCtag: _ctag2, ...withSequenceEvent } = withSequence;
             return withSequenceEvent;
         }
 
-        const { icsBlob: _ics, eventCtag: _ctag, ...updatedEvent } = updated;
+        const { eventCtag: _ctag, ...updatedEvent } = updated;
         return updatedEvent;
     }
 
@@ -1285,7 +1279,7 @@ export class Calendar {
                 .where(eq(schema.events.id, existing.id))
                 .run();
             this.incrementCtag(parent.calendarId);
-            this.touchEvent(eventId); // Update master etag + clear icsBlob for CalDAV sync
+            this.touchEvent(eventId); // Update master etag so CalDAV clients detect the change
         } else {
             const { startTime, endTime } = computeOccurrenceTimes(parent, recurrenceDate);
             this.createEvent(parent.calendarId, {
