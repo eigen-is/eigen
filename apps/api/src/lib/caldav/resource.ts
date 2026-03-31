@@ -1,0 +1,114 @@
+import type { CalendarEvent } from '@workspace/lib/types/calendar';
+import type { Calendar } from '../calendar/calendar';
+import { parseIcs } from './ical-parse';
+import { eventsToIcs } from './ical-serialize';
+
+// GET /dav/calendars/:ownerId/:calendarId/:uri
+export function handleGet(masterEvent: CalendarEvent, allEventsForUid: CalendarEvent[]): Response {
+    const ics = eventsToIcs(allEventsForUid);
+    return new Response(ics, {
+        status: 200,
+        headers: {
+            'Content-Type': 'text/calendar; charset=utf-8',
+            ETag: `"${masterEvent.etag}"`,
+        },
+    });
+}
+
+// PUT /dav/calendars/:ownerId/:calendarId/:uri
+export async function handlePut(
+    calendar: Calendar,
+    calendarId: string,
+    uri: string,
+    body: string,
+    ifMatch: string | null,
+    ifNoneMatch: string | null,
+    userId: string,
+): Promise<Response> {
+    const existingEvent = calendar.getEventByUri(calendarId, uri);
+
+    // If-None-Match: * means "create only, fail if exists"
+    if (ifNoneMatch === '*' && existingEvent) {
+        return new Response('Precondition Failed', { status: 412 });
+    }
+
+    // If-Match: "etag" means "update only if etag matches"
+    if (ifMatch && existingEvent) {
+        const cleanEtag = ifMatch.replace(/"/g, '');
+        if (existingEvent.etag !== cleanEtag) {
+            return new Response('Precondition Failed', { status: 412 });
+        }
+    }
+
+    const parsed = parseIcs(body);
+    if (!parsed.length) {
+        return new Response('Bad Request: no VEVENT found', { status: 400 });
+    }
+
+    // Find the master event (no recurrenceDate)
+    const masterParsed = parsed.find((e) => !e.recurrenceDate) || parsed[0];
+
+    if (existingEvent) {
+        // Update existing event
+        calendar.updateEvent(existingEvent.id, {
+            title: masterParsed.title,
+            startTime: masterParsed.startTime,
+            endTime: masterParsed.endTime,
+            allDay: masterParsed.allDay,
+            description: masterParsed.description,
+            location: masterParsed.location,
+            rrule: masterParsed.rrule,
+            timezone: masterParsed.timezone,
+            status: masterParsed.status,
+            data: masterParsed.data,
+        });
+
+        const updatedEvent = calendar.getEventByUri(calendarId, uri);
+
+        return new Response(null, {
+            status: 204,
+            headers: { ETag: `"${updatedEvent?.etag || ''}"` },
+        });
+    }
+
+    // Create new event
+    const newEvent = calendar.createEvent(calendarId, {
+        title: masterParsed.title,
+        startTime: masterParsed.startTime,
+        endTime: masterParsed.endTime,
+        allDay: masterParsed.allDay,
+        description: masterParsed.description,
+        location: masterParsed.location,
+        rrule: masterParsed.rrule,
+        timezone: masterParsed.timezone,
+        status: masterParsed.status,
+        data: masterParsed.data,
+        createByUserId: userId,
+    });
+
+    return new Response(null, {
+        status: 201,
+        headers: {
+            ETag: `"${newEvent.etag}"`,
+            Location: `/dav/calendars/${calendarId}/${uri}`,
+        },
+    });
+}
+
+// DELETE /dav/calendars/:ownerId/:calendarId/:uri
+export function handleDelete(calendar: Calendar, calendarId: string, uri: string, ifMatch: string | null): Response {
+    const event = calendar.getEventByUri(calendarId, uri);
+    if (!event) {
+        return new Response('Not Found', { status: 404 });
+    }
+
+    if (ifMatch) {
+        const cleanEtag = ifMatch.replace(/"/g, '');
+        if (event.etag !== cleanEtag) {
+            return new Response('Precondition Failed', { status: 412 });
+        }
+    }
+
+    calendar.deleteByUri(calendarId, uri);
+    return new Response(null, { status: 204 });
+}

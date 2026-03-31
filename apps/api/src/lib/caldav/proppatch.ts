@@ -1,0 +1,71 @@
+import { XMLParser } from 'fast-xml-parser';
+import type { Calendar } from '../calendar/calendar';
+import { multistatus, propstatOk, response } from './xml-builder';
+
+const XML_CONTENT_TYPE = 'application/xml; charset=utf-8';
+const parser = new XMLParser({ ignoreAttributes: false, removeNSPrefix: true });
+
+// MKCALENDAR /dav/calendars/:ownerId/:calendarId/
+export function handleMkcalendar(calendar: Calendar, body: string): Response {
+    let name = 'New Calendar';
+    let color = '#4285f4';
+
+    if (body?.trim()) {
+        try {
+            const parsed = parser.parse(body);
+            const mkcal = parsed['mkcalendar'] || parsed['C:mkcalendar'] || {};
+            const set = mkcal['set'] || mkcal['D:set'] || {};
+            const prop = set['prop'] || set['D:prop'] || {};
+
+            const displayName = prop['displayname'] || prop['D:displayname'];
+            if (displayName && typeof displayName === 'string') name = displayName;
+
+            const calColor = prop['calendar-color'] || prop['ICAL:calendar-color'];
+            if (calColor && typeof calColor === 'string') color = calColor;
+        } catch {
+            // Ignore XML parse errors — use defaults
+        }
+    }
+
+    calendar.createCalendar({ name, color });
+    return new Response(null, { status: 201 });
+}
+
+// PROPPATCH /dav/calendars/:ownerId/:calendarId/
+export async function handleProppatch(calendar: Calendar, calendarId: string, body: string): Promise<Response> {
+    const calendarItem = calendar.getCalendarById(calendarId);
+    if (!calendarItem) return new Response('Not Found', { status: 404 });
+
+    const updates: { name?: string; color?: string } = {};
+    const updatedProps: string[] = [];
+
+    if (body?.trim()) {
+        try {
+            const parsed = parser.parse(body);
+            const propertyupdate = parsed['propertyupdate'] || parsed['D:propertyupdate'] || {};
+            const set = propertyupdate['set'] || propertyupdate['D:set'] || {};
+            const prop = set['prop'] || set['D:prop'] || {};
+
+            const displayName = prop['displayname'] || prop['D:displayname'];
+            if (displayName && typeof displayName === 'string') {
+                updates.name = displayName;
+                updatedProps.push('<D:displayname/>');
+            }
+
+            const calColor = prop['calendar-color'] || prop['ICAL:calendar-color'];
+            if (calColor && typeof calColor === 'string') {
+                updates.color = calColor;
+                updatedProps.push('<ICAL:calendar-color/>');
+            }
+        } catch {
+            return new Response('Bad Request', { status: 400 });
+        }
+    }
+
+    if (Object.keys(updates).length > 0) {
+        await calendar.updateCalendar(calendarId, updates);
+    }
+
+    const xml = multistatus([response(`/dav/calendars/${calendarId}/`, [propstatOk(updatedProps)])]);
+    return new Response(xml, { status: 207, headers: { 'Content-Type': XML_CONTENT_TYPE } });
+}
