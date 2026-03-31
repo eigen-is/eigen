@@ -7,10 +7,6 @@ const parser = new XMLParser({
     isArray: (name) => ['href', 'comp'].includes(name),
 });
 
-export type PropfindRequest = {
-    propNames: string[];
-};
-
 export type ReportType = 'calendar-query' | 'calendar-multiget' | 'sync-collection';
 
 export type ReportRequest = {
@@ -21,15 +17,8 @@ export type ReportRequest = {
     propNames: string[];
 };
 
-export function parsePropfind(xml: string): PropfindRequest {
-    if (!xml?.trim()) return { propNames: [] };
-    const parsed = parser.parse(xml);
-    const propfind = parsed['propfind'] || parsed['D:propfind'] || {};
-    const prop = propfind['prop'] || propfind['D:prop'] || {};
-    return { propNames: Object.keys(prop) };
-}
-
 export function parseReport(xml: string): ReportRequest {
+    if (!xml?.trim()) return { type: 'calendar-query', hrefs: [], propNames: [] };
     const parsed = parser.parse(xml);
 
     // Detect report type from root element
