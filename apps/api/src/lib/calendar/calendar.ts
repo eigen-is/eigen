@@ -304,6 +304,8 @@ export class Calendar {
             status?: CalendarEvent['status'];
             data?: EventData | null;
             createByUserId?: string | null;
+            uid?: string | null;
+            uri?: string | null;
         },
         user?: UserIdentity,
     ): CalendarEvent {
@@ -311,7 +313,7 @@ export class Calendar {
         if (!cal) throw new ApiError(404, 'Calendar not found');
 
         const id = uuidv4();
-        const uid = uuidv4();
+        const uid = input.uid || uuidv4();
         const rruleStr = input.rrule ?? null;
         if (rruleStr) {
             try {
@@ -343,7 +345,7 @@ export class Calendar {
                 id,
                 calendarId,
                 uid,
-                uri: `${uid}.ics`,
+                uri: input.uri || `${uid}.ics`,
                 title: input.title.trim(),
                 description: input.description ?? null,
                 location: input.location ?? null,
