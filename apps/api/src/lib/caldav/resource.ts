@@ -71,7 +71,7 @@ export async function handlePut(
         });
     }
 
-    // Create new event
+    // Create new event — use UID from ICS and URI from the request path so subsequent GET/DELETE work
     const newEvent = calendar.createEvent(calendarId, {
         title: masterParsed.title,
         startTime: masterParsed.startTime,
@@ -84,6 +84,8 @@ export async function handlePut(
         status: masterParsed.status,
         data: masterParsed.data,
         createByUserId: userId,
+        uid: masterParsed.uid || null,
+        uri,
     });
 
     return new Response(null, {
