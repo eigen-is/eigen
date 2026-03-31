@@ -1,5 +1,8 @@
 import type { Attendee, CalendarEvent } from '@workspace/lib/types/calendar';
 
+// CalDAV serialization may receive events with an optional stored ICS blob for round-trip fidelity
+type SerializableEvent = CalendarEvent & { icsBlob?: string | null };
+
 // RFC 5545 §3.1 — fold lines longer than 75 octets with CRLF + single space
 function foldLine(line: string): string {
     const bytes = new TextEncoder().encode(line);
@@ -74,7 +77,7 @@ function mapAttendeeStatus(status: Attendee['status']): string {
     }
 }
 
-function buildVEvent(event: CalendarEvent): string[] {
+function buildVEvent(event: SerializableEvent): string[] {
     const lines: string[] = [];
 
     const prop = (line: string) => lines.push(foldLine(line));
@@ -157,19 +160,14 @@ function wrapInVCalendar(eventLines: string[]): string {
     return `${lines.join('\r\n')}\r\n`;
 }
 
-export function eventToIcs(event: CalendarEvent): string {
-    if (event.icsBlob) return event.icsBlob;
-    return wrapInVCalendar(buildVEvent(event));
-}
-
-export function eventsToIcs(events: CalendarEvent[]): string {
+export function eventsToIcs(events: SerializableEvent[]): string {
     if (events.length === 0) return wrapInVCalendar([]);
 
     // Check icsBlob on the first event — if it exists, return it directly (round-trip fidelity)
     if (events[0].icsBlob) return events[0].icsBlob;
 
     // Group by uid; master events (no recurrenceDate) come first within each group
-    const groups = new Map<string, CalendarEvent[]>();
+    const groups = new Map<string, SerializableEvent[]>();
     for (const event of events) {
         const group = groups.get(event.uid) ?? [];
         groups.set(event.uid, group);

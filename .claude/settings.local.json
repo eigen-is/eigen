@@ -172,8 +172,7 @@
       "Bash(cp /Users/reinder/Documents/GitHub/eigen/apps/api/build/index.js /tmp/eigen-ws-test/)",
       "Bash(readlink -f /Users/reinder/Documents/GitHub/eigen/node_modules/.bun/@tiptap+static-renderer*)",
       "Bash(for commit:*)",
-      "WebFetch(domain:elysia.dev)",
-      "Bash(wait)"
+      "WebFetch(domain:elysia.dev)"
     ]
   },
   "enabledPlugins": {

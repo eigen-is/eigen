@@ -25,6 +25,9 @@ import { buildCalendarEvent } from './sse-events';
 
 type UserIdentity = { id: string; email: string; name?: string | null };
 
+// Internal type extending the shared CalendarEvent with CalDAV-only storage fields
+export type CalendarEventRow = CalendarEvent & { icsBlob: string | null; eventCtag: number | null };
+
 function getCalendarDatabase(home: Home): Promise<ManagedDatabase<typeof schema>> {
     return home.getLocalDatabase(CALENDAR_DB_CONFIG, PATHS.CALENDAR.DB);
 }
@@ -121,7 +124,7 @@ function localToUtcSeconds(
     return adjusted;
 }
 
-function dbEventToCalendarEvent(row: typeof schema.events.$inferSelect): CalendarEvent {
+function dbEventToCalendarEvent(row: typeof schema.events.$inferSelect): CalendarEventRow {
     return {
         id: row.id,
         calendarId: row.calendarId,
@@ -309,7 +312,7 @@ export class Calendar {
             icsBlob?: string | null;
         },
         user?: UserIdentity,
-    ): CalendarEvent {
+    ): CalendarEventRow {
         const cal = this.getCalendarById(calendarId);
         if (!cal) throw new ApiError(404, 'Calendar not found');
 
@@ -380,12 +383,12 @@ export class Calendar {
         return event;
     }
 
-    private getEventById(id: string): CalendarEvent | null {
+    private getEventById(id: string): CalendarEventRow | null {
         const row = this.db.select().from(schema.events).where(eq(schema.events.id, id)).get();
         return row ? dbEventToCalendarEvent(row) : null;
     }
 
-    public getEventByUri(calendarId: string, uri: string): CalendarEvent | null {
+    public getEventByUri(calendarId: string, uri: string): CalendarEventRow | null {
         const row = this.db
             .select()
             .from(schema.events)
@@ -394,7 +397,7 @@ export class Calendar {
         return row ? dbEventToCalendarEvent(row) : null;
     }
 
-    public getRawEvents(calendarId: string): CalendarEvent[] {
+    public getRawEvents(calendarId: string): CalendarEventRow[] {
         return this.db
             .select()
             .from(schema.events)
@@ -403,7 +406,7 @@ export class Calendar {
             .map(dbEventToCalendarEvent);
     }
 
-    public getRawEventsInRange(calendarId: string, from: number, to: number): CalendarEvent[] {
+    public getRawEventsInRange(calendarId: string, from: number, to: number): CalendarEventRow[] {
         return this.db
             .select()
             .from(schema.events)
@@ -418,7 +421,7 @@ export class Calendar {
             .map(dbEventToCalendarEvent);
     }
 
-    public getEventsByUris(calendarId: string, uris: string[]): CalendarEvent[] {
+    public getEventsByUris(calendarId: string, uris: string[]): CalendarEventRow[] {
         if (!uris.length) return [];
         return this.db
             .select()
@@ -428,7 +431,7 @@ export class Calendar {
             .map(dbEventToCalendarEvent);
     }
 
-    public getChangedEventsSince(calendarId: string, sinceCtag: number): CalendarEvent[] {
+    public getChangedEventsSince(calendarId: string, sinceCtag: number): CalendarEventRow[] {
         return this.db
             .select()
             .from(schema.events)
@@ -472,7 +475,7 @@ export class Calendar {
             icsBlob?: string | null;
         },
         user?: UserIdentity,
-    ): CalendarEvent {
+    ): CalendarEventRow {
         const existing = this.getEventById(id);
         if (!existing) throw new ApiError(404, 'Event not found');
 

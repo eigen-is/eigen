@@ -107,7 +107,7 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         const body = await request.text();
         const ifMatch = request.headers.get('If-Match');
         const ifNoneMatch = request.headers.get('If-None-Match');
-        return handlePut(home.calendar, calendarId, resourceUri, body, ifMatch, ifNoneMatch, user.id);
+        return handlePut(home.calendar, params.ownerId, calendarId, resourceUri, body, ifMatch, ifNoneMatch, user.id);
     })
 
     // DELETE .ics resource
