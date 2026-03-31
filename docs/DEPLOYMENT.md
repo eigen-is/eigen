@@ -124,24 +124,25 @@ email exists. This must be fixed before deploying to a real server.
     domain. These should be consistent — either pre-populate from env var or remove the duplicate field
   - File: `apps/setup/` + `apps/api/src/routes/setup.ts`
 
-### Phase 5: CalDAV
+### Phase 5: CalDAV — Done (personal calendars)
 
-See `docs/RESEARCH_CALDAV.md` for the complete implementation plan.
+Read-write CalDAV server implemented and tested with Thunderbird. Files in `apps/api/src/lib/caldav/`.
 
-CalDAV is built into the Eigen API — no extra container needed. The infrastructure already supports
-it: Caddy forwards `/dav/*` and `/.well-known/caldav`, and the auth endpoint works for HTTP Basic
-Auth.
+**What works:**
+- [x] Discovery (PROPFIND chain from `/dav/` → principals → calendar-home-set)
+- [x] Calendar listing (PROPFIND Depth:1), properties (ctag, color, displayname)
+- [x] Event CRUD: GET/PUT/DELETE with ETag conflict detection
+- [x] REPORT: calendar-query (with time-range), calendar-multiget, sync-collection
+- [x] MKCALENDAR, PROPPATCH (create/update calendar properties)
+- [x] iCalendar serialization/parsing (ical.js) with RFC 5545 compliance
+- [x] Recurring events with RRULE, exceptions (RECURRENCE-ID), EXDATE handling
+- [x] Two-way sync tested with Thunderbird (create, edit, delete — including single occurrences)
+- [x] HTTP Basic Auth (password validation deferred — same as Dovecot IMAP)
 
-**Tasks:**
-
-- [ ] Schema changes (icsBlob, eventCtag, event_tombstones table)
-- [ ] Read-only CalDAV: PROPFIND, GET, REPORT (calendar-query, calendar-multiget, sync-collection)
-- [ ] Read-write CalDAV: PUT, DELETE, MKCALENDAR
-- [ ] iCalendar serialization/parsing (ical.js)
-- [ ] XML request/response handling (fast-xml-parser)
-- [ ] Shared & team calendar proxying
-- [ ] HTTP Basic Auth middleware using the same `/internal/auth/verify` flow
-- [ ] Test with Apple Calendar, Thunderbird, DAVx5
+**Remaining CalDAV work:**
+- [ ] Shared & team calendar proxying via CalDAV
+- [ ] Test with Apple Calendar, DAVx5 (Android)
+- [ ] VTIMEZONE generation (most clients don't require it)
 
 ### Phase 6: SMTP Submission (port 587) — Future
 

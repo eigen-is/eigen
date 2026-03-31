@@ -1,6 +1,6 @@
 import type { CalendarShare, EventData } from '@workspace/lib/types/calendar';
 import { sql } from 'drizzle-orm';
-import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 export const calendars = sqliteTable('calendars', {
     id: text('id').primaryKey(),
@@ -42,12 +42,28 @@ export const events = sqliteTable(
         createByUserId: text('createByUserId'),
         createdAt: integer('createdAt').default(sql`(unixepoch())`),
         updatedAt: integer('updatedAt').default(sql`(unixepoch())`),
+        icsBlob: text('icsBlob'),
+        eventCtag: integer('eventCtag'),
     },
     (table) => ({
         calendarStartTime: index('idx_events_calendar_start').on(table.calendarId, table.startTime),
         calendarEndTime: index('idx_events_calendar_end').on(table.calendarId, table.endTime),
         parentEvent: index('idx_events_parent').on(table.parentEventId),
         linkedEvent: index('idx_events_linked').on(table.organizerEventId, table.organizerUserId),
+        uriCalendar: uniqueIndex('idx_events_uri_calendar').on(table.calendarId, table.uri),
+        uidCalendar: index('idx_events_uid_calendar').on(table.calendarId, table.uid),
+    }),
+);
+
+export const eventTombstones = sqliteTable(
+    'event_tombstones',
+    {
+        uri: text('uri').notNull(),
+        calendarId: text('calendarId').notNull(),
+        deletedAtCtag: integer('deletedAtCtag').notNull(),
+    },
+    (table) => ({
+        calCtag: index('idx_tombstones_cal_ctag').on(table.calendarId, table.deletedAtCtag),
     }),
 );
 
