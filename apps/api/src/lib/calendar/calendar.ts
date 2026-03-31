@@ -399,6 +399,21 @@ export class Calendar {
             .map(dbEventToCalendarEvent);
     }
 
+    public getRawEventsInRange(calendarId: string, from: number, to: number): CalendarEvent[] {
+        return this.db
+            .select()
+            .from(schema.events)
+            .where(
+                and(
+                    eq(schema.events.calendarId, calendarId),
+                    gte(schema.events.endTime, from),
+                    lte(schema.events.startTime, to),
+                ),
+            )
+            .all()
+            .map(dbEventToCalendarEvent);
+    }
+
     public getEventsByUris(calendarId: string, uris: string[]): CalendarEvent[] {
         if (!uris.length) return [];
         return this.db
