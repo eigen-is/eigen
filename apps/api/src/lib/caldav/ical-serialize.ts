@@ -112,23 +112,22 @@ function buildVEvent(event: SerializableEvent): string[] {
     prop(`LAST-MODIFIED:${formatDateTimeUTC(event.updatedAt ?? 0)}`);
     prop(`DTSTAMP:${formatDateTimeUTC(event.updatedAt ?? 0)}`);
 
-    if (event.rrule) prop(`RRULE:${event.rrule}`);
+    if (event.rrule) {
+        // Eigen's frontend stores RRULE with "RRULE:" prefix; strip it to avoid doubling
+        const rruleValue = event.rrule.replace(/^RRULE:/i, '');
+        prop(`RRULE:${rruleValue}`);
+    }
 
-    // RECURRENCE-ID for exception events
+    // RECURRENCE-ID for exception events — use startTime (the actual occurrence time),
+    // not the date string, so timed events have the correct time component
     if (event.recurrenceDate) {
         if (event.allDay) {
-            // recurrenceDate is stored as YYYY-MM-DD; strip the dashes for iCal
             const compact = event.recurrenceDate.replace(/-/g, '');
             prop(`RECURRENCE-ID;VALUE=DATE:${compact}`);
         } else if (event.timezone) {
-            prop(
-                `RECURRENCE-ID;TZID=${event.timezone}:${formatDateTimeInTZ(
-                    new Date(event.recurrenceDate).getTime() / 1000,
-                    event.timezone,
-                )}`,
-            );
+            prop(`RECURRENCE-ID;TZID=${event.timezone}:${formatDateTimeInTZ(event.startTime, event.timezone)}`);
         } else {
-            prop(`RECURRENCE-ID:${formatDateTimeUTC(new Date(event.recurrenceDate).getTime() / 1000)}`);
+            prop(`RECURRENCE-ID:${formatDateTimeUTC(event.startTime)}`);
         }
     }
 
