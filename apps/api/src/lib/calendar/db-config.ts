@@ -3,7 +3,7 @@ import * as schema from './schema';
 
 export const CALENDAR_DB_CONFIG: DatabaseConfig<typeof schema> = {
     name: 'calendar',
-    currentVersion: 2,
+    currentVersion: 3,
     schema,
     migrations: [
         {
@@ -79,6 +79,14 @@ export const CALENDAR_DB_CONFIG: DatabaseConfig<typeof schema> = {
                 ALTER TABLE events ADD COLUMN eventCtag INTEGER;
                 CREATE TABLE IF NOT EXISTS event_tombstones (uri TEXT NOT NULL, calendarId TEXT NOT NULL, deletedAtCtag INTEGER NOT NULL);
                 CREATE INDEX IF NOT EXISTS idx_tombstones_cal_ctag ON event_tombstones(calendarId, deletedAtCtag);
+            `),
+        },
+        {
+            version: 3,
+            up: (db) =>
+                db.exec(`
+                DROP INDEX IF EXISTS idx_events_uri_calendar;
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_events_uri_calendar ON events(calendarId, uri);
             `),
         },
     ],

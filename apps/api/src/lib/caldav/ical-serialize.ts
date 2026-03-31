@@ -1,8 +1,5 @@
 import type { Attendee, CalendarEvent } from '@workspace/lib/types/calendar';
 
-// DB rows include icsBlob but the shared CalendarEvent type does not
-type CalendarEventWithBlob = CalendarEvent & { icsBlob?: string | null };
-
 // RFC 5545 §3.1 — fold lines longer than 75 octets with CRLF + single space
 function foldLine(line: string): string {
     const bytes = new TextEncoder().encode(line);
@@ -161,8 +158,7 @@ function wrapInVCalendar(eventLines: string[]): string {
 }
 
 export function eventToIcs(event: CalendarEvent): string {
-    const withBlob = event as CalendarEventWithBlob;
-    if (withBlob.icsBlob) return withBlob.icsBlob;
+    if (event.icsBlob) return event.icsBlob;
     return wrapInVCalendar(buildVEvent(event));
 }
 
@@ -170,8 +166,7 @@ export function eventsToIcs(events: CalendarEvent[]): string {
     if (events.length === 0) return wrapInVCalendar([]);
 
     // Check icsBlob on the first event — if it exists, return it directly (round-trip fidelity)
-    const first = events[0] as CalendarEventWithBlob;
-    if (first.icsBlob) return first.icsBlob;
+    if (events[0].icsBlob) return events[0].icsBlob;
 
     // Group by uid; master events (no recurrenceDate) come first within each group
     const groups = new Map<string, CalendarEvent[]>();
