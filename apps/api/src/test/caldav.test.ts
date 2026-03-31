@@ -163,6 +163,138 @@ describe('CalDAV', () => {
         expect(getRes.status).toBe(404);
     });
 
+    test('PUT all-day event stores correct UTC midnight times', async () => {
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:caldav-allday-1@eigen',
+            'SUMMARY:All Day Event',
+            'DTSTART;VALUE=DATE:20260415',
+            'DTEND;VALUE=DATE:20260416',
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/caldav-allday-1.ics`, {
+                method: 'PUT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'text/calendar',
+                },
+                body: ics,
+            }),
+        );
+
+        // Fetch via REST API to check stored values
+        const res = await app.handle(
+            new Request(`http://localhost/calendar/${userId}/event-range/1773964800/1776643200`, {
+                headers: { Cookie: `better-auth.session_token=${ctx.alice.user.sessionToken}` },
+            }),
+        );
+        const events = (await res.json()) as { title: string; allDay: boolean; startTime: number; endTime: number }[];
+        const allDayEvent = events.find((e) => e.title === 'All Day Event');
+        expect(allDayEvent).toBeDefined();
+        expect(allDayEvent!.allDay).toBe(true);
+        // April 15 00:00:00 UTC
+        expect(new Date(allDayEvent!.startTime * 1000).toISOString()).toBe('2026-04-15T00:00:00.000Z');
+        // April 16 00:00:00 UTC (exclusive end)
+        expect(new Date(allDayEvent!.endTime * 1000).toISOString()).toBe('2026-04-16T00:00:00.000Z');
+    });
+
+    test('recurring event exception sync — master etag changes when exception created', async () => {
+        // Create a recurring event
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:caldav-recur-1@eigen',
+            'SUMMARY:Daily Standup',
+            'DTSTART:20260401T090000Z',
+            'DTEND:20260401T093000Z',
+            'RRULE:FREQ=DAILY;COUNT=5',
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        const putRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/caldav-recur-1.ics`, {
+                method: 'PUT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'text/calendar',
+                },
+                body: ics,
+            }),
+        );
+        expect(putRes.status).toBe(201);
+        const originalEtag = putRes.headers.get('ETag');
+
+        // PUT again with an exception (cancel April 3)
+        const icsWithException = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:caldav-recur-1@eigen',
+            'SUMMARY:Daily Standup',
+            'DTSTART:20260401T090000Z',
+            'DTEND:20260401T093000Z',
+            'RRULE:FREQ=DAILY;COUNT=5',
+            'END:VEVENT',
+            'BEGIN:VEVENT',
+            'UID:caldav-recur-1@eigen',
+            'RECURRENCE-ID:20260403T090000Z',
+            'SUMMARY:Daily Standup',
+            'DTSTART:20260403T090000Z',
+            'DTEND:20260403T093000Z',
+            'STATUS:CANCELLED',
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        const updateRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/caldav-recur-1.ics`, {
+                method: 'PUT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'text/calendar',
+                },
+                body: icsWithException,
+            }),
+        );
+        expect(updateRes.status).toBe(204);
+
+        // GET the event — should contain both master and exception VEVENTs
+        const getRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/caldav-recur-1.ics`, {
+                method: 'GET',
+                headers: { Authorization: basicAuth(ctx.alice.user.email) },
+            }),
+        );
+        const body = await getRes.text();
+        expect(body).toContain('RRULE:FREQ=DAILY');
+        expect(body).toContain('RECURRENCE-ID');
+        expect(body).toContain('CANCELLED');
+
+        // The master event's etag should have changed (so CalDAV clients detect the change)
+        const newEtag = getRes.headers.get('ETag');
+        expect(newEtag).not.toBe(originalEtag);
+    });
+
+    test('cross-user access denied', async () => {
+        const res = await app.handle(
+            new Request(`http://localhost/dav/calendars/${ctx.bob.user.id}/`, {
+                method: 'PROPFIND',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    Depth: '1',
+                },
+            }),
+        );
+        expect(res.status).toBe(403);
+    });
+
     test('REPORT calendar-multiget returns requested events', async () => {
         // Create an event first
         const ics =
