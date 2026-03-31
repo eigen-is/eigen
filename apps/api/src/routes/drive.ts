@@ -208,7 +208,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
                 set.status = 404;
                 return { body: '', mode: 'plaintext' };
             }
-            set.headers['Cache-Control'] = 'no-cache';
+            setCacheHeaders(set, 60);
             return result;
         },
         { auth: true },
