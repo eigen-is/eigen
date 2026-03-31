@@ -306,6 +306,7 @@ export class Calendar {
             createByUserId?: string | null;
             uid?: string | null;
             uri?: string | null;
+            icsBlob?: string | null;
         },
         user?: UserIdentity,
     ): CalendarEvent {
@@ -361,6 +362,7 @@ export class Calendar {
                 data: input.data ?? null,
                 createByUserId: input.createByUserId ?? null,
                 eventCtag: currentCtag,
+                icsBlob: input.icsBlob ?? null,
             })
             .run();
 
@@ -467,6 +469,7 @@ export class Calendar {
             timezone?: string | null;
             status?: CalendarEvent['status'];
             data?: EventData | null;
+            icsBlob?: string | null;
         },
         user?: UserIdentity,
     ): CalendarEvent {
@@ -535,6 +538,7 @@ export class Calendar {
                 data,
                 eventCtag: updateCtag,
                 updatedAt: sql`unixepoch()`,
+                ...(input.icsBlob !== undefined ? { icsBlob: input.icsBlob } : {}),
             })
             .where(eq(schema.events.id, id))
             .run();

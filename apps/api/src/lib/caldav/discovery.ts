@@ -34,7 +34,7 @@ export function handleCalendarHomePropfind(ownerId: string, calendars: CalendarI
         // Each calendar as a child collection
         for (const cal of calendars) {
             responses.push(
-                response(`/dav/calendars/${ownerId}/${cal.id}/`, [propstatOk(calendarCollectionProps(cal, ownerId))]),
+                response(`/dav/calendars/${ownerId}/${cal.id}/`, [propstatOk(calendarCollectionProps(cal))]),
             );
         }
     }

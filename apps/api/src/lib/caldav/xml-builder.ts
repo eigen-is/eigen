@@ -23,13 +23,8 @@ export function currentUserPrincipalProp(userId: string): string {
     return `<D:current-user-principal><D:href>/dav/principals/${userId}/</D:href></D:current-user-principal>`;
 }
 
-// For PROPFIND on /dav/principals/{userId}/ — returns calendar-home-set
-export function calendarHomeSetProp(userId: string): string {
-    return `<C:calendar-home-set><D:href>/dav/calendars/${userId}/</D:href></C:calendar-home-set>`;
-}
-
 // Calendar collection properties (for listing calendars)
-export function calendarCollectionProps(cal: CalendarItem, _ownerId: string): string[] {
+export function calendarCollectionProps(cal: CalendarItem): string[] {
     return [
         `<D:resourcetype><D:collection/><C:calendar/></D:resourcetype>`,
         `<D:displayname>${escapeXml(cal.name)}</D:displayname>`,
@@ -68,5 +63,10 @@ export function principalProps(userId: string): string[] {
 }
 
 function escapeXml(s: string): string {
-    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    return s
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
 }

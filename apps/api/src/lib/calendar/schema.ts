@@ -1,6 +1,6 @@
 import type { CalendarShare, EventData } from '@workspace/lib/types/calendar';
 import { sql } from 'drizzle-orm';
-import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 export const calendars = sqliteTable('calendars', {
     id: text('id').primaryKey(),
@@ -50,7 +50,7 @@ export const events = sqliteTable(
         calendarEndTime: index('idx_events_calendar_end').on(table.calendarId, table.endTime),
         parentEvent: index('idx_events_parent').on(table.parentEventId),
         linkedEvent: index('idx_events_linked').on(table.organizerEventId, table.organizerUserId),
-        uriCalendar: index('idx_events_uri_calendar').on(table.calendarId, table.uri),
+        uriCalendar: uniqueIndex('idx_events_uri_calendar').on(table.calendarId, table.uri),
         uidCalendar: index('idx_events_uid_calendar').on(table.calendarId, table.uid),
     }),
 );

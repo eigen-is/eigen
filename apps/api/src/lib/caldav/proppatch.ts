@@ -32,7 +32,12 @@ export function handleMkcalendar(calendar: Calendar, body: string): Response {
 }
 
 // PROPPATCH /dav/calendars/:ownerId/:calendarId/
-export async function handleProppatch(calendar: Calendar, calendarId: string, body: string): Promise<Response> {
+export async function handleProppatch(
+    calendar: Calendar,
+    calendarId: string,
+    ownerId: string,
+    body: string,
+): Promise<Response> {
     const calendarItem = calendar.getCalendarById(calendarId);
     if (!calendarItem) return new Response('Not Found', { status: 404 });
 
@@ -66,6 +71,6 @@ export async function handleProppatch(calendar: Calendar, calendarId: string, bo
         await calendar.updateCalendar(calendarId, updates);
     }
 
-    const xml = multistatus([response(`/dav/calendars/${calendarId}/`, [propstatOk(updatedProps)])]);
+    const xml = multistatus([response(`/dav/calendars/${ownerId}/${calendarId}/`, [propstatOk(updatedProps)])]);
     return new Response(xml, { status: 207, headers: { 'Content-Type': XML_CONTENT_TYPE } });
 }

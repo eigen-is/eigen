@@ -10,7 +10,7 @@ export function handleCalendarPropfind(
     depth: string,
 ): Response {
     const calHref = `/dav/calendars/${ownerId}/${calendar.id}/`;
-    const responses: string[] = [response(calHref, [propstatOk(calendarCollectionProps(calendar, ownerId))])];
+    const responses: string[] = [response(calHref, [propstatOk(calendarCollectionProps(calendar))])];
 
     if (depth === '1') {
         for (const event of events) {

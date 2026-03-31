@@ -40,17 +40,20 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
 
     // PROPFIND /dav/principals/:ownerId/
     .route('PROPFIND', '/dav/principals/:ownerId', async ({ request, params }) => {
-        await authenticateBasic(request);
+        const user = await authenticateBasic(request);
+        if (user.id !== params.ownerId) throw new ApiError(403, 'Access denied');
         return handlePrincipalPropfind(params.ownerId);
     })
     .route('PROPFIND', '/dav/principals/:ownerId/*', async ({ request, params }) => {
-        await authenticateBasic(request);
+        const user = await authenticateBasic(request);
+        if (user.id !== params.ownerId) throw new ApiError(403, 'Access denied');
         return handlePrincipalPropfind(params.ownerId);
     })
 
     // PROPFIND /dav/calendars/:ownerId/ — calendar home
     .route('PROPFIND', '/dav/calendars/:ownerId', async ({ request, params }) => {
-        await authenticateBasic(request);
+        const user = await authenticateBasic(request);
+        if (user.id !== params.ownerId) throw new ApiError(403, 'Access denied');
         const home = await getHome(params.ownerId);
         const calendars = home.calendar.getCalendars();
         const depth = request.headers.get('Depth') || '0';
@@ -59,7 +62,8 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
 
     // PROPFIND /dav/calendars/:ownerId/* — calendar collection or event listing
     .route('PROPFIND', '/dav/calendars/:ownerId/*', async ({ request, params }) => {
-        await authenticateBasic(request);
+        const user = await authenticateBasic(request);
+        if (user.id !== params.ownerId) throw new ApiError(403, 'Access denied');
         const { calendarId } = parseDavPath(params['*']);
 
         if (!calendarId) {
@@ -79,7 +83,8 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
 
     // GET .ics resource
     .get('/dav/calendars/:ownerId/*', async ({ request, params }) => {
-        await authenticateBasic(request);
+        const user = await authenticateBasic(request);
+        if (user.id !== params.ownerId) throw new ApiError(403, 'Access denied');
         const { calendarId, resourceUri } = parseDavPath(params['*']);
         if (!calendarId || !resourceUri) return new Response('Not Found', { status: 404 });
 
@@ -94,6 +99,7 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
     // PUT .ics resource
     .put('/dav/calendars/:ownerId/*', async ({ request, params }) => {
         const user = await authenticateBasic(request);
+        if (user.id !== params.ownerId) throw new ApiError(403, 'Access denied');
         const { calendarId, resourceUri } = parseDavPath(params['*']);
         if (!calendarId || !resourceUri) return new Response('Bad Request', { status: 400 });
 
@@ -106,7 +112,8 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
 
     // DELETE .ics resource
     .delete('/dav/calendars/:ownerId/*', async ({ request, params }) => {
-        await authenticateBasic(request);
+        const user = await authenticateBasic(request);
+        if (user.id !== params.ownerId) throw new ApiError(403, 'Access denied');
         const { calendarId, resourceUri } = parseDavPath(params['*']);
         if (!calendarId || !resourceUri) return new Response('Bad Request', { status: 400 });
 
@@ -117,7 +124,8 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
 
     // REPORT — calendar-query, multiget, sync-collection
     .route('REPORT', '/dav/calendars/:ownerId/*', async ({ request, params }) => {
-        await authenticateBasic(request);
+        const user = await authenticateBasic(request);
+        if (user.id !== params.ownerId) throw new ApiError(403, 'Access denied');
         const { calendarId } = parseDavPath(params['*']);
         if (!calendarId) return new Response('Bad Request', { status: 400 });
 
@@ -131,7 +139,8 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
 
     // MKCALENDAR
     .route('MKCALENDAR', '/dav/calendars/:ownerId/*', async ({ request, params }) => {
-        await authenticateBasic(request);
+        const user = await authenticateBasic(request);
+        if (user.id !== params.ownerId) throw new ApiError(403, 'Access denied');
         const home = await getHome(params.ownerId);
         const body = await request.text();
         return handleMkcalendar(home.calendar, body);
@@ -139,11 +148,12 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
 
     // PROPPATCH
     .route('PROPPATCH', '/dav/calendars/:ownerId/*', async ({ request, params }) => {
-        await authenticateBasic(request);
+        const user = await authenticateBasic(request);
+        if (user.id !== params.ownerId) throw new ApiError(403, 'Access denied');
         const { calendarId } = parseDavPath(params['*']);
         if (!calendarId) return new Response('Bad Request', { status: 400 });
 
         const home = await getHome(params.ownerId);
         const body = await request.text();
-        return handleProppatch(home.calendar, calendarId, body);
+        return handleProppatch(home.calendar, calendarId, params.ownerId, body);
     });
