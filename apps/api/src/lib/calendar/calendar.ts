@@ -622,6 +622,12 @@ export class Calendar {
             .run();
 
         this.incrementCtag(existing.calendarId);
+
+        // When updating an exception, touch the master event so its etag changes (CalDAV sync)
+        if (existing.parentEventId) {
+            this.touchEvent(existing.parentEventId);
+        }
+
         const updated = this.getEventById(id)!;
 
         const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_UPDATED, this.home.user.id);
