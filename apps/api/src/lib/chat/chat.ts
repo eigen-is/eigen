@@ -231,6 +231,7 @@ export class ChatRoom {
                     ...msg,
                     content: `whispers to ${targetName}: [a few hushed words]`,
                     whisperTo: null,
+                    attachments: null,
                 };
             }
             if (msg.type === 'emote' && !msg.deletedAt) {

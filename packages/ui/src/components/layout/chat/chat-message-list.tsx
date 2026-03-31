@@ -7,13 +7,14 @@ import type { ChatMessage } from '@workspace/lib/types/chat';
 import type { Contact } from '@workspace/lib/types/contact';
 import { EMAIL_FIND_REGEX } from '@workspace/lib/validation';
 import { UserItem } from '@workspace/ui/components/layout/user-item';
-import { Paperclip } from 'lucide-react';
-import { type ReactNode, useCallback, useEffect, useRef } from 'react';
+import { Check, Paperclip, Pencil, Trash2, X } from 'lucide-react';
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '../../../components/hover-card';
 import { cn } from '../../../lib/utils';
 import { LoadingState } from '../app/loading-state';
 import { EigenLoader } from '../braket/eigen-loader.tsx';
 import { usePreview } from '../preview-provider';
+import { TooltipButton } from '../toolbar/tooltip-button';
 import { UserAvatar } from '../user-avatar';
 
 type ChatMessageListProps = {
@@ -28,6 +29,11 @@ type ChatMessageListProps = {
     hasOlderMessages?: boolean;
     isFetchingOlderMessages?: boolean;
     onLoadMore?: () => void;
+    onEditMessage?: (message: ChatMessage) => void;
+    onDeleteMessage?: (message: ChatMessage) => void;
+    editingMessageId?: string | null;
+    onSaveEdit?: (messageId: string, content: string) => void;
+    onCancelEdit?: () => void;
 };
 
 function isSameAuthorAndClose(prev: ChatMessage, curr: ChatMessage): boolean {
@@ -175,9 +181,73 @@ function InspectCard({ target }: { target: string }) {
     );
 }
 
+function InlineEdit({
+    initialContent,
+    onSave,
+    onCancel,
+}: {
+    initialContent: string;
+    onSave: (content: string) => void;
+    onCancel: () => void;
+}) {
+    const [content, setContent] = useState(initialContent);
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    useEffect(() => {
+        const ta = textareaRef.current;
+        if (ta) {
+            ta.focus();
+            ta.setSelectionRange(ta.value.length, ta.value.length);
+            ta.style.height = 'auto';
+            ta.style.height = `${Math.min(ta.scrollHeight, 120)}px`;
+        }
+    }, []);
+
+    const handleSave = () => {
+        const trimmed = content.trim();
+        if (trimmed && trimmed !== initialContent) {
+            onSave(trimmed);
+        } else {
+            onCancel();
+        }
+    };
+
+    return (
+        <div className="flex items-end gap-2">
+            <textarea
+                ref={textareaRef}
+                value={content}
+                onChange={(e) => {
+                    setContent(e.target.value);
+                    e.target.style.height = 'auto';
+                    e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
+                }}
+                onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSave();
+                    }
+                    if (e.key === 'Escape') {
+                        e.preventDefault();
+                        onCancel();
+                    }
+                }}
+                onBlur={() => {
+                    if (content.trim() === initialContent) onCancel();
+                }}
+                rows={1}
+                className="flex-1 min-w-0 resize-none rounded-lg border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring min-h-[40px] max-h-[120px] leading-[1.125]"
+            />
+            <TooltipButton icon={Check} tooltipText="Save" className="h-8 w-8" preventFocusLoss onClick={handleSave} />
+            <TooltipButton icon={X} tooltipText="Cancel" className="h-8 w-8" preventFocusLoss onClick={onCancel} />
+        </div>
+    );
+}
+
 export function ChatMessageList({
     messages,
     isLoading,
+    currentUserId,
     ownerId,
     mountId,
     mediaFolderId,
@@ -186,10 +256,27 @@ export function ChatMessageList({
     hasOlderMessages,
     isFetchingOlderMessages,
     onLoadMore,
+    onEditMessage,
+    onDeleteMessage,
+    editingMessageId,
+    onSaveEdit,
+    onCancelEdit,
 }: ChatMessageListProps) {
     const scrollRef = useRef<HTMLDivElement>(null);
     const lastMessageIdRef = useRef('');
     const isInitialLoadRef = useRef(true);
+
+    // Single floating action bar — tracks which message is hovered
+    const [hoveredMsg, setHoveredMsg] = useState<{ message: ChatMessage; top: number } | null>(null);
+
+    const handleMsgMouseEnter = useCallback(
+        (message: ChatMessage, el: HTMLElement) => {
+            if (message.authorId !== currentUserId) return;
+            if (message.type === 'system') return;
+            setHoveredMsg({ message, top: el.offsetTop });
+        },
+        [currentUserId],
+    );
 
     const scrollToBottom = useCallback(() => {
         requestAnimationFrame(() => {
@@ -247,7 +334,7 @@ export function ChatMessageList({
     }
 
     const renderAttachments = (message: ChatMessage) => {
-        if (!message.attachments || message.attachments.length === 0 || message.deletedAt) return null;
+        if (!message.attachments || message.attachments.length === 0) return null;
         if (!ownerId || !mountId || !mediaFolderId) return null;
         return (
             <div className="flex flex-wrap gap-2 mt-1">
@@ -273,7 +360,37 @@ export function ChatMessageList({
     }
 
     return (
-        <div ref={scrollRef} className={cn('flex-1 overflow-y-auto', className)}>
+        <div
+            ref={scrollRef}
+            className={cn('flex-1 overflow-y-auto relative', className)}
+            onMouseLeave={() => setHoveredMsg(null)}
+        >
+            {hoveredMsg && (onEditMessage || onDeleteMessage) && (
+                <div
+                    className="absolute right-3 z-10 flex items-center rounded-md border bg-background shadow-sm"
+                    style={{ top: hoveredMsg.top + 4 }}
+                    onMouseEnter={() => setHoveredMsg(hoveredMsg)}
+                >
+                    {onEditMessage && (
+                        <TooltipButton
+                            icon={Pencil}
+                            tooltipText="Edit"
+                            className="h-7 w-7"
+                            preventFocusLoss
+                            onClick={() => onEditMessage(hoveredMsg.message)}
+                        />
+                    )}
+                    {onDeleteMessage && (
+                        <TooltipButton
+                            icon={Trash2}
+                            tooltipText="Delete"
+                            className="h-7 w-7"
+                            preventFocusLoss
+                            onClick={() => onDeleteMessage(hoveredMsg.message)}
+                        />
+                    )}
+                </div>
+            )}
             {isFetchingOlderMessages && (
                 <div className="flex justify-center py-3">
                     <EigenLoader />
@@ -284,6 +401,8 @@ export function ChatMessageList({
                 const isEmote = message.type === 'emote';
                 const isSystem = message.type === 'system';
                 const isDeleted = !!message.deletedAt;
+                if (isDeleted) return null;
+                const isHovered = hoveredMsg?.message.id === message.id;
                 const prev = i > 0 ? messages[i - 1] : null;
                 const grouped =
                     prev &&
@@ -314,9 +433,17 @@ export function ChatMessageList({
 
                 const displayName = message.authorEmail.split('@')[0] || message.authorEmail;
 
-                if (isEmote && !isDeleted) {
+                if (isEmote) {
                     return (
-                        <div key={message.id} className={cn('flex gap-3 px-5', grouped ? 'py-1' : 'pt-3')}>
+                        <div
+                            key={message.id}
+                            className={cn(
+                                'flex gap-3 px-5 hover:bg-muted/50 transition-colors',
+                                grouped ? 'py-1' : 'pt-3',
+                                isHovered && 'bg-muted/50',
+                            )}
+                            onMouseEnter={(e) => handleMsgMouseEnter(message, e.currentTarget)}
+                        >
                             <div className="w-9 shrink-0 pt-0.5">
                                 {!grouped ? (
                                     <UserAvatar
@@ -350,15 +477,16 @@ export function ChatMessageList({
                     );
                 }
 
-                if (isWhisper && !isDeleted) {
+                if (isWhisper) {
                     return (
                         <div
                             key={message.id}
                             className={cn(
-                                'flex gap-3 px-5 hover:bg-primary/10 transition-colors',
+                                'flex gap-3 px-5 hover:bg-primary/10 transition-colors bg-primary/5',
                                 grouped ? 'pt-0.5' : 'pt-3',
-                                'bg-primary/5',
+                                isHovered && 'bg-primary/10',
                             )}
+                            onMouseEnter={(e) => handleMsgMouseEnter(message, e.currentTarget)}
                         >
                             <div className="w-9 shrink-0 pt-0.5">
                                 {!grouped && (
@@ -396,7 +524,9 @@ export function ChatMessageList({
                         className={cn(
                             'flex gap-3 px-5 hover:bg-muted/50 transition-colors',
                             grouped ? 'pt-0.5' : 'pt-3',
+                            isHovered && 'bg-muted/50',
                         )}
+                        onMouseEnter={(e) => handleMsgMouseEnter(message, e.currentTarget)}
                     >
                         <div className="w-9 shrink-0 pt-0.5">
                             {!grouped && (
@@ -415,20 +545,26 @@ export function ChatMessageList({
                                     <span className="text-xs text-muted-foreground">
                                         {formatDateTime(message.createdAt)}
                                     </span>
-                                    {message.editedAt && !isDeleted && (
+                                    {message.editedAt && (
                                         <span className="text-xs text-muted-foreground">(edited)</span>
                                     )}
                                 </div>
                             )}
-                            {isDeleted ? (
-                                <p className="text-sm text-muted-foreground italic">This message was deleted.</p>
-                            ) : (
-                                <RichContent
-                                    text={message.content}
-                                    className="text-sm text-foreground whitespace-pre-wrap break-words"
+                            {editingMessageId === message.id && onSaveEdit && onCancelEdit ? (
+                                <InlineEdit
+                                    initialContent={message.content}
+                                    onSave={(content) => onSaveEdit(message.id, content)}
+                                    onCancel={onCancelEdit}
                                 />
+                            ) : (
+                                <>
+                                    <RichContent
+                                        text={message.content}
+                                        className="text-sm text-foreground whitespace-pre-wrap break-words"
+                                    />
+                                    {renderAttachments(message)}
+                                </>
                             )}
-                            {renderAttachments(message)}
                         </div>
                     </div>
                 );
