@@ -18,6 +18,7 @@ const MESSAGE_AWARENESS = 1;
 
 const SNAPSHOT_INTERVAL = 100;
 const MAX_REVISIONS = 50;
+const TOUCH_THROTTLE_MS = 60_000;
 
 class DbProvider {
     private db: BunSQLiteDatabase<typeof schema>;
@@ -163,6 +164,7 @@ export default class CollabDocument {
     private connections: Set<ServerWebSocket<undefined>> = new Set();
     private connectionClientIds: Map<ServerWebSocket<undefined>, Set<number>> = new Map();
     private closed: boolean = false;
+    private lastTouchedAt = 0;
     public dataDbPathId: string | null = null;
 
     constructor(drive: Drive, path: DrivePath) {
@@ -207,6 +209,7 @@ export default class CollabDocument {
                     if (conn.readyState === 1) conn.send(Buffer.from(message));
                 }
             }
+            this.throttledTouchUpdatedAt();
         });
 
         this.awareness.on(
@@ -243,9 +246,16 @@ export default class CollabDocument {
         return this.provider.getRevisionState(revisionId);
     }
 
+    private throttledTouchUpdatedAt() {
+        const now = Date.now();
+        if (now - this.lastTouchedAt < TOUCH_THROTTLE_MS) return;
+        this.lastTouchedAt = now;
+        this.drive.touchUpdatedAt(this.path.mountId, this.path.id).catch(() => {});
+    }
+
     public destruct() {
         this.closed = true;
-        // destroy all connections
+        this.drive.touchUpdatedAt(this.path.mountId, this.path.id).catch(() => {});
         for (const conn of this.connections) {
             conn.close();
             this.connections.delete(conn);
