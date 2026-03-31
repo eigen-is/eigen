@@ -5,6 +5,7 @@ import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
+import { collabKeys } from '../../collab/hooks/use-collab';
 import { invalidateHomeSize } from '../../home';
 
 export { DEFAULT_MOUNT_ID };
@@ -566,6 +567,7 @@ export function invalidatePathRenamed(
     mimeType: string | null | undefined,
 ): void {
     queryClient.invalidateQueries({ queryKey: driveKeys.path(ownerId, mountId, pathId) });
+    queryClient.invalidateQueries({ queryKey: collabKeys.document(ownerId, mountId, pathId) });
     if (parentId) {
         queryClient.invalidateQueries({ queryKey: driveKeys.folder(ownerId, mountId, parentId) });
     }
