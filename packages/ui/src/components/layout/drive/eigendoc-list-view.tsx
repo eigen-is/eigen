@@ -6,6 +6,7 @@ import { type DrivePath, isDocumentType } from '@workspace/lib/types/drive';
 import { useContext } from 'react';
 import { useLayout } from '../app/layout-context';
 import { NotFound } from '../app/not-found';
+import { usePreview } from '../preview-provider';
 import { DriveLayout } from './drive-layout';
 import type { EigenDocAppConfig } from './eigendoc-config';
 import { EigenDocDriveContext } from './eigendoc-root';
@@ -23,6 +24,7 @@ export function EigenDocListView({ config, pid, mid }: EigenDocListViewProps) {
     const ownerId = user!.id;
     const { data: selectedPath = null } = usePathInfo(ownerId, mid || DEFAULT_MOUNT_ID, pid);
     const { isMobile } = useLayout();
+    const { openPreview } = usePreview();
 
     const {
         data: folderContents = [],
@@ -53,6 +55,7 @@ export function EigenDocListView({ config, pid, mid }: EigenDocListViewProps) {
             error={isFolderContentLoadingError}
             onRowSelect={onRowSelect}
             onRowActivate={openDocument}
+            onQuickLook={(path, siblings) => openPreview(path, siblings)}
             onBackToList={() => navigate({ to: '/' })}
             onAfterAction={() => navigate({ to: '/' })}
             allowDelete={true}
