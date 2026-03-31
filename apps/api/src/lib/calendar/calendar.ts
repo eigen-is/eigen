@@ -407,18 +407,65 @@ export class Calendar {
     }
 
     public getRawEventsInRange(calendarId: string, from: number, to: number): CalendarEventRow[] {
-        return this.db
+        // 1. Non-recurring events that overlap the range
+        const nonRecurring = this.db
             .select()
             .from(schema.events)
             .where(
                 and(
                     eq(schema.events.calendarId, calendarId),
-                    gte(schema.events.endTime, from),
+                    isNull(schema.events.rrule),
+                    isNull(schema.events.parentEventId),
                     lte(schema.events.startTime, to),
+                    gte(schema.events.endTime, from),
                 ),
             )
             .all()
             .map(dbEventToCalendarEvent);
+
+        // 2. Recurring events — check if ANY occurrence falls in range
+        const allRecurring = this.db
+            .select()
+            .from(schema.events)
+            .where(
+                and(
+                    eq(schema.events.calendarId, calendarId),
+                    sql`${schema.events.rrule} IS NOT NULL`,
+                    isNull(schema.events.parentEventId),
+                ),
+            )
+            .all();
+
+        const matchingRecurring: CalendarEventRow[] = [];
+        const matchingRecurringIds = new Set<string>();
+
+        for (const row of allRecurring) {
+            const evt = dbEventToCalendarEvent(row);
+            const occurrences = expandRecurrence(evt, from, to);
+            if (occurrences.length > 0) {
+                matchingRecurring.push(evt);
+                matchingRecurringIds.add(row.id);
+            }
+        }
+
+        // 3. Exception events whose parent is a matching recurring event
+        const exceptions: CalendarEventRow[] = [];
+        if (matchingRecurringIds.size > 0) {
+            const allExceptions = this.db
+                .select()
+                .from(schema.events)
+                .where(and(eq(schema.events.calendarId, calendarId), sql`${schema.events.parentEventId} IS NOT NULL`))
+                .all()
+                .map(dbEventToCalendarEvent);
+
+            for (const exc of allExceptions) {
+                if (exc.parentEventId && matchingRecurringIds.has(exc.parentEventId)) {
+                    exceptions.push(exc);
+                }
+            }
+        }
+
+        return [...nonRecurring, ...matchingRecurring, ...exceptions];
     }
 
     public getEventsByUris(calendarId: string, uris: string[]): CalendarEventRow[] {
