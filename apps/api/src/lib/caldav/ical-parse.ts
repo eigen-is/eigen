@@ -22,7 +22,9 @@ export function parseIcs(icsText: string): ParsedEvent[] {
     const comp = new ICAL.Component(jcal);
     const vevents = comp.getAllSubcomponents('vevent');
 
-    return vevents.map((vevent) => {
+    const results: ParsedEvent[] = [];
+
+    for (const vevent of vevents) {
         const event = new ICAL.Event(vevent);
 
         const uid = event.uid || '';
@@ -147,7 +149,7 @@ export function parseIcs(icsText: string): ParsedEvent[] {
                   }
                 : null;
 
-        return {
+        results.push({
             uid,
             title,
             description,
@@ -161,6 +163,49 @@ export function parseIcs(icsText: string): ParsedEvent[] {
             sequence,
             recurrenceDate,
             data,
-        };
-    });
+        });
+
+        // EXDATE: Thunderbird uses EXDATE to exclude dates from recurring events
+        // (instead of separate VEVENT with STATUS:CANCELLED).
+        // Convert each EXDATE to a synthetic cancelled ParsedEvent.
+        if (rrule) {
+            const exdateProps = vevent.getAllProperties('exdate');
+            for (const exdateProp of exdateProps) {
+                const values = exdateProp.getValues() as ICAL.Time[];
+                for (const exVal of values) {
+                    const isDateOnly = exVal.isDate;
+                    const pad = (n: number) => String(n).padStart(2, '0');
+                    const exDateStr = `${exVal.year}-${pad(exVal.month)}-${pad(exVal.day)}`;
+
+                    let exStartTime: number;
+                    let exEndTime: number;
+                    if (isDateOnly) {
+                        exStartTime = Math.floor(Date.UTC(exVal.year, exVal.month - 1, exVal.day) / 1000);
+                        exEndTime = exStartTime + 86400;
+                    } else {
+                        exStartTime = Math.floor(exVal.toJSDate().getTime() / 1000);
+                        exEndTime = exStartTime + (endTime - startTime);
+                    }
+
+                    results.push({
+                        uid,
+                        title,
+                        description: null,
+                        location: null,
+                        startTime: exStartTime,
+                        endTime: exEndTime,
+                        allDay: isDateOnly,
+                        rrule: null,
+                        timezone: tzid,
+                        status: 'cancelled',
+                        sequence,
+                        recurrenceDate: exDateStr,
+                        data: null,
+                    });
+                }
+            }
+        }
+    }
+
+    return results;
 }
