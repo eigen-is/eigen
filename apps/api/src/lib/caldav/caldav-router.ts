@@ -2,6 +2,10 @@ import Elysia from 'elysia';
 import { getHome } from '../home';
 import { authenticateBasic } from './auth';
 import { handleCalendarHomePropfind, handlePrincipalPropfind, handleRootPropfind } from './discovery';
+import { handleCalendarPropfind } from './propfind';
+import { handleMkcalendar, handleProppatch } from './proppatch';
+import { handleReport } from './report';
+import { handleDelete, handleGet, handlePut } from './resource';
 
 const DAV_HEADERS = {
     DAV: '1, 2, 3, calendar-access',
@@ -74,26 +78,85 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
             return handleCalendarHomePropfind(params.ownerId, calendars, depth);
         }
 
-        // Calendar collection PROPFIND — will be implemented in Task 9
-        return new Response('Not Implemented', { status: 501 });
+        // Calendar collection PROPFIND
+        const home = await getHome(params.ownerId);
+        const calendar = home.calendar.getCalendarById(calendarId);
+        if (!calendar) return new Response('Not Found', { status: 404 });
+        const depth = request.headers.get('Depth') || '0';
+        const events = depth === '1' ? home.calendar.getRawEvents(calendarId) : [];
+        return handleCalendarPropfind(params.ownerId, calendar, events, depth);
     })
 
-    // Stub routes for later tasks (REPORT, GET, PUT, DELETE, MKCALENDAR, PROPPATCH)
-    .route('REPORT', '/dav/calendars/:ownerId/*', async () => {
-        return new Response('Not Implemented', { status: 501 });
+    // GET /dav/calendars/:ownerId/:calendarId/:uri — fetch .ics resource
+    .get('/dav/calendars/:ownerId/*', async ({ request, params }) => {
+        await authenticateBasic(request);
+        const { calendarId, resourceUri } = parseDavPath(params['*']);
+        if (!calendarId || !resourceUri) return new Response('Not Found', { status: 404 });
+
+        const home = await getHome(params.ownerId);
+        const event = home.calendar.getEventByUri(calendarId, resourceUri);
+        if (!event) return new Response('Not Found', { status: 404 });
+
+        const allEvents = home.calendar.getRawEvents(calendarId).filter((e) => e.uid === event.uid);
+        return handleGet(event, allEvents);
     })
-    .get('/dav/calendars/:ownerId/*', async () => {
-        return new Response('Not Implemented', { status: 501 });
+
+    // PUT /dav/calendars/:ownerId/:calendarId/:uri — create or update .ics resource
+    .put('/dav/calendars/:ownerId/*', async ({ request, params }) => {
+        const user = await authenticateBasic(request);
+        const { calendarId, resourceUri } = parseDavPath(params['*']);
+        if (!calendarId || !resourceUri) return new Response('Bad Request', { status: 400 });
+
+        const home = await getHome(params.ownerId);
+        const body = await request.text();
+        const ifMatch = request.headers.get('If-Match');
+        const ifNoneMatch = request.headers.get('If-None-Match');
+        return handlePut(home.calendar, calendarId, resourceUri, body, ifMatch, ifNoneMatch, user.id);
     })
-    .put('/dav/calendars/:ownerId/*', async () => {
-        return new Response('Not Implemented', { status: 501 });
+
+    // DELETE /dav/calendars/:ownerId/:calendarId/:uri — delete .ics resource
+    .delete('/dav/calendars/:ownerId/*', async ({ request, params }) => {
+        await authenticateBasic(request);
+        const { calendarId, resourceUri } = parseDavPath(params['*']);
+        if (!calendarId || !resourceUri) return new Response('Bad Request', { status: 400 });
+
+        const home = await getHome(params.ownerId);
+        const ifMatch = request.headers.get('If-Match');
+        return handleDelete(home.calendar, calendarId, resourceUri, ifMatch);
     })
-    .delete('/dav/calendars/:ownerId/*', async () => {
-        return new Response('Not Implemented', { status: 501 });
+
+    // REPORT /dav/calendars/:ownerId/:calendarId/ — calendar-query, multiget, sync-collection
+    .route('REPORT', '/dav/calendars/:ownerId/*', async ({ request, params }) => {
+        await authenticateBasic(request);
+        const { calendarId } = parseDavPath(params['*']);
+        if (!calendarId) return new Response('Bad Request', { status: 400 });
+
+        const home = await getHome(params.ownerId);
+        const calendarItem = home.calendar.getCalendarById(calendarId);
+        if (!calendarItem) return new Response('Not Found', { status: 404 });
+
+        const body = await request.text();
+        return handleReport(home.calendar, calendarId, calendarItem, params.ownerId, body);
     })
-    .route('MKCALENDAR', '/dav/calendars/:ownerId/*', async () => {
-        return new Response('Not Implemented', { status: 501 });
+
+    // MKCALENDAR /dav/calendars/:ownerId/:calendarId/ — create a new calendar collection
+    .route('MKCALENDAR', '/dav/calendars/:ownerId/*', async ({ request, params }) => {
+        await authenticateBasic(request);
+        const { calendarId } = parseDavPath(params['*']);
+        if (!calendarId) return new Response('Bad Request', { status: 400 });
+
+        const home = await getHome(params.ownerId);
+        const body = await request.text();
+        return handleMkcalendar(home.calendar, body);
     })
-    .route('PROPPATCH', '/dav/calendars/:ownerId/*', async () => {
-        return new Response('Not Implemented', { status: 501 });
+
+    // PROPPATCH /dav/calendars/:ownerId/:calendarId/ — update calendar properties
+    .route('PROPPATCH', '/dav/calendars/:ownerId/*', async ({ request, params }) => {
+        await authenticateBasic(request);
+        const { calendarId } = parseDavPath(params['*']);
+        if (!calendarId) return new Response('Bad Request', { status: 400 });
+
+        const home = await getHome(params.ownerId);
+        const body = await request.text();
+        return handleProppatch(home.calendar, calendarId, body);
     });
