@@ -1,6 +1,6 @@
 import { getDriveDownloadUrl, getDriveThumbnailUrl } from '@workspace/lib/api';
 import { useContacts } from '@workspace/lib/contacts';
-import { formatTime } from '@workspace/lib/date';
+import { formatDateTime } from '@workspace/lib/date';
 import { useFolderLookup } from '@workspace/lib/drive';
 import { usePublicUser } from '@workspace/lib/public';
 import type { ChatMessage } from '@workspace/lib/types/chat';
@@ -336,7 +336,7 @@ export function ChatMessageList({
                                     <div className="flex items-baseline gap-2">
                                         <span className="text-sm font-bold text-foreground">{displayName}</span>
                                         <span className="text-xs text-muted-foreground">
-                                            {formatTime(message.createdAt)}
+                                            {formatDateTime(message.createdAt)}
                                         </span>
                                     </div>
                                 )}
@@ -375,7 +375,7 @@ export function ChatMessageList({
                                     <div className="flex items-baseline gap-2">
                                         <span className="text-sm font-bold text-foreground">{displayName}</span>
                                         <span className="text-xs text-muted-foreground">
-                                            {formatTime(message.createdAt)}
+                                            {formatDateTime(message.createdAt)}
                                         </span>
                                         <span className="text-xs text-primary font-medium italic">whisper</span>
                                     </div>
@@ -413,7 +413,7 @@ export function ChatMessageList({
                                 <div className="flex items-baseline gap-2">
                                     <span className="text-sm font-bold text-foreground">{displayName}</span>
                                     <span className="text-xs text-muted-foreground">
-                                        {formatTime(message.createdAt)}
+                                        {formatDateTime(message.createdAt)}
                                     </span>
                                     {message.editedAt && !isDeleted && (
                                         <span className="text-xs text-muted-foreground">(edited)</span>
