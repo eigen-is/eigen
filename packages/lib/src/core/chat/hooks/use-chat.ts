@@ -96,6 +96,38 @@ export function useInviteToChat(ownerId: string, mountId: string, chatId: string
     });
 }
 
+export function useEditMessage(ownerId: string, mountId: string, chatId: string) {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async ({ messageId, content }: { messageId: string; content: string }) => {
+            const response = await chatApi({ ownerId })({ mountId })({ chatId })
+                .messages({ messageId })
+                .patch({ content });
+            if (response.error) throw new AppError(response);
+            return response.data;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: chatKeys.messages(ownerId, mountId, chatId) });
+        },
+        onError: onMutationError,
+    });
+}
+
+export function useDeleteMessage(ownerId: string, mountId: string, chatId: string) {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (messageId: string) => {
+            const response = await chatApi({ ownerId })({ mountId })({ chatId }).messages({ messageId }).delete();
+            if (response.error) throw new AppError(response);
+            return response.data;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: chatKeys.messages(ownerId, mountId, chatId) });
+        },
+        onError: onMutationError,
+    });
+}
+
 // SSE invalidation functions
 export function invalidateMessages(queryClient: QueryClient, ownerId: string, mountId: string, chatId: string): void {
     queryClient.invalidateQueries({ queryKey: chatKeys.messages(ownerId, mountId, chatId) });
