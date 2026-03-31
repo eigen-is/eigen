@@ -13,7 +13,12 @@ export async function authenticateBasic(request: Request): Promise<CalDavUser> {
         throw new ApiError(401, 'Unauthorized');
     }
 
-    const decoded = atob(authHeader.slice(6));
+    let decoded: string;
+    try {
+        decoded = atob(authHeader.slice(6));
+    } catch {
+        throw new ApiError(401, 'Unauthorized');
+    }
     const colonIndex = decoded.indexOf(':');
     if (colonIndex === -1) {
         throw new ApiError(401, 'Unauthorized');

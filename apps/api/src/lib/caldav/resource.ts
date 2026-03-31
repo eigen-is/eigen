@@ -1,3 +1,4 @@
+import type { CalendarEvent } from '@workspace/lib/types/calendar';
 import type { Calendar, CalendarEventRow } from '../calendar/calendar';
 import { parseIcs } from './ical-parse';
 import { eventsToIcs } from './ical-serialize';
@@ -128,7 +129,7 @@ export function handleDelete(calendar: Calendar, calendarId: string, uri: string
 function syncExceptionEvents(
     calendar: Calendar,
     calendarId: string,
-    masterEvent: CalendarEventRow,
+    masterEvent: CalendarEvent,
     parsed: ReturnType<typeof parseIcs>,
     userId: string,
 ) {
