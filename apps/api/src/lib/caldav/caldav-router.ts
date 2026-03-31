@@ -86,7 +86,14 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         const user = await authenticateBasic(request);
         if (user.id !== params.ownerId) throw new ApiError(403, 'Access denied');
         const { calendarId, resourceUri } = parseDavPath(params['*']);
-        if (!calendarId || !resourceUri) return new Response('Not Found', { status: 404 });
+
+        // GET on collection URL (no resource) — return 200 so HEAD/GET checks pass
+        if (!calendarId || !resourceUri) {
+            return new Response('This is a CalDAV endpoint. Use a CalDAV client.', {
+                status: 200,
+                headers: { 'Content-Type': 'text/plain' },
+            });
+        }
 
         const home = await getHome(params.ownerId);
         const event = home.calendar.getEventByUri(calendarId, resourceUri);

@@ -48,9 +48,14 @@ export function calendarDataProp(icsData: string): string {
     return `<C:calendar-data>${escapeXml(icsData)}</C:calendar-data>`;
 }
 
-// Home collection (not a calendar, just a collection)
-export function homeCollectionProps(): string[] {
-    return [`<D:resourcetype><D:collection/></D:resourcetype>`];
+// Home collection — includes discovery props Thunderbird needs at Depth:0
+export function homeCollectionProps(userId: string): string[] {
+    return [
+        `<D:resourcetype><D:collection/></D:resourcetype>`,
+        `<D:current-user-principal><D:href>/dav/principals/${userId}/</D:href></D:current-user-principal>`,
+        `<C:calendar-home-set><D:href>/dav/calendars/${userId}/</D:href></C:calendar-home-set>`,
+        `<D:displayname>Calendars</D:displayname>`,
+    ];
 }
 
 // Principal properties
