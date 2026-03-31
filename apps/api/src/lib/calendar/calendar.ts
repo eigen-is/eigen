@@ -321,7 +321,13 @@ export class Calendar {
         if (!cal) throw new ApiError(404, 'Calendar not found');
 
         const id = uuidv4();
-        const uid = input.uid || uuidv4();
+        // Exceptions must share the parent's UID (CalDAV groups events by UID)
+        let uid = input.uid || '';
+        if (!uid && input.parentEventId) {
+            const parent = this.getEventById(input.parentEventId);
+            if (parent) uid = parent.uid;
+        }
+        if (!uid) uid = uuidv4();
         const rruleStr = input.rrule ?? null;
         if (rruleStr) {
             try {
@@ -381,6 +387,7 @@ export class Calendar {
 
         // When creating an exception, touch the master event so its etag changes (CalDAV sync)
         if (input.parentEventId) {
+            console.log();
             this.touchEvent(input.parentEventId);
         }
 
@@ -405,7 +412,9 @@ export class Calendar {
     // so CalDAV clients detect changes to the master event's .ics resource
     private touchEvent(id: string): void {
         const event = this.getEventById(id);
-        if (!event) return;
+        if (!event) {
+            return;
+        }
         const etag = computeEtag({ ...event, updatedAt: Math.floor(Date.now() / 1000) });
         this.db
             .update(schema.events)

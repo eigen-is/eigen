@@ -20,14 +20,6 @@ function parseDavPath(wildcard: string): { calendarId?: string; resourceUri?: st
 }
 
 export const caldavRouter = new Elysia({ name: 'caldav' })
-    // Debug logging (temporary)
-    .onAfterHandle(({ request, set }) => {
-        const url = new URL(request.url);
-        if (url.pathname.startsWith('/dav')) {
-            const depth = request.headers.get('Depth') ?? '-';
-            console.log(`[CalDAV] ${set.status} ${request.method} ${url.pathname} Depth:${depth}`);
-        }
-    })
     // Add WWW-Authenticate header on 401 errors for CalDAV paths
     .onError(({ set, request, error }) => {
         if (error instanceof ApiError && error.status === 401 && new URL(request.url).pathname.startsWith('/dav')) {
