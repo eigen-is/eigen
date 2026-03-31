@@ -69,7 +69,8 @@ export async function handlePut(
             icsBlob: body,
         });
 
-        const updatedEvent = calendar.getEventByUri(calendarId, uri);
+        const updatedEvent = calendar.getEventByUri(calendarId, uri)!;
+        syncExceptionEvents(calendar, calendarId, updatedEvent, parsed, userId);
 
         return new Response(null, {
             status: 204,
@@ -94,6 +95,8 @@ export async function handlePut(
         uri,
         icsBlob: body,
     });
+
+    syncExceptionEvents(calendar, calendarId, newEvent, parsed, userId);
 
     return new Response(null, {
         status: 201,
@@ -120,4 +123,57 @@ export function handleDelete(calendar: Calendar, calendarId: string, uri: string
 
     calendar.deleteByUri(calendarId, uri);
     return new Response(null, { status: 204 });
+}
+
+function syncExceptionEvents(
+    calendar: Calendar,
+    calendarId: string,
+    masterEvent: CalendarEventRow,
+    parsed: ReturnType<typeof parseIcs>,
+    userId: string,
+) {
+    const exceptionParsed = parsed.filter((e) => e.recurrenceDate);
+    if (!exceptionParsed.length) return;
+
+    const existingExceptions = calendar.getRawEvents(calendarId).filter((e) => e.parentEventId === masterEvent.id);
+
+    const existingByRecurrenceDate = new Map<string, CalendarEventRow>();
+    for (const exc of existingExceptions) {
+        if (exc.recurrenceDate) {
+            existingByRecurrenceDate.set(exc.recurrenceDate, exc);
+        }
+    }
+
+    for (const exc of exceptionParsed) {
+        const existing = exc.recurrenceDate ? existingByRecurrenceDate.get(exc.recurrenceDate) : null;
+
+        if (existing) {
+            calendar.updateEvent(existing.id, {
+                title: exc.title,
+                startTime: exc.startTime,
+                endTime: exc.endTime,
+                allDay: exc.allDay,
+                description: exc.description,
+                location: exc.location,
+                status: exc.status,
+                data: exc.data,
+            });
+        } else {
+            calendar.createEvent(calendarId, {
+                title: exc.title,
+                startTime: exc.startTime,
+                endTime: exc.endTime,
+                allDay: exc.allDay,
+                description: exc.description,
+                location: exc.location,
+                status: exc.status,
+                data: exc.data,
+                parentEventId: masterEvent.id,
+                recurrenceDate: exc.recurrenceDate,
+                uid: masterEvent.uid,
+                uri: `${masterEvent.uid}-exc-${exc.recurrenceDate}.ics`,
+                createByUserId: userId,
+            });
+        }
+    }
 }
