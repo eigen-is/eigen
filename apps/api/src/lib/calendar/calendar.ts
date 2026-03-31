@@ -10,7 +10,7 @@ import type {
     SharedCalendar,
 } from '@workspace/lib/types/calendar';
 import { SSEventType } from '@workspace/lib/types/sse';
-import { and, count, eq, gte, isNull, lte, sql } from 'drizzle-orm';
+import { and, count, eq, gt, gte, inArray, isNull, lte, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { RRule } from 'rrule';
 import { v4 as uuidv4 } from 'uuid';
@@ -24,6 +24,9 @@ import { notifySharedCalendarUsers, propagateCalendarShare } from './share-propa
 import { buildCalendarEvent } from './sse-events';
 
 type UserIdentity = { id: string; email: string; name?: string | null };
+
+// Internal type extending the shared CalendarEvent with CalDAV-only storage fields
+export type CalendarEventRow = CalendarEvent & { eventCtag: number | null };
 
 function getCalendarDatabase(home: Home): Promise<ManagedDatabase<typeof schema>> {
     return home.getLocalDatabase(CALENDAR_DB_CONFIG, PATHS.CALENDAR.DB);
@@ -40,6 +43,7 @@ function computeEtag(event: {
     timezone?: string | null;
     status: string;
     data?: EventData | null;
+    updatedAt?: number | null;
 }): string {
     const hash = createHash('md5');
     hash.update(
@@ -54,6 +58,7 @@ function computeEtag(event: {
             timezone: event.timezone,
             status: event.status,
             data: event.data,
+            updatedAt: event.updatedAt,
         }),
     );
     return hash.digest('hex');
@@ -145,6 +150,13 @@ function dbEventToCalendarEvent(row: typeof schema.events.$inferSelect): Calenda
     };
 }
 
+function dbEventToCalendarEventRow(row: typeof schema.events.$inferSelect): CalendarEventRow {
+    return {
+        ...dbEventToCalendarEvent(row),
+        eventCtag: row.eventCtag ?? null,
+    };
+}
+
 function dbCalendarToCalendarItem(row: typeof schema.calendars.$inferSelect): CalendarItem {
     return {
         id: row.id,
@@ -152,6 +164,7 @@ function dbCalendarToCalendarItem(row: typeof schema.calendars.$inferSelect): Ca
         color: row.color,
         isDefault: row.isDefault,
         visible: row.visible,
+        ctag: row.ctag,
         shares: row.shares ?? null,
         createdAt: row.createdAt as number,
         updatedAt: row.updatedAt as number,
@@ -299,6 +312,8 @@ export class Calendar {
             status?: CalendarEvent['status'];
             data?: EventData | null;
             createByUserId?: string | null;
+            uid?: string | null;
+            uri?: string | null;
         },
         user?: UserIdentity,
     ): CalendarEvent {
@@ -306,7 +321,13 @@ export class Calendar {
         if (!cal) throw new ApiError(404, 'Calendar not found');
 
         const id = uuidv4();
-        const uid = uuidv4();
+        // Exceptions must share the parent's UID (CalDAV groups events by UID)
+        let uid = input.uid || '';
+        if (!uid && input.parentEventId) {
+            const parent = this.getEventById(input.parentEventId);
+            if (parent) uid = parent.uid;
+        }
+        if (!uid) uid = uuidv4();
         const rruleStr = input.rrule ?? null;
         if (rruleStr) {
             try {
@@ -330,13 +351,19 @@ export class Calendar {
             data: input.data,
         });
 
+        const currentCtag = cal.ctag ?? 0;
+
         this.db
             .insert(schema.events)
             .values({
                 id,
                 calendarId,
                 uid,
-                uri: `${uid}.ics`,
+                uri:
+                    input.uri ||
+                    (input.parentEventId && input.recurrenceDate
+                        ? `${uid}-exc-${input.recurrenceDate}.ics`
+                        : `${uid}.ics`),
                 title: input.title.trim(),
                 description: input.description ?? null,
                 location: input.location ?? null,
@@ -351,11 +378,17 @@ export class Calendar {
                 etag,
                 data: input.data ?? null,
                 createByUserId: input.createByUserId ?? null,
+                eventCtag: currentCtag,
             })
             .run();
 
         this.incrementCtag(calendarId);
         const event = this.getEventById(id)!;
+
+        // When creating an exception, touch the master event so its etag changes (CalDAV sync)
+        if (input.parentEventId) {
+            this.touchEvent(input.parentEventId);
+        }
 
         const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_CREATED, this.home.user.id);
         this.home.broadcast(sseEvent);
@@ -365,12 +398,150 @@ export class Calendar {
             propagateInvitation(this.home, event, user, [], event.data.attendees).catch(console.error);
         }
 
-        return event;
+        const { eventCtag: _ctag, ...calendarEvent } = event;
+        return calendarEvent;
     }
 
-    private getEventById(id: string): CalendarEvent | null {
+    private getEventById(id: string): CalendarEventRow | null {
         const row = this.db.select().from(schema.events).where(eq(schema.events.id, id)).get();
-        return row ? dbEventToCalendarEvent(row) : null;
+        return row ? dbEventToCalendarEventRow(row) : null;
+    }
+
+    // Touch an event's updatedAt to change its etag — used when exceptions are created/deleted
+    // so CalDAV clients detect changes to the master event's .ics resource
+    private touchEvent(id: string): void {
+        const event = this.getEventById(id);
+        if (!event) {
+            return;
+        }
+        const etag = computeEtag({ ...event, updatedAt: Math.floor(Date.now() / 1000) });
+        this.db
+            .update(schema.events)
+            .set({
+                updatedAt: sql`unixepoch()`,
+                etag,
+                eventCtag: this.getCalendarById(event.calendarId)?.ctag ?? 0,
+            })
+            .where(eq(schema.events.id, id))
+            .run();
+    }
+
+    public getEventByUri(calendarId: string, uri: string): CalendarEventRow | null {
+        const row = this.db
+            .select()
+            .from(schema.events)
+            .where(and(eq(schema.events.calendarId, calendarId), eq(schema.events.uri, uri)))
+            .get();
+        return row ? dbEventToCalendarEventRow(row) : null;
+    }
+
+    public getRawEvents(calendarId: string): CalendarEventRow[] {
+        return this.db
+            .select()
+            .from(schema.events)
+            .where(eq(schema.events.calendarId, calendarId))
+            .all()
+            .map(dbEventToCalendarEventRow);
+    }
+
+    public getRawEventsInRange(calendarId: string, from: number, to: number): CalendarEventRow[] {
+        // 1. Non-recurring events that overlap the range
+        const nonRecurring = this.db
+            .select()
+            .from(schema.events)
+            .where(
+                and(
+                    eq(schema.events.calendarId, calendarId),
+                    isNull(schema.events.rrule),
+                    isNull(schema.events.parentEventId),
+                    lte(schema.events.startTime, to),
+                    gte(schema.events.endTime, from),
+                ),
+            )
+            .all()
+            .map(dbEventToCalendarEventRow);
+
+        // 2. Recurring events — check if ANY occurrence falls in range
+        const allRecurring = this.db
+            .select()
+            .from(schema.events)
+            .where(
+                and(
+                    eq(schema.events.calendarId, calendarId),
+                    sql`${schema.events.rrule} IS NOT NULL`,
+                    isNull(schema.events.parentEventId),
+                ),
+            )
+            .all();
+
+        const matchingRecurring: CalendarEventRow[] = [];
+        const matchingRecurringIds = new Set<string>();
+
+        for (const row of allRecurring) {
+            const evt = dbEventToCalendarEventRow(row);
+            const occurrences = expandRecurrence(evt, from, to);
+            if (occurrences.length > 0) {
+                matchingRecurring.push(evt);
+                matchingRecurringIds.add(row.id);
+            }
+        }
+
+        // 3. Exception events whose parent is a matching recurring event
+        const exceptions: CalendarEventRow[] = [];
+        if (matchingRecurringIds.size > 0) {
+            const allExceptions = this.db
+                .select()
+                .from(schema.events)
+                .where(and(eq(schema.events.calendarId, calendarId), sql`${schema.events.parentEventId} IS NOT NULL`))
+                .all()
+                .map(dbEventToCalendarEventRow);
+
+            for (const exc of allExceptions) {
+                if (exc.parentEventId && matchingRecurringIds.has(exc.parentEventId)) {
+                    exceptions.push(exc);
+                }
+            }
+        }
+
+        return [...nonRecurring, ...matchingRecurring, ...exceptions];
+    }
+
+    public getEventsByUris(calendarId: string, uris: string[]): CalendarEventRow[] {
+        if (!uris.length) return [];
+        return this.db
+            .select()
+            .from(schema.events)
+            .where(and(eq(schema.events.calendarId, calendarId), inArray(schema.events.uri, uris)))
+            .all()
+            .map(dbEventToCalendarEventRow);
+    }
+
+    public getChangedEventsSince(calendarId: string, sinceCtag: number): CalendarEventRow[] {
+        return this.db
+            .select()
+            .from(schema.events)
+            .where(and(eq(schema.events.calendarId, calendarId), gt(schema.events.eventCtag, sinceCtag)))
+            .all()
+            .map(dbEventToCalendarEventRow);
+    }
+
+    public getDeletedEventsSince(calendarId: string, sinceCtag: number): { uri: string }[] {
+        return this.db
+            .select({ uri: schema.eventTombstones.uri })
+            .from(schema.eventTombstones)
+            .where(
+                and(
+                    eq(schema.eventTombstones.calendarId, calendarId),
+                    gt(schema.eventTombstones.deletedAtCtag, sinceCtag),
+                ),
+            )
+            .all();
+    }
+
+    public deleteByUri(calendarId: string, uri: string): void {
+        const event = this.getEventByUri(calendarId, uri);
+        if (!event) return;
+        this.deleteEvent(event.id);
     }
 
     public updateEvent(
@@ -435,6 +606,9 @@ export class Calendar {
             data,
         });
 
+        const updateCal = this.getCalendarById(existing.calendarId);
+        const updateCtag = updateCal?.ctag ?? 0;
+
         this.db
             .update(schema.events)
             .set({
@@ -449,12 +623,19 @@ export class Calendar {
                 status,
                 etag,
                 data,
+                eventCtag: updateCtag,
                 updatedAt: sql`unixepoch()`,
             })
             .where(eq(schema.events.id, id))
             .run();
 
         this.incrementCtag(existing.calendarId);
+
+        // When updating an exception, touch the master event so its etag changes (CalDAV sync)
+        if (existing.parentEventId) {
+            this.touchEvent(existing.parentEventId);
+        }
+
         const updated = this.getEventById(id)!;
 
         const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_UPDATED, this.home.user.id);
@@ -468,10 +649,12 @@ export class Calendar {
             propagateInvitation(this.home, withSequence, user, oldAttendees, withSequence.data!.attendees!).catch(
                 console.error,
             );
-            return withSequence;
+            const { eventCtag: _ctag2, ...withSequenceEvent } = withSequence;
+            return withSequenceEvent;
         }
 
-        return updated;
+        const { eventCtag: _ctag, ...updatedEvent } = updated;
+        return updatedEvent;
     }
 
     public deleteEvent(id: string, user?: UserIdentity): void {
@@ -488,7 +671,23 @@ export class Calendar {
             propagateCancellation(this.home, existing).catch(console.error);
         }
 
+        const deleteCal = this.getCalendarById(existing.calendarId);
+        this.db
+            .insert(schema.eventTombstones)
+            .values({
+                uri: existing.uri,
+                calendarId: existing.calendarId,
+                deletedAtCtag: (deleteCal?.ctag ?? 0) + 1,
+            })
+            .run();
+
         this.db.delete(schema.events).where(eq(schema.events.id, id)).run();
+
+        // When deleting an exception, touch the master so its etag changes (CalDAV sync)
+        if (existing.parentEventId) {
+            this.touchEvent(existing.parentEventId);
+        }
+
         this.incrementCtag(existing.calendarId);
         const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_DELETED, this.home.user.id);
         this.home.broadcast(sseEvent);
@@ -1073,6 +1272,7 @@ export class Calendar {
                 recurrenceDate,
                 data: { ...parent.data, attendees },
                 createByUserId: parent.createByUserId,
+                uid: parent.uid,
             });
         }
     }
@@ -1093,6 +1293,7 @@ export class Calendar {
                 .where(eq(schema.events.id, existing.id))
                 .run();
             this.incrementCtag(parent.calendarId);
+            this.touchEvent(eventId); // Update master etag so CalDAV clients detect the change
         } else {
             const { startTime, endTime } = computeOccurrenceTimes(parent, recurrenceDate);
             this.createEvent(parent.calendarId, {
@@ -1103,6 +1304,7 @@ export class Calendar {
                 parentEventId: eventId,
                 recurrenceDate,
                 status: 'cancelled',
+                uid: parent.uid,
             });
         }
     }
