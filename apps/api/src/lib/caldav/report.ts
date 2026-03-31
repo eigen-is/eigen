@@ -1,6 +1,6 @@
 import type { CalendarEvent, CalendarItem } from '@workspace/lib/types/calendar';
 import type { Calendar } from '../calendar/calendar';
-import { eventToIcs } from './ical-serialize';
+import { eventsToIcs } from './ical-serialize';
 import { calendarDataProp, eventEtagProp, multistatus, propstatNotFound, propstatOk, response } from './xml-builder';
 import { parseReport } from './xml-parser';
 
@@ -66,6 +66,15 @@ function handleCalendarMultiget(
     const events = calendar.getEventsByUris(calendarId, uris);
     const wantsData = report.propNames.some((p) => p.includes('calendar-data'));
 
+    // Build a uid→all-events map for grouping exceptions with their master
+    const allEvents = calendar.getRawEvents(calendarId);
+    const eventsByUid = new Map<string, CalendarEvent[]>();
+    for (const e of allEvents) {
+        const group = eventsByUid.get(e.uid) ?? [];
+        eventsByUid.set(e.uid, group);
+        group.push(e);
+    }
+
     const responses: string[] = [];
 
     for (const event of events) {
@@ -73,7 +82,8 @@ function handleCalendarMultiget(
         const href = `${prefix}${event.uri}`;
         const props = [...eventEtagProp(event.etag)];
         if (wantsData) {
-            props.push(calendarDataProp(eventToIcs(event)));
+            const group = eventsByUid.get(event.uid) ?? [event];
+            props.push(calendarDataProp(eventsToIcs(group)));
         }
         responses.push(response(href, [propstatOk(props)]));
     }
@@ -155,6 +165,15 @@ function buildEventResponses(
     includeData: boolean,
 ): string[] {
     const prefix = `/dav/calendars/${ownerId}/${calendarId}/`;
+
+    // Build uid→events map so master events can include their exceptions in the ICS
+    const eventsByUid = new Map<string, CalendarEvent[]>();
+    for (const e of events) {
+        const group = eventsByUid.get(e.uid) ?? [];
+        eventsByUid.set(e.uid, group);
+        group.push(e);
+    }
+
     const responses: string[] = [];
 
     for (const event of events) {
@@ -162,7 +181,8 @@ function buildEventResponses(
         const href = `${prefix}${event.uri}`;
         const props = [...eventEtagProp(event.etag)];
         if (includeData) {
-            props.push(calendarDataProp(eventToIcs(event)));
+            const group = eventsByUid.get(event.uid) ?? [event];
+            props.push(calendarDataProp(eventsToIcs(group)));
         }
         responses.push(response(href, [propstatOk(props)]));
     }
