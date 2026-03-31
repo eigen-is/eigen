@@ -154,6 +154,7 @@ function dbCalendarToCalendarItem(row: typeof schema.calendars.$inferSelect): Ca
         color: row.color,
         isDefault: row.isDefault,
         visible: row.visible,
+        ctag: row.ctag,
         shares: row.shares ?? null,
         createdAt: row.createdAt as number,
         updatedAt: row.updatedAt as number,
