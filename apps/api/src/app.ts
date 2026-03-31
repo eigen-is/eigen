@@ -26,9 +26,20 @@ import { teamRouter } from './routes/team';
 
 const SLOW_REQUEST_MS = 200;
 
+const DAV_CAPABILITY_HEADERS = {
+    DAV: '1, 2, 3, calendar-access',
+    Allow: 'OPTIONS, GET, PUT, DELETE, PROPFIND, PROPPATCH, REPORT, MKCALENDAR',
+};
+
 export const app = new Elysia()
     .use(serverTiming())
     .use(swagger())
+    // Handle CalDAV OPTIONS before CORS intercepts them — CalDAV clients need DAV capability headers
+    .onRequest(({ request }) => {
+        if (request.method === 'OPTIONS' && new URL(request.url).pathname.startsWith('/dav')) {
+            return new Response(null, { status: 204, headers: DAV_CAPABILITY_HEADERS });
+        }
+    })
     .use(
         cors({
             origin: trustedOrigins,
@@ -83,6 +94,8 @@ export const app = new Elysia()
 
     .onError(({ error, set, code }) => {
         if (code === 'VALIDATION') return;
+        // CalDAV (and other handlers) throw Response objects directly for protocol-level errors
+        if (error instanceof Response) return error;
         const err = error as Error;
         if (err instanceof ApiError) {
             set.status = err.status;
