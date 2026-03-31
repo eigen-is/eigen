@@ -97,6 +97,10 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
             const local = getLocalCommand(rawContent);
             if (local) {
                 switch (local.kind) {
+                    case 'error': {
+                        addLocalMessage(local.error);
+                        return;
+                    }
                     case 'help': {
                         const lines = COMMANDS_HELP.map((c) => `  ${c.cmd}  —  ${c.desc}`).join('\n');
                         addLocalMessage(`Available commands:\n${lines}`);

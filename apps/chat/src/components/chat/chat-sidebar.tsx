@@ -110,7 +110,7 @@ export function ChatSidebar({
             {teams && teams.length > 0 && (
                 <>
                     <Separator />
-                    <SidebarSection condensed={condensed} title={condensed ? undefined : 'Shared Drives'}>
+                    <SidebarSection condensed={condensed} title={condensed ? undefined : 'Team Chats'}>
                         {teams.map((team) => (
                             <TeamChatItems key={team.id} teamId={team.id} condensed={condensed} />
                         ))}
