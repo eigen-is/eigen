@@ -67,7 +67,6 @@ export async function handlePut(
             timezone: masterParsed.timezone,
             status: masterParsed.status,
             data: masterParsed.data,
-            icsBlob: body,
         });
 
         const updatedEvent = calendar.getEventByUri(calendarId, uri)!;
@@ -94,7 +93,6 @@ export async function handlePut(
         createByUserId: userId,
         uid: masterParsed.uid || null,
         uri,
-        icsBlob: body,
     });
 
     syncExceptionEvents(calendar, calendarId, newEvent, parsed, userId);
