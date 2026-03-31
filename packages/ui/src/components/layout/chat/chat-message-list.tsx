@@ -246,6 +246,24 @@ export function ChatMessageList({
         return <LoadingState />;
     }
 
+    const renderAttachments = (message: ChatMessage) => {
+        if (!message.attachments || message.attachments.length === 0 || message.deletedAt) return null;
+        if (!ownerId || !mountId || !mediaFolderId) return null;
+        return (
+            <div className="flex flex-wrap gap-2 mt-1">
+                {message.attachments.map((name) => (
+                    <AttachmentChip
+                        key={name}
+                        fileName={name}
+                        ownerId={ownerId}
+                        mountId={mountId}
+                        mediaFolderId={mediaFolderId}
+                    />
+                ))}
+            </div>
+        );
+    };
+
     if (messages.length === 0) {
         return (
             <div className={cn('flex items-center justify-center flex-1', className)}>
@@ -326,6 +344,7 @@ export function ChatMessageList({
                                     text={message.content}
                                     className="text-sm text-muted-foreground italic whitespace-pre-wrap"
                                 />
+                                {renderAttachments(message)}
                             </div>
                         </div>
                     );
@@ -365,6 +384,7 @@ export function ChatMessageList({
                                     text={message.content}
                                     className="text-sm text-muted-foreground italic whitespace-pre-wrap break-words"
                                 />
+                                {renderAttachments(message)}
                             </div>
                         </div>
                     );
@@ -408,24 +428,7 @@ export function ChatMessageList({
                                     className="text-sm text-foreground whitespace-pre-wrap break-words"
                                 />
                             )}
-                            {message.attachments &&
-                                message.attachments.length > 0 &&
-                                !isDeleted &&
-                                ownerId &&
-                                mountId &&
-                                mediaFolderId && (
-                                    <div className="flex flex-wrap gap-2 mt-1">
-                                        {message.attachments.map((name) => (
-                                            <AttachmentChip
-                                                key={name}
-                                                fileName={name}
-                                                ownerId={ownerId}
-                                                mountId={mountId}
-                                                mediaFolderId={mediaFolderId}
-                                            />
-                                        ))}
-                                    </div>
-                                )}
+                            {renderAttachments(message)}
                         </div>
                     </div>
                 );

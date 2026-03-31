@@ -57,7 +57,7 @@ export function ChatSlashSuggest({
             {items.map((item, index) => (
                 <li
                     key={item.cmd}
-                    className={`px-3 py-2 cursor-pointer ${index === selectedIndex ? 'bg-accent' : 'hover:bg-accent'}`}
+                    className={`px-3 py-2 eigen-list-item ${index === selectedIndex ? 'eigen-list-item-active' : ''}`}
                     onMouseDown={(e) => {
                         e.preventDefault();
                         onSelect(cmds[index]);
