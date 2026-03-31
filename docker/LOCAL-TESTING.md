@@ -129,6 +129,55 @@ Accept the self-signed certificate warning. You'll see the same mailbox as in th
  echo '5 LOGOUT') | openssl s_client -connect localhost:993 -quiet 2>/dev/null
 ```
 
+## Testing CalDAV (Calendar Sync)
+
+### Thunderbird
+
+1. Open Thunderbird → **Calendar** tab
+2. Right-click calendars → **New Calendar** → **On the Network** → **CalDAV**
+3. Find your user ID:
+```bash
+curl -sk -X POST -H "Content-Type: application/json" \
+    -d '{"email":"YOUR_EMAIL","password":"x"}' \
+    https://localhost/eigen/internal/auth/verify
+```
+4. Enter:
+   - **Location:** `https://localhost/dav/calendars/{userId}/`
+   - **Username:** your email
+   - **Password:** anything (auth is open in dev)
+5. Accept the self-signed cert warning
+
+Your Eigen calendars appear in Thunderbird. Changes sync both ways — create, edit, and delete events
+in either client.
+
+### Testing CalDAV via command line
+
+```bash
+USER_ID="your-user-id"
+
+# List calendars
+curl -sk -u your@email:x -X PROPFIND -H "Depth: 1" \
+    https://localhost/dav/calendars/$USER_ID/ | xmllint --format -
+
+# Create an event
+curl -sk -u your@email:x -X PUT \
+    -H "Content-Type: text/calendar" \
+    -d 'BEGIN:VCALENDAR
+VERSION:2.0
+BEGIN:VEVENT
+UID:test-123@eigen
+SUMMARY:Test Event
+DTSTART:20260401T100000Z
+DTEND:20260401T110000Z
+END:VEVENT
+END:VCALENDAR' \
+    https://localhost/dav/calendars/$USER_ID/<CALENDAR_ID>/test-123.ics
+```
+
+**Note:** On a real server, CalDAV clients like Apple Calendar and DAVx5 auto-discover calendars —
+you just enter `https://yourdomain.com/dav/`, your email, and password. The user ID in the URL is
+only needed for Thunderbird which skips auto-discovery.
+
 ## Container Management
 
 ```bash

@@ -175,6 +175,21 @@ To use Thunderbird, Apple Mail, or any IMAP client alongside the web interface:
 
 Your IMAP client and the Eigen web interface share the same mailbox — changes sync both ways.
 
+## Step 8: Connect Your Calendar App (Optional)
+
+Eigen includes a CalDAV server. Connect Apple Calendar, Thunderbird, DAVx5 (Android), or any CalDAV client:
+
+| Setting | Value |
+|---------|-------|
+| Server | `https://eigen.example.com/dav/` |
+| Username | Your email (e.g., `you@eigen.example.com`) |
+| Password | Your Eigen password |
+
+Apple Calendar and DAVx5 auto-discover your calendars from just the server URL. Thunderbird requires
+the full calendar URL (`https://eigen.example.com/dav/calendars/{userId}/`).
+
+Events sync both ways — create, edit, and delete in your calendar app or the Eigen web interface.
+
 ## Updating Eigen
 
 When there's a new version:
