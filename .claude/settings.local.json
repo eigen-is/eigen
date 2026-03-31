@@ -173,7 +173,8 @@
       "Bash(readlink -f /Users/reinder/Documents/GitHub/eigen/node_modules/.bun/@tiptap+static-renderer*)",
       "Bash(for commit:*)",
       "WebFetch(domain:elysia.dev)",
-      "Bash(docker compose:*)"
+      "Bash(docker compose:*)",
+      "Bash(jobs -l)"
     ]
   },
   "enabledPlugins": {
