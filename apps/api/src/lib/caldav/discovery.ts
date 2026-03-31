@@ -7,9 +7,8 @@ import {
     principalProps,
     propstatOk,
     response,
+    XML_CONTENT_TYPE,
 } from './xml-builder';
-
-const XML_CONTENT_TYPE = 'application/xml; charset=utf-8';
 
 // PROPFIND /dav/ — returns current-user-principal
 export function handleRootPropfind(userId: string): Response {

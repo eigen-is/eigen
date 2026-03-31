@@ -1,7 +1,12 @@
 import type { CalendarEvent, CalendarItem } from '@workspace/lib/types/calendar';
-import { calendarCollectionProps, eventEtagProp, multistatus, propstatOk, response } from './xml-builder';
-
-const XML_CONTENT_TYPE = 'application/xml; charset=utf-8';
+import {
+    calendarCollectionProps,
+    eventEtagProp,
+    multistatus,
+    propstatOk,
+    response,
+    XML_CONTENT_TYPE,
+} from './xml-builder';
 
 export function handleCalendarPropfind(
     ownerId: string,

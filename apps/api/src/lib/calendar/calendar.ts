@@ -387,7 +387,6 @@ export class Calendar {
 
         // When creating an exception, touch the master event so its etag changes (CalDAV sync)
         if (input.parentEventId) {
-            console.log();
             this.touchEvent(input.parentEventId);
         }
 

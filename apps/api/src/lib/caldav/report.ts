@@ -1,10 +1,16 @@
 import type { CalendarItem } from '@workspace/lib/types/calendar';
 import type { Calendar, CalendarEventRow } from '../calendar/calendar';
 import { eventsToIcs } from './ical-serialize';
-import { calendarDataProp, eventEtagProp, multistatus, propstatNotFound, propstatOk, response } from './xml-builder';
+import {
+    calendarDataProp,
+    eventEtagProp,
+    multistatus,
+    propstatNotFound,
+    propstatOk,
+    response,
+    XML_CONTENT_TYPE,
+} from './xml-builder';
 import { parseReport, type ReportRequest } from './xml-parser';
-
-const XML_CONTENT_TYPE = 'application/xml; charset=utf-8';
 
 // REPORT on /dav/calendars/:ownerId/:calendarId/
 export function handleReport(
@@ -151,9 +157,9 @@ function handleSyncCollection(
         }
     }
 
-    // Build response with sync-token
+    // Build response with sync-token appended after responses (required by RFC 6578)
     const syncToken = `https://eigen.is/ns/sync/${currentCtag}`;
-    const xml = `<?xml version="1.0" encoding="utf-8"?>\n<D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CS="http://calendarserver.org/ns/" xmlns:ICAL="http://apple.com/ns/ical/">${responses.join('')}<D:sync-token>${syncToken}</D:sync-token></D:multistatus>`;
+    const xml = multistatus(responses, `<D:sync-token>${syncToken}</D:sync-token>`);
 
     return new Response(xml, {
         status: 207,

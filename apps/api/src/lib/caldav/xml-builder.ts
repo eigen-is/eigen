@@ -1,9 +1,11 @@
 import type { CalendarItem } from '@workspace/lib/types/calendar';
 
+export const XML_CONTENT_TYPE = 'application/xml; charset=utf-8';
+
 const NS = `xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CS="http://calendarserver.org/ns/" xmlns:ICAL="http://apple.com/ns/ical/"`;
 
-export function multistatus(responses: string[]): string {
-    return `<?xml version="1.0" encoding="utf-8"?>\n<D:multistatus ${NS}>${responses.join('')}</D:multistatus>`;
+export function multistatus(responses: string[], extra?: string): string {
+    return `<?xml version="1.0" encoding="utf-8"?>\n<D:multistatus ${NS}>${responses.join('')}${extra ?? ''}</D:multistatus>`;
 }
 
 export function response(href: string, propstats: string[]): string {
