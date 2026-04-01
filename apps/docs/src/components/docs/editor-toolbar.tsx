@@ -41,7 +41,6 @@ import {
     ChevronDown,
     Code,
     CodeXml,
-    Download,
     Heading1,
     Heading2,
     Heading3,
@@ -158,19 +157,10 @@ export const EditorToolbar = ({
                     canWrite={canWrite}
                     onAccessDialogOpen={onAccessDialogOpen}
                     onRestore={handleRestore}
+                    onExport={handleExport}
                     createLabel="New document"
                     CreateDialog={DriveCreateDoc}
                 >
-                    <DropdownMenuSub>
-                        <DropdownMenuSubTrigger>
-                            <Download className="h-4 w-4 mr-2" /> Export
-                        </DropdownMenuSubTrigger>
-                        <DropdownMenuSubContent>
-                            <DropdownMenuItem onClick={() => handleExport('docx')}>Export as DOCX</DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleExport('pdf')}>Export as PDF</DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleExport('html')}>Export as HTML</DropdownMenuItem>
-                        </DropdownMenuSubContent>
-                    </DropdownMenuSub>
                     <DropdownMenuItem onClick={printDocument}>
                         <Printer className="h-4 w-4 mr-2" /> Print
                     </DropdownMenuItem>
