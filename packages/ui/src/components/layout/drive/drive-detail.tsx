@@ -136,7 +136,7 @@ export function DriveDetail({ path, onShareClick, onItemOpen }: DriveDetailProps
                         <img
                             src={thumbnailPath}
                             alt={`Thumbnail for ${path.name}`}
-                            className="max-w-full max-h-[25%] object-contain"
+                            className="max-w-full max-h-[25vh] object-contain"
                             style={
                                 path.details?.width && path.details?.height
                                     ? { aspectRatio: path.details.width / path.details.height }
