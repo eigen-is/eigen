@@ -130,9 +130,8 @@ export default class SharedDrive extends Drive {
         );
     }
 
-    public async getThumbnail(mountId: string, fileName: string) {
-        const pathId = fileName.split('.')[0];
-        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.getThumbnail(mountId, fileName));
+    public async resolveFile(mountId: string, pathId: string) {
+        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.resolveFile(mountId, pathId));
     }
 
     public async getCollabDocument(mountId: string, pathId: string): Promise<CollabDocument> {
@@ -141,14 +140,6 @@ export default class SharedDrive extends Drive {
 
     public async closeCollabDocument(mountId: string, pathId: string) {
         return this.withReadPermission(mountId, pathId, () => this.sharedDrive.closeCollabDocument(mountId, pathId));
-    }
-
-    public async getPreview(mountId: string, pathId: string, embedUrl: string) {
-        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.getPreview(mountId, pathId, embedUrl));
-    }
-
-    public async getTextPreview(mountId: string, pathId: string) {
-        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.getTextPreview(mountId, pathId));
     }
 
     public async createFolder(mountId: string, parentId: string, folderName: string): Promise<DrivePath> {
