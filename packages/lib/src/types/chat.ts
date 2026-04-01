@@ -29,11 +29,11 @@ export type CommentEntry = {
     chatName: string;
     status: 'open' | 'resolved';
     resolvedBy: string | null;
-    resolvedAt: string | null;
+    resolvedAt: Date | null;
     lastAuthorEmail: string | null;
     lastMessageSnippet: string | null;
-    lastActivityAt: string | null;
+    lastActivityAt: Date | null;
     messageCount: number;
-    createdAt: string;
+    createdAt: Date;
     mentions: string[];
 };

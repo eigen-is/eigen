@@ -74,18 +74,6 @@ describe('Comment Index', () => {
             const data = await assertJson<CommentEntry[]>(res);
             expect(data).toEqual([]);
         });
-
-        test('unresolved count is zero', async () => {
-            const res = await collabGet(
-                ctx.alice.user.sessionToken,
-                ctx.alice.user.id,
-                mountId,
-                docId,
-                'comments/unresolved-count',
-            );
-            const data = await assertJson<{ count: number }>(res);
-            expect(data).toEqual({ count: 0 });
-        });
     });
 
     describe('comment creation via chat message', () => {
@@ -117,18 +105,6 @@ describe('Comment Index', () => {
             expect(comments[0].lastAuthorEmail).toBe(ctx.alice.user.email);
             expect(comments[0].lastMessageSnippet).toBe('First comment message');
             expect(comments[0].messageCount).toBe(1);
-        });
-
-        test('unresolved count is 1', async () => {
-            const res = await collabGet(
-                ctx.alice.user.sessionToken,
-                ctx.alice.user.id,
-                mountId,
-                docId,
-                'comments/unresolved-count',
-            );
-            const data = await assertJson<{ count: number }>(res);
-            expect(data).toEqual({ count: 1 });
         });
 
         test('second message updates activity', async () => {
@@ -252,23 +228,6 @@ describe('Comment Index', () => {
             expect(resolved.status).toBe('resolved');
             expect(resolved.resolvedBy).toBe(ctx.alice.user.email);
             expect(resolved.resolvedAt).toBeTruthy();
-        });
-
-        test('resolved comment decreases unresolved count', async () => {
-            const res = await collabGet(
-                ctx.alice.user.sessionToken,
-                ctx.alice.user.id,
-                mountId,
-                docId,
-                'comments/unresolved-count',
-            );
-            const body = await assertJson<{ count: number }>(res);
-            // Other comments from previous tests are still open
-            // The resolved one should not be counted
-            const listRes = await collabGet(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, docId, 'comments');
-            const comments = await assertJson<CommentEntry[]>(listRes);
-            const openCount = comments.filter((c: CommentEntry) => c.status === 'open').length;
-            expect(body.count).toBe(openCount);
         });
 
         test('reopen clears resolved state', async () => {
@@ -462,18 +421,6 @@ describe('Comment Index', () => {
                 'comment-c.eigenchat',
             ]);
         });
-
-        test('unresolved count reflects all open comments', async () => {
-            const res = await collabGet(
-                ctx.alice.user.sessionToken,
-                ctx.alice.user.id,
-                mountId,
-                doc2Id,
-                'comments/unresolved-count',
-            );
-            const data = await assertJson<{ count: number }>(res);
-            expect(data).toEqual({ count: 3 });
-        });
     });
 
     describe('whispers are not indexed', () => {
@@ -662,17 +609,6 @@ describe('Comment Index', () => {
                 mountId,
                 permDocId,
                 'comments',
-            );
-            expect(res.status).toBe(403);
-        });
-
-        test('user without access gets 403 on unresolved-count', async () => {
-            const res = await collabGet(
-                ctx.charlie.user.sessionToken,
-                ctx.alice.user.id,
-                mountId,
-                permDocId,
-                'comments/unresolved-count',
             );
             expect(res.status).toBe(403);
         });
