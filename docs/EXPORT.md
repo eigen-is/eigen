@@ -9,76 +9,39 @@ fonts, base64 images, and flattened eigen-prose CSS. DOCX and PDF are derived fr
 - **DOCX**: HTML fed to `@turbodocx/html-to-docx`
 - **PDF**: HTML fed to WeasyPrint subprocess
 
-The content loader (`content.ts`) extracts the Yjs -> PM JSON + media resolution logic shared by both
-the preview system and the export pipeline. The file structure accommodates future eigenslides/eigensheets export.
-
 ## File Structure
 
 ```
 apps/api/src/lib/export/
+  export-document.ts             # Entry point: dispatches by mime type + format
   weasyprint.ts                  # Generic: htmlToPdf(html) -> Buffer via subprocess
+  modules.d.ts                   # Type declarations for untyped npm packages
   doc/
-    render.ts                    # Shared: escapeHtml, renderFigureNode, docExtensions, ExportResult, stripEigendocExtension
-    content.ts                   # Load eigendoc Yjs -> PM JSON + media map
+    render.ts                    # Pure functions: escapeHtml, renderFigureNode, renderCodeBlockNode, renderTaskItemNode, ExportResult type
+    content.ts                   # Load eigendoc Yjs -> PM JSON + media map (shared with preview)
     html.ts                      # PM JSON -> standalone HTML (fonts, CSS, base64 images)
     docx.ts                      # DOCX export via html-to-docx
     pdf.ts                       # PDF export via WeasyPrint
-  slides/                        # Future: pptx.ts, pdf.ts
-  sheets/                        # Future: xlsx.ts, csv.ts
 ```
 
-### Rationale
+### Architecture
 
-- **`doc/`**: eigendoc-specific. Each eigen type gets its own directory -- the content models are
-  completely different (PM JSON vs Y.Map structures vs fortune-sheet cells)
-- **`render.ts`**: shared rendering primitives used by both `html.ts` (export) and `eigendoc-preview.ts`
-  (quick preview): `escapeHtml`, `renderFigureNode` (parameterized by image-src resolver), the shared
-  tiptap `docExtensions` singleton, `ExportResult` type, and `stripEigendocExtension`
-- **`content.ts`**: extracts the "load Yjs + resolve media" logic from `eigendoc-preview.ts`. Both
-  preview and export need the same data. `eigendoc-preview.ts` imports from here
-- **`html.ts`**: full standalone HTML document with base64 data URIs for images, embedded WOFF2 fonts,
-  and flattened eigen-prose CSS (nested CSS flattened for WeasyPrint compatibility). Used directly as
-  HTML export and as input for both DOCX and PDF pipelines
-- **`weasyprint.ts`** at the export root: not eigendoc-specific, all file types can use it for PDF
+- **`render.ts`**: pure utility functions with zero side effects — no imports from tiptap, lowlight, or
+  any heavy library. Callers pass their own lowlight instance. Shared by both `html.ts` (export) and
+  `eigendoc-preview.ts` (quick preview)
+- **`content.ts`**: shared Yjs -> PM JSON + media map loader, used by both export and preview
+- **`export-document.ts`**: thin dispatcher that routes `(mount, path, format)` to the right export
+  function. Imported by the drive route, NOT by Drive class — export is not Drive's responsibility
+- **`html.ts`**: standalone HTML with base64 data URIs, embedded WOFF2 fonts (via Bun `import ... with
+  { type: 'file' }`), CSS imported as text (via `import ... with { type: 'text' }`), and Tailwind
+  preflight reset. Font/CSS paths are resolved at build time by Bun's bundler
+- **`weasyprint.ts`**: not eigendoc-specific — any file type can use it for PDF
 
-## HTML Pipeline
+### Separation of Concerns
 
-All three export formats start from the same HTML:
-
-```
-loadEigendocContent() -> PM JSON + media map
-        |
-        v
-renderToHTMLString() with custom figure nodeMapping (base64 data URIs)
-        |
-        v
-DOMPurify.sanitize() (with ADD_DATA_URI_TAGS for img)
-        |
-        v
-wrapInDocument() -> full HTML with embedded fonts + flattened CSS + print extras
-        |
-        +-> HTML export (return as-is)
-        +-> DOCX export (feed to @turbodocx/html-to-docx)
-        +-> PDF export (feed to WeasyPrint subprocess)
-```
-
-### CSS Flattening
-
-The shared `eigen-prose.css` uses modern CSS nesting (`.eigen-prose { h1 { ... } }`). Standalone HTML
-and WeasyPrint need flat CSS. `flattenEigenProseCSS()` rewrites the shared stylesheet:
-
-1. Rewrites `.eigen-prose, .tiptap { }` to `.eigen-prose { }`
-2. Drops `.dark` overrides (export is always light)
-3. Flattens nested selectors to `.eigen-prose h1 { }` etc.
-4. Resolves CSS variables to concrete values
-
-### Font Embedding
-
-Reads WOFF2 files from `packages/ui/src/assets/fonts/`, base64-encodes them into `@font-face` rules.
-Path resolution uses `resolveUiSrcDir()` which tries multiple relative paths to handle dev (source)
-and Docker (build) layouts.
-
-Embedded fonts: Inter, Source Serif 4, JetBrains Mono, Excalifont.
+Export logic lives in `apps/api/src/lib/export/`, not in the Drive class. The route calls
+`drive.resolveFile()` to get a `Mount` + `DrivePath` (with ACL enforcement via SharedDrive), then passes
+them to `exportDocument()`. Same pattern for previews and thumbnails.
 
 ## Route
 
@@ -86,116 +49,79 @@ Embedded fonts: Inter, Source Serif 4, JetBrains Mono, Excalifont.
 GET /drive/:ownerId/:mountId/file/:pathId/export/:format
 ```
 
-Added to `apps/api/src/routes/drive.ts`. Follows the existing pattern: `getSharedDrive()` for ACL,
-`drive.exportDocument()` for the work. Uses dynamic `await import()` for tiptap chunk splitting.
-
-| MIME                      | `:format` values       |
-|---------------------------|------------------------|
-| `application/eigendoc`    | `docx`, `pdf`, `html`  |
-| (future) eigenslides      | `pptx`, `pdf`          |
-| (future) eigensheets      | `xlsx`, `csv`          |
+The route handler is thin:
+```typescript
+const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
+const result = await exportDocument(mount, path, params.format);
+```
 
 Returns 400 for unsupported format, 501 if WeasyPrint not installed (PDF only).
 
-### Drive Class Integration
+## HTML Pipeline
 
-`getMount()` is private, so export functions receive a `Mount` via `Drive.exportDocument()` -- same
-pattern as `getTextPreview()`:
-
-```typescript
-async exportDocument(mountId: string, pathId: string, format: string):
-    Promise<{ data: Buffer; contentType: string; fileName: string }>
+```
+loadEigendocContent() -> PM JSON + media map
+        |
+        v
+renderToHTMLString() with custom nodeMappings:
+  - codeBlock: lowlight syntax highlighting (highlightAuto fallback)
+  - taskItem: checkbox with data-checked attribute
+  - figure: base64 data URIs (export) or embed URLs (preview)
+        |
+        v
+DOMPurify.sanitize() (with ADD_DATA_URI_TAGS for img)
+        |
+        v
+wrapInDocument() -> full HTML with:
+  - Embedded WOFF2 fonts (Inter, Source Serif 4, JetBrains Mono, Excalifont)
+  - Flattened eigen-prose.css (nested CSS flattened for WeasyPrint)
+  - Tailwind preflight reset (box-sizing, list-style, input resets)
+  - Print extras (@page, page breaks, text alignment)
+        |
+        +-> HTML export (return as-is)
+        +-> DOCX export (feed to @turbodocx/html-to-docx)
+        +-> PDF export (feed to WeasyPrint subprocess)
 ```
 
-### ExportResult Type (in `render.ts`)
+### CSS Handling
 
-```typescript
-type ExportResult = {
-    data: Buffer;
-    contentType: string;
-    fileName: string;
-};
-```
+The export HTML includes three CSS layers:
+1. **Embedded fonts** — WOFF2 files base64-encoded into `@font-face` rules
+2. **Flattened eigen-prose.css** — modern CSS nesting flattened, `.dark` rules dropped, CSS variables resolved
+3. **Print extras** — Tailwind preflight reset, A4 page setup, checkbox sizing, code wrap
 
-## Content Loader (`content.ts`)
+### Build Configuration
 
-Extracts the shared Yjs loading + media resolution from `eigendoc-preview.ts`:
+The `buildfordocker` script externalizes `@turbodocx/*` to prevent it from being bundled (it's 1.7MB
+and changes the module evaluation order, breaking `PATHS.MAIL` initialization in the mail module).
 
-```typescript
-type EigendocContent = {
-    pmJson: JSONContent;
-    mediaByName: Map<string, MediaFile>;
-};
-
-async function loadEigendocContent(mount: Mount, drivePath: DrivePath): Promise<EigendocContent | null>
-```
-
-Implementation: opens `data.db`, calls `loadYjsState()`, converts via `yXmlFragmentToProsemirrorJSON()`,
-resolves media folder children into the map.
-
-## DOCX Export (`docx.ts`)
-
-Generates standalone HTML via `generateExportHtml()`, feeds it to `@turbodocx/html-to-docx`:
-
-```typescript
-async function exportEigendocToDocx(mount: Mount, drivePath: DrivePath): Promise<ExportResult>
-```
-
-The library handles HTML-to-OOXML conversion including images, tables, and text formatting.
-
-## PDF Export (`pdf.ts`)
-
-Generates standalone HTML via `generateExportHtml()`, feeds it to WeasyPrint:
-
-```typescript
-async function exportEigendocToPdf(mount: Mount, drivePath: DrivePath): Promise<ExportResult>
-```
-
-### WeasyPrint Wrapper (`weasyprint.ts`)
-
-```typescript
-async function htmlToPdf(html: string): Promise<Buffer>
-```
-
-Spawns WeasyPrint as subprocess: `Bun.spawn(['weasyprint', '-', '-', '--encoding', 'utf-8'])`.
-Writes HTML to stdin, reads PDF from stdout. Returns 501 error if WeasyPrint is not installed.
-Caches the availability check at module level. 60-second timeout with process kill.
+`@turbodocx/html-to-docx` must be installed in the deployment directory alongside `sharp` and
+`isomorphic-dompurify`.
 
 ## Frontend
 
-### Editor FileMenu (`apps/docs/src/components/docs/editor-toolbar.tsx`)
+### Export Hook (`packages/lib/src/core/drive/hooks/use-export-document.ts`)
 
-Export submenu as FileMenu children, before the existing Print item:
+`useExportDocument()` returns `{ exportDocument, isExporting }`. Handles fetch, blob download, filename
+extraction from Content-Disposition, and error handling via `onMutationError`.
 
+### FileMenu (`packages/ui/src/components/layout/toolbar/file-menu.tsx`)
+
+Export submenu rendered via `onExport` prop, positioned after Rename:
 ```
-File > ... > Export > Export as DOCX / Export as PDF / Export as HTML > Print > ...
+New document > Open > Rename > Export > [separator] > Edit access > ... > Print > Delete
 ```
-
-Download via programmatic `<a>` click with `getDriveExportUrl()`.
 
 ### Drive Context Menu (`packages/ui/src/components/layout/drive/drive-table.tsx`)
 
-Export submenu for eigendoc files (`type === 'doc'`), after Download:
-
-```
-Download > Export > Export as DOCX / Export as PDF / Export as HTML
-```
-
-`onExport?: (item: DrivePath, format: string) => void` prop, wired via `drive-list.tsx` and `drive-layout.tsx`.
-
-### URL Helper (`packages/lib/src/core/api.ts`)
-
-```typescript
-export const getDriveExportUrl = (ownerId: string, mountId: string, pathId: string, format: string) =>
-    `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/export/${format}`;
-```
+Export submenu for eigendoc files, driven by `onExport` callback.
 
 ## Dependencies
 
 | Package                    | Where           | Purpose                                |
 |----------------------------|-----------------|----------------------------------------|
-| `@turbodocx/html-to-docx` | `apps/api/`     | HTML -> DOCX conversion                |
-| `weasyprint` (system)      | Server          | HTML -> PDF (~50-80MB, lighter than Chromium) |
+| `@turbodocx/html-to-docx` | `apps/api/`     | HTML -> DOCX conversion (externalized in build) |
+| `weasyprint` (system)      | Server          | HTML -> PDF via subprocess             |
 
 ## Edge Cases
 
@@ -203,8 +129,8 @@ export const getDriveExportUrl = (ownerId: string, mountId: string, pathId: stri
 - **Missing media**: skip image (readFileAsDataUri returns null, no img tag emitted)
 - **WeasyPrint not installed**: return 501 with install instructions
 - **Corrupt Yjs state**: `loadYjsState()` handles this with try/catch
-- **Large docs with many images**: images loaded sequentially (bounded memory)
-- **Comment marks**: stripped by tiptap renderer (not in export extensions)
-- **Code blocks**: dark theme (Catppuccin) with syntax highlighting via lowlight
+- **Large docs with many images**: images loaded in parallel via `Promise.all`
+- **Code blocks without language**: `lowlight.highlightAuto()` auto-detects the language
+- **Task lists**: custom `taskItem` nodeMapping preserves checked/unchecked state
 - **Export during active collab**: loads last persisted state (may lag a few seconds)
 - **DOMPurify + data URIs**: `ADD_DATA_URI_TAGS: ['img']` preserves base64 image sources
