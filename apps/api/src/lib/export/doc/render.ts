@@ -1,11 +1,3 @@
-import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
-import { common, createLowlight } from 'lowlight';
-
-const lowlight = createLowlight(common);
-
-/** Shared tiptap extensions + lowlight instance for server-side rendering. */
-export const docExtensions = getDocExtensions({ lowlight });
-
 export type ExportResult = {
     data: Buffer;
     contentType: string;
@@ -25,16 +17,16 @@ export function escapeHtml(text: string): string {
         .replace(/>/g, '&gt;');
 }
 
+type Lowlight = { registered(lang: string): boolean; highlight(lang: string, code: string): HastNode };
+
 /**
  * Renders a codeBlock node with lowlight syntax highlighting.
- * Produces `<pre><code class="hljs language-X">…</code></pre>` with `.hljs-*`
- * spans that are styled by the eigen-prose Catppuccin theme.
+ * Caller provides their own lowlight instance so this module stays side-effect-free.
  */
-export function renderCodeBlockNode(node: {
-    attrs: Record<string, unknown>;
-    textContent?: string;
-    content?: unknown;
-}): string {
+export function renderCodeBlockNode(
+    node: { attrs: Record<string, unknown>; textContent?: string; content?: unknown },
+    lowlight: Lowlight,
+): string {
     const language = (node.attrs['language'] as string) || '';
     const code = node.textContent ?? '';
 

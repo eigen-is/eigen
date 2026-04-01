@@ -1,7 +1,9 @@
 import * as fs from 'node:fs';
 import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
+import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import DOMPurify from 'isomorphic-dompurify';
+import { common, createLowlight } from 'lowlight';
 // Font paths resolved at build time — copied to outdir by the bundler
 import fontExcalifont from '../../../../../../packages/ui/src/assets/fonts/excalifont/Excalifont-Regular.woff2' with {
     type: 'file',
@@ -23,17 +25,12 @@ import fontSerifItalic from '../../../../../../packages/ui/src/assets/fonts/sour
 };
 // CSS embedded as string at build time by Bun's bundler — no runtime file resolution needed
 import eigenProseCSSRaw from '../../../../../../packages/ui/src/styles/eigen-prose.css' with { type: 'text' };
-
 import type { Mount } from '../../mount';
 import { loadEigendocContent } from './content';
-import {
-    docExtensions,
-    type ExportResult,
-    escapeHtml,
-    renderCodeBlockNode,
-    renderFigureNode,
-    stripEigendocExtension,
-} from './render';
+import { type ExportResult, escapeHtml, renderCodeBlockNode, renderFigureNode, stripEigendocExtension } from './render';
+
+const lowlight = createLowlight(common);
+const extensions = getDocExtensions({ lowlight });
 
 export type { ExportResult };
 
@@ -72,10 +69,10 @@ export async function generateExportHtml(mount: Mount, drivePath: DrivePath): Pr
 
     const bodyHtml = renderToHTMLString({
         content: pmJson,
-        extensions: docExtensions,
+        extensions,
         options: {
             nodeMapping: {
-                codeBlock: ({ node }) => renderCodeBlockNode(node),
+                codeBlock: ({ node }) => renderCodeBlockNode(node, lowlight),
                 figure: ({ node }: { node: { attrs: Record<string, unknown> } }) =>
                     renderFigureNode(node.attrs, (mediaName, src) =>
                         mediaName ? (dataUriMap.get(mediaName) ?? null) : src,

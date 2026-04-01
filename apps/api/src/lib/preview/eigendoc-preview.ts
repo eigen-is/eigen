@@ -1,9 +1,14 @@
 import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
+import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import DOMPurify from 'isomorphic-dompurify';
+import { common, createLowlight } from 'lowlight';
 import { loadEigendocContent } from '../export/doc/content';
-import { docExtensions, renderCodeBlockNode, renderFigureNode } from '../export/doc/render';
+import { renderCodeBlockNode, renderFigureNode } from '../export/doc/render';
 import type { Mount } from '../mount';
+
+const lowlight = createLowlight(common);
+const extensions = getDocExtensions({ lowlight });
 
 export async function generateEigendocPreview(mount: Mount, drivePath: DrivePath, baseUrl = ''): Promise<string> {
     const content = await loadEigendocContent(mount, drivePath);
@@ -13,10 +18,10 @@ export async function generateEigendocPreview(mount: Mount, drivePath: DrivePath
 
     const html = renderToHTMLString({
         content: pmJson,
-        extensions: docExtensions,
+        extensions,
         options: {
             nodeMapping: {
-                codeBlock: ({ node }) => renderCodeBlockNode(node),
+                codeBlock: ({ node }) => renderCodeBlockNode(node, lowlight),
                 figure: ({ node }: { node: { attrs: Record<string, unknown> } }) =>
                     renderFigureNode(
                         node.attrs,
