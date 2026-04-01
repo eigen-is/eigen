@@ -236,6 +236,14 @@ export class Mount {
         }
     }
 
+    private buildFileValue(id: string, name: string): string {
+        return this.isPathBased ? name : buildStorageKey(id, name);
+    }
+
+    private async resolveWriteKey(parentId: string, fileValue: string): Promise<string> {
+        return this.isPathBased ? this.resolveStoragePathForNew(parentId, fileValue) : fileValue;
+    }
+
     async createFolder(parentId: string, name: string, type: DriveContainerType = 'folder'): Promise<string> {
         validateName(name);
         await this.assertUniqueName(parentId, name);
@@ -249,17 +257,12 @@ export class Mount {
             chat: DRIVE_MIME_CHAT,
         };
         const mimeType = mimeTypeMap[type] ?? 'folder';
-
-        let fileValue = '';
-        if (this.isPathBased) {
-            fileValue = name;
-        }
+        const fileValue = this.isPathBased ? name : '';
 
         // Create directory before DB insert so a crash leaves an orphaned
         // directory (harmless) instead of a DB entry for a missing directory.
         if (this.isPathBased && this.storage.mkdir) {
-            const fullPath = await this.resolveStoragePathForNew(parentId, fileValue);
-            await this.storage.mkdir(fullPath);
+            await this.storage.mkdir(await this.resolveWriteKey(parentId, fileValue));
         }
 
         await this.db.insert(paths).values({
@@ -298,15 +301,14 @@ export class Mount {
         validateName(name);
         await this.assertUniqueName(parentId, name);
         const fileId = randomUUID();
-        const fileValue = this.isPathBased ? name : buildStorageKey(fileId, name);
+        const fileValue = this.buildFileValue(fileId, name);
         const hash = data !== undefined ? await this.computeHash(data) : null;
 
         // Write storage first, then DB. On crash between the two, we get an
         // orphaned file on disk (harmless) instead of a DB entry pointing to
         // a non-existent file (broken).
         if (data !== undefined) {
-            const storageKey = this.isPathBased ? await this.resolveStoragePathForNew(parentId, fileValue) : fileValue;
-            await this.storage.write(storageKey, data);
+            await this.storage.write(await this.resolveWriteKey(parentId, fileValue), data);
         }
 
         await this.db.insert(paths).values({
@@ -338,9 +340,9 @@ export class Mount {
         validateName(name);
         await this.assertUniqueName(parentId, name);
         const fileId = randomUUID();
-        const fileValue = this.isPathBased ? name : buildStorageKey(fileId, name);
+        const fileValue = this.buildFileValue(fileId, name);
 
-        const storageKey = this.isPathBased ? await this.resolveStoragePathForNew(parentId, fileValue) : fileValue;
+        const storageKey = await this.resolveWriteKey(parentId, fileValue);
 
         // Storage write before DB insert (crash safety: orphaned file > orphaned row)
         await this.uploadFromTemp(storageKey, tempId);
@@ -582,19 +584,8 @@ export class Mount {
                 })
                 .where(eq(paths.id, pathId));
 
-            // For containers: recursively set trashedAt on descendants WHERE trashedAt IS NULL
             if (item.type !== 'file') {
-                const nowEpoch = Math.floor(now.getTime() / 1000);
-                this.db.run(sql`
-                    WITH RECURSIVE descendants AS (
-                        SELECT id FROM ${paths} WHERE ${paths.parentId} = ${pathId}
-                        UNION ALL
-                        SELECT p.id FROM ${paths} p JOIN descendants d ON p.${sql.raw('parentId')} = d.id
-                    )
-                    UPDATE ${paths}
-                    SET ${sql.raw('trashedAt')} = ${nowEpoch}, ${sql.raw('updatedAt')} = ${nowEpoch}
-                    WHERE id IN (SELECT id FROM descendants) AND ${paths.trashedAt} IS NULL
-                `);
+                this.trashDescendants(pathId, now);
             }
 
             const updated = await this.getPath(pathId);
@@ -666,21 +657,8 @@ export class Mount {
                 })
                 .where(eq(paths.id, pathId));
 
-            // For containers: recursively clear trashedAt on descendants,
-            // SKIP those with trashedFrom IS NOT NULL (independently trashed)
             if (row.type !== 'file') {
-                this.db.run(sql`
-                    WITH RECURSIVE descendants AS (
-                        SELECT id FROM ${paths} WHERE ${paths.parentId} = ${pathId}
-                        UNION ALL
-                        SELECT p.id FROM ${paths} p JOIN descendants d ON p.${sql.raw('parentId')} = d.id
-                    )
-                    UPDATE ${paths}
-                    SET ${sql.raw('trashedAt')} = NULL, ${sql.raw('updatedAt')} = ${Math.floor(now.getTime() / 1000)}
-                    WHERE id IN (SELECT id FROM descendants)
-                    AND ${paths.trashedAt} IS NOT NULL
-                    AND ${paths.trashedFrom} IS NULL
-                `);
+                this.restoreDescendants(pathId, now);
             }
 
             const updated = await this.getPath(pathId);
@@ -699,6 +677,38 @@ export class Mount {
         };
         collect(parentId);
         return ids;
+    }
+
+    // Recursively set trashedAt on all non-trashed descendants
+    private trashDescendants(parentId: string, now: Date): void {
+        const epoch = Math.floor(now.getTime() / 1000);
+        this.db.run(sql`
+            WITH RECURSIVE descendants AS (
+                SELECT id FROM ${paths} WHERE ${paths.parentId} = ${parentId}
+                UNION ALL
+                SELECT p.id FROM ${paths} p JOIN descendants d ON p.${sql.raw('parentId')} = d.id
+            )
+            UPDATE ${paths}
+            SET ${sql.raw('trashedAt')} = ${epoch}, ${sql.raw('updatedAt')} = ${epoch}
+            WHERE id IN (SELECT id FROM descendants) AND ${paths.trashedAt} IS NULL
+        `);
+    }
+
+    // Recursively clear trashedAt on descendants, skipping independently trashed items
+    private restoreDescendants(parentId: string, now: Date): void {
+        const epoch = Math.floor(now.getTime() / 1000);
+        this.db.run(sql`
+            WITH RECURSIVE descendants AS (
+                SELECT id FROM ${paths} WHERE ${paths.parentId} = ${parentId}
+                UNION ALL
+                SELECT p.id FROM ${paths} p JOIN descendants d ON p.${sql.raw('parentId')} = d.id
+            )
+            UPDATE ${paths}
+            SET ${sql.raw('trashedAt')} = NULL, ${sql.raw('updatedAt')} = ${epoch}
+            WHERE id IN (SELECT id FROM descendants)
+            AND ${paths.trashedAt} IS NOT NULL
+            AND ${paths.trashedFrom} IS NULL
+        `);
     }
 
     async permanentlyDeleteFromTrash(pathId: string): Promise<void> {
