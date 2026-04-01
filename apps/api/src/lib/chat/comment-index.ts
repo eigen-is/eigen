@@ -78,15 +78,6 @@ export class CommentIndex {
             mentions: mentionsByChat.get(c.chatName) ?? [],
         }));
     }
-
-    async unresolvedCount(): Promise<number> {
-        const result = await this.db
-            .select({ count: sql<number>`COUNT(*)` })
-            .from(commentSchema.comments)
-            .where(eq(commentSchema.comments.status, 'open'))
-            .get();
-        return result?.count ?? 0;
-    }
 }
 
 export async function openCommentIndex(drive: Drive, containerPath: DrivePath): Promise<CommentIndex> {

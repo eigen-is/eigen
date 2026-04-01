@@ -1,25 +1,28 @@
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCaret from '@tiptap/extension-collaboration-caret';
 import { Selection } from '@tiptap/pm/state';
+import type { Editor } from '@tiptap/react';
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
 import { yUndoPluginKey } from '@tiptap/y-tiptap';
 import { getCollabWebSocketUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
+import { useComments, useResolveComment } from '@workspace/lib/chat';
 import { needsReUpload, readEigenClipboard, reUploadImage, writeEigenClipboard } from '@workspace/lib/clipboard';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import { MediaResolverProvider, useMediaResolver, useUploadFile } from '@workspace/lib/drive';
 import { useMediaQuery } from '@workspace/lib/media';
+import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardData, EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { Column, LoadingState } from '@workspace/ui';
+import { Column, CommentPanel, CommentThread, LoadingState } from '@workspace/ui';
 import { common, createLowlight } from 'lowlight';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
-import { CreateCommentDialog, ViewCommentDialog } from './comment-dialog';
+import { CreateCommentDialog } from './comment-dialog';
 import { EditorToolbar } from './editor-toolbar';
-import { CommentMark } from './extensions/comment-mark';
+import { CommentMark, updateResolvedComments } from './extensions/comment-mark';
 import { Figure } from './extensions/figure';
 import { TableWidthClamp } from './extensions/table-width-clamp';
 import { FigurePropertiesPanel } from './figure-properties-panel';
@@ -86,6 +89,103 @@ export const CollaborativeEditor = ({
     );
 };
 
+function CommentPopover({
+    rect,
+    onClose,
+    children,
+}: {
+    rect: DOMRect;
+    onClose: () => void;
+    children: React.ReactNode;
+}) {
+    const ref = useRef<HTMLDivElement>(null);
+    const popoverHeight = 300;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const placeAbove = spaceBelow < popoverHeight && rect.top > popoverHeight;
+
+    const style: React.CSSProperties = placeAbove
+        ? { bottom: window.innerHeight - rect.top + 8, left: rect.left }
+        : { top: rect.bottom + 8, left: rect.left };
+
+    useEffect(() => {
+        const handleClick = (e: MouseEvent) => {
+            if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+        };
+        // Delay listener to avoid closing immediately from the click that opened this
+        const timer = setTimeout(() => document.addEventListener('mousedown', handleClick), 0);
+        return () => {
+            clearTimeout(timer);
+            document.removeEventListener('mousedown', handleClick);
+        };
+    }, [onClose]);
+
+    return (
+        <div
+            ref={ref}
+            className="fixed z-50 w-80 max-h-[70vh] overflow-y-auto rounded-lg border bg-background shadow-lg"
+            style={style}
+        >
+            <div className="flex items-center justify-between px-3 pt-2 pb-1">
+                <span className="text-xs font-medium text-muted-foreground">Comment</span>
+                <button type="button" className="text-muted-foreground hover:text-foreground text-xs" onClick={onClose}>
+                    &times;
+                </button>
+            </div>
+            <div className="px-1 pb-1">{children}</div>
+        </div>
+    );
+}
+
+type ActiveComments = {
+    ids: Set<string>;
+    anchorTexts: Map<string, string>;
+};
+
+const EMPTY_ACTIVE: ActiveComments = { ids: new Set(), anchorTexts: new Map() };
+
+function useActiveComments(editor: Editor | null): ActiveComments {
+    const [result, setResult] = useState<ActiveComments>(EMPTY_ACTIVE);
+
+    useEffect(() => {
+        if (!editor) return;
+        let timer: ReturnType<typeof setTimeout>;
+
+        const update = () => {
+            clearTimeout(timer);
+            timer = setTimeout(() => {
+                const ids = new Set<string>();
+                const texts = new Map<string, string>();
+
+                editor.state.doc.descendants((node, pos) => {
+                    for (const mark of node.marks) {
+                        if (mark.type.name === 'comment' && mark.attrs.chatName) {
+                            const chatName = mark.attrs.chatName as string;
+                            ids.add(chatName);
+                            if (!texts.has(chatName)) {
+                                texts.set(
+                                    chatName,
+                                    editor.state.doc.textBetween(pos, pos + node.nodeSize, ' ').slice(0, 100),
+                                );
+                            }
+                        }
+                    }
+                });
+
+                setResult({ ids, anchorTexts: texts });
+            }, 200);
+        };
+
+        update();
+        editor.on('update', update);
+        return () => {
+            editor.off('update', update);
+            clearTimeout(timer);
+        };
+    }, [editor]);
+
+    return result;
+}
+
 const TiptapEditor = ({
     yDoc,
     provider,
@@ -108,13 +208,14 @@ const TiptapEditor = ({
     const { resolveMediaPath } = useMediaResolver();
     const [commentDialogOpen, setCommentDialogOpen] = useState(false);
     const [commentSelectedText, setCommentSelectedText] = useState('');
-    const [viewCommentChatName, setViewCommentChatName] = useState<string | null>(null);
+    const [viewComment, setViewComment] = useState<{ chatName: string; rect: DOMRect } | null>(null);
     const [canvasScale, setCanvasScale] = useState(1);
     const [docHeight, setDocHeight] = useState(0);
     const needsScale = canvasScale < 1;
     const documentRef = useRef<HTMLDivElement>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const editorRef = useRef<ReturnType<typeof useEditor>>(null);
+    const handleAddCommentRef = useRef<(() => void) | null>(null);
     const mediaFolderIdRef = useRef(mediaFolderId);
     mediaFolderIdRef.current = mediaFolderId;
 
@@ -143,8 +244,8 @@ const TiptapEditor = ({
         return () => ro.disconnect();
     }, []);
 
-    const handleCommentClick = useCallback((chatName: string) => {
-        setViewCommentChatName(chatName);
+    const handleCommentClick = useCallback((chatName: string, rect: DOMRect) => {
+        setViewComment({ chatName, rect });
     }, []);
 
     const editor = useEditor(
@@ -156,6 +257,8 @@ const TiptapEditor = ({
                 TableWidthClamp,
                 CommentMark.configure({
                     onCommentClick: handleCommentClick,
+                    onAddComment: () => handleAddCommentRef.current?.(),
+                    onToggleCommentPanel: () => setCommentPanelOpen((v) => !v),
                 }),
                 Collaboration.configure({
                     document: yDoc,
@@ -386,6 +489,7 @@ const TiptapEditor = ({
         setCommentSelectedText(text);
         setCommentDialogOpen(true);
     };
+    handleAddCommentRef.current = chatFolderId ? handleAddComment : null;
 
     const handleCommentCreated = (chatName: string) => {
         if (!editor) return;
@@ -395,6 +499,30 @@ const TiptapEditor = ({
     const [sidebarContext, setSidebarContext] = useState<'document' | 'figure' | 'table'>('document');
     const lastPanelRef = useRef<'figure' | 'table'>('figure');
     if (sidebarContext !== 'document') lastPanelRef.current = sidebarContext;
+
+    const [commentPanelOpen, setCommentPanelOpen] = useState(false);
+    const activeComments = useActiveComments(editor);
+    const resolveComment = useResolveComment(path.ownerId, path.mountId, path.id);
+    const { data: allComments = [] } = useComments(path.ownerId, path.mountId, path.id);
+
+    const unresolvedCount = useMemo(() => {
+        return (allComments as CommentEntry[]).filter((c) => c.status === 'open' && activeComments.ids.has(c.chatName))
+            .length;
+    }, [allComments, activeComments.ids]);
+
+    const viewCommentEntry = viewComment
+        ? (allComments as CommentEntry[]).find((c) => c.chatName === viewComment.chatName)
+        : null;
+
+    // Sync resolved comment IDs into the ProseMirror decoration plugin
+    useEffect(() => {
+        if (!editor) return;
+        const resolved = new Set<string>();
+        for (const c of allComments as CommentEntry[]) {
+            if (c.status === 'resolved') resolved.add(c.chatName);
+        }
+        updateResolvedComments(editor, resolved);
+    }, [editor, allComments]);
 
     useEffect(() => {
         if (!editor) return;
@@ -413,7 +541,23 @@ const TiptapEditor = ({
 
     if (!editor) return null;
 
-    const showSidebar = isWide && access.canWrite && sidebarContext !== 'document';
+    const activePanel = commentPanelOpen ? 'comments' : sidebarContext;
+    const showSidebar = isWide && (activePanel === 'comments' || (access.canWrite && activePanel !== 'document'));
+
+    const handleScrollToComment = (chatName: string) => {
+        let targetPos: number | null = null;
+        editor.state.doc.descendants((node, pos) => {
+            if (targetPos !== null) return false;
+            for (const mark of node.marks) {
+                if (mark.type.name === 'comment' && mark.attrs.chatName === chatName) {
+                    targetPos = pos;
+                }
+            }
+        });
+        if (targetPos !== null) {
+            editor.chain().focus().setTextSelection(targetPos).scrollIntoView().run();
+        }
+    };
 
     return (
         <>
@@ -429,6 +573,9 @@ const TiptapEditor = ({
                         canRedo={canRedo}
                         onAccessDialogOpen={onAccessDialogOpen}
                         onAddComment={chatFolderId ? handleAddComment : undefined}
+                        onToggleCommentPanel={() => setCommentPanelOpen((v) => !v)}
+                        commentPanelOpen={commentPanelOpen}
+                        unresolvedCommentCount={unresolvedCount}
                         onImageUpload={mediaFolderId ? handleImageUpload : undefined}
                     />
                 }
@@ -461,11 +608,22 @@ const TiptapEditor = ({
                             <EditorContent editor={editor} className="h-full tiptap-wrapper" />
                         </div>
                     </div>
-                    {isWide && access.canWrite && (
+                    {isWide && (
                         <div
                             className={`absolute inset-y-0 right-0 transition-transform duration-200 ease-in-out ${showSidebar ? 'translate-x-0' : 'translate-x-full'}`}
                         >
-                            {lastPanelRef.current === 'figure' ? (
+                            {activePanel === 'comments' ? (
+                                <CommentPanel
+                                    ownerId={path.ownerId}
+                                    mountId={path.mountId}
+                                    containerId={path.id}
+                                    currentUserEmail={auth.user!.email}
+                                    activeCommentIds={activeComments.ids}
+                                    anchorTexts={activeComments.anchorTexts}
+                                    onClose={() => setCommentPanelOpen(false)}
+                                    onScrollToComment={handleScrollToComment}
+                                />
+                            ) : lastPanelRef.current === 'figure' ? (
                                 <FigurePropertiesPanel
                                     key={editor.state.selection.from}
                                     editor={editor}
@@ -491,16 +649,20 @@ const TiptapEditor = ({
                 />
             )}
 
-            {viewCommentChatName && (
-                <ViewCommentDialog
-                    open={!!viewCommentChatName}
-                    onOpenChange={(open) => {
-                        if (!open) setViewCommentChatName(null);
-                    }}
-                    ownerId={path.ownerId}
-                    mountId={path.mountId}
-                    chatName={viewCommentChatName}
-                />
+            {viewComment && viewCommentEntry && (
+                <CommentPopover rect={viewComment.rect} onClose={() => setViewComment(null)}>
+                    <CommentThread
+                        ownerId={path.ownerId}
+                        mountId={path.mountId}
+                        comment={viewCommentEntry}
+                        anchorText={activeComments.anchorTexts.get(viewComment.chatName)}
+                        onResolve={() => {
+                            resolveComment.mutate({ chatName: viewComment.chatName, status: 'resolved' });
+                            setViewComment(null);
+                        }}
+                        onReopen={() => resolveComment.mutate({ chatName: viewComment.chatName, status: 'open' })}
+                    />
+                </CommentPopover>
             )}
         </>
     );
