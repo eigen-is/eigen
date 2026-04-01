@@ -6,6 +6,7 @@ import DOMPurify from 'isomorphic-dompurify';
 import { common, createLowlight } from 'lowlight';
 import { COLLAB_DB_CONFIG } from '../collab/db-config';
 import { loadYjsState } from '../collab/yjs-loader';
+import { renderTaskItemNode } from '../export/doc/render';
 import type { Mount } from '../mount';
 
 const lowlight = createLowlight(common);
@@ -31,6 +32,7 @@ export async function generateEigendocPreview(mount: Mount, drivePath: DrivePath
         extensions,
         options: {
             nodeMapping: {
+                taskItem: ({ node, children }) => renderTaskItemNode(node, children),
                 figure: ({ node }: { node: { attrs: Record<string, unknown> } }) => {
                     const mediaName = node.attrs['mediaName'] as string | null;
                     const src = node.attrs['src'] as string | null;
