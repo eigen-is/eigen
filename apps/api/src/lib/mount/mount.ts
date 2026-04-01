@@ -804,6 +804,7 @@ export class Mount {
             visibility: (row.visibility ?? 'private') as DriveVisibility,
             sharingRestricted: !!row.sharingRestricted,
             details: row.details ?? null,
+            trashedAt: row.trashedAt ?? null,
             createdAt: row.createdAt ?? new Date(),
             updatedAt: row.updatedAt ?? new Date(),
         };

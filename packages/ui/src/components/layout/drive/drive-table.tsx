@@ -95,6 +95,7 @@ export function DriveTable({
                 visibility: 'private',
                 sharingRestricted: false,
                 details: null,
+                trashedAt: null,
                 createdAt: new Date(),
                 updatedAt: new Date(),
             });
