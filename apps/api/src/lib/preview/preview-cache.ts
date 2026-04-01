@@ -2,7 +2,6 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_DOC } from '@workspace/lib/types/drive';
-import { ApiError } from '../core';
 import type { Mount } from '../mount';
 import { generateImagePreview } from '../shared/thumbnails';
 import { isExiftoolCandidate } from './exiftool-preview';
@@ -20,11 +19,7 @@ function getTextCacheKey(pathId: string, updatedAt: Date | string): string {
     return `${pathId}-${ts}.json`;
 }
 
-export async function getScreenPreview(
-    mount: Mount,
-    drivePath: DrivePath,
-    embedUrl: string,
-): Promise<NonNullable<PreviewResult>> {
+export async function getScreenPreview(mount: Mount, drivePath: DrivePath, embedUrl: string): Promise<PreviewResult> {
     const mime = drivePath.mimeType || '';
 
     // Video/audio/PDF → redirect to embed
@@ -48,7 +43,7 @@ export async function getScreenPreview(
         }
 
         const file = await mount.readFile(drivePath.id);
-        if (!file) throw new ApiError(404, 'No preview available');
+        if (!file) return null;
         const data = Buffer.from(await file.arrayBuffer());
         await Bun.write(cacheFile, data);
         return { type: 'image', data, contentType: 'image/svg+xml' };
@@ -69,28 +64,28 @@ export async function getScreenPreview(
 
         // Pass the storage file reference directly to avoid an extra copy
         const file = await mount.readFile(drivePath.id);
-        if (!file) throw new ApiError(404, 'No preview available');
+        if (!file) return null;
 
         const result = await generateImagePreview(file, mime, drivePath.name, mount.previewsDir, drivePath.id, {
             maxSize: 2560,
             quality: 85,
         });
-        if (!result) throw new ApiError(404, 'No preview available');
+        if (!result) return null;
 
         await Bun.write(cacheFile, result.data);
         return { type: 'image', data: result.data, contentType: 'image/webp' };
     }
 
-    throw new ApiError(404, 'No preview available');
+    return null;
 }
 
-export async function getTextPreview(mount: Mount, drivePath: DrivePath, baseUrl?: string): Promise<TextPreviewResult> {
-    const result =
-        drivePath.type === 'doc'
-            ? await getCollabPreviewData(mount, drivePath, baseUrl)
-            : await getTextPreviewData(mount, drivePath);
-    if (!result) throw new ApiError(404, 'No preview available');
-    return result;
+export async function getTextPreview(
+    mount: Mount,
+    drivePath: DrivePath,
+    baseUrl?: string,
+): Promise<TextPreviewResult | null> {
+    if (drivePath.type === 'doc') return getCollabPreviewData(mount, drivePath, baseUrl);
+    return getTextPreviewData(mount, drivePath);
 }
 
 async function getTextPreviewData(mount: Mount, drivePath: DrivePath): Promise<TextPreviewResult | null> {

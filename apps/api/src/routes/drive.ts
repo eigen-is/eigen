@@ -201,6 +201,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             const embedUrl = `/drive/${params.ownerId}/${params.mountId}/file/${params.pathId}/embed/preview`;
             const result = await getScreenPreview(mount, path, embedUrl);
+            if (!result) throw new ApiError(404, 'No preview available');
             if (result.type === 'redirect') {
                 set.redirect = result.url;
                 return;
@@ -217,6 +218,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             const drive = await getSharedDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             const result = await getTextPreview(mount, path, new URL(request.url).origin);
+            if (!result) throw new ApiError(404, 'No preview available');
             setCacheHeaders(set, 60);
             return result;
         },
