@@ -79,7 +79,7 @@ function TrashRoute() {
                                 <TableBody>
                                     {trashedItems.map((item) => (
                                         <TableRow key={item.id} className="eigen-list-item group">
-                                            <TableCell>
+                                            <TableCell className="relative">
                                                 <div className="flex items-center max-w-full overflow-hidden">
                                                     {getFileIcon(item.mimeType, item.type, {
                                                         className: 'h-4 w-4 mr-2 text-muted-foreground flex-shrink-0',
@@ -90,24 +90,24 @@ function TrashRoute() {
                                                     <span className="truncate max-w-[calc(100%-1.5rem)]">
                                                         {stripEigenExtension(item.name)}
                                                     </span>
-                                                    <div className="invisible group-hover:visible flex items-center ml-auto pl-2 flex-shrink-0">
-                                                        <TooltipButton
-                                                            icon={RotateCcw}
-                                                            tooltipText="Restore"
-                                                            className="h-7 w-7"
-                                                            onClick={() => restorePath.mutate(item.id)}
-                                                        />
-                                                        <TooltipButton
-                                                            icon={Trash2}
-                                                            tooltipText="Delete permanently"
-                                                            className="h-7 w-7 text-destructive hover:text-destructive"
-                                                            onClick={() => {
-                                                                setDeleteItemId(item.id);
-                                                                setDeleteItemName(item.name);
-                                                                setDeleteItemOpen(true);
-                                                            }}
-                                                        />
-                                                    </div>
+                                                </div>
+                                                <div className="invisible group-hover:visible absolute right-2 top-1/2 -translate-y-1/2 flex items-center bg-inherit">
+                                                    <TooltipButton
+                                                        icon={RotateCcw}
+                                                        tooltipText="Restore"
+                                                        className="h-7 w-7"
+                                                        onClick={() => restorePath.mutate(item.id)}
+                                                    />
+                                                    <TooltipButton
+                                                        icon={Trash2}
+                                                        tooltipText="Delete permanently"
+                                                        className="h-7 w-7 text-destructive hover:text-destructive"
+                                                        onClick={() => {
+                                                            setDeleteItemId(item.id);
+                                                            setDeleteItemName(item.name);
+                                                            setDeleteItemOpen(true);
+                                                        }}
+                                                    />
                                                 </div>
                                             </TableCell>
                                             <TableCell className="hidden sm:table-cell text-muted-foreground">
