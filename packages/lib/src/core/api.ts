@@ -91,6 +91,9 @@ export const getDriveFileUploadUrl = (ownerId: string, mountId: string, pathId: 
     `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}`;
 export const getDriveDownloadUrl = (ownerId: string, mountId: string, pathId: string) =>
     `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/download`;
+export const getDriveExportUrl = (ownerId: string, mountId: string, pathId: string, format: string) =>
+    `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/export/${format}`;
+
 export const getDriveEmbedUrl = (ownerId: string, mountId: string, pathId: string, fileName: string) =>
     `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/embed/${fileName}`;
 export const getDrivePreviewUrl = (ownerId: string, mountId: string, pathId: string) =>

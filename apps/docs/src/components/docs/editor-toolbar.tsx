@@ -2,6 +2,7 @@ import { formatForDisplay } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
 import { yDocToProsemirrorJSON } from '@tiptap/y-tiptap';
 import { EIGEN_FONTS, getFontFamily } from '@workspace/lib/constants/fonts';
+import { useExportDocument } from '@workspace/lib/drive';
 import { useMediaQuery } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Toolbar, TooltipButton } from '@workspace/ui';
@@ -20,6 +21,7 @@ import {
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { DriveCreateDoc } from '@workspace/ui/components/layout/drive/drive-create-doc';
+import { ExportProgressDialog } from '@workspace/ui/components/layout/drive/export-progress-dialog';
 import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker';
 import { FontPicker } from '@workspace/ui/components/layout/media/font-picker';
 import { DocumentModeButton } from '@workspace/ui/components/layout/toolbar/document-mode-button';
@@ -39,6 +41,7 @@ import {
     ChevronDown,
     Code,
     CodeXml,
+    Download,
     Heading1,
     Heading2,
     Heading3,
@@ -96,6 +99,7 @@ export const EditorToolbar = ({
     const [linkDialogOpen, setLinkDialogOpen] = useState(false);
     const [textColorOpen, setTextColorOpen] = useState(false);
     const [highlightColorOpen, setHighlightColorOpen] = useState(false);
+    const { exportDocument, isExporting } = useExportDocument();
     const imageInputRef = useRef<HTMLInputElement>(null);
     const isMobile = useMediaQuery('(max-width: 1200px)');
 
@@ -126,6 +130,8 @@ export const EditorToolbar = ({
         editor.chain().focus().clearNodes().unsetAllMarks().run();
     };
 
+    const handleExport = (format: string) => exportDocument(path.ownerId, path.mountId, path.id, format);
+
     const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file && onImageUpload) {
@@ -155,6 +161,16 @@ export const EditorToolbar = ({
                     createLabel="New document"
                     CreateDialog={DriveCreateDoc}
                 >
+                    <DropdownMenuSub>
+                        <DropdownMenuSubTrigger>
+                            <Download className="h-4 w-4 mr-2" /> Export
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent>
+                            <DropdownMenuItem onClick={() => handleExport('docx')}>Export as DOCX</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleExport('pdf')}>Export as PDF</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleExport('html')}>Export as HTML</DropdownMenuItem>
+                        </DropdownMenuSubContent>
+                    </DropdownMenuSub>
                     <DropdownMenuItem onClick={printDocument}>
                         <Printer className="h-4 w-4 mr-2" /> Print
                     </DropdownMenuItem>
@@ -716,6 +732,8 @@ export const EditorToolbar = ({
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            <ExportProgressDialog open={isExporting} />
         </Toolbar>
     );
 };
