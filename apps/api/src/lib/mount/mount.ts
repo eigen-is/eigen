@@ -198,7 +198,7 @@ export class Mount {
         return results.map((r) => this.toDrivePath(r));
     }
 
-    private async listFolderAll(parentId: string): Promise<DrivePath[]> {
+    async listFolderAll(parentId: string): Promise<DrivePath[]> {
         const results = await this.db.select().from(paths).where(eq(paths.parentId, parentId)).all();
         return results.map((r) => this.toDrivePath(r));
     }
