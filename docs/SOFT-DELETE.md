@@ -76,7 +76,8 @@ Order: **storage rename first, DB update second**. If a crash occurs between the
 - File is physically in `.trash/` but DB still says it is active at the old path
 - Next access resolves the old storage path → 404 from storage
 - Recovery: on `mount.init()`, detect items with `trashedAt` set whose `.trash/` file does not exist,
-  and check the original path (from `trashedFrom` + `details.trashedFile`) — retry the rename if found
+  and check the original path (computable from `trashedFrom` parent chain + `name`) — retry the rename
+  if found
 
 This is a rare edge case (process crash during the brief window) and the recovery pass is best-effort.
 
@@ -165,8 +166,7 @@ metadata stored separately for restore.
 1. Current on-disk path: `data/projects/report.pdf`
 2. Move to: `data/.trash/{pathId}.{ext}` via `storage.rename()` (flat namespace, no collisions possible)
 3. Update `file` column to `.trash/{pathId}.{ext}`
-4. Store original `file` value in `details.trashedFile` (**merge** with existing details, don't replace)
-5. Change `parentId` to root folder
+4. Change `parentId` to root folder
 
 Since `resolveStoragePath()` walks the parent chain and concatenates `file` values, the resolved path
 becomes: root (skipped) -> `.trash/{pathId}.{ext}` = `.trash/{pathId}.{ext}`. This correctly points to
@@ -176,24 +176,23 @@ becomes: root (skipped) -> `.trash/{pathId}.{ext}` = `.trash/{pathId}.{ext}`. Th
 1. Current on-disk path: `data/projects/my-folder/`
 2. Move to: `data/.trash/{pathId}/` via `storage.rename()`
 3. Update the folder's `file` column to `.trash/{pathId}`
-4. Store original `file` value in `details.trashedFile`
-5. Change `parentId` to root folder
-6. **Descendants need no `file` column changes** — their `parentId` chain still points through this folder,
+4. Change `parentId` to root folder
+5. **Descendants need no `file` column changes** — their `parentId` chain still points through this folder,
    and `resolveStoragePath()` now resolves through root -> `.trash/{pathId}` -> child, producing
    `.trash/{pathId}/child-name`. This correctly matches the physical location after the folder was moved
 
+No need to store the original `file` value separately — for path-based storage, `file` and `name` are
+always kept in sync (`createFile` sets `file = name`, `updatePath` updates both on rename). Since `name`
+is not changed during trash, the original `file` value can be recovered from `name` on restore.
+
 ### Restore on path-based storage
 
-1. Read original `file` value from `details.trashedFile`
-2. Compute target path: resolve the target parent's storage path, append the original `file` value
-3. Move from `.trash/{pathId}` back to the target location via `storage.rename()`
-4. Restore the `file` column from `details.trashedFile`
-5. Remove `trashedFile` key from `details` (keep other details like `originalName`, `width`, `height`
-   intact — use `const { trashedFile, ...rest } = details; updatePath(id, { details: rest })`)
+1. Compute target path: resolve the target parent's storage path, append `name`
+2. Move from `.trash/{pathId}` back to the target location via `storage.rename()`
+3. Set `file = name` (restores the original storage filename segment)
 
-**Important**: the `file` column update for path-based storage must use a direct DB update, not
-`updatePath()` with a `name` change — `validateName()` rejects names containing `/`, which
-`.trash/{pathId}` would contain.
+**Important**: the `file` column update on trash must use a direct DB update, not `updatePath()` with a
+`name` change — `validateName()` rejects names containing `/`, which `.trash/{pathId}` would contain.
 
 ### Key-based and S3 storage
 
@@ -475,16 +474,13 @@ one `describe` block. Tests use the existing test helpers (test user, test home,
 
 - trash a file → moves to `data/.trash/{pathId}.ext` on disk
 - trash a file → `file` column updated to `.trash/{pathId}.ext`
-- trash a file → `details.trashedFile` stores original file value
-- trash a file → existing `details` fields (originalName, width, height) preserved
 - trash a folder → moves to `data/.trash/{pathId}/` on disk
 - trash a folder → descendants' `file` columns unchanged
 - `resolveStoragePath` for trashed file → resolves to `.trash/{pathId}.ext`
 - `resolveStoragePath` for child of trashed folder → resolves to `.trash/{folderId}/child`
 - trash file, create new file with same name → no disk collision, both accessible
 - restore file → moves back from `.trash/` to original location
-- restore file → `file` column restored from `details.trashedFile`
-- restore file → `details.trashedFile` cleared, other details preserved
+- restore file → `file` column restored to `name` value
 - restore folder → moves back, descendants resolve to original paths
 - permanent delete → removes from `.trash/` directory
 - `.trash/` directory created during `mount.init()`
