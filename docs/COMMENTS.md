@@ -32,12 +32,14 @@ Comments exist but are minimal:
 ## Design Goals
 
 1. **Floating "Add comment" button** — appears on text selection (like Google Docs), not buried in a toolbar menu
-2. **Shared `<CommentThread>`** — renders a single comment thread with resolve/reopen, used both inline (popover when
-   clicking a highlight) and in the side panel
-3. **Resolved comments hidden in doc** — resolved `CommentMark`s get a different style (no highlight) or are hidden
-4. **Shared `<CommentSidePanel>`** — opens as a right `Column` (350px), shows all comments with filters
+2. **Shared `<CommentThread>`** — composes existing `ChatMessageList`/`ChatMessageInput` with resolve/reopen, used
+   both in inline popovers (clicking a highlight) and in the comment panel
+3. **Resolved comments hidden in doc** — resolved `CommentMark`s get transparent styling via CSS decorations
+4. **Shared `<CommentPanel>`** — uses `PropertiesPanel` overlay pattern (same as figure/table panels), consistent
+   across docs and slides
 5. **Filter by current revision** — only show comments whose `chatName` exists in the current Yjs document state
 6. **Reusable across apps** — docs first, then slides/sheets/stickies with minimal per-app wiring
+7. **shadcn throughout** — all UI uses shadcn primitives (`Popover`, `Dialog`, `Tabs`, `Select`, `Button`, etc.)
 
 ## Architecture
 
