@@ -14,6 +14,7 @@ const settingsStore = new JsonStore<ServerSettings>(serverFs, 'settings.json', {
         defaultMountMaxSizeMB: 500,
         maxUploadSizeMB: 35,
         maxBatchUploadSizeMB: 10,
+        trashRetentionDays: 30,
     },
     defaults: {
         mount: {

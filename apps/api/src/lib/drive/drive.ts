@@ -902,6 +902,7 @@ export default class Drive {
             visibility: (r.visibility ?? 'private') as DriveVisibility,
             sharingRestricted: !!r.sharingRestricted,
             details: r.details ?? null,
+            trashedAt: null,
             createdAt: r.createdAt ?? new Date(),
             updatedAt: r.updatedAt ?? new Date(),
         };

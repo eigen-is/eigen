@@ -3,7 +3,7 @@ import * as schema from './schema';
 
 export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
     name: 'mount-metadata',
-    currentVersion: 1,
+    currentVersion: 2,
     schema,
     migrations: [
         {
@@ -55,6 +55,21 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
                 CREATE INDEX IF NOT EXISTS idx_paths_to_labels_pathId ON paths_to_labels(pathId);
                 CREATE INDEX IF NOT EXISTS idx_paths_to_labels_labelId ON paths_to_labels(labelId);
             `),
+        },
+        {
+            version: 2,
+            up: (db) =>
+                db.exec(`
+                    ALTER TABLE paths ADD COLUMN trashedAt INTEGER;
+                    ALTER TABLE paths ADD COLUMN trashedFrom TEXT;
+
+                    CREATE INDEX IF NOT EXISTS idx_paths_trashed_from
+                        ON paths(trashedFrom, trashedAt) WHERE trashedFrom IS NOT NULL;
+
+                    DROP INDEX IF EXISTS idx_paths_parentId;
+                    CREATE INDEX IF NOT EXISTS idx_paths_parent_trash
+                        ON paths(parentId, trashedAt);
+                `),
         },
     ],
 };
