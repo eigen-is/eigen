@@ -17,7 +17,11 @@ export function escapeHtml(text: string): string {
         .replace(/>/g, '&gt;');
 }
 
-type Lowlight = { registered(lang: string): boolean; highlight(lang: string, code: string): HastNode };
+type Lowlight = {
+    registered(lang: string): boolean;
+    highlight(lang: string, code: string): HastNode;
+    highlightAuto(code: string): HastNode;
+};
 
 /**
  * Renders a codeBlock node with lowlight syntax highlighting.
@@ -31,7 +35,9 @@ export function renderCodeBlockNode(
     const code = node.textContent ?? '';
 
     const highlighted =
-        language && lowlight.registered(language) ? hastToHtml(lowlight.highlight(language, code)) : escapeHtml(code);
+        language && lowlight.registered(language)
+            ? hastToHtml(lowlight.highlight(language, code))
+            : hastToHtml(lowlight.highlightAuto(code));
 
     const langClass = language ? ` language-${escapeHtml(language)}` : '';
     return `<pre><code class="hljs${langClass}">${highlighted}</code></pre>`;

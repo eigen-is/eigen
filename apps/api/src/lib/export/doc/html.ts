@@ -241,7 +241,7 @@ const PRINT_EXTRAS = `
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 ul, ol { list-style: none; }
 img, svg { display: block; max-width: 100%; }
-input, button, textarea, select { font: inherit; }
+input, button, textarea, select { font: inherit; color: inherit; background-color: transparent; border-radius: 0; }
 a { color: inherit; text-decoration: inherit; }
 table { border-collapse: collapse; border-spacing: 0; }
 
