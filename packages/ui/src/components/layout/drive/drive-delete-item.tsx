@@ -48,17 +48,18 @@ export function DriveDeleteItem({ paths, open, onOpenChange, onAfterAction }: Dr
     };
 
     const description = isSingle
-        ? 'Are you sure you want to delete'
-        : `Are you sure you want to delete ${paths.length} items`;
+        ? 'This will move the item to trash. You can restore it later from the trash.'
+        : `This will move ${paths.length} items to trash. You can restore them later from the trash.`;
 
     return (
         <DeleteDialog
             open={open}
             onOpenChange={onOpenChange}
-            title={isSingle ? 'Delete Item' : `Delete ${paths.length} Items`}
+            title={isSingle ? 'Move to trash' : `Move ${paths.length} items to trash`}
             description={description}
             itemName={isSingle ? first?.name : undefined}
             onDelete={handleDelete}
+            deleteText="Move to trash"
         />
     );
 }
