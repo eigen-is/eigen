@@ -158,6 +158,15 @@ export function ServerSettingsPage() {
                             onChange={(e) => updateQuota('maxBatchUploadSizeMB', e.target.valueAsNumber)}
                         />
                     </div>
+                    <div className="space-y-1.5">
+                        <Label>Trash Retention (days)</Label>
+                        <Input
+                            type="number"
+                            min={1}
+                            value={current.quotas.trashRetentionDays}
+                            onChange={(e) => updateQuota('trashRetentionDays', e.target.valueAsNumber)}
+                        />
+                    </div>
                 </div>
             </div>
 
