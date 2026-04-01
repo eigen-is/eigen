@@ -1,9 +1,10 @@
 # Comments — Redesign Plan
 
 > **TLDR**: Replace the current modal-based comment system with inline creation (floating "Add comment" button on text
-> selection), a shared `<CommentThread>` component (with resolve/reopen), and a shared `<CommentSidePanel>` that opens
-> as a right Column. All shared UI lives in `packages/ui`, all hooks in `packages/lib`. App-specific code is limited to
-> extracting active comment IDs from the Yjs document and wiring the side panel into the app's `ColumnLayout`.
+> selection), a shared `<CommentThread>` component (reusing `ChatMessageList`/`ChatMessageInput`, with resolve/reopen),
+> and a shared `<CommentPanel>` using the same `PropertiesPanel` overlay pattern as figure/table panels. All shared UI
+> lives in `packages/ui` (shadcn components throughout), all hooks in `packages/lib`. App-specific code is limited to
+> extracting active comment IDs + anchor texts from the Yjs document.
 
 ## Current State
 
@@ -44,9 +45,9 @@ Comments exist but are minimal:
 
 ```
 packages/ui/src/components/layout/comments/
-├── comment-thread.tsx         # Single comment thread (messages + resolve + reply input)
-├── comment-side-panel.tsx     # Full panel: header, filters, comment list
-├── comment-creation.tsx       # Inline comment creation (popover with textarea)
+├── comment-thread.tsx         # Single comment thread (ChatMessageList + resolve + reply)
+├── comment-panel.tsx          # Full panel: header, filters, comment list (uses PropertiesPanel pattern)
+├── comment-creation.tsx       # Inline comment creation (shadcn Popover with textarea)
 └── add-comment-button.tsx     # Floating button shown on text selection
 
 packages/lib/src/core/chat/hooks/
@@ -55,9 +56,33 @@ packages/lib/src/core/chat/hooks/
 
 apps/docs/src/components/docs/
 ├── extensions/comment-mark.ts # Update: add resolved styling, selection button positioning
-├── editor.tsx                 # Update: wire side panel Column, remove modal dialogs
+├── editor.tsx                 # Update: wire comment panel as overlay (same as figure/table), remove modals
 └── comment-dialog.tsx         # DELETE — replaced by shared components
 ```
+
+### Design Principle: Consistency with PropertiesPanel
+
+The comment panel follows the **same pattern** as the figure/table properties panels in docs and the
+slide properties panel in slides:
+
+- Uses `PropertiesPanel` from `packages/ui/components/layout/properties-panel/` as the container
+- In docs: absolute-positioned overlay inside the Column, slides in/out with `translate-x` transition
+- In slides: flex sibling inside the Column content area
+- Same width (`w-64` default, can be overridden via `className`), border-left, `ScrollArea`
+
+The comment panel is essentially another properties panel — it appears in the same position, with the same
+animation, and the same visual treatment. When a user selects a figure → figure panel shows. When a user
+clicks the comment toolbar icon → comment panel shows (in the same slot).
+
+### Shared Chat Components (Already Exist)
+
+Comment threads reuse the existing shared chat components in `packages/ui/components/layout/chat/`:
+
+- `ChatMessageList` — already used by `comment-dialog.tsx` (docs) and `card-dialog.tsx` (stickies)
+- `ChatMessageInput` — same, shared across chat, docs, stickies
+
+The `CommentThread` component composes these, adding resolve/reopen buttons and compact mode.
+The `resolveChatId` + `useChatRoom` pattern is already established in stickies `CardChat` component.
 
 ### What Each App Provides
 
@@ -134,8 +159,8 @@ the A4 canvas and the right edge), so it doesn't interfere with content.
 
 ### 2. Inline Comment Creation
 
-When the user clicks the floating button (or presses `Cmd+Alt+M`), a small popover appears anchored to the
-selection with a textarea and submit button. Much lighter than the current full-screen dialog.
+When the user clicks the floating button (or presses `Cmd+Alt+M`), a shadcn `Popover` appears anchored to the
+selection with a `Textarea` and `Button`. Much lighter than the current full-screen `Dialog`.
 
 ```
 ┌────────────────────────────────┐
@@ -143,9 +168,12 @@ selection with a textarea and submit button. Much lighter than the current full-
 │ │ Write a comment...         │ │
 │ │                            │ │
 │ └────────────────────────────┘ │
-│                    [Cancel] [Comment] │
+│               [Cancel] [Comment] │
 └────────────────────────────────┘
 ```
+
+Uses shadcn components: `Popover`, `PopoverContent`, `Textarea`, `Button` — same as the color picker popovers
+already used in `EditorToolbar`.
 
 **Props:**
 ```typescript
@@ -162,13 +190,16 @@ type CommentCreationProps = {
 **Location**: `packages/ui/src/components/layout/comments/comment-creation.tsx`
 
 On submit: creates chat (reuses `useCreateChat`), posts first message, calls `onCreated(chatName)` so the app
-can apply the mark. Same flow as current `CreateCommentDialog` but without the modal.
+can apply the mark. Same flow as current `CreateCommentDialog` but using a `Popover` instead of a `Dialog`.
 
 ### 3. CommentThread
 
-Shared component for rendering a single comment's message thread. Used in two places:
-1. **Inline popover** — when clicking a comment highlight in the doc (replaces `ViewCommentDialog`)
-2. **Inside the side panel** — each comment in the list is a `CommentThread`
+Shared component for rendering a single comment's message thread. Follows the same `resolveChatId` →
+`useChatRoom` pattern as stickies `CardChat` (`apps/stickies/src/components/stickies/card-dialog.tsx`).
+
+Used in two places:
+1. **Inline popover** (shadcn `Popover`) — when clicking a comment highlight in the doc (replaces `ViewCommentDialog`)
+2. **Inside the comment panel** — each comment in the list is a `CommentThread` in compact mode
 
 ```typescript
 type CommentThreadProps = {
@@ -176,31 +207,38 @@ type CommentThreadProps = {
     mountId: string;
     chatName: string;
     status: 'open' | 'resolved';
-    /** Compact mode for side panel (fewer messages shown, no full chat input) */
+    anchorText?: string;
+    /** Compact mode for panel (fewer messages shown, simplified input) */
     compact?: boolean;
     onResolve?: () => void;
     onReopen?: () => void;
-    onDelete?: () => void;
     onScrollToAnchor?: () => void;
     className?: string;
 };
 ```
 
-**Features:**
-- Shows message thread via `ChatMessageList` (or a lighter variant in compact mode)
-- Resolve button (checkmark) — calls `useResolveComment` mutation
-- Reopen button — appears on resolved comments
-- Reply input — `ChatMessageInput` (full in popover, simplified in side panel)
+**Internally**: resolves `chatName` → `chatId` via `useMediaResolver().resolveChatId()`, then uses `useChatRoom`
+to get messages and send handler. Renders:
+
+- Anchor text quote (if provided) — styled like the existing `CreateCommentDialog` quote block
+- `ChatMessageList` from `packages/ui/components/layout/chat/` (existing shared component)
+- `ChatMessageInput` from `packages/ui/components/layout/chat/` (existing shared component)
+- Resolve `Button` (shadcn, `variant="ghost"`, checkmark icon) — calls `useResolveComment` mutation
+- Reopen `Button` — appears on resolved comments
 - "Go to text" link — calls `onScrollToAnchor` to scroll the editor to the highlighted text
+
+In compact mode: shows only the last few messages and a simplified reply input.
 
 **Location**: `packages/ui/src/components/layout/comments/comment-thread.tsx`
 
-### 4. CommentSidePanel
+### 4. CommentPanel
 
-Opens as a right `Column` (same pattern as drive detail panel). Triggered by the comment icon in the toolbar.
+An absolute-positioned overlay panel — **same pattern as `FigurePropertiesPanel` / `TablePropertiesPanel`** in
+docs. Uses `PropertiesPanel` as its container, slides in/out with the same `translate-x` transition. Triggered
+by the comment icon in the toolbar.
 
 ```typescript
-type CommentSidePanelProps = {
+type CommentPanelProps = {
     ownerId: string;
     mountId: string;
     containerId: string;
@@ -209,39 +247,41 @@ type CommentSidePanelProps = {
     activeCommentIds: Set<string>;
     /** Map of chatName → quoted anchor text, extracted from the doc by the app */
     anchorTexts: Map<string, string>;
-    onClose: () => void;
     onScrollToComment?: (chatName: string) => void;
 };
 ```
 
-**Layout:**
-```
-┌──────────────────────────────────┐
-│ Comments                      ✕  │
-├──────────────────────────────────┤
-│ [All comments] [For you]        │
-│ ┌─ Filter: [Open ▾] ──────────┐ │
-│                                  │
-│ ┌──────────────────────────────┐ │
-│ │ "The quick brown fox..."     │ │
-│ │ Alice · 2 min ago        ✓  │ │
-│ │ This needs rewording         │ │
-│ │ [Reply...]                   │ │
-│ └──────────────────────────────┘ │
-│                                  │
-│ ┌──────────────────────────────┐ │
-│ │ "jumps over the lazy dog"   │ │
-│ │ Bob · 1 hour ago         ✓  │ │
-│ │ Great paragraph!             │ │
-│ │ [Reply...]                   │ │
-│ └──────────────────────────────┘ │
-└──────────────────────────────────┘
+**Rendering** (uses `PropertiesPanel` + `PropertySection` for consistent styling):
+```tsx
+<PropertiesPanel className="w-80"> {/* wider than default w-64 to fit comment threads */}
+    <div className="px-3 py-2 border-b flex items-center justify-between">
+        <span className="text-sm font-medium">Comments</span>
+        <div className="flex gap-1">
+            <TooltipButton icon={X} tooltipText="Close" onClick={onClose} />
+        </div>
+    </div>
+
+    {/* Tab bar: All / For you — using shadcn Tabs */}
+    <Tabs defaultValue="all">
+        <TabsList className="...">
+            <TabsTrigger value="all">All comments</TabsTrigger>
+            <TabsTrigger value="mine">For you</TabsTrigger>
+        </TabsList>
+        {/* Status filter: shadcn Select */}
+        <Select defaultValue="open">...</Select>
+    </Tabs>
+
+    {/* Comment list — each item is a compact CommentThread */}
+    {filteredComments.map(comment => (
+        <CommentThread key={comment.chatName} compact ... />
+    ))}
+</PropertiesPanel>
 ```
 
 **Tabs / Filters:**
 - **All comments**: all open comments whose `chatName` is in `activeCommentIds`
 - **For you**: same, filtered to comments where `mentions[]` includes `currentUserEmail`
-- **Status filter dropdown**: Open (default), Resolved, All
+- **Status filter dropdown** (shadcn `Select`): Open (default), Resolved, All
   - "Open" = `status === 'open'` AND `chatName` in `activeCommentIds`
   - "Resolved" = `status === 'resolved'` AND `chatName` in `activeCommentIds`
   - "All" = any status, `chatName` in `activeCommentIds`
@@ -254,10 +294,13 @@ All filtering is client-side. `useComments()` returns the full list; the panel i
 - Author avatar + name + relative time
 - First message snippet (from `lastMessageSnippet`)
 - Reply count (from `messageCount`)
-- Resolve button (checkmark)
+- Resolve button (checkmark) — uses shadcn `Button` with `variant="ghost"`
 - Click → expand to full `CommentThread` inline, or scroll to anchor in doc
 
-**Location**: `packages/ui/src/components/layout/comments/comment-side-panel.tsx`
+**All UI elements use shadcn components**: `Tabs`/`TabsList`/`TabsTrigger`, `Select`, `Button`, `ScrollArea`
+(via `PropertiesPanel`), `Separator`, `Badge` for counts.
+
+**Location**: `packages/ui/src/components/layout/comments/comment-panel.tsx`
 
 ### 5. Resolved Comment Visibility
 
@@ -294,58 +337,63 @@ update when a collaborator resolves/reopens a comment (SSE → query refetch →
 
 ### Context: Current Layout
 
-`TiptapEditor` currently renders a bare `<Column id="doc-editor" width="w-full">` inside a fragment (`<>...</>`).
-There is **no** `ColumnLayout` in the parent route chain — the doc route (`_auth.doc.$ownerId.$mountId.$pathId.tsx`)
-wraps the editor in a plain `<div className="flex-1 overflow-hidden">`. This means we can safely introduce a
-`ColumnLayout` inside `TiptapEditor` without nesting conflicts.
+`TiptapEditor` renders a `<Column>` containing a `relative overflow-hidden` div. Inside that div:
+- The scrollable A4 canvas with the tiptap editor
+- An **absolute-positioned overlay** for figure/table `PropertiesPanel` (slides in from right)
 
-The `MediaResolverProvider` wraps `TiptapEditor` in `CollaborativeEditor`, so both the editor Column and the
-comment panel Column will have access to `useMediaResolver()` (needed for `resolveChatId`).
+The comment panel uses **exactly the same pattern** — another absolute overlay in the same container. The
+`sidebarContext` state already switches between `'document' | 'figure' | 'table'`; we extend it to include
+`'comments'`. Only one panel shows at a time (selecting a figure closes comments, opening comments deselects
+any active panel).
 
-The figure/table property panels are absolute-positioned overlays inside the editor Column. When the comment
-side panel is open, these overlays remain inside the editor Column and do not conflict. If both a property panel
-and the comment panel are visible simultaneously, they occupy separate space (overlay inside editor vs. Column
-to the right).
+The `MediaResolverProvider` wraps `TiptapEditor` in `CollaborativeEditor`, so the comment panel has access
+to `useMediaResolver()` for `resolveChatId`.
 
 ### Updated editor.tsx Layout
 
 ```tsx
-// Current: bare <Column> with fragment wrapper and modal dialogs
-// New: <ColumnLayout> with editor Column + optional comment Column, no modals
+// Current sidebar states: 'document' | 'figure' | 'table'
+// New: 'document' | 'figure' | 'table' | 'comments'
+const [sidebarContext, setSidebarContext] = useState<'document' | 'figure' | 'table' | 'comments'>('document');
 
-<ColumnLayout mobileColumn={commentPanelOpen ? 'comments' : 'doc-editor'}>
-    <Column id="doc-editor" width="flex" toolbar={<EditorToolbar ... />}>
-        {/* existing editor content + figure/table property overlays */}
-        {/* + floating add-comment button */}
-        {/* + inline comment creation popover */}
-        {/* + inline comment view popover (replaces ViewCommentDialog) */}
-    </Column>
+const showSidebar = isWide && sidebarContext !== 'document';
 
-    {commentPanelOpen && (
-        <Column
-            id="comments"
-            width="350px"
-            onBack={() => setCommentPanelOpen(false)}
-            toolbar={<Toolbar><span className="font-semibold text-sm">Comments</span>
-                       <TooltipButton icon={X} onClick={close} /></Toolbar>}
-        >
-            <CommentSidePanel
-                ownerId={path.ownerId}
-                mountId={path.mountId}
-                containerId={path.id}
-                currentUserEmail={auth.user!.email}
-                activeCommentIds={activeCommentIds}
-                anchorTexts={anchorTexts}
-                onClose={() => setCommentPanelOpen(false)}
-                onScrollToComment={scrollToComment}
-            />
-        </Column>
-    )}
-</ColumnLayout>
+// Inside the Column's relative container (same pattern as existing panels):
+<Column id="doc-editor" width="w-full" toolbar={<EditorToolbar ... />}>
+    <div className="h-full relative overflow-hidden">
+        {/* scrollable A4 canvas (unchanged) */}
+        <div ref={scrollContainerRef} className="h-full w-full overflow-y-scroll bg-muted p-4">
+            {/* editor content */}
+        </div>
+
+        {/* Existing figure/table panels + new comment panel — same absolute overlay slot */}
+        {isWide && (
+            <div className={`absolute inset-y-0 right-0 transition-transform duration-200 ease-in-out
+                            ${showSidebar ? 'translate-x-0' : 'translate-x-full'}`}>
+                {sidebarContext === 'comments' ? (
+                    <CommentPanel
+                        ownerId={path.ownerId}
+                        mountId={path.mountId}
+                        containerId={path.id}
+                        currentUserEmail={auth.user!.email}
+                        activeCommentIds={activeComments.ids}
+                        anchorTexts={activeComments.anchorTexts}
+                        onClose={() => setSidebarContext('document')}
+                        onScrollToComment={scrollToComment}
+                    />
+                ) : sidebarContext === 'figure' ? (
+                    <FigurePropertiesPanel ... />
+                ) : sidebarContext === 'table' ? (
+                    <TablePropertiesPanel ... />
+                ) : null}
+            </div>
+        )}
+    </div>
+</Column>
 ```
 
-Note: the editor Column width changes from `w-full` (current) to `flex`. With `ColumnLayout`, `flex` means
-"take remaining space" (`flex: 1 1 auto`), which is correct when the comment panel takes 350px.
+**No `ColumnLayout` change needed** — the comment panel lives in the same absolute overlay as the existing
+panels. No Column width changes, no nesting concerns. The `Column` stays `width="w-full"` as before.
 
 ### Active Comments from Tiptap
 
@@ -442,18 +490,19 @@ function scrollToComment(editor: Editor, chatName: string) {
 
 ## Mobile Considerations
 
-The `ColumnLayout` handles mobile automatically via `mobileColumn` — when the comment panel is open on mobile,
-it replaces the editor view (full-screen panel with back button). This matches the drive detail pattern.
+The comment panel uses the same `isWide` media query check as the existing figure/table panels — it only
+appears on screens wider than 1200px. This is the established pattern (docs editor already hides property
+panels on narrow screens).
 
 **Floating "Add comment" button**: Not practical on mobile — text selection is OS-controlled and positioning a
 floating button in the margin doesn't work on narrow screens. On mobile, the toolbar button remains the primary
 way to add comments (requires text selection first, same as current behavior).
 
-**Inline popovers**: Comment creation and view popovers should render as bottom sheets or full-width panels on
-mobile instead of anchored popovers. Use `isMobile` from `useLayout()` to switch rendering mode.
+**Inline popovers**: shadcn `Popover` works on mobile but should use `align="center"` and a wider trigger area.
+For comment creation, fall back to shadcn `Dialog` on mobile (use `isMobile` from `useLayout()` to switch).
 
-**Initial implementation**: Desktop-first. Mobile support for the side panel comes free via `ColumnLayout`.
-Mobile-specific popover rendering can be deferred to a follow-up.
+**Initial implementation**: Desktop-first. Mobile-specific rendering can be deferred — the existing pattern
+of hiding panels on narrow screens is acceptable for now.
 
 ## Implementation Order
 
@@ -463,17 +512,18 @@ Mobile-specific popover rendering can be deferred to a follow-up.
 - Uses existing `useComments`, `useResolveComment` hooks
 - Test in isolation
 
-### Step 2: CommentSidePanel
-- Create `packages/ui/src/components/layout/comments/comment-side-panel.tsx`
-- Tabs (All / For you), status filter dropdown
-- Accepts `activeCommentIds` prop for revision-aware filtering
+### Step 2: CommentPanel
+- Create `packages/ui/src/components/layout/comments/comment-panel.tsx`
+- Uses `PropertiesPanel` as container (same as figure/table panels)
+- shadcn `Tabs` (All / For you), shadcn `Select` for status filter
+- Accepts `activeCommentIds` + `anchorTexts` props for revision-aware filtering
 - Each item renders `CommentThread` in compact mode
 
 ### Step 3: Wire into docs editor
-- Add `ColumnLayout` wrapper to `editor.tsx`
-- Add comment panel `Column` (conditional on `commentPanelOpen` state)
-- Implement `useActiveCommentIds` hook
-- Update toolbar button to toggle panel
+- Extend `sidebarContext` from `'document' | 'figure' | 'table'` to include `'comments'`
+- Render `CommentPanel` in existing absolute overlay slot (same `div` as figure/table panels)
+- Implement `useActiveComments` hook (debounced, returns ids + anchorTexts)
+- Update toolbar button to toggle comment panel
 - Pass resolved IDs to CommentMark for CSS-based hiding
 
 ### Step 4: Floating "Add comment" button + inline creation
@@ -502,28 +552,32 @@ Mobile-specific popover rendering can be deferred to a follow-up.
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| Side panel vs overlay | `Column` (350px) | Matches drive detail pattern, responsive, mobile-ready |
-| Comment creation UI | Floating button + popover | Lighter than modal, matches Google Docs UX |
+| Panel layout | Absolute overlay using `PropertiesPanel` | Same pattern as figure/table panels in docs and slides — consistent, no layout changes |
+| Comment creation UI | Floating button + shadcn `Popover` | Lighter than `Dialog`, matches Google Docs UX, uses existing popover pattern from toolbar |
+| Comment viewing | shadcn `Popover` on highlight click | Replaces `Dialog`-based `ViewCommentDialog`, inline experience |
 | Resolved visibility | CSS decoration, not Yjs | Keeps collaborative doc clean, visual-only change |
 | Filtering strategy | Client-side intersection | Yjs doc already loaded, comment list is small (<100) |
 | Anchor text in panel | `anchorTexts` map prop, extracted by app | App walks doc (debounced), passes map to shared panel |
 | Comment styles location | Shared stylesheet in packages/ui | Consistent with project convention for shared prose/code styles |
 | Doc traversal performance | Debounced 200ms | Fires on every collab update, debounce avoids expensive walks on each keystroke |
+| Chat message rendering | Reuse existing `ChatMessageList` + `ChatMessageInput` | Already shared in packages/ui, used by chat, docs, stickies |
+| All UI primitives | shadcn components | `Popover`, `Dialog`, `Button`, `Tabs`, `Select`, `Textarea`, `ScrollArea`, `Badge` |
 
 ## Files to Create
 
 | File | Purpose |
 |------|---------|
-| `packages/ui/src/components/layout/comments/comment-thread.tsx` | Single comment thread with resolve/reply |
-| `packages/ui/src/components/layout/comments/comment-side-panel.tsx` | Full panel with filters and comment list |
-| `packages/ui/src/components/layout/comments/comment-creation.tsx` | Inline popover for creating comments |
-| `packages/ui/src/components/layout/comments/add-comment-button.tsx` | Floating button on text selection |
+| `packages/ui/src/components/layout/comments/comment-thread.tsx` | Single thread: `ChatMessageList` + resolve + reply (reuses shared chat components) |
+| `packages/ui/src/components/layout/comments/comment-panel.tsx` | Full panel using `PropertiesPanel` container: tabs, filters, comment list |
+| `packages/ui/src/components/layout/comments/comment-creation.tsx` | Inline creation via shadcn `Popover` with `Textarea` + `Button` |
+| `packages/ui/src/components/layout/comments/add-comment-button.tsx` | Floating button shown on text selection |
+| `packages/ui/src/components/layout/comments/index.ts` | Barrel exports |
 
 ## Files to Modify
 
 | File | Change |
 |------|--------|
-| `apps/docs/src/components/docs/editor.tsx` | Add ColumnLayout, comment panel Column, remove dialog usage |
+| `apps/docs/src/components/docs/editor.tsx` | Add `'comments'` to `sidebarContext`, render `CommentPanel` in existing overlay slot, remove dialog imports |
 | `apps/docs/src/components/docs/editor-toolbar.tsx` | Dual-mode comment button, unresolved badge |
 | `apps/docs/src/components/docs/extensions/comment-mark.ts` | Add resolved decorations plugin, `addKeyboardShortcuts()` |
 | `packages/ui/src/styles/eigen-prose.css` | Move comment-highlight + resolved styles to shared stylesheet |
