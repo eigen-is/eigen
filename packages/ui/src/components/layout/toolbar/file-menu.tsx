@@ -17,7 +17,7 @@ import {
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { ConfirmDialog } from '@workspace/ui/components/layout/delete/confirm-dialog';
-import { FileText, Folder, History, Mail, Pencil, Trash2, UserRoundPlus } from 'lucide-react';
+import { Download, FileText, Folder, History, Mail, Pencil, Trash2, UserRoundPlus } from 'lucide-react';
 import { type ComponentType, type ReactNode, useState } from 'react';
 import { DriveDeleteItem } from '../drive/drive-delete-item';
 import { DriveEmailCollaborators } from '../drive/drive-email-collaborators';
@@ -28,6 +28,7 @@ type FileMenuProps = {
     canWrite: boolean;
     onAccessDialogOpen: () => void;
     onRestore?: (state: Uint8Array) => void;
+    onExport?: (format: string) => void;
     createLabel: string;
     CreateDialog: ComponentType<{ path: DrivePath; open: boolean; onOpenChange: (open: boolean) => void }>;
     children?: ReactNode;
@@ -38,6 +39,7 @@ export function FileMenu({
     canWrite,
     onAccessDialogOpen,
     onRestore,
+    onExport,
     createLabel,
     CreateDialog,
     children,
@@ -85,6 +87,18 @@ export function FileMenu({
                     <DropdownMenuItem onClick={() => setRenameOpen(true)}>
                         <Pencil className="h-4 w-4 mr-2" /> Rename
                     </DropdownMenuItem>
+                    {onExport && (
+                        <DropdownMenuSub>
+                            <DropdownMenuSubTrigger>
+                                <Download className="h-4 w-4 mr-2" /> Export
+                            </DropdownMenuSubTrigger>
+                            <DropdownMenuSubContent>
+                                <DropdownMenuItem onClick={() => onExport('docx')}>Export as DOCX</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => onExport('pdf')}>Export as PDF</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => onExport('html')}>Export as HTML</DropdownMenuItem>
+                            </DropdownMenuSubContent>
+                        </DropdownMenuSub>
+                    )}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={onAccessDialogOpen}>
                         <UserRoundPlus className="h-4 w-4 mr-2" /> Edit access
