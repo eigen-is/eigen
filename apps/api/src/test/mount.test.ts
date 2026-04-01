@@ -604,8 +604,8 @@ describe('trashPath (local-key storage)', () => {
         const f2 = await mount2.createFile(root2.id, 'second.txt', 'text/plain', 6, Buffer.from('second'));
 
         await mount2.trashPath(f1);
-        // Delay > 1s to ensure different epoch seconds (SQLite integer timestamp)
-        await new Promise((r) => setTimeout(r, 1100));
+        // Backdate f1's trashedAt so f2 is newer (avoids a 1s+ sleep)
+        await mount2.updatePath(f1, { trashedAt: new Date(Date.now() - 60_000) });
         await mount2.trashPath(f2);
 
         const trash = await mount2.listTrash();
