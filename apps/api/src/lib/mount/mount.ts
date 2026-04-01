@@ -20,11 +20,13 @@ import {
 } from '@workspace/lib/types';
 import type { DriveVisibility } from '@workspace/lib/types/drive';
 import type { BunFile } from 'bun';
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { createAsyncSingleton } from '../../utils/singleton';
 import { getS3Config } from '../config/server-config';
+import { getServerSettings } from '../config/server-settings';
 import { ApiError, type DatabaseConfig, ManagedDatabase, type SchemaType } from '../core';
+import { getUniqueFileName } from '../drive/naming';
 import { deleteThumbnail } from '../shared/thumbnails';
 import { LocalKeyStorage, LocalStorage, S3Storage, type StorageBackend, type StorageFile } from '../storage';
 import { MOUNT_DB_CONFIG } from './db-config';
@@ -101,6 +103,10 @@ export class Mount {
         return path.join(this.tmpDir, 'previews');
     }
 
+    get trashDir(): string {
+        return path.join(this.dataDir, '.trash');
+    }
+
     async init(): Promise<void> {
         if (!fs.existsSync(this.baseDir)) {
             fs.mkdirSync(this.baseDir, { recursive: true });
@@ -114,6 +120,9 @@ export class Mount {
         if (!fs.existsSync(this.previewsDir)) {
             fs.mkdirSync(this.previewsDir, { recursive: true });
         }
+        if (this.isPathBased && !fs.existsSync(this.trashDir)) {
+            fs.mkdirSync(this.trashDir, { recursive: true });
+        }
 
         // Cleanup stale temp files older than 1 hour (e.g. from interrupted uploads or crashes)
         this.cleanupStaleFiles(this.tmpDir, 60 * 60 * 1000);
@@ -126,6 +135,11 @@ export class Mount {
         this.db = managedDb.db;
 
         await this.ensureRootFolder();
+
+        const retentionDays = getServerSettings().quotas.trashRetentionDays;
+        if (retentionDays > 0) {
+            this.purgeTrash(retentionDays).catch((e) => console.error(`[Mount] Failed to purge expired trash:`, e));
+        }
     }
 
     get dataDir(): string {
@@ -176,16 +190,34 @@ export class Mount {
     }
 
     async listFolder(parentId: string): Promise<DrivePath[]> {
-        const results = await this.db.select().from(paths).where(eq(paths.parentId, parentId)).all();
+        const results = await this.db
+            .select()
+            .from(paths)
+            .where(and(eq(paths.parentId, parentId), isNull(paths.trashedAt)))
+            .all();
 
         return results.map((r) => this.toDrivePath(r));
+    }
+
+    async listFolderAll(parentId: string): Promise<DrivePath[]> {
+        const results = await this.db.select().from(paths).where(eq(paths.parentId, parentId)).all();
+        return results.map((r) => this.toDrivePath(r));
+    }
+
+    async getActivePath(pathId: string): Promise<DrivePath> {
+        const path = await this.getPath(pathId);
+        if (!path) throw new ApiError(404, 'Path not found');
+        if (path.trashedAt) throw new ApiError(404, 'File is in trash');
+        return path;
     }
 
     async getChildByName(parentId: string, name: string): Promise<DrivePath | null> {
         const result = await this.db
             .select()
             .from(paths)
-            .where(and(eq(paths.parentId, parentId), sql`LOWER(${paths.name}) = LOWER(${name})`))
+            .where(
+                and(eq(paths.parentId, parentId), sql`LOWER(${paths.name}) = LOWER(${name})`, isNull(paths.trashedAt)),
+            )
             .get();
 
         return result ? this.toDrivePath(result) : null;
@@ -195,12 +227,22 @@ export class Mount {
         const existing = await this.db
             .select({ id: paths.id })
             .from(paths)
-            .where(and(eq(paths.parentId, parentId), sql`LOWER(${paths.name}) = LOWER(${name})`))
+            .where(
+                and(eq(paths.parentId, parentId), sql`LOWER(${paths.name}) = LOWER(${name})`, isNull(paths.trashedAt)),
+            )
             .get();
 
         if (existing && existing.id !== excludeId) {
             throw new ApiError(409, `A file or folder named "${name}" already exists in this directory`);
         }
+    }
+
+    private buildFileValue(id: string, name: string): string {
+        return this.isPathBased ? name : buildStorageKey(id, name);
+    }
+
+    private async resolveWriteKey(parentId: string, fileValue: string): Promise<string> {
+        return this.isPathBased ? this.resolveStoragePathForNew(parentId, fileValue) : fileValue;
     }
 
     async createFolder(parentId: string, name: string, type: DriveContainerType = 'folder'): Promise<string> {
@@ -216,17 +258,12 @@ export class Mount {
             chat: DRIVE_MIME_CHAT,
         };
         const mimeType = mimeTypeMap[type] ?? 'folder';
-
-        let fileValue = '';
-        if (this.isPathBased) {
-            fileValue = name;
-        }
+        const fileValue = this.isPathBased ? name : '';
 
         // Create directory before DB insert so a crash leaves an orphaned
         // directory (harmless) instead of a DB entry for a missing directory.
         if (this.isPathBased && this.storage.mkdir) {
-            const fullPath = await this.resolveStoragePathForNew(parentId, fileValue);
-            await this.storage.mkdir(fullPath);
+            await this.storage.mkdir(await this.resolveWriteKey(parentId, fileValue));
         }
 
         await this.db.insert(paths).values({
@@ -265,15 +302,14 @@ export class Mount {
         validateName(name);
         await this.assertUniqueName(parentId, name);
         const fileId = randomUUID();
-        const fileValue = this.isPathBased ? name : buildStorageKey(fileId, name);
+        const fileValue = this.buildFileValue(fileId, name);
         const hash = data !== undefined ? await this.computeHash(data) : null;
 
         // Write storage first, then DB. On crash between the two, we get an
         // orphaned file on disk (harmless) instead of a DB entry pointing to
         // a non-existent file (broken).
         if (data !== undefined) {
-            const storageKey = this.isPathBased ? await this.resolveStoragePathForNew(parentId, fileValue) : fileValue;
-            await this.storage.write(storageKey, data);
+            await this.storage.write(await this.resolveWriteKey(parentId, fileValue), data);
         }
 
         await this.db.insert(paths).values({
@@ -305,9 +341,9 @@ export class Mount {
         validateName(name);
         await this.assertUniqueName(parentId, name);
         const fileId = randomUUID();
-        const fileValue = this.isPathBased ? name : buildStorageKey(fileId, name);
+        const fileValue = this.buildFileValue(fileId, name);
 
-        const storageKey = this.isPathBased ? await this.resolveStoragePathForNew(parentId, fileValue) : fileValue;
+        const storageKey = await this.resolveWriteKey(parentId, fileValue);
 
         // Storage write before DB insert (crash safety: orphaned file > orphaned row)
         await this.uploadFromTemp(storageKey, tempId);
@@ -450,6 +486,7 @@ export class Mount {
     async deletePath(pathId: string): Promise<void> {
         const pathEntry = await this.getPath(pathId);
         if (!pathEntry) return;
+        if (pathEntry.parentId === null) throw new ApiError(400, 'Cannot delete root folder');
 
         // Delete DB records before storage cleanup. On crash between the two,
         // we get orphaned files on disk (harmless) instead of DB entries
@@ -473,7 +510,7 @@ export class Mount {
                 await this.storage.deleteDir(storageKey);
             }
         } else {
-            const children = await this.listFolder(pathId);
+            const children = await this.listFolderAll(pathId);
             for (const child of children) {
                 await this.deletePath(child.id);
             }
@@ -515,6 +552,207 @@ export class Mount {
                 this.deleteDescendantsInTx(tx, child.id);
             }
             tx.delete(paths).where(eq(paths.id, child.id)).run();
+        }
+    }
+
+    async trashPath(pathId: string): Promise<DrivePath> {
+        const item = await this.getPath(pathId);
+        if (!item) throw new ApiError(404, 'Path not found');
+        if (item.parentId === null) throw new ApiError(400, 'Cannot trash root folder');
+
+        const root = await this.getRootFolder();
+        if (!root) throw new ApiError(500, 'Root folder not found');
+
+        return this.withPathLock(pathId, async () => {
+            // Path-based storage: move file/folder to .trash/
+            let trashKey: string | undefined;
+            if (this.isPathBased && this.storage.rename) {
+                const oldKey = await this.resolveStoragePath(pathId);
+                trashKey = `.trash/${buildStorageKey(pathId, item.name)}`;
+                await this.storage.rename(oldKey, trashKey);
+            }
+
+            // Direct DB update — do NOT use updatePath()
+            const now = new Date();
+            await this.db
+                .update(paths)
+                .set({
+                    trashedAt: now,
+                    trashedFrom: item.parentId,
+                    parentId: root.id,
+                    ...(trashKey !== undefined ? { file: trashKey } : {}),
+                    updatedAt: now,
+                })
+                .where(eq(paths.id, pathId));
+
+            if (item.type !== 'file') {
+                this.trashDescendants(pathId, now);
+            }
+
+            const updated = await this.getPath(pathId);
+            return updated!;
+        });
+    }
+
+    async listTrash(): Promise<DrivePath[]> {
+        const results = await this.db
+            .select()
+            .from(paths)
+            .where(isNotNull(paths.trashedFrom))
+            .orderBy(desc(paths.trashedAt))
+            .all();
+
+        return results.map((r) => this.toDrivePath(r));
+    }
+
+    async restorePath(pathId: string): Promise<DrivePath> {
+        const row = await this.db.select().from(paths).where(eq(paths.id, pathId)).get();
+        if (!row) throw new ApiError(404, 'Path not found');
+        if (!row.trashedFrom) throw new ApiError(400, 'Item is not in trash');
+
+        const root = await this.getRootFolder();
+        if (!root) throw new ApiError(500, 'Root folder not found');
+
+        // Determine target parent
+        let targetParentId = root.id;
+        const originalParent = await this.getPath(row.trashedFrom);
+        if (originalParent && !originalParent.trashedAt) {
+            targetParentId = originalParent.id;
+        }
+
+        // Check name conflict and auto-rename if needed
+        let restoreName = row.name;
+        try {
+            await this.assertUniqueName(targetParentId, restoreName, pathId);
+        } catch {
+            // Name conflict: generate unique name
+            const siblings = await this.db
+                .select({ name: paths.name })
+                .from(paths)
+                .where(and(eq(paths.parentId, targetParentId), isNull(paths.trashedAt)))
+                .all();
+            const usedNames = new Set(siblings.map((s) => s.name.toLowerCase()));
+            restoreName = getUniqueFileName(row.name, usedNames);
+        }
+
+        return this.withPathLock(pathId, async () => {
+            // Path-based storage: move back from .trash/
+            if (this.isPathBased && this.storage.rename) {
+                const currentKey = await this.resolveStoragePath(pathId);
+                const parentPath = await this.resolveStoragePath(targetParentId);
+                const targetKey = parentPath ? `${parentPath}/${restoreName}` : restoreName;
+                await this.storage.rename(currentKey, targetKey);
+            }
+
+            // Direct DB update
+            const now = new Date();
+            await this.db
+                .update(paths)
+                .set({
+                    parentId: targetParentId,
+                    trashedAt: null,
+                    trashedFrom: null,
+                    name: restoreName,
+                    ...(this.isPathBased ? { file: restoreName } : {}),
+                    updatedAt: now,
+                })
+                .where(eq(paths.id, pathId));
+
+            if (row.type !== 'file') {
+                this.restoreDescendants(pathId, now);
+            }
+
+            const updated = await this.getPath(pathId);
+            return updated!;
+        });
+    }
+
+    private collectDescendantIds(parentId: string): string[] {
+        const ids: string[] = [];
+        const collect = (pid: string) => {
+            const children = this.db.select({ id: paths.id }).from(paths).where(eq(paths.parentId, pid)).all();
+            for (const child of children) {
+                ids.push(child.id);
+                collect(child.id);
+            }
+        };
+        collect(parentId);
+        return ids;
+    }
+
+    // Recursively set trashedAt on all non-trashed descendants
+    private trashDescendants(parentId: string, now: Date): void {
+        const epoch = Math.floor(now.getTime() / 1000);
+        this.db.run(sql`
+            WITH RECURSIVE descendants AS (
+                SELECT id FROM ${paths} WHERE ${paths.parentId} = ${parentId}
+                UNION ALL
+                SELECT p.id FROM ${paths} p JOIN descendants d ON p.${sql.raw('parentId')} = d.id
+            )
+            UPDATE ${paths}
+            SET ${sql.raw('trashedAt')} = ${epoch}, ${sql.raw('updatedAt')} = ${epoch}
+            WHERE id IN (SELECT id FROM descendants) AND ${paths.trashedAt} IS NULL
+        `);
+    }
+
+    // Recursively clear trashedAt on descendants, skipping independently trashed items
+    private restoreDescendants(parentId: string, now: Date): void {
+        const epoch = Math.floor(now.getTime() / 1000);
+        this.db.run(sql`
+            WITH RECURSIVE descendants AS (
+                SELECT id FROM ${paths} WHERE ${paths.parentId} = ${parentId}
+                UNION ALL
+                SELECT p.id FROM ${paths} p JOIN descendants d ON p.${sql.raw('parentId')} = d.id
+            )
+            UPDATE ${paths}
+            SET ${sql.raw('trashedAt')} = NULL, ${sql.raw('updatedAt')} = ${epoch}
+            WHERE id IN (SELECT id FROM descendants)
+            AND ${paths.trashedAt} IS NOT NULL
+            AND ${paths.trashedFrom} IS NULL
+        `);
+    }
+
+    async permanentlyDeleteFromTrash(pathId: string): Promise<void> {
+        const row = await this.db.select().from(paths).where(eq(paths.id, pathId)).get();
+        if (!row) return;
+        if (!row.trashedAt) throw new ApiError(400, 'Item is not in trash');
+
+        if (row.type !== 'file') {
+            const descendantIds = this.collectDescendantIds(pathId);
+            const allIds = [pathId, ...descendantIds];
+            const orphans = await this.db
+                .select({ id: paths.id })
+                .from(paths)
+                .where(
+                    sql`${paths.trashedFrom} IN (${sql.join(
+                        allIds.map((id) => sql`${id}`),
+                        sql`, `,
+                    )})`,
+                )
+                .all();
+            for (const orphan of orphans) {
+                await this.deletePath(orphan.id);
+            }
+        }
+
+        await this.deletePath(pathId);
+    }
+
+    async purgeTrash(maxAgeDays?: number): Promise<void> {
+        let items: DrivePath[];
+        if (maxAgeDays !== undefined) {
+            const cutoffEpoch = Math.floor((Date.now() - maxAgeDays * 24 * 60 * 60 * 1000) / 1000);
+            const results = await this.db
+                .select()
+                .from(paths)
+                .where(sql`${paths.trashedFrom} IS NOT NULL AND ${paths.trashedAt} < ${cutoffEpoch}`)
+                .all();
+            items = results.map((r) => this.toDrivePath(r));
+        } else {
+            items = await this.listTrash();
+        }
+        for (const item of items) {
+            await this.permanentlyDeleteFromTrash(item.id);
         }
     }
 
@@ -683,11 +921,13 @@ export class Mount {
         if (mimeTypePrefix) {
             conditions.push(sql`${paths.mimeType} LIKE ${`${mimeTypePrefix}%`}`);
         }
+        conditions.push(isNull(paths.trashedAt));
         if (options?.excludeDocumentChildren) {
             conditions.push(sql`${paths.parentId} NOT IN (
                 WITH RECURSIVE doc_tree AS (
                     SELECT ${paths.id} FROM ${paths}
                     WHERE ${paths.type} IN (${DRIVE_TYPE_DOC}, ${DRIVE_TYPE_STICKIES}, ${DRIVE_TYPE_SLIDES}, ${DRIVE_TYPE_SHEETS}, ${DRIVE_TYPE_CHAT})
+                    AND ${paths.trashedAt} IS NULL
                     UNION ALL
                     SELECT p.id FROM ${paths} p
                     INNER JOIN doc_tree dt ON p.parentId = dt.id
@@ -696,13 +936,10 @@ export class Mount {
             )`);
         }
 
-        const query =
-            conditions.length > 0
-                ? this.db
-                      .select()
-                      .from(paths)
-                      .where(and(...conditions))
-                : this.db.select().from(paths);
+        const query = this.db
+            .select()
+            .from(paths)
+            .where(and(...conditions));
 
         const results = await query.all();
         return results.map((r) => this.toDrivePath(r));
@@ -712,7 +949,7 @@ export class Mount {
         const results = await this.db
             .select()
             .from(paths)
-            .where(sql`${paths.acl} IS NOT NULL AND json_array_length(${paths.acl}) > 0`)
+            .where(and(sql`${paths.acl} IS NOT NULL AND json_array_length(${paths.acl}) > 0`, isNull(paths.trashedAt)))
             .all();
         return results.map((r) => this.toDrivePath(r));
     }
@@ -804,6 +1041,7 @@ export class Mount {
             visibility: (row.visibility ?? 'private') as DriveVisibility,
             sharingRestricted: !!row.sharingRestricted,
             details: row.details ?? null,
+            trashedAt: row.trashedAt ?? null,
             createdAt: row.createdAt ?? new Date(),
             updatedAt: row.updatedAt ?? new Date(),
         };

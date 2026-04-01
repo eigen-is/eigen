@@ -73,6 +73,7 @@ A Mount bundles Drive file storage (`apps/api/src/lib/mount/mount.ts`):
 | `data/`          | File storage via StorageBackend                 |
 | `thumbs/`        | Thumbnails (always local, WebP/JPEG)            |
 | `tmp/`           | Temp files for remote sync + interrupted uploads |
+| `data/.trash/`   | Soft-deleted files (path-based storage only)     |
 | `tmp/previews/`  | Cached file previews (cleaned after 7 days)      |
 
 **Document types**: `folder`, `file`, `doc`, `stickies`, `slides`, `sheets`, `chat`
@@ -117,5 +118,14 @@ Org data: `data/org/{orgId}/` — minimal (filesystem only, no domain services).
 - `MountConfig` (`packages/lib/src/types/mount.ts`) — mount settings (id, name, storageType, isDefault, s3Config)
 - `StorageFile` (`apps/api/src/lib/storage/types.ts`) — `BunFile | S3File`, lazy file reference returned by `read()`
 - `StorageBackend` — interface implemented by all three storage backends
+
+## Soft Delete (Trash)
+
+Delete operations are soft — items are moved to trash instead of being permanently deleted. Two columns on
+`paths`: `trashedAt` (timestamp) and `trashedFrom` (original parentId). On trash, items are reparented to
+the mount root. Path-based (`local`) storage moves files to `data/.trash/{pathId}.ext`; key-based and S3
+need no file movement. Trash counts toward quota. Auto-purge after configurable retention (default 30 days).
+
+See: [SOFT-DELETE.md](SOFT-DELETE.md) for full design.
 
 See: [DATABASE.md](DATABASE.md) for schema details, [ACL.md](ACL.md) for permissions

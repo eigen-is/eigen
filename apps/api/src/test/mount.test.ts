@@ -379,6 +379,675 @@ describe('getUniqueFileName', () => {
     });
 });
 
+describe('Trash query filtering', () => {
+    let mount: Mount;
+    let rootId: string;
+
+    beforeAll(async () => {
+        const config = createDefaultMountConfig('test-trash-filter', 'local-key');
+        mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
+        await mount.init();
+        const root = await mount.getRootFolder();
+        expect(root).not.toBeNull();
+        rootId = root!.id;
+    });
+
+    test('listFolder excludes trashed items', async () => {
+        const data = Buffer.from('trash-test');
+        const fileId = await mount.createFile(rootId, 'trashed-file.txt', 'text/plain', data.length, data);
+
+        // Verify it appears before trashing
+        let children = await mount.listFolder(rootId);
+        expect(children.some((c) => c.id === fileId)).toBe(true);
+
+        // Simulate trashing via updatePath
+        await mount.updatePath(fileId, { trashedAt: new Date() });
+
+        // Should no longer appear in listFolder
+        children = await mount.listFolder(rootId);
+        expect(children.some((c) => c.id === fileId)).toBe(false);
+    });
+
+    test('getChildByName returns null for trashed items', async () => {
+        const folderId = await mount.createFolder(rootId, 'TrashChildTest');
+
+        // Verify it's findable before trashing
+        let found = await mount.getChildByName(rootId, 'TrashChildTest');
+        expect(found).not.toBeNull();
+        expect(found!.id).toBe(folderId);
+
+        // Simulate trashing
+        await mount.updatePath(folderId, { trashedAt: new Date() });
+
+        // Should no longer be found
+        found = await mount.getChildByName(rootId, 'TrashChildTest');
+        expect(found).toBeNull();
+    });
+
+    test('getPath still returns trashed items (unfiltered)', async () => {
+        const data = Buffer.from('still-visible');
+        const fileId = await mount.createFile(rootId, 'still-visible.txt', 'text/plain', data.length, data);
+
+        await mount.updatePath(fileId, { trashedAt: new Date() });
+
+        const file = await mount.getPath(fileId);
+        expect(file).not.toBeNull();
+        expect(file!.id).toBe(fileId);
+        expect(file!.trashedAt).not.toBeNull();
+    });
+
+    test('getTotalSize still counts trashed items', async () => {
+        const sizeBefore = await mount.getTotalSize();
+
+        const data = Buffer.from('counted-even-when-trashed');
+        const fileId = await mount.createFile(rootId, 'counted.txt', 'text/plain', data.length, data);
+
+        const sizeAfterCreate = await mount.getTotalSize();
+        expect(sizeAfterCreate).toBe(sizeBefore + data.length);
+
+        // Trash the file
+        await mount.updatePath(fileId, { trashedAt: new Date() });
+
+        // Size should still include trashed file
+        const sizeAfterTrash = await mount.getTotalSize();
+        expect(sizeAfterTrash).toBe(sizeAfterCreate);
+    });
+
+    test('getActivePath throws 404 for trashed items', async () => {
+        const data = Buffer.from('active-test');
+        const fileId = await mount.createFile(rootId, 'active-test.txt', 'text/plain', data.length, data);
+
+        await mount.updatePath(fileId, { trashedAt: new Date() });
+
+        expect(mount.getActivePath(fileId)).rejects.toThrow('File is in trash');
+    });
+
+    test('getActivePath returns active items normally', async () => {
+        const data = Buffer.from('active-ok');
+        const fileId = await mount.createFile(rootId, 'active-ok.txt', 'text/plain', data.length, data);
+
+        const result = await mount.getActivePath(fileId);
+        expect(result).not.toBeNull();
+        expect(result.id).toBe(fileId);
+        expect(result.trashedAt).toBeNull();
+    });
+
+    test('getActivePath throws 404 for non-existent path', async () => {
+        expect(mount.getActivePath('nonexistent-id')).rejects.toThrow('Path not found');
+    });
+
+    test('deletePath throws 400 when trying to delete root folder', async () => {
+        expect(mount.deletePath(rootId)).rejects.toThrow('Cannot delete root folder');
+    });
+
+    test('assertUniqueName allows creating file with same name as trashed file', async () => {
+        const data = Buffer.from('original');
+        const fileId = await mount.createFile(rootId, 'reusable-name.txt', 'text/plain', data.length, data);
+
+        // Trash the original
+        await mount.updatePath(fileId, { trashedAt: new Date() });
+
+        // Should be able to create a new file with the same name
+        const newData = Buffer.from('replacement');
+        const newFileId = await mount.createFile(rootId, 'reusable-name.txt', 'text/plain', newData.length, newData);
+        expect(newFileId).not.toBe(fileId);
+
+        const newFile = await mount.getPath(newFileId);
+        expect(newFile).not.toBeNull();
+        expect(newFile!.name).toBe('reusable-name.txt');
+        expect(newFile!.trashedAt).toBeNull();
+    });
+});
+
+describe('trashPath (local-key storage)', () => {
+    let mount: Mount;
+    let rootId: string;
+
+    beforeAll(async () => {
+        const config = createDefaultMountConfig('test-trash-lk', 'local-key');
+        mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
+        await mount.init();
+        const root = await mount.getRootFolder();
+        rootId = root!.id;
+    });
+
+    test('trash a file sets trashedAt, trashedFrom, and parentId=root', async () => {
+        const folderId = await mount.createFolder(rootId, 'TrashFileParent');
+        const data = Buffer.from('trash-me');
+        const fileId = await mount.createFile(folderId, 'trash-me.txt', 'text/plain', data.length, data);
+
+        const result = await mount.trashPath(fileId);
+        expect(result.trashedAt).not.toBeNull();
+        expect(result.parentId).toBe(rootId);
+
+        const file = await mount.getPath(fileId);
+        expect(file!.trashedAt).not.toBeNull();
+        expect(file!.parentId).toBe(rootId);
+
+        // Storage file still accessible (key-based storage doesn't move files)
+        const storageFile = await mount.readFile(fileId);
+        expect(storageFile).not.toBeNull();
+        const content = new TextDecoder().decode(await storageFile!.arrayBuffer());
+        expect(content).toBe('trash-me');
+    });
+
+    test('trash a file preserves acl column', async () => {
+        const data = Buffer.from('acl-test');
+        const fileId = await mount.createFile(rootId, 'acl-preserve.txt', 'text/plain', data.length, data);
+        const testAcl = [{ id: 'user-1', read: true, write: false }];
+        await mount.updatePath(fileId, { acl: testAcl });
+
+        await mount.trashPath(fileId);
+
+        const file = await mount.getPath(fileId);
+        expect(file!.acl).toEqual(testAcl);
+    });
+
+    test('trash a folder sets trashedAt on folder and all descendants', async () => {
+        const folderId = await mount.createFolder(rootId, 'TrashFolderDeep');
+        const subId = await mount.createFolder(folderId, 'SubFolder');
+        const fileId = await mount.createFile(subId, 'deep.txt', 'text/plain', 4, Buffer.from('deep'));
+
+        await mount.trashPath(folderId);
+
+        const folder = await mount.getPath(folderId);
+        const sub = await mount.getPath(subId);
+        const file = await mount.getPath(fileId);
+        expect(folder!.trashedAt).not.toBeNull();
+        expect(sub!.trashedAt).not.toBeNull();
+        expect(file!.trashedAt).not.toBeNull();
+    });
+
+    test('trash a folder: descendants get trashedFrom=null', async () => {
+        const folderId = await mount.createFolder(rootId, 'TrashFolderDescendants');
+        const childId = await mount.createFile(folderId, 'child.txt', 'text/plain', 5, Buffer.from('child'));
+
+        await mount.trashPath(folderId);
+
+        // Folder itself should have trashedFrom set (it's the top-level trashed item)
+        const trashList = await mount.listTrash();
+        const folderInTrash = trashList.find((t) => t.id === folderId);
+        expect(folderInTrash).not.toBeUndefined();
+
+        // Child should NOT appear in trash list (trashedFrom is null)
+        const childInTrash = trashList.find((t) => t.id === childId);
+        expect(childInTrash).toBeUndefined();
+    });
+
+    test('trash a folder with already-trashed child: child keeps its own trashedFrom', async () => {
+        const folderId = await mount.createFolder(rootId, 'TrashNestedPrior');
+        const childId = await mount.createFile(folderId, 'nested.txt', 'text/plain', 6, Buffer.from('nested'));
+
+        // Trash the child first
+        await mount.trashPath(childId);
+        const childAfterTrash = await mount.getPath(childId);
+        expect(childAfterTrash!.trashedAt).not.toBeNull();
+
+        // Now trash the folder
+        await mount.trashPath(folderId);
+
+        // Child should still appear as independently trashed in listTrash
+        const trashList = await mount.listTrash();
+        const childInTrash = trashList.find((t) => t.id === childId);
+        expect(childInTrash).not.toBeUndefined();
+    });
+
+    test('trash root folder throws 400', async () => {
+        expect(mount.trashPath(rootId)).rejects.toThrow('Cannot trash root folder');
+    });
+
+    test('trash non-existent path throws 404', async () => {
+        expect(mount.trashPath('nonexistent-id')).rejects.toThrow('Path not found');
+    });
+
+    test('listTrash returns only trashedFrom IS NOT NULL items, ordered by trashedAt desc', async () => {
+        const config2 = createDefaultMountConfig('test-trash-list-lk', 'local-key');
+        const mount2 = new Mount(OWNER_ID, TEST_DIR, config2, createGetLocalDatabase(TEST_DIR));
+        await mount2.init();
+        const root2 = (await mount2.getRootFolder())!;
+
+        const f1 = await mount2.createFile(root2.id, 'first.txt', 'text/plain', 5, Buffer.from('first'));
+        const f2 = await mount2.createFile(root2.id, 'second.txt', 'text/plain', 6, Buffer.from('second'));
+
+        await mount2.trashPath(f1);
+        // Backdate f1's trashedAt so f2 is newer (avoids a 1s+ sleep)
+        await mount2.updatePath(f1, { trashedAt: new Date(Date.now() - 60_000) });
+        await mount2.trashPath(f2);
+
+        const trash = await mount2.listTrash();
+        expect(trash.length).toBe(2);
+        // Newest first
+        expect(trash[0].id).toBe(f2);
+        expect(trash[1].id).toBe(f1);
+    });
+});
+
+describe('trashPath (local path-based storage)', () => {
+    let mount: Mount;
+    let rootId: string;
+
+    beforeAll(async () => {
+        const config = createDefaultMountConfig('test-trash-local', 'local');
+        mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
+        await mount.init();
+        const root = await mount.getRootFolder();
+        rootId = root!.id;
+    });
+
+    test('.trash directory exists after init', () => {
+        expect(existsSync(join(mount.dataDir, '.trash'))).toBe(true);
+    });
+
+    test('trash a file moves to .trash/{pathId}.ext on disk', async () => {
+        const folderId = await mount.createFolder(rootId, 'TrashLocalFile');
+        const data = Buffer.from('local-trash');
+        const fileId = await mount.createFile(folderId, 'report.pdf', 'application/pdf', data.length, data);
+
+        expect(existsSync(join(mount.dataDir, 'TrashLocalFile', 'report.pdf'))).toBe(true);
+
+        await mount.trashPath(fileId);
+
+        const expectedTrashKey = buildStorageKey(fileId, 'report.pdf');
+        expect(existsSync(join(mount.dataDir, '.trash', expectedTrashKey))).toBe(true);
+        expect(existsSync(join(mount.dataDir, 'TrashLocalFile', 'report.pdf'))).toBe(false);
+    });
+
+    test('trash a file updates file column and content is still readable', async () => {
+        const data = Buffer.from('file-col-test');
+        const fileId = await mount.createFile(rootId, 'filecol.txt', 'text/plain', data.length, data);
+
+        await mount.trashPath(fileId);
+
+        const file = await mount.getPath(fileId);
+        expect(file!.name).toBe('filecol.txt');
+        // Content should still be readable via the updated storage path
+        const content = await mount.readFile(fileId);
+        expect(content).not.toBeNull();
+        expect(await content!.text()).toBe('file-col-test');
+    });
+
+    test('trash a folder moves to .trash/{pathId}/ on disk', async () => {
+        const folderId = await mount.createFolder(rootId, 'TrashLocalFolder');
+        await mount.createFile(folderId, 'inside.txt', 'text/plain', 5, Buffer.from('inner'));
+
+        expect(existsSync(join(mount.dataDir, 'TrashLocalFolder'))).toBe(true);
+
+        await mount.trashPath(folderId);
+
+        // Folder should be at .trash/{folderId} (no extension for folders)
+        const expectedTrashKey = buildStorageKey(folderId, 'TrashLocalFolder');
+        expect(existsSync(join(mount.dataDir, '.trash', expectedTrashKey))).toBe(true);
+        expect(existsSync(join(mount.dataDir, 'TrashLocalFolder'))).toBe(false);
+        // Content should still be inside
+        expect(existsSync(join(mount.dataDir, '.trash', expectedTrashKey, 'inside.txt'))).toBe(true);
+    });
+
+    test('trash a folder: descendants file columns unchanged', async () => {
+        const folderId = await mount.createFolder(rootId, 'TrashDescFile');
+        const childId = await mount.createFile(folderId, 'child.txt', 'text/plain', 5, Buffer.from('child'));
+
+        const childBefore = await mount.getPath(childId);
+
+        await mount.trashPath(folderId);
+
+        const childAfter = await mount.getPath(childId);
+        // The child's name/file column should be unchanged
+        expect(childAfter!.name).toBe(childBefore!.name);
+    });
+
+    test('after trash, create new file with same name: no collision on disk', async () => {
+        const folderId = await mount.createFolder(rootId, 'TrashCollision');
+        const data1 = Buffer.from('original');
+        const file1Id = await mount.createFile(folderId, 'same.txt', 'text/plain', data1.length, data1);
+
+        await mount.trashPath(file1Id);
+
+        const data2 = Buffer.from('replacement');
+        const file2Id = await mount.createFile(folderId, 'same.txt', 'text/plain', data2.length, data2);
+
+        // Both should be accessible
+        const content1 = await mount.readFile(file1Id);
+        const content2 = await mount.readFile(file2Id);
+        expect(content1).not.toBeNull();
+        expect(content2).not.toBeNull();
+        expect(await content1!.text()).toBe('original');
+        expect(await content2!.text()).toBe('replacement');
+    });
+
+    test('trash a file: trashedAt, trashedFrom, parentId set correctly', async () => {
+        const folderId = await mount.createFolder(rootId, 'TrashLocalMeta');
+        const data = Buffer.from('meta-test');
+        const fileId = await mount.createFile(folderId, 'meta.txt', 'text/plain', data.length, data);
+
+        const result = await mount.trashPath(fileId);
+        expect(result.trashedAt).not.toBeNull();
+        expect(result.parentId).toBe(rootId);
+    });
+});
+
+describe('restorePath (local-key storage)', () => {
+    let mount: Mount;
+    let rootId: string;
+
+    beforeAll(async () => {
+        const config = createDefaultMountConfig('test-restore-lk', 'local-key');
+        mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
+        await mount.init();
+        const root = await mount.getRootFolder();
+        rootId = root!.id;
+    });
+
+    test('restore a file clears trashedAt, trashedFrom, restores parentId', async () => {
+        const folderId = await mount.createFolder(rootId, 'RestoreFileParent');
+        const data = Buffer.from('restore-me');
+        const fileId = await mount.createFile(folderId, 'restore.txt', 'text/plain', data.length, data);
+
+        await mount.trashPath(fileId);
+        const trashed = await mount.getPath(fileId);
+        expect(trashed!.trashedAt).not.toBeNull();
+        expect(trashed!.parentId).toBe(rootId);
+
+        const restored = await mount.restorePath(fileId);
+        expect(restored.trashedAt).toBeNull();
+        expect(restored.parentId).toBe(folderId);
+    });
+
+    test('restore a folder clears flags on folder and non-independently-trashed descendants', async () => {
+        const folderId = await mount.createFolder(rootId, 'RestoreFolderDeep');
+        const subId = await mount.createFolder(folderId, 'Sub');
+        const fileId = await mount.createFile(subId, 'deep.txt', 'text/plain', 4, Buffer.from('deep'));
+
+        await mount.trashPath(folderId);
+
+        // All should be trashed
+        expect((await mount.getPath(subId))!.trashedAt).not.toBeNull();
+        expect((await mount.getPath(fileId))!.trashedAt).not.toBeNull();
+
+        await mount.restorePath(folderId);
+
+        const folder = await mount.getPath(folderId);
+        const sub = await mount.getPath(subId);
+        const file = await mount.getPath(fileId);
+        expect(folder!.trashedAt).toBeNull();
+        expect(sub!.trashedAt).toBeNull();
+        expect(file!.trashedAt).toBeNull();
+    });
+
+    test('restore a folder: descendants with trashedFrom IS NOT NULL stay trashed', async () => {
+        const folderId = await mount.createFolder(rootId, 'RestoreIndepTrash');
+        const childId = await mount.createFile(folderId, 'indep.txt', 'text/plain', 5, Buffer.from('indep'));
+
+        // Trash child independently first
+        await mount.trashPath(childId);
+
+        // Then trash the folder
+        await mount.trashPath(folderId);
+
+        // Restore the folder
+        await mount.restorePath(folderId);
+
+        const folder = await mount.getPath(folderId);
+        const child = await mount.getPath(childId);
+        expect(folder!.trashedAt).toBeNull();
+        // Child was independently trashed — should still be in trash
+        expect(child!.trashedAt).not.toBeNull();
+    });
+
+    test('restore when original parent deleted restores to root', async () => {
+        const folderId = await mount.createFolder(rootId, 'RestoreDeletedParent');
+        const data = Buffer.from('orphan');
+        const fileId = await mount.createFile(folderId, 'orphan.txt', 'text/plain', data.length, data);
+
+        await mount.trashPath(fileId);
+        // Delete the original parent permanently
+        await mount.deletePath(folderId);
+
+        const restored = await mount.restorePath(fileId);
+        expect(restored.parentId).toBe(rootId);
+        expect(restored.trashedAt).toBeNull();
+    });
+
+    test('restore when original parent trashed restores to root', async () => {
+        const folderId = await mount.createFolder(rootId, 'RestoreTrashedParent');
+        const data = Buffer.from('nested-orphan');
+        const fileId = await mount.createFile(folderId, 'nested-orphan.txt', 'text/plain', data.length, data);
+
+        // Trash the file first
+        await mount.trashPath(fileId);
+        // Then trash the parent
+        await mount.trashPath(folderId);
+
+        const restored = await mount.restorePath(fileId);
+        expect(restored.parentId).toBe(rootId);
+        expect(restored.trashedAt).toBeNull();
+    });
+
+    test('restore with name conflict auto-renames', async () => {
+        const folderId = await mount.createFolder(rootId, 'RestoreConflict');
+        const data1 = Buffer.from('original');
+        const fileId = await mount.createFile(folderId, 'conflict.txt', 'text/plain', data1.length, data1);
+
+        await mount.trashPath(fileId);
+
+        // Create a new file with the same name
+        const data2 = Buffer.from('blocker');
+        await mount.createFile(folderId, 'conflict.txt', 'text/plain', data2.length, data2);
+
+        const restored = await mount.restorePath(fileId);
+        expect(restored.parentId).toBe(folderId);
+        expect(restored.name).not.toBe('conflict.txt');
+        expect(restored.name).toContain('conflict');
+    });
+
+    test('restore non-trashed item throws 400', async () => {
+        const data = Buffer.from('not-trashed');
+        const fileId = await mount.createFile(rootId, 'not-trashed.txt', 'text/plain', data.length, data);
+
+        expect(mount.restorePath(fileId)).rejects.toThrow('Item is not in trash');
+    });
+});
+
+describe('restorePath (local path-based storage)', () => {
+    let mount: Mount;
+    let rootId: string;
+
+    beforeAll(async () => {
+        const config = createDefaultMountConfig('test-restore-local', 'local');
+        mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
+        await mount.init();
+        const root = await mount.getRootFolder();
+        rootId = root!.id;
+    });
+
+    test('restore file moves back from .trash/, file column = name', async () => {
+        const folderId = await mount.createFolder(rootId, 'RestoreLocalFile');
+        const data = Buffer.from('restore-local');
+        const fileId = await mount.createFile(folderId, 'back.txt', 'text/plain', data.length, data);
+
+        await mount.trashPath(fileId);
+
+        // Verify file is in .trash/
+        const trashKey = buildStorageKey(fileId, 'back.txt');
+        expect(existsSync(join(mount.dataDir, '.trash', trashKey))).toBe(true);
+        expect(existsSync(join(mount.dataDir, 'RestoreLocalFile', 'back.txt'))).toBe(false);
+
+        await mount.restorePath(fileId);
+
+        // Verify file is back
+        expect(existsSync(join(mount.dataDir, 'RestoreLocalFile', 'back.txt'))).toBe(true);
+        expect(existsSync(join(mount.dataDir, '.trash', trashKey))).toBe(false);
+
+        // Verify content
+        const content = await mount.readFile(fileId);
+        expect(content).not.toBeNull();
+        expect(await content!.text()).toBe('restore-local');
+    });
+
+    test('restore folder moves back from .trash/', async () => {
+        const folderId = await mount.createFolder(rootId, 'RestoreLocalFolder');
+        await mount.createFile(folderId, 'inside.txt', 'text/plain', 6, Buffer.from('inside'));
+
+        await mount.trashPath(folderId);
+
+        const trashKey = buildStorageKey(folderId, 'RestoreLocalFolder');
+        expect(existsSync(join(mount.dataDir, '.trash', trashKey))).toBe(true);
+
+        await mount.restorePath(folderId);
+
+        expect(existsSync(join(mount.dataDir, 'RestoreLocalFolder'))).toBe(true);
+        expect(existsSync(join(mount.dataDir, 'RestoreLocalFolder', 'inside.txt'))).toBe(true);
+    });
+
+    test('restore with name conflict auto-renames on disk too', async () => {
+        const folderId = await mount.createFolder(rootId, 'RestoreLocalConflict');
+        const data1 = Buffer.from('first');
+        const fileId = await mount.createFile(folderId, 'dupe.txt', 'text/plain', data1.length, data1);
+
+        await mount.trashPath(fileId);
+
+        // Create blocker
+        await mount.createFile(folderId, 'dupe.txt', 'text/plain', 6, Buffer.from('blocker'));
+
+        const restored = await mount.restorePath(fileId);
+        expect(restored.name).not.toBe('dupe.txt');
+        // The restored file should exist on disk with the new name
+        expect(existsSync(join(mount.dataDir, 'RestoreLocalConflict', restored.name))).toBe(true);
+    });
+
+    test('restore when original parent deleted restores to root', async () => {
+        const folderId = await mount.createFolder(rootId, 'RestoreLocalDelParent');
+        const data = Buffer.from('orphan-local');
+        const fileId = await mount.createFile(folderId, 'orphan-local.txt', 'text/plain', data.length, data);
+
+        await mount.trashPath(fileId);
+        await mount.deletePath(folderId);
+
+        const restored = await mount.restorePath(fileId);
+        expect(restored.parentId).toBe(rootId);
+        // File should exist at root on disk
+        expect(existsSync(join(mount.dataDir, restored.name))).toBe(true);
+    });
+});
+
+describe('permanentlyDeleteFromTrash and purgeTrash', () => {
+    let mount: Mount;
+    let rootId: string;
+
+    beforeAll(async () => {
+        const config = createDefaultMountConfig('test-perm-delete', 'local-key');
+        mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
+        await mount.init();
+        const root = await mount.getRootFolder();
+        rootId = root!.id;
+    });
+
+    test('permanently delete a trashed file — DB row gone, storage file gone', async () => {
+        const data = Buffer.from('perm-delete-file');
+        const fileId = await mount.createFile(rootId, 'perm-delete.txt', 'text/plain', data.length, data);
+
+        await mount.trashPath(fileId);
+        expect((await mount.getPath(fileId))?.trashedAt).not.toBeNull();
+
+        await mount.permanentlyDeleteFromTrash(fileId);
+        expect(await mount.getPath(fileId)).toBeNull();
+    });
+
+    test('permanently delete a trashed folder — folder and all descendants gone', async () => {
+        const folderId = await mount.createFolder(rootId, 'PermanentFolder');
+        const subId = await mount.createFolder(folderId, 'Sub');
+        const fileId = await mount.createFile(subId, 'nested.txt', 'text/plain', 3, Buffer.from('abc'));
+
+        await mount.trashPath(folderId);
+        await mount.permanentlyDeleteFromTrash(folderId);
+
+        expect(await mount.getPath(folderId)).toBeNull();
+        expect(await mount.getPath(subId)).toBeNull();
+        expect(await mount.getPath(fileId)).toBeNull();
+    });
+
+    test('permanently delete folder with independently-trashed orphan child — both deleted', async () => {
+        const folderId = await mount.createFolder(rootId, 'OrphanParent');
+        const childId = await mount.createFile(folderId, 'orphan-child.txt', 'text/plain', 5, Buffer.from('child'));
+
+        // Trash the child independently first (it gets trashedFrom = folderId, parentId = rootId)
+        await mount.trashPath(childId);
+        const childAfter = await mount.getPath(childId);
+        expect(childAfter?.trashedAt).not.toBeNull();
+
+        // Trash and then permanently delete the folder
+        await mount.trashPath(folderId);
+        await mount.permanentlyDeleteFromTrash(folderId);
+
+        // Both the folder and the orphaned child should be gone
+        expect(await mount.getPath(folderId)).toBeNull();
+        expect(await mount.getPath(childId)).toBeNull();
+    });
+
+    test('purgeTrash() with no args deletes all trashed items', async () => {
+        const config2 = createDefaultMountConfig('test-purge-all', 'local-key');
+        const mount2 = new Mount(OWNER_ID, TEST_DIR, config2, createGetLocalDatabase(TEST_DIR));
+        await mount2.init();
+        const root2 = (await mount2.getRootFolder())!;
+
+        const f1 = await mount2.createFile(root2.id, 'purge1.txt', 'text/plain', 1, Buffer.from('a'));
+        const f2 = await mount2.createFile(root2.id, 'purge2.txt', 'text/plain', 1, Buffer.from('b'));
+        await mount2.trashPath(f1);
+        await mount2.trashPath(f2);
+
+        const trashBefore = await mount2.listTrash();
+        expect(trashBefore.length).toBe(2);
+
+        await mount2.purgeTrash();
+
+        expect(await mount2.getPath(f1)).toBeNull();
+        expect(await mount2.getPath(f2)).toBeNull();
+
+        const trashAfter = await mount2.listTrash();
+        expect(trashAfter.length).toBe(0);
+    });
+
+    test('purgeTrash() on empty trash — no error', async () => {
+        const config3 = createDefaultMountConfig('test-purge-empty', 'local-key');
+        const mount3 = new Mount(OWNER_ID, TEST_DIR, config3, createGetLocalDatabase(TEST_DIR));
+        await mount3.init();
+
+        await expect(mount3.purgeTrash()).resolves.toBeUndefined();
+    });
+
+    test('purgeTrash(30) deletes old items, keeps recent ones', async () => {
+        const config4 = createDefaultMountConfig('test-purge-age', 'local-key');
+        const mount4 = new Mount(OWNER_ID, TEST_DIR, config4, createGetLocalDatabase(TEST_DIR));
+        await mount4.init();
+        const root4 = (await mount4.getRootFolder())!;
+
+        const oldId = await mount4.createFile(root4.id, 'old-file.txt', 'text/plain', 3, Buffer.from('old'));
+        const newId = await mount4.createFile(root4.id, 'new-file.txt', 'text/plain', 3, Buffer.from('new'));
+
+        await mount4.trashPath(oldId);
+        await mount4.trashPath(newId);
+
+        // Backdate the old item's trashedAt to 31 days ago
+        const oldDate = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000);
+        await mount4.updatePath(oldId, { trashedAt: oldDate });
+
+        await mount4.purgeTrash(30);
+
+        // The old item should be deleted
+        expect(await mount4.getPath(oldId)).toBeNull();
+        // The new item (trashed just now) should still exist
+        expect(await mount4.getPath(newId)).not.toBeNull();
+    });
+
+    test('permanentlyDeleteFromTrash on non-trashed item throws 400', async () => {
+        const fileId = await mount.createFile(rootId, 'not-trashed2.txt', 'text/plain', 3, Buffer.from('nop'));
+        await expect(mount.permanentlyDeleteFromTrash(fileId)).rejects.toThrow('Item is not in trash');
+    });
+
+    test('permanentlyDeleteFromTrash on non-existent item is a no-op', async () => {
+        await expect(mount.permanentlyDeleteFromTrash('nonexistent-id-xyz')).resolves.toBeUndefined();
+    });
+});
+
 describe('LocalStorage safety', () => {
     let storage: LocalStorage;
 

@@ -34,6 +34,7 @@ export const settingsRouter = new Elysia({ name: 'settings' })
                         defaultMountMaxSizeMB: t.Optional(t.Number({ minimum: 10 })),
                         maxUploadSizeMB: t.Optional(t.Number({ minimum: 1 })),
                         maxBatchUploadSizeMB: t.Optional(t.Number({ minimum: 1 })),
+                        trashRetentionDays: t.Optional(t.Number({ minimum: 1 })),
                     }),
                 ),
                 defaults: t.Optional(
