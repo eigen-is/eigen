@@ -88,50 +88,22 @@ The `resolveChatId` + `useChatRoom` pattern is already established in stickies `
 
 ### What Each App Provides
 
-Each app must supply a function to extract active comment data from its current document state. This is the
-only app-specific piece:
+Each app provides the active comment data as props to the shared `CommentPanel`. No adapter interface needed —
+each app computes the data differently, and passing it as props is simpler than an abstraction.
 
-```typescript
-// Adapter type — each app implements this
-type CommentAnchorProvider = {
-    /** Return set of chatNames that exist in the current document revision */
-    getActiveCommentIds: () => Set<string>;
-    /** Return the anchor text for a given comment (the text the comment is attached to) */
-    getAnchorText: (chatName: string) => string | null;
-    /** Optional: scroll to / highlight the anchor for a given comment */
-    scrollToComment?: (chatName: string) => void;
-};
-```
-
-**Per-app implementations:**
-- **Docs**: walk tiptap doc for `CommentMark` marks → collect `chatName` attributes + anchor text
+**Per-app data extraction:**
+- **Docs**: walk tiptap doc for `CommentMark` marks → `Set<string>` of chatNames + `Map<string, string>` of anchor texts
 - **Slides**: scan Y.Map slides for comment annotations (future)
 - **Sheets**: scan Y.Map cells for comment annotations (future)
 - **Stickies**: scan Y.Map cards for `chatName` field (future)
 
-Everything else (thread rendering, resolve/reopen, filtering, side panel) is shared.
+Everything else (thread rendering, resolve/reopen, filtering, panel) is shared.
 
 ### Types
 
-Add a typed response for the comment list endpoint. Currently `useComments` returns untyped `response.data`.
-
-```typescript
-// packages/lib/src/types/chat.ts — add alongside existing CommentEntry
-export type CommentListItem = {
-    chatName: string;
-    status: 'open' | 'resolved';
-    resolvedBy: string | null;
-    resolvedAt: string | null;
-    lastAuthorEmail: string | null;
-    lastMessageSnippet: string | null;
-    lastActivityAt: string | null;
-    messageCount: number;
-    createdAt: string;
-    mentions: string[];
-};
-```
-
-Update `useComments` to return `CommentListItem[]`.
+`CommentEntry` already exists in `packages/lib/src/types/chat.ts` with the correct shape (`chatName`, `status`,
+`mentions[]`, `lastMessageSnippet`, etc.). The Eden Treaty response from `useComments` should be typed as
+`CommentEntry[]`. No new types needed — just ensure the hook's return type is explicit.
 
 ## Components
 
@@ -249,6 +221,7 @@ type CommentPanelProps = {
     activeCommentIds: Set<string>;
     /** Map of chatName → quoted anchor text, extracted from the doc by the app */
     anchorTexts: Map<string, string>;
+    onClose: () => void;
     onScrollToComment?: (chatName: string) => void;
 };
 ```
@@ -353,13 +326,32 @@ to `useMediaResolver()` for `resolveChatId`.
 
 ### Updated editor.tsx Layout
 
+**Key subtlety**: the current `selectionUpdate` handler auto-sets `sidebarContext` to `'figure'`/`'table'`/
+`'document'` on every selection change. If we naively add `'comments'`, clicking anywhere in the doc would
+immediately close the comment panel. Solution: separate `commentPanelOpen` state from the selection-driven
+`sidebarContext`. The comment panel is user-toggled (toolbar button), not selection-driven.
+
 ```tsx
-// Current sidebar states: 'document' | 'figure' | 'table'
-// New: 'document' | 'figure' | 'table' | 'comments'
-const [sidebarContext, setSidebarContext] = useState<'document' | 'figure' | 'table' | 'comments'>('document');
+// Selection-driven panel state (unchanged)
+const [sidebarContext, setSidebarContext] = useState<'document' | 'figure' | 'table'>('document');
 
-const showSidebar = isWide && sidebarContext !== 'document';
+// User-toggled comment panel (independent of selection)
+const [commentPanelOpen, setCommentPanelOpen] = useState(false);
 
+// Which panel to show — comments takes priority when open
+const activePanel = commentPanelOpen ? 'comments' : sidebarContext;
+
+// Figure/table panels require canWrite; comments are visible to all users
+const showSidebar = isWide && (
+    activePanel === 'comments' ||
+    (access.canWrite && activePanel !== 'document')
+);
+```
+
+The existing `selectionUpdate` handler is unchanged — it still sets `sidebarContext` to `'figure'`/`'table'`/
+`'document'`. When the comment panel is open, `activePanel` returns `'comments'` regardless of selection state.
+
+```tsx
 // Inside the Column's relative container (same pattern as existing panels):
 <Column id="doc-editor" width="w-full" toolbar={<EditorToolbar ... />}>
     <div className="h-full relative overflow-hidden">
@@ -372,7 +364,7 @@ const showSidebar = isWide && sidebarContext !== 'document';
         {isWide && (
             <div className={`absolute inset-y-0 right-0 transition-transform duration-200 ease-in-out
                             ${showSidebar ? 'translate-x-0' : 'translate-x-full'}`}>
-                {sidebarContext === 'comments' ? (
+                {activePanel === 'comments' ? (
                     <CommentPanel
                         ownerId={path.ownerId}
                         mountId={path.mountId}
@@ -380,12 +372,12 @@ const showSidebar = isWide && sidebarContext !== 'document';
                         currentUserEmail={auth.user!.email}
                         activeCommentIds={activeComments.ids}
                         anchorTexts={activeComments.anchorTexts}
-                        onClose={() => setSidebarContext('document')}
+                        onClose={() => setCommentPanelOpen(false)}
                         onScrollToComment={scrollToComment}
                     />
-                ) : sidebarContext === 'figure' ? (
+                ) : activePanel === 'figure' ? (
                     <FigurePropertiesPanel ... />
-                ) : sidebarContext === 'table' ? (
+                ) : activePanel === 'table' ? (
                     <TablePropertiesPanel ... />
                 ) : null}
             </div>
@@ -456,18 +448,31 @@ function useActiveComments(editor: Editor | null): ActiveComments {
 
 The comment icon in `EditorToolbar` gets dual behavior:
 - **With text selected**: triggers inline comment creation (same as current `onAddComment`)
-- **Without selection**: toggles the comment side panel open/closed
+- **Without selection**: toggles the comment panel open/closed
 
-Add `onToggleCommentPanel` callback and unresolved count badge:
+Add `onToggleCommentPanel` callback. For the unresolved count badge, wrap the `TooltipButton` in a `relative`
+div with a small badge overlay (shadcn `Badge` or a simple styled span) — `TooltipButton` doesn't support a
+`badge` prop natively.
 
 ```tsx
-<TooltipButton
-    icon={MessageSquare}
-    tooltipText={hasSelection ? "Add comment" : "Comments"}
-    onClick={hasSelection ? onAddComment : onToggleCommentPanel}
-    badge={unresolvedCount > 0 ? unresolvedCount : undefined}
-/>
+<div className="relative">
+    <TooltipButton
+        icon={MessageSquare}
+        tooltipText={hasSelection ? "Add comment" : "Comments"}
+        onClick={hasSelection ? onAddComment : onToggleCommentPanel}
+        active={commentPanelOpen}
+    />
+    {unresolvedCount > 0 && (
+        <span className="absolute -top-1 -right-1 h-4 min-w-4 rounded-full bg-primary text-primary-foreground
+                         text-[10px] flex items-center justify-center pointer-events-none">
+            {unresolvedCount}
+        </span>
+    )}
+</div>
 ```
+
+Note: `TooltipButton` already supports `active` prop (renders `variant="secondary"`) — use it to indicate
+the comment panel is open.
 
 ## Scroll-to-Comment
 
@@ -522,10 +527,11 @@ of hiding panels on narrow screens is acceptable for now.
 - Each item renders `CommentThread` in compact mode
 
 ### Step 3: Wire into docs editor
-- Extend `sidebarContext` from `'document' | 'figure' | 'table'` to include `'comments'`
+- Add `commentPanelOpen` state (separate from selection-driven `sidebarContext`)
+- Compute `activePanel` = comments takes priority over figure/table
 - Render `CommentPanel` in existing absolute overlay slot (same `div` as figure/table panels)
 - Implement `useActiveComments` hook (debounced, returns ids + anchorTexts)
-- Update toolbar button to toggle comment panel
+- Update toolbar button: add comment (with selection) or toggle panel (without)
 - Pass resolved IDs to CommentMark for CSS-based hiding
 
 ### Step 4: Floating "Add comment" button + inline creation
@@ -546,24 +552,26 @@ of hiding panels on narrow screens is acceptable for now.
 - Resolved comments still clickable (to reopen) but not visually highlighted
 
 ### Step 7: Slides / Sheets / Stickies integration (future)
-- Each app implements `CommentAnchorProvider`
-- Each app adds `CommentSidePanel` Column to its layout
+- Each app extracts active comment IDs + anchor texts from its Yjs state
+- Each app renders `CommentPanel` in its existing properties panel slot (slides already has one)
 - Comment creation varies per app (slides: selection on canvas, sheets: cell selection)
 
 ## Key Decisions
 
 | Decision | Choice | Rationale |
 |----------|--------|-----------|
-| Panel layout | Absolute overlay using `PropertiesPanel` | Same pattern as figure/table panels in docs and slides — consistent, no layout changes |
-| Comment creation UI | Floating button + shadcn `Popover` | Lighter than `Dialog`, matches Google Docs UX, uses existing popover pattern from toolbar |
-| Comment viewing | shadcn `Popover` on highlight click | Replaces `Dialog`-based `ViewCommentDialog`, inline experience |
+| Panel layout | `PropertiesPanel` absolute overlay | Same pattern as figure/table panels — consistent, no layout changes |
+| Panel state | Separate `commentPanelOpen` bool | Selection-driven `sidebarContext` would close panel on every click |
+| Panel visibility | No `canWrite` check | Comments should be readable even without write access |
+| Comment creation | Floating button + shadcn `Popover` | Same popover pattern as color pickers in toolbar |
+| Comment viewing | shadcn `Popover` on highlight click | Replaces modal `ViewCommentDialog`, inline experience |
 | Resolved visibility | CSS decoration, not Yjs | Keeps collaborative doc clean, visual-only change |
-| Filtering strategy | Client-side intersection | Yjs doc already loaded, comment list is small (<100) |
-| Anchor text in panel | `anchorTexts` map prop, extracted by app | App walks doc (debounced), passes map to shared panel |
-| Comment styles location | Shared stylesheet in packages/ui | Consistent with project convention for shared prose/code styles |
-| Doc traversal performance | Debounced 200ms | Fires on every collab update, debounce avoids expensive walks on each keystroke |
-| Chat message rendering | Reuse existing `ChatMessageList` + `ChatMessageInput` | Already shared in packages/ui, used by chat, docs, stickies |
-| All UI primitives | shadcn components | `Popover`, `Dialog`, `Button`, `Tabs`, `Select`, `Textarea`, `ScrollArea`, `Badge` |
+| Filtering | Client-side intersection with `activeCommentIds` | Yjs doc already loaded, comment list is small (<100) |
+| Anchor text | `anchorTexts` map prop from app | App walks doc (debounced 200ms), passes to shared panel |
+| Comment styles | `eigen-prose.css` in packages/ui | Shared prose stylesheet convention |
+| Chat rendering | Reuse `ChatMessageList` + `ChatMessageInput` | Already shared, used by chat app, docs, stickies |
+| Types | Use existing `CommentEntry` from types/chat.ts | Already has correct shape, no new type needed |
+| UI primitives | shadcn throughout | `Popover`, `Button`, `Tabs`, `Select`, `Textarea`, `ScrollArea` |
 
 ## Files to Create
 
@@ -579,14 +587,13 @@ of hiding panels on narrow screens is acceptable for now.
 
 | File | Change |
 |------|--------|
-| `apps/docs/src/components/docs/editor.tsx` | Add `'comments'` to `sidebarContext`, render `CommentPanel` in existing overlay slot, remove dialog imports |
-| `apps/docs/src/components/docs/editor-toolbar.tsx` | Dual-mode comment button, unresolved badge |
+| `apps/docs/src/components/docs/editor.tsx` | Add `commentPanelOpen` state, `activePanel` logic, render `CommentPanel` in overlay, remove dialog imports |
+| `apps/docs/src/components/docs/editor-toolbar.tsx` | Dual-mode comment button, unresolved badge wrapper, `onToggleCommentPanel` + `active` prop |
 | `apps/docs/src/components/docs/extensions/comment-mark.ts` | Add resolved decorations plugin, `addKeyboardShortcuts()` |
-| `packages/ui/src/styles/eigen-prose.css` | Move comment-highlight + resolved styles to shared stylesheet |
-| `apps/docs/css/globals.css` | Remove comment-highlight styles (moved to shared) |
+| `packages/ui/src/styles/eigen-prose.css` | Add comment-highlight base + resolved styles (shared across apps) |
+| `apps/docs/css/globals.css` | Remove comment-highlight styles (moved to eigen-prose.css) |
 | `packages/ui/src/index.ts` | Export new comment components |
-| `packages/lib/src/types/chat.ts` | Add `CommentListItem` type |
-| `packages/lib/src/core/chat/hooks/use-comments.ts` | Type `useComments` return as `CommentListItem[]` |
+| `packages/lib/src/core/chat/hooks/use-comments.ts` | Type `useComments` return as `CommentEntry[]` (type already exists in types/chat.ts) |
 
 ## Files to Delete
 

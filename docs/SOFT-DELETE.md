@@ -191,8 +191,18 @@ is not changed during trash, the original `file` value can be recovered from `na
 2. Move from `.trash/{pathId}` back to the target location via `storage.rename()`
 3. Set `file = name` (restores the original storage filename segment)
 
-**Important**: the `file` column update on trash must use a direct DB update, not `updatePath()` with a
-`name` change — `validateName()` rejects names containing `/`, which `.trash/{pathId}` would contain.
+### Direct DB update — do not use `updatePath()`
+
+The **entire trash DB update** (`parentId`, `file`, `trashedAt`, `trashedFrom`) must be a single direct
+`db.update(paths).set(...)` call, **not** through `updatePath()`. Two reasons:
+
+1. `updatePath()` with a `parentId` change triggers `assertUniqueName(root, name)` — this can fail if
+   an active item at root has the same name. Trash must not be blocked by naming conflicts.
+2. For path-based storage, `updatePath()` triggers `storage.rename()` for the `parentId` change — but
+   the storage move was already done separately. Running it again would break.
+
+The restore operation has the same constraint for path-based storage: do the storage rename separately,
+then use a direct DB update to set `parentId`, `file = name`, and clear `trashedAt`/`trashedFrom`.
 
 ### Key-based and S3 storage
 
@@ -211,9 +221,10 @@ Existing mount queries that must add `AND trashedAt IS NULL`:
 | `getPathsByMimeType`| Exclude trashed items from type-filtered views       |
 | `getPathsWithACL`   | Trashed items shouldn't appear in shared views       |
 
-**Note on `getPathsByMimeType`**: this method has a recursive CTE to exclude document children. The
-`AND trashedAt IS NULL` filter must be applied **inside** the CTE as well, not just on the outer query —
-otherwise trashed containers reparented to root would pollute the exclusion walk.
+**Note on `getPathsByMimeType`**: this method has a recursive CTE (`doc_tree`) that walks containers by
+type to exclude document children. The CTE's seed query (`WHERE type IN ('doc', 'stickies', ...)`) must
+also include `AND trashedAt IS NULL` — otherwise trashed containers reparented to root would be included
+in the exclusion walk, potentially hiding active files whose `parentId` matches a trashed container's ID.
 
 Queries that must **not** filter trashed items:
 
@@ -259,9 +270,12 @@ add a guard.
 Methods that switch to `getActivePath()`:
 - `getFolderContents`, `createFolder`, `createCollabDoc`, `createChat`
 - `uploadFiles`, `deleteFolder`, `deleteFile`, `movePath`, `renamePath`
-- `serveFile`, `downloadFile`, `writeFileContent`
+- `serveFile`, `downloadFile`, `writeFileContent`, `resolveFile`
 - `getEditableContent`, `saveEditableContent`
 - `getCollabDocument`, `getPreview`, `getTextPreview`, `getThumbnail`
+
+Note: `resolveFile(mountId, pathId)` (returns `{ mount, path }`) is used by 4 routes — export, preview,
+text-preview, and thumbnail. It currently calls `mount.getPath()` and must switch to `getActivePath()`.
 
 Methods that keep using `getPath()` (trash-aware operations):
 - `restorePath`, `permanentlyDelete`, `emptyTrash`, `listTrash`
@@ -340,15 +354,18 @@ with safer semantics.
 | `DRIVE_FOLDER_DELETED` | Permanent delete (unchanged) | Remove from trash cache |
 
 `DRIVE_PATH_TRASHED` must include `oldParentId` (from `trashedFrom`) so the frontend knows which folder
-cache to invalidate. Same pattern as existing `DRIVE_PATH_MOVED`.
+cache to invalidate. The existing `SSEventDrive` type already has `oldParentId?: string` and
+`buildDriveEvent()` already accepts it — no type changes needed, same call pattern as `DRIVE_PATH_MOVED`.
 
 ## Auto-Purge
 
-New server setting in `ServerSettings`:
+New field in `ServerSettings.quotas` (`packages/lib/src/types/settings.ts`):
 
 ```
 trashRetentionDays: number  // default: 30
 ```
+
+Add to the `settingsStore` defaults in `apps/api/src/lib/config/server-settings.ts`.
 
 Purge runs on **`mount.init()`** only — cleans expired items when a Home initializes. This avoids adding
 latency to read operations like `listTrash()`. The purge query:
@@ -516,6 +533,7 @@ one `describe` block. Tests use the existing test helpers (test user, test home,
 ### Drive: access guards via `getActivePath`
 
 - `serveFile` on trashed item → 404
+- `resolveFile` on trashed item → 404 (blocks preview, export, thumbnail routes)
 - `getCollabDocument` on trashed item → 404
 - `uploadFiles` to trashed folder → 404
 
