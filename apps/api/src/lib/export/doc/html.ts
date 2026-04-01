@@ -27,8 +27,7 @@ import fontSerifRegular from '../../../../../../packages/ui/src/assets/fonts/sou
 import fontSerifItalic from '../../../../../../packages/ui/src/assets/fonts/source-serif/SourceSerif4-Variable-Italic.woff2' with {
     type: 'file',
 };
-// Assets resolved at build time by Bun's bundler — no runtime file resolution needed
-// @ts-expect-error -- Bun import attribute: embeds file content as string
+// CSS embedded as string at build time by Bun's bundler — no runtime file resolution needed
 import eigenProseCSSRaw from '../../../../../../packages/ui/src/styles/eigen-prose.css' with { type: 'text' };
 
 import type { Mount } from '../../mount';
