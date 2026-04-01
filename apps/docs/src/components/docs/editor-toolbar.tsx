@@ -79,6 +79,9 @@ type EditorToolbarProps = {
     onAccessDialogOpen: () => void;
     path: DrivePath;
     onAddComment?: () => void;
+    onToggleCommentPanel?: () => void;
+    commentPanelOpen?: boolean;
+    unresolvedCommentCount?: number;
     onImageUpload?: (file: File) => void;
 };
 
@@ -92,6 +95,9 @@ export const EditorToolbar = ({
     canRedo,
     onAccessDialogOpen,
     onAddComment,
+    onToggleCommentPanel,
+    commentPanelOpen,
+    unresolvedCommentCount,
     onImageUpload,
 }: EditorToolbarProps) => {
     const [linkUrl, setLinkUrl] = useState('');
@@ -677,8 +683,26 @@ export const EditorToolbar = ({
             )}
 
             <div className="flex items-center">
-                {onAddComment && (
-                    <TooltipButton icon={MessageSquare} tooltipText="Add comment" onClick={onAddComment} />
+                {(onAddComment || onToggleCommentPanel) && (
+                    <div className="relative">
+                        <TooltipButton
+                            icon={MessageSquare}
+                            tooltipText="Comments"
+                            onClick={() => {
+                                if (!editor.state.selection.empty && onAddComment) {
+                                    onAddComment();
+                                } else {
+                                    onToggleCommentPanel?.();
+                                }
+                            }}
+                            active={commentPanelOpen}
+                        />
+                        {!!unresolvedCommentCount && unresolvedCommentCount > 0 && (
+                            <span className="absolute -top-1 -right-1 h-4 min-w-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center pointer-events-none px-1">
+                                {unresolvedCommentCount}
+                            </span>
+                        )}
+                    </div>
                 )}
                 {canWrite ? (
                     <TooltipButton icon={UserRoundPlus} tooltipText="Share" onClick={onAccessDialogOpen} />

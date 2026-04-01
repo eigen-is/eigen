@@ -82,19 +82,7 @@
     cursor: col-resize;
 }
 
-/* Comment highlights (docs-specific) */
-.tiptap .comment-highlight {
-    background-color: oklch(0.94 0.15 95);
-    border-bottom: 2px solid oklch(0.75 0.15 85);
-    padding: 0.05em 0;
-    cursor: pointer;
-    transition: background-color 150ms;
-    border-radius: 2px;
-}
-
-.tiptap .comment-highlight:hover {
-    background-color: oklch(0.9 0.18 90);
-}
+/* Comment highlight styles moved to packages/ui eigen-prose.css (shared) */
 
 /* Collaboration Cursors (docs-specific) */
 .collaboration-cursor__caret {

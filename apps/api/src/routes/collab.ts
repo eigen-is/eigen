@@ -116,16 +116,6 @@ export const collabRouter = new Elysia({
         { auth: true },
     )
 
-    .get(
-        '/collab/:ownerId/:mountId/:pathId/comments/unresolved-count',
-        async ({ params, user }) => {
-            const drive = await getSharedDrive(params.ownerId, user);
-            const index = await getCommentIndex(drive, params.mountId, params.pathId);
-            return { count: await index.unresolvedCount() };
-        },
-        { auth: true },
-    )
-
     .patch(
         '/collab/:ownerId/:mountId/:pathId/comments/:chatName/status',
         async ({ params, body, user }) => {

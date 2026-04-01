@@ -8,8 +8,6 @@ export const commentKeys = {
         [...commentKeys.all, ownerId, mountId, containerId] as const,
     list: (ownerId: string, mountId: string, containerId: string) =>
         [...commentKeys.container(ownerId, mountId, containerId), 'list'] as const,
-    unresolvedCount: (ownerId: string, mountId: string, containerId: string) =>
-        [...commentKeys.container(ownerId, mountId, containerId), 'unresolved-count'] as const,
 };
 
 export function useComments(ownerId: string, mountId: string, containerId: string) {
@@ -18,19 +16,6 @@ export function useComments(ownerId: string, mountId: string, containerId: strin
         queryFn: async () => {
             const response = await collabApi({ ownerId })({ mountId })({ pathId: containerId }).comments.get();
             return response.data ?? [];
-        },
-        enabled: !!containerId,
-    });
-}
-
-export function useUnresolvedCommentCount(ownerId: string, mountId: string, containerId: string) {
-    return useQuery({
-        queryKey: commentKeys.unresolvedCount(ownerId, mountId, containerId),
-        queryFn: async () => {
-            const response = await collabApi({ ownerId })({ mountId })({ pathId: containerId }).comments[
-                'unresolved-count'
-            ].get();
-            return response.data?.count ?? 0;
         },
         enabled: !!containerId,
     });

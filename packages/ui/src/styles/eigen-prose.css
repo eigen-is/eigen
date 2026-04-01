@@ -450,3 +450,28 @@
         background-color: #27272a;
     }
 }
+
+/* ===== Comment highlights (shared across apps) ===== */
+
+.tiptap .comment-highlight {
+    background-color: oklch(0.94 0.15 95);
+    border-bottom: 2px solid oklch(0.75 0.15 85);
+    padding: 0.05em 0;
+    cursor: pointer;
+    transition: background-color 150ms;
+    border-radius: 2px;
+}
+
+.tiptap .comment-highlight:hover {
+    background-color: oklch(0.9 0.18 90);
+}
+
+.tiptap .comment-highlight[data-resolved="true"] {
+    background-color: transparent;
+    border-bottom: none;
+    cursor: default;
+}
+
+.tiptap .comment-highlight[data-resolved="true"]:hover {
+    background-color: transparent;
+}
