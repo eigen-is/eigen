@@ -171,12 +171,12 @@ type DriveListProps = CreateCallbacks & {
     onDelete?: (paths: DrivePath[]) => void;
     onShareClick?: (item: DrivePath) => void;
     onDownload?: (path: DrivePath) => void;
+    onExport?: (item: DrivePath, format: string) => void;
     ownerId: string;
     mountId: string;
     pathId: string;
     showBreadcrumb?: boolean;
     allowDelete?: boolean;
-    allowDownload?: boolean;
     allowUpload?: boolean;
     onRename?: (item: DrivePath) => void;
     onMove?: (item: DrivePath, targetItemId: string) => void;
@@ -203,11 +203,11 @@ export function DriveList({
     onCreateSlides,
     onCreateSheets,
     onDownload,
+    onExport,
     ownerId,
     mountId,
     pathId,
     allowDelete = false,
-    allowDownload = false,
     allowUpload = false,
     onRename,
     onMove,
@@ -331,7 +331,7 @@ export function DriveList({
                 onShareClick={onShareClick}
                 getFileIcon={getFileIcon}
                 onDownload={onDownload}
-                allowDownload={allowDownload}
+                onExport={onExport}
                 onDelete={onDelete}
                 allowDelete={allowDelete}
                 onRename={onRename}

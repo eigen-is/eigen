@@ -6,10 +6,16 @@ import {
     isInlineEditable,
     stripEigenExtension,
 } from '@workspace/lib/types';
-import { DropdownMenuItem, DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
+import {
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
+} from '@workspace/ui/components/dropdown-menu';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@workspace/ui/components/table';
 import { cn } from '@workspace/ui/lib/utils';
-import { ArrowRight, ChevronLeft, Download, Eye, Pencil, Trash2, UserRoundPlus } from 'lucide-react';
+import { ArrowRight, ChevronLeft, Download, Eye, FileDown, Pencil, Trash2, UserRoundPlus } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useKeyboardListNavigation } from '../../../hooks/use-keyboard-list-navigation';
@@ -36,10 +42,10 @@ export type DriveTableProps = {
     onDelete?: (items: DrivePath[]) => void;
     onRename?: (item: DrivePath) => void;
     onMove?: (item: DrivePath, targetItemId: string) => void;
+    onExport?: (item: DrivePath, format: string) => void;
     onQuickLook?: (item: DrivePath) => void;
     sortFn?: (a: DrivePath, b: DrivePath) => number;
     allowDelete?: boolean;
-    allowDownload?: boolean;
     ancestorBreadcrumb?: DrivePath[];
 };
 
@@ -55,6 +61,7 @@ export function DriveTable({
     onDelete,
     onRename,
     onMove,
+    onExport,
     onQuickLook,
     sortFn = defaultDriveSort,
     allowDelete = false,
@@ -309,6 +316,27 @@ export function DriveTable({
                         <Download className="h-4 w-4 mr-2" />
                         Download
                     </DropdownMenuItem>
+                )}
+                {isSingleSelect && contextMenu.item?.type === 'doc' && onExport && (
+                    <DropdownMenuSub>
+                        <DropdownMenuSubTrigger>
+                            <FileDown className="h-4 w-4 mr-2" />
+                            Export
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent>
+                            {(['docx', 'pdf', 'html'] as const).map((format) => (
+                                <DropdownMenuItem
+                                    key={format}
+                                    onClick={() => {
+                                        onExport(contextMenu.item!, format);
+                                        contextMenu.close();
+                                    }}
+                                >
+                                    Export as {format.toUpperCase()}
+                                </DropdownMenuItem>
+                            ))}
+                        </DropdownMenuSubContent>
+                    </DropdownMenuSub>
                 )}
 
                 {isSingleSelect && onShareClick && (
