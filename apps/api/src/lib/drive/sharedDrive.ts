@@ -294,6 +294,26 @@ export default class SharedDrive extends Drive {
         return this.withParentWritePermission(mountId, pathId, () => this.sharedDrive.deleteFile(mountId, pathId));
     }
 
+    public async trashPath(mountId: string, pathId: string) {
+        return this.withWritePermission(mountId, pathId, () => this.sharedDrive.trashPath(mountId, pathId));
+    }
+
+    public async restorePath(mountId: string, pathId: string) {
+        return this.sharedDrive.restorePath(mountId, pathId);
+    }
+
+    public async listTrash(mountId: string) {
+        return this.sharedDrive.listTrash(mountId);
+    }
+
+    public async permanentlyDelete(mountId: string, pathId: string) {
+        return this.sharedDrive.permanentlyDelete(mountId, pathId);
+    }
+
+    public async emptyTrash(mountId: string) {
+        return this.sharedDrive.emptyTrash(mountId);
+    }
+
     public async renamePath(mountId: string, pathId: string, newName: string) {
         return this.withParentWritePermission(mountId, pathId, () =>
             this.sharedDrive.renamePath(mountId, pathId, newName),

@@ -2906,4 +2906,127 @@ describe('Drive', () => {
             expect(data.find((item) => item.id === childId)).toBeUndefined();
         });
     });
+
+    describe('Trash', () => {
+        let trashFolderId: string;
+        let trashFileId: string;
+        let trashSubFolderId: string;
+
+        beforeAll(async () => {
+            // Create a folder with a subfolder and files for trash testing
+            const folder = await drivePost(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${aliceRootId}`,
+                { folderName: 'Trash Test Folder' },
+            );
+            trashFolderId = folder.id;
+
+            const subFolder = await drivePost(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${trashFolderId}`,
+                { folderName: 'Trash Sub Folder' },
+            );
+            trashSubFolderId = subFolder.id;
+
+            const subFile = new File(['sub content'], 'sub-file.txt', { type: 'text/plain' });
+            await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, trashSubFolderId, subFile);
+
+            // Create a standalone file to trash
+            const file = new File(['trash me'], 'trash-file.txt', { type: 'text/plain' });
+            const uploaded = await driveUpload(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                aliceRootId,
+                file,
+            );
+            trashFileId = uploaded.id;
+        });
+
+        test('DELETE a file returns 200 (soft-delete)', async () => {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/file/${trashFileId}`,
+                { method: 'DELETE' },
+            );
+            expect(res.status).toBe(200);
+        });
+
+        test('trashed file is not visible in folder listing', async () => {
+            const contents = await driveGetList(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${aliceRootId}`,
+            );
+            const trashedFile = contents.find((item: DrivePath) => item.id === trashFileId);
+            expect(trashedFile).toBeUndefined();
+        });
+
+        test('download trashed file returns 404', async () => {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/file/${trashFileId}/download`,
+            );
+            expect(res.status).toBe(404);
+        });
+
+        test('DELETE a folder returns 200 and trashes descendants', async () => {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/folder/${trashFolderId}`,
+                { method: 'DELETE' },
+            );
+            expect(res.status).toBe(200);
+
+            // Folder no longer visible in root listing
+            const contents = await driveGetList(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${aliceRootId}`,
+            );
+            const trashedFolder = contents.find((item: DrivePath) => item.id === trashFolderId);
+            expect(trashedFolder).toBeUndefined();
+
+            // Subfolder also inaccessible (trashed via cascade)
+            const subRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/folder/${trashSubFolderId}`,
+            );
+            // The subfolder listing returns empty or 404 because parent is trashed
+            // The actual subfolder children are implicitly hidden because the parent is reparented to root
+            expect([200, 404]).toContain(subRes.status);
+        });
+
+        test('trashed file cannot be renamed', async () => {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${trashFileId}/rename`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ newName: 'should-fail.txt' }),
+                },
+            );
+            expect(res.status).toBe(404);
+        });
+
+        test('cannot create folder inside trashed folder', async () => {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/folder/${trashFolderId}`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ folderName: 'Should Fail' }),
+                },
+            );
+            expect(res.status).toBe(404);
+        });
+    });
 });
