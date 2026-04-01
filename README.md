@@ -84,7 +84,7 @@ docs/             # Architecture documentation
 ## Documentation
 
 Architecture docs live in `docs/`. Start with [CONTRIBUTING.md](docs/CONTRIBUTING.md) for code patterns and
-development workflow, or [CLAUDE.md](CLAUDE.md) for the full project context.
+development workflow, or [CLAUDE.md](AGENTS.md) for the full project context.
 
 | Area | Docs |
 |------|------|
