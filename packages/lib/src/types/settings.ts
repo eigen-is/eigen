@@ -32,6 +32,7 @@ export type ServerSettings = {
         defaultMountMaxSizeMB: number;
         maxUploadSizeMB: number;
         maxBatchUploadSizeMB: number;
+        trashRetentionDays: number;
     };
     defaults: {
         mount: {

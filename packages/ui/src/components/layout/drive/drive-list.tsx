@@ -341,7 +341,7 @@ export function DriveList({
                 sortFn={sortFn}
             />
 
-            {items.length === 0 && <EmptyState />}
+            {items.length === 0 && !currentPath?.parentId && <EmptyState />}
         </div>
     );
 
