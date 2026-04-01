@@ -176,7 +176,8 @@
       "Bash(docker compose:*)",
       "Bash(jobs -l)",
       "Bash(npx biome:*)",
-      "Bash(kill %1)"
+      "Bash(kill %1)",
+      "Bash(npx --yes @tanstack/router-cli generate --config apps/drive/tsr.config.json)"
     ]
   },
   "enabledPlugins": {

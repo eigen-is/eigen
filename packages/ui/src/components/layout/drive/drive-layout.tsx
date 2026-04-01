@@ -1,5 +1,5 @@
 import { getDriveDownloadUrl } from '@workspace/lib/api';
-import { useExportDocument, useMovePath } from '@workspace/lib/drive';
+import { useDeleteFile, useDeleteFolder, useDeletePaths, useExportDocument, useMovePath } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { useCallback, useMemo } from 'react';
 import { Column, ColumnLayout } from '../app/column-layout.tsx';
@@ -12,7 +12,6 @@ import { DriveCreateFolder } from './drive-create-folder';
 import { DriveCreateSheets } from './drive-create-sheets';
 import { DriveCreateSlides } from './drive-create-slides';
 import { DriveCreateStickies } from './drive-create-stickies';
-import { DriveDeleteItem } from './drive-delete-item';
 import { DriveDetail, DriveDetailToolbar } from './drive-detail';
 import { DriveList, DriveListToolbar } from './drive-list';
 import { DriveRenameItem } from './drive-rename-item';
@@ -83,6 +82,9 @@ export function DriveLayout({
     const { isMobile } = useLayout();
     const dialogs = useDriveDialogs();
     const movePath = useMovePath(ownerId, mountId, currentPath?.id);
+    const deleteFileMutation = useDeleteFile(ownerId, mountId, currentPath?.id, currentPath?.mimeType);
+    const deleteFolderMutation = useDeleteFolder(ownerId, mountId, currentPath?.id, currentPath?.mimeType);
+    const deletePathsMutation = useDeletePaths(ownerId, mountId);
 
     const handleFileUpload = () => {
         if (allowUpload && currentPath) {
@@ -97,8 +99,17 @@ export function DriveLayout({
     };
 
     const handleDeletePaths = (paths: DrivePath[]) => {
-        if (allowDelete && paths.length > 0) {
-            dialogs.delete.openDialog(paths);
+        if (!allowDelete || paths.length === 0) return;
+        if (paths.length === 1) {
+            const item = paths[0];
+            const mutation = item.type === 'folder' ? deleteFolderMutation : deleteFileMutation;
+            mutation.mutate(item.id, { onSuccess: () => onAfterAction?.('delete', item) });
+        } else {
+            deletePathsMutation.mutate(paths, {
+                onSuccess: () => {
+                    for (const path of paths) onAfterAction?.('delete', path);
+                },
+            });
         }
     };
 
@@ -322,15 +333,6 @@ export function DriveLayout({
                     onOpenChange={dialogs.upload.setOpen}
                     initialFiles={dialogs.upload.files}
                     onAfterUpload={dialogs.upload.closeDialog}
-                    onAfterAction={onAfterAction}
-                />
-            )}
-
-            {allowDelete && (
-                <DriveDeleteItem
-                    paths={dialogs.delete.items}
-                    open={dialogs.delete.open}
-                    onOpenChange={dialogs.delete.setOpen}
                     onAfterAction={onAfterAction}
                 />
             )}
