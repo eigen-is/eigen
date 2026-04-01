@@ -8,11 +8,14 @@ import {
     usePermanentlyDelete,
     useRestorePath,
 } from '@workspace/lib/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { isFolderType, stripEigenExtension } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
+import { DropdownMenuItem, DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout';
 import { EmptyState } from '@workspace/ui/components/layout/app/empty-state';
 import { LoadingState } from '@workspace/ui/components/layout/app/loading-state';
+import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
 import { getFileIcon } from '@workspace/ui/components/layout/drive';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
@@ -53,6 +56,14 @@ function TrashRoute() {
     const [deleteItemId, setDeleteItemId] = useState<string | null>(null);
     const [deleteItemName, setDeleteItemName] = useState<string>('');
 
+    const contextMenu = useContextMenu<DrivePath>();
+
+    const openPermanentDelete = (id: string, name: string) => {
+        setDeleteItemId(id);
+        setDeleteItemName(name);
+        setDeleteItemOpen(true);
+    };
+
     if (isLoading) return <LoadingState />;
 
     return (
@@ -78,7 +89,11 @@ function TrashRoute() {
                                 </TableHeader>
                                 <TableBody>
                                     {trashedItems.map((item) => (
-                                        <TableRow key={item.id} className="eigen-list-item group">
+                                        <TableRow
+                                            key={item.id}
+                                            className="eigen-list-item group"
+                                            onContextMenu={(e) => contextMenu.handleContextMenu(e, item)}
+                                        >
                                             <TableCell className="relative">
                                                 <div className="flex items-center max-w-full overflow-hidden">
                                                     {getFileIcon(item.mimeType, item.type, {
@@ -102,11 +117,7 @@ function TrashRoute() {
                                                         icon={Trash2}
                                                         tooltipText="Delete permanently"
                                                         className="h-7 w-7 text-destructive hover:text-destructive"
-                                                        onClick={() => {
-                                                            setDeleteItemId(item.id);
-                                                            setDeleteItemName(item.name);
-                                                            setDeleteItemOpen(true);
-                                                        }}
+                                                        onClick={() => openPermanentDelete(item.id, item.name)}
                                                     />
                                                 </div>
                                             </TableCell>
@@ -117,6 +128,28 @@ function TrashRoute() {
                                     ))}
                                 </TableBody>
                             </Table>
+
+                            <ContextMenuAnchor contextMenu={contextMenu} className="w-48">
+                                <DropdownMenuItem
+                                    onClick={() => {
+                                        if (contextMenu.item) restorePath.mutate(contextMenu.item.id);
+                                        contextMenu.close();
+                                    }}
+                                >
+                                    <RotateCcw className="h-4 w-4 mr-2" /> Restore
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                    onClick={() => {
+                                        if (contextMenu.item)
+                                            openPermanentDelete(contextMenu.item.id, contextMenu.item.name);
+                                        contextMenu.close();
+                                    }}
+                                    className="text-destructive"
+                                >
+                                    <Trash2 className="h-4 w-4 mr-2" /> Delete permanently
+                                </DropdownMenuItem>
+                            </ContextMenuAnchor>
                         </div>
                     )}
                 </Column>
