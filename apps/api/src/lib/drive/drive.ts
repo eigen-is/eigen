@@ -300,7 +300,9 @@ export default class Drive {
             if (isCollabType(item.type)) {
                 try {
                     await this.closeCollabDocument(mountId, pathId);
-                } catch {}
+                } catch (e) {
+                    console.error(`Failed to close collab document ${pathId}:`, e);
+                }
             }
             if (item.acl) {
                 await propagateACLChange(item, item.acl, null);
@@ -353,12 +355,7 @@ export default class Drive {
         const mount = this.getMount(mountId);
         const items = await mount.listTrash();
         for (const item of items) {
-            await mount.permanentlyDeleteFromTrash(item.id);
-            if (isContainerType(item.type) || isCollabType(item.type) || isChatType(item.type)) {
-                this.emit(SSEventType.DRIVE_FOLDER_DELETED, item);
-            } else {
-                this.emit(SSEventType.DRIVE_FILE_DELETED, item);
-            }
+            await this.permanentlyDelete(mountId, item.id);
         }
     }
 

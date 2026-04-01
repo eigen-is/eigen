@@ -34,8 +34,8 @@ export const driveKeys = {
         [...driveKeys.textPreviews(ownerId), mountId, pathId] as const,
     effectiveMembers: (ownerId: string, mountId: string, pathId: string) =>
         [...driveKeys.owner(ownerId), 'effective-members', mountId, pathId] as const,
-    trash: () => [...driveKeys.all, 'trash'] as const,
-    trashList: (mountId: string) => [...driveKeys.trash(), mountId] as const,
+    trash: (ownerId: string) => [...driveKeys.owner(ownerId), 'trash'] as const,
+    trashList: (ownerId: string, mountId: string) => [...driveKeys.trash(ownerId), mountId] as const,
 };
 
 // GET MOUNTS
@@ -522,7 +522,7 @@ export function useTextPreview(ownerId: string, mountId: string, pathId: string,
 // LIST TRASH
 export function useListTrash(ownerId: string, mountId: string) {
     return useQuery({
-        queryKey: driveKeys.trashList(mountId),
+        queryKey: driveKeys.trashList(ownerId, mountId),
         queryFn: async () => {
             const { data, error } = await driveApi({ ownerId })({ mountId }).trash.get();
             if (error) throw error;
@@ -668,6 +668,6 @@ export function invalidateAclUpdated(
     }
 }
 
-export function invalidateTrash(queryClient: QueryClient, _ownerId: string, mountId: string): void {
-    queryClient.invalidateQueries({ queryKey: driveKeys.trashList(mountId) });
+export function invalidateTrash(queryClient: QueryClient, ownerId: string, mountId: string): void {
+    queryClient.invalidateQueries({ queryKey: driveKeys.trashList(ownerId, mountId) });
 }

@@ -299,6 +299,10 @@ export default class SharedDrive extends Drive {
     }
 
     public async restorePath(mountId: string, pathId: string) {
+        const memberships = await this.getUserMemberships();
+        if (!this.isEffectiveOwnerSync(this.owner.id, memberships)) {
+            throw new ApiError(403, 'Only the drive owner can restore from trash');
+        }
         return this.sharedDrive.restorePath(mountId, pathId);
     }
 
@@ -307,10 +311,18 @@ export default class SharedDrive extends Drive {
     }
 
     public async permanentlyDelete(mountId: string, pathId: string) {
+        const memberships = await this.getUserMemberships();
+        if (!this.isEffectiveOwnerSync(this.owner.id, memberships)) {
+            throw new ApiError(403, 'Only the drive owner can permanently delete from trash');
+        }
         return this.sharedDrive.permanentlyDelete(mountId, pathId);
     }
 
     public async emptyTrash(mountId: string) {
+        const memberships = await this.getUserMemberships();
+        if (!this.isEffectiveOwnerSync(this.owner.id, memberships)) {
+            throw new ApiError(403, 'Only the drive owner can empty trash');
+        }
         return this.sharedDrive.emptyTrash(mountId);
     }
 
