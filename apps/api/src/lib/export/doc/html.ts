@@ -3,27 +3,21 @@ import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import DOMPurify from 'isomorphic-dompurify';
 // Font paths resolved at build time — copied to outdir by the bundler
-// @ts-expect-error -- Bun import attribute: copies file to outdir, resolves to output path
 import fontExcalifont from '../../../../../../packages/ui/src/assets/fonts/excalifont/Excalifont-Regular.woff2' with {
     type: 'file',
 };
-// @ts-expect-error -- Bun import attribute
 import fontInterRegular from '../../../../../../packages/ui/src/assets/fonts/inter/Inter-Variable.woff2' with {
     type: 'file',
 };
-// @ts-expect-error -- Bun import attribute
 import fontInterItalic from '../../../../../../packages/ui/src/assets/fonts/inter/Inter-Variable-Italic.woff2' with {
     type: 'file',
 };
-// @ts-expect-error -- Bun import attribute
 import fontMonoRegular from '../../../../../../packages/ui/src/assets/fonts/jetbrains-mono/JetBrainsMono-Variable.woff2' with {
     type: 'file',
 };
-// @ts-expect-error -- Bun import attribute
 import fontSerifRegular from '../../../../../../packages/ui/src/assets/fonts/source-serif/SourceSerif4-Variable.woff2' with {
     type: 'file',
 };
-// @ts-expect-error -- Bun import attribute
 import fontSerifItalic from '../../../../../../packages/ui/src/assets/fonts/source-serif/SourceSerif4-Variable-Italic.woff2' with {
     type: 'file',
 };
