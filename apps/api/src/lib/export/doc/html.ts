@@ -27,7 +27,14 @@ import fontSerifItalic from '../../../../../../packages/ui/src/assets/fonts/sour
 import eigenProseCSSRaw from '../../../../../../packages/ui/src/styles/eigen-prose.css' with { type: 'text' };
 import type { Mount } from '../../mount';
 import { loadEigendocContent } from './content';
-import { type ExportResult, escapeHtml, renderCodeBlockNode, renderFigureNode, stripEigendocExtension } from './render';
+import {
+    type ExportResult,
+    escapeHtml,
+    renderCodeBlockNode,
+    renderFigureNode,
+    renderTaskItemNode,
+    stripEigendocExtension,
+} from './render';
 
 const lowlight = createLowlight(common);
 const extensions = getDocExtensions({ lowlight });
@@ -73,6 +80,7 @@ export async function generateExportHtml(mount: Mount, drivePath: DrivePath): Pr
         options: {
             nodeMapping: {
                 codeBlock: ({ node }) => renderCodeBlockNode(node, lowlight),
+                taskItem: ({ node, children }) => renderTaskItemNode(node, children),
                 figure: ({ node }: { node: { attrs: Record<string, unknown> } }) =>
                     renderFigureNode(node.attrs, (mediaName, src) =>
                         mediaName ? (dataUriMap.get(mediaName) ?? null) : src,

@@ -59,6 +59,21 @@ function hastToHtml(tree: HastNode): string {
     return '';
 }
 
+/**
+ * Renders a taskItem node as an `<li>` with a checkbox. The tiptap static renderer
+ * doesn't preserve the `checked` attribute correctly, so we handle it explicitly.
+ */
+export function renderTaskItemNode(
+    node: { attrs: Record<string, unknown> },
+    children: string | string[] | undefined,
+): string {
+    const checked = node.attrs['checked'] === true;
+    const checkedAttr = checked ? ' checked' : '';
+    const dataChecked = checked ? 'true' : 'false';
+    const content = Array.isArray(children) ? children.join('') : (children ?? '');
+    return `<li data-type="taskItem" data-checked="${dataChecked}"><label><input type="checkbox"${checkedAttr} disabled /></label><div>${content}</div></li>`;
+}
+
 type ImgSrcResolver = (mediaName: string | null, src: string | null) => string | null;
 
 /**
