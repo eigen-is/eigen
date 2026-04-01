@@ -237,7 +237,13 @@ const PRINT_EXTRAS = `
     margin: 2.5cm;
 }
 
-* { box-sizing: border-box; }
+/* Minimal Tailwind preflight — reset browser defaults that conflict with eigen-prose */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+ul, ol { list-style: none; }
+img, svg { display: block; max-width: 100%; }
+input, button, textarea, select { font: inherit; }
+a { color: inherit; text-decoration: inherit; }
+table { border-collapse: collapse; border-spacing: 0; }
 
 body {
     font-family: "Inter", system-ui, -apple-system, sans-serif;
@@ -271,4 +277,12 @@ figure, table, pre, blockquote { page-break-inside: avoid; }
 
 /* Ensure pre wraps for PDF */
 pre code { white-space: pre-wrap; font-family: "JetBrains Mono", "Courier New", monospace; }
+
+/* Task list checkboxes — explicit sizing to match editor (16px) */
+ul[data-type="taskList"] li > label input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: #2563eb;
+}
 `;
