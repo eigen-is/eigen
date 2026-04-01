@@ -3181,5 +3181,60 @@ describe('Drive', () => {
             expect(Array.isArray(trashList)).toBe(true);
             expect(trashList.length).toBe(0);
         });
+
+        test('non-owner cannot restore from trash', async () => {
+            // Alice trashes a file
+            const folder = await drivePost(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${aliceRootId}`,
+                { folderName: 'acl-trash-test' },
+            );
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/folder/${folder.id}`,
+                { method: 'DELETE' },
+            );
+
+            // Bob tries to restore it
+            const res = await authedRequest(
+                ctx.bob.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/trash/${folder.id}/restore`,
+                { method: 'POST' },
+            );
+            expect(res.status).toBe(403);
+        });
+
+        test('non-owner cannot permanently delete from trash', async () => {
+            const folder = await drivePost(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${aliceRootId}`,
+                { folderName: 'acl-perm-del-test' },
+            );
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/folder/${folder.id}`,
+                { method: 'DELETE' },
+            );
+
+            const res = await authedRequest(
+                ctx.bob.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/trash/${folder.id}`,
+                { method: 'DELETE' },
+            );
+            expect(res.status).toBe(403);
+        });
+
+        test('non-owner cannot empty trash', async () => {
+            const res = await authedRequest(
+                ctx.bob.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/trash`,
+                { method: 'DELETE' },
+            );
+            expect(res.status).toBe(403);
+        });
     });
 });
