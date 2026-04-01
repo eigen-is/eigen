@@ -176,7 +176,7 @@ Notifications: `home.notifications.persist({...})` → writes to DB + broadcasts
 
 ```
 data/home/{userId}/
-├── mounts/default/       # Drive (metadata.db + data/ + thumbs/)
+├── mounts/default/       # Drive (metadata.db + data/ + thumbs/ + data/.trash/)
 │   └── shared.db         # Shared-with-me paths
 ├── eigen.mail/           # mail.db + Maildir/
 ├── eigen.contacts/       # contacts.db + avatars/
@@ -226,6 +226,7 @@ Detailed architecture docs in `docs/`:
 | [DOCKER.md](docs/DOCKER.md)                                   | Docker deployment                                                            |
 | [IMAP.md](docs/IMAP.md)                                       | Maildir storage format, Dovecot compatibility                                |
 | [TYPOGRAPHY.md](docs/TYPOGRAPHY.md)                           | Self-hosted font system, FontPicker                                          |
+| [SOFT-DELETE.md](docs/SOFT-DELETE.md)                         | Trash / recycle bin — soft delete, restore, auto-purge                       |
 
 | [Code Reviews](codereviews/OVERVIEW.md)                         | Full-stack code review findings + fix priorities |
 
