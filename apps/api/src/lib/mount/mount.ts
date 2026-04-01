@@ -661,7 +661,7 @@ export class Mount {
                     trashedAt: null,
                     trashedFrom: null,
                     name: restoreName,
-                    file: this.isPathBased ? restoreName : undefined,
+                    ...(this.isPathBased ? { file: restoreName } : {}),
                     updatedAt: now,
                 })
                 .where(eq(paths.id, pathId));
