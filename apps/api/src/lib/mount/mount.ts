@@ -176,16 +176,34 @@ export class Mount {
     }
 
     async listFolder(parentId: string): Promise<DrivePath[]> {
-        const results = await this.db.select().from(paths).where(eq(paths.parentId, parentId)).all();
+        const results = await this.db
+            .select()
+            .from(paths)
+            .where(and(eq(paths.parentId, parentId), isNull(paths.trashedAt)))
+            .all();
 
         return results.map((r) => this.toDrivePath(r));
+    }
+
+    private async listFolderAll(parentId: string): Promise<DrivePath[]> {
+        const results = await this.db.select().from(paths).where(eq(paths.parentId, parentId)).all();
+        return results.map((r) => this.toDrivePath(r));
+    }
+
+    async getActivePath(pathId: string): Promise<DrivePath> {
+        const path = await this.getPath(pathId);
+        if (!path) throw new ApiError(404, 'Path not found');
+        if (path.trashedAt) throw new ApiError(404, 'File is in trash');
+        return path;
     }
 
     async getChildByName(parentId: string, name: string): Promise<DrivePath | null> {
         const result = await this.db
             .select()
             .from(paths)
-            .where(and(eq(paths.parentId, parentId), sql`LOWER(${paths.name}) = LOWER(${name})`))
+            .where(
+                and(eq(paths.parentId, parentId), sql`LOWER(${paths.name}) = LOWER(${name})`, isNull(paths.trashedAt)),
+            )
             .get();
 
         return result ? this.toDrivePath(result) : null;
@@ -195,7 +213,9 @@ export class Mount {
         const existing = await this.db
             .select({ id: paths.id })
             .from(paths)
-            .where(and(eq(paths.parentId, parentId), sql`LOWER(${paths.name}) = LOWER(${name})`))
+            .where(
+                and(eq(paths.parentId, parentId), sql`LOWER(${paths.name}) = LOWER(${name})`, isNull(paths.trashedAt)),
+            )
             .get();
 
         if (existing && existing.id !== excludeId) {
@@ -450,6 +470,7 @@ export class Mount {
     async deletePath(pathId: string): Promise<void> {
         const pathEntry = await this.getPath(pathId);
         if (!pathEntry) return;
+        if (pathEntry.parentId === null) throw new ApiError(400, 'Cannot delete root folder');
 
         // Delete DB records before storage cleanup. On crash between the two,
         // we get orphaned files on disk (harmless) instead of DB entries
@@ -473,7 +494,7 @@ export class Mount {
                 await this.storage.deleteDir(storageKey);
             }
         } else {
-            const children = await this.listFolder(pathId);
+            const children = await this.listFolderAll(pathId);
             for (const child of children) {
                 await this.deletePath(child.id);
             }
@@ -683,11 +704,13 @@ export class Mount {
         if (mimeTypePrefix) {
             conditions.push(sql`${paths.mimeType} LIKE ${`${mimeTypePrefix}%`}`);
         }
+        conditions.push(isNull(paths.trashedAt));
         if (options?.excludeDocumentChildren) {
             conditions.push(sql`${paths.parentId} NOT IN (
                 WITH RECURSIVE doc_tree AS (
                     SELECT ${paths.id} FROM ${paths}
                     WHERE ${paths.type} IN (${DRIVE_TYPE_DOC}, ${DRIVE_TYPE_STICKIES}, ${DRIVE_TYPE_SLIDES}, ${DRIVE_TYPE_SHEETS}, ${DRIVE_TYPE_CHAT})
+                    AND ${paths.trashedAt} IS NULL
                     UNION ALL
                     SELECT p.id FROM ${paths} p
                     INNER JOIN doc_tree dt ON p.parentId = dt.id
@@ -696,13 +719,10 @@ export class Mount {
             )`);
         }
 
-        const query =
-            conditions.length > 0
-                ? this.db
-                      .select()
-                      .from(paths)
-                      .where(and(...conditions))
-                : this.db.select().from(paths);
+        const query = this.db
+            .select()
+            .from(paths)
+            .where(and(...conditions));
 
         const results = await query.all();
         return results.map((r) => this.toDrivePath(r));
@@ -712,7 +732,7 @@ export class Mount {
         const results = await this.db
             .select()
             .from(paths)
-            .where(sql`${paths.acl} IS NOT NULL AND json_array_length(${paths.acl}) > 0`)
+            .where(and(sql`${paths.acl} IS NOT NULL AND json_array_length(${paths.acl}) > 0`, isNull(paths.trashedAt)))
             .all();
         return results.map((r) => this.toDrivePath(r));
     }
