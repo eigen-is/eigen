@@ -1,4 +1,4 @@
-# CLAUDE.md — Eigen Project Context
+# AGENTS.md — Eigen Project Context
 
 Eigen is a self-hosted Google Workspace alternative. Monorepo with integrated apps sharing a single API server, UI
 library, and business logic layer.
@@ -80,6 +80,9 @@ bun run check          # lint + typecheck + test
   "Email sent", "Settings saved"). Apps should never add their own `try/catch` + `toast.error()` around mutations.
   Apps only need `try/catch` when they must do extra work on failure (e.g., reset UI state), and in that case they
   must NOT show a toast. See [NOTIFICATIONS.md](docs/NOTIFICATIONS.md)
+- **Check existing shared components before building new ones** — `packages/ui/src/components/layout/` has reusable
+  components for common patterns: `TooltipButton` (icon+tooltip), `DeleteDialog` (confirmation), `EmptyState`,
+  `LoadingState`, `ErrorState`, `SearchBar`, `ConfirmDialog`, etc. See [LAYOUT.md](docs/LAYOUT.md) for the full list
 - **Fix broken windows** — when you encounter pre-existing errors, warnings, or code smells while working on a task,
   fix them if the fix is straightforward. Leave code in a better state than you found it
 - **Keep docs up to date** — when a task is fully completed, update relevant docs in `docs/` and this file if the
@@ -109,6 +112,24 @@ bun run check          # lint + typecheck + test
 | **Environment**       | `apps/api/src/lib/config/env.ts`             | `isProduction()` — checks `PRODUCTION=1` or `NODE_ENV=production`                                         |
 | **Singleton factory** | `apps/api/src/utils/singleton.ts`            | `createAsyncSingleton()` for Home/DB instances                                                             |
 
+#### Drive Architecture
+
+The Drive system has four layers. When adding new features, all four need changes:
+
+```
+Route (thin handler)  →  SharedDrive (ACL proxy)  →  Drive (business logic)  →  Mount (storage + DB)
+```
+
+- **Mount** (`apps/api/src/lib/mount/mount.ts`): Core storage operations on a single mount's `metadata.db`.
+  Handles file CRUD, path resolution, storage key building. Three storage backends: `local` (hierarchical
+  paths), `local-key` (flat UUID keys), `s3` (S3-compatible)
+- **Drive** (`apps/api/src/lib/drive/drive.ts`): High-level API over multiple mounts. Handles ACL
+  propagation, collab document lifecycle, SSE emission, sharing
+- **SharedDrive** (`apps/api/src/lib/drive/sharedDrive.ts`): ACL-enforcing proxy. **Every public Drive
+  method must have a corresponding SharedDrive wrapper** with permission checks. Routes always use
+  `getSharedDrive()`, never raw `Drive`
+- **Routes** (`apps/api/src/routes/drive.ts`): Thin Elysia handlers that delegate to SharedDrive
+
 ### Frontend
 
 | Concept            | Location                                              | Pattern                                                    |
@@ -121,18 +142,79 @@ bun run check          # lint + typecheck + test
 | **Colors**         | `packages/lib/src/constants/colors.ts`                | `EIGEN_COLORS`, `EIGEN_ACCENT_COLORS`                      |
 | **App shell**      | `packages/ui/src/components/layout/app/app-shell.tsx` | Wraps every app (Topbar + sidebar + content)               |
 | **Provider stack** | `packages/ui/src/components/layout/app/eigen-app.tsx` | Auth → SSE → Upload → Preview → Toaster                    |
-| **Layout**         | `packages/ui/src/components/layout/column-layout.tsx` | `ColumnLayout` + `Column` with responsive mobile switching |
+| **Layout**         | `packages/ui/src/components/layout/app/column-layout.tsx` | `ColumnLayout` + `Column` with responsive mobile switching |
 | **Routing**        | `apps/[name]/src/routes/`                             | TanStack Router, file-based. `_auth.tsx` guards            |
+
+#### Page Layout Pattern
+
+Every page uses `ColumnLayout` + `Column`. The toolbar is a **separate prop**, not part of the page content.
+The `Column` renders the toolbar in a fixed `h-12` bar with `px-4 border-b`. This ensures consistent
+toolbar height across all pages.
+
+```tsx
+<ColumnLayout mobileColumn={showDetail ? 'detail' : 'list'}>
+    <Column id="list" width="flex" toolbar={<MyToolbar />}>
+        <MyContent />
+    </Column>
+    <Column id="detail" width="400px" onBack={handleBack} toolbar={<DetailToolbar />}>
+        <DetailContent />
+    </Column>
+</ColumnLayout>
+```
+
+Use `width="flex"` for a single full-width column. The toolbar text should use the same sizing as other
+toolbars — match the `BreadcrumbPage` styling (`text-sm text-foreground font-normal`).
+
+#### Hover-Only Icons Pattern
+
+To show action icons only on row hover (like the share icon in Drive), use the Tailwind `group` +
+`invisible group-hover:visible` pattern:
+
+```tsx
+<TableRow className="eigen-list-item group">
+    <TableCell>
+        <span>Item name</span>
+        <div className="invisible group-hover:visible ml-auto">
+            <TooltipButton icon={Edit} tooltipText="Edit" className="h-7 w-7" onClick={...} />
+        </div>
+    </TableCell>
+</TableRow>
+```
+
+Use `TooltipButton` from `packages/ui/src/components/layout/toolbar/tooltip-button.tsx` for icon buttons
+with tooltips. Don't rebuild Tooltip+Button manually.
+
+If hover icons would affect row height, use `absolute` positioning so they float over the row.
+
+#### Key UI Components
+
+Before building custom UI, check these exist in `packages/ui/src/components/layout/`:
+
+| Component       | File                        | Use for                              |
+|-----------------|-----------------------------|--------------------------------------|
+| `TooltipButton` | `toolbar/tooltip-button.tsx` | Icon button with tooltip             |
+| `DeleteDialog`  | `delete/delete-dialog.tsx`   | Destructive action confirmation      |
+| `ConfirmDialog` | `delete/confirm-dialog.tsx`  | Generic confirmation dialog          |
+| `EmptyState`    | `app/empty-state.tsx`        | "Nothing here" message with icon     |
+| `LoadingState`  | `app/loading-state.tsx`      | Centered spinner                     |
+| `ErrorState`    | `app/error-state.tsx`        | Error message display                |
+| `SearchBar`     | `search-bar/search-bar.tsx`  | Search input with icon               |
+| `FileMenu`      | `toolbar/file-menu.tsx`      | File dropdown (rename, delete, etc.) |
+
+Full component list: [LAYOUT.md](docs/LAYOUT.md)
 
 ### Query Keys Pattern
 
 ```typescript
 export const driveKeys = {
     all: ['drive'] as const,
-    folders: () => [...driveKeys.all, 'folder'] as const,
-    folder: (id: string) => [...driveKeys.folders(), id] as const,
+    owner: (ownerId: string) => [...driveKeys.all, ownerId] as const,
+    folders: (ownerId: string) => [...driveKeys.owner(ownerId), 'folder'] as const,
+    folder: (ownerId: string, id: string) => [...driveKeys.folders(ownerId), id] as const,
 };
 ```
+
+**Query keys must always include `ownerId`** — see Common Pitfalls below.
 
 Export invalidation functions for use in SSE handlers + mutation `onSuccess`.
 
@@ -142,8 +224,8 @@ These patterns have caused bugs across multiple domains:
 
 - **Query keys must include `ownerId`** for any owner-scoped data. Without it, switching between personal and team
   contexts serves stale cached data from the wrong owner
-- **`SharedDrive` must override every `Drive` creation method** — when adding a new eigen file type, add a
-  corresponding `create*` override in `SharedDrive` or it will 404 on shared/team drives
+- **`SharedDrive` must wrap every public `Drive` method** — when adding new Drive methods (not just creation
+  methods), add a corresponding wrapper in `SharedDrive` with appropriate permission checks, or it will bypass ACL
 - **MIME type strings must match the Eigen File Types table exactly** — use the constants, don't type them by hand.
   `eigenslides` not `eigenslide`, `eigensheets` not `eigensheet`
 - **`validateSearch` in shared routes must extract all URL params the route uses** — missing params (like `uid`)
@@ -155,6 +237,10 @@ These patterns have caused bugs across multiple domains:
   that owns the resource. For personal data it equals `user.id`; for team data it's `team_{teamId}`. This consistent
   prefix enables future load-balancer sharding by ownerId (all requests for one Home on the same server). Routes must
   validate that the caller has access to the specified ownerId (owns it or is a team member)
+- **Use `ColumnLayout` + `Column` with `toolbar` prop for page layout** — don't put the toolbar inside the page
+  content. The `Column` component renders the toolbar in a fixed-height bar. See Page Layout Pattern above
+- **Use existing shared components** — check `packages/ui/src/components/layout/` before building custom UI.
+  `TooltipButton`, `DeleteDialog`, `EmptyState`, etc. already exist
 
 ### SSE Pattern
 
@@ -193,6 +279,20 @@ Teams: `data/team/{teamId}/` (Drive + Calendar only)
 | Team | `team_{teamId}` | `team_x9y8z7w6` |
 
 Resolution: `parseOwnerId()` in `packages/lib/src/types/owner.ts`
+
+## Testing
+
+Tests are in `apps/api/src/test/`. Run with `bun run test` or `bun test apps/api/src/test/[file].test.ts`.
+
+**Integration tests** (`drive.test.ts`, `calendar.test.ts`, etc.) use test helpers from `setup.ts`:
+- `getTestContext()` → returns `{ alice, bob, charlie }` test users with session tokens and API clients
+- `authedRequest(token, path, options?)` → make authenticated HTTP request
+- `driveGet/drivePost/drivePut/driveDelete` → typed drive API helpers
+- `driveGetPermission` → check read/write permissions
+
+**Unit tests** (`mount.test.ts`, `storage.test.ts`, etc.) create isolated instances with temp directories.
+
+See [TESTING.md](docs/TESTING.md) for full patterns.
 
 ## Documentation Index
 
