@@ -20,20 +20,22 @@ async function sharpResize(
     options: { maxSize: number; quality: number; fit: 'inside' | 'cover' },
 ): Promise<ImageResult | null> {
     try {
-        const image = sharp(source);
+        const image = sharp(source, { animated: true });
         const metadata = await image.metadata();
 
         if (!metadata.width || !metadata.height) return null;
-        if (metadata.width > 12000 || metadata.height > 12000) return null;
 
-        const { width, height } = metadata;
+        const width = metadata.width;
+        const height = metadata.pageHeight || metadata.height;
+
+        if (width > 12000 || height > 12000) return null;
         const data = await image
             .resize(options.maxSize, options.maxSize, {
                 fit: options.fit,
                 position: 'center',
                 withoutEnlargement: options.fit === 'inside',
             })
-            .webp({ quality: options.quality })
+            .webp({ quality: options.quality, animated: true })
             .toBuffer();
 
         return { data, width, height };
