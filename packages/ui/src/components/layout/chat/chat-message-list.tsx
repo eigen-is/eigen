@@ -74,7 +74,7 @@ function AttachmentChip({
             href={downloadUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-md bg-muted text-xs text-foreground hover:bg-muted/80 transition-colors border overflow-hidden"
+            className="inline-flex items-center gap-1.5 rounded-md bg-muted text-xs text-foreground hover:bg-muted/80 transition-colors border overflow-hidden min-h-10"
             onClick={handleClick}
         >
             {thumbnailUrl && isImage ? (
