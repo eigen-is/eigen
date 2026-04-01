@@ -8,7 +8,7 @@ import {
     usePermanentlyDelete,
     useRestorePath,
 } from '@workspace/lib/drive';
-import { stripEigenExtension } from '@workspace/lib/types';
+import { isFolderType, stripEigenExtension } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout';
 import { EmptyState } from '@workspace/ui/components/layout/app/empty-state';
@@ -27,7 +27,7 @@ export const Route = createFileRoute('/_auth/trash')({
 function TrashToolbar({ itemCount, onEmptyTrash }: { itemCount: number; onEmptyTrash: () => void }) {
     return (
         <div className="flex items-center justify-between w-full">
-            <span className="text-lg font-medium">Trash</span>
+            <span className="text-sm text-foreground font-normal">Trash</span>
             {itemCount > 0 && (
                 <Button variant="outline" size="sm" onClick={onEmptyTrash}>
                     <Trash2 className="h-4 w-4 mr-2" />
@@ -68,23 +68,28 @@ function TrashRoute() {
                     {trashedItems.length === 0 ? (
                         <EmptyState message="Trash is empty" icon={<Trash2 className="h-10 w-10" />} />
                     ) : (
-                        <div className="h-full overflow-auto">
+                        <div className="flex-1 overflow-auto">
                             <Table className="eigen-table">
                                 <TableHeader>
                                     <TableRow>
-                                        <TableHead>Name</TableHead>
-                                        <TableHead className="w-40 hidden sm:table-cell">Trashed</TableHead>
+                                        <TableHead className="w-[85%]">Name</TableHead>
+                                        <TableHead className="w-[15%] hidden sm:table-cell">Trashed</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {trashedItems.map((item) => (
                                         <TableRow key={item.id} className="eigen-list-item group">
                                             <TableCell>
-                                                <div className="flex items-center overflow-hidden">
+                                                <div className="flex items-center max-w-full overflow-hidden">
                                                     {getFileIcon(item.mimeType, item.type, {
                                                         className: 'h-4 w-4 mr-2 text-muted-foreground flex-shrink-0',
+                                                        ...(isFolderType(item.type)
+                                                            ? { fill: 'var(--app-drive-light-color)' }
+                                                            : {}),
                                                     })}
-                                                    <span className="truncate">{stripEigenExtension(item.name)}</span>
+                                                    <span className="truncate max-w-[calc(100%-1.5rem)]">
+                                                        {stripEigenExtension(item.name)}
+                                                    </span>
                                                     <div className="invisible group-hover:visible flex items-center ml-auto pl-2 flex-shrink-0">
                                                         <TooltipButton
                                                             icon={RotateCcw}
