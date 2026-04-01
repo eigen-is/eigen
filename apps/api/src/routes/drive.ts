@@ -1,9 +1,12 @@
 import { Elysia, t } from 'elysia';
 import { getUploadMaxSize } from '../lib/config/enforcement';
+import { ApiError } from '../lib/core';
 import { contentDisposition, setCacheHeaders } from '../lib/core/http';
 import { getSharedDrive } from '../lib/drive';
 import { exportDocument } from '../lib/export/export-document';
 import { getHome } from '../lib/home';
+import { getScreenPreview, getTextPreview } from '../lib/preview/preview-cache';
+import { getThumbnail } from '../lib/shared/thumbnails';
 import { betterAuth } from './auth';
 
 // Drive routes allow cross-owner access (shared drives, team drives).
@@ -195,12 +198,9 @@ export const driveRouter = new Elysia({ name: 'drive' })
         '/drive/:ownerId/:mountId/file/:pathId/preview',
         async ({ params, user, set }) => {
             const drive = await getSharedDrive(params.ownerId, user);
+            const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             const embedUrl = `/drive/${params.ownerId}/${params.mountId}/file/${params.pathId}/embed/preview`;
-            const result = await drive.getPreview(params.mountId, params.pathId, embedUrl);
-            if (!result) {
-                set.status = 404;
-                return 'No preview available';
-            }
+            const result = await getScreenPreview(mount, path, embedUrl);
             if (result.type === 'redirect') {
                 set.redirect = result.url;
                 return;
@@ -215,12 +215,8 @@ export const driveRouter = new Elysia({ name: 'drive' })
         '/drive/:ownerId/:mountId/file/:pathId/text-preview',
         async ({ params, user, set, request }) => {
             const drive = await getSharedDrive(params.ownerId, user);
-            const origin = new URL(request.url).origin;
-            const result = await drive.getTextPreview(params.mountId, params.pathId, origin);
-            if (!result) {
-                set.status = 404;
-                return { body: '', mode: 'plaintext' };
-            }
+            const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
+            const result = await getTextPreview(mount, path, new URL(request.url).origin);
             setCacheHeaders(set, 60);
             return result;
         },
@@ -355,11 +351,10 @@ export const driveRouter = new Elysia({ name: 'drive' })
         '/drive/:ownerId/:mountId/thumb/:fileName',
         async ({ params, user, set }) => {
             const drive = await getSharedDrive(params.ownerId, user);
-            const file = await drive.getThumbnail(params.mountId, params.fileName);
-            if (!file) {
-                set.status = 404;
-                return 'No thumbnail available';
-            }
+            const pathId = params.fileName.split('.')[0];
+            const { mount } = await drive.resolveFile(params.mountId, pathId);
+            const file = await getThumbnail(mount.thumbsDir, pathId);
+            if (!file) throw new ApiError(404, 'No thumbnail available');
             setCacheHeaders(set, 86400);
             set.headers['Content-Type'] = 'image/webp';
             return file;

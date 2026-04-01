@@ -25,7 +25,6 @@ import {
 import { SSEventType } from '@workspace/lib/types/sse';
 import { validateACLEntries, validateEmailAddress } from '@workspace/lib/validation';
 import type { User } from 'better-auth/types';
-import type { BunFile } from 'bun';
 import { eq } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { createAsyncSingleton } from '../../utils/singleton';
@@ -37,8 +36,7 @@ import { contentDisposition } from '../core/http';
 import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
 import { createDefaultMountConfig, createMountConfig, Mount } from '../mount';
-import { getCollabPreviewData, getScreenPreview, getTextPreviewData } from '../preview/preview-cache';
-import { getThumbnail, saveThumbnail } from '../shared/thumbnails';
+import { saveThumbnail } from '../shared/thumbnails';
 import { getTeamMembers } from '../team';
 import { getMemberships, type Memberships } from '../user/';
 import {
@@ -470,32 +468,11 @@ export default class Drive {
         return { conflict: false as const, updatedAt };
     }
 
-    async getPreview(mountId: string, pathId: string, embedUrl: string) {
-        const mount = this.getMount(mountId);
-        const path = await mount.getPath(pathId);
-        if (!path || path.type === 'folder') return null;
-        return getScreenPreview(mount, path, embedUrl);
-    }
-
     async resolveFile(mountId: string, pathId: string): Promise<{ mount: Mount; path: DrivePath }> {
         const mount = this.getMount(mountId);
         const path = await mount.getPath(pathId);
         if (!path) throw new ApiError(404, 'File not found');
         return { mount, path };
-    }
-
-    async getTextPreview(mountId: string, pathId: string, baseUrl?: string) {
-        const mount = this.getMount(mountId);
-        const path = await mount.getPath(pathId);
-        if (!path || path.type === 'folder') return null;
-        if (path.type === DRIVE_TYPE_DOC) return getCollabPreviewData(mount, path, baseUrl);
-        return getTextPreviewData(mount, path);
-    }
-
-    async getThumbnail(mountId: string, fileName: string): Promise<BunFile | null> {
-        const mount = this.getMount(mountId);
-        const pathId = fileName.split('.')[0];
-        return getThumbnail(mount.thumbsDir, pathId);
     }
 
     async getMimeTypeContents(
