@@ -523,6 +523,12 @@ describe('trashPath (local-key storage)', () => {
         const file = await mount.getPath(fileId);
         expect(file!.trashedAt).not.toBeNull();
         expect(file!.parentId).toBe(rootId);
+
+        // Storage file still accessible (key-based storage doesn't move files)
+        const storageFile = await mount.readFile(fileId);
+        expect(storageFile).not.toBeNull();
+        const content = new TextDecoder().decode(await storageFile!.arrayBuffer());
+        expect(content).toBe('trash-me');
     });
 
     test('trash a file preserves acl column', async () => {
