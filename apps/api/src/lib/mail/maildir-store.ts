@@ -3,15 +3,21 @@ import type { BunFile } from 'bun';
 import { LocalFilesystem, PATHS, STANDARD_MAILBOXES } from '../core';
 import { buildMaildirFilename, createUniqueMessageId } from './mailutils';
 
-const { ROOT, MAILDIR, CUR, NEW, TMP } = PATHS.MAIL;
-
 export class MaildirStore {
-    readonly basePath = MAILDIR;
+    readonly basePath: string;
     readonly storage: LocalFilesystem;
     private watchers: FSWatcher[] = [];
+    private readonly CUR: string;
+    private readonly NEW: string;
+    private readonly TMP: string;
 
     constructor(homeDir: string) {
+        const { ROOT, MAILDIR, CUR, NEW, TMP } = PATHS.MAIL;
+        this.basePath = MAILDIR;
         this.storage = new LocalFilesystem(`${homeDir}/${ROOT}`);
+        this.CUR = CUR;
+        this.NEW = NEW;
+        this.TMP = TMP;
     }
 
     async exists(): Promise<boolean> {
@@ -36,9 +42,9 @@ export class MaildirStore {
     async createMailboxDir(mailbox: string): Promise<void> {
         const mailboxPath = this.mailboxDir(mailbox);
         await this.storage.mkdir(mailboxPath);
-        await this.storage.mkdir(this.storage.pathJoin(mailboxPath, CUR));
-        await this.storage.mkdir(this.storage.pathJoin(mailboxPath, NEW));
-        await this.storage.mkdir(this.storage.pathJoin(mailboxPath, TMP));
+        await this.storage.mkdir(this.storage.pathJoin(mailboxPath, this.CUR));
+        await this.storage.mkdir(this.storage.pathJoin(mailboxPath, this.NEW));
+        await this.storage.mkdir(this.storage.pathJoin(mailboxPath, this.TMP));
         if (mailbox !== '') {
             await this.storage.write(this.storage.pathJoin(mailboxPath, 'maildirfolder'), '');
         }
@@ -50,10 +56,10 @@ export class MaildirStore {
         const filename = `${uniqueId},S=${size}`;
         const mailboxPath = this.mailboxDir(mailbox);
 
-        const tmpPath = this.storage.pathJoin(mailboxPath, TMP, filename);
+        const tmpPath = this.storage.pathJoin(mailboxPath, this.TMP, filename);
         await this.storage.write(tmpPath, message);
 
-        const newPath = this.storage.pathJoin(mailboxPath, NEW, filename);
+        const newPath = this.storage.pathJoin(mailboxPath, this.NEW, filename);
         await this.storage.rename(tmpPath, newPath);
 
         return { uniqueId, size };
@@ -74,10 +80,10 @@ export class MaildirStore {
         const filename = buildMaildirFilename(uniqueId, flags, size);
         const mailboxPath = this.mailboxDir(mailbox);
 
-        const tmpPath = this.storage.pathJoin(mailboxPath, TMP, filename);
+        const tmpPath = this.storage.pathJoin(mailboxPath, this.TMP, filename);
         await this.storage.write(tmpPath, message);
 
-        const curPath = this.storage.pathJoin(mailboxPath, CUR, filename);
+        const curPath = this.storage.pathJoin(mailboxPath, this.CUR, filename);
         await this.storage.rename(tmpPath, curPath);
 
         return { uniqueId, size, filename };
@@ -85,14 +91,14 @@ export class MaildirStore {
 
     async moveNewToCur(mailbox: string): Promise<void> {
         const mailboxPath = this.mailboxDir(mailbox);
-        const newPath = this.storage.pathJoin(mailboxPath, NEW);
+        const newPath = this.storage.pathJoin(mailboxPath, this.NEW);
         if (!(await this.storage.dirExists(newPath))) return;
 
         for (const fileName of await this.storage.readdir(newPath)) {
             if (fileName.startsWith('.')) continue;
             const src = this.storage.pathJoin(newPath, fileName);
             const curName = fileName.includes(':') ? fileName : `${fileName}:2,`;
-            const dst = this.storage.pathJoin(mailboxPath, CUR, curName);
+            const dst = this.storage.pathJoin(mailboxPath, this.CUR, curName);
             try {
                 await this.storage.rename(src, dst);
             } catch (e: unknown) {
@@ -102,24 +108,24 @@ export class MaildirStore {
     }
 
     async listCurFiles(mailbox: string): Promise<string[]> {
-        const curPath = this.storage.pathJoin(this.mailboxDir(mailbox), CUR);
+        const curPath = this.storage.pathJoin(this.mailboxDir(mailbox), this.CUR);
         if (!(await this.storage.dirExists(curPath))) return [];
         return this.storage.readdir(curPath);
     }
 
     getMessageFile(mailbox: string, filename: string): BunFile {
-        const filePath = this.storage.pathJoin(this.mailboxDir(mailbox), CUR, filename);
+        const filePath = this.storage.pathJoin(this.mailboxDir(mailbox), this.CUR, filename);
         return this.storage.file(filePath);
     }
 
     async moveMessage(fromMailbox: string, fromFilename: string, toMailbox: string): Promise<void> {
-        const srcPath = this.storage.pathJoin(this.mailboxDir(fromMailbox), CUR, fromFilename);
-        const dstPath = this.storage.pathJoin(this.mailboxDir(toMailbox), CUR, fromFilename);
+        const srcPath = this.storage.pathJoin(this.mailboxDir(fromMailbox), this.CUR, fromFilename);
+        const dstPath = this.storage.pathJoin(this.mailboxDir(toMailbox), this.CUR, fromFilename);
         await this.storage.rename(srcPath, dstPath);
     }
 
     async renameInCur(mailbox: string, oldFilename: string, newFilename: string): Promise<void> {
-        const curPath = this.storage.pathJoin(this.mailboxDir(mailbox), CUR);
+        const curPath = this.storage.pathJoin(this.mailboxDir(mailbox), this.CUR);
         await this.storage.rename(
             this.storage.pathJoin(curPath, oldFilename),
             this.storage.pathJoin(curPath, newFilename),
@@ -127,7 +133,7 @@ export class MaildirStore {
     }
 
     async deleteMessage(mailbox: string, filename: string): Promise<void> {
-        const filePath = this.storage.pathJoin(this.mailboxDir(mailbox), CUR, filename);
+        const filePath = this.storage.pathJoin(this.mailboxDir(mailbox), this.CUR, filename);
         if (await this.storage.fileExists(filePath)) {
             await this.storage.unlink(filePath);
         }
@@ -139,13 +145,13 @@ export class MaildirStore {
     }
 
     async dirSize(): Promise<number> {
-        return (await this.storage.dirSize(ROOT)) || 0;
+        return (await this.storage.dirSize(PATHS.MAIL.ROOT)) || 0;
     }
 
     watchMailboxes(onChange: (mailbox: string) => void): void {
         for (const mailbox of STANDARD_MAILBOXES) {
             const mailboxPath = this.mailboxDir(mailbox);
-            for (const subdir of [CUR, NEW]) {
+            for (const subdir of [this.CUR, this.NEW]) {
                 try {
                     const watcher = this.storage.watch(this.storage.pathJoin(mailboxPath, subdir), () =>
                         onChange(mailbox),

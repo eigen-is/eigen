@@ -2,6 +2,7 @@ import { Elysia, t } from 'elysia';
 import { getUploadMaxSize } from '../lib/config/enforcement';
 import { contentDisposition, setCacheHeaders } from '../lib/core/http';
 import { getSharedDrive } from '../lib/drive';
+import { exportDocument } from '../lib/export/export-document';
 import { getHome } from '../lib/home';
 import { betterAuth } from './auth';
 
@@ -174,7 +175,8 @@ export const driveRouter = new Elysia({ name: 'drive' })
         '/drive/:ownerId/:mountId/file/:pathId/export/:format',
         async ({ params, user, set }) => {
             const drive = await getSharedDrive(params.ownerId, user);
-            const result = await drive.exportDocument(params.mountId, params.pathId, params.format);
+            const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
+            const result = await exportDocument(mount, path, params.format);
             set.headers['Content-Type'] = result.contentType;
             set.headers['Content-Disposition'] = contentDisposition('attachment', result.fileName);
             return result.data;

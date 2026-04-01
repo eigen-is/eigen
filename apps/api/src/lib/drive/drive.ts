@@ -1,6 +1,5 @@
 import { getTextPreviewMode } from '@workspace/lib/constants';
 import {
-    DRIVE_MIME_DOC,
     DRIVE_TYPE_CHAT,
     DRIVE_TYPE_DOC,
     DRIVE_TYPE_FILE,
@@ -478,30 +477,11 @@ export default class Drive {
         return getScreenPreview(mount, path, embedUrl);
     }
 
-    async exportDocument(
-        mountId: string,
-        pathId: string,
-        format: string,
-    ): Promise<{ data: Buffer; contentType: string; fileName: string }> {
+    async resolveFile(mountId: string, pathId: string): Promise<{ mount: Mount; path: DrivePath }> {
         const mount = this.getMount(mountId);
         const path = await mount.getPath(pathId);
         if (!path) throw new ApiError(404, 'File not found');
-
-        if (path.mimeType === DRIVE_MIME_DOC) {
-            if (format === 'docx') {
-                const { exportEigendocToDocx } = await import('../export/doc/docx');
-                return exportEigendocToDocx(mount, path);
-            }
-            if (format === 'pdf') {
-                const { exportEigendocToPdf } = await import('../export/doc/pdf');
-                return exportEigendocToPdf(mount, path);
-            }
-            if (format === 'html') {
-                const { exportEigendocToHtml } = await import('../export/doc/html');
-                return exportEigendocToHtml(mount, path);
-            }
-        }
-        throw new ApiError(400, `Format "${format}" is not supported for ${path.mimeType}`);
+        return { mount, path };
     }
 
     async getTextPreview(mountId: string, pathId: string, baseUrl?: string) {
