@@ -1,3 +1,4 @@
+/// <reference path="../modules.d.ts" />
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Mount } from '../../mount';
 import { generateExportHtml } from './html';
