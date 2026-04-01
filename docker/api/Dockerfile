@@ -6,7 +6,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     libvips \
     libimage-exiftool-perl \
-    python3 \
+    weasyprint \
     make \
     g++ \
     curl \

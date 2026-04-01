@@ -1,5 +1,5 @@
 import { getDriveDownloadUrl } from '@workspace/lib/api';
-import { useMovePath } from '@workspace/lib/drive';
+import { useExportDocument, useMovePath } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { useCallback, useMemo } from 'react';
 import { Column, ColumnLayout } from '../app/column-layout.tsx';
@@ -18,6 +18,7 @@ import { DriveList, DriveListToolbar } from './drive-list';
 import { DriveRenameItem } from './drive-rename-item';
 import { defaultDriveSort } from './drive-table';
 import { DriveUploadFiles } from './drive-upload-files';
+import { ExportProgressDialog } from './export-progress-dialog';
 import { useDriveDialogs } from './use-drive-dialogs';
 
 export type DriveLayoutProps = {
@@ -124,6 +125,11 @@ export function DriveLayout({
         }
     };
 
+    const { exportDocument, isExporting } = useExportDocument();
+
+    const handleExportPath = (path: DrivePath, format: string) =>
+        exportDocument(path.ownerId, path.mountId, path.id, format);
+
     const handleShareClick = (path: DrivePath) => {
         if (allowShare) {
             dialogs.share.openDialog(path);
@@ -166,6 +172,7 @@ export function DriveLayout({
         pathId,
         showBreadcrumb,
         onDownload: handleDownloadPath,
+        onExport: handleExportPath,
         allowDelete,
         allowUpload,
         onRename: allowRename ? handleRenamePath : undefined,
@@ -344,6 +351,8 @@ export function DriveLayout({
                     path={dialogs.share.item}
                 />
             )}
+
+            <ExportProgressDialog open={isExporting} />
         </>
     );
 }

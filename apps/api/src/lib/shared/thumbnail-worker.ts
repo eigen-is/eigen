@@ -29,13 +29,14 @@ async function sharpResize(
         const height = metadata.pageHeight || metadata.height;
 
         if (width > 12000 || height > 12000) return null;
+
         const data = await image
             .resize(options.maxSize, options.maxSize, {
                 fit: options.fit,
                 position: 'center',
                 withoutEnlargement: options.fit === 'inside',
             })
-            .webp({ quality: options.quality, animated: true })
+            .webp({ quality: options.quality })
             .toBuffer();
 
         return { data, width, height };
