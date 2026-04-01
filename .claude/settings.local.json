@@ -175,7 +175,8 @@
       "WebFetch(domain:elysia.dev)",
       "Bash(docker compose:*)",
       "Bash(jobs -l)",
-      "Bash(npx biome:*)"
+      "Bash(npx biome:*)",
+      "Bash(kill %1)"
     ]
   },
   "enabledPlugins": {
