@@ -312,7 +312,6 @@ Detailed architecture docs in `docs/`:
 | [CHAT.md](docs/CHAT.md)                                       | Chat rooms, slash commands, embedded chats                                   |
 | [COMMENTS_IN_DOCS.md](docs/COMMENTS_IN_DOCS.md)               | Comment index, mentions, resolution tracking                                 |
 | [CALENDAR.md](docs/CALENDAR.md)                               | Calendar, RRULE, sharing, team calendars                                     |
-| [RESEARCH_CALDAV.md](docs/RESEARCH_CALDAV.md)                 | CalDAV protocol spec, implementation plan                                    |
 | [STICKIES.md](docs/STICKIES.md)                               | Kanban board, Yjs data model                                                 |
 | [SLIDES.md](docs/SLIDES.md)                                   | Presentation editor, percentage coordinates                                  |
 | [SHEETS.md](docs/SHEETS.md)                                   | Spreadsheet, op-based Yjs sync                                               |
@@ -342,5 +341,5 @@ Detailed architecture docs in `docs/`:
 | [TODO-GUEST-USERS.md](docs/TODO-GUEST-USERS.md)             | Guest user access plan (superseded)      |
 | [TODO-CALENDAR-TIMEZONE.md](docs/TODO-CALENDAR-TIMEZONE.md) | Timezone-aware recurrence expansion      |
 | [TODO-FORTUNE-SHEETS.md](docs/TODO-FORTUNE-SHEETS.md)       | Fortune-sheet refactoring audit          |
-| [RESEARCH_AI.md](docs/RESEARCH_AI.md)                       | Local/private AI integration research    |
+| [RESEARCH_AI.md](docs/PROPOSAL_AI.md)                       | Local/private AI integration research    |
 | [TODO-SOFT-DELETE-CLEANUP.md](docs/TODO-SOFT-DELETE-CLEANUP.md) | Consolidate deleteFile/deleteFolder into single trashPath |

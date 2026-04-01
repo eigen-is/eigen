@@ -436,7 +436,6 @@ public getRawEventsInRange(calendarId: string, from: number, to: number): Calend
     // 1. Non-recurring events: direct time range check
     // 2. Recurring events: expand to check if any occurrence overlaps, include master if yes
     // 3. Include exception events whose parent is included
-    // See docs/RESEARCH_CALDAV.md "Critical: getEventsInRange() vs CalDAV"
 }
 ```
 
