@@ -1,5 +1,7 @@
 # Soft Delete / Recycle Bin
 
+> **Status**: Implemented on `feat/soft-delete` branch.
+>
 > **TLDR**: Delete becomes "move to trash". Two new columns on `paths` (`trashedAt`, `trashedFrom`).
 > On trash, `parentId` is reparented to root and the original parent is stored in `trashedFrom`.
 > Path-based (`local`) storage moves files to a `.trash/` directory; key-based/S3 needs no file movement.
