@@ -3029,4 +3029,157 @@ describe('Drive', () => {
             expect(res.status).toBe(404);
         });
     });
+
+    describe('Trash Management Routes', () => {
+        let trashMgmtFileId: string;
+        let trashMgmtFolderId: string;
+        let permanentFileId: string;
+
+        beforeAll(async () => {
+            // Create a folder for trash management testing
+            const folder = await drivePost(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${aliceRootId}`,
+                { folderName: 'Trash Mgmt Folder' },
+            );
+            trashMgmtFolderId = folder.id;
+
+            // Create a file to trash and restore
+            const file = new File(['trash mgmt content'], 'trash-mgmt-file.txt', { type: 'text/plain' });
+            const uploaded = await driveUpload(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                aliceRootId,
+                file,
+            );
+            trashMgmtFileId = uploaded.id;
+
+            // Create a file to permanently delete
+            const permFile = new File(['permanent delete content'], 'perm-delete-file.txt', { type: 'text/plain' });
+            const permUploaded = await driveUpload(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                aliceRootId,
+                permFile,
+            );
+            permanentFileId = permUploaded.id;
+        });
+
+        test('GET /trash returns trashed items after soft-delete', async () => {
+            // Soft-delete the file first
+            const deleteRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/file/${trashMgmtFileId}`,
+                { method: 'DELETE' },
+            );
+            expect(deleteRes.status).toBe(200);
+
+            // List trash
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/trash`,
+            );
+            expect(res.status).toBe(200);
+            const trashList = (await res.json()) as DrivePath[];
+            expect(Array.isArray(trashList)).toBe(true);
+            const found = trashList.find((item) => item.id === trashMgmtFileId);
+            expect(found).toBeDefined();
+        });
+
+        test('POST /trash/:pathId/restore restores item to folder listing', async () => {
+            // Restore the trashed file
+            const restoreRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/trash/${trashMgmtFileId}/restore`,
+                { method: 'POST' },
+            );
+            expect(restoreRes.status).toBe(200);
+            const restoreData = (await restoreRes.json()) as { success: boolean };
+            expect(restoreData.success).toBe(true);
+
+            // File should no longer be in trash
+            const trashRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/trash`,
+            );
+            const trashList = (await trashRes.json()) as DrivePath[];
+            expect(trashList.find((item) => item.id === trashMgmtFileId)).toBeUndefined();
+
+            // File should be visible in root folder listing again
+            const contents = await driveGetList(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${aliceRootId}`,
+            );
+            const restored = contents.find((item) => item.id === trashMgmtFileId);
+            expect(restored).toBeDefined();
+        });
+
+        test('DELETE /trash/:pathId permanently deletes item', async () => {
+            // First soft-delete the file so it is in trash
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/file/${permanentFileId}`,
+                { method: 'DELETE' },
+            );
+
+            // Permanently delete it from trash
+            const permDeleteRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/trash/${permanentFileId}`,
+                { method: 'DELETE' },
+            );
+            expect(permDeleteRes.status).toBe(200);
+            const permDeleteData = (await permDeleteRes.json()) as { success: boolean };
+            expect(permDeleteData.success).toBe(true);
+
+            // Item should not be in trash anymore
+            const trashRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/trash`,
+            );
+            const trashList = (await trashRes.json()) as DrivePath[];
+            expect(trashList.find((item) => item.id === permanentFileId)).toBeUndefined();
+        });
+
+        test('DELETE /trash empties all trashed items', async () => {
+            // Trash the folder
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/folder/${trashMgmtFolderId}`,
+                { method: 'DELETE' },
+            );
+
+            // Also re-trash the restored file
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/file/${trashMgmtFileId}`,
+                { method: 'DELETE' },
+            );
+
+            // Empty trash
+            const emptyRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/trash`,
+                { method: 'DELETE' },
+            );
+            expect(emptyRes.status).toBe(200);
+            const emptyData = (await emptyRes.json()) as { success: boolean };
+            expect(emptyData.success).toBe(true);
+
+            // Trash should now be empty
+            const trashRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/trash`,
+            );
+            const trashList = (await trashRes.json()) as DrivePath[];
+            expect(Array.isArray(trashList)).toBe(true);
+            expect(trashList.length).toBe(0);
+        });
+    });
 });

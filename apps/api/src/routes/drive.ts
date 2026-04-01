@@ -362,4 +362,40 @@ export const driveRouter = new Elysia({ name: 'drive' })
             return file;
         },
         { auth: true },
+    )
+    // Trash management
+    .get(
+        '/drive/:ownerId/:mountId/trash',
+        async ({ params, user }) => {
+            const drive = await getSharedDrive(params.ownerId, user);
+            return await drive.listTrash(params.mountId);
+        },
+        { auth: true },
+    )
+    .post(
+        '/drive/:ownerId/:mountId/trash/:pathId/restore',
+        async ({ params, user }) => {
+            const drive = await getSharedDrive(params.ownerId, user);
+            await drive.restorePath(params.mountId, params.pathId);
+            return { success: true };
+        },
+        { auth: true },
+    )
+    .delete(
+        '/drive/:ownerId/:mountId/trash/:pathId',
+        async ({ params, user }) => {
+            const drive = await getSharedDrive(params.ownerId, user);
+            await drive.permanentlyDelete(params.mountId, params.pathId);
+            return { success: true };
+        },
+        { auth: true },
+    )
+    .delete(
+        '/drive/:ownerId/:mountId/trash',
+        async ({ params, user }) => {
+            const drive = await getSharedDrive(params.ownerId, user);
+            await drive.emptyTrash(params.mountId);
+            return { success: true };
+        },
+        { auth: true },
     );
