@@ -103,6 +103,10 @@ export class Mount {
         return path.join(this.tmpDir, 'previews');
     }
 
+    get trashDir(): string {
+        return path.join(this.dataDir, '.trash');
+    }
+
     async init(): Promise<void> {
         if (!fs.existsSync(this.baseDir)) {
             fs.mkdirSync(this.baseDir, { recursive: true });
@@ -116,11 +120,8 @@ export class Mount {
         if (!fs.existsSync(this.previewsDir)) {
             fs.mkdirSync(this.previewsDir, { recursive: true });
         }
-        if (this.isPathBased) {
-            const trashDir = path.join(this.dataDir, '.trash');
-            if (!fs.existsSync(trashDir)) {
-                fs.mkdirSync(trashDir, { recursive: true });
-            }
+        if (this.isPathBased && !fs.existsSync(this.trashDir)) {
+            fs.mkdirSync(this.trashDir, { recursive: true });
         }
 
         // Cleanup stale temp files older than 1 hour (e.g. from interrupted uploads or crashes)
