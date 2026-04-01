@@ -19,6 +19,8 @@ export const paths = sqliteTable('paths', {
     hash: text('hash'),
     createdAt: integer('createdAt', { mode: 'timestamp' }).default(sql`(unixepoch())`),
     updatedAt: integer('updatedAt', { mode: 'timestamp' }).default(sql`(unixepoch())`),
+    trashedAt: integer('trashedAt', { mode: 'timestamp' }),
+    trashedFrom: text('trashedFrom'),
 });
 
 export const labels = sqliteTable('labels', {
