@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthRouteImport } from './routes/_auth'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthTrashRouteImport } from './routes/_auth.trash'
 import { Route as AuthSharedToRouteImport } from './routes/_auth.shared.$to'
 import { Route as AuthMimeMimeTypeRouteImport } from './routes/_auth.mime.$mimeType'
 import { Route as AuthFsOwnerIdMountIdPathIdRouteImport } from './routes/_auth.fs.$ownerId.$mountId.$pathId'
@@ -30,6 +31,11 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AuthTrashRoute = AuthTrashRouteImport.update({
+  id: '/trash',
+  path: '/trash',
+  getParentRoute: () => AuthRoute,
 } as any)
 const AuthSharedToRoute = AuthSharedToRouteImport.update({
   id: '/shared/$to',
@@ -57,6 +63,7 @@ const AuthEditOwnerIdMountIdPathIdRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/trash': typeof AuthTrashRoute
   '/mime/$mimeType': typeof AuthMimeMimeTypeRoute
   '/shared/$to': typeof AuthSharedToRoute
   '/edit/$ownerId/$mountId/$pathId': typeof AuthEditOwnerIdMountIdPathIdRoute
@@ -65,6 +72,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/trash': typeof AuthTrashRoute
   '/mime/$mimeType': typeof AuthMimeMimeTypeRoute
   '/shared/$to': typeof AuthSharedToRoute
   '/edit/$ownerId/$mountId/$pathId': typeof AuthEditOwnerIdMountIdPathIdRoute
@@ -75,6 +83,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_auth': typeof AuthRouteWithChildren
   '/login': typeof LoginRoute
+  '/_auth/trash': typeof AuthTrashRoute
   '/_auth/mime/$mimeType': typeof AuthMimeMimeTypeRoute
   '/_auth/shared/$to': typeof AuthSharedToRoute
   '/_auth/edit/$ownerId/$mountId/$pathId': typeof AuthEditOwnerIdMountIdPathIdRoute
@@ -85,6 +94,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/trash'
     | '/mime/$mimeType'
     | '/shared/$to'
     | '/edit/$ownerId/$mountId/$pathId'
@@ -93,6 +103,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/login'
+    | '/trash'
     | '/mime/$mimeType'
     | '/shared/$to'
     | '/edit/$ownerId/$mountId/$pathId'
@@ -102,6 +113,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_auth'
     | '/login'
+    | '/_auth/trash'
     | '/_auth/mime/$mimeType'
     | '/_auth/shared/$to'
     | '/_auth/edit/$ownerId/$mountId/$pathId'
@@ -137,6 +149,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_auth/trash': {
+      id: '/_auth/trash'
+      path: '/trash'
+      fullPath: '/trash'
+      preLoaderRoute: typeof AuthTrashRouteImport
+      parentRoute: typeof AuthRoute
+    }
     '/_auth/shared/$to': {
       id: '/_auth/shared/$to'
       path: '/shared/$to'
@@ -169,6 +188,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthRouteChildren {
+  AuthTrashRoute: typeof AuthTrashRoute
   AuthMimeMimeTypeRoute: typeof AuthMimeMimeTypeRoute
   AuthSharedToRoute: typeof AuthSharedToRoute
   AuthEditOwnerIdMountIdPathIdRoute: typeof AuthEditOwnerIdMountIdPathIdRoute
@@ -176,6 +196,7 @@ interface AuthRouteChildren {
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
+  AuthTrashRoute: AuthTrashRoute,
   AuthMimeMimeTypeRoute: AuthMimeMimeTypeRoute,
   AuthSharedToRoute: AuthSharedToRoute,
   AuthEditOwnerIdMountIdPathIdRoute: AuthEditOwnerIdMountIdPathIdRoute,

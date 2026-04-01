@@ -19,6 +19,8 @@ export const SSEventType = {
     DRIVE_ACL_UPDATED: 'drive:acl-updated',
     DRIVE_ACL_SHARED: 'drive:acl-shared',
     DRIVE_ACL_UNSHARED: 'drive:acl-unshared',
+    DRIVE_PATH_TRASHED: 'drive:path-trashed',
+    DRIVE_PATH_RESTORED: 'drive:path-restored',
     // Chat events
     CHAT_MESSAGE_POSTED: 'chat:message-posted',
     CHAT_MESSAGE_EDITED: 'chat:message-edited',

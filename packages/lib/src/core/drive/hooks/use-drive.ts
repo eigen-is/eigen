@@ -34,6 +34,8 @@ export const driveKeys = {
         [...driveKeys.textPreviews(ownerId), mountId, pathId] as const,
     effectiveMembers: (ownerId: string, mountId: string, pathId: string) =>
         [...driveKeys.owner(ownerId), 'effective-members', mountId, pathId] as const,
+    trash: (ownerId: string) => [...driveKeys.owner(ownerId), 'trash'] as const,
+    trashList: (ownerId: string, mountId: string) => [...driveKeys.trash(ownerId), mountId] as const,
 };
 
 // GET MOUNTS
@@ -517,6 +519,61 @@ export function useTextPreview(ownerId: string, mountId: string, pathId: string,
     });
 }
 
+// LIST TRASH
+export function useListTrash(ownerId: string, mountId: string) {
+    return useQuery({
+        queryKey: driveKeys.trashList(ownerId, mountId),
+        queryFn: async () => {
+            const { data, error } = await driveApi({ ownerId })({ mountId }).trash.get();
+            if (error) throw error;
+            return data;
+        },
+        enabled: !!ownerId && !!mountId,
+    });
+}
+
+// RESTORE PATH FROM TRASH
+export function useRestorePath(ownerId: string, mountId: string) {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (pathId: string) => {
+            const response = await driveApi({ ownerId })({ mountId }).trash({ pathId }).restore.post();
+            if (response.error) throw new AppError(response);
+            return response.data;
+        },
+        onSuccess: () => invalidateTrash(queryClient, ownerId, mountId),
+        onError: onMutationError,
+    });
+}
+
+// PERMANENTLY DELETE FROM TRASH
+export function usePermanentlyDelete(ownerId: string, mountId: string) {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (pathId: string) => {
+            const response = await driveApi({ ownerId })({ mountId }).trash({ pathId }).delete();
+            if (response.error) throw new AppError(response);
+            return response.data;
+        },
+        onSuccess: () => invalidateTrash(queryClient, ownerId, mountId),
+        onError: onMutationError,
+    });
+}
+
+// EMPTY TRASH
+export function useEmptyTrash(ownerId: string, mountId: string) {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async () => {
+            const response = await driveApi({ ownerId })({ mountId }).trash.delete();
+            if (response.error) throw new AppError(response);
+            return response.data;
+        },
+        onSuccess: () => invalidateTrash(queryClient, ownerId, mountId),
+        onError: onMutationError,
+    });
+}
+
 // SSE invalidation functions
 export function invalidateAclSharedOrUnshared(queryClient: QueryClient, ownerId: string): void {
     queryClient.invalidateQueries({ queryKey: driveKeys.shared(ownerId, 'with-me') });
@@ -609,4 +666,8 @@ export function invalidateAclUpdated(
     if (parentId) {
         queryClient.invalidateQueries({ queryKey: driveKeys.folder(ownerId, mountId, parentId) });
     }
+}
+
+export function invalidateTrash(queryClient: QueryClient, ownerId: string, mountId: string): void {
+    queryClient.invalidateQueries({ queryKey: driveKeys.trashList(ownerId, mountId) });
 }

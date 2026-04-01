@@ -193,6 +193,7 @@ export type DrivePath = {
     visibility: DriveVisibility;
     sharingRestricted: boolean;
     details: DrivePathDetails;
+    trashedAt: Date | null;
     createdAt: Date;
     updatedAt: Date;
 };

@@ -8,6 +8,7 @@ import {
     invalidateItemDeleted,
     invalidatePathMoved,
     invalidatePathRenamed,
+    invalidateTrash,
 } from './hooks/use-drive';
 
 export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient, userId?: string): boolean {
@@ -45,6 +46,25 @@ export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient, use
         case SSEventType.DRIVE_ACL_UPDATED:
             if (userId) invalidateAclSharedOrUnshared(queryClient, userId);
             invalidateAclUpdated(queryClient, path.ownerId, path.mountId, path.id, path.parentId);
+            return true;
+
+        case SSEventType.DRIVE_PATH_TRASHED:
+            if (event.oldParentId) {
+                invalidateItemDeleted(
+                    queryClient,
+                    path.ownerId,
+                    path.mountId,
+                    path.id,
+                    event.oldParentId,
+                    path.mimeType,
+                );
+            }
+            invalidateTrash(queryClient, path.ownerId, path.mountId);
+            return true;
+
+        case SSEventType.DRIVE_PATH_RESTORED:
+            invalidateItemCreated(queryClient, path.ownerId, path.mountId, path.parentId, path.mimeType);
+            invalidateTrash(queryClient, path.ownerId, path.mountId);
             return true;
 
         default:

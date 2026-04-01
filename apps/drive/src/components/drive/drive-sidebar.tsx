@@ -1,5 +1,6 @@
 import { useMatch, useNavigate } from '@tanstack/react-router';
-import { usePathInfo, useRootFolder } from '@workspace/lib/drive';
+import { useAuth } from '@workspace/lib/auth';
+import { DEFAULT_MOUNT_ID, useListTrash, usePathInfo, useRootFolder } from '@workspace/lib/drive';
 import { usePeopleTeams } from '@workspace/lib/people';
 import { usePublicConfig } from '@workspace/lib/public';
 import { useTeamMounts } from '@workspace/lib/team';
@@ -7,6 +8,7 @@ import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { MountSettings } from '@workspace/lib/types/settings';
 import { SidebarItem, StorageUsage, UserAvatar } from '@workspace/ui';
+import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
 import {
     DropdownMenu,
@@ -35,6 +37,7 @@ import {
     Presentation,
     Sheet,
     StickyNote,
+    Trash2,
     Upload as UploadIcon,
     UsersRound,
 } from 'lucide-react';
@@ -107,6 +110,11 @@ function TeamDriveItems({
 }
 
 export function DriveSidebar({ condensed = false, onClose, isMobile = false, rootPath }: DriveSidebarProps) {
+    const auth = useAuth();
+    const currentUserId = auth.user?.id || '';
+    const { data: trashedItems } = useListTrash(currentUserId, DEFAULT_MOUNT_ID);
+    const trashCount = trashedItems?.length ?? 0;
+
     // Dialog open states
     const [createFolderOpen, setCreateFolderOpen] = useState(false);
     const [createDocOpen, setCreateDocOpen] = useState(false);
@@ -274,6 +282,16 @@ export function DriveSidebar({ condensed = false, onClose, isMobile = false, roo
                     label="Shared with me"
                     condensed={condensed}
                 />
+            </SidebarSection>
+            <Separator />
+            <SidebarSection condensed={condensed}>
+                <SidebarItem icon={<Trash2 className="h-4 w-4" />} to="/trash" label="Trash" condensed={condensed}>
+                    {!condensed && trashCount > 0 && (
+                        <Badge variant="secondary" className="ml-auto text-xs">
+                            {trashCount}
+                        </Badge>
+                    )}
+                </SidebarItem>
             </SidebarSection>
 
             {config && teams && teams.length > 0 && (

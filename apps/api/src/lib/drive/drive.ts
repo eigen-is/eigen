@@ -156,8 +156,8 @@ export default class Drive {
 
     async getFolderContents(mountId: string, pathId: string): Promise<DrivePath[]> {
         const mount = this.getMount(mountId);
-        const folder = await mount.getPath(pathId);
-        if (!folder || !isContainerType(folder.type)) {
+        const folder = await mount.getActivePath(pathId);
+        if (!isContainerType(folder.type)) {
             throw new ApiError(404, 'Folder not found');
         }
 
@@ -170,8 +170,8 @@ export default class Drive {
 
     async createFolder(mountId: string, parentId: string, folderName: string): Promise<DrivePath> {
         const mount = this.getMount(mountId);
-        const parent = await mount.getPath(parentId);
-        if (!parent || !isContainerType(parent.type)) {
+        const parent = await mount.getActivePath(parentId);
+        if (!isContainerType(parent.type)) {
             throw new ApiError(404, 'Parent folder not found');
         }
 
@@ -230,8 +230,8 @@ export default class Drive {
 
     async uploadFiles(mountId: string, parentId: string, request: Request, maxSize: number): Promise<DrivePath[]> {
         const mount = this.getMount(mountId);
-        const parent = await mount.getPath(parentId);
-        if (!parent || parent.type !== 'folder') {
+        const parent = await mount.getActivePath(parentId);
+        if (parent.type !== 'folder') {
             throw new ApiError(404, 'Parent folder not found');
         }
 
@@ -276,63 +276,97 @@ export default class Drive {
     }
 
     async deleteFolder(mountId: string, pathId: string): Promise<void> {
-        const mount = this.getMount(mountId);
-        const folder = await mount.getPath(pathId);
-        if (!folder || !isContainerType(folder.type)) {
-            throw new ApiError(404, 'Folder not found');
-        }
-
-        if (folder.parentId === null) {
-            throw new ApiError(400, 'Cannot delete root folder');
-        }
-
-        if (!(await this.canWrite(mountId, pathId, this.owner))) {
-            throw new ApiError(403, 'No write permission');
-        }
-
-        await this.closeCollabDocumentsRecursively(mountId, pathId);
-        await this.propagateACLRemovalRecursively(mountId, pathId);
-
-        await mount.deletePath(pathId);
-
-        if (isCollabType(folder.type) || isChatType(folder.type)) {
-            this.emit(SSEventType.DRIVE_FILE_DELETED, folder);
-        } else {
-            this.emit(SSEventType.DRIVE_FOLDER_DELETED, folder);
-        }
+        return this.trashPath(mountId, pathId);
     }
 
     async deleteFile(mountId: string, pathId: string): Promise<void> {
+        return this.trashPath(mountId, pathId);
+    }
+
+    async trashPath(mountId: string, pathId: string): Promise<void> {
         const mount = this.getMount(mountId);
-        const file = await mount.getPath(pathId);
-        if (!file) {
-            throw new ApiError(404, 'File not found');
-        }
+        const item = await mount.getActivePath(pathId);
 
-        if (isCollabType(file.type)) {
-            return this.deleteFolder(mountId, pathId);
-        }
-
+        if (item.parentId === null) throw new ApiError(400, 'Cannot trash root folder');
         if (!(await this.canWrite(mountId, pathId, this.owner))) {
             throw new ApiError(403, 'No write permission');
         }
 
-        await mount.deletePath(pathId);
-        await propagateACLChange(file, file.acl, null);
-        this.emit(SSEventType.DRIVE_FILE_DELETED, file);
+        // Close collab docs BEFORE setting trashedAt (they use listFolderAll internally)
+        if (isContainerType(item.type)) {
+            await this.closeCollabDocumentsRecursively(mountId, pathId);
+            await this.propagateACLRemovalRecursively(mountId, pathId);
+        } else {
+            if (isCollabType(item.type)) {
+                try {
+                    await this.closeCollabDocument(mountId, pathId);
+                } catch (e) {
+                    console.error(`Failed to close collab document ${pathId}:`, e);
+                }
+            }
+            if (item.acl) {
+                await propagateACLChange(item, item.acl, null);
+            }
+        }
+
+        const trashedItem = await mount.trashPath(pathId);
+        this.emit(SSEventType.DRIVE_PATH_TRASHED, trashedItem, item.parentId ?? undefined);
+    }
+
+    async restorePath(mountId: string, pathId: string): Promise<void> {
+        const mount = this.getMount(mountId);
+        const item = await mount.getPath(pathId);
+        if (!item?.trashedAt) throw new ApiError(404, 'Trashed item not found');
+
+        const restoredItem = await mount.restorePath(pathId);
+
+        // Re-propagate ACL
+        if (restoredItem.acl) {
+            await propagateACLChange(restoredItem, null, restoredItem.acl);
+        }
+        // For containers, re-propagate for descendants with ACL
+        if (isContainerType(restoredItem.type)) {
+            await this.propagateACLRestoreRecursively(mountId, restoredItem.id);
+        }
+
+        this.emit(SSEventType.DRIVE_PATH_RESTORED, restoredItem);
+    }
+
+    async listTrash(mountId: string): Promise<DrivePath[]> {
+        const mount = this.getMount(mountId);
+        return mount.listTrash();
+    }
+
+    async permanentlyDelete(mountId: string, pathId: string): Promise<void> {
+        const mount = this.getMount(mountId);
+        const item = await mount.getPath(pathId);
+        if (!item?.trashedAt) throw new ApiError(404, 'Trashed item not found');
+
+        await mount.permanentlyDeleteFromTrash(pathId);
+
+        if (isContainerType(item.type) || isCollabType(item.type) || isChatType(item.type)) {
+            this.emit(SSEventType.DRIVE_FOLDER_DELETED, item);
+        } else {
+            this.emit(SSEventType.DRIVE_FILE_DELETED, item);
+        }
+    }
+
+    async emptyTrash(mountId: string): Promise<void> {
+        const mount = this.getMount(mountId);
+        const items = await mount.listTrash();
+        for (const item of items) {
+            await this.permanentlyDelete(mountId, item.id);
+        }
     }
 
     async movePath(mountId: string, pathId: string, targetParentId: string): Promise<DrivePath> {
         const mount = this.getMount(mountId);
-        const path = await mount.getPath(pathId);
-        if (!path) {
-            throw new ApiError(404, 'Path not found');
-        }
+        const path = await mount.getActivePath(pathId);
 
         const oldParentId = path.parentId;
 
-        const targetParent = await mount.getPath(targetParentId);
-        if (!targetParent || targetParent.type !== DRIVE_TYPE_FOLDER) {
+        const targetParent = await mount.getActivePath(targetParentId);
+        if (targetParent.type !== DRIVE_TYPE_FOLDER) {
             throw new ApiError(404, 'Target parent is not a folder');
         }
 
@@ -363,10 +397,7 @@ export default class Drive {
 
     async renamePath(mountId: string, pathId: string, newName: string): Promise<void> {
         const mount = this.getMount(mountId);
-        const item = await mount.getPath(pathId);
-        if (!item) {
-            throw new ApiError(404, 'Path not found');
-        }
+        const item = await mount.getActivePath(pathId);
 
         if (!(await this.canWrite(mountId, pathId, this.owner))) {
             throw new ApiError(403, 'No write permission');
@@ -380,13 +411,14 @@ export default class Drive {
 
     async downloadFile(mountId: string, pathId: string) {
         const mount = this.getMount(mountId);
+        await mount.getActivePath(pathId);
         return await mount.readFile(pathId);
     }
 
     async serveFile(mountId: string, pathId: string, disposition: 'attachment' | 'inline'): Promise<Response> {
         const mount = this.getMount(mountId);
-        const path = await mount.getPath(pathId);
-        if (!path || path.type !== DRIVE_TYPE_FILE) throw new ApiError(404, 'File not found');
+        const path = await mount.getActivePath(pathId);
+        if (path.type !== DRIVE_TYPE_FILE) throw new ApiError(404, 'File not found');
         const file = await mount.readFile(pathId);
         if (!file) throw new ApiError(404, 'File not found');
         return new Response(file, {
@@ -401,8 +433,8 @@ export default class Drive {
 
     async writeFileContent(mountId: string, pathId: string, data: Buffer): Promise<DrivePath> {
         const mount = this.getMount(mountId);
-        const path = await mount.getPath(pathId);
-        if (!path || path.type !== DRIVE_TYPE_FILE) {
+        const path = await mount.getActivePath(pathId);
+        if (path.type !== DRIVE_TYPE_FILE) {
             throw new ApiError(404, 'File not found');
         }
         if (!(await this.canWrite(mountId, pathId, this.owner))) {
@@ -417,8 +449,8 @@ export default class Drive {
 
     async getEditableContent(mountId: string, pathId: string) {
         const mount = this.getMount(mountId);
-        const path = await mount.getPath(pathId);
-        if (!path || path.type !== DRIVE_TYPE_FILE) throw new ApiError(404, 'File not found');
+        const path = await mount.getActivePath(pathId);
+        if (path.type !== DRIVE_TYPE_FILE) throw new ApiError(404, 'File not found');
 
         const editMode = getTextPreviewMode(path.mimeType, path.name);
         if (!editMode) throw new ApiError(400, 'File type not supported for inline editing');
@@ -453,8 +485,8 @@ export default class Drive {
         force: boolean,
     ) {
         const mount = this.getMount(mountId);
-        const path = await mount.getPath(pathId);
-        if (!path || path.type !== DRIVE_TYPE_FILE) throw new ApiError(404, 'File not found');
+        const path = await mount.getActivePath(pathId);
+        if (path.type !== DRIVE_TYPE_FILE) throw new ApiError(404, 'File not found');
 
         const currentUpdatedAt = path.updatedAt instanceof Date ? path.updatedAt.toISOString() : String(path.updatedAt);
         if (expectedUpdatedAt !== currentUpdatedAt && !force) {
@@ -470,8 +502,7 @@ export default class Drive {
 
     async resolveFile(mountId: string, pathId: string): Promise<{ mount: Mount; path: DrivePath }> {
         const mount = this.getMount(mountId);
-        const path = await mount.getPath(pathId);
-        if (!path) throw new ApiError(404, 'File not found');
+        const path = await mount.getActivePath(pathId);
         return { mount, path };
     }
 
@@ -702,8 +733,8 @@ export default class Drive {
             this.documents.set(
                 key,
                 createAsyncSingleton(async () => {
-                    const path = await mount.getPath(pathId);
-                    if (!path || !isCollabType(path.type)) {
+                    const path = await mount.getActivePath(pathId);
+                    if (!isCollabType(path.type)) {
                         throw new Error('Document not found');
                     }
                     const document = new CollabDocument(this, path);
@@ -902,6 +933,7 @@ export default class Drive {
             visibility: (r.visibility ?? 'private') as DriveVisibility,
             sharingRestricted: !!r.sharingRestricted,
             details: r.details ?? null,
+            trashedAt: null,
             createdAt: r.createdAt ?? new Date(),
             updatedAt: r.updatedAt ?? new Date(),
         };
@@ -921,9 +953,22 @@ export default class Drive {
             await propagateACLChange(path, path.acl, null);
         }
         if (isContainerType(path.type)) {
-            const children = await mount.listFolder(pathId);
+            const children = await mount.listFolderAll(pathId);
             for (const child of children) {
                 await this.propagateACLRemovalRecursively(mountId, child.id);
+            }
+        }
+    }
+
+    private async propagateACLRestoreRecursively(mountId: string, pathId: string): Promise<void> {
+        const mount = this.getMount(mountId);
+        const children = await mount.listFolderAll(pathId);
+        for (const child of children) {
+            if (child.acl) {
+                await propagateACLChange(child, null, child.acl);
+            }
+            if (isContainerType(child.type)) {
+                await this.propagateACLRestoreRecursively(mountId, child.id);
             }
         }
     }
@@ -940,7 +985,7 @@ export default class Drive {
                 console.error(`Failed to close collab document ${pathId}:`, error);
             }
         } else if (isContainerType(path.type)) {
-            const children = await mount.listFolder(pathId);
+            const children = await mount.listFolderAll(pathId);
             for (const child of children) {
                 await this.closeCollabDocumentsRecursively(mountId, child.id);
             }
