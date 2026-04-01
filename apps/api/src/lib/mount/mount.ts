@@ -24,6 +24,7 @@ import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { createAsyncSingleton } from '../../utils/singleton';
 import { getS3Config } from '../config/server-config';
+import { getServerSettings } from '../config/server-settings';
 import { ApiError, type DatabaseConfig, ManagedDatabase, type SchemaType } from '../core';
 import { getUniqueFileName } from '../drive/naming';
 import { deleteThumbnail } from '../shared/thumbnails';
@@ -133,6 +134,11 @@ export class Mount {
         this.db = managedDb.db;
 
         await this.ensureRootFolder();
+
+        const retentionDays = getServerSettings().quotas.trashRetentionDays;
+        if (retentionDays > 0) {
+            this.purgeTrash(retentionDays).catch((e) => console.error(`[Mount] Failed to purge expired trash:`, e));
+        }
     }
 
     get dataDir(): string {
@@ -680,6 +686,63 @@ export class Mount {
             const updated = await this.getPath(pathId);
             return updated!;
         });
+    }
+
+    private collectDescendantIds(parentId: string): string[] {
+        const ids: string[] = [];
+        const collect = (pid: string) => {
+            const children = this.db.select({ id: paths.id }).from(paths).where(eq(paths.parentId, pid)).all();
+            for (const child of children) {
+                ids.push(child.id);
+                collect(child.id);
+            }
+        };
+        collect(parentId);
+        return ids;
+    }
+
+    async permanentlyDeleteFromTrash(pathId: string): Promise<void> {
+        const row = await this.db.select().from(paths).where(eq(paths.id, pathId)).get();
+        if (!row) return;
+        if (!row.trashedAt) throw new ApiError(400, 'Item is not in trash');
+
+        if (row.type !== 'file') {
+            const descendantIds = this.collectDescendantIds(pathId);
+            const allIds = [pathId, ...descendantIds];
+            const orphans = await this.db
+                .select({ id: paths.id })
+                .from(paths)
+                .where(
+                    sql`${paths.trashedFrom} IN (${sql.join(
+                        allIds.map((id) => sql`${id}`),
+                        sql`, `,
+                    )})`,
+                )
+                .all();
+            for (const orphan of orphans) {
+                await this.deletePath(orphan.id);
+            }
+        }
+
+        await this.deletePath(pathId);
+    }
+
+    async purgeTrash(maxAgeDays?: number): Promise<void> {
+        let items: DrivePath[];
+        if (maxAgeDays !== undefined) {
+            const cutoffEpoch = Math.floor((Date.now() - maxAgeDays * 24 * 60 * 60 * 1000) / 1000);
+            const results = await this.db
+                .select()
+                .from(paths)
+                .where(sql`${paths.trashedFrom} IS NOT NULL AND ${paths.trashedAt} < ${cutoffEpoch}`)
+                .all();
+            items = results.map((r) => this.toDrivePath(r));
+        } else {
+            items = await this.listTrash();
+        }
+        for (const item of items) {
+            await this.permanentlyDeleteFromTrash(item.id);
+        }
     }
 
     async readFile(pathId: string): Promise<StorageFile | null> {
