@@ -1,0 +1,853 @@
+import _ from "lodash";
+import {Context, getFlowdata} from "../context";
+import {
+    cancelActiveImgItem,
+    cellFocus,
+    createFormulaRangeSelect,
+    createRangeHightlight,
+    functionHTMLGenerate,
+    israngeseleciton,
+    rangeHightlightselected,
+    rangeSetValue,
+} from "../modules";
+import {
+    cancelFunctionrangeSelected,
+    luckysheetUpdateCell,
+    mergeBorder,
+    mergeMoveMain,
+    updateCell,
+} from "../modules/cell";
+import {colLocation, colLocationByIndex, rowLocation, rowLocationByIndex} from "../modules/location";
+import {checkProtectionSelectLockedOrUnLockedCells} from "../modules/protection";
+import {normalizeSelection} from "../modules/selection";
+import {Settings} from "../settings";
+import {GlobalCache} from "../types";
+import {getSheetIndex, isAllowEdit} from "../utils";
+import {showLinkCard} from "../modules/hyperlink";
+import {fixPositionOnFrozenCells} from "./mouse-resize";
+
+export function handleCellAreaMouseDown(
+    ctx: Context,
+    globalCache: GlobalCache,
+    e: MouseEvent,
+    cellInput: HTMLDivElement,
+    container: HTMLDivElement,
+    fxInput?: HTMLDivElement | null,
+    canvas?: CanvasRenderingContext2D
+) {
+    ctx.contextMenu = {};
+    ctx.filterContextMenu = undefined;
+    const flowdata = getFlowdata(ctx);
+    if (!flowdata) return;
+
+    cancelActiveImgItem(ctx, globalCache);
+    const rect = container.getBoundingClientRect();
+    const mouseX = e.pageX - rect.left - window.scrollX;
+    const mouseY = e.pageY - rect.top - window.scrollY;
+    const _x = mouseX + ctx.scrollLeft;
+    const _y = mouseY + ctx.scrollTop;
+    if (_x >= rect.width + ctx.scrollLeft || _y >= rect.height + ctx.scrollTop) {
+        return;
+    }
+    const freeze = globalCache.freezen?.[ctx.currentSheetId];
+    const {x, y, inHorizontalFreeze, inVerticalFreeze} =
+        fixPositionOnFrozenCells(freeze, _x, _y, mouseX, mouseY);
+
+    const row_location = rowLocation(y, ctx.visibledatarow);
+    let row = row_location[1];
+    let row_pre = row_location[0];
+    let row_index = row_location[2];
+
+    const col_location = colLocation(x, ctx.visibledatacolumn);
+    let col = col_location[1];
+    let col_pre = col_location[0];
+    let col_index = col_location[2];
+
+    let row_index_ed = row_index;
+    let col_index_ed = col_index;
+    const margeset = mergeBorder(ctx, flowdata, row_index, col_index);
+    if (margeset) {
+        [row_pre, row, row_index, row_index_ed] = margeset.row;
+        [col_pre, col, col_index, col_index_ed] = margeset.column;
+    }
+
+    showLinkCard(ctx, row_index, col_index, false, true);
+    // Before cell mousedown hook
+    if (
+        ctx.hooks.beforeCellMouseDown?.(flowdata[row_index]?.[col_index], {
+            row: row_index,
+            column: col_index,
+            startRow: row_pre,
+            startColumn: col_pre,
+            endRow: row,
+            endColumn: col,
+        }) === false
+    ) {
+        return;
+    }
+
+    // Data verification: cell focus
+    cellFocus(ctx, row_index, col_index, true);
+
+    // If clicked cell is not in viewport
+    if (!inHorizontalFreeze && !inVerticalFreeze) {
+        if (col_pre < ctx.scrollLeft) {
+            ctx.scrollLeft = col_pre;
+        }
+
+        if (row_pre < ctx.scrollTop) {
+            ctx.scrollTop = row_pre;
+        }
+    }
+
+    // Right-click handling
+    if (e.button === 2) {
+        // If right-click is inside selection, stop mousedown handling
+        const isInSelection = _.some(
+            ctx.luckysheet_select_save,
+            (obj_s) =>
+                obj_s.row != null &&
+                row_index >= obj_s.row[0] &&
+                row_index <= obj_s.row[1] &&
+                col_index >= obj_s.column[0] &&
+                col_index <= obj_s.column[1]
+        );
+        if (isInSelection) return;
+    }
+
+    ctx.luckysheet_scroll_status = true;
+
+    // Formula-related
+    if (ctx.luckysheetCellUpdate.length > 0) {
+        if (
+            ctx.formulaCache.rangestart ||
+            ctx.formulaCache.rangedrag_column_start ||
+            ctx.formulaCache.rangedrag_row_start ||
+            israngeseleciton(ctx)
+        ) {
+            // Formula range selection
+            let rowseleted = [row_index, row_index_ed];
+            let columnseleted = [col_index, col_index_ed];
+
+            let left = col_pre;
+            let width = col - col_pre - 1;
+            let top = row_pre;
+            let height = row - row_pre - 1;
+
+            if (e.shiftKey) {
+                const last = ctx.formulaCache.func_selectedrange;
+
+                top = 0;
+                height = 0;
+                rowseleted = [];
+
+                if (
+                    last == null ||
+                    last.top == null ||
+                    last.height == null ||
+                    last.row_focus == null ||
+                    last.left == null ||
+                    last.width == null
+                )
+                    return;
+                if (last.top > row_pre) {
+                    top = row_pre;
+                    height = last.top + last.height - row_pre;
+
+                    if (last.row[1] > last.row_focus) {
+                        last.row[1] = last.row_focus;
+                    }
+
+                    rowseleted = [row_index, last.row[1]];
+                } else if (last.top === row_pre) {
+                    top = row_pre;
+                    height = last.top + last.height - row_pre;
+                    rowseleted = [row_index, last.row[0]];
+                } else {
+                    top = last.top;
+                    height = row - last.top - 1;
+
+                    if (last.row[0] < last.row_focus) {
+                        last.row[0] = last.row_focus;
+                    }
+
+                    rowseleted = [last.row[0], row_index];
+                }
+
+                left = 0;
+                width = 0;
+                columnseleted = [];
+                if (last.left > col_pre) {
+                    left = col_pre;
+                    width = last.left + last.width - col_pre;
+                    if (last.column == null || last.column_focus == null) return;
+                    if (last.column[1] > last.column_focus) {
+                        last.column[1] = last.column_focus;
+                    }
+
+                    columnseleted = [col_index, last.column[1]];
+                } else if (last.left === col_pre) {
+                    left = col_pre;
+                    width = last.left + last.width - col_pre;
+                    columnseleted = [col_index, last.column[0]];
+                } else {
+                    left = last.left;
+                    width = col - last.left - 1;
+                    if (last.column == null || last.column_focus == null) return;
+
+                    if (last.column[0] < last.column_focus) {
+                        last.column[0] = last.column_focus;
+                    }
+
+                    columnseleted = [last.column[0], col_index];
+                }
+
+                const changeparam = mergeMoveMain(
+                    ctx,
+                    columnseleted,
+                    rowseleted,
+                    last,
+                    top,
+                    height,
+                    left,
+                    width
+                );
+                if (changeparam != null) {
+                    // @ts-ignore
+                    [columnseleted, rowseleted, top, height, left, width] = changeparam;
+                }
+
+                last.row = rowseleted;
+                last.column = columnseleted;
+
+                last.left_move = left;
+                last.width_move = width;
+                last.top_move = top;
+                last.height_move = height;
+
+                ctx.formulaCache.func_selectedrange = last;
+            } else if (
+                e.ctrlKey &&
+                _.last(cellInput.querySelectorAll("span"))?.innerText !== ","
+            ) {
+                // Ctrl held: finalize previous range
+                let vText = cellInput.innerText;
+
+                if (vText[vText.length - 1] === ")") {
+                    vText = vText.substring(0, vText.length - 1); // Remove trailing closing parenthesis
+                }
+
+                if (vText.length > 0) {
+                    const lastWord = vText.substring(vText.length - 1, 1);
+                    if (lastWord !== "," && lastWord !== "=" && lastWord !== "(") {
+                        vText += ",";
+                    }
+                }
+                if (vText.length > 0 && vText.substring(0, 1) === "=") {
+                    vText = functionHTMLGenerate(vText);
+
+                    if (window.getSelection) {
+                        // all browsers, except IE before version 9
+                        const currSelection = window.getSelection();
+                        if (currSelection == null) return;
+                        ctx.formulaCache.functionRangeIndex = [
+                            _.indexOf(
+                                currSelection.anchorNode?.parentNode?.parentNode?.childNodes,
+                                // @ts-ignore
+                                currSelection.anchorNode?.parentNode
+                            ),
+                            currSelection.anchorOffset,
+                        ];
+                    } else {
+                        // Internet Explorer before version 9
+                        // @ts-ignore
+                        const textRange = document.selection.createRange();
+                        ctx.formulaCache.functionRangeIndex = textRange;
+                    }
+
+                    /* Re-add closing parenthesis before display */
+                    cellInput.innerHTML = vText;
+
+                    cancelFunctionrangeSelected(ctx);
+                    createRangeHightlight(ctx, vText);
+                }
+
+                ctx.formulaCache.rangestart = false;
+                ctx.formulaCache.rangedrag_column_start = false;
+                ctx.formulaCache.rangedrag_row_start = false;
+
+                if (fxInput) fxInput.innerHTML = vText;
+
+                rangeHightlightselected(ctx, cellInput);
+
+                // Then proceed with new range selection
+                israngeseleciton(ctx);
+                ctx.formulaCache.func_selectedrange = {
+                    left,
+                    width,
+                    top,
+                    height,
+                    left_move: left,
+                    width_move: width,
+                    top_move: top,
+                    height_move: height,
+                    row: rowseleted,
+                    column: columnseleted,
+                    row_focus: row_index,
+                    column_focus: col_index,
+                };
+            } else {
+                ctx.formulaCache.func_selectedrange = {
+                    left,
+                    width,
+                    top,
+                    height,
+                    left_move: left,
+                    width_move: width,
+                    top_move: top,
+                    height_move: height,
+                    row: rowseleted,
+                    column: columnseleted,
+                    row_focus: row_index,
+                    column_focus: col_index,
+                };
+            }
+
+            rangeSetValue(
+                ctx,
+                cellInput,
+                {
+                    row: rowseleted,
+                    column: columnseleted,
+                },
+                fxInput
+            );
+
+            ctx.formulaCache.rangestart = true;
+            ctx.formulaCache.rangedrag_column_start = false;
+            ctx.formulaCache.rangedrag_row_start = false;
+
+            ctx.formulaCache.selectingRangeIndex = ctx.formulaCache.rangechangeindex!;
+            if (
+                ctx.formulaCache.rangechangeindex! > ctx.formulaRangeHighlight.length
+            ) {
+                createRangeHightlight(
+                    ctx,
+                    cellInput.innerHTML,
+                    ctx.formulaCache.rangechangeindex!
+                );
+            }
+            createFormulaRangeSelect(ctx, {
+                rangeIndex: ctx.formulaCache.rangechangeindex || 0,
+                left,
+                top,
+                width,
+                height,
+            });
+            e.preventDefault();
+            return; // skip ctx.luckysheet_select_save to prevent clearing cellInput
+        }
+        updateCell(
+            ctx,
+            ctx.luckysheetCellUpdate[0],
+            ctx.luckysheetCellUpdate[1],
+            cellInput,
+            undefined,
+            canvas
+        );
+        ctx.luckysheet_select_status = true;
+    }
+    if (
+        checkProtectionSelectLockedOrUnLockedCells(
+            ctx,
+            row_index,
+            col_index,
+            ctx.currentSheetId
+        )
+    ) {
+        ctx.luckysheet_select_status = true;
+    }
+
+    if (ctx.luckysheet_select_status) {
+        if (e.shiftKey) {
+            // Shift+click: select range
+            const last =
+                ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1]; // last selection
+            if (
+                last &&
+                last.top != null &&
+                last.left != null &&
+                last.height != null &&
+                last.width != null &&
+                last.row_focus != null &&
+                last.column_focus != null
+            ) {
+                let top = 0;
+                let height = 0;
+                let rowseleted = [];
+                if (last.top > row_pre) {
+                    top = row_pre;
+                    height = last.top + last.height - row_pre;
+                    if (last.row[1] > last.row_focus) {
+                        last.row[1] = last.row_focus;
+                    }
+                    rowseleted = [row_index, last.row[1]];
+                } else if (last.top === row_pre) {
+                    top = row_pre;
+                    height = last.top + last.height - row_pre;
+                    rowseleted = [row_index, last.row[0]];
+                } else {
+                    top = last.top;
+                    height = row - last.top - 1;
+                    if (last.row[0] < last.row_focus) {
+                        last.row[0] = last.row_focus;
+                    }
+                    rowseleted = [last.row[0], row_index];
+                }
+                let left = 0;
+                let width = 0;
+                let columnseleted = [];
+                if (last.left > col_pre) {
+                    left = col_pre;
+                    width = last.left + last.width - col_pre;
+                    if (last.column[1] > last.column_focus) {
+                        last.column[1] = last.column_focus;
+                    }
+                    columnseleted = [col_index, last.column[1]];
+                } else if (last.left === col_pre) {
+                    left = col_pre;
+                    width = last.left + last.width - col_pre;
+                    columnseleted = [col_index, last.column[0]];
+                } else {
+                    left = last.left;
+                    width = col - last.left - 1;
+                    if (last.column[0] < last.column_focus) {
+                        last.column[0] = last.column_focus;
+                    }
+                    columnseleted = [last.column[0], col_index];
+                }
+                const changeparam = mergeMoveMain(
+                    ctx,
+                    columnseleted,
+                    rowseleted,
+                    last,
+                    top,
+                    height,
+                    left,
+                    width
+                );
+                if (changeparam != null) {
+                    // @ts-ignore
+                    [columnseleted, rowseleted, top, height, left, width] = changeparam;
+                }
+                last.row = rowseleted;
+                last.column = columnseleted;
+                last.left_move = left;
+                last.width_move = width;
+                last.top_move = top;
+                last.height_move = height;
+                ctx.luckysheet_select_save![ctx.luckysheet_select_save!.length - 1] =
+                    last;
+            }
+        } else if (e.ctrlKey || e.metaKey) {
+            // Add to selection
+            ctx.luckysheet_select_save?.push({
+                left: col_pre,
+                width: col - col_pre - 1,
+                top: row_pre,
+                height: row - row_pre - 1,
+                left_move: col_pre,
+                width_move: col - col_pre - 1,
+                top_move: row_pre,
+                height_move: row - row_pre - 1,
+                row: [row_index, row_index_ed],
+                column: [col_index, col_index_ed],
+                row_focus: row_index,
+                column_focus: col_index,
+            });
+        } else {
+            // eslint-disable-next-line prefer-const
+            ctx.luckysheet_select_save = [
+                {
+                    left: col_pre,
+                    width: col - col_pre - 1,
+                    top: row_pre,
+                    height: row - row_pre - 1,
+                    left_move: col_pre,
+                    width_move: col - col_pre - 1,
+                    top_move: row_pre,
+                    height_move: row - row_pre - 1,
+                    row: [row_index, row_index_ed],
+                    column: [col_index, col_index_ed],
+                    row_focus: row_index,
+                    column_focus: col_index,
+                },
+            ];
+
+            // Update cell format icon
+        }
+    }
+
+    ctx.luckysheet_select_save = normalizeSelection(
+        ctx,
+        ctx.luckysheet_select_save
+    );
+
+    if (ctx.hooks.afterCellMouseDown) {
+        setTimeout(() => {
+            ctx.hooks.afterCellMouseDown?.(flowdata[row_index]?.[col_index], {
+                row: row_index,
+                column: col_index,
+                startRow: row_pre,
+                startColumn: col_pre,
+                endRow: row,
+                endColumn: col,
+            });
+        });
+    }
+}
+
+export function handleCellAreaDoubleClick(
+    ctx: Context,
+    globalCache: GlobalCache,
+    settings: Settings,
+    e: MouseEvent,
+    container: HTMLElement
+) {
+    const flowdata = getFlowdata(ctx);
+    if (!flowdata) return;
+
+    if (
+        (ctx.luckysheetCellUpdate.length > 0 && ctx.formulaCache.rangestart) ||
+        ctx.formulaCache.rangedrag_column_start ||
+        ctx.formulaCache.rangedrag_row_start ||
+        israngeseleciton(ctx)
+    ) {
+        return;
+    }
+    // Editing disabled (view only)
+    const allowEdit = isAllowEdit(ctx);
+    if (!allowEdit) return;
+
+    const rect = container.getBoundingClientRect();
+    const mouseX = e.pageX - rect.left;
+    const mouseY = e.pageY - rect.top;
+    const _x = mouseX + ctx.scrollLeft;
+    const _y = mouseY + ctx.scrollTop;
+
+    const freeze = globalCache.freezen?.[ctx.currentSheetId];
+    const {x, y} = fixPositionOnFrozenCells(freeze, _x, _y, mouseX, mouseY);
+
+    const row_location = rowLocation(y, ctx.visibledatarow);
+    let row_index = row_location[2];
+
+    const col_location = colLocation(x, ctx.visibledatacolumn);
+    let col_index = col_location[2];
+
+    // Cancel double-click for checkbox cells -- do not allow editing
+    const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
+    const {dataVerification} = ctx.luckysheetfile[index];
+
+    if (dataVerification) {
+        const item = dataVerification[`${row_index}_${col_index}`];
+        if (item && item.type === "checkbox") return;
+    }
+
+    const margeset = mergeBorder(ctx, flowdata, row_index, col_index);
+    if (margeset) {
+        [, , row_index] = margeset.row;
+        [, , col_index] = margeset.column;
+    }
+
+    // Check if current and focus coordinates match; correct if not
+    const {column_focus, row_focus} = ctx.luckysheet_select_save![0];
+    if (
+        !_.isNil(column_focus) &&
+        !_.isNil(row_focus) &&
+        (column_focus !== col_index || row_focus !== row_index)
+    ) {
+        row_index = row_focus;
+        col_index = column_focus;
+    }
+
+    luckysheetUpdateCell(ctx, row_index, col_index);
+}
+
+export function handleContextMenu(
+    ctx: Context,
+    settings: Settings,
+    e: MouseEvent,
+    workbookContainer: HTMLDivElement,
+    container: HTMLDivElement,
+    area: "cell" | "rowHeader" | "columnHeader"
+) {
+    if (!ctx.allowEdit) {
+        return;
+    }
+    const flowdata = getFlowdata(ctx);
+    if (!flowdata) return;
+
+    const workbookRect = workbookContainer.getBoundingClientRect();
+
+    const {cellContextMenu} = settings;
+
+    // If all buttons hidden, hide the menu container
+    if (_.isEmpty(cellContextMenu)) {
+        return;
+    }
+
+    // relative to the workbook container
+    const x = e.pageX - workbookRect.left;
+    const y = e.pageY - workbookRect.top;
+    ctx.contextMenu = {
+        x,
+        y,
+        pageX: e.pageX,
+        pageY: e.pageY,
+    };
+    // select current cell when clicking the right button
+    e.preventDefault();
+    if (area === "cell") {
+        _.set(ctx.contextMenu, "headerMenu", undefined);
+        const rect = container.getBoundingClientRect();
+        const mouseX = e.pageX - rect.left - window.scrollX;
+        const mouseY = e.pageY - rect.top - window.scrollY;
+        const _selected_x = mouseX + ctx.scrollLeft;
+        const _selected_y = mouseY + ctx.scrollTop;
+        const {x: selected_x, y: selected_y} = fixPositionOnFrozenCells(
+            ctx.getRefs().globalCache.freezen?.[ctx.currentSheetId],
+            _selected_x,
+            _selected_y,
+            mouseX,
+            mouseY
+        );
+        const row_location = rowLocation(selected_y, ctx.visibledatarow);
+        const row = row_location[1];
+        const row_pre = row_location[0];
+        const row_index = row_location[2];
+
+        const col_location = colLocation(selected_x, ctx.visibledatacolumn);
+        const col = col_location[1];
+        const col_pre = col_location[0];
+        const col_index = col_location[2];
+        // If right-click is inside selection, skip selection handling
+        const isInSelection = _.some(
+            ctx.luckysheet_select_save,
+            (obj_s) =>
+                obj_s.row != null &&
+                row_index >= obj_s.row[0] &&
+                row_index <= obj_s.row[1] &&
+                col_index >= obj_s.column[0] &&
+                col_index <= obj_s.column[1]
+        );
+        if (!isInSelection && (e.metaKey || e.ctrlKey)) {
+            // Add to selection
+            if (flowdata[row_index][col_index]?.mc) {
+                // Handle merged cell
+                const changeparam = mergeMoveMain(
+                    ctx,
+                    [col_index, col_index],
+                    [row_index, row_index],
+                    {row_focus: row_index, column_focus: col_index},
+                    row_pre,
+                    row,
+                    col_pre,
+                    col
+                );
+                if (changeparam != null) {
+                    // @ts-ignore
+                    const [columnseleted, rowseleted, top, height, left, width] =
+                        changeparam;
+                    ctx.luckysheet_select_save?.push({
+                        left: left as number,
+                        width: (width as number) - 1,
+                        top: top as number,
+                        height: (height as number) - 1,
+                        left_move: left as number,
+                        width_move: width as number,
+                        top_move: top as number,
+                        height_move: height as number,
+                        row: rowseleted as number[],
+                        column: columnseleted as number[],
+                        row_focus: (rowseleted as number[])[0],
+                        column_focus: (columnseleted as number[])[0],
+                    });
+                    return;
+                }
+            }
+            ctx.luckysheet_select_save?.push({
+                left: col_pre,
+                width: col - col_pre - 1,
+                top: row_pre,
+                height: row - row_pre - 1,
+                left_move: col_pre,
+                width_move: col - col_pre - 1,
+                top_move: row_pre,
+                height_move: row - row_pre - 1,
+                row: [row_index, row_index],
+                column: [col_index, col_index],
+                row_focus: row_index,
+                column_focus: col_index,
+            });
+            return;
+        }
+        if (isInSelection) return;
+        const row_index_ed = row_index;
+        const col_index_ed = col_index;
+        if (flowdata[row_index][col_index]?.mc) {
+            // Handle merged cell
+            const changeparam = mergeMoveMain(
+                ctx,
+                [col_index, col_index],
+                [row_index, row_index],
+                {row_focus: row_index, column_focus: col_index},
+                row_pre,
+                row,
+                col_pre,
+                col
+            );
+            if (changeparam != null) {
+                // @ts-ignore
+                const [columnseleted, rowseleted, top, height, left, width] =
+                    changeparam;
+                ctx.luckysheet_select_save = [
+                    {
+                        left: left as number,
+                        width: (width as number) - 1,
+                        top: top as number,
+                        height: (height as number) - 1,
+                        left_move: left as number,
+                        width_move: width as number,
+                        top_move: top as number,
+                        height_move: height as number,
+                        row: rowseleted as number[],
+                        column: columnseleted as number[],
+                        row_focus: (rowseleted as number[])[0],
+                        column_focus: (columnseleted as number[])[0],
+                    },
+                ];
+                return;
+            }
+        }
+        ctx.luckysheet_select_save = [
+            {
+                left: col_pre,
+                width: col - col_pre - 1,
+                top: row_pre,
+                height: row - row_pre - 1,
+                left_move: col_pre,
+                width_move: col - col_pre - 1,
+                top_move: row_pre,
+                height_move: row - row_pre - 1,
+                row: [row_index, row_index_ed],
+                column: [col_index, col_index_ed],
+                row_focus: row_index,
+                column_focus: col_index,
+            },
+        ];
+    } else if (area === "rowHeader") {
+        _.set(ctx.contextMenu, "headerMenu", "row");
+        const rect = container.getBoundingClientRect();
+        const mouseY = e.pageY - rect.top - window.scrollY;
+        const _selected_y = mouseY + ctx.scrollTop;
+        const {y: selected_y} = fixPositionOnFrozenCells(
+            ctx.getRefs().globalCache.freezen?.[ctx.currentSheetId],
+            0,
+            _selected_y,
+            0,
+            mouseY
+        );
+        const row_location = rowLocation(selected_y, ctx.visibledatarow);
+        const row = row_location[1];
+        const row_pre = row_location[0];
+        const row_index = row_location[2];
+        // If right-click is inside selection, skip selection handling
+        const isInSelection = _.some(
+            ctx.luckysheet_select_save,
+            (obj_s) =>
+                obj_s.row != null &&
+                row_index >= obj_s.row[0] &&
+                row_index <= obj_s.row[1] &&
+                !obj_s.column_select
+        );
+
+        if (isInSelection) return;
+        const col_index = ctx.visibledatacolumn.length - 1;
+        const col = ctx.visibledatacolumn[col_index];
+        const col_pre = 0;
+        const top = row_pre;
+        const height = row - row_pre - 1;
+        const rowseleted = [row_index, row_index];
+        ctx.luckysheet_select_save = [];
+        ctx.luckysheet_select_save.push({
+            left: colLocationByIndex(0, ctx.visibledatacolumn)[0],
+            width:
+                colLocationByIndex(0, ctx.visibledatacolumn)[1] -
+                colLocationByIndex(0, ctx.visibledatacolumn)[0] -
+                1,
+            top,
+            height,
+            left_move: col_pre,
+            width_move: col - col_pre - 1,
+            top_move: top,
+            height_move: height,
+            row: rowseleted,
+            column: [0, col_index],
+            row_focus: row_index,
+            column_focus: 0,
+            row_select: true,
+        });
+    } else if (area === "columnHeader") {
+        _.set(ctx.contextMenu, "headerMenu", "column");
+        const rect = container.getBoundingClientRect();
+        const mouseX = e.pageX - rect.left - window.scrollX;
+        const _selected_x = mouseX + ctx.scrollLeft;
+        const {x: selected_x} = fixPositionOnFrozenCells(
+            ctx.getRefs().globalCache.freezen?.[ctx.currentSheetId],
+            _selected_x,
+            0,
+            mouseX,
+            0
+        );
+        const row_index = ctx.visibledatarow.length - 1;
+        const row = ctx.visibledatarow[row_index];
+        const row_pre = 0;
+        const col_location = colLocation(selected_x, ctx.visibledatacolumn);
+        const col = col_location[1];
+        const col_pre = col_location[0];
+        const col_index = col_location[2];
+        // If right-click is inside selection, skip selection handling
+        const isInSelection = _.some(
+            ctx.luckysheet_select_save,
+            (obj_s) =>
+                obj_s.row != null &&
+                col_index >= obj_s.column[0] &&
+                col_index <= obj_s.column[1] &&
+                !obj_s.row_select
+        );
+
+        if (isInSelection) return;
+        const left = col_pre;
+        const width = col - col_pre - 1;
+        const columnseleted = [col_index, col_index];
+        ctx.luckysheet_select_save = [];
+        ctx.luckysheet_select_save.push({
+            left,
+            width,
+            top: rowLocationByIndex(0, ctx.visibledatarow)[0],
+            height:
+                rowLocationByIndex(0, ctx.visibledatarow)[1] -
+                rowLocationByIndex(0, ctx.visibledatarow)[0] -
+                1,
+            left_move: left,
+            width_move: width,
+            top_move: row_pre,
+            height_move: row - row_pre - 1,
+            row: [0, row_index],
+            column: columnseleted,
+            row_focus: 0,
+            column_focus: col_index,
+            column_select: true,
+        });
+    }
+}
