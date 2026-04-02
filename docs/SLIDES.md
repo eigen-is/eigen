@@ -26,7 +26,8 @@ container rather than the browser viewport. The helpers `pxToPercentHeight(val)`
 **Text**: `text`, `fontFamily`, `fontSize`, `fontWeight`, `fontStyle`, `textDecoration`, `textAlign`, `verticalAlign`,
 `color`, `letterSpacing`, `lineHeight`, `highlightColor`, `backgroundColor`
 **Image**: `mediaName` (file name, resolved at render time), `objectFit`
-**Common (BaseObject)**: `x`, `y`, `w`, `h`, `rotation`, `borderColor`, `borderWidth`, `borderRadius`
+**Common (BaseObject)**: `x`, `y`, `w`, `h`, `rotation`, `borderColor`, `borderWidth`, `borderRadius`,
+`commentChatNames` (plain string array — chat folder names linking to `.eigenchat` threads)
 
 ### Slide Properties
 
@@ -58,7 +59,8 @@ apps/slides/src/components/slides/
 ├── slide-thumbnail.tsx           # Thumbnail preview
 ├── slide-properties-panel.tsx    # Right panel (transform, text, image, border, slide background)
 ├── hooks/
-│   ├── use-deck.ts               # Yjs document management
+│   ├── use-deck.ts               # Yjs document management (incl. addCommentToObject/removeCommentFromObject)
+│   ├── use-active-comments.ts    # Scan objects for comment IDs + anchor texts
 │   ├── use-slide-dnd.ts          # Slide reorder (dnd-kit)
 │   ├── use-object-drag.ts        # Canvas drag/resize
 │   ├── use-snap-lines.ts         # Alignment snapping
