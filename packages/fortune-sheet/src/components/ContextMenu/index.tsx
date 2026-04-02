@@ -18,19 +18,22 @@ import {
     showSelected,
     sortSelection,
 } from "../../core";
-import React, {useCallback, useContext, useLayoutEffect, useRef} from "react";
+import React, {useCallback, useContext} from "react";
 import {SetContextOptions, WorkbookContext} from "../../context";
 import {useAlert} from "../../hooks/useAlert";
 import {useDialog} from "../../hooks/useDialog";
-import {Divider} from "./Divider";
-import "./index.css";
-import {Menu} from "./Menu";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from "@workspace/ui/components/dropdown-menu";
 import {CustomSort} from "../CustomSort";
 
 export const ContextMenu: React.FC = () => {
     const {showDialog} = useDialog();
-    const containerRef = useRef<HTMLDivElement>(null);
-    const {context, setContext, settings, refs} = useContext(WorkbookContext);
+    const {context, setContext, settings} = useContext(WorkbookContext);
     const {contextMenu} = context;
     const {showAlert} = useAlert();
     const {rightclick, drag, generalDialog, info} = locale(context);
@@ -38,11 +41,11 @@ export const ContextMenu: React.FC = () => {
         (name: string, i: number) => {
             const selection = context.luckysheet_select_save?.[0];
             if (name === "|") {
-                return <Divider key={`divider-${i}`}/>;
+                return <DropdownMenuSeparator key={`divider-${i}`}/>;
             }
             if (name === "copy") {
                 return (
-                    <Menu
+                    <DropdownMenuItem
                         key={name}
                         onClick={() => {
                             setContext((draftCtx) => {
@@ -57,12 +60,12 @@ export const ContextMenu: React.FC = () => {
                         }}
                     >
                         {rightclick.copy}
-                    </Menu>
+                    </DropdownMenuItem>
                 );
             }
             if (name === "paste") {
                 return (
-                    <Menu
+                    <DropdownMenuItem
                         key={name}
                         onClick={async () => {
                             let clipboardText = "";
@@ -86,20 +89,21 @@ export const ContextMenu: React.FC = () => {
                         }}
                     >
                         {rightclick.paste}
-                    </Menu>
+                    </DropdownMenuItem>
                 );
             }
             if (name === "insert-column") {
                 return selection?.row_select
                     ? null
                     : ["left", "right"].map((dir) => (
-                        <Menu
+                        <div
                             key={`add-col-${dir}`}
+                            className="relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground"
                             onClick={(e) => {
                                 const position =
                                     context.luckysheet_select_save?.[0]?.column?.[0];
                                 if (position == null) return;
-                                const countStr = (e.target as HTMLDivElement).querySelector(
+                                const countStr = (e.currentTarget as HTMLDivElement).querySelector(
                                     "input"
                                 )?.value;
                                 if (countStr == null) return;
@@ -163,20 +167,21 @@ export const ContextMenu: React.FC = () => {
                     </span>
                                 )}
                             </>
-                        </Menu>
+                        </div>
                     ));
             }
             if (name === "insert-row") {
                 return selection?.column_select
                     ? null
                     : ["top", "bottom"].map((dir) => (
-                        <Menu
+                        <div
                             key={`add-row-${dir}`}
-                            onClick={(e, container) => {
+                            className="relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground"
+                            onClick={(e) => {
                                 const position =
                                     context.luckysheet_select_save?.[0]?.row?.[0];
                                 if (position == null) return;
-                                const countStr = container.querySelector("input")?.value;
+                                const countStr = e.currentTarget.querySelector("input")?.value;
                                 if (countStr == null) return;
                                 const count = parseInt(countStr, 10);
                                 if (count < 1) return;
@@ -233,13 +238,13 @@ export const ContextMenu: React.FC = () => {
                     </span>
                                 )}
                             </>
-                        </Menu>
+                        </div>
                     ));
             }
             if (name === "delete-column") {
                 return (
                     selection?.column_select && (
-                        <Menu
+                        <DropdownMenuItem
                             key="delete-col"
                             onClick={() => {
                                 if (!selection) return;
@@ -285,14 +290,14 @@ export const ContextMenu: React.FC = () => {
                         >
                             {rightclick.deleteSelected}
                             {rightclick.column}
-                        </Menu>
+                        </DropdownMenuItem>
                     )
                 );
             }
             if (name === "delete-row") {
                 return (
                     selection?.row_select && (
-                        <Menu
+                        <DropdownMenuItem
                             key="delete-row"
                             onClick={() => {
                                 if (!selection) return;
@@ -335,7 +340,7 @@ export const ContextMenu: React.FC = () => {
                         >
                             {rightclick.deleteSelected}
                             {rightclick.row}
-                        </Menu>
+                        </DropdownMenuItem>
                     )
                 );
             }
@@ -343,7 +348,7 @@ export const ContextMenu: React.FC = () => {
                 return (
                     selection?.row_select === true &&
                     ["hideSelected", "showHide"].map((item) => (
-                        <Menu
+                        <DropdownMenuItem
                             key={item}
                             onClick={() => {
                                 setContext((draftCtx) => {
@@ -361,7 +366,7 @@ export const ContextMenu: React.FC = () => {
                             }}
                         >
                             {(rightclick as any)[item] + rightclick.row}
-                        </Menu>
+                        </DropdownMenuItem>
                     ))
                 );
             }
@@ -369,7 +374,7 @@ export const ContextMenu: React.FC = () => {
                 return (
                     selection?.column_select === true &&
                     ["hideSelected", "showHide"].map((item) => (
-                        <Menu
+                        <DropdownMenuItem
                             key={item}
                             onClick={() => {
                                 setContext((draftCtx) => {
@@ -387,7 +392,7 @@ export const ContextMenu: React.FC = () => {
                             }}
                         >
                             {(rightclick as any)[item] + rightclick.column}
-                        </Menu>
+                        </DropdownMenuItem>
                     ))
                 );
             }
@@ -403,10 +408,11 @@ export const ContextMenu: React.FC = () => {
                 return context.luckysheet_select_save?.some(
                     (section) => section.row_select
                 ) ? (
-                    <Menu
+                    <div
                         key="set-row-height"
-                        onClick={(e, container) => {
-                            const targetRowHeight = container.querySelector("input")?.value;
+                        className="relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground"
+                        onClick={(e) => {
+                            const targetRowHeight = e.currentTarget.querySelector("input")?.value;
                             setContext((draftCtx) => {
                                 if (
                                     targetRowHeight === undefined ||
@@ -449,7 +455,7 @@ export const ContextMenu: React.FC = () => {
                             style={{width: "40px"}}
                         />
                         px
-                    </Menu>
+                    </div>
                 ) : null;
             }
             if (name === "set-column-width") {
@@ -464,10 +470,11 @@ export const ContextMenu: React.FC = () => {
                 return context.luckysheet_select_save?.some(
                     (section) => section.column_select
                 ) ? (
-                    <Menu
+                    <div
                         key="set-column-width"
-                        onClick={(e, container) => {
-                            const targetColWidth = container.querySelector("input")?.value;
+                        className="relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground"
+                        onClick={(e) => {
+                            const targetColWidth = e.currentTarget.querySelector("input")?.value;
                             setContext((draftCtx) => {
                                 if (
                                     targetColWidth === undefined ||
@@ -510,12 +517,12 @@ export const ContextMenu: React.FC = () => {
                             style={{width: "40px"}}
                         />
                         px
-                    </Menu>
+                    </div>
                 ) : null;
             }
             if (name === "clear") {
                 return (
-                    <Menu
+                    <DropdownMenuItem
                         key={name}
                         onClick={() => {
                             setContext((draftCtx) => {
@@ -539,12 +546,12 @@ export const ContextMenu: React.FC = () => {
                         }}
                     >
                         {rightclick.clearContent}
-                    </Menu>
+                    </DropdownMenuItem>
                 );
             }
             if (name === "orderAZ") {
                 return (
-                    <Menu
+                    <DropdownMenuItem
                         key={name}
                         onClick={() => {
                             setContext((draftCtx) => {
@@ -554,12 +561,12 @@ export const ContextMenu: React.FC = () => {
                         }}
                     >
                         {rightclick.orderAZ}
-                    </Menu>
+                    </DropdownMenuItem>
                 );
             }
             if (name === "orderZA") {
                 return (
-                    <Menu
+                    <DropdownMenuItem
                         key={name}
                         onClick={() => {
                             setContext((draftCtx) => {
@@ -569,12 +576,12 @@ export const ContextMenu: React.FC = () => {
                         }}
                     >
                         {rightclick.orderZA}
-                    </Menu>
+                    </DropdownMenuItem>
                 );
             }
             if (name === "sort") {
                 return (
-                    <Menu
+                    <DropdownMenuItem
                         key={name}
                         onClick={() => {
                             setContext((draftCtx) => {
@@ -584,12 +591,12 @@ export const ContextMenu: React.FC = () => {
                         }}
                     >
                         {rightclick.sortSelection}
-                    </Menu>
+                    </DropdownMenuItem>
                 );
             }
             if (name === "filter") {
                 return (
-                    <Menu
+                    <DropdownMenuItem
                         key={name}
                         onClick={() => {
                             setContext((draftCtx) => {
@@ -599,12 +606,12 @@ export const ContextMenu: React.FC = () => {
                         }}
                     >
                         {rightclick.filterSelection}
-                    </Menu>
+                    </DropdownMenuItem>
                 );
             }
             if (name === "image") {
                 return (
-                    <Menu
+                    <DropdownMenuItem
                         key={name}
                         onClick={() => {
                             setContext((draftCtx) => {
@@ -614,12 +621,12 @@ export const ContextMenu: React.FC = () => {
                         }}
                     >
                         {rightclick.image}
-                    </Menu>
+                    </DropdownMenuItem>
                 );
             }
             if (name === "link") {
                 return (
-                    <Menu
+                    <DropdownMenuItem
                         key={name}
                         onClick={() => {
                             setContext((draftCtx) => {
@@ -629,7 +636,7 @@ export const ContextMenu: React.FC = () => {
                         }}
                     >
                         {rightclick.link}
-                    </Menu>
+                    </DropdownMenuItem>
                 );
             }
             if (name === "comment") {
@@ -649,7 +656,7 @@ export const ContextMenu: React.FC = () => {
 
                 if (!hasComment && settings.hooks?.onAddComment) {
                     return (
-                        <Menu
+                        <DropdownMenuItem
                             key={name}
                             onClick={() => {
                                 setContext((draftCtx) => { draftCtx.contextMenu = {}; });
@@ -657,14 +664,14 @@ export const ContextMenu: React.FC = () => {
                             }}
                         >
                             Add comment
-                        </Menu>
+                        </DropdownMenuItem>
                     );
                 }
                 if (hasComment) {
                     const items: React.ReactNode[] = [];
                     if (settings.hooks?.onViewComment) {
                         items.push(
-                            <Menu
+                            <DropdownMenuItem
                                 key="view-comment"
                                 onClick={() => {
                                     setContext((draftCtx) => { draftCtx.contextMenu = {}; });
@@ -672,12 +679,12 @@ export const ContextMenu: React.FC = () => {
                                 }}
                             >
                                 View comment
-                            </Menu>
+                            </DropdownMenuItem>
                         );
                     }
                     if (settings.hooks?.onDeleteComment) {
                         items.push(
-                            <Menu
+                            <DropdownMenuItem
                                 key="delete-comment"
                                 onClick={() => {
                                     setContext((draftCtx) => { draftCtx.contextMenu = {}; });
@@ -685,7 +692,7 @@ export const ContextMenu: React.FC = () => {
                                 }}
                             >
                                 Delete comment
-                            </Menu>
+                            </DropdownMenuItem>
                         );
                     }
                     if (items.length > 0) {
@@ -714,58 +721,22 @@ export const ContextMenu: React.FC = () => {
         ]
     );
 
-    useLayoutEffect(() => {
-        // re-position the context menu if it overflows the window
-        if (!containerRef.current) {
-            return;
-        }
-        const winH = window.innerHeight;
-        const winW = window.innerWidth;
-        const rect = containerRef.current.getBoundingClientRect();
-        const workbookRect =
-            refs.workbookContainer.current?.getBoundingClientRect();
-        if (!workbookRect) {
-            return;
-        }
-        const menuW = rect.width;
-        const menuH = rect.height;
-        let top = contextMenu.y || 0;
-        let left = contextMenu.x || 0;
-
-        let hasOverflow = false;
-        if (workbookRect.left + left + menuW > winW) {
-            left -= menuW;
-            hasOverflow = true;
-        }
-        if (workbookRect.top + top + menuH > winH) {
-            top -= menuH;
-            hasOverflow = true;
-        }
-        if (top < 0) {
-            top = 0;
-            hasOverflow = true;
-        }
-        if (hasOverflow) {
-            setContext((draftCtx) => {
-                draftCtx.contextMenu.x = left;
-                draftCtx.contextMenu.y = top;
-            });
-        }
-    }, [contextMenu.x, contextMenu.y, refs.workbookContainer, setContext]);
-
-    if (Object.keys(context.contextMenu).length === 0) return null;
+    const isOpen = Object.keys(context.contextMenu).length > 0;
 
     return (
-        <div
-            className="fortune-context-menu luckysheet-cols-menu"
-            ref={containerRef}
-            onContextMenu={(e) => e.stopPropagation()}
-            style={{left: contextMenu.x, top: contextMenu.y}}
-        >
-            {context.contextMenu.headerMenu === true
-                ? settings.headerContextMenu.map((menu, i) => getMenuElement(menu, i))
-                : settings.cellContextMenu.map((menu, i) => getMenuElement(menu, i))}
-        </div>
+        <DropdownMenu open={isOpen} onOpenChange={(open) => {
+            if (!open) setContext((draftCtx) => { draftCtx.contextMenu = {}; });
+        }}>
+            <DropdownMenuTrigger className="hidden" />
+            <DropdownMenuContent
+                style={{ position: 'fixed', left: contextMenu.pageX, top: contextMenu.pageY }}
+                onContextMenu={(e) => e.stopPropagation()}
+            >
+                {context.contextMenu.headerMenu === true
+                    ? settings.headerContextMenu.map((menu, i) => getMenuElement(menu, i))
+                    : settings.cellContextMenu.map((menu, i) => getMenuElement(menu, i))}
+            </DropdownMenuContent>
+        </DropdownMenu>
     );
 };
 
