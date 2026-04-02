@@ -287,7 +287,7 @@ export class ChatRoom {
             const attachmentIds = existing.attachments as string[];
             for (const attachmentId of attachmentIds) {
                 try {
-                    await this.drive.deleteFile(this.path.mountId, attachmentId);
+                    await this.drive.deletePath(this.path.mountId, attachmentId);
                 } catch {
                     // attachment may already be deleted
                 }

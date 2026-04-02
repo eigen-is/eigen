@@ -184,44 +184,6 @@ export function useUploadFile(ownerId: string, mountId: string = DEFAULT_MOUNT_I
     });
 }
 
-// DELETE FOLDER
-export function useDeleteFolder(
-    ownerId: string,
-    mountId: string = DEFAULT_MOUNT_ID,
-    parentId?: string,
-    mimeType?: string,
-) {
-    const queryClient = useQueryClient();
-    return useMutation({
-        mutationFn: async (pathId: string) => {
-            const response = await driveApi({ ownerId })({ mountId }).folder({ pathId }).delete();
-            if (response.error) throw new AppError(response);
-            return response.data;
-        },
-        onSuccess: (_data, pathId) => invalidateItemDeleted(queryClient, ownerId, mountId, pathId, parentId, mimeType),
-        onError: onMutationError,
-    });
-}
-
-// DELETE FILE
-export function useDeleteFile(
-    ownerId: string,
-    mountId: string = DEFAULT_MOUNT_ID,
-    parentId?: string,
-    mimeType?: string,
-) {
-    const queryClient = useQueryClient();
-    return useMutation({
-        mutationFn: async (pathId: string) => {
-            const response = await driveApi({ ownerId })({ mountId }).file({ pathId }).delete();
-            if (response.error) throw new AppError(response);
-            return response.data;
-        },
-        onSuccess: (_data, pathId) => invalidateItemDeleted(queryClient, ownerId, mountId, pathId, parentId, mimeType),
-        onError: onMutationError,
-    });
-}
-
 // DELETE MULTIPLE PATHS
 export function useDeletePaths(ownerId: string, mountId: string = DEFAULT_MOUNT_ID) {
     const queryClient = useQueryClient();
@@ -229,10 +191,7 @@ export function useDeletePaths(ownerId: string, mountId: string = DEFAULT_MOUNT_
         mutationFn: async (paths: DrivePath[]) => {
             const results = await Promise.allSettled(
                 paths.map(async (path) => {
-                    const response =
-                        path.type === 'folder'
-                            ? await driveApi({ ownerId })({ mountId }).folder({ pathId: path.id }).delete()
-                            : await driveApi({ ownerId })({ mountId }).file({ pathId: path.id }).delete();
+                    const response = await driveApi({ ownerId })({ mountId }).path({ pathId: path.id }).delete();
                     if (response.error) throw new AppError(response);
                     return path;
                 }),
