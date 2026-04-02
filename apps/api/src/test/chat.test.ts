@@ -1038,7 +1038,7 @@ describe('Chat', () => {
 
             const res = await authedRequest(
                 ctx.alice.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${aliceMountId}/folder/${chat.id}`,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${chat.id}`,
                 { method: 'DELETE' },
             );
             const data = (await res.json()) as { success: boolean };

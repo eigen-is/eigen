@@ -292,7 +292,7 @@ describe('Drive', () => {
         test('delete file', async () => {
             const res = await authedRequest(
                 ctx.alice.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${aliceMountId}/file/${uploadedFileId}`,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${uploadedFileId}`,
                 { method: 'DELETE' },
             );
             expect(res.status).toBe(200);
@@ -2660,7 +2660,7 @@ describe('Drive', () => {
 
             await authedRequest(
                 ctx.alice.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${aliceMountId}/folder/${folder.id}`,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${folder.id}`,
                 { method: 'DELETE' },
             );
 
@@ -2950,7 +2950,7 @@ describe('Drive', () => {
         test('DELETE a file returns 200 (soft-delete)', async () => {
             const res = await authedRequest(
                 ctx.alice.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${aliceMountId}/file/${trashFileId}`,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${trashFileId}`,
                 { method: 'DELETE' },
             );
             expect(res.status).toBe(200);
@@ -2978,7 +2978,7 @@ describe('Drive', () => {
         test('DELETE a folder returns 200 and trashes descendants', async () => {
             const res = await authedRequest(
                 ctx.alice.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${aliceMountId}/folder/${trashFolderId}`,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${trashFolderId}`,
                 { method: 'DELETE' },
             );
             expect(res.status).toBe(200);
@@ -3073,7 +3073,7 @@ describe('Drive', () => {
             // Soft-delete the file first
             const deleteRes = await authedRequest(
                 ctx.alice.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${aliceMountId}/file/${trashMgmtFileId}`,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${trashMgmtFileId}`,
                 { method: 'DELETE' },
             );
             expect(deleteRes.status).toBe(200);
@@ -3124,7 +3124,7 @@ describe('Drive', () => {
             // First soft-delete the file so it is in trash
             await authedRequest(
                 ctx.alice.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${aliceMountId}/file/${permanentFileId}`,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${permanentFileId}`,
                 { method: 'DELETE' },
             );
 
@@ -3151,14 +3151,14 @@ describe('Drive', () => {
             // Trash the folder
             await authedRequest(
                 ctx.alice.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${aliceMountId}/folder/${trashMgmtFolderId}`,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${trashMgmtFolderId}`,
                 { method: 'DELETE' },
             );
 
             // Also re-trash the restored file
             await authedRequest(
                 ctx.alice.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${aliceMountId}/file/${trashMgmtFileId}`,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${trashMgmtFileId}`,
                 { method: 'DELETE' },
             );
 
@@ -3193,7 +3193,7 @@ describe('Drive', () => {
             );
             await authedRequest(
                 ctx.alice.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${aliceMountId}/folder/${folder.id}`,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${folder.id}`,
                 { method: 'DELETE' },
             );
 
@@ -3216,7 +3216,7 @@ describe('Drive', () => {
             );
             await authedRequest(
                 ctx.alice.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${aliceMountId}/folder/${folder.id}`,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${folder.id}`,
                 { method: 'DELETE' },
             );
 
