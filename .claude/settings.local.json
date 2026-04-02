@@ -177,7 +177,8 @@
       "Bash(jobs -l)",
       "Bash(npx biome:*)",
       "Bash(kill %1)",
-      "Bash(npx --yes @tanstack/router-cli generate --config apps/drive/tsr.config.json)"
+      "Bash(npx --yes @tanstack/router-cli generate --config apps/drive/tsr.config.json)",
+      "Skill(code-review:code-review)"
     ]
   },
   "enabledPlugins": {

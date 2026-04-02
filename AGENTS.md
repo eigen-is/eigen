@@ -310,7 +310,7 @@ Detailed architecture docs in `docs/`:
 | [ORGANISATIONS-AND-TEAMS.md](docs/ORGANISATIONS-AND-TEAMS.md) | Org/team model, team drives, prefixed owner IDs, People app                  |
 | [LAYOUT.md](docs/LAYOUT.md)                                   | AppShell, ColumnLayout, shared components, Drive UI, list patterns           |
 | [CHAT.md](docs/CHAT.md)                                       | Chat rooms, slash commands, embedded chats                                   |
-| [COMMENTS_IN_DOCS.md](docs/COMMENTS_IN_DOCS.md)               | Comment index, mentions, resolution tracking                                 |
+| [COMMENTS.md](docs/COMMENTS.md)                               | Comment system: index, panel, decorations, shared NoteCard components        |
 | [CALENDAR.md](docs/CALENDAR.md)                               | Calendar, RRULE, sharing, team calendars                                     |
 | [STICKIES.md](docs/STICKIES.md)                               | Kanban board, Yjs data model                                                 |
 | [SLIDES.md](docs/SLIDES.md)                                   | Presentation editor, percentage coordinates                                  |
