@@ -35,6 +35,7 @@ const OBJECT_FIELDS = [
     'backgroundColor',
     'mediaName',
     'objectFit',
+    'commentChatNames',
 ] as const;
 
 function yMapToObject(yMap: Y.Map<unknown>): Record<string, unknown> {
@@ -42,6 +43,13 @@ function yMapToObject(yMap: Y.Map<unknown>): Record<string, unknown> {
     for (const field of OBJECT_FIELDS) {
         const val = yMap.get(field);
         if (val !== undefined) obj[field] = val;
+    }
+    // Ensure commentChatNames is always a string array (may be stored as Y.Array or plain array)
+    const raw = obj.commentChatNames;
+    if (raw && typeof (raw as Y.Array<string>).toArray === 'function') {
+        obj.commentChatNames = (raw as Y.Array<string>).toArray();
+    } else if (!Array.isArray(raw)) {
+        obj.commentChatNames = [];
     }
     return obj;
 }
@@ -227,6 +235,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
                     for (const [k, v] of Object.entries(srcObj)) {
                         if (k === 'id') objYMap.set('id', newObjId);
                         else if (k === 'slideId') objYMap.set('slideId', newSlideId);
+                        else if (k === 'commentChatNames') continue;
                         else objYMap.set(k, v);
                     }
                     objectsMap.set(newObjId, objYMap);
@@ -470,6 +479,35 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         [deleteObjects],
     );
 
+    const addCommentToObject = useCallback((objId: string, chatName: string) => {
+        const doc = docRef.current;
+        if (!doc) return;
+        doc.transact(() => {
+            const objectsMap = doc.getMap('objects');
+            const objMap = objectsMap.get(objId) as Y.Map<unknown> | undefined;
+            if (!objMap) return;
+            const current = (objMap.get('commentChatNames') as string[] | undefined) || [];
+            const arr = Array.isArray(current) ? [...current] : [];
+            if (!arr.includes(chatName)) {
+                arr.push(chatName);
+                objMap.set('commentChatNames', arr);
+            }
+        });
+    }, []);
+
+    const removeCommentFromObject = useCallback((objId: string, chatName: string) => {
+        const doc = docRef.current;
+        if (!doc) return;
+        doc.transact(() => {
+            const objectsMap = doc.getMap('objects');
+            const objMap = objectsMap.get(objId) as Y.Map<unknown> | undefined;
+            if (!objMap) return;
+            const current = (objMap.get('commentChatNames') as string[] | undefined) || [];
+            const arr = Array.isArray(current) ? current.filter((n) => n !== chatName) : [];
+            objMap.set('commentChatNames', arr);
+        });
+    }, []);
+
     return {
         deck,
         activeSlideId,
@@ -484,6 +522,8 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         updateObjects,
         deleteObject,
         deleteObjects,
+        addCommentToObject,
+        removeCommentFromObject,
         moveObjectUp,
         moveObjectDown,
         moveObjectToFront,
