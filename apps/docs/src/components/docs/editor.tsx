@@ -684,6 +684,7 @@ const TiptapEditor = ({
 
             <ContextMenuAnchor contextMenu={selectionContextMenu}>
                 <DropdownMenuItem
+                    className="whitespace-nowrap"
                     onClick={() => {
                         handleAddCommentRef.current?.();
                         selectionContextMenu.close();
