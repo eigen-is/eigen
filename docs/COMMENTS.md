@@ -166,6 +166,35 @@ palette), Resolve/Reopen, Delete actions shown directly (no nested submenu).
 The `CommentPanel` replaces the properties/background panel when toggled via the toolbar button.
 Clicking a comment card navigates to the slide containing the commented object and selects it.
 
+## Sheets Editor Integration
+
+### Anchoring
+
+Sheets anchor comments to **cells** via `commentChatNames?: string[]` on the fortune-sheet `Cell` type.
+The fortune-sheet built-in comment system (`ps` field, `NotationBoxes`, comment module, mouse handlers)
+has been fully removed and replaced with the shared Eigen comment infrastructure.
+
+### Active Comments
+
+`useActiveComments(flowdata)` in `hooks/use-active-comments.ts` scans the current sheet's cell matrix
+for cells with `commentChatNames`, returning `{ ids, anchorTexts }`. Anchor text is the cell reference
+(e.g., `"Cell A1"`).
+
+### Visual Indicator
+
+The fortune-sheet canvas draws a red triangle (`#FC6666`) in the top-right corner of any cell with
+`commentChatNames.length > 0`. This is built into the canvas rendering layer.
+
+### Context Menu
+
+Fortune-sheet's cell context menu has a `"comment"` item rendered via hooks:
+- No comment: "Add comment" (calls `hooks.onAddComment`)
+- Has comment: "View comment" / "Delete comment" (calls `hooks.onViewComment` / `hooks.onDeleteComment`)
+
+### Panel
+
+`CommentPanel` shows as a sidebar alongside the spreadsheet when toggled via the toolbar button.
+
 ## Active vs Orphaned Comments
 
 The Yjs document is the source of truth for which comments are "active". When a user deletes a `CommentMark`,
@@ -192,4 +221,6 @@ results with `activeCommentIds` from the doc to show only live comments.
 | `apps/docs/src/components/docs/extensions/comment-mark.ts`   | ProseMirror plugins (interaction + decorations) |
 | `apps/slides/src/components/slides/editor.tsx`                | Slides editor integration                 |
 | `apps/slides/src/components/slides/hooks/use-active-comments.ts` | Scan objects for comment IDs          |
+| `apps/sheets/src/components/sheets/editor.tsx`                | Sheets editor integration                 |
+| `apps/sheets/src/components/sheets/hooks/use-active-comments.ts` | Scan cell matrix for comment IDs      |
 | `packages/ui/src/styles/eigen-prose.css`                      | Comment highlight CSS                     |
