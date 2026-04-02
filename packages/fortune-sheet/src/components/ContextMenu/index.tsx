@@ -727,9 +727,22 @@ export const ContextMenu: React.FC = () => {
         <DropdownMenu open={isOpen} onOpenChange={(open) => {
             if (!open) setContext((draftCtx) => { draftCtx.contextMenu = {}; });
         }}>
-            <DropdownMenuTrigger className="hidden" />
+            <DropdownMenuTrigger asChild>
+                <div
+                    style={{
+                        position: 'fixed',
+                        left: contextMenu.pageX,
+                        top: contextMenu.pageY,
+                        width: 0,
+                        height: 0,
+                        pointerEvents: 'none',
+                    }}
+                />
+            </DropdownMenuTrigger>
             <DropdownMenuContent
-                style={{ position: 'fixed', left: contextMenu.pageX, top: contextMenu.pageY }}
+                side="bottom"
+                align="start"
+                collisionPadding={8}
                 onContextMenu={(e) => e.stopPropagation()}
             >
                 {context.contextMenu.headerMenu === true
