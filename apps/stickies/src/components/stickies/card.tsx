@@ -55,6 +55,7 @@ export function StickyCard({
                 title={card.title}
                 description={card.description}
                 color={card.color}
+                replyCount={card.messageCount ? card.messageCount - 1 : undefined}
                 onClick={handleClick}
                 onContextMenu={onContextMenu ? (e) => onContextMenu(e, card) : undefined}
                 className={`mb-2 ${canWrite ? 'cursor-grab touch-none' : 'cursor-pointer'} ${isDragging ? 'opacity-50' : ''}`}
