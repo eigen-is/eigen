@@ -1,5 +1,5 @@
-import { type EditorState, Plugin, PluginKey } from '@tiptap/pm/state';
-import { Decoration, DecorationSet } from '@tiptap/pm/view';
+import { Plugin, PluginKey } from '@tiptap/pm/state';
+import type { EditorView } from '@tiptap/pm/view';
 import { lightenColor } from '@workspace/lib/constants';
 import { CommentMarkSchema } from '@workspace/lib/docs/eigendoc';
 
@@ -8,28 +8,41 @@ export type CommentMarkOptions = {
     onCommentContextMenu?: (chatName: string, event: MouseEvent) => void;
     onAddComment?: () => void;
     onToggleCommentPanel?: () => void;
+    onDeleteComment?: (chatName: string) => void;
 };
 
-type CommentMeta = { resolvedIds: Set<string>; colorMap: Map<string, string> };
+type CommentMeta = {
+    resolvedIds: Set<string>;
+    colorMap: Map<string, string>;
+};
 
-const decorationPluginKey = new PluginKey('commentDecorations');
+const metaKey = new PluginKey('commentMeta');
 
-function buildDecorations(state: EditorState, meta: CommentMeta): DecorationSet {
-    const decorations: Decoration[] = [];
-    state.doc.descendants((node, pos) => {
-        for (const mark of node.marks) {
-            if (mark.type.name !== 'comment' || !mark.attrs.chatName) continue;
-            const chatName = mark.attrs.chatName as string;
-            const attrs: Record<string, string> = {};
-            if (meta.resolvedIds.has(chatName)) attrs['data-resolved'] = 'true';
+function applyCommentStyles(view: EditorView, meta: CommentMeta) {
+    const root = view.dom;
+    for (const el of root.querySelectorAll('.comment-highlight')) {
+        const chatName = el.getAttribute('data-chat-name');
+        if (!chatName) continue;
+
+        const htmlEl = el as HTMLElement;
+
+        if (meta.resolvedIds.has(chatName)) {
+            htmlEl.style.backgroundColor = 'transparent';
+            htmlEl.style.borderBottom = 'none';
+            htmlEl.style.cursor = 'default';
+        } else {
             const color = meta.colorMap.get(chatName);
-            if (color) attrs.style = `--comment-color: ${lightenColor(color, 0.5)}`;
-            if (Object.keys(attrs).length > 0) {
-                decorations.push(Decoration.inline(pos, pos + node.nodeSize, attrs));
+            if (color) {
+                const light = lightenColor(color, 0.5);
+                htmlEl.style.backgroundColor = light;
+                htmlEl.style.borderBottom = `2px solid ${lightenColor(color, 0.2)}`;
+            } else {
+                htmlEl.style.backgroundColor = '';
+                htmlEl.style.borderBottom = '';
             }
+            htmlEl.style.cursor = '';
         }
-    });
-    return decorations.length > 0 ? DecorationSet.create(state.doc, decorations) : DecorationSet.empty;
+    }
 }
 
 export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions>({
@@ -39,6 +52,7 @@ export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions>({
             onCommentContextMenu: undefined,
             onAddComment: undefined,
             onToggleCommentPanel: undefined,
+            onDeleteComment: undefined,
         };
     },
 
@@ -104,21 +118,17 @@ export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions>({
             );
         }
 
+        // Plugin that applies resolved + color styles directly to DOM elements
         plugins.push(
             new Plugin({
-                key: decorationPluginKey,
+                key: metaKey,
                 state: {
-                    init: (_, state) => buildDecorations(state, storage),
-                    apply: (tr, old, _oldState, newState) => {
-                        if (tr.docChanged || tr.getMeta(decorationPluginKey)) {
-                            return buildDecorations(newState, storage);
-                        }
-                        return old.map(tr.mapping, tr.doc);
-                    },
+                    init: () => 0,
+                    apply: (tr, val) => (tr.docChanged || tr.getMeta(metaKey) ? val + 1 : val),
                 },
-                props: {
-                    decorations: (state) => decorationPluginKey.getState(state),
-                },
+                view: () => ({
+                    update: (view) => applyCommentStyles(view, storage),
+                }),
             }),
         );
 
@@ -127,7 +137,7 @@ export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions>({
 });
 
 export function updateCommentDecorations(
-    // biome-ignore lint/suspicious/noExplicitAny: tiptap Editor type is complex, structural typing doesn't match
+    // biome-ignore lint/suspicious/noExplicitAny: tiptap Editor type is complex
     editor: any,
     resolvedIds: Set<string>,
     colorMap: Map<string, string>,
@@ -137,6 +147,6 @@ export function updateCommentDecorations(
         storage.resolvedIds = resolvedIds;
         storage.colorMap = colorMap;
     }
-    const tr = editor.view.state.tr.setMeta(decorationPluginKey, true);
+    const tr = editor.view.state.tr.setMeta(metaKey, true);
     editor.view.dispatch(tr);
 }
