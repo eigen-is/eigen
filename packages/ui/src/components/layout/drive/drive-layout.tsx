@@ -1,5 +1,5 @@
 import { getDriveDownloadUrl } from '@workspace/lib/api';
-import { useDeleteFile, useDeleteFolder, useDeletePaths, useExportDocument, useMovePath } from '@workspace/lib/drive';
+import { useDeletePaths, useExportDocument, useMovePath } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { useCallback, useMemo } from 'react';
 import { Column, ColumnLayout } from '../app/column-layout.tsx';
@@ -82,8 +82,6 @@ export function DriveLayout({
     const { isMobile } = useLayout();
     const dialogs = useDriveDialogs();
     const movePath = useMovePath(ownerId, mountId, currentPath?.id);
-    const deleteFileMutation = useDeleteFile(ownerId, mountId, currentPath?.id, currentPath?.mimeType);
-    const deleteFolderMutation = useDeleteFolder(ownerId, mountId, currentPath?.id, currentPath?.mimeType);
     const deletePathsMutation = useDeletePaths(ownerId, mountId);
 
     const handleFileUpload = () => {
@@ -100,17 +98,11 @@ export function DriveLayout({
 
     const handleDeletePaths = (paths: DrivePath[]) => {
         if (!allowDelete || paths.length === 0) return;
-        if (paths.length === 1) {
-            const item = paths[0];
-            const mutation = item.type === 'folder' ? deleteFolderMutation : deleteFileMutation;
-            mutation.mutate(item.id, { onSuccess: () => onAfterAction?.('delete', item) });
-        } else {
-            deletePathsMutation.mutate(paths, {
-                onSuccess: () => {
-                    for (const path of paths) onAfterAction?.('delete', path);
-                },
-            });
-        }
+        deletePathsMutation.mutate(paths, {
+            onSuccess: () => {
+                for (const path of paths) onAfterAction?.('delete', path);
+            },
+        });
     };
 
     const handleRenamePath = (path: DrivePath) => {
