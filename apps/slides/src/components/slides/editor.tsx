@@ -747,7 +747,17 @@ function SlideEditorInner({
                                         activeCommentIds={activeComments.ids}
                                         anchorTexts={activeComments.anchorTexts}
                                         onClose={() => setCommentPanelOpen(false)}
-                                        onCommentClick={(chatName) => setViewCommentChatName(chatName)}
+                                        onCommentClick={(chatName) => {
+                                            // Navigate to the slide containing this comment
+                                            for (const obj of Object.values(deck.objects)) {
+                                                if (obj.commentChatNames?.includes(chatName)) {
+                                                    setActiveSlideId(obj.slideId);
+                                                    setSelectedObjectIds([obj.id]);
+                                                    break;
+                                                }
+                                            }
+                                            setViewCommentChatName(chatName);
+                                        }}
                                         onCommentContextMenu={commentContextMenu.handleContextMenu}
                                     />
                                 ) : selectedObjects.length > 0 && canWrite ? (
