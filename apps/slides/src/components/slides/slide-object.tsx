@@ -361,8 +361,8 @@ export const SlideObjectView = memo(function SlideObjectView({
                                     <MessageSquarePlus className="h-4 w-4 mr-2" /> View comment
                                 </ContextMenuItem>
                                 <ContextMenuSub>
-                                    <ContextMenuSubTrigger>
-                                        <Palette className="h-4 w-4 mr-2" /> Comment color
+                                    <ContextMenuSubTrigger className="gap-2">
+                                        <Palette className="h-4 w-4" /> Comment color
                                     </ContextMenuSubTrigger>
                                     <ContextMenuSubContent>
                                         <div className="flex gap-1 p-2">
