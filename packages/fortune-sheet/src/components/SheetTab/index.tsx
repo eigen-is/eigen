@@ -1,7 +1,13 @@
-import {ChevronsLeft, ChevronsRight, LayoutGrid, Plus} from "lucide-react";
+import {ChevronsLeft, ChevronsRight, Check, LayoutGrid, Plus} from "lucide-react";
 import React, {useCallback, useContext, useEffect, useRef, useState,} from "react";
-import {addSheet, locale, updateCell} from "../../core";
+import {addSheet, cancelActiveImgItem, cancelNormalSelected, locale, updateCell} from "../../core";
 import {WorkbookContext} from "../../context";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@workspace/ui/components/dropdown-menu";
 import "./index.css";
 import {SheetItem} from "./SheetItem";
 import {ZoomControl} from "../ZoomControl";
@@ -82,20 +88,52 @@ export const SheetTab: React.FC = () => {
                 )}
                 {context.allowEdit && (
                     <div className="sheet-list-container">
-                        <div
-                            id="all-sheets"
-                            className="fortune-sheettab-button"
-                            ref={tabContainerRef}
-                            onMouseDown={(e) => {
-                                e.stopPropagation();
-                                setContext((ctx) => {
-                                    ctx.showSheetList = !(ctx.showSheetList ?? false);
-                                    ctx.sheetTabContextMenu = {};
-                                });
-                            }}
-                        >
-                            <LayoutGrid width={16} height={16} aria-hidden="true"/>
-                        </div>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <div
+                                    id="all-sheets"
+                                    className="fortune-sheettab-button"
+                                    ref={tabContainerRef}
+                                >
+                                    <LayoutGrid width={16} height={16} aria-hidden="true"/>
+                                </div>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent side="top" align="start" collisionPadding={8} style={{zIndex: 10002}}>
+                                {context.luckysheetfile
+                                    .slice()
+                                    .sort((s1, s2) => Number(s1.order) - Number(s2.order))
+                                    .map((singleSheet) => (
+                                        <DropdownMenuItem
+                                            key={singleSheet.id}
+                                            onClick={() => {
+                                                setContext((draftCtx) => {
+                                                    draftCtx.sheetScrollRecord[draftCtx.currentSheetId] = {
+                                                        scrollLeft: draftCtx.scrollLeft,
+                                                        scrollTop: draftCtx.scrollTop,
+                                                        luckysheet_select_status: draftCtx.luckysheet_select_status,
+                                                        luckysheet_select_save: draftCtx.luckysheet_select_save,
+                                                        luckysheet_selection_range: draftCtx.luckysheet_selection_range,
+                                                    };
+                                                    draftCtx.currentSheetId = singleSheet.id!;
+                                                    draftCtx.zoomRatio = singleSheet.zoomRatio || 1;
+                                                    cancelActiveImgItem(draftCtx, refs.globalCache);
+                                                    cancelNormalSelected(draftCtx);
+                                                });
+                                            }}
+                                        >
+                                            <span className="w-5 inline-flex items-center">
+                                                {singleSheet.id === context.currentSheetId && (
+                                                    <Check width={14} height={14} aria-hidden="true"/>
+                                                )}
+                                            </span>
+                                            {!!singleSheet.color && (
+                                                <div className="w-1.5 h-4 rounded-sm mr-1" style={{background: singleSheet.color}}/>
+                                            )}
+                                            {singleSheet.name}
+                                        </DropdownMenuItem>
+                                    ))}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     </div>
                 )}
                 <div

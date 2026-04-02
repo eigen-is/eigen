@@ -35,7 +35,7 @@ import {SheetTabContextMenu} from "../ContextMenu/SheetTab";
 import {generateAPIs} from "./api";
 import {ModalProvider} from "../../context/modal";
 import {FilterMenu} from "../ContextMenu/FilterMenu";
-import {SheetList} from "../SheetList";
+
 import {readEigenClipboard} from "@workspace/lib/clipboard";
 import type {EigenClipboardData, EigenClipboardTextItem} from "@workspace/lib/types/clipboard";
 import {consumePendingCopy} from "../../core/modules/clipboard";
@@ -872,7 +872,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         <ContextMenu/>
                         <FilterMenu/>
                         <SheetTabContextMenu/>
-                        {context.showSheetList && <SheetList/>}
                         {context.contextMenu && Object.keys(context.contextMenu).length > 0 && (
                             <div
                                 onMouseDown={() => {
