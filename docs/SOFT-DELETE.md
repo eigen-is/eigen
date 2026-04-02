@@ -101,7 +101,7 @@ To handle this, `permanentlyDeleteFromTrash(pathId)` must:
 4. Then call `deletePath(pathId)` which cascades to the remaining children
 
 Additionally, `deletePath()` itself should guard against deleting the root folder
-(`if parentId === null, throw`) — currently only `deleteFolder()` has this guard.
+(`if parentId === null, throw`) — `deletePath()` has this guard.
 
 ## Restore
 
@@ -271,9 +271,8 @@ add a guard.
 
 Methods that switch to `getActivePath()`:
 - `getFolderContents`, `createFolder`, `createCollabDoc`, `createChat`
-- `uploadFiles`, `deleteFolder`, `deleteFile`, `movePath`, `renamePath`
+- `uploadFiles`, `deletePath`, `movePath`, `renamePath`
 - `serveFile`, `downloadFile`, `writeFileContent`, `resolveFile`
-- `getEditableContent`, `saveEditableContent`
 - `getCollabDocument`, `getPreview`, `getTextPreview`, `getThumbnail`
 
 Note: `resolveFile(mountId, pathId)` (returns `{ mount, path }`) is used by 4 routes — export, preview,
