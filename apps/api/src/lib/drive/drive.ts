@@ -275,15 +275,7 @@ export default class Drive {
         return uploaded;
     }
 
-    async deleteFolder(mountId: string, pathId: string): Promise<void> {
-        return this.trashPath(mountId, pathId);
-    }
-
-    async deleteFile(mountId: string, pathId: string): Promise<void> {
-        return this.trashPath(mountId, pathId);
-    }
-
-    async trashPath(mountId: string, pathId: string): Promise<void> {
+    async deletePath(mountId: string, pathId: string): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getActivePath(pathId);
 

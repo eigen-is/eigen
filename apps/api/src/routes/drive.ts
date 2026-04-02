@@ -75,15 +75,6 @@ export const driveRouter = new Elysia({ name: 'drive' })
             auth: true,
         },
     )
-    .delete(
-        '/drive/:ownerId/:mountId/folder/:pathId',
-        async ({ params, user }) => {
-            const drive = await getSharedDrive(params.ownerId, user);
-            await drive.deleteFolder(params.mountId, params.pathId);
-            return { success: true };
-        },
-        { auth: true },
-    )
     .post(
         '/drive/:ownerId/:mountId/folder/:pathId/doc',
         async ({ params, body, user }) => {
@@ -157,15 +148,6 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
         { auth: true, parse: 'none' },
     )
-    .delete(
-        '/drive/:ownerId/:mountId/file/:pathId',
-        async ({ params, user }) => {
-            const drive = await getSharedDrive(params.ownerId, user);
-            await drive.deleteFile(params.mountId, params.pathId);
-            return { success: true };
-        },
-        { auth: true },
-    )
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/download',
         async ({ params, user }) => {
@@ -224,12 +206,21 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
         { auth: true },
     )
-    // Path operations (rename, move, acl, breadcrumb)
+    // Path operations (rename, move, delete, acl, breadcrumb)
     .get(
         '/drive/:ownerId/:mountId/path/:pathId',
         async ({ params, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
             return await drive.getPath(params.mountId, params.pathId);
+        },
+        { auth: true },
+    )
+    .delete(
+        '/drive/:ownerId/:mountId/path/:pathId',
+        async ({ params, user }) => {
+            const drive = await getSharedDrive(params.ownerId, user);
+            await drive.deletePath(params.mountId, params.pathId);
+            return { success: true };
         },
         { auth: true },
     )
