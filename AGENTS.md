@@ -342,4 +342,3 @@ Detailed architecture docs in `docs/`:
 | [TODO-CALENDAR-TIMEZONE.md](docs/TODO-CALENDAR-TIMEZONE.md) | Timezone-aware recurrence expansion      |
 | [TODO-FORTUNE-SHEETS.md](docs/TODO-FORTUNE-SHEETS.md)       | Fortune-sheet refactoring audit          |
 | [RESEARCH_AI.md](docs/PROPOSAL_AI.md)                       | Local/private AI integration research    |
-| [DRIVE-SIMPLIFY.md](docs/DRIVE-SIMPLIFY.md)                   | Drive class simplification plan          |
