@@ -109,8 +109,7 @@ describe('Editor', () => {
         test('saves content when updatedAt matches', async () => {
             const uploaded = await uploadTextFile('editable.txt', 'original');
             const { data: initial } = await editorGet(uploaded.id);
-            const updatedAt =
-                initial.updatedAt instanceof Date ? initial.updatedAt.toISOString() : String(initial.updatedAt);
+            const updatedAt = initial.updatedAt;
 
             const { status, data } = await editorPut(uploaded.id, {
                 content: 'modified',
@@ -128,8 +127,7 @@ describe('Editor', () => {
         test('returns conflict when updatedAt is stale', async () => {
             const uploaded = await uploadTextFile('conflict.txt', 'original');
             const { data: initial } = await editorGet(uploaded.id);
-            const updatedAt =
-                initial.updatedAt instanceof Date ? initial.updatedAt.toISOString() : String(initial.updatedAt);
+            const updatedAt = initial.updatedAt;
 
             // Wait so updatedAt will differ after save
             await new Promise((r) => setTimeout(r, 1100));
@@ -140,8 +138,7 @@ describe('Editor', () => {
 
             // Verify the first save actually changed updatedAt
             const { data: refreshed } = await editorGet(uploaded.id);
-            const newUpdatedAt =
-                refreshed.updatedAt instanceof Date ? refreshed.updatedAt.toISOString() : String(refreshed.updatedAt);
+            const newUpdatedAt = refreshed.updatedAt;
             expect(newUpdatedAt).not.toBe(updatedAt);
 
             // Second save with original (now stale) updatedAt returns conflict
@@ -156,8 +153,7 @@ describe('Editor', () => {
         test('force save ignores stale updatedAt', async () => {
             const uploaded = await uploadTextFile('force.txt', 'original');
             const { data: initial } = await editorGet(uploaded.id);
-            const updatedAt =
-                initial.updatedAt instanceof Date ? initial.updatedAt.toISOString() : String(initial.updatedAt);
+            const updatedAt = initial.updatedAt;
 
             await new Promise((r) => setTimeout(r, 1100));
 
@@ -180,8 +176,7 @@ describe('Editor', () => {
             const content = '---\ntitle: Test\n---\n# Hello';
             const uploaded = await uploadTextFile('fm-save.md', content, 'text/markdown');
             const { data: initial } = await editorGet(uploaded.id);
-            const updatedAt =
-                initial.updatedAt instanceof Date ? initial.updatedAt.toISOString() : String(initial.updatedAt);
+            const updatedAt = initial.updatedAt;
 
             await editorPut(uploaded.id, {
                 content: '# Updated',

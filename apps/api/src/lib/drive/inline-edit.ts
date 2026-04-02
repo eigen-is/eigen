@@ -43,7 +43,7 @@ export async function getEditableContent(mount: Mount, path: DrivePath) {
                   frontmatter: null,
                   body: content,
               };
-    return { editMode, content: body, frontmatter, mimeType: path.mimeType, updatedAt: path.updatedAt };
+    return { editMode, content: body, frontmatter, mimeType: path.mimeType, updatedAt: path.updatedAt.toISOString() };
 }
 
 export function prepareSaveContent(
@@ -55,7 +55,7 @@ export function prepareSaveContent(
 ): { conflict: true; currentUpdatedAt: string } | { conflict: false; data: Buffer } {
     if (path.type !== DRIVE_TYPE_FILE) throw new ApiError(404, 'File not found');
 
-    const currentUpdatedAt = path.updatedAt instanceof Date ? path.updatedAt.toISOString() : String(path.updatedAt);
+    const currentUpdatedAt = path.updatedAt.toISOString();
     if (expectedUpdatedAt !== currentUpdatedAt && !force) {
         return { conflict: true, currentUpdatedAt };
     }
