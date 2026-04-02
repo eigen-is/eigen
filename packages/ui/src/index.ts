@@ -9,6 +9,7 @@ export * from './components/layout/drive';
 export * from './components/layout/home';
 export * from './components/layout/labels';
 export * from './components/layout/media';
+export * from './components/layout/notes';
 export * from './components/layout/pages';
 export * from './components/layout/shadow-content';
 export * from './components/layout/sidebar';

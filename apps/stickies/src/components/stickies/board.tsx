@@ -1,22 +1,12 @@
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { horizontalListSortingStrategy, SortableContext } from '@dnd-kit/sortable';
 import { useHotkey } from '@tanstack/react-hotkeys';
-import { EIGEN_STICKIES_COLORS, lightenColor } from '@workspace/lib/constants';
 import { MediaResolverProvider } from '@workspace/lib/drive';
 import { useIsMobile } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { Card, CardContent } from '@workspace/ui/components/card';
-import {
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuSub,
-    DropdownMenuSubContent,
-    DropdownMenuSubTrigger,
-} from '@workspace/ui/components/dropdown-menu';
+import { NoteCard, NoteCardContextMenu } from '@workspace/ui';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
-import { isLightColor } from '@workspace/ui/components/layout/media/color-picker';
-import { Check, CircleOff, Palette, Pencil, Trash2 } from 'lucide-react';
 import { useCallback, useState } from 'react';
 import * as Y from 'yjs';
 import { AddCardDialog } from './add-card-dialog';
@@ -188,22 +178,12 @@ export function StickiesBoard({ ownerId, path, canWrite, chatFolderId, onAccessD
         if (dragState.activeType === 'task') {
             const card = dragState.activeItem as CardItem;
             return (
-                <Card
-                    className={`${isMobile ? 'w-full p-0' : 'w-[254px] p-0'} shadow-md rounded-none ${!card.color ? 'border' : 'border-0'}`}
-                    style={{
-                        backgroundColor: card.color ? lightenColor(card.color, 0.25) : undefined,
-                        color: card.color ? (isLightColor(card.color) ? '#000' : '#fff') : undefined,
-                    }}
-                >
-                    <CardContent className={`p-3 text-sm ${!card.color ? 'bg-accent' : ''}`}>
-                        {card.title}
-                        {card.description && (
-                            <p className="text-xs mt-1 line-clamp-2" style={{ opacity: 0.7 }}>
-                                {card.description}
-                            </p>
-                        )}
-                    </CardContent>
-                </Card>
+                <NoteCard
+                    title={card.title}
+                    description={card.description}
+                    color={card.color}
+                    className={isMobile ? 'w-full' : 'w-[254px]'}
+                />
             );
         }
 
@@ -333,45 +313,12 @@ export function StickiesBoard({ ownerId, path, canWrite, chatFolderId, onAccessD
                         )}
 
                         <ContextMenuAnchor contextMenu={cardContextMenu}>
-                            <DropdownMenuItem onClick={handleCardContextEdit}>
-                                <Pencil className="h-4 w-4 mr-2" /> Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuSub>
-                                <DropdownMenuSubTrigger>
-                                    <Palette className="h-4 w-4 mr-2" /> Color
-                                </DropdownMenuSubTrigger>
-                                <DropdownMenuSubContent>
-                                    <div className="flex gap-1 p-2">
-                                        <button
-                                            className="h-4 w-4 rounded-full border border-border hover:scale-125 transition-transform flex items-center justify-center bg-background"
-                                            title="No color"
-                                            onClick={() => handleCardContextColor('')}
-                                        >
-                                            <CircleOff className="h-2.5 w-2.5 text-muted-foreground" />
-                                        </button>
-                                        {EIGEN_STICKIES_COLORS[0].map((c) => (
-                                            <button
-                                                key={c.value}
-                                                className="h-4 w-4 rounded-full border border-border/50 hover:scale-125 transition-transform flex items-center justify-center"
-                                                style={{ backgroundColor: c.value }}
-                                                title={c.label}
-                                                onClick={() => handleCardContextColor(c.value)}
-                                            >
-                                                {cardContextMenu.item?.color === c.value && (
-                                                    <Check
-                                                        className="h-2 w-2"
-                                                        style={{ color: isLightColor(c.value) ? '#000' : '#fff' }}
-                                                    />
-                                                )}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </DropdownMenuSubContent>
-                            </DropdownMenuSub>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem variant="destructive" onClick={handleCardContextDelete}>
-                                <Trash2 className="h-4 w-4 mr-2" /> Delete
-                            </DropdownMenuItem>
+                            <NoteCardContextMenu
+                                currentColor={cardContextMenu.item?.color}
+                                onEdit={handleCardContextEdit}
+                                onChangeColor={handleCardContextColor}
+                                onDelete={handleCardContextDelete}
+                            />
                         </ContextMenuAnchor>
 
                         {editCardId && board.tasks[editCardId] && (

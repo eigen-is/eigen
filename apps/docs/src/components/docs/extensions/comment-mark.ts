@@ -4,33 +4,45 @@ import { CommentMarkSchema } from '@workspace/lib/docs/eigendoc';
 
 export type CommentMarkOptions = {
     onCommentClick?: (chatName: string) => void;
+    onCommentContextMenu?: (chatName: string, event: MouseEvent) => void;
     onAddComment?: () => void;
     onToggleCommentPanel?: () => void;
 };
 
-const resolvedPluginKey = new PluginKey('commentResolved');
+type CommentMeta = { resolvedIds: Set<string>; colorMap: Map<string, string> };
 
-function buildResolvedDecorations(state: EditorState, resolvedIds: Set<string>): DecorationSet {
-    if (resolvedIds.size === 0) return DecorationSet.empty;
+const decorationPluginKey = new PluginKey('commentDecorations');
 
+function buildDecorations(state: EditorState, meta: CommentMeta): DecorationSet {
     const decorations: Decoration[] = [];
     state.doc.descendants((node, pos) => {
         for (const mark of node.marks) {
-            if (mark.type.name === 'comment' && mark.attrs.chatName && resolvedIds.has(mark.attrs.chatName as string)) {
-                decorations.push(Decoration.inline(pos, pos + node.nodeSize, { 'data-resolved': 'true' }));
+            if (mark.type.name !== 'comment' || !mark.attrs.chatName) continue;
+            const chatName = mark.attrs.chatName as string;
+            const attrs: Record<string, string> = {};
+            if (meta.resolvedIds.has(chatName)) attrs['data-resolved'] = 'true';
+            const color = meta.colorMap.get(chatName);
+            if (color) attrs.style = `--comment-color: ${color}`;
+            if (Object.keys(attrs).length > 0) {
+                decorations.push(Decoration.inline(pos, pos + node.nodeSize, attrs));
             }
         }
     });
-    return DecorationSet.create(state.doc, decorations);
+    return decorations.length > 0 ? DecorationSet.create(state.doc, decorations) : DecorationSet.empty;
 }
 
 export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions>({
     addOptions() {
-        return { onCommentClick: undefined, onAddComment: undefined, onToggleCommentPanel: undefined };
+        return {
+            onCommentClick: undefined,
+            onCommentContextMenu: undefined,
+            onAddComment: undefined,
+            onToggleCommentPanel: undefined,
+        };
     },
 
     addStorage() {
-        return { resolvedIds: new Set<string>() };
+        return { resolvedIds: new Set<string>(), colorMap: new Map<string, string>() } satisfies CommentMeta;
     },
 
     addKeyboardShortcuts() {
@@ -51,28 +63,41 @@ export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions>({
     },
 
     addProseMirrorPlugins() {
-        const onCommentClick = this.options.onCommentClick;
-        const storage = this.storage as { resolvedIds: Set<string> };
+        const { onCommentClick, onCommentContextMenu } = this.options;
+        const storage = this.storage as CommentMeta;
 
         const plugins: Plugin[] = [];
 
-        if (onCommentClick) {
+        if (onCommentClick || onCommentContextMenu) {
             plugins.push(
                 new Plugin({
-                    key: new PluginKey('commentClick'),
+                    key: new PluginKey('commentInteraction'),
                     props: {
-                        handleClick: (_view, _pos, event) => {
-                            const target = event.target as HTMLElement;
-                            const commentEl = target.closest('.comment-highlight');
-                            if (commentEl) {
-                                const chatName = commentEl.getAttribute('data-chat-name');
-                                if (chatName) {
-                                    onCommentClick(chatName);
-                                    return true;
-                                }
-                            }
-                            return false;
-                        },
+                        handleClick: onCommentClick
+                            ? (_view, _pos, event) => {
+                                  const el = (event.target as HTMLElement).closest('.comment-highlight');
+                                  const chatName = el?.getAttribute('data-chat-name');
+                                  if (chatName) {
+                                      onCommentClick(chatName);
+                                      return true;
+                                  }
+                                  return false;
+                              }
+                            : undefined,
+                        handleDOMEvents: onCommentContextMenu
+                            ? {
+                                  contextmenu: (_view, event) => {
+                                      const el = (event.target as HTMLElement).closest('.comment-highlight');
+                                      const chatName = el?.getAttribute('data-chat-name');
+                                      if (chatName) {
+                                          event.preventDefault();
+                                          onCommentContextMenu(chatName, event);
+                                          return true;
+                                      }
+                                      return false;
+                                  },
+                              }
+                            : undefined,
                     },
                 }),
             );
@@ -80,18 +105,18 @@ export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions>({
 
         plugins.push(
             new Plugin({
-                key: resolvedPluginKey,
+                key: decorationPluginKey,
                 state: {
-                    init: (_, state) => buildResolvedDecorations(state, storage.resolvedIds),
+                    init: (_, state) => buildDecorations(state, storage),
                     apply: (tr, old, _oldState, newState) => {
-                        if (tr.docChanged || tr.getMeta(resolvedPluginKey)) {
-                            return buildResolvedDecorations(newState, storage.resolvedIds);
+                        if (tr.docChanged || tr.getMeta(decorationPluginKey)) {
+                            return buildDecorations(newState, storage);
                         }
                         return old.map(tr.mapping, tr.doc);
                     },
                 },
                 props: {
-                    decorations: (state) => resolvedPluginKey.getState(state),
+                    decorations: (state) => decorationPluginKey.getState(state),
                 },
             }),
         );
@@ -100,15 +125,17 @@ export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions>({
     },
 });
 
-export function updateResolvedComments(
+export function updateCommentDecorations(
     // biome-ignore lint/suspicious/noExplicitAny: tiptap Editor type is complex, structural typing doesn't match
     editor: any,
     resolvedIds: Set<string>,
+    colorMap: Map<string, string>,
 ) {
-    const storage = editor.extensionStorage?.comment as { resolvedIds: Set<string> } | undefined;
+    const storage = editor.extensionStorage?.comment as CommentMeta | undefined;
     if (storage) {
         storage.resolvedIds = resolvedIds;
+        storage.colorMap = colorMap;
     }
-    const tr = editor.view.state.tr.setMeta(resolvedPluginKey, true);
+    const tr = editor.view.state.tr.setMeta(decorationPluginKey, true);
     editor.view.dispatch(tr);
 }
