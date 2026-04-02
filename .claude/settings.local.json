@@ -180,7 +180,9 @@
       "Bash(npx --yes @tanstack/router-cli generate --config apps/drive/tsr.config.json)",
       "Skill(code-review:code-review)",
       "Bash(kill 85967)",
-      "Bash(perl:*)"
+      "Bash(perl:*)",
+      "Bash(/Users/reinder/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.7/skills/brainstorming/scripts/start-server.sh:*)",
+      "Bash(/Users/reinder/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.7/skills/brainstorming/scripts/stop-server.sh:*)"
     ]
   },
   "enabledPlugins": {
