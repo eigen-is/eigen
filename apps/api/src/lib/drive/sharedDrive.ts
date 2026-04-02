@@ -113,23 +113,6 @@ export default class SharedDrive extends Drive {
         );
     }
 
-    public async getEditableContent(mountId: string, pathId: string) {
-        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.getEditableContent(mountId, pathId));
-    }
-
-    public async saveEditableContent(
-        mountId: string,
-        pathId: string,
-        content: string,
-        frontmatter: string | null,
-        expectedUpdatedAt: string,
-        force: boolean,
-    ) {
-        return this.withWritePermission(mountId, pathId, () =>
-            this.sharedDrive.saveEditableContent(mountId, pathId, content, frontmatter, expectedUpdatedAt, force),
-        );
-    }
-
     public async resolveFile(mountId: string, pathId: string) {
         return this.withReadPermission(mountId, pathId, () => this.sharedDrive.resolveFile(mountId, pathId));
     }
