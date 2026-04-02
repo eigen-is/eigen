@@ -492,7 +492,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
                 arr.push(chatName);
                 objMap.set('commentChatNames', arr);
             }
-        });
+        }, 'comment');
     }, []);
 
     const removeCommentFromObject = useCallback((objId: string, chatName: string) => {
@@ -505,7 +505,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
             const current = (objMap.get('commentChatNames') as string[] | undefined) || [];
             const arr = Array.isArray(current) ? current.filter((n) => n !== chatName) : [];
             objMap.set('commentChatNames', arr);
-        });
+        }, 'comment');
     }, []);
 
     return {
