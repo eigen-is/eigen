@@ -28,11 +28,8 @@ function buildDecorations(state: EditorState, meta: CommentMeta): DecorationSet 
             const end = pos + node.nodeSize;
 
             if (meta.resolvedIds.has(chatName)) {
-                decorations.push(
-                    Decoration.inline(pos, end, {
-                        class: 'comment-resolved',
-                    }),
-                );
+                // Resolved comments: no decoration, keep default highlight appearance.
+                // Resolved status is visible in the sidebar (checkmark icon + filter).
             } else {
                 const color = meta.colorMap.get(chatName);
                 if (color) {

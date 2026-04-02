@@ -67,7 +67,7 @@ export function CommentPanel({
                 </Tabs>
 
                 <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
-                    <SelectTrigger className="h-8 text-xs w-24 gap-1">
+                    <SelectTrigger className="h-8 text-xs w-28 gap-1">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
