@@ -11,20 +11,14 @@ import {
     israngeseleciton,
     onCellsMove,
     onCellsMoveEnd,
-    onCommentBoxMove,
-    onCommentBoxMoveEnd,
-    onCommentBoxResize,
-    onCommentBoxResizeEnd,
     onFormulaRangeDragEnd,
     onImageMove,
     onImageMoveEnd,
     onImageResize,
     onImageResizeEnd,
-    overShowComment,
     rangeDrag,
     rangeHightlightselected,
     rangeSetValue,
-    removeEditingComment,
 } from "../modules";
 import {getFrozenHandleLeft, getFrozenHandleTop, scrollToFrozenRowCol,} from "../modules/freeze";
 import {
@@ -209,8 +203,6 @@ export function handleCellAreaMouseDown(
     ctx.filterContextMenu = undefined;
     const flowdata = getFlowdata(ctx);
     if (!flowdata) return;
-    // //有批注在编辑时
-    removeEditingComment(ctx, globalCache);
     // TODO set MouseDown state to context
     // const mouse = mousePosition(
     //   e.nativeEvent.offsetX,
@@ -3367,12 +3359,9 @@ export function handleOverlayMouseMove(
     container: HTMLDivElement,
     fxInput?: HTMLDivElement | null
 ) {
-    if (onCommentBoxResize(ctx, globalCache, e)) return;
-    if (onCommentBoxMove(ctx, globalCache, e)) return;
     if (onImageMove(ctx, globalCache, e)) return;
     if (onImageResize(ctx, globalCache, e)) return;
     onCellsMove(ctx, globalCache, e, scrollX, scrollY, container);
-    overShowComment(ctx, e, scrollX, scrollY, container); // 有批注显示
     onSearchDialogMove(globalCache, e);
     onRangeSelectionModalMove(globalCache, e);
     // hyperlinkCtrl.overshow(event); // 链接提示显示
@@ -3642,11 +3631,8 @@ export function handleOverlayMouseUp(
     fxInput: HTMLDivElement | null
 ) {
     const rect = container.getBoundingClientRect();
-    // 批注框 移动结束
     onImageMoveEnd(ctx, globalCache);
     onImageResizeEnd(ctx, globalCache);
-    onCommentBoxMoveEnd(ctx, globalCache);
-    onCommentBoxResizeEnd(ctx, globalCache);
     onFormulaRangeDragEnd(ctx);
     onSearchDialogMoveEnd(globalCache);
     onRangeSelectionModalMoveEnd(globalCache);
@@ -4344,9 +4330,6 @@ export function handleRowHeaderMouseDown(
     if (!checkProtectionAllSelected(ctx, ctx.currentSheetId)) {
         return;
     }
-    // 有批注在编辑时
-    removeEditingComment(ctx, globalCache);
-
     // 图片 active/cropping
     // if (
     //   $("#luckysheet-modal-dialog-activeImage").is(":visible") ||
@@ -4788,9 +4771,6 @@ export function handleColumnHeaderMouseDown(
     if (!checkProtectionAllSelected(ctx, ctx.currentSheetId)) {
         return;
     }
-    // 有批注在编辑时
-    removeEditingComment(ctx, globalCache);
-
     // 图片 active/cropping
     // if (
     //   $("#luckysheet-modal-dialog-activeImage").is(":visible") ||
@@ -5203,9 +5183,6 @@ export function handleColSizeHandleMouseDown(
     workbookContainer: HTMLDivElement,
     cellArea: HTMLDivElement
 ) {
-    // //有批注在编辑时
-    removeEditingComment(ctx, globalCache);
-
     // //图片 active/cropping
     // if (
     //   $("#luckysheet-modal-dialog-activeImage").is(":visible") ||
@@ -5264,9 +5241,6 @@ export function handleRowSizeHandleMouseDown(
     workbookContainer: HTMLDivElement,
     cellArea: HTMLDivElement
 ) {
-    // 有批注在编辑时
-    removeEditingComment(ctx, globalCache);
-
     // //图片 active/cropping
     // if (
     //   $("#luckysheet-modal-dialog-activeImage").is(":visible") ||
@@ -5331,8 +5305,6 @@ export function handleColFreezeHandleMouseDown(
     workbookContainer: HTMLDivElement,
     cellArea: HTMLDivElement
 ) {
-    // 有批注在编辑时
-    removeEditingComment(ctx, globalCache);
     cancelActiveImgItem(ctx, globalCache);
 
     ctx.luckysheetCellUpdate = [];
@@ -5386,8 +5358,6 @@ export function handleRowFreezeHandleMouseDown(
     workbookContainer: HTMLDivElement,
     cellArea: HTMLDivElement
 ) {
-    // 有批注在编辑时
-    removeEditingComment(ctx, globalCache);
     cancelActiveImgItem(ctx, globalCache);
 
     ctx.luckysheetCellUpdate = [];

@@ -10967,7 +10967,6 @@ export default {
         autoSum: "Auto SUM",
         moreFunction: "More functions",
         conditionalFormat: "Conditional format",
-        comment: "Comment",
         pivotTable: "Pivot Table",
         chart: "Chart",
         screenshot: "Screenshot",
@@ -11562,13 +11561,6 @@ export default {
         cannotInsertOnColumnReadOnly: "Cannot insert into read-only column",
         rowOverLimit: "10000 row limit exceeded",
         columnOverLimit: "1000 column limit exceeded",
-    },
-    comment: {
-        insert: "Insert",
-        edit: "Edit",
-        delete: "Delete",
-        showOne: "Show/Hide",
-        showAll: "Show/Hide All",
     },
     screenshot: {
         screenshotTipNoSelection: "Please select the scope of the screenshot",
