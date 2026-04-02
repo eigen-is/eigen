@@ -7,6 +7,7 @@ import { CommentMarkSchema } from '@workspace/lib/docs/eigendoc';
 export type CommentMarkOptions = {
     onCommentClick?: (chatName: string) => void;
     onCommentContextMenu?: (chatName: string, event: MouseEvent) => void;
+    onSelectionContextMenu?: (event: MouseEvent) => void;
     onAddComment?: () => void;
     onToggleCommentPanel?: () => void;
 };
@@ -80,45 +81,48 @@ export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions>({
     },
 
     addProseMirrorPlugins() {
-        const { onCommentClick, onCommentContextMenu } = this.options;
+        const { onCommentClick, onCommentContextMenu, onSelectionContextMenu } = this.options;
         const storage = this.storage as CommentMeta;
 
         const plugins: Plugin[] = [];
 
-        if (onCommentClick || onCommentContextMenu) {
-            plugins.push(
-                new Plugin({
-                    key: new PluginKey('commentInteraction'),
-                    props: {
-                        handleClick: onCommentClick
-                            ? (_view, _pos, event) => {
-                                  const el = (event.target as HTMLElement).closest('.comment-highlight');
-                                  const chatName = el?.getAttribute('data-chat-name');
-                                  if (chatName) {
-                                      onCommentClick(chatName);
-                                      return true;
-                                  }
-                                  return false;
+        plugins.push(
+            new Plugin({
+                key: new PluginKey('commentInteraction'),
+                props: {
+                    handleClick: onCommentClick
+                        ? (_view, _pos, event) => {
+                              const el = (event.target as HTMLElement).closest('.comment-highlight');
+                              const chatName = el?.getAttribute('data-chat-name');
+                              if (chatName) {
+                                  onCommentClick(chatName);
+                                  return true;
                               }
-                            : undefined,
-                        handleDOMEvents: onCommentContextMenu
-                            ? {
-                                  contextmenu: (_view, event) => {
-                                      const el = (event.target as HTMLElement).closest('.comment-highlight');
-                                      const chatName = el?.getAttribute('data-chat-name');
-                                      if (chatName) {
-                                          event.preventDefault();
-                                          onCommentContextMenu(chatName, event);
-                                          return true;
-                                      }
-                                      return false;
-                                  },
-                              }
-                            : undefined,
+                              return false;
+                          }
+                        : undefined,
+                    handleDOMEvents: {
+                        contextmenu: (view, event) => {
+                            // Right-click on a comment highlight → comment context menu
+                            const el = (event.target as HTMLElement).closest('.comment-highlight');
+                            const chatName = el?.getAttribute('data-chat-name');
+                            if (chatName && onCommentContextMenu) {
+                                event.preventDefault();
+                                onCommentContextMenu(chatName, event);
+                                return true;
+                            }
+                            // Right-click with text selected → selection context menu
+                            if (!view.state.selection.empty && onSelectionContextMenu) {
+                                event.preventDefault();
+                                onSelectionContextMenu(event);
+                                return true;
+                            }
+                            return false;
+                        },
                     },
-                }),
-            );
-        }
+                },
+            }),
+        );
 
         plugins.push(
             new Plugin({

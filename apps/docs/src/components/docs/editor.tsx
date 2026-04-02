@@ -16,8 +16,10 @@ import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardData, EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Column, CommentPanel, CommentThread, LoadingState, NoteCardContextMenu, NoteCardDialog } from '@workspace/ui';
+import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { common, createLowlight } from 'lowlight';
+import { MessageSquarePlus } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
@@ -216,6 +218,9 @@ const TiptapEditor = ({
                         const comment = (allCommentsRef.current as CommentEntry[]).find((c) => c.chatName === chatName);
                         if (comment)
                             commentContextMenu.handleContextMenu(event as unknown as React.MouseEvent, comment);
+                    },
+                    onSelectionContextMenu: (event) => {
+                        selectionContextMenu.handleContextMenu(event as unknown as React.MouseEvent, true);
                     },
                     onAddComment: () => handleAddCommentRef.current?.(),
                     onToggleCommentPanel: () => setCommentPanelOpen((v) => !v),
@@ -467,6 +472,7 @@ const TiptapEditor = ({
     const { data: allComments = [] } = useComments(path.ownerId, path.mountId, path.id);
     allCommentsRef.current = allComments;
     const commentContextMenu = useContextMenu<CommentEntry>();
+    const selectionContextMenu = useContextMenu<boolean>();
 
     const unresolvedCount = useMemo(() => {
         return (allComments as CommentEntry[]).filter((c) => c.status === 'open' && activeComments.ids.has(c.chatName))
@@ -537,7 +543,6 @@ const TiptapEditor = ({
                         canUndo={canUndo}
                         canRedo={canRedo}
                         onAccessDialogOpen={onAccessDialogOpen}
-                        onAddComment={chatFolderId ? handleAddComment : undefined}
                         onToggleCommentPanel={() => setCommentPanelOpen((v) => !v)}
                         commentPanelOpen={commentPanelOpen}
                         unresolvedCommentCount={unresolvedCount}
@@ -675,6 +680,17 @@ const TiptapEditor = ({
                         commentContextMenu.close();
                     }}
                 />
+            </ContextMenuAnchor>
+
+            <ContextMenuAnchor contextMenu={selectionContextMenu}>
+                <DropdownMenuItem
+                    onClick={() => {
+                        handleAddCommentRef.current?.();
+                        selectionContextMenu.close();
+                    }}
+                >
+                    <MessageSquarePlus className="h-4 w-4 mr-2" /> Add comment
+                </DropdownMenuItem>
             </ContextMenuAnchor>
         </>
     );
