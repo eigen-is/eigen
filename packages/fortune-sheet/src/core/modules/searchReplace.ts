@@ -44,12 +44,12 @@ export function getSearchIndexArr(
                     if (value != null && value !== "") {
                         value = value.toString();
 
-                        // 1. 勾选整词 直接匹配
-                        // 2. 勾选了正则 结合是否勾选 构造正则
-                        // 3. 什么都没选 用字符串 indexOf 匹配
+                        // 1. Whole-word checked: direct match
+                        // 2. Regex checked: build regex with or without case sensitivity
+                        // 3. Nothing checked: use string indexOf match
 
                         if (wordCheck) {
-                            // 整词
+                            // Whole word
                             if (caseCheck) {
                                 if (searchText === value) {
                                     if (!(`${r}_${c}` in obj)) {
@@ -67,9 +67,9 @@ export function getSearchIndexArr(
                                 }
                             }
                         } else if (regCheck) {
-                            // 正则表达式
+                            // Regular expression
                             let reg;
-                            // 是否区分大小写
+                            // Whether to be case sensitive
                             if (caseCheck) {
                                 reg = new RegExp(getRegExpStr(searchText), "g");
                             } else {

@@ -113,33 +113,33 @@ export function getDropdownList(ctx: Context, txt: string) {
     return list;
 }
 
-// 身份证
+// ID card validation
 export function validateIdCard(ctx: Context, idCard: string) {
-    // 15位和18位身份证号码的正则表达式
+    // regex for 15-digit and 18-digit Chinese ID card numbers
     const regIdCard =
         /^(^[1-9]\d{7}((0\d)|(1[0-2]))(([0|1|2]\d)|3[0-1])\d{3}$)|(^[1-9]\d{5}[1-9]\d{3}((0\d)|(1[0-2]))(([0|1|2]\d)|3[0-1])((\d{4})|\d{3}[Xx])$)$/;
 
-    // 如果通过该验证，说明身份证格式正确，但准确性还需计算
+    // if this passes, the ID card format is correct, but accuracy still needs to be calculated
     if (regIdCard.test(idCard)) {
         if (idCard.length === 18) {
-            const idCardWi = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2]; // 将前17位加权因子保存在数组里
-            const idCardY = [1, 0, 10, 9, 8, 7, 6, 5, 4, 3, 2]; // 这是除以11后，可能产生的11位余数、验证码，也保存成数组
-            let idCardWiSum = 0; // 用来保存前17位各自乖以加权因子后的总和
+            const idCardWi = [7, 9, 10, 5, 8, 4, 2, 1, 6, 3, 7, 9, 10, 5, 8, 4, 2]; // store the weighting factors for the first 17 digits in an array
+            const idCardY = [1, 0, 10, 9, 8, 7, 6, 5, 4, 3, 2]; // the 11 possible remainders after dividing by 11 (check digits), also stored as array
+            let idCardWiSum = 0; // stores the sum of the first 17 digits each multiplied by their weighting factor
             for (let i = 0; i < 17; i += 1) {
                 idCardWiSum += Number(idCard.substring(i, i + 1)) * idCardWi[i];
             }
 
-            const idCardMod = idCardWiSum % 11; // 计算出校验码所在数组的位置
-            const idCardLast = idCard.substring(17); // 得到最后一位身份证号码
+            const idCardMod = idCardWiSum % 11; // calculate the array index of the check digit
+            const idCardLast = idCard.substring(17); // get the last digit of the ID card
 
-            // 如果等于2，则说明校验码是10，身份证号码最后一位应该是X
+            // if equals 2, the check digit is 10, so the last character of the ID card should be X
             if (idCardMod === 2) {
                 if (idCardLast === "X" || idCardLast === "x") {
                     return true;
                 }
                 return false;
             }
-            // 用计算出的验证码与最后一位身份证号码匹配，如果一致，说明通过，否则是无效的身份证号码
+            // match the computed check digit with the last character; if they match it is valid, otherwise the ID card is invalid
             if (idCardLast === idCardY[idCardMod].toString()) {
                 return true;
             }
@@ -151,14 +151,14 @@ export function validateIdCard(ctx: Context, idCard: string) {
     return false;
 }
 
-// 数据验证
+// Data validation
 export function validateCellData(ctx: Context, item: any, cellValue: any) {
     let {value1, value2} = item;
     const {type, type2} = item;
     if (type === "dropdown") {
         const list = getDropdownList(ctx, value1);
 
-        // 多选的情况 检查每个都在下拉列表中
+        // for multi-select, check that each value is in the dropdown list
         if (type2 && cellValue) {
             return cellValue
                 .toString()
@@ -339,7 +339,7 @@ export function validateCellData(ctx: Context, item: any, cellValue: any) {
     return true;
 }
 
-// 复选框处理
+// checkbox handling
 export function checkboxChange(ctx: Context, r: number, c: number) {
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
     // let historyDataVerification = $.extend(true, {}, _this.dataVerification);
@@ -355,7 +355,7 @@ export function checkboxChange(ctx: Context, r: number, c: number) {
     setCellValue(ctx, r, c, d, value);
 }
 
-// 数据无效时的提示信息
+// error message when data is invalid
 export function getFailureText(ctx: Context, item: any) {
     let failureText = "";
     const {lang} = ctx;
@@ -607,7 +607,7 @@ export function getFailureText(ctx: Context, item: any) {
     return failureText;
 }
 
-// 获得提示内容
+// get the hint text
 export function getHintText(ctx: Context, item: any) {
     let hintValue = item.hintValue || "";
     const {type, type2, value1, value2} = item;
@@ -787,7 +787,7 @@ export function getHintText(ctx: Context, item: any) {
     return hintValue;
 }
 
-// 单元格聚焦处理
+// handle cell focus
 export function cellFocus(
     ctx: Context,
     r: number,
@@ -824,12 +824,12 @@ export function cellFocus(
     const item = dataVerification[`${r}_${c}`];
     if (!item) return;
 
-    // 单元格数据验证 类型是 复选
+    // cell data validation type is checkbox
     if (clickMode && item.type === "checkbox") {
         checkboxChange(ctx, r, c);
     }
 
-    // 单元格数据验证 类型是 下拉列表
+    // cell data validation type is dropdown
     if (item.type === "dropdown") {
         dropDownBtn.style.display = "block";
         dropDownBtn.style.maxWidth = `${col - col_pre}px`;
@@ -838,7 +838,7 @@ export function cellFocus(
         dropDownBtn.style.top = `${row_pre + (row - row_pre - 20) / 2 - 2}px`;
     }
 
-    // 提示语
+    // hint text
     if (item.hintShow) {
         let hintText = "";
         const {lang} = ctx;
@@ -862,7 +862,7 @@ export function cellFocus(
         showHintBox.style.top = `${row}px`;
     }
 
-    // 数据验证未通过,失效提醒
+    // data validation failed — show failure reminder
     const cellValue = getCellValue(r, c, d);
     if (isRealNull(cellValue)) {
         return;
@@ -892,7 +892,7 @@ export function cellFocus(
     }
 }
 
-// 设置下拉列表的值
+// set the dropdown value
 export function setDropcownValue(ctx: Context, value: string, arr: any) {
     if (!ctx.luckysheet_select_save) return;
     const d = getFlowdata(ctx);
@@ -917,7 +917,7 @@ export function setDropcownValue(ctx: Context, value: string, arr: any) {
     jfrefreshgrid(ctx, null, undefined);
 }
 
-// 输入数据验证
+// input data validation
 export function confirmMessage(
     ctx: Context,
     generalDialog: any,
@@ -953,7 +953,7 @@ export function confirmMessage(
     const regulation = ctx.dataVerification!.dataRegulation!;
     const verifacationT = regulation?.type;
     const {value1, value2, type2} = regulation;
-    // 判断是不是数字
+    // check if the value is a number
     const v1 = parseFloat(value1).toString() !== "NaN";
     const v2 = parseFloat(value2).toString() !== "NaN";
     if (verifacationT === "dropdown") {

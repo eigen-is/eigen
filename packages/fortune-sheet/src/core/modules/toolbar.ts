@@ -480,7 +480,7 @@ function backFormulaInput(
     // server.historyParam(d, ctx.currentSheetId, {
     //   row: [r, r],
     //   column: [c, c],
-    // }); 目前没有server
+    // }); No server at this time
 }
 
 function singleFormulaInput(
@@ -635,7 +635,7 @@ function singleFormulaInput(
             cell = d[fix][ed_m + 1];
         }
 
-        /* 备注：在搜寻的时候排除自己以解决单元格函数引用自己的问题 */
+        /* Note: exclude the cell itself during search to prevent a cell formula from referencing itself */
         if (cell != null && cell.v != null && cell.v.toString().length > 0) {
             let c = ed_m + 1;
 
@@ -970,7 +970,7 @@ export function handleNumberDecrease(ctx: Context, cellInput: HTMLDivElement) {
         [, foucsStatus] = mask;
     }
 
-    // 万亿格式
+    // Wan/Yi (10,000/100,000,000) number format
     const reg = /^(w|W)((0?)|(0\.0+))$/;
     if (reg.test(foucsStatus.fa)) {
         if (foucsStatus.fa.indexOf(".") > -1) {
@@ -1064,7 +1064,7 @@ export function handleNumberIncrease(ctx: Context, cellInput: HTMLDivElement) {
         return;
     }
 
-    // 万亿格式
+    // Wan/Yi (10,000/100,000,000) number format
     const reg = /^(w|W)((0?)|(0\.0+))$/;
     if (reg.test(foucsStatus.fa)) {
         if (foucsStatus.fa.indexOf(".") > -1) {
@@ -1190,8 +1190,8 @@ export function handleFormatPainter(ctx: Context) {
         return;
     }
 
-    // *增加了对选区范围是否为部分合并单元格的校验，如果为部分合并单元格，就阻止格式刷的下一步
-    // TODO 这里也可以改为：判断到是合并单元格的一部分后，格式刷执行黏贴格式后删除范围单元格的 mc 值
+    // *Added a check for whether the selection contains partial merged cells; if so, block the next step of format painter
+    // TODO Could also be changed to: when a partial merge is detected, delete the mc value of range cells after format painter pastes the format
 
     let has_PartMC = false;
 
@@ -1204,8 +1204,8 @@ export function handleFormatPainter(ctx: Context) {
     has_PartMC = hasPartMC(ctx, ctx.config, r1, r2, c1, c2);
 
     if (has_PartMC) {
-        // *提示后中止下一步
-        // tooltip.info('无法对部分合并单元格执行此操作', '');
+        // *Show warning and abort next step
+        // tooltip.info('Cannot perform this action on partial merged cells', '');
         return;
     }
 
@@ -1268,7 +1268,7 @@ export function handleFormatPainter(ctx: Context) {
     ctx.luckysheetPaintSingle = true;
 }
 
-// 2022-10-10 废弃了handleClearFormat中的foreach写法，改为可跳出的every写法，以防止选区多次覆盖
+// 2022-10-10 Replaced the forEach loop in handleClearFormat with an every loop that can break early, to prevent a selection from being processed multiple times
 export function handleClearFormat(ctx: Context) {
     if (ctx.allowEdit === false) return;
     const flowdata = getFlowdata(ctx);
@@ -1286,10 +1286,10 @@ export function handleClearFormat(ctx: Context) {
                 flowdata[r][c] = _.pick(cell, "v", "m", "mc", "f", "ct");
             }
         }
-        // 清空表格样式时，清除边框样式
+        // When clearing table styles, also clear border styles
         const index = getSheetIndex(ctx, ctx.currentSheetId);
         if (index == null) return false;
-        // 表格边框为空时，不对表格进行操作
+        // If there are no border styles, skip table operations
         if (ctx.config.borderInfo == null) return false;
         const cfg = ctx.config || {};
         if (cfg.borderInfo && cfg.borderInfo.length > 0) {
@@ -1370,7 +1370,7 @@ export function handleBorder(
     borderColor?: string,
     borderStyle?: string
 ) {
-    // *如果禁止前台编辑，则中止下一步操作
+    // *If frontend editing is disabled, abort the next operation
     // if (!checkIsAllowEdit()) {
     //   tooltip.info("", locale().pivotTable.errorNotAllowEdit);
     //   return;
@@ -1462,9 +1462,9 @@ export function handleMerge(ctx: Context, type: string) {
 
     if (selectIsOverlap(ctx)) {
         //   if (isEditMode()) {
-        //     alert("不能合并重叠区域");
+        //     alert("Cannot merge overlapping areas");
         //   } else {
-        //     tooltip.info("不能合并重叠区域", "");
+        //     tooltip.info("Cannot merge overlapping areas", "");
         //   }
         return;
     }
@@ -1487,9 +1487,9 @@ export function handleMerge(ctx: Context, type: string) {
 
         if (has_PartMC) {
             // if (isEditMode()) {
-            //   alert("无法对部分合并单元格执行此操作");
+            //   alert("Cannot perform this action on partial merged cells");
             // } else {
-            //   tooltip.info("无法对部分合并单元格执行此操作", "");
+            //   tooltip.info("Cannot perform this action on partial merged cells", "");
             // }
             return;
         }

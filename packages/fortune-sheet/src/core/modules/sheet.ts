@@ -40,7 +40,7 @@ export function changeSheet(
     isCopySheet?: boolean
 ) {
     //   if (isEditMode()) {
-    //     // alert("非编辑模式下不允许该操作！");
+    //     // alert("This operation is not allowed in non-edit mode!");
     //     return;
     //   }
 
@@ -69,7 +69,7 @@ export function changeSheet(
         //     luckysheetsizeauto(false);
     }
 
-    // 隐藏其他sheet的图表，显示当前sheet的图表 chartMix
+    // Hide charts from other sheets, show charts for the current sheet (chartMix)
     //   renderChartShow(index);
 
     //   luckysheetFreezen.initialFreezen(index);
@@ -90,7 +90,7 @@ export function addSheet(
     sheetData: Sheet | undefined = undefined
 ) {
     if (/* isEditMode() || */ ctx.allowEdit === false) {
-        // alert("非编辑模式下不允许该操作！");
+        // alert("This operation is not allowed in non-edit mode!");
         return;
     }
     const order = ctx.luckysheetfile.length;

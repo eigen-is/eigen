@@ -295,7 +295,7 @@ function extendCssText(origin: string, cover: string, isLimit = true) {
         so = so.toLowerCase();
         const okey = _.trim(so.substring(0, so.indexOf(":")));
 
-        /* 不设置文字的大小，解决设置删除线等后字体变大的问题 */
+        /* Do not set font size here, to avoid the font growing larger after applying strikethrough etc. */
         if (okey === "font-size") {
             continue;
         }
