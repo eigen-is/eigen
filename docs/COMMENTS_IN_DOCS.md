@@ -83,8 +83,8 @@ Negligible cost, done once per `ChatRoom.init()`.
 | `resolve`           | Set `status='resolved'`, record `resolvedBy`/`resolvedAt`                         |
 | `reopen`            | Set `status='open'`, clear `resolvedBy`/`resolvedAt`                              |
 | `decrementCount`    | `MAX(0, messageCount - 1)`                                                        |
+| `updateColor`       | Set `color` for a comment                                                         |
 | `list`              | Returns all comments with inline `mentions: string[]` per comment (2 queries, grouped in memory) |
-| `unresolvedCount`   | `COUNT(*) WHERE status='open'`                                                    |
 
 Helper functions `openCommentIndex(drive, containerPath)` and `getCommentIndex(drive, mountId, pathId)` handle path
 resolution and DB opening. `ManagedDatabase` handles WAL mode, versioning, and caching.
@@ -121,8 +121,8 @@ Added to `apps/api/src/routes/collab.ts` — comments are document-scoped metada
 
 ```
 GET    /collab/:ownerId/:mountId/:pathId/comments                    List all comments (with mentions[] inline)
-GET    /collab/:ownerId/:mountId/:pathId/comments/unresolved-count   Unresolved count
 PATCH  /collab/:ownerId/:mountId/:pathId/comments/:chatName/status   Resolve or reopen
+PATCH  /collab/:ownerId/:mountId/:pathId/comments/:chatName/color    Set comment color (hex or null)
 ```
 
 All routes use `getCommentIndex(drive, mountId, pathId)` for thin handlers. `SharedDrive.getPath()` enforces read
@@ -146,10 +146,10 @@ All hooks live in `packages/lib/src/core/chat/hooks/use-comments.ts`.
 
 | Hook / export                | Description                                       |
 |------------------------------|---------------------------------------------------|
-| `commentKeys`                | Query key factory: `all`, `container`, `list`, `unresolvedCount` |
+| `commentKeys`                | Query key factory: `all`, `container`, `list`      |
 | `useComments`                | `GET /collab/.../comments` — list with inline mentions |
-| `useUnresolvedCommentCount`  | `GET /collab/.../comments/unresolved-count`        |
 | `useResolveComment`          | `PATCH .../comments/:chatName/status`              |
+| `useUpdateCommentColor`      | `PATCH .../comments/:chatName/color`               |
 | `invalidateComments`         | Called by SSE handler to invalidate container keys  |
 | `useEffectiveMembers`        | In `use-drive.ts` — `GET /drive/.../effective-members` |
 

@@ -689,7 +689,7 @@ export const EditorToolbar = ({
                             onClick={onToggleCommentPanel}
                             active={commentPanelOpen}
                         />
-                        {!!unresolvedCommentCount && unresolvedCommentCount > 0 && (
+                        {(unresolvedCommentCount ?? 0) > 0 && (
                             <span className="absolute -top-1 -right-1 h-4 min-w-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center pointer-events-none px-1">
                                 {unresolvedCommentCount}
                             </span>

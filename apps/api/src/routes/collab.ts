@@ -149,7 +149,7 @@ export const collabRouter = new Elysia({
             return { success: true };
         },
         {
-            body: t.Object({ color: t.Union([t.String(), t.Null()]) }),
+            body: t.Object({ color: t.Union([t.String({ pattern: '^#[0-9a-fA-F]{6}$' }), t.Null()]) }),
             auth: true,
         },
     )
