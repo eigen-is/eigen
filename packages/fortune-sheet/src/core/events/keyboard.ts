@@ -65,11 +65,11 @@ export function handleGlobalEnter(
         moveHighlightCell(ctx, "down", 1, "rangeOfSelect");
         // }
 
-        // // 若有参数弹出框，隐藏
+        // // if the parameter popup is visible, hide it
         // if ($("#luckysheet-search-formula-parm").is(":visible")) {
         //   $("#luckysheet-search-formula-parm").hide();
         // }
-        // // 若有参数选取范围弹出框，隐藏
+        // // if the parameter range-selection popup is visible, hide it
         // if ($("#luckysheet-search-formula-parm-select").is(":visible")) {
         //   $("#luckysheet-search-formula-parm-select").hide();
         // }
@@ -287,7 +287,7 @@ export function handleWithCtrlOrMetaKey(
         ctx.luckysheet_shiftkeydown = true;
 
         if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) {
-            // Ctrl + Shift + 方向键  调整选区
+            // Ctrl + Shift + Arrow key  adjust selection
             handleControlPlusArrowKey(ctx, e, true);
         } else if (_.includes([";", '"', ":", "'"], e.key)) {
             const last =
@@ -306,7 +306,7 @@ export function handleWithCtrlOrMetaKey(
             // luckysheetRangeLast($("#luckysheet-rich-text-editor")[0]);
             handleFormulaInput(ctx, fxInput, cellInput, e.keyCode);
         } else if (e.code === "KeyZ") {
-            // Ctrl + shift + z 重做
+            // Ctrl + Shift + Z  redo
             handleRedo();
             e.stopPropagation();
             return;
@@ -316,31 +316,31 @@ export function handleWithCtrlOrMetaKey(
     ) {
         handleControlPlusArrowKey(ctx, e, false);
     } else if (e.code === "KeyB") {
-        // Ctrl + B  加粗
+        // Ctrl + B  bold
         handleBold(ctx, cellInput);
         // $("#luckysheet-icon-bold").click();
     } else if (e.code === "KeyC") {
-        // Ctrl + C  复制
+        // Ctrl + C  copy
         handleCopy(ctx);
         // luckysheetactiveCell();
         e.stopPropagation();
         return;
     } else if (e.code === "KeyF") {
-        // Ctrl + F  查找
+        // Ctrl + F  find
         ctx.showSearch = true;
     } else if (e.code === "KeyH") {
-        // Ctrl + H  替换
+        // Ctrl + H  replace
         ctx.showReplace = true;
         //   searchReplace.init();
 
         //   $("#luckysheet-search-replace #searchInput input").focus();
         // } else if (e.code === "KeyI") {
-        //   // Ctrl + I  斜体
+        //   // Ctrl + I  italic
         //   $("#luckysheet-icon-italic").click();
     } else if (e.code === "KeyV") {
-        // Ctrl + V  粘贴
+        // Ctrl + V  paste
         // if (isEditMode()) {
-        //   // 此模式下禁用粘贴
+        //   // paste is disabled in this mode
         //   return;
         // }
 
@@ -362,8 +362,8 @@ export function handleWithCtrlOrMetaKey(
         e.stopPropagation();
         return;
     } else if (e.code === "KeyX") {
-        // Ctrl + X  剪切
-        // 复制时存在格式刷状态，取消格式刷
+        // Ctrl + X  cut
+        // if format-painter is active during cut, cancel it
         if (ctx.luckysheetPaintModelOn) {
             cancelPaintModel(ctx);
         }
@@ -373,7 +373,7 @@ export function handleWithCtrlOrMetaKey(
             return;
         }
 
-        // 复制范围内包含部分合并单元格，提示
+        // warn if the cut range contains partially merged cells
         if (ctx.config.merge != null) {
             let has_PartMC = false;
 
@@ -400,7 +400,7 @@ export function handleWithCtrlOrMetaKey(
             }
         }
 
-        // 多重选区时 提示
+        // warn when multiple selections are active
         if (selection.length > 1) {
             // if (isEditMode()) {
             //   alert(locale_drag.noMulti);
@@ -418,12 +418,12 @@ export function handleWithCtrlOrMetaKey(
         e.stopPropagation();
         return;
     } else if (e.code === "KeyZ") {
-        // Ctrl + Z  撤销
+        // Ctrl + Z  undo
         handleUndo();
         e.stopPropagation();
         return;
     } /* else if (e.key === "ArrowUp") {
-    // Ctrl + up  调整单元格
+    // Ctrl + up  adjust cell
     if (
       parseInt($inputbox.css("top")) > 0 ||
       $("#luckysheet-singleRange-dialog").is(":visible") ||
@@ -434,7 +434,7 @@ export function handleWithCtrlOrMetaKey(
 
     luckysheetMoveHighlightCell2("up", "rangeOfSelect");
   } else if (e.key === "ArrowDown") {
-    // Ctrl + down  调整单元格
+    // Ctrl + down  adjust cell
     if (
       parseInt($inputbox.css("top")) > 0 ||
       $("#luckysheet-singleRange-dialog").is(":visible") ||
@@ -445,7 +445,7 @@ export function handleWithCtrlOrMetaKey(
 
     luckysheetMoveHighlightCell2("down", "rangeOfSelect");
   } else if (e.key === "ArrowLeft") {
-    // Ctrl + top  调整单元格
+    // Ctrl + left  adjust cell
     if (
       parseInt($inputbox.css("top")) > 0 ||
       $("#luckysheet-singleRange-dialog").is(":visible") ||
@@ -456,7 +456,7 @@ export function handleWithCtrlOrMetaKey(
 
     luckysheetMoveHighlightCell2("left", "rangeOfSelect");
   } else if (e.key === "ArrowRight") {
-    // Ctrl + right  调整单元格
+    // Ctrl + right  adjust cell
     if (
       parseInt($inputbox.css("top")) > 0 ||
       $("#luckysheet-singleRange-dialog").is(":visible") ||
@@ -467,7 +467,7 @@ export function handleWithCtrlOrMetaKey(
 
     luckysheetMoveHighlightCell2("right", "rangeOfSelect");
   } else if (e.keyCode === 186) {
-    // Ctrl + ; 填充系统日期
+    // Ctrl + ;  fill with current date
     const last =
       ctx.luckysheet_select_save[ctx.luckysheet_select_save.length - 1];
     const row_index = last.row_focus;
@@ -483,7 +483,7 @@ export function handleWithCtrlOrMetaKey(
       e.keyCode
     );
   } else if (e.keyCode === 222) {
-    // Ctrl + ' 填充系统时间
+    // Ctrl + '  fill with current time
     const last =
       ctx.luckysheet_select_save[ctx.luckysheet_select_save.length - 1];
     const row_index = last.row_focus;
@@ -499,7 +499,7 @@ export function handleWithCtrlOrMetaKey(
       e.keyCode
     );
   } */ else if (e.code === "KeyA") {
-        // Ctrl + A  全选
+        // Ctrl + A  select all
         // $("#luckysheet-left-top").trigger("mousedown");
         // $(document).trigger("mouseup");
         selectAll(ctx);
@@ -621,7 +621,7 @@ function handleShiftWithArrowKey(ctx: Context, e: KeyboardEvent) {
     }
     */
 
-    // shift + 方向键 调整选区
+    // Shift + Arrow key  adjust selection
     switch (e.key) {
         case "ArrowUp":
             moveHighlightRange(ctx, "down", -1, "rangeOfSelect");
@@ -920,7 +920,7 @@ export function handleGlobalKeyDown(
                 kstr !== "Win" &&
                 kcode !== 18
             ) {
-                // 激活输入框，并将按键输入到输入框
+                // activate the input box and send the keypress to it
                 const last =
                     ctx.luckysheet_select_save![ctx.luckysheet_select_save!.length - 1];
 

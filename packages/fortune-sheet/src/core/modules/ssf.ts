@@ -1796,8 +1796,8 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
                 break;
         }
 
-        //new runze 增加万 亿 格式
-        //注："w":2万2500  "w0":2万2500  "w0.0":2万2500.2  "w0.00":2万2500.23......自定义精确度
+        //new runze: add wan (10k) and yi (100M) Chinese number unit formats
+        //Note: "w":2wan2500  "w0":2wan2500  "w0.0":2wan2500.2  "w0.00":2wan2500.23......custom precision
         var reg = /^(w|W)((0?)|(0\.0+))$/;
         if (!!sfmt.match(reg)) {
             if (isNaN(v)) {
@@ -1805,7 +1805,7 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
             }
 
             //var v =300101886.436;
-            var acc = sfmt.slice(1); //取得0/0.0/0.00
+            var acc = sfmt.slice(1); //get 0/0.0/0.00
             var isNegative = false;
             if (!isNaN(v) && Number(v) < 0) {
                 isNegative = true;
@@ -1816,18 +1816,18 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
             var vlength = vInt.toString().length;
             if (vlength > 4) {
                 if (vlength > 8) {
-                    let y = parseInt((parseFloat(v.toString()) / 100000000).toString()); //亿
-                    let w = parseInt((parseFloat(v.toString()) - (y * 100000000) / 10000).toString()); //万
-                    let q = parseFloat(v.toString()) - (y * 100000000 + w * 10000); //千以后
+                    let y = parseInt((parseFloat(v.toString()) / 100000000).toString()); //hundred-millions (yi units)
+                    let w = parseInt((parseFloat(v.toString()) - (y * 100000000) / 10000).toString()); //ten-thousands (wan units)
+                    let q = parseFloat(v.toString()) - (y * 100000000 + w * 10000); //remainder below thousands
                     if (acc != "") {
-                        q = parseFloat(numeral(q).format(acc)); //处理精确度
+                        q = parseFloat(numeral(q).format(acc)); //apply precision
                     }
                     v = y + "亿" + w + "万" + q;
                 } else {
-                    let w = parseInt((parseFloat(v.toString()) / 10000).toString()); //万
-                    let q = parseFloat(v.toString()) - w * 10000; //千以后
+                    let w = parseInt((parseFloat(v.toString()) / 10000).toString()); //ten-thousands (wan units)
+                    let q = parseFloat(v.toString()) - w * 10000; //remainder below thousands
                     if (acc != "") {
-                        q = parseFloat(numeral(q).format(acc)); //处理精确度
+                        q = parseFloat(numeral(q).format(acc)); //apply precision
                     }
                     v = w + "万" + q;
                 }
@@ -1840,9 +1840,9 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
                     v = v.replace("万0", "万");
                 }
 
-                //舍弃正则后顾断言写法，旧浏览器不识别（360 V9）
+                //Dropped regex lookbehind syntax — not recognized by older browsers (360 V9)
                 if (v.indexOf("亿") != -1 && v.indexOf("万") == -1) {
-                    //1亿/1亿111 => 1亿/1亿0111
+                    //1yi/1yi111 => 1yi/1yi0111 (pad digits after the yi unit)
                     var afterYi = v.substring(v.indexOf("亿") + 1);
                     if (afterYi.substring(0, 1) !== "." && afterYi != "") {
                         switch ((parseInt(afterYi) + "").length) {
@@ -1859,7 +1859,7 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
                         v = v.substring(0, v.indexOf("亿") + 1) + afterYi;
                     }
                 } else if (v.indexOf("亿") == -1 && v.indexOf("万") != -1) {
-                    //3万0011
+                    //3wan0011 (pad digits after the wan unit)
                     var afterWan = v.substring(v.indexOf("万") + 1);
                     if (afterWan.substring(0, 1) !== "." && afterWan != "") {
                         switch ((parseInt(afterWan) + "").length) {
@@ -1876,7 +1876,7 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
                         v = v.substring(0, v.indexOf("万") + 1) + afterWan;
                     }
                 } else if (v.indexOf("亿") != -1 && v.indexOf("万") != -1) {
-                    //1亿0053万0611
+                    //1yi0053wan0611 (pad digits between yi and wan units, and after wan)
                     var afterYi = v.substring(v.indexOf("亿") + 1, v.indexOf("万")),
                         afterWan = v.substring(v.indexOf("万") + 1);
 
@@ -1913,7 +1913,7 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
                 }
             } else {
                 if (acc != "") {
-                    v = numeral(v).format(acc); //处理精确度
+                    v = numeral(v).format(acc); //apply precision
                 }
             }
             if (isNegative) {

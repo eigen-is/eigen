@@ -89,14 +89,14 @@ export type Presence = {
 };
 
 export type SheetConfig = {
-    merge?: Record<string, { r: number; c: number; rs: number; cs: number }>; // 合并单元格
-    rowlen?: Record<string, number>; // 表格行高
-    columnlen?: Record<string, number>; // 表格列宽
-    rowhidden?: Record<string, number>; // 隐藏行
-    colhidden?: Record<string, number>; // 隐藏列
+    merge?: Record<string, { r: number; c: number; rs: number; cs: number }>; // merged cells
+    rowlen?: Record<string, number>; // row heights
+    columnlen?: Record<string, number>; // column widths
+    rowhidden?: Record<string, number>; // hidden rows
+    colhidden?: Record<string, number>; // hidden columns
     customHeight?: Record<string, number>;
     customWidth?: Record<string, number>;
-    borderInfo?: any[]; // 边框
+    borderInfo?: any[]; // border info
     authority?: any;
     rowReadOnly?: Record<number, number>;
     colReadOnly?: Record<number, number>;

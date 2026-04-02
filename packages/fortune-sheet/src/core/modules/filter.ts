@@ -10,7 +10,7 @@ import {normalizedAttr} from "./cell";
 import {sortDataRange} from "./sort";
 import {checkCF, getComputeMap} from "./ConditionFormat";
 
-// 筛选配置状态
+// Filter configuration state
 export function labelFilterOptionState(
     ctx: Context,
     optionstate: boolean,
@@ -36,7 +36,7 @@ export function labelFilterOptionState(
 
     if (optionstate) {
         ctx.filter[cindex - stc] = param;
-        // 条件格式参数
+        // Conditional format parameters
         if (caljs != null) {
         }
     } else {
@@ -64,7 +64,7 @@ export function labelFilterOptionState(
     }
 }
 
-// 筛选排序
+// Filter sort
 export function orderbydatafiler(
     ctx: Context,
     str: number,
@@ -80,7 +80,7 @@ export function orderbydatafiler(
     }
     str += 1;
 
-    let hasMc = false; // 排序选区是否有合并单元格
+    let hasMc = false; // Whether the sort selection has merged cells
     const data: CellMatrix = [];
 
     for (let r = str; r <= edr; r += 1) {
@@ -113,7 +113,7 @@ export function orderbydatafiler(
     return null;
 }
 
-// 创建筛选配置
+// Create filter options
 export function createFilterOptions(
     ctx: Context,
     luckysheet_filter_save:
@@ -336,12 +336,12 @@ export function getFilterColumnValues(
     );
     const visibleRows: number[] = [];
     const flattenValues: string[] = [];
-    // 日期值
+    // Date values
     const dates: FilterDate[] = [];
     let datesUncheck: string[] = [];
     const dateRowMap: Record<string, number[]> = {};
 
-    // 除日期以外的值
+    // Non-date values
     const valuesMap: Map<string, FilterValue[]> = new Map();
     let valuesUncheck: string[] = [];
     const valueRowMap: Record<string, number[]> = {};
@@ -375,7 +375,7 @@ export function getFilterColumnValues(
             cell.ct != null &&
             cell.ct.t === "d"
         ) {
-            // 单元格是日期
+            // Cell is a date
             const dateStr: string = update("YYYY-MM-DD", cell.v);
 
             const y = dateStr.split("-")[0];
@@ -499,9 +499,9 @@ export function getFilterColumnColors(
     startRow: number,
     endRow: number
 ) {
-    // 遍历筛选列颜色
-    const bgMap: Map<string, FilterColor> = new Map(); // 单元格颜色
-    const fcMap: Map<string, FilterColor> = new Map(); // 字体颜色
+    // Iterate over filter column colors
+    const bgMap: Map<string, FilterColor> = new Map(); // Cell background color
+    const fcMap: Map<string, FilterColor> = new Map(); // Font color
 
     // const af_compute = alternateformat.getComputeMap();
     const cf_compute: any = getComputeMap(ctx);
@@ -511,7 +511,7 @@ export function getFilterColumnColors(
     for (let r = startRow + 1; r <= endRow; r += 1) {
         const cell = flowdata[r][col];
 
-        // 单元格颜色
+        // Cell background color
         let bg = normalizedAttr(flowdata, r, col, "bg");
 
         if (bg == null) {
@@ -521,13 +521,13 @@ export function getFilterColumnColors(
         // const checksAF = alternateformat.checksAF(r, col, af_compute);
         const checksAF: any = [];
         if (checksAF.length > 1) {
-            // 若单元格有交替颜色
+            // If the cell has alternating colors
             [, bg] = checksAF;
         }
 
         const checksCF = checkCF(r, col, cf_compute);
         if (checksCF != null && checksCF.cellColor != null) {
-            // 若单元格有条件格式
+            // If the cell has conditional formatting
             bg = checksCF.cellColor;
         }
 
@@ -543,16 +543,16 @@ export function getFilterColumnColors(
                 bg.substr(3, 1).repeat(2);
         }
 
-        // 字体颜色
+        // Font color
         let fc = normalizedAttr(flowdata, r, col, "fc");
 
         if (checksAF.length > 0) {
-            // 若单元格有交替颜色
+            // If the cell has alternating colors
             [fc] = checksAF;
         }
 
         if (checksCF != null && checksCF.textColor != null) {
-            // 若单元格有条件格式
+            // If the cell has conditional formatting
             fc = checksCF.textColor;
         }
 

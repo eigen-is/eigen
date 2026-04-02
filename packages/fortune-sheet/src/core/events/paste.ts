@@ -21,7 +21,7 @@ function postPasteCut(
     target: any,
     RowlChange: boolean
 ) {
-    // 单元格数据更新联动
+    // trigger linked cell data updates
     const execF_rc: any = {};
     ctx.formulaCache.execFunctionExist = [];
     // clearTimeout(refreshCanvasTimeOut);
@@ -82,7 +82,7 @@ function postPasteCut(
                 ctx.rh_height += rowlen + 1;
             }
 
-            ctx.visibledatarow.push(ctx.rh_height); // 行的临时长度分布
+            ctx.visibledatarow.push(ctx.rh_height); // temporary row height distribution
         }
         ctx.rh_height += 80;
         // sheetmanage.showSheet();
@@ -117,7 +117,7 @@ function postPasteCut(
         ctx.luckysheetfile[getSheetIndex(ctx, source.sheetId)!].data =
             source.curData;
     }
-    // editor.webWorkerFlowDataCache(ctx.flowdata); // worker存数据
+    // editor.webWorkerFlowDataCache(ctx.flowdata); // store data in worker
     // ctx.luckysheetfile[getSheetIndex(ctx.currentSheetId)].data = ctx.flowdata;
 
     // luckysheet_select_save
@@ -131,10 +131,10 @@ function postPasteCut(
         ];
     }
     if (ctx.luckysheet_select_save.length > 0) {
-        // 有选区时，刷新一下选区
+        // if there is a selection, refresh the selection highlight
         // selectHightlightShow();
     }
-    // 条件格式
+    // conditional formatting
     ctx.luckysheetfile[
         getSheetIndex(ctx, source.sheetId)!
         ].luckysheet_conditionformat_save = source.curCdformat;
@@ -142,7 +142,7 @@ function postPasteCut(
         getSheetIndex(ctx, target.sheetId)!
         ].luckysheet_conditionformat_save = target.curCdformat;
 
-    // 数据验证
+    // data validation
     // if (ctx.currentSheetId === source.sheetId) {
     //   dataVerificationCtrl.dataVerification = source.curDataVerification;
     // } else if (ctx.currentSheetId === target.sheetId) {
@@ -172,40 +172,40 @@ function postPasteCut(
     storeSheetParamALL(ctx);
 
     // saveparam
-    // //来源表
+    // // source sheet
     // server.saveParam("all", source["sheetId"], source["curConfig"], {
     //   k: "config",
     // });
-    // //目的表
+    // // destination sheet
     // server.saveParam("all", target["sheetId"], target["curConfig"], {
     //   k: "config",
     // });
 
-    // //来源表
+    // // source sheet
     // server.historyParam(source["curData"], source["sheetId"], {
     //   row: source["range"]["row"],
     //   column: source["range"]["column"],
     // });
-    // //目的表
+    // // destination sheet
     // server.historyParam(target["curData"], target["sheetId"], {
     //   row: target["range"]["row"],
     //   column: target["range"]["column"],
     // });
 
-    // //来源表
+    // // source sheet
     // server.saveParam("all", source["sheetId"], source["curCdformat"], {
     //   k: "luckysheet_conditionformat_save",
     // });
-    // //目的表
+    // // destination sheet
     // server.saveParam("all", target["sheetId"], target["curCdformat"], {
     //   k: "luckysheet_conditionformat_save",
     // });
 
-    // //来源表
+    // // source sheet
     // server.saveParam("all", source["sheetId"], source["curDataVerification"], {
     //   k: "dataVerification",
     // });
-    // //目的表
+    // // destination sheet
     // server.saveParam("all", target["sheetId"], target["curDataVerification"], {
     //   k: "dataVerification",
     // });
@@ -225,11 +225,11 @@ function pasteHandler(ctx: Context, data: any, borderInfo?: any) {
 
     if ((ctx.luckysheet_select_save?.length ?? 0) !== 1) {
         // if (isEditMode()) {
-        //   alert("不能对多重选择区域执行此操作，请选择单个区域，然后再试");
+        //   alert("Cannot perform this operation on multiple selection areas, please select a single area and try again");
         // } else {
         //   tooltip.info(
-        //     '<i class="fa fa-exclamation-triangle"></i>提示',
-        //     "不能对多重选择区域执行此操作，请选择单个区域，然后再试"
+        //     '<i class="fa fa-exclamation-triangle"></i>Warning',
+        //     "Cannot perform this operation on multiple selection areas, please select a single area and try again"
         //   );
         // }
         return;
@@ -252,12 +252,12 @@ function pasteHandler(ctx: Context, data: any, borderInfo?: any) {
         const copyh = data.length;
         const copyc = data[0].length;
 
-        const minh = ctx.luckysheet_select_save![0].row[0]; // 应用范围首尾行
+        const minh = ctx.luckysheet_select_save![0].row[0]; // first and last row of apply range
         const maxh = minh + copyh - 1;
-        const minc = ctx.luckysheet_select_save![0].column[0]; // 应用范围首尾列
+        const minc = ctx.luckysheet_select_save![0].column[0]; // first and last column of apply range
         const maxc = minc + copyc - 1;
 
-        // 应用范围包含部分合并单元格，则return提示
+        // return with a warning if the apply range contains partially merged cells
         let has_PartMC = false;
         if (cfg.merge != null) {
             has_PartMC = hasPartMC(ctx, cfg, minh, maxh, minc, maxc);
@@ -265,23 +265,23 @@ function pasteHandler(ctx: Context, data: any, borderInfo?: any) {
 
         if (has_PartMC) {
             // if (isEditMode()) {
-            //   alert("不能对合并单元格做部分更改");
+            //   alert("Cannot make partial changes to merged cells");
             // } else {
             //   tooltip.info(
-            //     '<i class="fa fa-exclamation-triangle"></i>提示',
-            //     "不能对合并单元格做部分更改"
+            //     '<i class="fa fa-exclamation-triangle"></i>Warning',
+            //     "Cannot make partial changes to merged cells"
             //   );
             // }
             return;
         }
 
-        const d = getFlowdata(ctx); // 取数据
+        const d = getFlowdata(ctx); // fetch data
         if (!d) return;
 
         const rowMaxLength = d.length;
         const cellMaxLength = d[0].length;
 
-        // 若应用范围超过最大行或最大列，增加行列
+        // expand rows/columns if the apply range exceeds the current maximum
         const addr = maxh - rowMaxLength + 1;
         const addc = maxc - cellMaxLength + 1;
         if (addr > 0 || addc > 0) {
@@ -358,7 +358,7 @@ function pasteHandler(ctx: Context, data: any, borderInfo?: any) {
 
                 // const fontset = luckysheetfontformat(x[c]);
                 // const oneLineTextHeight = menuButton.getTextSize("田", fontset)[1];
-                // // 比较计算高度和当前高度取最大高度
+                // // compare computed height with current height and take the larger
                 // if (oneLineTextHeight > currentRowLen) {
                 //   currentRowLen = oneLineTextHeight;
                 //   RowlChange = true;
@@ -403,7 +403,7 @@ function pasteHandler(ctx: Context, data: any, borderInfo?: any) {
             dataChe.push(che[i].split("\t"));
         }
 
-        const d = getFlowdata(ctx); // 取数据
+        const d = getFlowdata(ctx); // fetch data
         if (!d) return;
 
         const last =
@@ -415,7 +415,7 @@ function pasteHandler(ctx: Context, data: any, borderInfo?: any) {
         const rlen = dataChe.length;
         const clen = dataChe[0].length;
 
-        // 应用范围包含部分合并单元格，则return提示
+        // return with a warning if the apply range contains partially merged cells
         let has_PartMC = false;
         if (ctx.config.merge != null) {
             has_PartMC = hasPartMC(
@@ -430,11 +430,11 @@ function pasteHandler(ctx: Context, data: any, borderInfo?: any) {
 
         if (has_PartMC) {
             // if (isEditMode()) {
-            //   alert("不能对合并单元格做部分更改");
+            //   alert("Cannot make partial changes to merged cells");
             // } else {
             //   tooltip.info(
-            //     '<i class="fa fa-exclamation-triangle"></i>提示',
-            //     "不能对合并单元格做部分更改"
+            //     '<i class="fa fa-exclamation-triangle"></i>Warning',
+            //     "Cannot make partial changes to merged cells"
             //   );
             // }
             return;
@@ -453,7 +453,8 @@ function pasteHandler(ctx: Context, data: any, borderInfo?: any) {
                 const originCell = x[c + curC];
                 let value = dataChe[r][c];
                 if (isRealNum(value)) {
-                    // 如果单元格设置了纯文本格式，那么就不要转成数值类型了，防止数值过大自动转成科学计数法
+                    // if the cell is formatted as plain text, do not convert to a numeric type
+                    // to prevent large numbers from being automatically displayed in scientific notation
                     if (originCell && originCell.ct && originCell.ct.fa === "@") {
                         value = String(value);
                     } else {
@@ -535,7 +536,7 @@ function pasteHandlerOfCutPaste(
         cfg.merge = {};
     }
 
-    // 复制范围
+    // copy range
     const copyHasMC = copyRange.HasMC;
     const copyRowlChange = copyRange.RowlChange;
     const copySheetId = copyRange.dataSheetId;
@@ -556,17 +557,17 @@ function pasteHandlerOfCutPaste(
     const copyh = copyData.length;
     const copyc = copyData[0].length;
 
-    // 应用范围
+    // apply range
     const last =
         ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1];
     if (!last || last.row_focus == null || last.column_focus == null) return;
 
     const minh = last.row_focus;
-    const maxh = minh + copyh - 1; // 应用范围首尾行
+    const maxh = minh + copyh - 1; // first and last row of apply range
     const minc = last.column_focus;
-    const maxc = minc + copyc - 1; // 应用范围首尾列
+    const maxc = minc + copyc - 1; // first and last column of apply range
 
-    // 应用范围包含部分合并单元格，则提示
+    // warn if the apply range contains partially merged cells
     let has_PartMC = false;
     if (cfg.merge != null) {
         has_PartMC = hasPartMC(ctx, cfg, minh, maxh, minc, maxc);
@@ -574,17 +575,17 @@ function pasteHandlerOfCutPaste(
 
     if (has_PartMC) {
         // if (isEditMode()) {
-        //   alert("不能对合并单元格做部分更改");
+        //   alert("Cannot make partial changes to merged cells");
         // } else {
         //   tooltip.info(
-        //     '<i class="fa fa-exclamation-triangle"></i>提示',
-        //     "不能对合并单元格做部分更改"
+        //     '<i class="fa fa-exclamation-triangle"></i>Warning',
+        //     "Cannot make partial changes to merged cells"
         //   );
         // }
         return;
     }
 
-    const d = getFlowdata(ctx); // 取数据
+    const d = getFlowdata(ctx); // fetch data
     if (!d) return;
     const rowMaxLength = d.length;
     const cellMaxLength = d[0].length;
@@ -606,7 +607,7 @@ function pasteHandlerOfCutPaste(
                 .dataVerification
         ) || {};
 
-    // 若选区内包含超链接
+    // if the selection contains hyperlinks
     if (
         ctx.luckysheet_select_save?.length === 1 &&
         ctx.luckysheet_copy_save?.copyRange.length === 1
@@ -637,7 +638,7 @@ function pasteHandlerOfCutPaste(
         });
     }
 
-    // 剪切粘贴在当前表操作，删除剪切范围内数据、合并单元格、数据验证和超链接
+    // cut-paste within the current sheet: delete data, merged cells, data validation, and hyperlinks in the cut range
     if (ctx.currentSheetId === copySheetId) {
         for (let i = c_r1; i <= c_r2; i += 1) {
             for (let j = c_c1; j <= c_c2; j += 1) {
@@ -660,7 +661,7 @@ function pasteHandlerOfCutPaste(
             }
         }
 
-        // 边框
+        // borders
         if (cfg.borderInfo && cfg.borderInfo.length > 0) {
             const source_borderInfo = [];
 
@@ -761,7 +762,7 @@ function pasteHandlerOfCutPaste(
                 cfg.borderInfo.push(bd_obj);
             }
 
-            // 数据验证 剪切
+            // data validation: cut
             if (c_dataVerification[`${c_r1 + h - minh}_${c_c1 + c - minc}`]) {
                 dataVerification[`${h}_${c}`] =
                     c_dataVerification[`${c_r1 + h - minh}_${c_c1 + c - minc}`];
@@ -810,7 +811,7 @@ function pasteHandlerOfCutPaste(
     last.row = [minh, maxh];
     last.column = [minc, maxc];
 
-    // 若有行高改变，重新计算行高改变
+    // if row heights changed, recalculate them
     if (copyRowlChange) {
         // if (ctx.currentSheetId !== copySheetIndex) {
         //   cfg = rowlenByRange(d, minh, maxh, cfg);
@@ -823,7 +824,7 @@ function pasteHandlerOfCutPaste(
     let source;
     let target;
     if (ctx.currentSheetId !== copySheetId) {
-        // 跨表操作
+        // cross-sheet operation
         const sourceData = _.cloneDeep(
             ctx.luckysheetfile[getSheetIndex(ctx, copySheetId)!].data!
         );
@@ -860,7 +861,7 @@ function pasteHandlerOfCutPaste(
             // );
         }
 
-        // 边框
+        // borders
         if (sourceCurConfig.borderInfo && sourceCurConfig.borderInfo.length > 0) {
             const source_borderInfo = [];
 
@@ -898,7 +899,7 @@ function pasteHandlerOfCutPaste(
             sourceCurConfig.borderInfo = source_borderInfo;
         }
 
-        // 条件格式
+        // conditional formatting
         const source_cdformat = _.cloneDeep(
             ctx.luckysheetfile[getSheetIndex(ctx, copySheetId)!]
                 .luckysheet_conditionformat_save
@@ -953,7 +954,7 @@ function pasteHandlerOfCutPaste(
             target_curCdformat = target_curCdformat?.concat(ruleArr);
         }
 
-        // 数据验证
+        // data validation
         for (let i = c_r1; i <= c_r2; i += 1) {
             for (let j = c_c1; j <= c_c2; j += 1) {
                 delete c_dataVerification[`${i}_${j}`];
@@ -996,7 +997,7 @@ function pasteHandlerOfCutPaste(
             },
         };
     } else {
-        // 条件格式
+        // conditional formatting
         const cdformat = _.cloneDeep(
             ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId)!]
                 .luckysheet_conditionformat_save
@@ -1019,7 +1020,7 @@ function pasteHandlerOfCutPaste(
             }
         }
 
-        // 当前表操作
+        // same-sheet operation
         source = {
             sheetId: ctx.currentSheetId,
             data: getFlowdata(ctx),
@@ -1087,7 +1088,7 @@ function pasteHandlerOfCopyPaste(
         cfg.merge = {};
     }
 
-    // 复制范围
+    // copy range
     const copyHasMC = copyRange.HasMC;
     const copyRowlChange = copyRange.RowlChange;
     const copySheetIndex = copyRange.dataSheetId;
@@ -1143,7 +1144,7 @@ function pasteHandlerOfCopyPaste(
 
     const copyData = _.cloneDeep(arr);
 
-    // 多重选择选择区域 单元格如果有函数 则只取值 不取函数
+    // for multiple selections, if a cell has a formula, use only the value and discard the formula
     if (copyRange.copyRange.length > 1) {
         for (let i = 0; i < copyData.length; i += 1) {
             for (let j = 0; j < copyData[i].length; j += 1) {
@@ -1158,25 +1159,25 @@ function pasteHandlerOfCopyPaste(
     const copyh = copyData.length;
     const copyc = copyData[0].length;
 
-    // 应用范围
+    // apply range
     const last =
         ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1];
     if (!last) return;
     const minh = last.row[0];
-    let maxh = last.row[1]; // 应用范围首尾行
+    let maxh = last.row[1]; // first and last row of apply range
     const minc = last.column[0];
-    let maxc = last.column[1]; // 应用范围首尾列
+    let maxc = last.column[1]; // first and last column of apply range
 
     const mh = (maxh - minh + 1) % copyh;
     const mc = (maxc - minc + 1) % copyc;
 
     if (mh !== 0 || mc !== 0) {
-        // 若应用范围不是copydata行列数的整数倍，则取copydata的行列数
+        // if the apply range is not an integer multiple of the copy data dimensions, use the copy data dimensions
         maxh = minh + copyh - 1;
         maxc = minc + copyc - 1;
     }
 
-    // 应用范围包含部分合并单元格，则提示
+    // warn if the apply range contains partially merged cells
     let has_PartMC = false;
     if (!_.isNil(cfg.merge)) {
         has_PartMC = hasPartMC(ctx, cfg, minh, maxh, minc, maxc);
@@ -1184,11 +1185,11 @@ function pasteHandlerOfCopyPaste(
 
     if (has_PartMC) {
         // if (isEditMode()) {
-        //   alert("不能对合并单元格做部分更改");
+        //   alert("Cannot make partial changes to merged cells");
         // } else {
         //   tooltip.info(
-        //     '<i class="fa fa-exclamation-triangle"></i>提示',
-        //     "不能对合并单元格做部分更改"
+        //     '<i class="fa fa-exclamation-triangle"></i>Warning',
+        //     "Cannot make partial changes to merged cells"
         //   );
         // }
         return;
@@ -1197,13 +1198,13 @@ function pasteHandlerOfCopyPaste(
     const timesH = (maxh - minh + 1) / copyh;
     const timesC = (maxc - minc + 1) / copyc;
 
-    const d = getFlowdata(ctx); // 取数据
+    const d = getFlowdata(ctx); // fetch data
     if (!d) return;
 
     const rowMaxLength = d.length;
     const cellMaxLength = d[0].length;
 
-    // 若应用范围超过最大行或最大列，增加行列
+    // expand rows/columns if the apply range exceeds the current maximum
     const addr = copyh + minh - rowMaxLength;
     const addc = copyc + minc - cellMaxLength;
     if (addr > 0 || addc > 0) {
@@ -1233,7 +1234,7 @@ function pasteHandlerOfCopyPaste(
             maxrowCache = minh + th * copyh;
             maxcellCahe = minc + tc * copyc;
 
-            // 行列位移值 用于单元格有函数
+            // row/column offset values used when cells contain formulas
             const offsetRow = mth - c_r1;
             const offsetCol = mtc - c_c1;
 
@@ -1304,7 +1305,7 @@ function pasteHandlerOfCopyPaste(
                         cfg.borderInfo.push(bd_obj);
                     }
 
-                    // 数据验证 复制
+                    // data validation: copy
                     if (c_dataVerification[`${c_r1 + h - mth}_${c_c1 + c - mtc}`]) {
                         if (_.isNil(dataVerification)) {
                             dataVerification = _.cloneDeep(
@@ -1402,7 +1403,7 @@ function pasteHandlerOfCopyPaste(
         }
     }
 
-    // 复制范围 是否有 条件格式和数据验证
+    // check whether the copy range has conditional formatting and data validation
     let cdformat: any = null;
     if (copyRange.copyRange.length === 1) {
         const c_file =
@@ -1457,7 +1458,7 @@ function pasteHandlerOfCopyPaste(
     file.luckysheet_conditionformat_save = cdformat;
     file.dataVerification = _.cloneDeep({...file.dataVerification, ...dataVerification});
 
-    // 若选区内包含超链接
+    // if the selection contains hyperlinks
     if (
         ctx.luckysheet_select_save?.length === 1 &&
         ctx.luckysheet_copy_save?.copyRange.length === 1
@@ -1528,7 +1529,7 @@ function handleFormulaStringPaste(ctx: Context, formulaStr: string) {
 
 export function handlePaste(ctx: Context, e: ClipboardEvent) {
     // if (isEditMode()) {
-    //   // 此模式下禁用粘贴
+    //   // paste is disabled in this mode
     //   return;
     // }
     const allowEdit = isAllowEdit(ctx);
@@ -1551,14 +1552,14 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
         let txtdata =
             clipboardData.getData("text/html") || clipboardData.getData("text/plain");
 
-        // 如果标示是qksheet复制的内容，判断剪贴板内容是否是当前页面复制的内容
+        // if the content is marked as copied from this sheet, check whether the clipboard matches what was copied from the current page
         let isEqual = true;
         if (
             txtdata.indexOf("fortune-copy-action-table") > -1 &&
             ctx.luckysheet_copy_save?.copyRange != null &&
             ctx.luckysheet_copy_save.copyRange.length > 0
         ) {
-            // 剪贴板内容解析
+            // parse clipboard content
             const cpDataArr = [];
 
             const reg = /<tr.*?>(.*?)<\/tr>/g;
@@ -1583,7 +1584,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                 cpDataArr.push(cpRowArr);
             }
 
-            // 当前页面复制区内容
+            // content of the copy area on the current page
             const copy_r1 = ctx.luckysheet_copy_save.copyRange[0].row[0];
             const copy_r2 = ctx.luckysheet_copy_save.copyRange[0].row[1];
             const copy_c1 = ctx.luckysheet_copy_save.copyRange[0].column[0];
@@ -1664,7 +1665,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
             ctx.luckysheet_copy_save.copyRange.length > 0 &&
             isEqual
         ) {
-            // 剪切板内容 和 luckysheet本身复制的内容 一致
+            // clipboard content matches what was copied from luckysheet itself
             if (ctx.luckysheet_paste_iscut) {
                 ctx.luckysheet_paste_iscut = false;
                 pasteHandlerOfCutPaste(ctx, ctx.luckysheet_copy_save);
@@ -1996,7 +1997,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                 // $("#fortune-copy-content").empty();
                 ele.remove();
             }
-            // 复制的是图片
+            // the copied content is an image
             else if (
                 clipboardData.files.length === 1 &&
                 clipboardData.files[0].type.indexOf("image") > -1
@@ -2014,7 +2015,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
             }
         }
     } else if (ctx.luckysheetCellUpdate.length > 0) {
-        // 阻止默认粘贴
+        // prevent default paste behaviour
         e.preventDefault();
 
         let {clipboardData} = e;

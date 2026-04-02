@@ -156,18 +156,18 @@ export type Settings = {
 };
 
 export const defaultSettings: Required<Settings> = {
-    column: 60, // 空表格默认的列数量
-    row: 84, // 空表格默认的行数据量
+    column: 60, // default number of columns for an empty sheet
+    row: 84, // default number of rows for an empty sheet
     addRows: 50, // It will add the rows when we click on add row button
-    showToolbar: true, // 是否显示工具栏
-    showFormulaBar: true, // 是否显示公式栏
-    showSheetTabs: true, // 是否显示底部表格名称区域
-    data: [], // 客户端sheet数据[sheet1, sheet2, sheet3]
-    config: {}, // 表格行高、列宽、合并单元格、公式等设置
-    devicePixelRatio: 0, // 设备比例，比例越大表格分标率越高，0表示自动
-    allowEdit: true, // 是否允许前台编辑
+    showToolbar: true, // whether to show the toolbar
+    showFormulaBar: true, // whether to show the formula bar
+    showSheetTabs: true, // whether to show the sheet tab area at the bottom
+    data: [], // client-side sheet data [sheet1, sheet2, sheet3]
+    config: {}, // settings for row height, column width, merged cells, formulas, etc.
+    devicePixelRatio: 0, // device pixel ratio; higher value gives sharper rendering, 0 means auto
+    allowEdit: true, // whether to allow editing in the frontend
     lang: null, // language
-    forceCalculation: false, // 强制刷新公式，公式较多会有性能问题，慎用
+    forceCalculation: false, // force formula recalculation; may cause performance issues with many formulas, use with caution
     rowHeaderWidth: 46,
     columnHeaderHeight: 20,
     defaultColWidth: 73,
@@ -215,54 +215,54 @@ export const defaultSettings: Required<Settings> = {
         "locationCondition",
         "screenshot",
         "search",
-    ], // 自定义工具栏
+    ], // custom toolbar
     cellContextMenu: [
-        "copy", // 复制
-        "paste", // 粘贴
+        "copy", // copy
+        "paste", // paste
         "|",
-        "insert-row", // 插入行
-        "insert-column", // 插入列
-        "delete-row", // 删除选中行
-        "delete-column", // 删除选中列
-        "delete-cell", // 删除单元格
-        "hide-row", // 隐藏选中行和显示选中行
-        "hide-column", // 隐藏选中列和显示选中列
-        "set-row-height", // 设置行高
-        "set-column-width", // 设置列宽
+        "insert-row", // insert row
+        "insert-column", // insert column
+        "delete-row", // delete selected row(s)
+        "delete-column", // delete selected column(s)
+        "delete-cell", // delete cell
+        "hide-row", // hide/show selected row(s)
+        "hide-column", // hide/show selected column(s)
+        "set-row-height", // set row height
+        "set-column-width", // set column width
         "|",
-        "clear", // 清除内容
-        "sort", // 排序选区
+        "clear", // clear content
+        "sort", // sort selection
         "|",
         "comment",
         "|",
-        "orderAZ", // 升序
-        "orderZA", // 降序
-        "filter", // 筛选选区
-        "chart", // 图表生成
-        "image", // 插入图片
-        "link", // 插入链接
-        "data", // 数据验证
-        "cell-format", // 设置单元格格式
-    ], // 自定义单元格右键菜单
+        "orderAZ", // sort ascending
+        "orderZA", // sort descending
+        "filter", // filter selection
+        "chart", // generate chart
+        "image", // insert image
+        "link", // insert link
+        "data", // data validation
+        "cell-format", // set cell format
+    ], // custom cell right-click menu
     headerContextMenu: [
-        "copy", // 复制
-        "paste", // 粘贴
+        "copy", // copy
+        "paste", // paste
         "|",
-        "insert-row", // 插入行
-        "insert-column", // 插入列
-        "delete-row", // 删除选中行
-        "delete-column", // 删除选中列
-        "delete-cell", // 删除单元格
-        "hide-row", // 隐藏选中行和显示选中行
-        "hide-column", // 隐藏选中列和显示选中列
-        "set-row-height", // 设置行高
-        "set-column-width", // 设置列宽
+        "insert-row", // insert row
+        "insert-column", // insert column
+        "delete-row", // delete selected row(s)
+        "delete-column", // delete selected column(s)
+        "delete-cell", // delete cell
+        "hide-row", // hide/show selected row(s)
+        "hide-column", // hide/show selected column(s)
+        "set-row-height", // set row height
+        "set-column-width", // set column width
         "|",
-        "clear", // 清除内容
-        "sort", // 排序选区
-        "orderAZ", // 升序
-        "orderZA", // 降序
-    ], // header菜单
+        "clear", // clear content
+        "sort", // sort selection
+        "orderAZ", // sort ascending
+        "orderZA", // sort descending
+    ], // header context menu
     sheetTabContextMenu: [
         "delete",
         "copy",
@@ -272,7 +272,7 @@ export const defaultSettings: Required<Settings> = {
         "|",
         "move",
         // "focus",
-    ], // 自定义底部sheet页右击菜单
+    ], // custom sheet tab right-click menu
     filterContextMenu: [
         "sort-by-asc",
         "sort-by-desc",
@@ -282,7 +282,7 @@ export const defaultSettings: Required<Settings> = {
         // "filter-by-condition",
         // "|",
         "filter-by-value",
-    ], // 筛选菜单
+    ], // filter context menu
     generateSheetId: () => uuidv4(),
     hooks: {},
     customToolbarItems: [],

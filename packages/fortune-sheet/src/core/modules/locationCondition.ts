@@ -14,23 +14,23 @@ export function deleteCellInSave(
     return cellSave;
 }
 
-// 得到符合条件的cell坐标
+// Get the coordinates of cells matching the condition
 export function getRangeArr(
-    minR: number, // 选区行起点
-    maxR: number, // 选区行终点
-    minC: number, // 选区列起点
-    maxC: number, // 选区列终点
+    minR: number, // Selection row start
+    maxR: number, // Selection row end
+    minC: number, // Selection column start
+    maxC: number, // Selection column end
     cellSave: Record<string, number>,
     rangeArr: { row: (number | null)[]; column: (number | null)[] }[],
     ctx: Context
 ): any {
-    // 判断有没有符合条件的cell，为0说明没有符合条件的，直接返回。
+    // Check if there are any matching cells; if count is 0, return immediately.
     if (Object.keys(cellSave).length === 0) {
         return rangeArr;
     }
     /**
      * str=>startRow, edr=>endRow, stc=>startColumn, edc=>endColumn
-     * 四个参数记录符合条件的cell的最大的起点值和终点值，因为符合条件的多个cell有可能是相连的，有可能是不相连的
+     * The four parameters record the maximum start and end values of matching cells, since multiple matching cells may be adjacent or non-adjacent
      */
     let stack_str = null;
     let stack_edr = null;
@@ -41,22 +41,22 @@ export function getRangeArr(
         for (let c = minC; c <= maxC; c += 1) {
             if (_.isNil(flowData)) break;
             const cell = flowData[r][c];
-            // cellSave中存储的是符合条件的cell坐标，找符合条件的cell坐标
+            // cellSave stores the coordinates of matching cells; look up matching cell coordinates
             if (`${r}_${c}` in cellSave) {
-                // 判断是不是合并的单元格条件
+                // Check whether the condition is a merged cell
                 if (!!cell?.mc?.cs && !!cell?.mc?.rs && !!cell?.mc?.r) {
                     if (stack_stc === null) {
-                        // 记录符合合并单元格条件的cell坐标在range
+                        // Record the coordinates of the merged-cell-matching cell in range
                         const range = {
                             row: [cell.mc.r, cell.mc.r + cell.mc.rs - 1],
                             column: [cell.mc.c, cell.mc.c + cell.mc.cs - 1],
                         };
                         rangeArr.push(range);
-                        // 当前符合条件的cellSave坐标判断完后无需再使用了，所以进行删除
+                        // Once the current matching cellSave coordinate is processed, it is no longer needed, so delete it
                         cellSave = deleteCellInSave(cellSave, range);
                         return getRangeArr(minR, maxR, minC, maxC, cellSave, rangeArr, ctx);
                     }
-                    // 因为合并的单元格是大范围，所以小范围中符合条件的直接记录大范围的坐标
+                    // Since a merged cell spans a large range, matching cells within a smaller range are recorded using the merged cell's full coordinates
                     if (stack_edc !== null && c < stack_edc) {
                         const range = {
                             row: [stack_str, stack_edr],
@@ -68,13 +68,13 @@ export function getRangeArr(
                     }
                     break;
                 } else if (stack_stc === null) {
-                    // 符合条件且不是合并单元格，且在范围内是第一个符合条件的则记录范围
+                    // Matches condition and is not a merged cell, and is the first match in the range — record the range
                     stack_stc = c;
                     stack_edc = c;
                     stack_str = r;
                     stack_edr = r;
                 } else if (stack_edc !== null && c > stack_edc) {
-                    // 符合条件且不是合并单元格，并且当前的这个在大范围外面，所以更新最大范围的终点值
+                    // Matches condition and is not a merged cell, and this one is outside the current range, so update the maximum end value
                     stack_edc = c;
                 }
             } else if (stack_stc !== null) {
@@ -82,7 +82,7 @@ export function getRangeArr(
                     break;
                 } else if (c < stack_stc) {
                 } else if (stack_edc !== null && c <= stack_edc) {
-                    // 说明没有相连的符合条件的单元格了，就把上一次符合条件的多个单元格的大范围记录下来
+                    // No more contiguous matching cells; record the combined range of the previously matched cells
                     const range = {
                         row: [stack_str, stack_edr],
                         column: [stack_stc, stack_edc],
@@ -108,7 +108,7 @@ export function getRangeArr(
     return rangeArr;
 }
 
-// 获取操作列表
+// Get the list of operations
 export function getOptionValue(
     constants: Record<string, boolean>
 ): string | undefined {
@@ -142,10 +142,10 @@ export function getOptionValue(
     return value;
 }
 
-// 获取选区坐标
+// Get the selection coordinates
 export function getSelectRange(ctx: Context) {
     let range;
-    // 判断选区是不是单个单元格，如果是的话则选区范围改为整张表
+    // Check if the selection is a single cell; if so, expand the range to the entire sheet
     if (
         ctx.luckysheet_select_save?.length === 0 ||
         (ctx.luckysheet_select_save?.length === 1 &&
@@ -165,7 +165,7 @@ export function getSelectRange(ctx: Context) {
     return range;
 }
 
-// 条件定位功能
+// Conditional location feature
 export function applyLocation(
     range: { row: any[]; column: any[] }[],
     type: string,
@@ -178,23 +178,23 @@ export function applyLocation(
         type === "locationConstant" ||
         type === "locationNull"
     ) {
-        // 公式 常量 空值
+        // Formula, constant, empty value
         let minR = null;
         let maxR = null;
         let minC = null;
         let maxC = null;
-        // cellSave:记录符合条件的坐标值例，0_1
+        // cellSave: records coordinates of matching cells, e.g. 0_1
         const cellSave: Record<string, number> = {};
         const flowData = getFlowdata(ctx, ctx.currentSheetId);
         if (_.isNil(flowData)) return [];
         for (let s = 0; s < range.length; s += 1) {
-            // 选区行起点
+            // Selection row start
             const st_r = range[s].row[0];
-            // 选区行终点
+            // Selection row end
             const ed_r = range[s].row[1];
-            // 选区列起点
+            // Selection column start
             const st_c = range[s].column[0];
-            // 选区列终点
+            // Selection column end
             const ed_c = range[s].column[1];
             if (minR === null || minR < st_r) {
                 minR = st_r;
@@ -243,8 +243,8 @@ export function applyLocation(
         }
         rangeArr = getRangeArr(minR, maxR, minC, maxC, cellSave, rangeArr, ctx);
     } else if (type === "locationCF") {
-        // TODO定位条件
-        // 条件格式
+        // TODO location condition
+        // Conditional format
         // const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
         // let ruleArr = ctx.luckysheetfile[index].luckysheet_conditionformat_save;
         // let {data} = ctx.luckysheetfile[index];
@@ -267,7 +267,7 @@ export function applyLocation(
             }
         }
     } else if (type === "locationColumnSpan") {
-        // 间隔列
+        // Alternating columns
         for (let s = 0; s < range.length; s += 1) {
             if (range[s].column[0] === range[s].column[1]) {
                 continue;

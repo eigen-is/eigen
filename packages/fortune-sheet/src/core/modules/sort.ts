@@ -118,10 +118,10 @@ export function sortSelection(
     if (ctx.luckysheet_select_save == null) return;
     if (ctx.luckysheet_select_save.length > 1) {
         // if (isEditMode()) {
-        //   alert("不能对多重选择区域执行此操作，请选择单个区域，然后再试");
+        //   alert("Cannot perform this action on a multi-selection. Please select a single range and try again.");
         // } else {
         //   tooltip.info(
-        //     "不能对多重选择区域执行此操作，请选择单个区域，然后再试",
+        //     "Cannot perform this action on a multi-selection. Please select a single range and try again.",
         //     ""
         //   );
         // }
@@ -189,9 +189,9 @@ export function sortSelection(
 
     if (hasMc) {
         // if (isEditMode()) {
-        //   alert("选区有合并单元格，无法执行此操作！");
+        //   alert("The selection contains merged cells. Cannot perform this action!");
         // } else {
-        //   tooltip.info("选区有合并单元格，无法执行此操作！", "");
+        //   tooltip.info("The selection contains merged cells. Cannot perform this action!", "");
         // }
 
         return;
