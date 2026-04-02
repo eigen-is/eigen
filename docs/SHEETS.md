@@ -9,9 +9,10 @@
 ```
 packages/fortune-sheet/     # Forked React UI + core engine + formula parser (full source control)
 apps/sheets/src/components/sheets/
-├── hooks/use-sheet.ts      # Yjs integration (op-based sync)
-├── editor.tsx              # Workbook config + toolbar items
-└── toolbar.tsx             # File menu + share/mode buttons
+├── hooks/use-sheet.ts          # Yjs integration (op-based sync)
+├── hooks/use-active-comments.ts # Scan cell matrix for comment IDs + anchor texts
+├── editor.tsx                  # Workbook config + toolbar items + comment panel/dialog
+└── toolbar.tsx                 # File menu + share/mode + comment toggle buttons
 ```
 
 ## Yjs Sync
@@ -28,6 +29,20 @@ merge cleanly.
 
 **Snapshot**: Saved on `beforeunload` (flushes latest data to `state.snapshot` and clears the ops array). New joiners
 load from the snapshot, then replay any pending ops that arrived during initial sync.
+
+## Comments
+
+Comments anchor to cells via `commentChatNames?: string[]` on the `Cell` type. The fortune-sheet built-in
+comment system (ps field, NotationBoxes, comment module) has been fully removed and replaced with the shared
+Eigen comment infrastructure.
+
+- **Canvas indicator**: red triangle (top-right) drawn when `cell.commentChatNames?.length > 0`
+- **Context menu**: "Add comment" (no comment) or "View comment" / "Delete comment" (has comment), wired via
+  `hooks.onAddComment/onViewComment/onDeleteComment` from settings
+- **Comment panel**: `CommentPanel` sidebar toggled via toolbar button
+- **Thread viewing**: `NoteCardDialog` + `CommentThread` popup
+
+See [COMMENTS.md](COMMENTS.md) for the full shared comment architecture.
 
 ## Fortune-Sheet Integration
 
