@@ -321,7 +321,7 @@ export const SlideObjectView = memo(function SlideObjectView({
     return (
         <ContextMenu>
             <ContextMenuTrigger asChild>{objectDiv}</ContextMenuTrigger>
-            <ContextMenuContent>
+            <ContextMenuContent className="min-w-48">
                 <ContextMenuItem onClick={() => onCopy?.(obj.id)}>
                     <Copy className="h-4 w-4 mr-2" /> Copy
                 </ContextMenuItem>
