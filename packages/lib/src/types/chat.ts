@@ -35,5 +35,6 @@ export type CommentEntry = {
     lastActivityAt: Date | null;
     messageCount: number;
     createdAt: Date;
+    color: string | null;
     mentions: string[];
 };
