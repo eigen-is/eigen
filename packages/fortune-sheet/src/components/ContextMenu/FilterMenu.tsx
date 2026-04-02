@@ -14,17 +14,11 @@ import {
 import React, {useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState,} from "react";
 import produce from "immer";
 import {WorkbookContext} from "../../context";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from "@workspace/ui/components/dropdown-menu";
 import {SVGIcon} from "../icon-map";
 import {useAlert} from "../../hooks/useAlert";
 import {Button} from "@workspace/ui/components/button";
 import {ArrowUpDown} from "lucide-react";
+import {useOutsideClick} from "../../hooks/useOutsideClick";
 
 const SelectItem: React.FC<{
     item: FilterValue;
@@ -145,6 +139,7 @@ const DateSelectTree: React.FC<{
 export const FilterMenu: React.FC = () => {
     const {context, setContext, settings} = useContext(WorkbookContext);
     const contextRef = useRef<Context>(context);
+    const containerRef = useRef<HTMLDivElement>(null);
     const byColorMenuRef = useRef<HTMLDivElement>(null);
     const subMenuRef = useRef<HTMLDivElement>(null);
     const {filterContextMenu} = context;
@@ -199,6 +194,8 @@ export const FilterMenu: React.FC = () => {
             ctx.filterContextMenu = undefined;
         });
     }, [setContext]);
+
+    useOutsideClick(containerRef, close, [close]);
 
     const initialExpand = useCallback((key: string) => {
         const expand = dateTreeExpandState.current[key];
@@ -322,6 +319,29 @@ export const FilterMenu: React.FC = () => {
         []
     );
 
+    // Reposition main container if it overflows the viewport
+    useLayoutEffect(() => {
+        if (!containerRef.current || !filterContextMenu) return;
+        const rect = containerRef.current.getBoundingClientRect();
+        const winH = window.innerHeight;
+        const winW = window.innerWidth;
+        let needsUpdate = false;
+        let newX = filterContextMenu.x;
+        let newY = filterContextMenu.y;
+        if (newX + rect.width > winW) { newX = winW - rect.width - 8; needsUpdate = true; }
+        if (newY + rect.height > winH) { newY = winH - rect.height - 8; needsUpdate = true; }
+        if (newX < 0) { newX = 8; needsUpdate = true; }
+        if (newY < 0) { newY = 8; needsUpdate = true; }
+        if (needsUpdate && (newX !== filterContextMenu.x || newY !== filterContextMenu.y)) {
+            setContext((draftCtx) => {
+                if (draftCtx.filterContextMenu) {
+                    draftCtx.filterContextMenu.x = newX;
+                    draftCtx.filterContextMenu.y = newY;
+                }
+            });
+        }
+    }, [filterContextMenu?.x, filterContextMenu?.y, setContext]);
+
     useLayoutEffect(() => {
         if (!subMenuPos) return;
         // re-position the subMenu if it overflows the window
@@ -370,291 +390,278 @@ export const FilterMenu: React.FC = () => {
         );
     }, [col, endRow, startRow]);
 
-    const isOpen = filterContextMenu != null;
+    if (!filterContextMenu) return null;
 
     return (
         <>
-            <DropdownMenu open={isOpen} onOpenChange={(open) => {
-                if (!open) close();
-            }}>
-                <DropdownMenuTrigger asChild>
-                    <div
-                        style={{
-                            position: 'fixed',
-                            left: filterContextMenu?.x,
-                            top: filterContextMenu?.y,
-                            width: 0,
-                            height: 0,
-                            pointerEvents: 'none',
-                        }}
-                    />
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                    side="bottom"
-                    align="start"
-                    collisionPadding={8}
-                    style={{zIndex: 1010}}
-                    className="fortune-filter-menu"
-                    onCloseAutoFocus={(e) => e.preventDefault()}
-                >
-                    {settings.filterContextMenu?.map((name, i) => {
-                        if (name === "|") {
-                            return <DropdownMenuSeparator key={`divider-${i}`}/>;
-                        }
-                        if (name === "sort-by-asc") {
-                            return (
-                                <DropdownMenuItem key={name} onClick={() => sortData(true)}>
-                                    {filter.sortByAsc}
-                                </DropdownMenuItem>
-                            );
-                        }
-                        if (name === "sort-by-desc") {
-                            return (
-                                <DropdownMenuItem key={name} onClick={() => sortData(false)}>
-                                    {filter.sortByDesc}
-                                </DropdownMenuItem>
-                            );
-                        }
-                        if (name === "filter-by-color") {
-                            return (
-                                <div
-                                    key={name}
-                                    ref={byColorMenuRef}
-                                    onMouseEnter={() => {
-                                        if (!filterContextMenu) {
-                                            return;
-                                        }
-                                        setShowSubMenu(true);
-                                        const rect = byColorMenuRef.current?.getBoundingClientRect();
-                                        if (rect == null) return;
-                                        setSubMenuPos({top: rect.top - 5, left: rect.right});
-                                    }}
-                                    onMouseLeave={delayHideSubMenu}
-                                >
-                                    <DropdownMenuItem onClick={() => {
-                                    }}>
-                                        <div className="filter-bycolor-container">
-                                            {filter.filterByColor}
-                                            <div className="filter-caret right"/>
-                                        </div>
-                                    </DropdownMenuItem>
-                                </div>
-                            );
-                        }
-                        if (name === "filter-by-condition") {
-                            return (
-                                <div key="name">
-                                    <DropdownMenuItem onClick={() => {
-                                    }}>
+            <div
+                ref={containerRef}
+                className="fixed rounded-md border bg-popover p-1 shadow-lg text-sm fortune-filter-menu"
+                style={{left: filterContextMenu.x, top: filterContextMenu.y, zIndex: 1010}}
+                onContextMenu={(e) => e.stopPropagation()}
+            >
+                {settings.filterContextMenu?.map((name, i) => {
+                    if (name === "|") {
+                        return <div key={`divider-${i}`} className="h-px my-1 bg-border"/>;
+                    }
+                    if (name === "sort-by-asc") {
+                        return (
+                            <div
+                                key={name}
+                                className="relative flex cursor-default items-center rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground"
+                                onClick={() => sortData(true)}
+                            >
+                                {filter.sortByAsc}
+                            </div>
+                        );
+                    }
+                    if (name === "sort-by-desc") {
+                        return (
+                            <div
+                                key={name}
+                                className="relative flex cursor-default items-center rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground"
+                                onClick={() => sortData(false)}
+                            >
+                                {filter.sortByDesc}
+                            </div>
+                        );
+                    }
+                    if (name === "filter-by-color") {
+                        return (
+                            <div
+                                key={name}
+                                ref={byColorMenuRef}
+                                onMouseEnter={() => {
+                                    if (!filterContextMenu) {
+                                        return;
+                                    }
+                                    setShowSubMenu(true);
+                                    const rect = byColorMenuRef.current?.getBoundingClientRect();
+                                    if (rect == null) return;
+                                    setSubMenuPos({top: rect.top - 5, left: rect.right});
+                                }}
+                                onMouseLeave={delayHideSubMenu}
+                            >
+                                <div className="relative flex cursor-default items-center rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground">
+                                    <div className="filter-bycolor-container">
+                                        {filter.filterByColor}
                                         <div className="filter-caret right"/>
-                                        {filter.filterByCondition}
-                                    </DropdownMenuItem>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    }
+                    if (name === "filter-by-condition") {
+                        return (
+                            <div key={name}>
+                                <div className="relative flex cursor-default items-center rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground">
+                                    <div className="filter-caret right"/>
+                                    {filter.filterByCondition}
+                                </div>
+                                <div
+                                    className="luckysheet-${menuid}-bycondition"
+                                    style={{display: "none"}}
+                                >
                                     <div
-                                        className="luckysheet-\${menuid}-bycondition"
-                                        style={{display: "none"}}
+                                        className="luckysheet-flat-menu-button luckysheet-mousedown-cancel"
+                                        id="luckysheet-${menuid}-selected"
                                     >
-                                        <div
-                                            className="luckysheet-flat-menu-button luckysheet-mousedown-cancel"
-                                            id="luckysheet-\${menuid}-selected"
+                                        <span
+                                            className="luckysheet-mousedown-cancel"
+                                            data-value="null"
+                                            data-type="0"
                                         >
-                                            <span
-                                                className="luckysheet-mousedown-cancel"
-                                                data-value="null"
-                                                data-type="0"
-                                            >
-                                                {filter.filiterInputNone}
-                                            </span>
-                                            <div className="luckysheet-mousedown-cancel">
-                                                <ArrowUpDown size={14}/>
-                                            </div>
+                                            {filter.filiterInputNone}
+                                        </span>
+                                        <div className="luckysheet-mousedown-cancel">
+                                            <ArrowUpDown size={14}/>
                                         </div>
                                     </div>
                                 </div>
-                            );
-                        }
-                        if (name === "filter-by-value") {
-                            return (
-                                <div key={name}>
-                                    <DropdownMenuItem onClick={() => {
-                                    }}>
-                                        <div className="filter-caret right"/>
-                                        {filter.filterByValues}
-                                    </DropdownMenuItem>
-                                    <div className="luckysheet-filter-byvalue">
-                                        <div className="fortune-menuitem-row byvalue-btn-row">
-                                            <div>
-                                                <span
-                                                    className="fortune-byvalue-btn"
-                                                    onClick={selectAll}
-                                                    tabIndex={0}
-                                                >
-                                                    {filter.filterValueByAllBtn}
-                                                </span>
-                                                {" - "}
-                                                <span
-                                                    className="fortune-byvalue-btn"
-                                                    onClick={clearAll}
-                                                    tabIndex={0}
-                                                >
-                                                    {filter.filterValueByClearBtn}
-                                                </span>
-                                                {" - "}
-                                                <span
-                                                    className="fortune-byvalue-btn"
-                                                    onClick={inverseSelect}
-                                                    tabIndex={0}
-                                                >
-                                                    {filter.filterValueByInverseBtn}
-                                                </span>
-                                            </div>
-                                            <div className="byvalue-filter-icon">
-                                                <SVGIcon
-                                                    name="filter-fill"
-                                                    style={{width: 20, height: 20}}
-                                                />
-                                            </div>
+                            </div>
+                        );
+                    }
+                    if (name === "filter-by-value") {
+                        return (
+                            <div key={name}>
+                                <div className="relative flex cursor-default items-center rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground">
+                                    <div className="filter-caret right"/>
+                                    {filter.filterByValues}
+                                </div>
+                                <div className="luckysheet-filter-byvalue">
+                                    <div className="fortune-menuitem-row byvalue-btn-row">
+                                        <div>
+                                            <span
+                                                className="fortune-byvalue-btn"
+                                                onClick={selectAll}
+                                                tabIndex={0}
+                                            >
+                                                {filter.filterValueByAllBtn}
+                                            </span>
+                                            {" - "}
+                                            <span
+                                                className="fortune-byvalue-btn"
+                                                onClick={clearAll}
+                                                tabIndex={0}
+                                            >
+                                                {filter.filterValueByClearBtn}
+                                            </span>
+                                            {" - "}
+                                            <span
+                                                className="fortune-byvalue-btn"
+                                                onClick={inverseSelect}
+                                                tabIndex={0}
+                                            >
+                                                {filter.filterValueByInverseBtn}
+                                            </span>
                                         </div>
-                                        <div className="filtermenu-input-container">
-                                            <input
-                                                type="text"
-                                                onKeyDown={(e) => e.stopPropagation()}
-                                                placeholder={filter.filterValueByTip}
-                                                className="luckysheet-mousedown-cancel"
-                                                id="luckysheet-\${menuid}-byvalue-input"
-                                                value={searchText}
-                                                onChange={(e) => {
-                                                    setSearchText(e.target.value);
-                                                    searchValues(e.target.value);
-                                                }}
+                                        <div className="byvalue-filter-icon">
+                                            <SVGIcon
+                                                name="filter-fill"
+                                                style={{width: 20, height: 20}}
                                             />
                                         </div>
-                                        <div
-                                            id="luckysheet-filter-byvalue-select"
-                                            style={{maxHeight: listBoxMaxHeight}}
-                                        >
-                                            <DateSelectTree
-                                                dates={data.dates}
-                                                onExpand={onExpand}
-                                                initialExpand={initialExpand}
+                                    </div>
+                                    <div className="filtermenu-input-container">
+                                        <input
+                                            type="text"
+                                            onKeyDown={(e) => e.stopPropagation()}
+                                            placeholder={filter.filterValueByTip}
+                                            className="luckysheet-mousedown-cancel"
+                                            id="luckysheet-${menuid}-byvalue-input"
+                                            value={searchText}
+                                            onChange={(e) => {
+                                                setSearchText(e.target.value);
+                                                searchValues(e.target.value);
+                                            }}
+                                        />
+                                    </div>
+                                    <div
+                                        id="luckysheet-filter-byvalue-select"
+                                        style={{maxHeight: listBoxMaxHeight}}
+                                    >
+                                        <DateSelectTree
+                                            dates={data.dates}
+                                            onExpand={onExpand}
+                                            initialExpand={initialExpand}
+                                            isChecked={(key: string) =>
+                                                datesUncheck.find(
+                                                    (v: string) => v.match(key) != null
+                                                ) == null
+                                            }
+                                            onChange={(item: FilterDate, checked: boolean) => {
+                                                const rows = hiddenRows.current;
+                                                hiddenRows.current = checked
+                                                    ? _.without(rows, ...item.rows)
+                                                    : _.union(rows, item.rows);
+                                                setDatesUncheck(
+                                                    produce((draft) => {
+                                                        return checked
+                                                            ? _.without(draft, ...item.dateValues)
+                                                            : _.union(draft, item.dateValues);
+                                                    })
+                                                );
+                                            }}
+                                            isItemVisible={(item) => {
+                                                return showValues.length === data.flattenValues.length
+                                                    ? true
+                                                    : showValues.findIndex(
+                                                    (v) => v.match(item.key) != null
+                                                ) > -1;
+                                            }}
+                                        />
+                                        {data.values.map((v) => (
+                                            <SelectItem
+                                                key={v.key}
+                                                item={v}
                                                 isChecked={(key: string) =>
-                                                    datesUncheck.find(
-                                                        (v: string) => v.match(key) != null
-                                                    ) == null
+                                                    !valuesUncheck.includes(key)
                                                 }
-                                                onChange={(item: FilterDate, checked: boolean) => {
+                                                onChange={(item: FilterValue, checked: boolean) => {
                                                     const rows = hiddenRows.current;
                                                     hiddenRows.current = checked
                                                         ? _.without(rows, ...item.rows)
-                                                        : _.union(rows, item.rows);
-                                                    setDatesUncheck(
+                                                        : _.concat(rows, item.rows);
+                                                    setValuesUncheck(
                                                         produce((draft) => {
-                                                            return checked
-                                                                ? _.without(draft, ...item.dateValues)
-                                                                : _.union(draft, item.dateValues);
+                                                            if (checked) {
+                                                                _.pull(draft, item.key);
+                                                            } else {
+                                                                draft.push(item.key);
+                                                            }
                                                         })
                                                     );
                                                 }}
                                                 isItemVisible={(item) => {
                                                     return showValues.length === data.flattenValues.length
                                                         ? true
-                                                        : showValues.findIndex(
-                                                        (v) => v.match(item.key) != null
-                                                    ) > -1;
+                                                        : showValues.includes(item.text);
                                                 }}
                                             />
-                                            {data.values.map((v) => (
-                                                <SelectItem
-                                                    key={v.key}
-                                                    item={v}
-                                                    isChecked={(key: string) =>
-                                                        !valuesUncheck.includes(key)
-                                                    }
-                                                    onChange={(item: FilterValue, checked: boolean) => {
-                                                        const rows = hiddenRows.current;
-                                                        hiddenRows.current = checked
-                                                            ? _.without(rows, ...item.rows)
-                                                            : _.concat(rows, item.rows);
-                                                        setValuesUncheck(
-                                                            produce((draft) => {
-                                                                if (checked) {
-                                                                    _.pull(draft, item.key);
-                                                                } else {
-                                                                    draft.push(item.key);
-                                                                }
-                                                            })
-                                                        );
-                                                    }}
-                                                    isItemVisible={(item) => {
-                                                        return showValues.length === data.flattenValues.length
-                                                            ? true
-                                                            : showValues.includes(item.text);
-                                                    }}
-                                                />
-                                            ))}
-                                        </div>
+                                        ))}
                                     </div>
                                 </div>
-                            );
-                        }
-                        return null;
-                    })}
-                    <DropdownMenuSeparator/>
-                    <div className="fortune-menuitem-row">
-                        <Button
-                            size="sm"
-                            onClick={() => {
-                                if (col == null) return;
-                                setContext((draftCtx) => {
-                                    const rowHidden = hiddenRows.current.reduce(
-                                        (pre, curr) => {
-                                            pre[curr] = 0;
-                                            return pre;
-                                        },
-                                        {} as Record<string, number>
-                                    );
-                                    saveFilter(
-                                        draftCtx,
-                                        hiddenRows.current.length > 0,
-                                        rowHidden,
-                                        {},
-                                        startRow,
-                                        endRow,
-                                        col,
-                                        startCol,
-                                        endCol
-                                    );
-                                    hiddenRows.current = [];
-                                    draftCtx.filterContextMenu = undefined;
-                                });
-                            }}
-                        >
-                            {filter.filterConform}
-                        </Button>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                                setContext((draftCtx) => {
-                                    draftCtx.filterContextMenu = undefined;
-                                });
-                            }}
-                        >
-                            {filter.filterCancel}
-                        </Button>
-                        <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => {
-                                setContext((draftCtx) => {
-                                    clearFilter(draftCtx);
-                                });
-                            }}
-                        >
-                            {filter.clearFilter}
-                        </Button>
-                    </div>
-                </DropdownMenuContent>
-            </DropdownMenu>
+                            </div>
+                        );
+                    }
+                    return null;
+                })}
+                <div className="h-px my-1 bg-border"/>
+                <div className="fortune-menuitem-row">
+                    <Button
+                        size="sm"
+                        onClick={() => {
+                            if (col == null) return;
+                            setContext((draftCtx) => {
+                                const rowHidden = hiddenRows.current.reduce(
+                                    (pre, curr) => {
+                                        pre[curr] = 0;
+                                        return pre;
+                                    },
+                                    {} as Record<string, number>
+                                );
+                                saveFilter(
+                                    draftCtx,
+                                    hiddenRows.current.length > 0,
+                                    rowHidden,
+                                    {},
+                                    startRow,
+                                    endRow,
+                                    col,
+                                    startCol,
+                                    endCol
+                                );
+                                hiddenRows.current = [];
+                                draftCtx.filterContextMenu = undefined;
+                            });
+                        }}
+                    >
+                        {filter.filterConform}
+                    </Button>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                            setContext((draftCtx) => {
+                                draftCtx.filterContextMenu = undefined;
+                            });
+                        }}
+                    >
+                        {filter.filterCancel}
+                    </Button>
+                    <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => {
+                            setContext((draftCtx) => {
+                                clearFilter(draftCtx);
+                            });
+                        }}
+                    >
+                        {filter.clearFilter}
+                    </Button>
+                </div>
+            </div>
             {showSubMenu && (
                 <div
                     ref={subMenuRef}
