@@ -5,17 +5,22 @@ import { DocumentModeButton } from '@workspace/ui/components/layout/toolbar/docu
 import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
 import { MessageSquare, UserRoundPlus } from 'lucide-react';
 
-type ToolbarItemsProps = {
+type ToolbarLeftProps = {
     canWrite: boolean;
     onAccessDialogOpen: () => void;
     onRestore: (state: Uint8Array) => void;
     path: DrivePath;
+};
+
+type ToolbarRightProps = {
+    canWrite: boolean;
+    onAccessDialogOpen: () => void;
     onToggleCommentPanel?: () => void;
     commentPanelOpen?: boolean;
     unresolvedCommentCount?: number;
 };
 
-export function ToolbarLeftItems({ path, onAccessDialogOpen, onRestore, canWrite }: ToolbarItemsProps) {
+export function ToolbarLeftItems({ path, onAccessDialogOpen, onRestore, canWrite }: ToolbarLeftProps) {
     return (
         <FileMenu
             path={path}
@@ -34,7 +39,7 @@ export function ToolbarRightItems({
     onToggleCommentPanel,
     commentPanelOpen,
     unresolvedCommentCount,
-}: ToolbarItemsProps) {
+}: ToolbarRightProps) {
     return (
         <>
             {onToggleCommentPanel && (
