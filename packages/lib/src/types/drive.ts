@@ -219,7 +219,7 @@ export type EditorContent = {
     content: string;
     frontmatter: string | null;
     mimeType: string;
-    updatedAt: string | Date;
+    updatedAt: string;
 };
 
 export type EditorSaveResult = {

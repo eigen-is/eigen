@@ -1,4 +1,3 @@
-import { getTextPreviewMode } from '@workspace/lib/constants';
 import {
     DRIVE_TYPE_CHAT,
     DRIVE_TYPE_DOC,
@@ -48,7 +47,6 @@ import {
     normalizeACL,
 } from './acl';
 import { type EffectiveMember, propagateACLChange, resolveACLToEmails } from './acl-propagation';
-import { extractFrontmatter, MAX_INLINE_EDIT_SIZE, reattachFrontmatter } from './inline-edit';
 import { getUniqueFileName } from './naming';
 import { getSharedDatabase } from './shared';
 import * as sharedSchema from './sharedschema';
@@ -275,15 +273,7 @@ export default class Drive {
         return uploaded;
     }
 
-    async deleteFolder(mountId: string, pathId: string): Promise<void> {
-        return this.trashPath(mountId, pathId);
-    }
-
-    async deleteFile(mountId: string, pathId: string): Promise<void> {
-        return this.trashPath(mountId, pathId);
-    }
-
-    async trashPath(mountId: string, pathId: string): Promise<void> {
+    async deletePath(mountId: string, pathId: string): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getActivePath(pathId);
 
@@ -445,59 +435,6 @@ export default class Drive {
         if (!updated) throw new ApiError(500, 'Failed to get updated file');
         this.emit(SSEventType.DRIVE_FILE_UPLOADED, updated);
         return updated;
-    }
-
-    async getEditableContent(mountId: string, pathId: string) {
-        const mount = this.getMount(mountId);
-        const path = await mount.getActivePath(pathId);
-        if (path.type !== DRIVE_TYPE_FILE) throw new ApiError(404, 'File not found');
-
-        const editMode = getTextPreviewMode(path.mimeType, path.name);
-        if (!editMode) throw new ApiError(400, 'File type not supported for inline editing');
-        if (path.size > MAX_INLINE_EDIT_SIZE) throw new ApiError(413, 'File too large for inline editing');
-
-        const file = await mount.readFile(pathId);
-        if (!file) throw new ApiError(404, 'File content not found');
-
-        let content: string;
-        try {
-            content = new TextDecoder('utf-8', { fatal: true }).decode(await file.arrayBuffer());
-        } catch {
-            throw new ApiError(400, 'File contains invalid UTF-8 encoding');
-        }
-
-        const { frontmatter, body } =
-            editMode === 'markdown'
-                ? extractFrontmatter(content)
-                : {
-                      frontmatter: null,
-                      body: content,
-                  };
-        return { editMode, content: body, frontmatter, mimeType: path.mimeType, updatedAt: path.updatedAt };
-    }
-
-    async saveEditableContent(
-        mountId: string,
-        pathId: string,
-        content: string,
-        frontmatter: string | null,
-        expectedUpdatedAt: string,
-        force: boolean,
-    ) {
-        const mount = this.getMount(mountId);
-        const path = await mount.getActivePath(pathId);
-        if (path.type !== DRIVE_TYPE_FILE) throw new ApiError(404, 'File not found');
-
-        const currentUpdatedAt = path.updatedAt instanceof Date ? path.updatedAt.toISOString() : String(path.updatedAt);
-        if (expectedUpdatedAt !== currentUpdatedAt && !force) {
-            return { conflict: true as const, currentUpdatedAt };
-        }
-
-        const fullContent = reattachFrontmatter(content, frontmatter);
-        const updated = await this.writeFileContent(mountId, pathId, Buffer.from(fullContent, 'utf-8'));
-        const updatedAt =
-            updated.updatedAt instanceof Date ? updated.updatedAt.toISOString() : String(updated.updatedAt);
-        return { conflict: false as const, updatedAt };
     }
 
     async resolveFile(mountId: string, pathId: string): Promise<{ mount: Mount; path: DrivePath }> {
