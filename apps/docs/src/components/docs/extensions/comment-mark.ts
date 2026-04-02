@@ -54,6 +54,7 @@ export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions>({
         return {
             onCommentClick: undefined,
             onCommentContextMenu: undefined,
+            onSelectionContextMenu: undefined,
             onAddComment: undefined,
             onToggleCommentPanel: undefined,
         };

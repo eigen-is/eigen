@@ -67,7 +67,7 @@ export function CommentPanel({
                 </Tabs>
 
                 <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
-                    <SelectTrigger className="h-8 text-xs w-auto gap-1">
+                    <SelectTrigger className="h-8 text-xs w-24 gap-1">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -94,7 +94,7 @@ export function CommentPanel({
                                     ? `Comment by ${comment.lastAuthorEmail.split('@')[0]}`
                                     : undefined
                             }
-                            color={comment.color}
+                            color={comment.color ?? undefined}
                             replyCount={comment.messageCount > 1 ? comment.messageCount - 1 : undefined}
                             statusIcon={
                                 comment.status === 'resolved' ? (
