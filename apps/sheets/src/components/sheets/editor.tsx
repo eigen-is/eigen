@@ -76,14 +76,7 @@ export function SheetEditor({ ownerId, path, canWrite, chatFolderId, onAccessDia
     const [commentSelectedText, setCommentSelectedText] = useState('');
     const [commentCellRef, setCommentCellRef] = useState<{ r: number; c: number } | null>(null);
     const [viewCommentChatName, setViewCommentChatName] = useState<string | null>(null);
-    const [dataVersion, setDataVersion] = useState(0);
-
-    const flowdata = useMemo(
-        () => workbookRef.current?.getFlowdata() ?? undefined,
-        // dataVersion triggers re-read when sheet data changes via onChange
-        // biome-ignore lint/correctness/useExhaustiveDependencies: dataVersion is intentional
-        [dataVersion],
-    );
+    const [flowdata, setFlowdata] = useState<(import('@workspace/fortune-sheet').Cell | null)[][] | undefined>();
     const activeComments = useActiveComments(flowdata);
     const { data: allComments = [] } = useComments(ownerId, path.mountId, path.id);
     const resolveComment = useResolveComment(ownerId, path.mountId, path.id);
@@ -162,7 +155,7 @@ export function SheetEditor({ ownerId, path, canWrite, chatFolderId, onAccessDia
                             data={initialData}
                             onChange={(data) => {
                                 onDataChange(data);
-                                setDataVersion((v) => v + 1);
+                                setFlowdata(workbookRef.current?.getFlowdata() ?? undefined);
                             }}
                             onOp={handleOp}
                             showToolbar={true}
