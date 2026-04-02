@@ -109,7 +109,7 @@ describe('Drive', () => {
         });
 
         test('delete folder', async () => {
-            await driveDelete(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `folder/${folderId}`);
+            await driveDelete(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${folderId}`);
 
             const contents = await driveGetList(
                 ctx.alice.user.sessionToken,
@@ -2899,7 +2899,7 @@ describe('Drive', () => {
         });
 
         test('delete parent folder removes child from shared-with-me', async () => {
-            await driveDelete(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `folder/${parentId}`);
+            await driveDelete(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${parentId}`);
 
             const res = await authedRequest(ctx.bob.user.sessionToken, `/drive/${ctx.bob.user.id}/shared/with-me`);
             const data = await assertJson<DrivePath[]>(res);
