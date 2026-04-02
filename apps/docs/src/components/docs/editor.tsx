@@ -16,7 +16,15 @@ import { useMediaQuery } from '@workspace/lib/media';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardData, EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { Column, CommentPanel, CommentThread, LoadingState, NoteCardContextMenu, NoteCardDialog } from '@workspace/ui';
+import {
+    Column,
+    CommentPanel,
+    CommentThread,
+    CreateCommentDialog,
+    LoadingState,
+    NoteCardContextMenu,
+    NoteCardDialog,
+} from '@workspace/ui';
 import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { common, createLowlight } from 'lowlight';
@@ -24,7 +32,6 @@ import { MessageSquarePlus } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
-import { CreateCommentDialog } from './comment-dialog';
 import { EditorToolbar } from './editor-toolbar';
 import { CommentMark, updateCommentDecorations } from './extensions/comment-mark';
 import { Figure } from './extensions/figure';
