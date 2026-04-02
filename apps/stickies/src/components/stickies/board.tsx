@@ -1,13 +1,15 @@
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { horizontalListSortingStrategy, SortableContext } from '@dnd-kit/sortable';
 import { useHotkey } from '@tanstack/react-hotkeys';
+import { useComments } from '@workspace/lib/chat';
 import { MediaResolverProvider } from '@workspace/lib/drive';
 import { useIsMobile } from '@workspace/lib/media';
+import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { NoteCard, NoteCardContextMenu } from '@workspace/ui';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import * as Y from 'yjs';
 import { AddCardDialog } from './add-card-dialog';
 import { AddColumnDialog } from './add-column-dialog';
@@ -59,6 +61,25 @@ export function StickiesBoard({ ownerId, path, canWrite, chatFolderId, onAccessD
     } = useBoard(ownerId, path.mountId, path.id, chatFolderId);
 
     const { dragState, handleDragStart, handleDragEnd } = useDragAndDrop({ board, yjsDoc });
+
+    // Enrich cards with message counts from comments.db
+    const { data: commentList = [] } = useComments(ownerId, path.mountId, path.id);
+    const messageCounts = useMemo(() => {
+        const map = new Map<string, number>();
+        for (const c of commentList as CommentEntry[]) {
+            if (c.messageCount > 0) map.set(c.chatName, c.messageCount);
+        }
+        return map;
+    }, [commentList]);
+
+    const enrichCard = useCallback(
+        (card: CardItem): CardItem => {
+            if (!card.chatName) return card;
+            const count = messageCounts.get(card.chatName);
+            return count ? { ...card, messageCount: count } : card;
+        },
+        [messageCounts],
+    );
 
     useHotkey(
         'Mod+Z',
@@ -189,7 +210,7 @@ export function StickiesBoard({ ownerId, path, canWrite, chatFolderId, onAccessD
 
         if (dragState.activeType === 'column') {
             const column = dragState.activeItem as ColumnItem;
-            const columnCards = column.taskIds.map((taskId: string) => board.tasks[taskId]);
+            const columnCards = column.taskIds.map((taskId: string) => enrichCard(board.tasks[taskId]));
             return (
                 <Column
                     column={column}
@@ -258,7 +279,7 @@ export function StickiesBoard({ ownerId, path, canWrite, chatFolderId, onAccessD
                                     {board.columnOrder.map((columnId) => {
                                         const column = board.columns[columnId];
                                         const columnCards = column.taskIds
-                                            .map((taskId) => board.tasks[taskId])
+                                            .map((taskId) => enrichCard(board.tasks[taskId]))
                                             .filter(
                                                 (card) => colorFilter.size === 0 || colorFilter.has(card.color || ''),
                                             );

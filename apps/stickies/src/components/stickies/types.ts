@@ -6,6 +6,7 @@ export type CardItem = {
     creator: string;
     createdAt: number;
     chatName?: string;
+    messageCount?: number;
 };
 
 export type ColumnItem = {
