@@ -1,4 +1,6 @@
 import { useHotkey } from '@tanstack/react-hotkeys';
+import { useAuth } from '@workspace/lib/auth';
+import { useComments, useResolveComment, useUpdateCommentColor } from '@workspace/lib/chat';
 import {
     needsReUpload,
     readEigenClipboard,
@@ -6,13 +8,18 @@ import {
     writeEigenClipboard,
     writeEigenClipboardAsync,
 } from '@workspace/lib/clipboard';
+import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants/colors';
 import { MediaResolverProvider, useMediaResolver, useUploadFile } from '@workspace/lib/drive';
+import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { CommentPanel, CommentThread, CreateCommentDialog, NoteCardContextMenu, NoteCardDialog } from '@workspace/ui';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
+import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { Column, ColumnLayout, EmptyState } from '@workspace/ui/index';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Y from 'yjs';
+import { useActiveComments } from './hooks/use-active-comments';
 import { useDeck } from './hooks/use-deck';
 import { useSlideDnd } from './hooks/use-slide-dnd';
 import { SlideCanvas } from './slide-canvas';
@@ -143,6 +150,8 @@ function SlideEditorInner({
         moveObjectDown,
         moveObjectToFront,
         moveObjectToBack,
+        addCommentToObject,
+        removeCommentFromObject,
     } = useDeck(ownerId, path.mountId, path.id);
 
     const { isMobile } = useLayout();
@@ -153,6 +162,25 @@ function SlideEditorInner({
     const [editingObjectId, setEditingObjectId] = useState<string | null>(null);
     const [isPresenting, setIsPresenting] = useState(false);
     const imageInputRef = useRef<HTMLInputElement>(null);
+
+    const auth = useAuth();
+    const [commentPanelOpen, setCommentPanelOpen] = useState(false);
+    const [commentDialogOpen, setCommentDialogOpen] = useState(false);
+    const [commentSelectedText, setCommentSelectedText] = useState('');
+    const [commentObjectId, setCommentObjectId] = useState<string | null>(null);
+    const [viewCommentChatName, setViewCommentChatName] = useState<string | null>(null);
+
+    const activeComments = useActiveComments(deck);
+    const { data: allComments = [] } = useComments(ownerId, path.mountId, path.id);
+    const resolveComment = useResolveComment(ownerId, path.mountId, path.id);
+    const updateColor = useUpdateCommentColor(ownerId, path.mountId, path.id);
+    const commentContextMenu = useContextMenu<CommentEntry>();
+
+    const unresolvedCount = useMemo(() => {
+        return allComments.filter((c) => c.status === 'open' && activeComments.ids.has(c.chatName)).length;
+    }, [allComments, activeComments.ids]);
+
+    const viewCommentEntry = viewCommentChatName ? allComments.find((c) => c.chatName === viewCommentChatName) : null;
 
     const uploadFile = useUploadFile(ownerId, path.mountId);
 
@@ -544,6 +572,34 @@ function SlideEditorInner({
         [yjsDoc],
     );
 
+    const handleAddComment = useCallback(
+        (objId: string) => {
+            const obj = deck.objects[objId];
+            if (!obj) return;
+            setCommentObjectId(objId);
+            setCommentSelectedText(obj.type === 'text' ? obj.text.slice(0, 100) : 'Image');
+            setCommentDialogOpen(true);
+        },
+        [deck.objects],
+    );
+
+    const handleCommentCreated = useCallback(
+        (chatName: string) => {
+            if (!commentObjectId) return;
+            addCommentToObject(commentObjectId, chatName);
+            updateColor.mutate({ chatName, color: EIGEN_STICKIES_COLORS[0][1].value });
+            setCommentObjectId(null);
+        },
+        [commentObjectId, addCommentToObject, updateColor],
+    );
+
+    const handleDeleteComment = useCallback(
+        (objId: string, chatName: string) => {
+            removeCommentFromObject(objId, chatName);
+        },
+        [removeCommentFromObject],
+    );
+
     const activeSlide = activeSlideId ? deck.slides[activeSlideId] : null;
     const activeObjects = activeSlide ? activeSlide.objectIds.map((id) => deck.objects[id]).filter(Boolean) : [];
     const selectedObjects = useMemo(
@@ -618,6 +674,9 @@ function SlideEditorInner({
                         onAddImage={() => imageInputRef.current?.click()}
                         onAddSlide={() => addSlide()}
                         onPresent={handlePresent}
+                        onToggleCommentPanel={() => setCommentPanelOpen((v) => !v)}
+                        commentPanelOpen={commentPanelOpen}
+                        unresolvedCommentCount={unresolvedCount}
                     />
                 }
             >
@@ -658,6 +717,20 @@ function SlideEditorInner({
                                         onMoveToFront={canWrite ? moveObjectToFront : undefined}
                                         onMoveToBack={canWrite ? moveObjectToBack : undefined}
                                         canWrite={canWrite}
+                                        onAddComment={canWrite && chatFolderId ? handleAddComment : undefined}
+                                        onCommentClick={setViewCommentChatName}
+                                        allComments={allComments}
+                                        activeCommentIds={activeComments.ids}
+                                        onCommentResolve={(chatName) =>
+                                            resolveComment.mutate({ chatName, status: 'resolved' })
+                                        }
+                                        onCommentReopen={(chatName) =>
+                                            resolveComment.mutate({ chatName, status: 'open' })
+                                        }
+                                        onCommentChangeColor={(chatName, color) =>
+                                            updateColor.mutate({ chatName, color })
+                                        }
+                                        onCommentDelete={handleDeleteComment}
                                     />
                                     <div className="h-8 bg-muted border-t flex items-center justify-between px-4 text-xs text-muted-foreground">
                                         <span>
@@ -666,7 +739,19 @@ function SlideEditorInner({
                                         </span>
                                     </div>
                                 </div>
-                                {selectedObjects.length > 0 && canWrite ? (
+                                {commentPanelOpen ? (
+                                    <CommentPanel
+                                        ownerId={ownerId}
+                                        mountId={path.mountId}
+                                        containerId={path.id}
+                                        currentUserEmail={auth.user!.email}
+                                        activeCommentIds={activeComments.ids}
+                                        anchorTexts={activeComments.anchorTexts}
+                                        onClose={() => setCommentPanelOpen(false)}
+                                        onCommentClick={(chatName) => setViewCommentChatName(chatName)}
+                                        onCommentContextMenu={commentContextMenu.handleContextMenu}
+                                    />
+                                ) : selectedObjects.length > 0 && canWrite ? (
                                     <SlidePropertiesPanel
                                         objects={selectedObjects}
                                         onUpdate={updateObjects}
@@ -702,6 +787,75 @@ function SlideEditorInner({
                     onChange={handleImageSelect}
                 />
             </Column>
+
+            {chatFolderId && (
+                <CreateCommentDialog
+                    open={commentDialogOpen}
+                    onOpenChange={setCommentDialogOpen}
+                    ownerId={ownerId}
+                    mountId={path.mountId}
+                    chatFolderId={chatFolderId}
+                    selectedText={commentSelectedText}
+                    onCommentCreated={handleCommentCreated}
+                />
+            )}
+
+            {viewCommentChatName && viewCommentEntry && (
+                <NoteCardDialog
+                    open
+                    onOpenChange={(open) => {
+                        if (!open) setViewCommentChatName(null);
+                    }}
+                    title={activeComments.anchorTexts.get(viewCommentChatName) || viewCommentChatName}
+                    description={
+                        viewCommentEntry.lastAuthorEmail
+                            ? `Comment by ${viewCommentEntry.lastAuthorEmail.split('@')[0]}`
+                            : undefined
+                    }
+                >
+                    <CommentThread ownerId={ownerId} mountId={path.mountId} chatName={viewCommentChatName} />
+                </NoteCardDialog>
+            )}
+
+            <ContextMenuAnchor contextMenu={commentContextMenu}>
+                <NoteCardContextMenu
+                    currentColor={commentContextMenu.item?.color}
+                    status={commentContextMenu.item?.status}
+                    onEdit={() => {
+                        if (commentContextMenu.item) setViewCommentChatName(commentContextMenu.item.chatName);
+                        commentContextMenu.close();
+                    }}
+                    onChangeColor={(color) => {
+                        if (commentContextMenu.item)
+                            updateColor.mutate({ chatName: commentContextMenu.item.chatName, color: color || null });
+                        commentContextMenu.close();
+                    }}
+                    onResolve={() => {
+                        if (commentContextMenu.item)
+                            resolveComment.mutate({ chatName: commentContextMenu.item.chatName, status: 'resolved' });
+                        commentContextMenu.close();
+                    }}
+                    onReopen={() => {
+                        if (commentContextMenu.item)
+                            resolveComment.mutate({ chatName: commentContextMenu.item.chatName, status: 'open' });
+                        commentContextMenu.close();
+                    }}
+                    onDelete={() => {
+                        if (!commentContextMenu.item) {
+                            commentContextMenu.close();
+                            return;
+                        }
+                        const chatName = commentContextMenu.item.chatName;
+                        for (const obj of Object.values(deck.objects)) {
+                            if (obj.commentChatNames?.includes(chatName)) {
+                                removeCommentFromObject(obj.id, chatName);
+                                break;
+                            }
+                        }
+                        commentContextMenu.close();
+                    }}
+                />
+            </ContextMenuAnchor>
         </ColumnLayout>
     );
 }
