@@ -89,7 +89,7 @@ export function NativeFileEditor({ path, onClose }: NativeFileEditorProps) {
         );
     }
 
-    const updatedAt = data!.updatedAt instanceof Date ? data!.updatedAt.toISOString() : String(data!.updatedAt);
+    const updatedAt = data!.updatedAt;
     const editorProps = {
         key: reloadKey,
         content: data!.content,
