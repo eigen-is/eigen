@@ -72,12 +72,6 @@ export type Context = {
         pageX?: number;
         pageY?: number;
     };
-    sheetTabContextMenu: {
-        x?: number;
-        y?: number;
-        sheet?: Sheet;
-        onRename?: () => void;
-    };
     filterContextMenu?: {
         x: number;
         y: number;
@@ -210,7 +204,6 @@ export type Context = {
     groupValuesRefreshData: any[];
     formulaCache: FormulaCache;
     hooks: Hooks;
-    showSheetList?: Boolean;
     // 只读模式公式被引用单元格强制高光
     forceFormulaRef?: Boolean;
 
@@ -230,7 +223,6 @@ export function defaultContext(refs: RefValues): Context {
             .devicePixelRatio,
 
         contextMenu: {},
-        sheetTabContextMenu: {},
 
         currentSheetId: "",
         calculateSheetId: "",
