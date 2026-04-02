@@ -8,7 +8,7 @@ type ActiveComments = {
 
 const EMPTY: ActiveComments = { ids: new Set(), anchorTexts: new Map() };
 
-function columnToLetter(c: number): string {
+export function columnToLetter(c: number): string {
     let result = '';
     let n = c;
     while (n >= 0) {
