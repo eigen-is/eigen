@@ -27,8 +27,14 @@ import {
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuSeparator,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
     DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu";
+import {EIGEN_STICKIES_COLORS} from "@workspace/lib/constants/colors";
+import {isLightColor} from "@workspace/ui/components/layout/media/color-picker";
+import {Check, CircleOff} from "lucide-react";
 import {CustomSort} from "../CustomSort";
 
 export const ContextMenu: React.FC = () => {
@@ -653,13 +659,14 @@ export const ContextMenu: React.FC = () => {
                 const fd = getFlowdata(context);
                 const cell = fd?.[row_index]?.[col_index];
                 const hasComment = (cell?.commentChatNames?.length ?? 0) > 0;
+                const closeMenu = () => setContext((draftCtx) => { draftCtx.contextMenu = {}; });
 
                 if (!hasComment && settings.hooks?.onAddComment) {
                     return (
                         <DropdownMenuItem
                             key={name}
                             onClick={() => {
-                                setContext((draftCtx) => { draftCtx.contextMenu = {}; });
+                                closeMenu();
                                 settings.hooks!.onAddComment!(row_index!, col_index!);
                             }}
                         >
@@ -668,36 +675,82 @@ export const ContextMenu: React.FC = () => {
                     );
                 }
                 if (hasComment) {
-                    const items: React.ReactNode[] = [];
-                    if (settings.hooks?.onViewComment) {
-                        items.push(
-                            <DropdownMenuItem
-                                key="view-comment"
-                                onClick={() => {
-                                    setContext((draftCtx) => { draftCtx.contextMenu = {}; });
+                    const info = settings.hooks?.getCommentInfo?.(row_index!, col_index!);
+                    return (
+                        <React.Fragment key={name}>
+                            {settings.hooks?.onViewComment && (
+                                <DropdownMenuItem onClick={() => {
+                                    closeMenu();
                                     settings.hooks!.onViewComment!(row_index!, col_index!);
-                                }}
-                            >
-                                View comment
-                            </DropdownMenuItem>
-                        );
-                    }
-                    if (settings.hooks?.onDeleteComment) {
-                        items.push(
-                            <DropdownMenuItem
-                                key="delete-comment"
-                                onClick={() => {
-                                    setContext((draftCtx) => { draftCtx.contextMenu = {}; });
+                                }}>
+                                    View comment
+                                </DropdownMenuItem>
+                            )}
+                            {settings.hooks?.onCommentColor && (
+                                <DropdownMenuSub>
+                                    <DropdownMenuSubTrigger className="gap-2">
+                                        Comment color
+                                    </DropdownMenuSubTrigger>
+                                    <DropdownMenuSubContent>
+                                        <div className="flex gap-1 p-2">
+                                            <button
+                                                type="button"
+                                                className="h-4 w-4 rounded-full border border-border hover:scale-125 transition-transform flex items-center justify-center bg-background"
+                                                title="No color"
+                                                onClick={() => {
+                                                    closeMenu();
+                                                    settings.hooks!.onCommentColor!(row_index!, col_index!, null);
+                                                }}
+                                            >
+                                                <CircleOff className="h-2.5 w-2.5 text-muted-foreground" />
+                                            </button>
+                                            {EIGEN_STICKIES_COLORS[0].map((c) => (
+                                                <button
+                                                    type="button"
+                                                    key={c.value}
+                                                    className="h-4 w-4 rounded-full border border-border/50 hover:scale-125 transition-transform flex items-center justify-center"
+                                                    style={{ backgroundColor: c.value }}
+                                                    title={c.label}
+                                                    onClick={() => {
+                                                        closeMenu();
+                                                        settings.hooks!.onCommentColor!(row_index!, col_index!, c.value);
+                                                    }}
+                                                >
+                                                    {info?.color === c.value && (
+                                                        <Check className="h-2 w-2" style={{ color: isLightColor(c.value) ? '#000' : '#fff' }} />
+                                                    )}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </DropdownMenuSubContent>
+                                </DropdownMenuSub>
+                            )}
+                            {info?.status === 'open' && settings.hooks?.onCommentResolve && (
+                                <DropdownMenuItem onClick={() => {
+                                    closeMenu();
+                                    settings.hooks!.onCommentResolve!(row_index!, col_index!);
+                                }}>
+                                    Resolve comment
+                                </DropdownMenuItem>
+                            )}
+                            {info?.status === 'resolved' && settings.hooks?.onCommentReopen && (
+                                <DropdownMenuItem onClick={() => {
+                                    closeMenu();
+                                    settings.hooks!.onCommentReopen!(row_index!, col_index!);
+                                }}>
+                                    Reopen comment
+                                </DropdownMenuItem>
+                            )}
+                            {settings.hooks?.onDeleteComment && (
+                                <DropdownMenuItem variant="destructive" onClick={() => {
+                                    closeMenu();
                                     settings.hooks!.onDeleteComment!(row_index!, col_index!);
-                                }}
-                            >
-                                Delete comment
-                            </DropdownMenuItem>
-                        );
-                    }
-                    if (items.length > 0) {
-                        return <React.Fragment key={name}>{items}</React.Fragment>;
-                    }
+                                }}>
+                                    Delete comment
+                                </DropdownMenuItem>
+                            )}
+                        </React.Fragment>
+                    );
                 }
                 return null;
             }
