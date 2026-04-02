@@ -1,5 +1,6 @@
 import { type EditorState, Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
+import { lightenColor } from '@workspace/lib/constants';
 import { CommentMarkSchema } from '@workspace/lib/docs/eigendoc';
 
 export type CommentMarkOptions = {
@@ -22,7 +23,7 @@ function buildDecorations(state: EditorState, meta: CommentMeta): DecorationSet 
             const attrs: Record<string, string> = {};
             if (meta.resolvedIds.has(chatName)) attrs['data-resolved'] = 'true';
             const color = meta.colorMap.get(chatName);
-            if (color) attrs.style = `--comment-color: ${color}`;
+            if (color) attrs.style = `--comment-color: ${lightenColor(color, 0.5)}`;
             if (Object.keys(attrs).length > 0) {
                 decorations.push(Decoration.inline(pos, pos + node.nodeSize, attrs));
             }
