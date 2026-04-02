@@ -10,11 +10,19 @@ type ContextMenuAnchorProps = {
 export function ContextMenuAnchor({ contextMenu, children, className }: ContextMenuAnchorProps) {
     return (
         <DropdownMenu open={contextMenu.isOpen} onOpenChange={(open) => !open && contextMenu.close()}>
-            <DropdownMenuTrigger className="hidden" />
-            <DropdownMenuContent
-                style={{ position: 'fixed', left: contextMenu.position.x, top: contextMenu.position.y }}
-                className={className}
-            >
+            <DropdownMenuTrigger asChild>
+                <div
+                    style={{
+                        position: 'fixed',
+                        left: contextMenu.position.x,
+                        top: contextMenu.position.y,
+                        width: 0,
+                        height: 0,
+                        pointerEvents: 'none',
+                    }}
+                />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent side="bottom" align="start" collisionPadding={8} className={className}>
                 {children}
             </DropdownMenuContent>
         </DropdownMenu>
