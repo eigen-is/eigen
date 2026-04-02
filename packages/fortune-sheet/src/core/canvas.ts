@@ -1346,7 +1346,7 @@ export class Canvas {
         }
 
         // Cell comment indicator (red triangle top-right)
-        if (flowdata?.[r]?.[c]?.ps) {
+        if (flowdata?.[r]?.[c]?.commentChatNames?.length) {
             renderCtx.beginPath();
             renderCtx.moveTo(endX + offsetLeft - 9, startY + offsetTop);
             renderCtx.lineTo(endX + offsetLeft - 1, startY + offsetTop);
@@ -1529,7 +1529,7 @@ export class Canvas {
         }
 
         // Cell comment indicator (red triangle top-right)
-        if (cell?.ps) {
+        if (cell?.commentChatNames?.length) {
             renderCtx.beginPath();
             renderCtx.moveTo(endX + offsetLeft - 8, startY + offsetTop);
             renderCtx.lineTo(endX + offsetLeft, startY + offsetTop);
