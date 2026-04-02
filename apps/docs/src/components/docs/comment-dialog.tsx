@@ -1,7 +1,5 @@
 import { chatApi } from '@workspace/lib/api';
-import { useChatRoom, useCreateChat } from '@workspace/lib/chat';
-import { useMediaResolver } from '@workspace/lib/drive';
-import { ChatMessageInput, ChatMessageList } from '@workspace/ui';
+import { useCreateChat } from '@workspace/lib/chat';
 import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Textarea } from '@workspace/ui/components/textarea';
@@ -89,59 +87,6 @@ export function CreateCommentDialog({
                         {isSubmitting ? 'Commenting...' : 'Comment'}
                     </Button>
                 </DialogFooter>
-            </DialogContent>
-        </Dialog>
-    );
-}
-
-type ViewCommentDialogProps = {
-    open: boolean;
-    onOpenChange: (open: boolean) => void;
-    ownerId: string;
-    mountId: string;
-    chatName: string;
-};
-
-export function ViewCommentDialog({ open, onOpenChange, ownerId, mountId, chatName }: ViewCommentDialogProps) {
-    const { resolveChatId } = useMediaResolver();
-    const chatId = resolveChatId(chatName);
-    const chat = useChatRoom(ownerId, mountId, chatId || '');
-
-    return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="max-h-[80vh] flex flex-col p-0">
-                <DialogHeader className="px-6 pt-6 pb-4">
-                    <DialogTitle>Comment</DialogTitle>
-                </DialogHeader>
-                <div className="flex flex-col flex-1 min-h-0 overflow-hidden px-6">
-                    {chatId ? (
-                        <>
-                            <ChatMessageList
-                                messages={chat.messages}
-                                isLoading={chat.isLoading}
-                                currentUserId={chat.currentUserId}
-                                ownerId={ownerId}
-                                mountId={mountId}
-                                mediaFolderId={chat.mediaFolderId}
-                                emptyMessage=""
-                                className="flex-1"
-                            />
-                            <div className="mt-4 pb-6">
-                                <ChatMessageInput
-                                    onSend={chat.handleSendMessage}
-                                    disabled={chat.disabled}
-                                    readOnly={chat.readOnly}
-                                    placeholder="Reply..."
-                                    roomMembers={chat.roomMembers}
-                                    currentUserEmail={chat.currentUserEmail}
-                                    messageCount={chat.messages.length}
-                                />
-                            </div>
-                        </>
-                    ) : (
-                        <p className="text-sm text-muted-foreground pb-6">Comment not found.</p>
-                    )}
-                </div>
             </DialogContent>
         </Dialog>
     );

@@ -31,6 +31,21 @@ import { TableWidthClamp } from './extensions/table-width-clamp';
 import { FigurePropertiesPanel } from './figure-properties-panel';
 import { TablePropertiesPanel } from './table-properties-panel';
 
+function findCommentMarkPositions(
+    doc: import('@tiptap/pm/model').Node,
+    chatName: string,
+): { pos: number; end: number }[] {
+    const positions: { pos: number; end: number }[] = [];
+    doc.descendants((node, pos) => {
+        for (const mark of node.marks) {
+            if (mark.type.name === 'comment' && mark.attrs.chatName === chatName) {
+                positions.push({ pos, end: pos + node.nodeSize });
+            }
+        }
+    });
+    return positions;
+}
+
 const lowlight = createLowlight(common);
 const A4_WIDTH_PX = 794; // 210mm at 96dpi
 
@@ -516,17 +531,9 @@ const TiptapEditor = ({
     const showSidebar = isWide && (activePanel === 'comments' || (access.canWrite && activePanel !== 'document'));
 
     const handleScrollToComment = (chatName: string) => {
-        let targetPos: number | null = null;
-        editor.state.doc.descendants((node, pos) => {
-            if (targetPos !== null) return false;
-            for (const mark of node.marks) {
-                if (mark.type.name === 'comment' && mark.attrs.chatName === chatName) {
-                    targetPos = pos;
-                }
-            }
-        });
-        if (targetPos !== null) {
-            editor.chain().focus().setTextSelection(targetPos).scrollIntoView().run();
+        const positions = findCommentMarkPositions(editor.state.doc, chatName);
+        if (positions.length > 0) {
+            editor.chain().focus().setTextSelection(positions[0].pos).scrollIntoView().run();
         }
     };
 
@@ -669,13 +676,10 @@ const TiptapEditor = ({
                         }
                         const targetName = commentContextMenu.item.chatName;
                         const { tr } = editor.state;
-                        editor.state.doc.descendants((node, pos) => {
-                            for (const mark of node.marks) {
-                                if (mark.type.name === 'comment' && mark.attrs.chatName === targetName) {
-                                    tr.removeMark(pos, pos + node.nodeSize, mark);
-                                }
-                            }
-                        });
+                        const commentType = editor.state.schema.marks.comment;
+                        for (const { pos, end } of findCommentMarkPositions(editor.state.doc, targetName)) {
+                            tr.removeMark(pos, end, commentType);
+                        }
                         editor.view.dispatch(tr);
                         commentContextMenu.close();
                     }}
