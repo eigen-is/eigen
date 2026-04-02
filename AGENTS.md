@@ -342,4 +342,3 @@ Detailed architecture docs in `docs/`:
 | [TODO-CALENDAR-TIMEZONE.md](docs/TODO-CALENDAR-TIMEZONE.md) | Timezone-aware recurrence expansion      |
 | [TODO-FORTUNE-SHEETS.md](docs/TODO-FORTUNE-SHEETS.md)       | Fortune-sheet refactoring audit          |
 | [RESEARCH_AI.md](docs/PROPOSAL_AI.md)                       | Local/private AI integration research    |
-| [TODO-SOFT-DELETE-CLEANUP.md](docs/TODO-SOFT-DELETE-CLEANUP.md) | Consolidate deleteFile/deleteFolder into single trashPath |
