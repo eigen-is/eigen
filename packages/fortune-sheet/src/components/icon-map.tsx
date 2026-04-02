@@ -34,7 +34,6 @@ import {
     Link,
     Locate,
     type LucideIcon,
-    MessageSquare,
     Minus,
     MoveRight,
     Paintbrush,
@@ -123,7 +122,6 @@ export const ICON_MAP: Record<string, LucideIcon> = {
     dataVerification: ShieldCheck,
     image: ImagePlus,
     "formula-sum": Sigma,
-    comment: MessageSquare,
     conditionFormat: FileCode2,
     locationCondition: Locate,
 

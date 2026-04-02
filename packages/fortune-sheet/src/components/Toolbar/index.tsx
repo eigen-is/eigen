@@ -4,8 +4,6 @@ import {
     autoSelectionFormula,
     clearFilter,
     createFilter,
-    deleteComment,
-    editComment,
     getFlowdata,
     handleBorder,
     handleFreeze,
@@ -19,10 +17,7 @@ import {
     handleTextSize,
     handleVerticalAlign,
     locale,
-    newComment,
     normalizedCellAttr,
-    showHideAllComments,
-    showHideComment,
     showImgChooser,
     toolbarItemClickHandler,
     toolbarItemSelectedFunc,
@@ -95,7 +90,6 @@ export function Toolbar({
         filter,
         splitText,
         findAndReplace,
-        comment,
         fontarray,
     } = locale(context);
     const toolbarFormat = locale(context).format;
@@ -588,52 +582,6 @@ export function Toolbar({
                 );
             }
 
-            if (name === "comment") {
-                const last =
-                    contextRef.current.luckysheet_select_save?.[
-                    contextRef.current.luckysheet_select_save.length - 1
-                        ];
-                let row_index = last?.row_focus;
-                let col_index = last?.column_focus;
-                if (!last) {
-                    row_index = 0;
-                    col_index = 0;
-                } else {
-                    if (row_index == null) [row_index] = last.row;
-                    if (col_index == null) [col_index] = last.column;
-                }
-                const fd = getFlowdata(contextRef.current);
-                let itemData: { key: string; text: string; onClick: any }[];
-                if (fd?.[row_index]?.[col_index]?.ps != null) {
-                    itemData = [
-                        {key: "edit", text: comment.edit, onClick: editComment},
-                        {key: "delete", text: comment.delete, onClick: deleteComment},
-                        {key: "showOrHide", text: comment.showOne, onClick: showHideComment},
-                        {key: "showOrHideAll", text: comment.showAll, onClick: showHideAllComments},
-                    ];
-                } else {
-                    itemData = [
-                        {key: "new", text: comment.insert, onClick: newComment},
-                        {key: "showOrHideAll", text: comment.showAll, onClick: showHideAllComments},
-                    ];
-                }
-                return (
-                    <ToolbarMenuButton iconId={name} key={name} tooltip={tooltip}>
-                        {itemData.map(({key, text, onClick}) => (
-                            <DropdownMenuItem
-                                key={key}
-                                onClick={() => {
-                                    setContext((draftContext) =>
-                                        onClick(draftContext, refs.globalCache, row_index, col_index)
-                                    );
-                                }}
-                            >
-                                {text}
-                            </DropdownMenuItem>
-                        ))}
-                    </ToolbarMenuButton>
-                );
-            }
 
             if (name === "quick-formula") {
                 const itemData = [
@@ -903,7 +851,7 @@ export function Toolbar({
             toolbar, setContext, refs.cellInput, refs.fxInput, refs.globalCache, refs.canvas,
             defaultFormat, align, handleUndo, handleRedo, formula, showDialog, hideDialog,
             merge, border, freezen, screenshot, sort, textWrap, rotation, filter,
-            splitText, findAndReplace, comment, fontarray,
+            splitText, findAndReplace, fontarray,
             context.defaultFontSize, context.allowEdit,
             customColor, customStyle, toolbarFormat.moreCurrency, toolbarFormat.moreNumber,
         ]

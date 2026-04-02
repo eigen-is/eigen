@@ -1,10 +1,9 @@
-import React, {useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState,} from "react";
+import React, {useCallback, useContext, useEffect, useMemo, useRef, useState,} from "react";
 import "./index.css";
 import {
     api,
     Context,
     createDropCellRange,
-    drawArrow,
     fixColumnStyleOverflowInFreeze,
     fixRowStyleOverflowInFreeze,
     getCellHyperlink,
@@ -38,7 +37,6 @@ import {LinkEditCard} from "../LinkEidtCard";
 import {FilterOptions} from "../FilterOption";
 import {useAlert} from "../../hooks/useAlert";
 import {ImgBoxs} from "../ImgBoxs";
-import {NotationBoxes} from "../NotationBoxes";
 import {RangeDialog} from "../DataVerification/RangeDialog";
 import {useDialog} from "../../hooks/useDialog";
 import {ChevronDown} from "lucide-react";
@@ -377,40 +375,6 @@ export const SheetOverlay: React.FC = () => {
         };
     }, [refs]);
 
-    // useEffect(() => {
-    //   // ensure cell input is always focused to accept first key stroke on cell
-    //   if (!context.editingCommentBox) {
-    //     refs.cellInput.current?.focus({ preventScroll: true });
-    //   }
-    // }, [
-    //   context.editingCommentBox,
-    //   context.luckysheet_select_save,
-    //   refs.cellInput,
-    // ]);
-
-    useLayoutEffect(() => {
-        if (
-            context.commentBoxes ||
-            context.hoveredCommentBox ||
-            context.editingCommentBox
-        ) {
-            for (const box of [
-                ...(context.commentBoxes?.filter(
-                    (v) => v.rc !== context.editingCommentBox?.rc
-                ) ?? []),
-                context.hoveredCommentBox,
-                context.editingCommentBox,
-            ]) {
-                if (box) {
-                    drawArrow(box.rc, box.size);
-                }
-            }
-        }
-    }, [
-        context.commentBoxes,
-        context.hoveredCommentBox,
-        context.editingCommentBox,
-    ]);
 
     useEffect(() => {
         document.addEventListener("mousemove", onMouseMove);
@@ -821,7 +785,6 @@ export const SheetOverlay: React.FC = () => {
                     {context.rangeDialog?.show && <RangeDialog/>}
                     <FilterOptions getContainer={() => containerRef.current!}/>
                     <InputBox/>
-                    <NotationBoxes/>
                     <div id="luckysheet-multipleRange-show"/>
                     <div id="luckysheet-dynamicArray-hightShow"/>
                     <ImgBoxs/>
