@@ -197,8 +197,30 @@ export function SheetEditor({ ownerId, path, canWrite, chatFolderId, onAccessDia
                                                   );
                                               }
                                           },
+                                          onCommentColor: (r: number, c: number, color: string | null) => {
+                                              const fd = workbookRef.current?.getFlowdata();
+                                              const chatName = fd?.[r]?.[c]?.commentChatNames?.[0];
+                                              if (chatName) updateColor.mutate({ chatName, color });
+                                          },
+                                          onCommentResolve: (r: number, c: number) => {
+                                              const fd = workbookRef.current?.getFlowdata();
+                                              const chatName = fd?.[r]?.[c]?.commentChatNames?.[0];
+                                              if (chatName) resolveComment.mutate({ chatName, status: 'resolved' });
+                                          },
+                                          onCommentReopen: (r: number, c: number) => {
+                                              const fd = workbookRef.current?.getFlowdata();
+                                              const chatName = fd?.[r]?.[c]?.commentChatNames?.[0];
+                                              if (chatName) resolveComment.mutate({ chatName, status: 'open' });
+                                          },
                                       }
                                     : {}),
+                                getCommentInfo: (r: number, c: number) => {
+                                    const fd = workbookRef.current?.getFlowdata();
+                                    const chatName = fd?.[r]?.[c]?.commentChatNames?.[0];
+                                    if (!chatName) return null;
+                                    const entry = allComments.find((c) => c.chatName === chatName);
+                                    return entry ? { color: entry.color, status: entry.status } : null;
+                                },
                             }}
                         />
                     </div>

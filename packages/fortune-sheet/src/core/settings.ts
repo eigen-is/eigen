@@ -112,6 +112,10 @@ export type Hooks = {
     onAddComment?: (row: number, column: number) => void;
     onViewComment?: (row: number, column: number) => void;
     onDeleteComment?: (row: number, column: number) => void;
+    onCommentColor?: (row: number, column: number, color: string | null) => void;
+    onCommentResolve?: (row: number, column: number) => void;
+    onCommentReopen?: (row: number, column: number) => void;
+    getCommentInfo?: (row: number, column: number) => { color: string | null; status: 'open' | 'resolved' } | null;
 };
 
 export type Settings = {
@@ -230,6 +234,7 @@ export const defaultSettings: Required<Settings> = {
         "sort", // 排序选区
         "|",
         "comment",
+        "|",
         "orderAZ", // 升序
         "orderZA", // 降序
         "filter", // 筛选选区
