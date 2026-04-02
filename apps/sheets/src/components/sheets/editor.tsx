@@ -1,4 +1,5 @@
 import { Workbook, type WorkbookInstance } from '@workspace/fortune-sheet';
+import { MediaResolverProvider } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { LoadingState } from '@workspace/ui';
 import { useMemo, useRef } from 'react';
@@ -9,6 +10,7 @@ type SheetEditorProps = {
     ownerId: string;
     path: DrivePath;
     canWrite: boolean;
+    chatFolderId: string | null;
     onAccessDialogOpen: () => void;
 };
 
@@ -45,7 +47,7 @@ const TOOLBAR_ITEMS = [
     'search',
 ];
 
-export function SheetEditor({ ownerId, path, canWrite, onAccessDialogOpen }: SheetEditorProps) {
+export function SheetEditor({ ownerId, path, canWrite, chatFolderId, onAccessDialogOpen }: SheetEditorProps) {
     const workbookRef = useRef<WorkbookInstance>(null);
 
     const { initialData, synced, handleOp, onDataChange, handleRestore } = useSheet(
@@ -84,26 +86,33 @@ export function SheetEditor({ ownerId, path, canWrite, onAccessDialogOpen }: She
     }
 
     return (
-        <div className="flex flex-col h-full w-full">
-            <div className="flex-1 overflow-hidden">
-                <Workbook
-                    ref={workbookRef}
-                    data={initialData}
-                    onChange={onDataChange}
-                    onOp={handleOp}
-                    showToolbar={true}
-                    showFormulaBar={true}
-                    showSheetTabs={true}
-                    allowEdit={canWrite}
-                    toolbarItems={TOOLBAR_ITEMS}
-                    toolbarLeftItems={leftItems}
-                    toolbarRightItems={rightItems}
-                    defaultRowHeight={25}
-                    defaultFontSize={11}
-                    column={26}
-                    row={100}
-                />
+        <MediaResolverProvider
+            ownerId={ownerId}
+            mountId={path.mountId}
+            mediaFolderId={null}
+            chatFolderId={chatFolderId}
+        >
+            <div className="flex flex-col h-full w-full">
+                <div className="flex-1 overflow-hidden">
+                    <Workbook
+                        ref={workbookRef}
+                        data={initialData}
+                        onChange={onDataChange}
+                        onOp={handleOp}
+                        showToolbar={true}
+                        showFormulaBar={true}
+                        showSheetTabs={true}
+                        allowEdit={canWrite}
+                        toolbarItems={TOOLBAR_ITEMS}
+                        toolbarLeftItems={leftItems}
+                        toolbarRightItems={rightItems}
+                        defaultRowHeight={25}
+                        defaultFontSize={11}
+                        column={26}
+                        row={100}
+                    />
+                </div>
             </div>
-        </div>
+        </MediaResolverProvider>
     );
 }

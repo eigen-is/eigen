@@ -3,13 +3,16 @@ import { TooltipButton } from '@workspace/ui';
 import { DriveCreateSheets } from '@workspace/ui/components/layout/drive/drive-create-sheets';
 import { DocumentModeButton } from '@workspace/ui/components/layout/toolbar/document-mode-button';
 import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
-import { UserRoundPlus } from 'lucide-react';
+import { MessageSquare, UserRoundPlus } from 'lucide-react';
 
 type ToolbarItemsProps = {
     canWrite: boolean;
     onAccessDialogOpen: () => void;
     onRestore: (state: Uint8Array) => void;
     path: DrivePath;
+    onToggleCommentPanel?: () => void;
+    commentPanelOpen?: boolean;
+    unresolvedCommentCount?: number;
 };
 
 export function ToolbarLeftItems({ path, onAccessDialogOpen, onRestore, canWrite }: ToolbarItemsProps) {
@@ -25,10 +28,35 @@ export function ToolbarLeftItems({ path, onAccessDialogOpen, onRestore, canWrite
     );
 }
 
-export function ToolbarRightItems({ canWrite, onAccessDialogOpen }: ToolbarItemsProps) {
-    return canWrite ? (
-        <TooltipButton icon={UserRoundPlus} tooltipText="Share" onClick={onAccessDialogOpen} />
-    ) : (
-        <DocumentModeButton canWrite={canWrite} />
+export function ToolbarRightItems({
+    canWrite,
+    onAccessDialogOpen,
+    onToggleCommentPanel,
+    commentPanelOpen,
+    unresolvedCommentCount,
+}: ToolbarItemsProps) {
+    return (
+        <>
+            {onToggleCommentPanel && (
+                <div className="relative">
+                    <TooltipButton
+                        icon={MessageSquare}
+                        tooltipText="Comments"
+                        onClick={onToggleCommentPanel}
+                        active={commentPanelOpen}
+                    />
+                    {(unresolvedCommentCount ?? 0) > 0 && (
+                        <span className="absolute -top-1 -right-1 h-4 min-w-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center pointer-events-none px-1">
+                            {unresolvedCommentCount}
+                        </span>
+                    )}
+                </div>
+            )}
+            {canWrite ? (
+                <TooltipButton icon={UserRoundPlus} tooltipText="Share" onClick={onAccessDialogOpen} />
+            ) : (
+                <DocumentModeButton canWrite={canWrite} />
+            )}
+        </>
     );
 }
