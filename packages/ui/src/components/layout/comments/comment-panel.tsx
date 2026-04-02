@@ -39,7 +39,7 @@ export function CommentPanel({
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('open');
 
     const filtered = useMemo(() => {
-        return (comments as CommentEntry[]).filter((c) => {
+        return comments.filter((c) => {
             if (!activeCommentIds.has(c.chatName)) return false;
             if (statusFilter !== 'all' && c.status !== statusFilter) return false;
             if (tab === 'mine' && !c.mentions.includes(currentUserEmail)) return false;
@@ -94,7 +94,7 @@ export function CommentPanel({
                                     ? `Comment by ${comment.lastAuthorEmail.split('@')[0]}`
                                     : undefined
                             }
-                            color={comment.color ?? undefined}
+                            color={comment.color}
                             replyCount={comment.messageCount > 1 ? comment.messageCount - 1 : undefined}
                             statusIcon={
                                 comment.status === 'resolved' ? (

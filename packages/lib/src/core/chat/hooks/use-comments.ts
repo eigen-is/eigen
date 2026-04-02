@@ -1,4 +1,5 @@
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { CommentEntry } from '../../../types/chat';
 import { collabApi } from '../../api';
 import { AppError, onMutationError } from '../../api-error';
 
@@ -15,7 +16,7 @@ export function useComments(ownerId: string, mountId: string, containerId: strin
         queryKey: commentKeys.list(ownerId, mountId, containerId),
         queryFn: async () => {
             const response = await collabApi({ ownerId })({ mountId })({ pathId: containerId }).comments.get();
-            return response.data ?? [];
+            return (response.data ?? []) as CommentEntry[];
         },
         enabled: !!containerId,
     });

@@ -4,7 +4,6 @@ import { useHotkey } from '@tanstack/react-hotkeys';
 import { useComments } from '@workspace/lib/chat';
 import { MediaResolverProvider } from '@workspace/lib/drive';
 import { useIsMobile } from '@workspace/lib/media';
-import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { NoteCard, NoteCardContextMenu } from '@workspace/ui';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
@@ -66,7 +65,7 @@ export function StickiesBoard({ ownerId, path, canWrite, chatFolderId, onAccessD
     const { data: commentList = [] } = useComments(ownerId, path.mountId, path.id);
     const messageCounts = useMemo(() => {
         const map = new Map<string, number>();
-        for (const c of commentList as CommentEntry[]) {
+        for (const c of commentList) {
             if (c.messageCount > 0) map.set(c.chatName, c.messageCount);
         }
         return map;
