@@ -729,7 +729,6 @@ export function insertRowCol(
                 }
                 delete templateCell.v;
                 delete templateCell.m;
-                delete templateCell.ps;
                 delete templateCell.f;
             }
             row.push(templateCell);
@@ -961,7 +960,6 @@ export function insertRowCol(
                 }
                 delete templateCell.v;
                 delete templateCell.m;
-                delete templateCell.ps;
                 delete templateCell.f;
             }
             col.push(templateCell);
