@@ -1,14 +1,16 @@
 import {api, deleteSheet, locale} from "../../core";
-import React, {useCallback, useContext, useState,} from "react";
+import React, {useCallback, useContext} from "react";
 import {WorkbookContext} from "../../context";
 import {useAlert} from "../../hooks/useAlert";
 import {ChangeColor} from "../ChangeColor";
-import {ChevronRight} from "lucide-react";
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuSeparator,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
     DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu";
 
@@ -16,8 +18,6 @@ export function SheetTabContextMenu() {
     const {context, setContext, settings} = useContext(WorkbookContext);
     const {x, y, sheet, onRename} = context.sheetTabContextMenu;
     const {sheetconfig} = locale(context);
-    const [isShowChangeColor, setIsShowChangeColor] = useState<boolean>(false);
-    const [isShowInputColor, setIsShowInputColor] = useState<boolean>(false);
     const {showAlert, hideAlert} = useAlert();
 
     const close = useCallback(() => {
@@ -72,9 +72,6 @@ export function SheetTabContextMenu() {
             {addSheetOp: true}
         );
     }, [context.allowEdit, setContext, sheet?.id]);
-    const updateShowInputColor = useCallback((state: boolean) => {
-        setIsShowInputColor(state);
-    }, []);
 
     const focusSheet = useCallback(() => {
         if (context.allowEdit === false) return;
@@ -211,25 +208,16 @@ export function SheetTabContextMenu() {
                     }
                     if (name === "color") {
                         return (
-                            <DropdownMenuItem
-                                key={name}
-                                onMouseEnter={() => {
-                                    setIsShowChangeColor(true);
-                                }}
-                                onMouseLeave={() => {
-                                    if (!isShowInputColor) {
-                                        setIsShowChangeColor(false);
-                                    }
-                                }}
-                            >
-                                {sheetconfig.changeColor}
-                                <span className="change-color-triangle">
-                                    <ChevronRight width={18} height={18} aria-hidden="true"/>
-                                </span>
-                                {isShowChangeColor && context.allowEdit && (
-                                    <ChangeColor triggerParentUpdate={updateShowInputColor}/>
-                                )}
-                            </DropdownMenuItem>
+                            <DropdownMenuSub key={name}>
+                                <DropdownMenuSubTrigger>
+                                    {sheetconfig.changeColor}
+                                </DropdownMenuSubTrigger>
+                                <DropdownMenuSubContent style={{zIndex: 1010}}>
+                                    {context.allowEdit && (
+                                        <ChangeColor triggerParentUpdate={() => {}} />
+                                    )}
+                                </DropdownMenuSubContent>
+                            </DropdownMenuSub>
                         );
                     }
                     if (name === "focus") {
