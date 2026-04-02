@@ -858,7 +858,6 @@ function SlideEditorInner({
                         for (const obj of Object.values(deck.objects)) {
                             if (obj.commentChatNames?.includes(chatName)) {
                                 removeCommentFromObject(obj.id, chatName);
-                                break;
                             }
                         }
                         commentContextMenu.close();
