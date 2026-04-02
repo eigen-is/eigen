@@ -877,7 +877,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                                     setContextWithProduce((draftCtx) => {
                                         draftCtx.contextMenu = {};
                                         draftCtx.filterContextMenu = undefined;
-                                        draftCtx.showSheetList = undefined;
                                     });
                                 }}
                                 onMouseMove={(e) => e.stopPropagation()}
