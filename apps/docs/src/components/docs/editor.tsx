@@ -1,5 +1,6 @@
 import Collaboration from '@tiptap/extension-collaboration';
 import CollaborationCaret from '@tiptap/extension-collaboration-caret';
+import type { Node } from '@tiptap/pm/model';
 import { Selection } from '@tiptap/pm/state';
 import type { Editor } from '@tiptap/react';
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
@@ -8,7 +9,7 @@ import { getCollabWebSocketUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { useComments, useResolveComment, useUpdateCommentColor } from '@workspace/lib/chat';
 import { needsReUpload, readEigenClipboard, reUploadImage, writeEigenClipboard } from '@workspace/lib/clipboard';
-import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
+import { EIGEN_ACCENT_COLORS_SHUFFLED, EIGEN_STICKIES_COLORS } from '@workspace/lib/constants/colors';
 import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import { MediaResolverProvider, useMediaResolver, useUploadFile } from '@workspace/lib/drive';
 import { useMediaQuery } from '@workspace/lib/media';
@@ -31,10 +32,7 @@ import { TableWidthClamp } from './extensions/table-width-clamp';
 import { FigurePropertiesPanel } from './figure-properties-panel';
 import { TablePropertiesPanel } from './table-properties-panel';
 
-function findCommentMarkPositions(
-    doc: import('@tiptap/pm/model').Node,
-    chatName: string,
-): { pos: number; end: number }[] {
+function findCommentMarkPositions(doc: Node, chatName: string): { pos: number; end: number }[] {
     const positions: { pos: number; end: number }[] = [];
     doc.descendants((node, pos) => {
         for (const mark of node.marks) {
@@ -187,7 +185,7 @@ const TiptapEditor = ({
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const editorRef = useRef<ReturnType<typeof useEditor>>(null);
     const handleAddCommentRef = useRef<(() => void) | null>(null);
-    const allCommentsRef = useRef<unknown[]>([]);
+    const allCommentsRef = useRef<CommentEntry[]>([]);
     const mediaFolderIdRef = useRef(mediaFolderId);
     mediaFolderIdRef.current = mediaFolderId;
 
@@ -230,7 +228,7 @@ const TiptapEditor = ({
                 CommentMark.configure({
                     onCommentClick: handleCommentClick,
                     onCommentContextMenu: (chatName, event) => {
-                        const comment = (allCommentsRef.current as CommentEntry[]).find((c) => c.chatName === chatName);
+                        const comment = allCommentsRef.current.find((c) => c.chatName === chatName);
                         if (comment)
                             commentContextMenu.handleContextMenu(event as unknown as React.MouseEvent, comment);
                     },
@@ -471,11 +469,6 @@ const TiptapEditor = ({
     };
     handleAddCommentRef.current = chatFolderId ? handleAddComment : null;
 
-    const handleCommentCreated = (chatName: string) => {
-        if (!editor) return;
-        editor.chain().focus().setComment(chatName).run();
-    };
-
     const [sidebarContext, setSidebarContext] = useState<'document' | 'figure' | 'table'>('document');
     const lastPanelRef = useRef<'figure' | 'table'>('figure');
     if (sidebarContext !== 'document') lastPanelRef.current = sidebarContext;
@@ -489,21 +482,24 @@ const TiptapEditor = ({
     const commentContextMenu = useContextMenu<CommentEntry>();
     const selectionContextMenu = useContextMenu<boolean>();
 
+    const handleCommentCreated = (chatName: string) => {
+        if (!editor) return;
+        editor.chain().focus().setComment(chatName).run();
+        updateColor.mutate({ chatName, color: EIGEN_STICKIES_COLORS[0][1].value });
+    };
+
     const unresolvedCount = useMemo(() => {
-        return (allComments as CommentEntry[]).filter((c) => c.status === 'open' && activeComments.ids.has(c.chatName))
-            .length;
+        return allComments.filter((c) => c.status === 'open' && activeComments.ids.has(c.chatName)).length;
     }, [allComments, activeComments.ids]);
 
-    const viewCommentEntry = viewCommentChatName
-        ? (allComments as CommentEntry[]).find((c) => c.chatName === viewCommentChatName)
-        : null;
+    const viewCommentEntry = viewCommentChatName ? allComments.find((c) => c.chatName === viewCommentChatName) : null;
 
     // Sync resolved IDs + colors into the ProseMirror decoration plugin
     useEffect(() => {
         if (!editor) return;
         const resolved = new Set<string>();
         const colorMap = new Map<string, string>();
-        for (const c of allComments as CommentEntry[]) {
+        for (const c of allComments) {
             if (c.status === 'resolved') resolved.add(c.chatName);
             if (c.color) colorMap.set(c.chatName, c.color);
         }

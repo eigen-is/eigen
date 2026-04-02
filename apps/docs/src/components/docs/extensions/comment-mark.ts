@@ -1,3 +1,4 @@
+import type { Editor } from '@tiptap/core';
 import type { EditorState } from '@tiptap/pm/state';
 import { Plugin, PluginKey } from '@tiptap/pm/state';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
@@ -144,13 +145,8 @@ export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions>({
     },
 });
 
-export function updateCommentDecorations(
-    // biome-ignore lint/suspicious/noExplicitAny: tiptap Editor type is complex
-    editor: any,
-    resolvedIds: Set<string>,
-    colorMap: Map<string, string>,
-) {
-    const storage = editor.extensionStorage?.comment as CommentMeta | undefined;
+export function updateCommentDecorations(editor: Editor, resolvedIds: Set<string>, colorMap: Map<string, string>) {
+    const storage = (editor.extensionStorage as unknown as Record<string, CommentMeta>)?.comment;
     if (storage) {
         storage.resolvedIds = resolvedIds;
         storage.colorMap = colorMap;

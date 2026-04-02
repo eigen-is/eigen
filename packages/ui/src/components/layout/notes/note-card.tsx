@@ -1,9 +1,10 @@
 import { lightenColor } from '@workspace/lib/constants';
 import type { HTMLAttributes, ReactNode } from 'react';
+import { cn } from '../../../lib/utils';
 import { Card, CardContent } from '../../card';
 import { isLightColor } from '../media/color-picker';
 
-type NoteCardProps = HTMLAttributes<HTMLDivElement> & {
+type NoteCardProps = Omit<HTMLAttributes<HTMLDivElement>, 'title' | 'color'> & {
     title: string;
     description?: string;
     color?: string | null;
@@ -30,7 +31,12 @@ export function NoteCard({
     return (
         <Card
             ref={ref}
-            className={`p-0 w-full shadow-md select-none rounded-none cursor-pointer ${!color ? 'border' : 'border-0'} ${className || ''}`}
+            className={cn(
+                'p-0 w-full shadow-md select-none rounded-none',
+                color ? 'border-0' : 'border',
+                onClick ? 'cursor-pointer' : '',
+                className,
+            )}
             style={{
                 backgroundColor: color ? lightenColor(color, 0.25) : undefined,
                 color: color ? (isLightColor(color) ? '#000' : '#fff') : undefined,
@@ -42,9 +48,9 @@ export function NoteCard({
         >
             <CardContent className="p-3 text-sm relative">
                 {statusIcon && <span className="absolute top-2 right-2">{statusIcon}</span>}
-                <span className={`line-clamp-2 ${statusIcon ? 'pr-5' : ''}`}>{title}</span>
+                <span className={cn('line-clamp-2', statusIcon && 'pr-5')}>{title}</span>
                 {description && <p className="text-xs mt-1 line-clamp-2 opacity-70">{description}</p>}
-                {replyCount && replyCount > 0 && (
+                {!!replyCount && (
                     <p className="text-xs mt-0.5 opacity-50">
                         {replyCount} {replyLabel || (replyCount === 1 ? 'reply' : 'replies')}
                     </p>
