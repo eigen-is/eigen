@@ -140,11 +140,9 @@ type SlideObjectViewProps = {
     onMoveDown?: (objId: string) => void;
     onMoveToFront?: (objId: string) => void;
     onMoveToBack?: (objId: string) => void;
-    // Comment indicator (Task 7)
     commentColor?: string | null;
     onCommentClick?: (chatName: string) => void;
     firstCommentChatName?: string | null;
-    // Context menu actions (Task 8)
     onAddComment?: (objId: string) => void;
     commentEntries?: Array<{ chatName: string; color: string | null; status: 'open' | 'resolved' }>;
     onCommentResolve?: (chatName: string) => void;
