@@ -35,6 +35,7 @@ function SlideView() {
 
     const canWrite = docInfo?.canWrite ?? false;
     const mediaFolderId = docInfo?.folderContents?.find((f) => f.name === 'media')?.id ?? null;
+    const chatFolderId = docInfo?.folderContents?.find((f) => f.name === 'chat')?.id ?? null;
 
     const handleAccessDialogOpen = useCallback(() => setAccessDialogOpen(true), []);
 
@@ -48,6 +49,7 @@ function SlideView() {
                 path={path}
                 canWrite={canWrite}
                 mediaFolderId={mediaFolderId}
+                chatFolderId={chatFolderId}
                 onAccessDialogOpen={handleAccessDialogOpen}
             />
             <DriveAccessDialog path={path} open={accessDialogOpen} onOpenChange={setAccessDialogOpen} />
