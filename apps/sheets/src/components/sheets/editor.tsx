@@ -147,84 +147,84 @@ export function SheetEditor({ ownerId, path, canWrite, chatFolderId, onAccessDia
             mediaFolderId={null}
             chatFolderId={chatFolderId}
         >
-            <div className="flex flex-col h-full w-full">
-                <div className="flex-1 flex overflow-hidden">
-                    <div className="flex-1 overflow-hidden">
-                        <Workbook
-                            ref={workbookRef}
-                            data={initialData}
-                            onChange={(data) => {
-                                onDataChange(data);
-                                setFlowdata(workbookRef.current?.getFlowdata() ?? undefined);
-                            }}
-                            onOp={handleOp}
-                            showToolbar={true}
-                            showFormulaBar={true}
-                            showSheetTabs={true}
-                            allowEdit={canWrite}
-                            toolbarItems={TOOLBAR_ITEMS}
-                            toolbarLeftItems={leftItems}
-                            toolbarRightItems={rightItems}
-                            defaultRowHeight={25}
-                            defaultFontSize={11}
-                            column={26}
-                            row={100}
-                            hooks={{
-                                ...(canWrite && chatFolderId
-                                    ? {
-                                          onAddComment: (r: number, c: number) => {
-                                              addCommentRef.current?.(r, c);
-                                          },
-                                      }
-                                    : {}),
-                                onViewComment: (r: number, c: number) => {
-                                    const fd = workbookRef.current?.getFlowdata();
-                                    const chatName = fd?.[r]?.[c]?.commentChatNames?.[0];
-                                    if (chatName) setViewCommentChatName(chatName);
-                                },
-                                ...(canWrite
-                                    ? {
-                                          onDeleteComment: (r: number, c: number) => {
-                                              const fd = workbookRef.current?.getFlowdata();
-                                              const cell = fd?.[r]?.[c];
-                                              const chatName = cell?.commentChatNames?.[0];
-                                              if (chatName && workbookRef.current) {
-                                                  workbookRef.current.setCellFormat(
-                                                      r,
-                                                      c,
-                                                      'commentChatNames',
-                                                      (cell.commentChatNames ?? []).filter((n) => n !== chatName),
-                                                  );
-                                              }
-                                          },
-                                          onCommentColor: (r: number, c: number, color: string | null) => {
-                                              const fd = workbookRef.current?.getFlowdata();
-                                              const chatName = fd?.[r]?.[c]?.commentChatNames?.[0];
-                                              if (chatName) updateColor.mutate({ chatName, color });
-                                          },
-                                          onCommentResolve: (r: number, c: number) => {
-                                              const fd = workbookRef.current?.getFlowdata();
-                                              const chatName = fd?.[r]?.[c]?.commentChatNames?.[0];
-                                              if (chatName) resolveComment.mutate({ chatName, status: 'resolved' });
-                                          },
-                                          onCommentReopen: (r: number, c: number) => {
-                                              const fd = workbookRef.current?.getFlowdata();
-                                              const chatName = fd?.[r]?.[c]?.commentChatNames?.[0];
-                                              if (chatName) resolveComment.mutate({ chatName, status: 'open' });
-                                          },
-                                      }
-                                    : {}),
-                                getCommentInfo: (r: number, c: number) => {
-                                    const fd = workbookRef.current?.getFlowdata();
-                                    const chatName = fd?.[r]?.[c]?.commentChatNames?.[0];
-                                    if (!chatName) return null;
-                                    const entry = allComments.find((c) => c.chatName === chatName);
-                                    return entry ? { color: entry.color, status: entry.status } : null;
-                                },
-                            }}
-                        />
-                    </div>
-                    {commentPanelOpen && (
+            <div className="flex flex-col h-full w-full relative">
+                <div className="flex-1 overflow-hidden">
+                    <Workbook
+                        ref={workbookRef}
+                        data={initialData}
+                        onChange={(data) => {
+                            onDataChange(data);
+                            setFlowdata(workbookRef.current?.getFlowdata() ?? undefined);
+                        }}
+                        onOp={handleOp}
+                        showToolbar={true}
+                        showFormulaBar={true}
+                        showSheetTabs={true}
+                        allowEdit={canWrite}
+                        toolbarItems={TOOLBAR_ITEMS}
+                        toolbarLeftItems={leftItems}
+                        toolbarRightItems={rightItems}
+                        defaultRowHeight={25}
+                        defaultFontSize={11}
+                        column={26}
+                        row={100}
+                        hooks={{
+                            ...(canWrite && chatFolderId
+                                ? {
+                                      onAddComment: (r: number, c: number) => {
+                                          addCommentRef.current?.(r, c);
+                                      },
+                                  }
+                                : {}),
+                            onViewComment: (r: number, c: number) => {
+                                const fd = workbookRef.current?.getFlowdata();
+                                const chatName = fd?.[r]?.[c]?.commentChatNames?.[0];
+                                if (chatName) setViewCommentChatName(chatName);
+                            },
+                            ...(canWrite
+                                ? {
+                                      onDeleteComment: (r: number, c: number) => {
+                                          const fd = workbookRef.current?.getFlowdata();
+                                          const cell = fd?.[r]?.[c];
+                                          const chatName = cell?.commentChatNames?.[0];
+                                          if (chatName && workbookRef.current) {
+                                              workbookRef.current.setCellFormat(
+                                                  r,
+                                                  c,
+                                                  'commentChatNames',
+                                                  (cell.commentChatNames ?? []).filter((n) => n !== chatName),
+                                              );
+                                          }
+                                      },
+                                      onCommentColor: (r: number, c: number, color: string | null) => {
+                                          const fd = workbookRef.current?.getFlowdata();
+                                          const chatName = fd?.[r]?.[c]?.commentChatNames?.[0];
+                                          if (chatName) updateColor.mutate({ chatName, color });
+                                      },
+                                      onCommentResolve: (r: number, c: number) => {
+                                          const fd = workbookRef.current?.getFlowdata();
+                                          const chatName = fd?.[r]?.[c]?.commentChatNames?.[0];
+                                          if (chatName) resolveComment.mutate({ chatName, status: 'resolved' });
+                                      },
+                                      onCommentReopen: (r: number, c: number) => {
+                                          const fd = workbookRef.current?.getFlowdata();
+                                          const chatName = fd?.[r]?.[c]?.commentChatNames?.[0];
+                                          if (chatName) resolveComment.mutate({ chatName, status: 'open' });
+                                      },
+                                  }
+                                : {}),
+                            getCommentInfo: (r: number, c: number) => {
+                                const fd = workbookRef.current?.getFlowdata();
+                                const chatName = fd?.[r]?.[c]?.commentChatNames?.[0];
+                                if (!chatName) return null;
+                                const entry = allComments.find((c) => c.chatName === chatName);
+                                return entry ? { color: entry.color, status: entry.status } : null;
+                            },
+                        }}
+                    />
+                </div>
+                {commentPanelOpen && (
+                    <div className="absolute top-12 bottom-0 right-0" style={{ zIndex: 1005 }}>
                         <CommentPanel
                             ownerId={ownerId}
                             mountId={path.mountId}
@@ -236,8 +236,8 @@ export function SheetEditor({ ownerId, path, canWrite, chatFolderId, onAccessDia
                             onCommentClick={(chatName) => setViewCommentChatName(chatName)}
                             onCommentContextMenu={commentContextMenu.handleContextMenu}
                         />
-                    )}
-                </div>
+                    </div>
+                )}
             </div>
 
             {chatFolderId && (
