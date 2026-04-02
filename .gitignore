@@ -58,3 +58,4 @@ next-env.d.ts
 /data/certs/
 /data/dkim/
 /backups/
+/.superpowers/
