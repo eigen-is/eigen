@@ -78,7 +78,6 @@ type EditorToolbarProps = {
     canRedo: boolean;
     onAccessDialogOpen: () => void;
     path: DrivePath;
-    onAddComment?: () => void;
     onToggleCommentPanel?: () => void;
     commentPanelOpen?: boolean;
     unresolvedCommentCount?: number;
@@ -94,7 +93,6 @@ export const EditorToolbar = ({
     canUndo,
     canRedo,
     onAccessDialogOpen,
-    onAddComment,
     onToggleCommentPanel,
     commentPanelOpen,
     unresolvedCommentCount,
@@ -683,18 +681,12 @@ export const EditorToolbar = ({
             )}
 
             <div className="flex items-center">
-                {(onAddComment || onToggleCommentPanel) && (
+                {onToggleCommentPanel && (
                     <div className="relative">
                         <TooltipButton
                             icon={MessageSquare}
                             tooltipText="Comments"
-                            onClick={() => {
-                                if (!editor.state.selection.empty && onAddComment) {
-                                    onAddComment();
-                                } else {
-                                    onToggleCommentPanel?.();
-                                }
-                            }}
+                            onClick={onToggleCommentPanel}
                             active={commentPanelOpen}
                         />
                         {!!unresolvedCommentCount && unresolvedCommentCount > 0 && (
