@@ -47,15 +47,8 @@ export type Cell = {
     bg?: string;
     lo?: number;
     rt?: number;
-    ps?: {
-        left: number | null;
-        top: number | null;
-        width: number | null;
-        height: number | null;
-        value: string;
-        isShow: boolean;
-    };
     hl?: { r: number; c: number; id: string };
+    commentChatNames?: string[];
 } & CellStyle;
 
 export type CellWithRowAndCol = {
@@ -157,20 +150,6 @@ export type Sheet = {
         range?: { row_focus: number; column_focus: number };
     };
 };
-
-export type CommentBox = {
-    r: number;
-    c: number;
-    rc: string;
-    autoFocus: boolean;
-    value: string;
-    size: {
-        fromX: number;
-        fromY: number;
-        toX: number;
-        toY: number;
-    } & Rect;
-} & Rect;
 
 export type SearchResult = {
     r: number;
@@ -279,14 +258,6 @@ export type GlobalCache = {
         imgInitialPosition: Rect | undefined;
         cursorMoveStartPosition: { x: number; y: number } | undefined;
         resizingSide: string | undefined;
-    };
-    commentBox?: {
-        movingId: string | undefined;
-        resizingId: string | undefined;
-        resizingSide: string | undefined;
-        commentRC: { r: number; c: number; rc: string };
-        boxInitialPosition: Rect | undefined;
-        cursorMoveStartPosition: { x: number; y: number } | undefined;
     };
     searchDialog?: {
         mouseEnter?: boolean;
