@@ -5,7 +5,6 @@ import {normalizeSelection} from "./modules/selection";
 import {Hooks} from "./settings";
 import {
     Cell,
-    CommentBox,
     ConditionRulesProps,
     DataRegulationProps,
     FilterOptions,
@@ -40,9 +39,6 @@ export type Context = {
     addDefaultRows: number;
     fullscreenmode: boolean;
     devicePixelRatio: number;
-    commentBoxes?: CommentBox[];
-    editingCommentBox?: CommentBox;
-    hoveredCommentBox?: CommentBox;
     insertedImgs?: Image[];
     editingInsertedImgs?: Image;
     activeImg?: string;

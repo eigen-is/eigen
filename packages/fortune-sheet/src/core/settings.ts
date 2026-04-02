@@ -97,17 +97,6 @@ export type Hooks = {
         selection: Selection[] | undefined,
         content: string
     ) => boolean;
-    beforeUpdateComment?: (row: number, column: number, value: any) => boolean;
-    afterUpdateComment?: (
-        row: number,
-        column: number,
-        oldValue: any,
-        value: any
-    ) => void;
-    beforeInsertComment?: (row: number, column: number) => boolean;
-    afterInsertComment?: (row: number, column: number) => void;
-    beforeDeleteComment?: (row: number, column: number) => boolean;
-    afterDeleteComment?: (row: number, column: number) => void;
     beforeAddSheet?: (sheet: Sheet) => boolean;
     afterAddSheet?: (sheet: Sheet) => void;
     beforeActivateSheet?: (id: string) => boolean;
@@ -213,7 +202,6 @@ export const defaultSettings: Required<Settings> = {
         "filter",
         "link",
         "image",
-        "comment",
         "quick-formula",
         "dataVerification",
         "splitColumn",
