@@ -54,8 +54,8 @@ export function CommentPanel({
                 <TooltipButton icon={X} tooltipText="Close" className="h-6 w-6" onClick={onClose} />
             </div>
 
-            <div className="px-3 py-2 border-b space-y-2">
-                <Tabs value={tab} onValueChange={(v) => setTab(v as 'all' | 'mine')}>
+            <div className="px-3 py-2 border-b flex items-center gap-2">
+                <Tabs value={tab} onValueChange={(v) => setTab(v as 'all' | 'mine')} className="flex-1">
                     <TabsList className="w-full">
                         <TabsTrigger value="all" className="flex-1 text-xs">
                             All
@@ -67,7 +67,7 @@ export function CommentPanel({
                 </Tabs>
 
                 <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
-                    <SelectTrigger className="h-7 text-xs">
+                    <SelectTrigger className="h-8 text-xs w-auto gap-1">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>

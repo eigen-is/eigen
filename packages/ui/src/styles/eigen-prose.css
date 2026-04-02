@@ -453,11 +453,15 @@
 
 /* ===== Comment highlights (shared across apps) ===== */
 
+/* Matches NoteCard: lightenColor(color, 0.25), shadow-md, no border */
 .tiptap .comment-highlight {
+    all: unset;
     background-color: oklch(0.94 0.15 95);
+    box-shadow:
+        0 4px 6px -1px rgb(0 0 0 / 0.1),
+        0 2px 4px -2px rgb(0 0 0 / 0.1);
     padding: 0.1em 0.05em;
     cursor: pointer;
-    transition: background-color 150ms;
     border-radius: 2px;
 }
 
@@ -466,10 +470,8 @@
 }
 
 /* Resolved comments */
-.tiptap .comment-resolved,
 .tiptap .comment-resolved .comment-highlight,
 .tiptap .comment-highlight.comment-resolved {
-    background-color: transparent !important;
-    box-shadow: none !important;
+    all: unset;
     cursor: default;
 }
