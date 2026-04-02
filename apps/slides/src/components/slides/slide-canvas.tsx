@@ -1,4 +1,5 @@
 import { useMediaResolver } from '@workspace/lib/drive';
+import type { CommentEntry } from '@workspace/lib/types/chat';
 import { useCallback, useMemo, useRef } from 'react';
 import { useMarqueeSelect } from './hooks/use-marquee-select';
 import { type DragMode, useObjectDrag } from './hooks/use-object-drag';
@@ -24,6 +25,14 @@ type SlideCanvasProps = {
     onMoveToFront?: (objId: string) => void;
     onMoveToBack?: (objId: string) => void;
     canWrite: boolean;
+    onAddComment?: (objId: string) => void;
+    onCommentClick?: (chatName: string) => void;
+    allComments?: CommentEntry[];
+    activeCommentIds?: Set<string>;
+    onCommentResolve?: (chatName: string) => void;
+    onCommentReopen?: (chatName: string) => void;
+    onCommentChangeColor?: (chatName: string, color: string | null) => void;
+    onCommentDelete?: (objId: string, chatName: string) => void;
 };
 
 export function SlideCanvas({
@@ -44,6 +53,14 @@ export function SlideCanvas({
     onMoveToFront,
     onMoveToBack,
     canWrite,
+    onAddComment,
+    onCommentClick,
+    allComments,
+    activeCommentIds,
+    onCommentResolve,
+    onCommentReopen,
+    onCommentChangeColor,
+    onCommentDelete,
 }: SlideCanvasProps) {
     const { resolveMediaUrl } = useMediaResolver();
     const bgUrl = slide.backgroundMediaName ? resolveMediaUrl(slide.backgroundMediaName) : null;
@@ -178,6 +195,10 @@ export function SlideCanvas({
                     const displayObj = preview
                         ? { ...obj, x: preview.x, y: preview.y, w: preview.w, h: preview.h }
                         : obj;
+                    const objCommentEntries = (allComments ?? []).filter((c) =>
+                        obj.commentChatNames?.includes(c.chatName),
+                    );
+                    const firstUnresolved = objCommentEntries.find((c) => c.status === 'open');
                     return (
                         <SlideObjectView
                             key={obj.id}
@@ -198,6 +219,19 @@ export function SlideCanvas({
                             onMoveDown={onMoveDown}
                             onMoveToFront={onMoveToFront}
                             onMoveToBack={onMoveToBack}
+                            onAddComment={onAddComment}
+                            onCommentClick={onCommentClick}
+                            commentColor={firstUnresolved?.color}
+                            firstCommentChatName={firstUnresolved?.chatName}
+                            commentEntries={objCommentEntries.map((c) => ({
+                                chatName: c.chatName,
+                                color: c.color,
+                                status: c.status,
+                            }))}
+                            onCommentResolve={onCommentResolve}
+                            onCommentReopen={onCommentReopen}
+                            onCommentChangeColor={onCommentChangeColor}
+                            onCommentDelete={onCommentDelete}
                         />
                     );
                 })}
