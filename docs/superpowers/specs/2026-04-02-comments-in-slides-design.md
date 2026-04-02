@@ -131,9 +131,7 @@ For objects with active unresolved comments, render a colored triangle in the to
 
 This dialog is currently docs-specific but has no Tiptap dependency. Two options:
 
-**Option A (recommended):** Move `CreateCommentDialog` to `@workspace/ui` alongside the other shared comment components. It only depends on `@workspace/lib/api`, `@workspace/lib/chat`, and `@workspace/ui` components — all already shared.
-
-**Option B:** Copy to slides app. Quick but duplicates code.
+Move `CreateCommentDialog` to `@workspace/ui` alongside the other shared comment components. It only depends on `@workspace/lib/api`, `@workspace/lib/chat`, and `@workspace/ui` components — all already shared.
 
 The dialog's `onCommentCreated(chatName)` callback is called by the consuming editor. In docs it applies a Tiptap mark; in slides it calls `addCommentToObject()`.
 
