@@ -16,6 +16,7 @@ import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardData, EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Column, CommentPanel, CommentThread, LoadingState } from '@workspace/ui';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { common, createLowlight } from 'lowlight';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { WebsocketProvider } from 'y-websocket';
@@ -89,53 +90,6 @@ export const CollaborativeEditor = ({
     );
 };
 
-function CommentPopover({
-    rect,
-    onClose,
-    children,
-}: {
-    rect: DOMRect;
-    onClose: () => void;
-    children: React.ReactNode;
-}) {
-    const ref = useRef<HTMLDivElement>(null);
-    const popoverHeight = 300;
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const placeAbove = spaceBelow < popoverHeight && rect.top > popoverHeight;
-
-    const style: React.CSSProperties = placeAbove
-        ? { bottom: window.innerHeight - rect.top + 8, left: rect.left }
-        : { top: rect.bottom + 8, left: rect.left };
-
-    useEffect(() => {
-        const handleClick = (e: MouseEvent) => {
-            if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-        };
-        // Delay listener to avoid closing immediately from the click that opened this
-        const timer = setTimeout(() => document.addEventListener('mousedown', handleClick), 0);
-        return () => {
-            clearTimeout(timer);
-            document.removeEventListener('mousedown', handleClick);
-        };
-    }, [onClose]);
-
-    return (
-        <div
-            ref={ref}
-            className="fixed z-50 w-80 max-h-[70vh] overflow-y-auto rounded-lg border bg-background shadow-lg"
-            style={style}
-        >
-            <div className="flex items-center justify-between px-3 pt-2 pb-1">
-                <span className="text-xs font-medium text-muted-foreground">Comment</span>
-                <button type="button" className="text-muted-foreground hover:text-foreground text-xs" onClick={onClose}>
-                    &times;
-                </button>
-            </div>
-            <div className="px-1 pb-1">{children}</div>
-        </div>
-    );
-}
-
 type ActiveComments = {
     ids: Set<string>;
     anchorTexts: Map<string, string>;
@@ -208,7 +162,7 @@ const TiptapEditor = ({
     const { resolveMediaPath } = useMediaResolver();
     const [commentDialogOpen, setCommentDialogOpen] = useState(false);
     const [commentSelectedText, setCommentSelectedText] = useState('');
-    const [viewComment, setViewComment] = useState<{ chatName: string; rect: DOMRect } | null>(null);
+    const [viewCommentChatName, setViewCommentChatName] = useState<string | null>(null);
     const [canvasScale, setCanvasScale] = useState(1);
     const [docHeight, setDocHeight] = useState(0);
     const needsScale = canvasScale < 1;
@@ -244,8 +198,8 @@ const TiptapEditor = ({
         return () => ro.disconnect();
     }, []);
 
-    const handleCommentClick = useCallback((chatName: string, rect: DOMRect) => {
-        setViewComment({ chatName, rect });
+    const handleCommentClick = useCallback((chatName: string) => {
+        setViewCommentChatName(chatName);
     }, []);
 
     const editor = useEditor(
@@ -510,8 +464,8 @@ const TiptapEditor = ({
             .length;
     }, [allComments, activeComments.ids]);
 
-    const viewCommentEntry = viewComment
-        ? (allComments as CommentEntry[]).find((c) => c.chatName === viewComment.chatName)
+    const viewCommentEntry = viewCommentChatName
+        ? (allComments as CommentEntry[]).find((c) => c.chatName === viewCommentChatName)
         : null;
 
     // Sync resolved comment IDs into the ProseMirror decoration plugin
@@ -649,20 +603,34 @@ const TiptapEditor = ({
                 />
             )}
 
-            {viewComment && viewCommentEntry && (
-                <CommentPopover rect={viewComment.rect} onClose={() => setViewComment(null)}>
-                    <CommentThread
-                        ownerId={path.ownerId}
-                        mountId={path.mountId}
-                        comment={viewCommentEntry}
-                        anchorText={activeComments.anchorTexts.get(viewComment.chatName)}
-                        onResolve={() => {
-                            resolveComment.mutate({ chatName: viewComment.chatName, status: 'resolved' });
-                            setViewComment(null);
-                        }}
-                        onReopen={() => resolveComment.mutate({ chatName: viewComment.chatName, status: 'open' })}
-                    />
-                </CommentPopover>
+            {viewCommentChatName && viewCommentEntry && (
+                <Dialog
+                    open
+                    onOpenChange={(open) => {
+                        if (!open) setViewCommentChatName(null);
+                    }}
+                >
+                    <DialogContent className="max-h-[80vh] flex flex-col p-0 gap-0">
+                        <DialogHeader className="px-6 pt-6 pb-4">
+                            <DialogTitle>Comment</DialogTitle>
+                        </DialogHeader>
+                        <div className="flex flex-col flex-1 min-h-0 overflow-hidden px-2 pb-2">
+                            <CommentThread
+                                ownerId={path.ownerId}
+                                mountId={path.mountId}
+                                comment={viewCommentEntry}
+                                anchorText={activeComments.anchorTexts.get(viewCommentChatName)}
+                                onResolve={() => {
+                                    resolveComment.mutate({ chatName: viewCommentChatName, status: 'resolved' });
+                                    setViewCommentChatName(null);
+                                }}
+                                onReopen={() =>
+                                    resolveComment.mutate({ chatName: viewCommentChatName, status: 'open' })
+                                }
+                            />
+                        </div>
+                    </DialogContent>
+                </Dialog>
             )}
         </>
     );

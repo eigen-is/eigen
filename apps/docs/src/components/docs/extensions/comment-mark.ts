@@ -3,7 +3,7 @@ import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { CommentMarkSchema } from '@workspace/lib/docs/eigendoc';
 
 export type CommentMarkOptions = {
-    onCommentClick?: (chatName: string, rect: DOMRect) => void;
+    onCommentClick?: (chatName: string) => void;
     onAddComment?: () => void;
     onToggleCommentPanel?: () => void;
 };
@@ -67,7 +67,7 @@ export const CommentMark = CommentMarkSchema.extend<CommentMarkOptions>({
                             if (commentEl) {
                                 const chatName = commentEl.getAttribute('data-chat-name');
                                 if (chatName) {
-                                    onCommentClick(chatName, commentEl.getBoundingClientRect());
+                                    onCommentClick(chatName);
                                     return true;
                                 }
                             }
