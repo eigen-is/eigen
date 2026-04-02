@@ -1,3 +1,4 @@
+import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants/colors';
 import { useMediaResolver } from '@workspace/lib/drive';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import { useCallback, useMemo, useRef } from 'react';
@@ -28,7 +29,7 @@ type SlideCanvasProps = {
     onAddComment?: (objId: string) => void;
     onCommentClick?: (chatName: string) => void;
     allComments?: CommentEntry[];
-    activeCommentIds?: Set<string>;
+
     onCommentResolve?: (chatName: string) => void;
     onCommentReopen?: (chatName: string) => void;
     onCommentChangeColor?: (chatName: string, color: string | null) => void;
@@ -56,7 +57,7 @@ export function SlideCanvas({
     onAddComment,
     onCommentClick,
     allComments,
-    activeCommentIds: _activeCommentIds,
+
     onCommentResolve,
     onCommentReopen,
     onCommentChangeColor,
@@ -221,7 +222,10 @@ export function SlideCanvas({
                             onMoveToBack={onMoveToBack}
                             onAddComment={onAddComment}
                             onCommentClick={onCommentClick}
-                            commentColor={firstUnresolved?.color}
+                            commentColor={
+                                firstUnresolved?.color ??
+                                (firstUnresolved ? EIGEN_STICKIES_COLORS[0][1].value : undefined)
+                            }
                             firstCommentChatName={firstUnresolved?.chatName}
                             commentEntries={objCommentEntries.map((c) => ({
                                 chatName: c.chatName,

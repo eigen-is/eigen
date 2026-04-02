@@ -720,7 +720,6 @@ function SlideEditorInner({
                                         onAddComment={canWrite && chatFolderId ? handleAddComment : undefined}
                                         onCommentClick={setViewCommentChatName}
                                         allComments={allComments}
-                                        activeCommentIds={activeComments.ids}
                                         onCommentResolve={(chatName) =>
                                             resolveComment.mutate({ chatName, status: 'resolved' })
                                         }
