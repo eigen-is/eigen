@@ -3,6 +3,7 @@ import {
     createFilter,
     deleteRowCol,
     deleteSelectedCellText,
+    getFlowdata,
     getSheetIndex,
     handleCopy,
     handleLink,
@@ -631,9 +632,72 @@ export const ContextMenu: React.FC = () => {
                     </Menu>
                 );
             }
+            if (name === "comment") {
+                const last = context.luckysheet_select_save?.[context.luckysheet_select_save.length - 1];
+                let row_index = last?.row_focus;
+                let col_index = last?.column_focus;
+                if (!last) {
+                    row_index = 0;
+                    col_index = 0;
+                } else {
+                    if (row_index == null) [row_index] = last.row;
+                    if (col_index == null) [col_index] = last.column;
+                }
+                const fd = getFlowdata(context);
+                const cell = fd?.[row_index]?.[col_index];
+                const hasComment = (cell?.commentChatNames?.length ?? 0) > 0;
+
+                if (!hasComment && settings.hooks?.onAddComment) {
+                    return (
+                        <Menu
+                            key={name}
+                            onClick={() => {
+                                setContext((draftCtx) => { draftCtx.contextMenu = {}; });
+                                settings.hooks!.onAddComment!(row_index!, col_index!);
+                            }}
+                        >
+                            Add comment
+                        </Menu>
+                    );
+                }
+                if (hasComment) {
+                    const items: React.ReactNode[] = [];
+                    if (settings.hooks?.onViewComment) {
+                        items.push(
+                            <Menu
+                                key="view-comment"
+                                onClick={() => {
+                                    setContext((draftCtx) => { draftCtx.contextMenu = {}; });
+                                    settings.hooks!.onViewComment!(row_index!, col_index!);
+                                }}
+                            >
+                                View comment
+                            </Menu>
+                        );
+                    }
+                    if (settings.hooks?.onDeleteComment) {
+                        items.push(
+                            <Menu
+                                key="delete-comment"
+                                onClick={() => {
+                                    setContext((draftCtx) => { draftCtx.contextMenu = {}; });
+                                    settings.hooks!.onDeleteComment!(row_index!, col_index!);
+                                }}
+                            >
+                                Delete comment
+                            </Menu>
+                        );
+                    }
+                    if (items.length > 0) {
+                        return <React.Fragment key={name}>{items}</React.Fragment>;
+                    }
+                }
+                return null;
+            }
             return null;
         },
         [
+            context,
             context.currentSheetId,
             context.lang,
             context.luckysheet_select_save,
@@ -642,6 +706,7 @@ export const ContextMenu: React.FC = () => {
             rightclick,
             info,
             setContext,
+            settings,
             showAlert,
             showDialog,
             drag,

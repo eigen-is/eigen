@@ -109,6 +109,9 @@ export type Hooks = {
         newName: string
     ) => boolean;
     afterUpdateSheetName?: (id: string, oldName: string, newName: string) => void;
+    onAddComment?: (row: number, column: number) => void;
+    onViewComment?: (row: number, column: number) => void;
+    onDeleteComment?: (row: number, column: number) => void;
 };
 
 export type Settings = {
@@ -225,6 +228,8 @@ export const defaultSettings: Required<Settings> = {
         "|",
         "clear", // 清除内容
         "sort", // 排序选区
+        "|",
+        "comment",
         "orderAZ", // 升序
         "orderZA", // 降序
         "filter", // 筛选选区
