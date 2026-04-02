@@ -56,7 +56,7 @@ export function SlideCanvas({
     onAddComment,
     onCommentClick,
     allComments,
-    activeCommentIds,
+    activeCommentIds: _activeCommentIds,
     onCommentResolve,
     onCommentReopen,
     onCommentChangeColor,
