@@ -31,7 +31,7 @@ import {Toolbar} from "../Toolbar";
 import {FxEditor} from "../FxEditor";
 import {SheetTab} from "../SheetTab";
 import {ContextMenu} from "../ContextMenu";
-import {SheetTabContextMenu} from "../ContextMenu/SheetTab";
+
 import {generateAPIs} from "./api";
 import {ModalProvider} from "../../context/modal";
 import {FilterMenu} from "../ContextMenu/FilterMenu";
@@ -871,7 +871,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         {mergedSettings.showSheetTabs && <SheetTab/>}
                         <ContextMenu/>
                         <FilterMenu/>
-                        <SheetTabContextMenu/>
                         {context.contextMenu && Object.keys(context.contextMenu).length > 0 && (
                             <div
                                 onMouseDown={() => {
