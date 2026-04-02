@@ -465,11 +465,3 @@
 .tiptap .comment-highlight:hover {
     filter: brightness(0.95);
 }
-
-.tiptap .comment-resolved .comment-highlight,
-.tiptap .comment-highlight.comment-resolved {
-    background-color: transparent;
-    box-shadow: none;
-    cursor: default;
-    filter: none;
-}
