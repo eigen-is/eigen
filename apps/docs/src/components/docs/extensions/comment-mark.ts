@@ -35,12 +35,10 @@ function buildDecorations(state: EditorState, meta: CommentMeta): DecorationSet 
             } else {
                 const color = meta.colorMap.get(chatName);
                 if (color) {
-                    const bg = lightenColor(color, 0.5);
-                    const border = lightenColor(color, 0.2);
                     decorations.push(
                         Decoration.inline(pos, end, {
                             class: 'comment-colored',
-                            style: `background-color:${bg};border-bottom-color:${border}`,
+                            style: `background-color:${lightenColor(color, 0.25)}`,
                         }),
                     );
                 }
