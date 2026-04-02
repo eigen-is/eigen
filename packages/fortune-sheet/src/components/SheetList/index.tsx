@@ -16,7 +16,7 @@ export function SheetList() {
 
     return (
         <div
-            className="fortune-context-menu luckysheet-cols-menu overflow-y-auto overflow-x-hidden min-w-[120px] absolute z-[10002] bottom-[53px] ml-[72px] max-h-[60%]"
+            className="overflow-y-auto overflow-x-hidden min-w-[120px] absolute z-[10002] bottom-[53px] ml-[72px] max-h-[60%] rounded-md border bg-popover p-1 shadow-lg"
             ref={containerRef}
         >
             {context.luckysheetfile
