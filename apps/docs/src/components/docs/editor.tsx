@@ -658,6 +658,23 @@ const TiptapEditor = ({
                             resolveComment.mutate({ chatName: commentContextMenu.item.chatName, status: 'open' });
                         commentContextMenu.close();
                     }}
+                    onDelete={() => {
+                        if (!commentContextMenu.item || !editor) {
+                            commentContextMenu.close();
+                            return;
+                        }
+                        const targetName = commentContextMenu.item.chatName;
+                        const { tr } = editor.state;
+                        editor.state.doc.descendants((node, pos) => {
+                            for (const mark of node.marks) {
+                                if (mark.type.name === 'comment' && mark.attrs.chatName === targetName) {
+                                    tr.removeMark(pos, pos + node.nodeSize, mark);
+                                }
+                            }
+                        });
+                        editor.view.dispatch(tr);
+                        commentContextMenu.close();
+                    }}
                 />
             </ContextMenuAnchor>
         </>

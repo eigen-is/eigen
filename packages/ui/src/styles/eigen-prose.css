@@ -454,9 +454,8 @@
 /* ===== Comment highlights (shared across apps) ===== */
 
 .tiptap .comment-highlight {
-    --comment-color: oklch(0.94 0.15 95);
-    background-color: var(--comment-color);
-    border-bottom: 2px solid color-mix(in srgb, var(--comment-color) 60%, #888);
+    background-color: oklch(0.94 0.15 95);
+    border-bottom: 2px solid oklch(0.75 0.15 85);
     padding: 0.05em 0;
     cursor: pointer;
     transition: background-color 150ms;
@@ -464,15 +463,5 @@
 }
 
 .tiptap .comment-highlight:hover {
-    background-color: color-mix(in srgb, var(--comment-color) 80%, #888);
-}
-
-.tiptap .comment-highlight[data-resolved="true"] {
-    background-color: transparent;
-    border-bottom: none;
-    cursor: default;
-}
-
-.tiptap .comment-highlight[data-resolved="true"]:hover {
-    background-color: transparent;
+    filter: brightness(0.95);
 }
