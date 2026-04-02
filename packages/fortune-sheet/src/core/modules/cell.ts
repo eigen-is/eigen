@@ -551,7 +551,7 @@ function mergeMove(
                     columnseleted[0] = col_st;
                 }
 
-                // 向右滑动或者居中时往左滑动的向下补齐
+                // Fill downward when sliding right or sliding left while centered
                 if (columnseleted[1] >= col_st && columnseleted[1] <= col_ed) {
                     if (s.column_focus! >= col_st && s.column_focus! <= col_ed) {
                         width = col - left;
@@ -684,7 +684,7 @@ export function updateCell(
     //   return;
     // }
 
-    // 数据验证 输入数据无效时禁止输入
+    // Data validation: block input when the entered data is invalid
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
     const {dataVerification} = ctx.luckysheetfile[index];
     if (!_.isNil(dataVerification)) {
@@ -821,7 +821,7 @@ export function updateCell(
                 curv = _.cloneDeep(d?.[r]?.[c] || {});
                 [, curv.v, curv.f] = v;
 
-                // 打进单元格的sparklines的配置串， 报错需要单独处理。
+                // The sparklines configuration string entered into a cell must be handled separately when it causes an error.
                 if (v.length === 4 && v[3].type === "sparklines") {
                     delete curv.m;
                     delete curv.v;
@@ -855,7 +855,7 @@ export function updateCell(
                     curv = _.cloneDeep(d?.[r]?.[c] || {});
                     [, curv.v, curv.f] = v;
 
-                    // 打进单元格的sparklines的配置串， 报错需要单独处理。
+                    // The sparklines configuration string entered into a cell must be handled separately when it causes an error.
                     if (v.length === 4 && v[3].type === "sparklines") {
                         delete curv.m;
                         delete curv.v;
@@ -905,7 +905,7 @@ export function updateCell(
                 f: v[2],
             };
 
-            // 打进单元格的sparklines的配置串， 报错需要单独处理。
+            // The sparklines configuration string entered into a cell must be handled separately when it causes an error.
             if (v.length === 4 && v[3].type === "sparklines") {
                 const curCalv = v[3].data;
 
@@ -939,7 +939,7 @@ export function updateCell(
                 // update attribute v
                 [, value.v, value.f] = v;
 
-                // 打进单元格的sparklines的配置串， 报错需要单独处理。
+                // The sparklines configuration string entered into a cell must be handled separately when it causes an error.
                 if (v.length === 4 && v[3].type === "sparklines") {
                     const curCalv = v[3].data;
 
@@ -977,11 +977,11 @@ export function updateCell(
     */
 
     if ((curv?.tb === "2" && curv.v) || isInlineStringCell(d[r][c])) {
-        // 自动换行
+        // Word wrap
         const {defaultrowlen} = ctx;
 
         // const canvas = $("#luckysheetTableContent").get(0).getContext("2d");
-        // offlinecanvas.textBaseline = 'top'; //textBaseline以top计算
+        // offlinecanvas.textBaseline = 'top'; //textBaseline calculated from top
 
         // let fontset = luckysheetfontformat(d[r][c]);
         // offlinecanvas.font = fontset;
@@ -1018,7 +1018,7 @@ export function updateCell(
         }
     }
 
-    // 动态数组
+    // Dynamic array
     /*
     let dynamicArray = null;
     if (dynamicArrayItem) {
@@ -1111,12 +1111,12 @@ export function getFlattenedRange(ctx: Context, range?: Range) {
     const result: { r: number; c: number }[] = [];
 
     range.forEach((ele) => {
-        // 这个data可能是个范围或者是单个cell
+        // This data may be a range or a single cell
         const rs = ele.row;
         const cs = ele.column;
         for (let r = rs[0]; r <= rs[1]; r += 1) {
             for (let c = cs[0]; c <= cs[1]; c += 1) {
-                // r c 当前的r和当前的c
+                // r c: current row index and current column index
                 result.push({r, c});
             }
         }
@@ -1124,7 +1124,7 @@ export function getFlattenedRange(ctx: Context, range?: Range) {
     return result;
 }
 
-// 把选区范围数组转为string A1:A2
+// Convert a selection range array to a string like A1:A2
 export function getRangetxt(
     ctx: Context,
     sheetId: string,
@@ -1138,11 +1138,11 @@ export function getRangetxt(
     }
 
     if (sheetId !== currentId) {
-        // sheet名字包含'的，引用时应该替换为''
+        // If the sheet name contains ', replace it with '' when referencing
         const index = getSheetIndex(ctx, sheetId);
         if (index == null) return "";
         sheettxt = ctx.luckysheetfile[index].name.replace(/'/g, "''");
-        // 如果包含除a-z、A-Z、0-9、下划线等以外的字符那么就用单引号包起来
+        // If the name contains characters other than a-z, A-Z, 0-9, underscore, etc., wrap it in single quotes
         if (
             // eslint-disable-next-line no-misleading-character-class
             /^[:A-Z_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C-\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD][:A-Z_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C-\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\-.0-9\u00B7\u0300-\u036F\u203F-\u2040]*$/.test(
@@ -1178,7 +1178,7 @@ export function getRangetxt(
     }:${indexToColumnChar(column1)}${row1 + 1}`;
 }
 
-// 把string A1:A2转为选区数组
+// Convert a string like A1:A2 to a selection range array
 export function getRangeByTxt(ctx: Context, txt: string) {
     let range: (FormulaDependency | null)[] = [];
     if (txt.indexOf(",") !== -1) {
@@ -1242,7 +1242,7 @@ export function isAllSelectedCellsInStatus(
             }
         }
     }
-    /* 获取选区内所有的单元格-扁平后的处理 */
+    /* Get all cells within the selection — processed as a flat list */
     const cells = getFlattenedRange(ctx);
     const flowdata = getFlowdata(ctx);
 
@@ -1326,11 +1326,11 @@ export function getStyleByCell(
 ) {
     let style: any = {};
 
-    // 交替颜色
+    // Alternating colors
     //   const af_compute = alternateformat.getComputeMap();
     //   const checksAF = alternateformat.checksAF(r, c, af_compute);
     const checksAF: any = [];
-    // 条件格式
+    // Conditional format
     const cf_compute = cfCompute ?? getComputeMap(ctx);
     const checksCF = checkCF(r, c, cf_compute);
 
@@ -1448,13 +1448,13 @@ export function getQKBorder(width: string, type: string, color: string) {
 }
 
 /**
- * 计算范围行高
+ * Calculate row heights for a range
  *
- * @param d 原始数据
- * @param r1 起始行
- * @param r2 截至行
- * @param cfg 配置
- * @returns 计算后的配置
+ * @param d Raw data
+ * @param r1 Start row
+ * @param r2 End row
+ * @param cfg Configuration
+ * @returns Updated configuration
  */
 
 /*
@@ -1475,7 +1475,7 @@ export function rowlenByRange(
   }
 
   const canvas = $("#luckysheetTableContent").get(0).getContext("2d");
-  canvas.textBaseline = "top"; // textBaseline以top计算
+  canvas.textBaseline = "top"; // textBaseline calculated from top
 
   for (let r = r1; r <= r2; r += 1) {
     if (cfg_clone.rowhidden != null && cfg_clone.rowhidden[r] != null) {
@@ -1532,7 +1532,7 @@ export function rowlenByRange(
           computeRowlen = textInfo.textHeightAll + 2;
         }
 
-        // 比较计算高度和当前高度取最大高度
+        // Compare the computed height with the current height and take the maximum
         if (computeRowlen > currentRowLen) {
           currentRowLen = computeRowlen;
         }
@@ -1569,7 +1569,7 @@ export function getdatabyselection(
         return [];
     }
 
-    // 取数据
+    // Fetch data
     let d;
     let cfg;
     if (sheetId != null && sheetId !== ctx.currentSheetId) {

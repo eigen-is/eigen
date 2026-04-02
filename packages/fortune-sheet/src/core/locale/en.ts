@@ -9650,7 +9650,7 @@ export default {
                     name: "Birthday format",
                     example: "0",
                     detail:
-                        "Date type, default:0:[1900/01/01], 1:[1900-01-01], 2:[1900年1月1日]",
+                        "Date type, default:0:[1900/01/01], 1:[1900-01-01], 2:[January 1, 1900]",
                     require: "o",
                     repeat: "n",
                     type: "rangeall",
@@ -12063,10 +12063,10 @@ export default {
         offsetColumnLessZero: "The offset column cannot be negative!",
 
         pasteMustKeybordAlert:
-            "在表格中进行复制粘贴: Ctrl + C 进行复制, Ctrl + V 进行粘贴, Ctrl + X 进行剪切",
-        pasteMustKeybordAlertHTMLTitle: "在表格中进行复制粘贴",
+            "To copy/paste in the spreadsheet: Ctrl + C to copy, Ctrl + V to paste, Ctrl + X to cut",
+        pasteMustKeybordAlertHTMLTitle: "Copy/paste in the spreadsheet",
         pasteMustKeybordAlertHTML:
-            "<span style='line-height: 1.0;font-size:36px;font-weight: bold;color:#666;'>Ctrl + C</span>&nbsp;&nbsp;进行复制<br/><span style='line-height: 1.0;font-size:36px;font-weight: bold;color:#666;'>Ctrl + V</span>&nbsp;&nbsp;进行粘贴<br/><span style='line-height: 1.0;font-size:36px;font-weight: bold;color:#666;'>Ctrl + X</span>&nbsp;&nbsp;进行剪切",
+            "<span style='line-height: 1.0;font-size:36px;font-weight: bold;color:#666;'>Ctrl + C</span>&nbsp;&nbsp;to copy<br/><span style='line-height: 1.0;font-size:36px;font-weight: bold;color:#666;'>Ctrl + V</span>&nbsp;&nbsp;to paste<br/><span style='line-height: 1.0;font-size:36px;font-weight: bold;color:#666;'>Ctrl + X</span>&nbsp;&nbsp;to cut",
     },
     pivotTable: {
         title: "Pivot Table",

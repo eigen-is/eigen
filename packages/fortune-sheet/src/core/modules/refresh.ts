@@ -41,16 +41,16 @@ export function jfrefreshgrid(
 
     // clearTimeout(refreshCanvasTimeOut);
 
-    // 更新数据的范围
+    // Update data range
     // for (let s = 0; s < range.length; s += 1) {
     //   const r1 = range[s].row[0];
     //   const c1 = range[s].column[0];
 
     //   if (server.allowUpdate) {
-    //     // 共享编辑模式
+    //     // Collaborative editing mode
     //     server.historyParam(ctx.flowdata, ctx.currentSheetIndex, range[s]);
     //   }
-    //   // 刷新图表
+    //   // Refresh charts
     //   if (typeof ctx.chartparam.jfrefreshchartall === "function") {
     //     ctx.chartparam.jfrefreshchartall(
     //       ctx.flowdata,
@@ -62,11 +62,11 @@ export function jfrefreshgrid(
     //   }
     // }
 
-    // 单元格数据更新联动
+    // Trigger linked updates when cell data changes
     if (isRunExecFunction) {
         runExecFunction(ctx, range, ctx.currentSheetId, data);
     }
 
-    /* 选区同步 */
+    /* Sync selection */
     // selectHightlightShow();
 }

@@ -96,7 +96,7 @@ export function hideRowOrColumn(
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
 
     if (type === "row") {
-        /* TODO: 工作表保护判断
+        /* TODO: worksheet protection check
         if (
           !checkProtectionAuthorityNormal(Store.currentSheetIndex, "formatRows")
         ) {
@@ -108,7 +108,7 @@ export function hideRowOrColumn(
             rowhidden[r] = 0;
         });
 
-        /* 保存撤销,luck中保存撤销用以下方式实现，而在本项目中不需要另外处理
+        /* save undo; in lucky this is done as follows, but it is not needed in this project
           if(Store.clearjfundo){
             let redo = {};
             redo["type"] = "showHidRows";
@@ -122,12 +122,12 @@ export function hideRowOrColumn(
         ctx.config.rowhidden = rowhidden;
         // const rowLen = ctx.luckysheetfile[index].data!.length;
         /**
-         * 计算要隐藏的行是否是最后一列
-         * 符合最后一列的条件：要隐藏的index===表格的长度-1 或者
-         * 记录隐藏数组里面的数-1===要隐藏的index
+         * check whether the row to be hidden is the last column
+         * conditions for being the last column: the index to hide === sheet length - 1, or
+         * the number in the hidden array - 1 === the index to hide
          */
     } else if (type === "column") {
-        // 隐藏列
+        // hide column
         const colhidden = ctx.config.colhidden ?? {};
 
         rowColInfo.forEach((r) => {
@@ -154,7 +154,7 @@ export function showRowOrColumn(
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
 
     if (type === "row") {
-        /* TODO: 工作表保护判断
+        /* TODO: worksheet protection check
         if (
           !checkProtectionAuthorityNormal(Store.currentSheetIndex, "formatRows")
         ) {
@@ -166,7 +166,7 @@ export function showRowOrColumn(
             delete rowhidden[r];
         });
 
-        /* 保存撤销,luck中保存撤销用以下方式实现，而在本项目中不需要另外处理
+        /* save undo; in lucky this is done as follows, but it is not needed in this project
           if(Store.clearjfundo){
             let redo = {};
             redo["type"] = "showHidRows";
@@ -180,12 +180,12 @@ export function showRowOrColumn(
         ctx.config.rowhidden = rowhidden;
         // const rowLen = ctx.luckysheetfile[index].data!.length;
         /**
-         * 计算要隐藏的行是否是最后一列
-         * 符合最后一列的条件：要隐藏的index===表格的长度-1 或者
-         * 记录隐藏数组里面的数-1===要隐藏的index
+         * check whether the row to be hidden is the last column
+         * conditions for being the last column: the index to hide === sheet length - 1, or
+         * the number in the hidden array - 1 === the index to hide
          */
     } else if (type === "column") {
-        // 隐藏列
+        // hide column
         const colhidden = ctx.config.colhidden ?? {};
 
         rowColInfo.forEach((r) => {

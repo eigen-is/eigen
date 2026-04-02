@@ -58,8 +58,8 @@ export function setFormulaCellInfo(
             calc_funcStr.substring(calc_funcStr.length - 1, 1) === '"'
         )
     ) {
-        // let formulaTextArray = calc_funcStr.split(/==|!=|<>|<=|>=|[,()=+-\/*%&^><]/g);//无法正确分割单引号或双引号之间有==、!=、-等运算符的情况。导致如='1-2'!A1公式中表名1-2的A1单元格内容更新后，公式的值不更新的bug
-        // 解决='1-2'!A1+5会被calc_funcStr.split(/==|!=|<>|<=|>=|[,()=+-\/*%&^><]/g)分割成["","'1","2'!A1",5]的错误情况
+        // let formulaTextArray = calc_funcStr.split(/==|!=|<>|<=|>=|[,()=+-\/*%&^><]/g); // Cannot correctly split cases where ==, !=, - etc. appear between single or double quotes. This caused a bug where the formula value was not updated when the cell content of sheet name '1-2' in ='1-2'!A1 changed.
+        // Fix: ='1-2'!A1+5 being split by calc_funcStr.split(/==|!=|<>|<=|>=|[,()=+-\/*%&^><]/g) into ["","'1","2'!A1",5] incorrectly
         let point = 0; // pointer
         let squote = -1; // single quote
         let dquote = -1; // double quotes
@@ -82,11 +82,11 @@ export function setFormulaCellInfo(
                     point = j;
                 } // end single quote
                 else {
-                    // if (squote === i - 1)//配对的单引号后第一个字符不能是单引号
+                    // if (squote === i - 1) // The first character after a paired single quote cannot be a single quote
                     // {
-                    //    ;//到此处说明公式错误
+                    //    ; // Reaching here means the formula is invalid
                     // }
-                    // 如果是''代表着输出'
+                    // If '' it represents an output of '
                     if (
                         j < calc_funcStr_length - 1 &&
                         calc_funcStr.charAt(j + 1) === "'"
@@ -143,7 +143,7 @@ export function setFormulaCellInfo(
                     .split(/==|!=|<>|<=|>=|[,()=+-/*%&^><]/)
             );
         }
-        // 拼接所有配对单引号及之后一个单元格内容，例如["'1-2'","!A1"]拼接为["'1-2'!A1"]
+        // Concatenate each paired single-quoted segment with the following cell reference, e.g. ["'1-2'","!A1"] becomes ["'1-2'!A1"]
         for (let j = sq_end_array.length - 1; j >= 0; j -= 1) {
             if (sq_end_array[j] !== formulaTextArray.length - 1) {
                 formulaTextArray[sq_end_array[j]] +=
@@ -151,7 +151,7 @@ export function setFormulaCellInfo(
                 formulaTextArray.splice(sq_end_array[j] + 1, 1);
             }
         }
-        // 至此=SUM('1-2'!A1:A2&"'1-2'!A2")由原来的["","SUM","'1","2'!A1:A2","",""'1","2'!A2""]更正为["","SUM","","'1-2'!A1:A2","","",""'1-2'!A2""]
+        // At this point =SUM('1-2'!A1:A2&"'1-2'!A2") is corrected from ["","SUM","'1","2'!A1:A2","",""'1","2'!A2""] to ["","SUM","","'1-2'!A1:A2","","",""'1-2'!A2""]
 
         for (let j = 0; j < formulaTextArray.length; j += 1) {
             const t = formulaTextArray[j];

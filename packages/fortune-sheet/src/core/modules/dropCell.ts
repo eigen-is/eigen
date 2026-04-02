@@ -18,10 +18,10 @@ function toPx(v: number) {
 }
 
 export const dropCellCache: Record<string, any> = {
-    copyRange: {}, // 复制范围
-    applyRange: {}, // 应用范围
-    applyType: null, // 0复制单元格，1填充序列，2仅填充格式，3不带格式填充，4以天数填充，5以工作日填充，6以月填充，7以年填充，8以中文小写数字序列填充
-    direction: null, // down-往下拖拽，right-往右拖拽，up-往上拖拽，left-往左拖拽
+    copyRange: {}, // copy range
+    applyRange: {}, // apply range
+    applyType: null, // 0=copy cells, 1=fill series, 2=fill format only, 3=fill without format, 4=fill by days, 5=fill by weekdays, 6=fill by months, 7=fill by years, 8=fill by Chinese lowercase number sequence
+    direction: null, // down=drag down, right=drag right, up=drag up, left=drag left
     chnNumChar: {
         零: 0,
         一: 1,
@@ -298,15 +298,15 @@ function forecast(x: number, yArr: number[], xArr: number[]) {
         return sum / arr.length;
     }
 
-    const ax = getAverage(xArr); // x数组 平均值
-    const ay = getAverage(yArr); // y数组 平均值
+    const ax = getAverage(xArr); // average of x array
+    const ay = getAverage(yArr); // average of y array
 
     let sum_d = 0;
     let sum_n = 0;
     for (let j = 0; j < xArr.length; j += 1) {
-        // 分母和
+        // sum of denominators
         sum_d += (xArr[j] - ax) * (yArr[j] - ay);
-        // 分子和
+        // sum of numerators
         sum_n += (xArr[j] - ax) * (xArr[j] - ax);
     }
 
@@ -337,28 +337,28 @@ function judgeDate(data: (Cell | null | undefined)[]) {
     const equalDiffYears = dayjs(data[1].m).diff(dayjs(data[0].m), "years");
 
     for (let i = 1; i < data.length; i += 1) {
-        // 日是否一样
+        // check if the day is the same
         if (dayjs(data[i]?.m).date() !== sameDay) {
             isSameDay = false;
         }
-        // 月是否一样
+        // check if the month is the same
         if (dayjs(data[i]?.m).month() !== sameMonth) {
             isSameMonth = false;
         }
-        // 日差是否是 等差数列
+        // check if the day difference is an arithmetic sequence
         if (
             dayjs(data[i]?.m).diff(dayjs(data[i - 1]?.m), "days") !== equalDiffDays
         ) {
             isEqualDiffDays = false;
         }
-        // 月差是否是 等差数列
+        // check if the month difference is an arithmetic sequence
         if (
             dayjs(data[i]?.m).diff(dayjs(data[i - 1]?.m), "months") !==
             equalDiffMonths
         ) {
             isEqualDiffMonths = false;
         }
-        // 年差是否是 等差数列
+        // check if the year difference is an arithmetic sequence
         if (
             dayjs(data[i]?.m).diff(dayjs(data[i - 1]?.m), "years") !== equalDiffYears
         ) {
@@ -551,7 +551,7 @@ function fillSeries(
         data[0] != null &&
         data[1] != null
     ) {
-        // 等比数列
+        // geometric sequence
         for (let i = 1; i <= len; i += 1) {
             const index = (i - 1) % data.length;
             const d = _.cloneDeep(data[index]);
@@ -576,7 +576,7 @@ function fillSeries(
             }
         }
     } else {
-        // 线性数列
+        // linear sequence
         const xArr = getXArr(data.length);
         for (let i = 1; i <= len; i += 1) {
             const index = (i - 1) % data.length;
@@ -650,7 +650,7 @@ function fillDays(
                 .add(step * i, "days")
                 .format("YYYY-MM-DD");
 
-            // TODO generate的处理是否合适
+            // TODO: is this genarate() call handled correctly?
             d.v = genarate(date)?.[2];
             if (d.ct != null && d.ct.fa != null) {
                 d.m = update(d.ct.fa, d.v);
@@ -1032,19 +1032,19 @@ function getDataByType(
     let applyData: (Cell | null | undefined)[] = [];
 
     if (type === "0" || data.length === 1) {
-        // 复制单元格
+        // copy cells
         if (direction === "up" || direction === "left") {
             data.reverse();
         }
 
         applyData = fillCopy(data, len);
     } else if (type === "1") {
-        // 填充序列
+        // fill series
         if (dataType === "number") {
-            // 数据类型是 数字
+            // data type: number
             applyData = fillSeries(data, len, direction);
         } else if (dataType === "extendNumber") {
-            // 扩展数字
+            // extended number
             const dataNumArr = [];
 
             for (let i = 0; i < data.length; i += 1) {
@@ -1061,34 +1061,34 @@ function getDataByType(
             }
 
             if (isEqualDiff(dataNumArr)) {
-                // 等差数列，以等差为step
+                // arithmetic sequence — use the common difference as step
                 const step = dataNumArr[1] - dataNumArr[0];
                 applyData = fillExtendNumber(data, len, step);
             } else {
-                // 不是等差数列，复制数据
+                // not an arithmetic sequence — copy data
                 applyData = fillCopy(data, len);
             }
         } else if (dataType === "date") {
-            // 数据类型是 日期
+            // data type: date
             if (direction === "up" || direction === "left") {
                 data.reverse();
             }
 
             const _judgeDate = judgeDate(data);
             if (_judgeDate[0] && _judgeDate[3]) {
-                // 日一样，月差为等差数列，以月差为step
+                // same day, month difference is an arithmetic sequence — use month diff as step
                 const step = dayjs(data[1]?.m).diff(dayjs(data[0]?.m), "months");
                 applyData = fillMonths(data, len, step);
             } else if (!_judgeDate[0] && _judgeDate[2]) {
-                // 日不一样，日差为等差数列，以日差为step
+                // different day, day difference is an arithmetic sequence — use day diff as step
                 const step = dayjs(data[1]?.m).diff(dayjs(data[0]?.m), "days");
                 applyData = fillDays(data, len, step);
             } else {
-                // 其它，复制数据
+                // other — copy data
                 applyData = fillCopy(data, len);
             }
         } else if (dataType === "chnNumber" && data[0]?.m != null) {
-            // 数据类型是 中文小写数字
+            // data type: Chinese lowercase numbers
 
             let hasweek = false;
             for (let i = 0; i < data.length; i += 1) {
@@ -1134,20 +1134,20 @@ function getDataByType(
                     (dataNumArr[dataNumArr.length - 1] < 6 && dataNumArr[0] > 0) ||
                     (dataNumArr[0] < 6 && dataNumArr[dataNumArr.length - 1] > 0)
                 ) {
-                    // 以周一~周日序列填充
+                    // fill with Mon–Sun sequence
                     const step = dataNumArr[1] - dataNumArr[0];
                     applyData = fillChnWeek(data, len, step);
                 } else {
-                    // 以中文小写数字序列填充
+                    // fill with Chinese lowercase number sequence
                     const step = dataNumArr[1] - dataNumArr[0];
                     applyData = fillChnNumber(data, len, step);
                 }
             } else {
-                // 不是等差数列，复制数据
+                // not an arithmetic sequence — copy data
                 applyData = fillCopy(data, len);
             }
         } else if (dataType === "chnWeek2") {
-            // 周一~周日
+            // Mon (周一) ~ Sun (周日)
             const dataNumArr = [];
             let weekIndex = 0;
 
@@ -1175,15 +1175,15 @@ function getDataByType(
             }
 
             if (isEqualDiff(dataNumArr)) {
-                // 等差数列，以等差为step
+                // arithmetic sequence — use the common difference as step
                 const step = dataNumArr[1] - dataNumArr[0];
                 applyData = fillChnWeek2(data, len, step);
             } else {
-                // 不是等差数列，复制数据
+                // not an arithmetic sequence — copy data
                 applyData = fillCopy(data, len);
             }
         } else if (dataType === "chnWeek3") {
-            // 星期一~星期日
+            // Monday (星期一) ~ Sunday (星期日)
             const dataNumArr = [];
             let weekIndex = 0;
 
@@ -1211,15 +1211,15 @@ function getDataByType(
             }
 
             if (isEqualDiff(dataNumArr)) {
-                // 等差数列，以等差为step
+                // arithmetic sequence — use the common difference as step
                 const step = dataNumArr[1] - dataNumArr[0];
                 applyData = fillChnWeek3(data, len, step);
             } else {
-                // 不是等差数列，复制数据
+                // not an arithmetic sequence — copy data
                 applyData = fillCopy(data, len);
             }
         } else {
-            // 数据类型是 其它
+            // data type: other
             if (direction === "up" || direction === "left") {
                 data.reverse();
             }
@@ -1227,20 +1227,20 @@ function getDataByType(
             applyData = fillCopy(data, len);
         }
         // } else if (type === "2") {
-        //   // 仅填充格式
+        //   // fill format only
         //   if (direction === "up" || direction === "left") {
         //     data.reverse();
         //   }
 
         //   applyData = fillOnlyFormat(data, len);
         // } else if (type === "3") {
-        //   // 不带格式填充
+        //   // fill without format
         //   const dataArr = getDataByType(data, len, direction, "1", dataType);
         //   applyData = fillWithoutFormat(dataArr);
     } else if (type === "4") {
-        // 以天数填充
+        // fill by days
         if (data.length === 2) {
-            // 以日差为step
+            // use the day difference as step
             if (direction === "up" || direction === "left") {
                 data.reverse();
             }
@@ -1254,26 +1254,26 @@ function getDataByType(
 
             const _judgeDate = judgeDate(data);
             if (_judgeDate[0] && _judgeDate[3]) {
-                // 日一样，且月差为等差数列，以月差为step
+                // same day, month difference is an arithmetic sequence — use month diff as step
                 const step = dayjs(data[1]?.m).diff(dayjs(data[0]?.m), "months");
                 applyData = fillMonths(data, len, step);
             } else if (!_judgeDate[0] && _judgeDate[2]) {
-                // 日不一样，且日差为等差数列，以日差为step
+                // different day, day difference is an arithmetic sequence — use day diff as step
                 const step = dayjs(data[1]?.m).diff(dayjs(data[0]?.m), "days");
                 applyData = fillDays(data, len, step);
             } else {
-                // 日差不是等差数列，复制数据
+                // day difference is not an arithmetic sequence — copy data
                 applyData = fillCopy(data, len);
             }
         }
     } else if (type === "5") {
-        // 以工作日填充
+        // fill by weekdays
         if (data.length === 2) {
             if (
                 dayjs(data[1]?.m).date() === dayjs(data[0]?.m).date() &&
                 dayjs(data[1]?.m).diff(dayjs(data[0]?.m), "months") !== 0
             ) {
-                // 日一样，且月差大于一月，以月差为step（若那天为休息日，则向前取最近的工作日）
+                // same day, month diff > 1 month — use month diff as step (if that day is a weekend, roll back to nearest weekday)
                 if (direction === "up" || direction === "left") {
                     data.reverse();
                 }
@@ -1311,9 +1311,9 @@ function getDataByType(
                     }
                 }
             } else {
-                // 日不一样
+                // different day
                 if (Math.abs(dayjs(data[1]?.m).diff(dayjs(data[0]?.m))) > 7) {
-                    // 若日差大于7天，以一月为step（若那天是休息日，则向前取最近的工作日）
+                    // day diff > 7 days — use 1 month as step (if that day is a weekend, roll back to nearest weekday)
                     let step_month;
                     if (direction === "down" || direction === "right") {
                         step_month = 1;
@@ -1322,7 +1322,7 @@ function getDataByType(
                         data.reverse();
                     }
 
-                    let step: number; // 以数组第一个为对比
+                    let step: number; // compare against the first element in the array
                     for (let i = 1; i <= len; i += 1) {
                         const index = (i - 1) % data.length;
                         const d = _.cloneDeep(data[index]);
@@ -1356,7 +1356,7 @@ function getDataByType(
                         }
                     }
                 } else {
-                    // 若日差小于等于7天，以7天为step（若那天是休息日，则向前取最近的工作日）
+                    // day diff <= 7 days — use 7 days as step (if that day is a weekend, roll back to nearest weekday)
                     let step_day;
                     if (direction === "down" || direction === "right") {
                         step_day = 7;
@@ -1365,7 +1365,7 @@ function getDataByType(
                         data.reverse();
                     }
 
-                    let step: number; // 以数组第一个为对比
+                    let step: number; // compare against the first element in the array
                     for (let i = 1; i <= len; i += 1) {
                         const index = (i - 1) % data.length;
                         const d = _.cloneDeep(data[index]);
@@ -1403,7 +1403,7 @@ function getDataByType(
         } else {
             const _judgeDate = judgeDate(data);
             if (_judgeDate[0] && _judgeDate[3]) {
-                // 日一样，且月差为等差数列，以月差为step（若那天为休息日，则向前取最近的工作日）
+                // same day, month diff is an arithmetic sequence — use month diff as step (if that day is a weekend, roll back to nearest weekday)
                 if (direction === "up" || direction === "left") {
                     data.reverse();
                 }
@@ -1441,9 +1441,9 @@ function getDataByType(
                     }
                 }
             } else if (!_judgeDate[0] && _judgeDate[2]) {
-                // 日不一样，且日差为等差数列
+                // different day, day difference is an arithmetic sequence
                 if (Math.abs(dayjs(data[1]?.m).diff(dayjs(data[0]?.m))) > 7) {
-                    // 若日差大于7天，以一月为step（若那天是休息日，则向前取最近的工作日）
+                    // day diff > 7 days — use 1 month as step (if that day is a weekend, roll back to nearest weekday)
                     let step_month;
                     if (direction === "down" || direction === "right") {
                         step_month = 1;
@@ -1452,7 +1452,7 @@ function getDataByType(
                         data.reverse();
                     }
 
-                    let step: number; // 以数组第一个为对比
+                    let step: number; // compare against the first element in the array
                     for (let i = 1; i <= len; i += 1) {
                         const index = (i - 1) % data.length;
                         const d = _.cloneDeep(data[index]);
@@ -1486,7 +1486,7 @@ function getDataByType(
                         }
                     }
                 } else {
-                    // 若日差小于等于7天，以7天为step（若那天是休息日，则向前取最近的工作日）
+                    // day diff <= 7 days — use 7 days as step (if that day is a weekend, roll back to nearest weekday)
                     let step_day;
                     if (direction === "down" || direction === "right") {
                         step_day = 7;
@@ -1495,7 +1495,7 @@ function getDataByType(
                         data.reverse();
                     }
 
-                    let step: number; // 以数组第一个为对比
+                    let step: number; // compare against the first element in the array
                     for (let i = 1; i <= len; i += 1) {
                         const index = (i - 1) % data.length;
                         const d = _.cloneDeep(data[index]);
@@ -1530,7 +1530,7 @@ function getDataByType(
                     }
                 }
             } else {
-                // 日差不是等差数列，复制数据
+                // day difference is not an arithmetic sequence — copy data
                 if (direction === "up" || direction === "left") {
                     data.reverse();
                 }
@@ -1539,13 +1539,13 @@ function getDataByType(
             }
         }
     } else if (type === "6") {
-        // 以月填充
+        // fill by months
         if (data.length === 2) {
             if (
                 dayjs(data[1]?.m).date() === dayjs(data[0]?.m).date() &&
                 dayjs(data[1]?.m).diff(dayjs(data[0]?.m), "months") !== 0
             ) {
-                // 日一样，且月差大于一月，以月差为step
+                // same day, month diff > 1 month — use month diff as step
                 if (direction === "up" || direction === "left") {
                     data.reverse();
                 }
@@ -1553,7 +1553,7 @@ function getDataByType(
                 const step = dayjs(data[1]?.m).diff(dayjs(data[0]?.m), "months");
                 applyData = fillMonths(data, len, step);
             } else {
-                // 以一月为step
+                // use 1 month as step
                 let step_month;
                 if (direction === "down" || direction === "right") {
                     step_month = 1;
@@ -1562,7 +1562,7 @@ function getDataByType(
                     data.reverse();
                 }
 
-                let step: number; // 以数组第一个为对比
+                let step: number; // compare against the first element in the array
                 for (let i = 1; i <= len; i += 1) {
                     const index = (i - 1) % data.length;
                     const d = _.cloneDeep(data[index]);
@@ -1584,7 +1584,7 @@ function getDataByType(
         } else {
             const _judgeDate = judgeDate(data);
             if (_judgeDate[0] && _judgeDate[3]) {
-                // 日一样，且月差为等差数列，以月差为step
+                // same day, month difference is an arithmetic sequence — use month diff as step
                 if (direction === "up" || direction === "left") {
                     data.reverse();
                 }
@@ -1592,7 +1592,7 @@ function getDataByType(
                 const step = dayjs(data[1]?.m).diff(dayjs(data[0]?.m), "months");
                 applyData = fillMonths(data, len, step);
             } else if (!_judgeDate[0] && _judgeDate[2]) {
-                // 日不一样，且日差为等差数列，以一月为step
+                // different day, day difference is an arithmetic sequence — use 1 month as step
                 let step_month;
                 if (direction === "down" || direction === "right") {
                     step_month = 1;
@@ -1601,7 +1601,7 @@ function getDataByType(
                     data.reverse();
                 }
 
-                let step: number; // 以数组第一个为对比
+                let step: number; // compare against the first element in the array
                 for (let i = 1; i <= len; i += 1) {
                     const index = (i - 1) % data.length;
                     const d = _.cloneDeep(data[index]);
@@ -1620,7 +1620,7 @@ function getDataByType(
                     }
                 }
             } else {
-                // 日差不是等差数列，复制数据
+                // day difference is not an arithmetic sequence — copy data
                 if (direction === "up" || direction === "left") {
                     data.reverse();
                 }
@@ -1629,14 +1629,14 @@ function getDataByType(
             }
         }
     } else if (type === "7") {
-        // 以年填充
+        // fill by years
         if (data.length === 2) {
             if (
                 dayjs(data[1]?.m).date() === dayjs(data[0]?.m).date() &&
                 dayjs(data[1]?.m).month() === dayjs(data[0]?.m).month() &&
                 dayjs(data[1]?.m).diff(dayjs(data[0]?.m), "years") !== 0
             ) {
-                // 日月一样，且年差大于一年，以年差为step
+                // same day and month, year diff > 1 year — use year diff as step
                 if (direction === "up" || direction === "left") {
                     data.reverse();
                 }
@@ -1644,7 +1644,7 @@ function getDataByType(
                 const step = dayjs(data[1]?.m).diff(dayjs(data[0]?.m), "years");
                 applyData = fillYears(data, len, step);
             } else {
-                // 以一年为step
+                // use 1 year as step
                 let step_year;
                 if (direction === "down" || direction === "right") {
                     step_year = 1;
@@ -1653,7 +1653,7 @@ function getDataByType(
                     data.reverse();
                 }
 
-                let step: number; // 以数组第一个为对比
+                let step: number; // compare against the first element in the array
                 for (let i = 1; i <= len; i += 1) {
                     const index = (i - 1) % data.length;
                     const d = _.cloneDeep(data[index]);
@@ -1675,7 +1675,7 @@ function getDataByType(
         } else {
             const _judgeDate = judgeDate(data);
             if (_judgeDate[0] && _judgeDate[1] && _judgeDate[4]) {
-                // 日月一样，且年差为等差数列，以年差为step
+                // same day and month, year difference is an arithmetic sequence — use year diff as step
                 if (direction === "up" || direction === "left") {
                     data.reverse();
                 }
@@ -1683,7 +1683,7 @@ function getDataByType(
                 const step = dayjs(data[1]?.m).diff(dayjs(data[0]?.m), "years");
                 applyData = fillYears(data, len, step);
             } else if ((_judgeDate[0] && _judgeDate[3]) || _judgeDate[2]) {
-                // 日一样且月差为等差数列，或天差为等差数列，以一年为step
+                // same day with arithmetic month diff, or arithmetic day diff — use 1 year as step
                 let step_year;
                 if (direction === "down" || direction === "right") {
                     step_year = 1;
@@ -1692,7 +1692,7 @@ function getDataByType(
                     data.reverse();
                 }
 
-                let step: number; // 以数组第一个为对比
+                let step: number; // compare against the first element in the array
                 for (let i = 1; i <= len; i += 1) {
                     const index = (i - 1) % data.length;
                     const d = _.cloneDeep(data[index]);
@@ -1711,7 +1711,7 @@ function getDataByType(
                     }
                 }
             } else {
-                // 日差不是等差数列，复制数据
+                // day difference is not an arithmetic sequence — copy data
                 if (direction === "up" || direction === "left") {
                     data.reverse();
                 }
@@ -1720,7 +1720,7 @@ function getDataByType(
             }
         }
     } else if (type === "8") {
-        // 以中文小写数字序列填充
+        // fill with Chinese lowercase number sequence
         const dataNumArr = [];
         for (let i = 0; i < data.length; i += 1) {
             let m = data[i]?.m;
@@ -1739,7 +1739,7 @@ function getDataByType(
             const step = dataNumArr[1] - dataNumArr[0];
             applyData = fillChnNumber(data, len, step);
         } else {
-            // 不是等差数列，复制数据
+            // not an arithmetic sequence — copy data
             applyData = fillCopy(data, len);
         }
     }
@@ -1787,7 +1787,7 @@ function getCopyData(
         let isSameStr = true;
 
         for (let b: number = b1; b <= b2; b += 1) {
-            // 单元格
+            // cell
             let data;
             if (direction === "down" || direction === "up") {
                 data = d[b][a];
@@ -1795,7 +1795,7 @@ function getCopyData(
                 data = d[a][b];
             }
 
-            // 单元格值类型
+            // cell value type
             let str;
             if (data?.v != null && data.f == null) {
                 if (!!data.ct && data.ct.t === "n") {
@@ -2007,7 +2007,7 @@ function getApplyData(
     const num = Math.floor(asLen / csLen);
     const rsd = asLen % csLen;
 
-    // 纯数字类型
+    // pure number type
     const copyD_number = copyD.number;
     const applyD_number = [];
     if (copyD_number) {
@@ -2035,7 +2035,7 @@ function getApplyData(
         }
     }
 
-    // 扩展数字型（即一串字符最后面的是数字）
+    // extended number type (a string ending with a number)
     const copyD_extendNumber = copyD.extendNumber;
     const applyD_extendNumber = [];
     if (copyD_extendNumber) {
@@ -2073,7 +2073,7 @@ function getApplyData(
         }
     }
 
-    // 日期类型
+    // date type
     const copyD_date = copyD.date;
     const applyD_date = [];
     if (copyD_date) {
@@ -2101,7 +2101,7 @@ function getApplyData(
         }
     }
 
-    // 中文小写数字 或 一~日
+    // Chinese lowercase numbers or 一~日
     const copyD_chnNumber = copyD.chnNumber;
     const applyD_chnNumber = [];
     if (copyD_chnNumber) {
@@ -2129,7 +2129,7 @@ function getApplyData(
         }
     }
 
-    // 周一~周日
+    // Mon (周一) ~ Sun (周日)
     const copyD_chnWeek2 = copyD.chnWeek2;
     const applyD_chnWeek2 = [];
     if (copyD_chnWeek2) {
@@ -2157,7 +2157,7 @@ function getApplyData(
         }
     }
 
-    // 星期一~星期日
+    // Monday (星期一) ~ Sunday (星期日)
     const copyD_chnWeek3 = copyD.chnWeek3;
     const applyD_chnWeek3 = [];
     if (copyD_chnWeek3) {
@@ -2185,7 +2185,7 @@ function getApplyData(
         }
     }
 
-    // 其它
+    // other
     const copyD_other = copyD.other;
     const applyD_other = [];
     if (copyD_other) {
@@ -2299,7 +2299,7 @@ export function updateDropCell(ctx: Context) {
     const {direction} = dropCellCache;
     // const type = dropCellCache.applyType;
 
-    // 复制范围
+    // copy range
     const {copyRange} = dropCellCache;
     const copy_str_r = copyRange.row[0];
     const copy_end_r = copyRange.row[1];
@@ -2322,7 +2322,7 @@ export function updateDropCell(ctx: Context) {
         csLen = copy_end_c - copy_str_c + 1;
     }
 
-    // 应用范围
+    // apply range
     const {applyRange} = dropCellCache;
     const apply_str_r = applyRange.row[0];
     const apply_end_r = applyRange.row[1];
@@ -2409,7 +2409,7 @@ export function updateDropCell(ctx: Context) {
 
                     d[j][i] = cell || null;
 
-                    // 边框
+                    // border
                     const bd_r = copy_str_r + ((j - apply_str_r) % csLen);
                     const bd_c = i;
 
@@ -2443,7 +2443,7 @@ export function updateDropCell(ctx: Context) {
                         cfg.borderInfo.push(bd_obj);
                     }
 
-                    // 数据验证
+                    // data validation
                     // Bug
                     if (dataVerification != null && dataVerification[`${bd_r}_${bd_c}`]) {
                         dataVerification[`${j}_${i}`] = dataVerification[`${bd_r}_${bd_c}`];
@@ -2509,7 +2509,7 @@ export function updateDropCell(ctx: Context) {
 
                     d[j][i] = cell || null;
 
-                    // 边框
+                    // border
                     const bd_r = copy_end_r - ((apply_end_r - j) % csLen);
                     const bd_c = i;
 
@@ -2543,7 +2543,7 @@ export function updateDropCell(ctx: Context) {
                         cfg.borderInfo.push(bd_obj);
                     }
 
-                    // 数据验证
+                    // data validation
                     if (dataVerification != null && dataVerification[`${bd_r}_${bd_c}`]) {
                         dataVerification[`${j}_${i}`] = dataVerification[`${bd_r}_${bd_c}`];
                     }
@@ -2618,7 +2618,7 @@ export function updateDropCell(ctx: Context) {
 
                     d[i][j] = cell || null;
 
-                    // 边框
+                    // border
                     const bd_r = i;
                     const bd_c = copy_str_c + ((j - apply_str_c) % csLen);
 
@@ -2652,7 +2652,7 @@ export function updateDropCell(ctx: Context) {
                         cfg.borderInfo.push(bd_obj);
                     }
 
-                    // 数据验证
+                    // data validation
                     if (dataVerification != null && dataVerification[`${bd_r}_${bd_c}`]) {
                         dataVerification[`${i}_${j}`] = dataVerification[`${bd_r}_${bd_c}`];
                     }
@@ -2717,7 +2717,7 @@ export function updateDropCell(ctx: Context) {
 
                     d[i][j] = cell || null;
 
-                    // 边框
+                    // border
                     const bd_r = i;
                     const bd_c = copy_end_c - ((apply_end_c - j) % csLen);
 
@@ -2751,7 +2751,7 @@ export function updateDropCell(ctx: Context) {
                         cfg.borderInfo.push(bd_obj);
                     }
 
-                    // 数据验证
+                    // data validation
                     if (dataVerification != null && dataVerification[`${bd_r}_${bd_c}`]) {
                         dataVerification[`${i}_${j}`] = dataVerification[`${bd_r}_${bd_c}`];
                     }
@@ -2760,7 +2760,7 @@ export function updateDropCell(ctx: Context) {
         }
     }
 
-    // 条件格式
+    // conditional format
     const cdformat = file.luckysheet_conditionformat_save;
     if (cdformat != null && cdformat.length > 0) {
         for (let i = 0; i < cdformat.length; i += 1) {
@@ -2786,7 +2786,7 @@ export function updateDropCell(ctx: Context) {
         }
     }
 
-    // 刷新一次表格
+    // refresh the grid
     // const allParam = {
     //   cfg,
     //   cdformat,
@@ -2847,7 +2847,7 @@ export function onDropCellSelectEnd(
         let col_s = last.column[0];
         let col_e = last.column[1];
 
-        // 复制范围
+        // copy range
         dropCellCache.copyRange = _.cloneDeep(_.pick(last, ["row", "column"]));
         // applyType
         const typeItemHide = getTypeItemHide(ctx);
@@ -2874,7 +2874,7 @@ export function onDropCellSelectEnd(
         ) {
             if (!(row_index >= row_s && row_index <= row_e)) {
                 if (top_move != null && top_move >= row_pre) {
-                    // 当往上拖拽时
+                    // dragging upward
                     dropCellCache.applyRange = {
                         row: [row_index, last.row[0] - 1],
                         column: last.column,
@@ -2883,13 +2883,13 @@ export function onDropCellSelectEnd(
 
                     row_s -= last.row[0] - row_index;
 
-                    // 是否有数据透视表范围
+                    // check if pivot table range is affected
                     // if (pivotTable.isPivotRange(row_s, col_e)) {
                     //   tooltip.info(locale_drag.affectPivot, "");
                     //   return;
                     // }
                 } else {
-                    // 当往下拖拽时
+                    // dragging downward
                     dropCellCache.applyRange = {
                         row: [last.row[1] + 1, row_index],
                         column: last.column,
@@ -2898,7 +2898,7 @@ export function onDropCellSelectEnd(
 
                     row_e += row_index - last.row[1];
 
-                    // 是否有数据透视表范围
+                    // check if pivot table range is affected
                     // if (pivotTable.isPivotRange(row_e, col_e)) {
                     //   tooltip.info(locale_drag.affectPivot, "");
                     //   return;
@@ -2910,7 +2910,7 @@ export function onDropCellSelectEnd(
         } else {
             if (!(col_index >= col_s && col_index <= col_e)) {
                 if (left_move != null && left_move >= col_pre) {
-                    // 当往左拖拽时
+                    // dragging leftward
                     dropCellCache.applyRange = {
                         row: last.row,
                         column: [col_index, last.column[0] - 1],
@@ -2919,13 +2919,13 @@ export function onDropCellSelectEnd(
 
                     col_s -= last.column[0] - col_index;
 
-                    // 是否有数据透视表范围
+                    // check if pivot table range is affected
                     // if (pivotTable.isPivotRange(row_e, col_s)) {
                     //   tooltip.info(locale_drag.affectPivot, "");
                     //   return;
                     // }
                 } else {
-                    // 当往右拖拽时
+                    // dragging rightward
                     dropCellCache.applyRange = {
                         row: last.row,
                         column: [last.column[1] + 1, col_index],
@@ -2934,7 +2934,7 @@ export function onDropCellSelectEnd(
 
                     col_e += col_index - last.column[1];
 
-                    // 是否有数据透视表范围
+                    // check if pivot table range is affected
                     // if (pivotTable.isPivotRange(row_e, col_e)) {
                     //   tooltip.info(locale_drag.affectPivot, "");
                     //   return;

@@ -2,10 +2,10 @@ export function moveToEnd(obj: HTMLDivElement) {
     if (document.createRange) {
         // chrome, firefox, opera, safari, ie9+
         if (obj.innerHTML !== obj.innerText || obj.innerHTML === "") {
-            obj.focus(); // 解决ff不获取焦点无法定位问题
-            const range = window.getSelection(); // 创建range
-            range?.selectAllChildren(obj); // range 选择obj下所有子内容
-            range?.collapseToEnd(); // 光标移至最后
+            obj.focus(); // Fix Firefox not being able to position cursor without focus
+            const range = window.getSelection(); // Create range
+            range?.selectAllChildren(obj); // Select all child content of obj within the range
+            range?.collapseToEnd(); // Move cursor to the end
         } else {
             const len = obj.innerText.length;
             const range = document.createRange();

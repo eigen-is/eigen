@@ -52,7 +52,7 @@ export function checkProtectionSelectLockedOrUnLockedCells(
     const cell = data?.[r]?.[c];
 
     if (cell && cell.lo === 0) {
-        // lo为0的时候才是可编辑
+        // lo === 0 means the cell is editable
         if (aut.selectunLockedCells === 1 || _.isNil(aut.selectunLockedCells)) {
             return true;
         }

@@ -64,7 +64,7 @@ function parseDate(str: string | Date, fixdate?: number) {
 }
 
 export function genarate(value: string | number | boolean) {
-    // 万 单位格式增加！！！
+    // Add support for 万 (10,000) unit format!!!
     let m: string | null = null;
     let ct: any = {};
     let v: any = value;
@@ -75,7 +75,7 @@ export function genarate(value: string | number | boolean) {
 
     if (/^-?[0-9]{1,}[,][0-9]{3}(.[0-9]{1,2})?$/.test(value as string)) {
         value = value as string;
-        // 表述金额的字符串，如：12,000.00 或者 -12,000.00
+        // String representing a monetary amount, e.g. 12,000.00 or -12,000.00
         m = value;
         v = Number(value.split(".")[0].replace(",", ""));
         let fa = "#,##0";

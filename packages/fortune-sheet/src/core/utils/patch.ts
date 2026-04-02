@@ -279,7 +279,7 @@ export function patchToOp(
         );
         options.id = options.addSheet!.id as string;
         if (undo) {
-            // 撤消增表
+            // undo add sheet
             const index = getSheetIndex(
                 ctx,
                 options.addSheet!.id as string
@@ -306,7 +306,7 @@ export function patchToOp(
                 });
             }
         } else {
-            // 正常增表
+            // normal add sheet
             ops = otherOps;
             ops.push({
                 op: "addSheet",
@@ -318,7 +318,7 @@ export function patchToOp(
     } else if (options?.deleteSheetOp) {
         options.id = options.deleteSheetOp!.id as string;
         if (undo) {
-            // 撤销删表
+            // undo delete sheet
             ops = [
                 {
                     op: "addSheet",
@@ -348,7 +348,7 @@ export function patchToOp(
                 });
             });
         } else {
-            // 正常删表
+            // normal delete sheet
             ops = [
                 {
                     op: "deleteSheet",

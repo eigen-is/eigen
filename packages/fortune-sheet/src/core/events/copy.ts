@@ -10,7 +10,7 @@ export function handleCopy(ctx: Context) {
     //   return;
     // }
 
-    // // 复制时存在格式刷状态，取消格式刷
+    // // if format-painter is active during copy, cancel it
     if (ctx.luckysheetPaintModelOn) {
         cancelPaintModel(ctx);
     }
@@ -20,7 +20,7 @@ export function handleCopy(ctx: Context) {
         return;
     }
 
-    // 复制范围内包含部分合并单元格，提示
+    // warn if the copy range contains partially merged cells
     if (ctx.config.merge != null) {
         let has_PartMC = false;
 
@@ -47,7 +47,7 @@ export function handleCopy(ctx: Context) {
         }
     }
 
-    // 多重选区 有条件格式时 提示
+    // warn when multiple selections have conditional formatting
     const cdformat =
         ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId) as number]
             .luckysheet_conditionformat_save;
@@ -94,7 +94,7 @@ export function handleCopy(ctx: Context) {
         }
     }
 
-    // 多重选区 行不一样且列不一样时 提示
+    // warn when multiple selections span different rows and columns
     if (selection.length > 1) {
         let isSameRow = true;
         const str_r = selection[0].row[0];

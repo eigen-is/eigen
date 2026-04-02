@@ -64,7 +64,7 @@ export function scrollToHighlightCell(ctx: Context, r: number, c: number) {
     }
 }
 
-// 公式函数 选区实体框
+// Formula function: selection highlight box
 export function seletedHighlistByindex(
     ctx: Context,
     r1: number,
@@ -242,7 +242,7 @@ export function pasteHandlerOfPaintModel(
     }
 
     if (!copyRange) return;
-    // 复制范围
+    // Copy range
     const copyHasMC = copyRange.HasMC;
     // let copyRowlChange = copyRange["RowlChange"];
     const copySheetIndex = copyRange.dataSheetId;
@@ -260,22 +260,22 @@ export function pasteHandlerOfPaintModel(
         )
     );
 
-    // 应用范围
+    // Apply range
     if (!ctx.luckysheet_select_save) return;
-    // 框选区域
+    // Selected region
     const last =
         ctx.luckysheet_select_save[ctx.luckysheet_select_save.length - 1];
-    // 框选区域输出
+    // Selected region output
     const minh = last.row[0];
-    let maxh = last.row[1]; // 应用范围首尾行
+    let maxh = last.row[1]; // Apply range: first and last rows
     const minc = last.column[0];
-    let maxc = last.column[1]; // 应用范围首尾列
+    let maxc = last.column[1]; // Apply range: first and last columns
 
     const copyh = copyData.length;
     const copyc = copyData[0].length;
 
     if (minh === maxh && minc === maxc) {
-        // 应用范围是一个单元格，自动增加到复制范围大小 (若自动增加的范围包含部分合并单元格，则提示)
+        // Apply range is a single cell; automatically expand to the copy range size (if the expanded range partially overlaps a merged cell, show a warning)
         let has_PartMC = false;
         if (cfg.merge != null) {
             has_PartMC = hasPartMC(
@@ -290,10 +290,10 @@ export function pasteHandlerOfPaintModel(
 
         if (has_PartMC) {
             // if (isEditMode()) {
-            //   alert("不能对合并单元格做部分更改");
+            //   alert("Cannot make partial changes to merged cells");
             // }
             // else {
-            //   tooltip.info('<i class="fa fa-exclamation-triangle"></i>提示', "不能对合并单元格做部分更改");
+            //   tooltip.info('<i class="fa fa-exclamation-triangle"></i>Tip', "Cannot make partial changes to merged cells");
             // }
             return;
         }
@@ -302,11 +302,11 @@ export function pasteHandlerOfPaintModel(
         maxc = minc + copyc - 1;
     }
 
-    const timesH = Math.ceil((maxh - minh + 1) / copyh); // 复制行 组数
-    const timesC = Math.ceil((maxc - minc + 1) / copyc); // 复制列 组数
+    const timesH = Math.ceil((maxh - minh + 1) / copyh); // Number of row copy groups
+    const timesC = Math.ceil((maxc - minc + 1) / copyc); // Number of column copy groups
 
-    // let d = editor.deepCopyFlowData(ctx.flowdata);//取数据
-    const flowdata = getFlowdata(ctx); // 取数据
+    // let d = editor.deepCopyFlowData(ctx.flowdata); // fetch data
+    const flowdata = getFlowdata(ctx); // fetch data
     if (flowdata == null) return;
     const cellMaxLength = flowdata[0].length;
     const rowMaxLength = flowdata.length;
@@ -385,7 +385,7 @@ export function pasteHandlerOfPaintModel(
                         cfg.borderInfo.push(bd_obj);
                     }
 
-                    // 数据验证 复制
+                    // Data validation copy
                     if (c_dataVerification[`${c_r1 + h - mth}_${c_c1 + c - mtc}`]) {
                         if (dataVerification == null) {
                             dataVerification = _.cloneDeep(
@@ -481,7 +481,7 @@ export function pasteHandlerOfPaintModel(
 
                         if (x[c].v != null) {
                             if (value.ct != null && value.ct.fa != null) {
-                                // 修改被格式刷的值
+                                // Update the value modified by the format painter
                                 const mask = update(value.ct.fa, x[c].v);
                                 x[c].m = mask;
                             }
@@ -497,7 +497,7 @@ export function pasteHandlerOfPaintModel(
     currFile.config = cfg;
     currFile.dataVerification = dataVerification;
 
-    // 复制范围 是否有 条件格式
+    // Whether the copy range has conditional formatting
     let cdformat: any = null;
     const copyIndex = getSheetIndex(ctx, copySheetIndex);
     if (!copyIndex) return;
@@ -553,11 +553,11 @@ export function pasteHandlerOfPaintModel(
 //   jfrefreshgrid(flowdata, ctx.luckysheet_select_save, allParam);
 // }
 // else {
-//   // 选区格式刷存在超出边界的情况
+//   // The selection format painter may exceed the boundary
 //   if (maxh >= flowdata.length) {
 //     maxh = flowdata.length - 1;
 //   }
-//   cfg = rowlenByRange(flowdata, minh, maxh, cfg); //更新行高
+//   cfg = rowlenByRange(flowdata, minh, maxh, cfg); // update row heights
 //   let allParam = {
 //     "cfg": cfg,
 //     "RowlChange": true,
@@ -599,7 +599,7 @@ export function selectionCopyShow(range: any, ctx: Context) {
     // }
 }
 
-// shift + 方向键 / ctrl + shift + 方向键 功能
+// shift + arrow key / ctrl + shift + arrow key functionality
 export function rowHasMerged(ctx: Context, r: number, c1: number, c2: number) {
     let hasMerged = false;
     const flowData = getFlowdata(ctx);
@@ -634,7 +634,7 @@ export function colHasMerged(ctx: Context, c: number, r1: number, r2: number) {
     return hasMerged;
 }
 
-// 得到合并
+// Get merged cell info
 export function getRowMerge(
     ctx: Context,
     rIndex: number,
@@ -810,7 +810,7 @@ export function moveHighlightCell(
             curC = last.column_focus;
         }
 
-        // focus单元格 是否是合并单元格
+        // Whether the focused cell is a merged cell
         const margeset = mergeBorder(ctx, flowdata, curR, curC);
         if (margeset) {
             const str_r = margeset.row[2];
@@ -869,7 +869,7 @@ export function moveHighlightCell(
             moveY = curC;
         }
 
-        // 移动的下一个单元格是否是合并的单元格
+        // Whether the next cell to move to is a merged cell
         const margeset2 = mergeBorder(ctx, flowdata, curR, curC);
         if (margeset2) {
             [row_pre, row, row_index, row_index_ed] = margeset2.row;
@@ -931,7 +931,7 @@ export function moveHighlightCell(
             curC = last.column_focus;
         }
 
-        // focus单元格 是否是合并单元格
+        // Whether the focused cell is a merged cell
         const margeset = mergeBorder(ctx, flowdata, curR, curC);
         if (margeset) {
             const str_r = margeset.row[2];
@@ -990,7 +990,7 @@ export function moveHighlightCell(
             moveY = curC;
         }
 
-        // 移动的下一个单元格是否是合并的单元格
+        // Whether the next cell to move to is a merged cell
         const margeset2 = mergeBorder(ctx, flowdata, curR, curC);
         if (margeset2) {
             [row_pre, row, row_index, row_index_ed] = margeset2.row;
@@ -1090,11 +1090,11 @@ export function moveHighlightCell(
     countfunc();
     */
 
-    // 移动单元格通知后台
+    // Notify the server of cell move
     // server.saveParam("mv", ctx.currentSheetId, ctx.luckysheet_select_save);
 }
 
-// shift + 方向键  调整选区
+// shift + arrow key: adjust the selection range
 export function moveHighlightRange(
     ctx: Context,
     postion: "down" | "right",
@@ -1121,9 +1121,9 @@ export function moveHighlightRange(
         const datarowlen = flowData.length;
         const datacolumnlen = flowData[0].length;
         if (postion === "down") {
-            // 选区上下变动
+            // Selection changes vertically
             if (rowHasMerged(ctx, rf, curC, endC)) {
-                // focus单元格所在行有合并单元格
+                // The row containing the focused cell has merged cells
                 const rfMerge = getRowMerge(ctx, rf, curC, endC);
                 const rf_str = rfMerge[0];
                 const rf_end = rfMerge[1];
@@ -1559,7 +1559,7 @@ export function rangeValueToHtml(
 
     let borderInfoCompute;
     if (sheet.config?.borderInfo && sheet.config.borderInfo.length > 0) {
-        // 边框
+        // Border
         borderInfoCompute = getBorderInfoCompute(ctx, sheetId);
     }
 
@@ -1638,7 +1638,7 @@ export function rangeValueToHtml(
                     if ("rs" in cell.mc) {
                         span = `rowspan="${cell.mc.rs}" colspan="${cell.mc.cs}"`;
 
-                        // 边框
+                        // Border
                         if (borderInfoCompute && borderInfoCompute[`${r}_${c}`]) {
                             const bl_obj: any = {color: {}, style: {}};
                             const br_obj: any = {color: {}, style: {}};
@@ -1839,30 +1839,30 @@ export function rangeValueToHtml(
                         continue;
                     }
                 } else {
-                    // 边框
+                    // Border
                     if (borderInfoCompute && borderInfoCompute[`${r}_${c}`]) {
-                        // 左边框
+                        // Left border
                         if (borderInfoCompute[`${r}_${c}`].l) {
                             const linetype = borderInfoCompute[`${r}_${c}`].l.style;
                             const bcolor = borderInfoCompute[`${r}_${c}`].l.color;
                             style += `border-left:${getHtmlBorderStyle(linetype, bcolor)}`;
                         }
 
-                        // 右边框
+                        // Right border
                         if (borderInfoCompute[`${r}_${c}`].r) {
                             const linetype = borderInfoCompute[`${r}_${c}`].r.style;
                             const bcolor = borderInfoCompute[`${r}_${c}`].r.color;
                             style += `border-right:${getHtmlBorderStyle(linetype, bcolor)}`;
                         }
 
-                        // 下边框
+                        // Bottom border
                         if (borderInfoCompute[`${r}_${c}`].b) {
                             const linetype = borderInfoCompute[`${r}_${c}`].b.style;
                             const bcolor = borderInfoCompute[`${r}_${c}`].b.color;
                             style += `border-bottom:${getHtmlBorderStyle(linetype, bcolor)}`;
                         }
 
-                        // 上边框
+                        // Top border
                         if (borderInfoCompute[`${r}_${c}`].t) {
                             const linetype = borderInfoCompute[`${r}_${c}`].t.style;
                             const bcolor = borderInfoCompute[`${r}_${c}`].t.color;
@@ -1903,30 +1903,30 @@ export function rangeValueToHtml(
             } else {
                 let style = "";
 
-                // 边框
+                // Border
                 if (borderInfoCompute && borderInfoCompute[`${r}_${c}`]) {
-                    // 左边框
+                    // Left border
                     if (borderInfoCompute[`${r}_${c}`].l) {
                         const linetype = borderInfoCompute[`${r}_${c}`].l.style;
                         const bcolor = borderInfoCompute[`${r}_${c}`].l.color;
                         style += `border-left:${getHtmlBorderStyle(linetype, bcolor)}`;
                     }
 
-                    // 右边框
+                    // Right border
                     if (borderInfoCompute[`${r}_${c}`].r) {
                         const linetype = borderInfoCompute[`${r}_${c}`].r.style;
                         const bcolor = borderInfoCompute[`${r}_${c}`].r.color;
                         style += `border-right:${getHtmlBorderStyle(linetype, bcolor)}`;
                     }
 
-                    // 下边框
+                    // Bottom border
                     if (borderInfoCompute[`${r}_${c}`].b) {
                         const linetype = borderInfoCompute[`${r}_${c}`].b.style;
                         const bcolor = borderInfoCompute[`${r}_${c}`].b.color;
                         style += `border-bottom:${getHtmlBorderStyle(linetype, bcolor)}`;
                     }
 
-                    // 上边框
+                    // Top border
                     if (borderInfoCompute[`${r}_${c}`].t) {
                         const linetype = borderInfoCompute[`${r}_${c}`].t.style;
                         const bcolor = borderInfoCompute[`${r}_${c}`].t.color;
@@ -1980,7 +1980,7 @@ export function copy(ctx: Context) {
     const flowdata = getFlowdata(ctx);
 
     ctx.luckysheet_selection_range = [];
-    // copy范围
+    // Copy range
     const copyRange = [];
     let RowlChange = false;
     let HasMC = false;
@@ -2030,7 +2030,7 @@ export function copy(ctx: Context) {
 
     // selectionCopyShow();
 
-    // luckysheet内copy保存
+    // Save copy data within luckysheet
     ctx.luckysheet_copy_save = {
         dataSheetId: ctx.currentSheetId,
         copyRange,
@@ -2109,14 +2109,14 @@ export function deleteSelectedCellText(ctx: Context): string {
         }
         // jfrefreshgrid(d, ctx.luckysheet_select_save);
 
-        // // 清空编辑框的内容
-        // // 备注：在functionInputHanddler方法中会把该标签的内容拷贝到 #luckysheet-functionbox-cell
+        // // Clear the content of the editor box
+        // // Note: the functionInputHanddler method copies this element's content to #luckysheet-functionbox-cell
         // $("#luckysheet-rich-text-editor").html("");
     }
     return "success";
 }
 
-// 选区是否重叠
+// Whether selections overlap
 export function selectIsOverlap(ctx: Context, range?: any) {
     if (range == null) {
         range = ctx.luckysheet_select_save;
@@ -2148,7 +2148,7 @@ export function selectIsOverlap(ctx: Context, range?: any) {
 }
 
 export function selectAll(ctx: Context) {
-    // 全选表格
+    // Select all cells in the sheet
     // if (!checkProtectionAllSelected(ctx.currentSheetId)) {
     //   return;
     // }
@@ -2203,7 +2203,7 @@ export function fixRowStyleOverflowInFreeze(
         const height_move = row - row_pre - 1;
 
         if (r1 >= freezen_rowindex) {
-            // 原选区在冻结区外
+            // Original selection is outside the frozen area
             if (top_move + height_move < freezenTop + offTop) {
                 rangeshow = false;
             } else if (top_move < freezenTop + offTop) {
@@ -2212,7 +2212,7 @@ export function fixRowStyleOverflowInFreeze(
             } else {
             }
         } else if (r2 >= freezen_rowindex) {
-            // 原选区有一部分在冻结区内
+            // Original selection partially overlaps the frozen area
             if (top_move + height_move < freezenTop + offTop) {
                 ret.top = top_move + offTop;
                 ret.height = freezenTop - top_move;
@@ -2221,7 +2221,7 @@ export function fixRowStyleOverflowInFreeze(
                 ret.height = height_move - offTop;
             }
         } else {
-            // 原选区在冻结区内
+            // Original selection is inside the frozen area
             ret.top = top_move + offTop;
         }
     }
@@ -2262,7 +2262,7 @@ export function fixColumnStyleOverflowInFreeze(
         const width_move = col - col_pre - 1;
 
         if (c1 >= freezen_colindex) {
-            // 原选区在冻结区外
+            // Original selection is outside the frozen area
             if (left_move + width_move < freezenLeft + offLeft) {
                 rangeshow = false;
             } else if (left_move < freezenLeft + offLeft) {
@@ -2271,7 +2271,7 @@ export function fixColumnStyleOverflowInFreeze(
             } else {
             }
         } else if (c2 >= freezen_colindex) {
-            // 原选区有一部分在冻结区内
+            // Original selection partially overlaps the frozen area
             if (left_move + width_move < freezenLeft + offLeft) {
                 ret.left = left_move + offLeft;
                 ret.width = freezenLeft - left_move;
@@ -2280,7 +2280,7 @@ export function fixColumnStyleOverflowInFreeze(
                 ret.width = width_move - offLeft;
             }
         } else {
-            // 原选区在冻结区内
+            // Original selection is inside the frozen area
             ret.left = left_move + offLeft;
         }
     }
@@ -2301,11 +2301,11 @@ export function calcSelectionInfo(ctx: Context, lang?: string | null) {
         const data = getDataBySelectionNoCopy(ctx, selection[s]);
         for (let r = 0; r < data.length; r += 1) {
             for (let c = 0; c < data[0].length; c += 1) {
-                // 防止选区长度超出data
+                // Prevent the selection length from exceeding data bounds
                 if (r >= data.length || c >= data[0].length) break;
                 const ct = data![r][c]?.ct?.t as string;
                 const value = data![r][c]?.m as string;
-                // 判断是不是数字
+                // Check whether the value is a number
                 if (
                     ct === "n" ||
                     (ct === "g" && parseFloat(value).toString() !== "NaN")

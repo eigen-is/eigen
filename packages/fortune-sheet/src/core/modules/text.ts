@@ -129,7 +129,7 @@ export function getFontSet(
     return defaultFont(defaultFontSize);
 }
 
-// 获取有值单元格文本大小
+// Get text size for cells with a value
 // let measureTextCache = {}, measureTextCacheTimeOut = null;
 export function getMeasureText(
     value: any,
@@ -332,7 +332,7 @@ export function drawLineInfo(
     }
 }
 
-// 获取单元格文本内容的渲染信息
+// Get rendering info for cell text content
 // let measureTextCache = {}, measureTextCacheTimeOut = null;
 // option {cellWidth,cellHeight,space_width,space_height}
 export function getCellTextInfo(
@@ -359,7 +359,7 @@ export function getCellTextInfo(
 
     // let cell = sheetCtx.flowdata[r][c];
     let {space_width} = option;
-    let {space_height} = option; // 宽高方向 间隙
+    let {space_height} = option; // Gap in width/height direction
 
     if (space_width === undefined) {
         space_width = 2;
@@ -369,9 +369,9 @@ export function getCellTextInfo(
         space_height = 2;
     }
 
-    // 水平对齐
+    // Horizontal alignment
     const horizonAlign = normalizedCellAttr(cell, "ht");
-    // 垂直对齐
+    // Vertical alignment
     const verticalAlign = normalizedCellAttr(cell, "vt");
 
     const tb = normalizedCellAttr(cell, "tb"); // wrap overflow
@@ -526,7 +526,7 @@ export function getCellTextInfo(
         // vertical text
         renderCtx.textBaseline = "top";
 
-        let textW_all = 0; // 拆分后宽高度合计
+        let textW_all = 0; // Total width/height after splitting
         let textH_all = 0;
         let colIndex = 0;
         let textH_all_cache = 0;
@@ -756,7 +756,7 @@ export function getCellTextInfo(
         if (tb === "2" || isInline) {
             // wrap
 
-            let textW_all = 0; // 拆分后宽高度合计
+            let textW_all = 0; // Total width/height after splitting
             let textH_all = 0;
             let textW_all_inner = 0;
 
@@ -1757,13 +1757,13 @@ export function getCellTextInfo(
             const width = textWidthAll;
             const height = textHeightAll;
 
-            let left = space_width + textHeight * Math.sin(rtPI) * isRotateUp; // 默认为1，左对齐
+            let left = space_width + textHeight * Math.sin(rtPI) * isRotateUp; // Default: left-align (ht=1)
             if (horizonAlign === "0") {
-                // 居中对齐
+                // Center-align
                 left =
                     cellWidth / 2 - width / 2 + textHeight * Math.sin(rtPI) * isRotateUp;
             } else if (horizonAlign === "2") {
-                // 右对齐
+                // Right-align
                 left =
                     cellWidth -
                     space_width -
@@ -1776,16 +1776,16 @@ export function getCellTextInfo(
                 space_height -
                 height +
                 measureText.actualBoundingBoxAscent * Math.cos(rtPI) +
-                textWidth * Math.sin(rtPI) * isRotateUp; // 默认为2，下对齐
+                textWidth * Math.sin(rtPI) * isRotateUp; // Default: bottom-align (vt=2)
             if (verticalAlign === "0") {
-                // 居中对齐
+                // Center-align
                 top =
                     cellHeight / 2 -
                     height / 2 +
                     measureText.actualBoundingBoxAscent * Math.cos(rtPI) +
                     textWidth * Math.sin(rtPI) * isRotateUp;
             } else if (verticalAlign === "1") {
-                // 上对齐
+                // Top-align
                 top =
                     space_height +
                     measureText.actualBoundingBoxAscent * Math.cos(rtPI) +

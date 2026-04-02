@@ -31,7 +31,7 @@ export function handleScreenShot(ctx: Context) {
         return undefined;
     }
 
-    // 截图范围内包含部分合并单元格，提示
+    // Screenshot range contains partial merged cells, show a warning
     if (ctx.config.merge != null) {
         let has_PartMC = false;
 
@@ -104,7 +104,7 @@ export function handleScreenShot(ctx: Context) {
     const ctx_newCanvas = newCanvasElement.getContext("2d");
     if (ctx_newCanvas == null) return undefined;
 
-    // 补上 左边框和上边框
+    // Draw the left border and top border
     ctx_newCanvas.beginPath();
     ctx_newCanvas.moveTo(0, 0);
     ctx_newCanvas.lineTo(0, ctx.devicePixelRatio * rh_height);
