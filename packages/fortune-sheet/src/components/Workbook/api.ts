@@ -8,6 +8,7 @@ import {
     createFilterOptions,
     deleteRowCol,
     deleteSheet,
+    getFlowdata,
     getSheetIndex,
     insertRowCol,
     Op,
@@ -328,6 +329,8 @@ export function generateAPIs(
 
         handleUndo,
         handleRedo,
+
+        getFlowdata: (id?: string | null) => getFlowdata(context, id),
 
         calculateFormula: (id?: string, range?: SingleRange) => {
             setContext((draftCtx) => {
