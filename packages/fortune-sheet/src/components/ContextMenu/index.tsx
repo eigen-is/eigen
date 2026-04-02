@@ -743,6 +743,7 @@ export const ContextMenu: React.FC = () => {
                 side="bottom"
                 align="start"
                 collisionPadding={8}
+                style={{ zIndex: 1010 }}
                 onContextMenu={(e) => e.stopPropagation()}
             >
                 {context.contextMenu.headerMenu === true
