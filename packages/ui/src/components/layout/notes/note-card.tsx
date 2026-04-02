@@ -9,6 +9,7 @@ type NoteCardProps = {
     color?: string | null;
     statusIcon?: ReactNode;
     replyCount?: number;
+    replyLabel?: string;
     onClick?: (e: React.MouseEvent) => void;
     onContextMenu?: (e: React.MouseEvent) => void;
     className?: string;
@@ -22,6 +23,7 @@ export function NoteCard({
     color,
     statusIcon,
     replyCount,
+    replyLabel,
     onClick,
     onContextMenu,
     className,
@@ -50,7 +52,7 @@ export function NoteCard({
                 )}
                 {!!replyCount && replyCount > 0 && (
                     <p className="text-xs mt-0.5" style={{ opacity: 0.5 }}>
-                        {replyCount} {replyCount === 1 ? 'reply' : 'replies'}
+                        {replyCount} {replyLabel || (replyCount === 1 ? 'reply' : 'replies')}
                     </p>
                 )}
             </CardContent>
