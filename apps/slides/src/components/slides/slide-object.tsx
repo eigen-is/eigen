@@ -1,3 +1,4 @@
+import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants/colors';
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import { useMediaResolver } from '@workspace/lib/drive';
 import {
@@ -5,9 +6,25 @@ import {
     ContextMenuContent,
     ContextMenuItem,
     ContextMenuSeparator,
+    ContextMenuSub,
+    ContextMenuSubContent,
+    ContextMenuSubTrigger,
     ContextMenuTrigger,
 } from '@workspace/ui/components/context-menu';
-import { ArrowDownToLine, ArrowUpToLine, ChevronDown, ChevronUp, Copy, Trash2 } from 'lucide-react';
+import { isLightColor } from '@workspace/ui/components/layout/media/color-picker';
+import {
+    ArrowDownToLine,
+    ArrowUpToLine,
+    Check,
+    ChevronDown,
+    ChevronUp,
+    CircleOff,
+    Copy,
+    MessageSquarePlus,
+    Palette,
+    RotateCcw,
+    Trash2,
+} from 'lucide-react';
 import { memo, useEffect, useRef } from 'react';
 import { BORDER_RADIUS_ROUND, pxToPercent, SLIDE_BASE_HEIGHT, SLIDE_BASE_WIDTH, type SlideObject } from './types';
 
@@ -123,6 +140,17 @@ type SlideObjectViewProps = {
     onMoveDown?: (objId: string) => void;
     onMoveToFront?: (objId: string) => void;
     onMoveToBack?: (objId: string) => void;
+    // Comment indicator (Task 7)
+    commentColor?: string | null;
+    onCommentClick?: (chatName: string) => void;
+    firstCommentChatName?: string | null;
+    // Context menu actions (Task 8)
+    onAddComment?: (objId: string) => void;
+    commentEntries?: Array<{ chatName: string; color: string | null; status: 'open' | 'resolved' }>;
+    onCommentResolve?: (chatName: string) => void;
+    onCommentReopen?: (chatName: string) => void;
+    onCommentChangeColor?: (chatName: string, color: string | null) => void;
+    onCommentDelete?: (objId: string, chatName: string) => void;
 };
 
 const HANDLE_POSITIONS = [
@@ -154,6 +182,15 @@ export const SlideObjectView = memo(function SlideObjectView({
     onMoveDown,
     onMoveToFront,
     onMoveToBack,
+    commentColor,
+    onCommentClick,
+    firstCommentChatName,
+    onAddComment,
+    commentEntries,
+    onCommentResolve,
+    onCommentReopen,
+    onCommentChangeColor,
+    onCommentDelete,
 }: SlideObjectViewProps) {
     const { resolveMediaUrl } = useMediaResolver();
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -262,6 +299,22 @@ export const SlideObjectView = memo(function SlideObjectView({
                         }}
                     />
                 ))}
+            {firstCommentChatName && commentColor && (
+                <div
+                    className="absolute top-0 right-0 cursor-pointer z-10"
+                    style={{
+                        width: 0,
+                        height: 0,
+                        borderLeft: '16px solid transparent',
+                        borderTop: `16px solid ${commentColor}`,
+                    }}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onCommentClick?.(firstCommentChatName);
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                />
+            )}
         </div>
     );
 
@@ -291,6 +344,87 @@ export const SlideObjectView = memo(function SlideObjectView({
                 <ContextMenuItem variant="destructive" onClick={() => onDelete?.(obj.id)}>
                     <Trash2 className="h-4 w-4 mr-2" /> Delete
                 </ContextMenuItem>
+                {onAddComment && (
+                    <>
+                        <ContextMenuSeparator />
+                        <ContextMenuItem onClick={() => onAddComment(obj.id)}>
+                            <MessageSquarePlus className="h-4 w-4 mr-2" /> Add comment
+                        </ContextMenuItem>
+                    </>
+                )}
+                {commentEntries && commentEntries.length > 0 && (
+                    <>
+                        <ContextMenuSeparator />
+                        {commentEntries.map((entry) => (
+                            <ContextMenuSub key={entry.chatName}>
+                                <ContextMenuSubTrigger>
+                                    <div
+                                        className="h-3 w-3 rounded-full mr-2 border border-border/50"
+                                        style={{ backgroundColor: entry.color || undefined }}
+                                    />
+                                    {entry.status === 'open' ? 'Comment' : 'Comment (resolved)'}
+                                </ContextMenuSubTrigger>
+                                <ContextMenuSubContent>
+                                    <ContextMenuItem onClick={() => onCommentClick?.(entry.chatName)}>
+                                        Edit
+                                    </ContextMenuItem>
+                                    <ContextMenuSub>
+                                        <ContextMenuSubTrigger>
+                                            <Palette className="h-4 w-4 mr-2" /> Color
+                                        </ContextMenuSubTrigger>
+                                        <ContextMenuSubContent>
+                                            <div className="flex gap-1 p-2">
+                                                <button
+                                                    type="button"
+                                                    className="h-4 w-4 rounded-full border border-border hover:scale-125 transition-transform flex items-center justify-center bg-background"
+                                                    title="No color"
+                                                    onClick={() => onCommentChangeColor?.(entry.chatName, null)}
+                                                >
+                                                    <CircleOff className="h-2.5 w-2.5 text-muted-foreground" />
+                                                </button>
+                                                {EIGEN_STICKIES_COLORS[0].map((c) => (
+                                                    <button
+                                                        type="button"
+                                                        key={c.value}
+                                                        className="h-4 w-4 rounded-full border border-border/50 hover:scale-125 transition-transform flex items-center justify-center"
+                                                        style={{ backgroundColor: c.value }}
+                                                        title={c.label}
+                                                        onClick={() => onCommentChangeColor?.(entry.chatName, c.value)}
+                                                    >
+                                                        {entry.color === c.value && (
+                                                            <Check
+                                                                className="h-2 w-2"
+                                                                style={{
+                                                                    color: isLightColor(c.value) ? '#000' : '#fff',
+                                                                }}
+                                                            />
+                                                        )}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </ContextMenuSubContent>
+                                    </ContextMenuSub>
+                                    {entry.status === 'open' ? (
+                                        <ContextMenuItem onClick={() => onCommentResolve?.(entry.chatName)}>
+                                            <Check className="h-4 w-4 mr-2" /> Resolve
+                                        </ContextMenuItem>
+                                    ) : (
+                                        <ContextMenuItem onClick={() => onCommentReopen?.(entry.chatName)}>
+                                            <RotateCcw className="h-4 w-4 mr-2" /> Reopen
+                                        </ContextMenuItem>
+                                    )}
+                                    <ContextMenuSeparator />
+                                    <ContextMenuItem
+                                        variant="destructive"
+                                        onClick={() => onCommentDelete?.(obj.id, entry.chatName)}
+                                    >
+                                        <Trash2 className="h-4 w-4 mr-2" /> Delete comment
+                                    </ContextMenuItem>
+                                </ContextMenuSubContent>
+                            </ContextMenuSub>
+                        ))}
+                    </>
+                )}
             </ContextMenuContent>
         </ContextMenu>
     );
