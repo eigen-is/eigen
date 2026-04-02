@@ -455,8 +455,7 @@
 
 .tiptap .comment-highlight {
     background-color: oklch(0.94 0.15 95);
-    border-bottom: 2px solid oklch(0.75 0.15 85);
-    padding: 0.05em 0;
+    padding: 0.1em 0.05em;
     cursor: pointer;
     transition: background-color 150ms;
     border-radius: 2px;
@@ -466,18 +465,11 @@
     filter: brightness(0.95);
 }
 
-/* Decoration applies color via inline style — these selectors ensure it takes priority */
-.tiptap .comment-colored,
-.tiptap .comment-colored .comment-highlight {
-    border-bottom-style: solid;
-    border-bottom-width: 2px;
-}
-
-/* Resolved comments — decoration wraps or is sibling to the mark span */
+/* Resolved comments */
 .tiptap .comment-resolved,
 .tiptap .comment-resolved .comment-highlight,
 .tiptap .comment-highlight.comment-resolved {
     background-color: transparent !important;
-    border-bottom: none !important;
+    box-shadow: none !important;
     cursor: default;
 }
