@@ -165,6 +165,29 @@ export function SheetEditor({ ownerId, path, canWrite, chatFolderId, onAccessDia
                             defaultFontSize={11}
                             column={26}
                             row={100}
+                            hooks={{
+                                onAddComment: (r: number, c: number) => {
+                                    addCommentRef.current?.(r, c);
+                                },
+                                onViewComment: (r: number, c: number) => {
+                                    const fd = workbookRef.current?.getFlowdata();
+                                    const chatName = fd?.[r]?.[c]?.commentChatNames?.[0];
+                                    if (chatName) setViewCommentChatName(chatName);
+                                },
+                                onDeleteComment: (r: number, c: number) => {
+                                    const fd = workbookRef.current?.getFlowdata();
+                                    const cell = fd?.[r]?.[c];
+                                    const chatName = cell?.commentChatNames?.[0];
+                                    if (chatName && workbookRef.current) {
+                                        workbookRef.current.setCellFormat(
+                                            r,
+                                            c,
+                                            'commentChatNames',
+                                            (cell.commentChatNames ?? []).filter((n) => n !== chatName),
+                                        );
+                                    }
+                                },
+                            }}
                         />
                     </div>
                     {commentPanelOpen && (
