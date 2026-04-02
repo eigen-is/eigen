@@ -1,41 +1,73 @@
 # Eigen
 
-**Your workspace in the cloud. Simple and secure. You control your own data.**
+**Your own workspace. Simple, secure, self-hosted.**
 
 Eigen is a self-hosted alternative to Google Workspace. It runs as a single server with integrated apps for email,
-file storage, documents, spreadsheets, presentations, calendar, contacts, and chat — all sharing one API, one auth
-system, and one UI library.
+file storage, documents, spreadsheets, presentations, calendar, contacts, and real-time chat — all sharing one API,
+one auth system, and one UI.
+
+The name *Eigen* is Dutch and German for "own." You own your data, you own your infrastructure, you own your workspace.
+
+> For the backstory on how and why this project started, see
+> [Eigen: Building a Workspace](https://reindernijhoff.net/2025/10/eigen-building-a-workspace/).
+
+## Why
+
+Given the power large tech companies hold over our data, a self-hosted European alternative feels needed. Eigen aims
+to be that alternative: a workspace you can run on your own server, where every byte of data stays under your control.
+
+## Goal
+
+The first goal is a **self-hostable workspace for individuals, enthusiasts, and small organizations**. During active
+development, expect rough edges — but the core is functional and improving fast. As the project matures and stabilizes,
+the aim is to make Eigen reliable enough for mid-to-large organizations as well.
 
 ## Apps
 
-| App          | Description                                    |
-|--------------|------------------------------------------------|
-| **Mail**     | Email client with mailbox management           |
-| **Drive**    | File storage and management                    |
-| **Docs**     | Collaborative document editor (Tiptap + Yjs)   |
-| **Sheets**   | Collaborative spreadsheet editor               |
-| **Slides**   | Collaborative presentation editor              |
-| **Stickies** | Kanban board (Yjs)                             |
-| **Calendar** | Calendar and scheduling                        |
-| **Contacts** | Contact management                             |
-| **Chat**     | Real-time chat with slash commands             |
-| **Space**    | User profile and account settings              |
-| **People**   | Organization and team admin                    |
+Eigen ships as a monorepo with a single API server and a set of tightly integrated frontend apps:
 
-## Tech Stack
+- **Mail** — Webmail client with full mailbox management. Email is stored in standard Maildir++ format, fully
+  compatible with Dovecot. Connect any IMAP client (Thunderbird, Apple Mail, etc.) to access your mail alongside the
+  web UI.
+- **Drive** — File storage with folders, sharing, ACL, thumbnails, file previews, and pluggable storage backends
+  (local filesystem, flat key-based, or S3-compatible). Soft delete with configurable trash retention. Supports inline
+  editing of text, code, and Markdown files.
+- **Docs** — Collaborative document editor built on Tiptap and Yjs. Multiple users edit the same document in
+  real time. Export to DOCX, PDF, and HTML. Embedded comment threads with @mentions.
+- **Sheets** — Collaborative spreadsheets using a fully forked fortune-sheet engine with Yjs-based op-level sync.
+  Concurrent edits on different cells merge cleanly.
+- **Slides** — Collaborative presentations with a pixel-based canvas (1920×1080), resolution-independent rendering,
+  drag-and-drop objects, background images, and a presentation mode.
+- **Stickies** — Kanban boards with real-time collaboration via Yjs. Drag-and-drop cards and columns. Each card has
+  its own embedded chat room for discussion.
+- **Calendar** — Full calendar with recurring events (RFC 5545 RRULE), invitations with RSVP, shared calendars, and
+  team calendars. Includes a **CalDAV server** — sync with Thunderbird, Apple Calendar, or DAVx5 using standard
+  protocols.
+- **Contacts** — Contact management with avatars.
+- **Chat** — Real-time chat inspired by classic MUDs. Over 80 built-in slash commands including emotes, whispers,
+  and @mentions. Chat rooms live inside Drive (inheriting its ACL), and can be embedded inside documents and
+  kanban cards as comment threads.
+- **Space** — Personal account settings, profile, and preferences.
+- **People** — Organization and team administration. Manage members, roles, shared drives, team calendars, quotas,
+  and server-wide settings.
 
-| Layer     | Technology                                                        |
-|-----------|-------------------------------------------------------------------|
-| Runtime   | [Bun](https://bun.sh)                                            |
-| Backend   | Elysia + Drizzle ORM (SQLite)                                    |
-| Frontend  | React 19 + TypeScript + TanStack Router + TanStack Query          |
-| API       | Eden Treaty (end-to-end type-safe)                                |
-| Styling   | Tailwind CSS 4 + shadcn/ui + Lucide React                        |
-| Auth      | better-auth (email/password, 2FA, organizations, teams)           |
-| Real-time | Yjs (collaborative editing) + WebSocket + SSE (live updates)      |
-| Tooling   | Biome (lint + format) + Vite (build) + GitHub Actions (CI)        |
+### Protocol support
 
-## Getting Started
+Eigen doesn't lock you into its web interface. Standard protocols let you use your favorite native clients:
+
+- **IMAP** — Via Dovecot. Eigen writes Maildir++, Dovecot serves it over IMAP. They coexist on the same filesystem.
+- **CalDAV** — Built-in CalDAV server with discovery, sync-collection, and recurring event support. Tested with
+  Thunderbird.
+- **SMTP** — Postfix handles inbound and outbound email, with DKIM signing and relay support.
+
+## Getting started
+
+### Prerequisites
+
+- [Bun](https://bun.sh) (runtime for both server and client)
+- [Git](https://git-scm.com)
+
+### Quick start
 
 ```bash
 git clone https://github.com/eigen-foundation/eigen.git
@@ -44,56 +76,108 @@ bun install
 bun run serve
 ```
 
-Visit `http://localhost:3011/setup` to run the setup wizard. It creates your admin account and configures storage.
+Open `http://localhost:3011/setup` to run the first-time setup wizard. It creates your admin account and configures
+storage.
 
-## Development
+### Docker deployment
+
+For production, Eigen runs as four Docker containers: **Caddy** (reverse proxy with automatic HTTPS), **Eigen API**
+(Bun), **Postfix** (email), and **Dovecot** (IMAP). See the [VPS Setup Guide](docker/SETUP-GUIDE.md) for
+step-by-step instructions, or the [Local Testing Guide](docker/LOCAL-TESTING.md) to try the full stack on your
+machine.
+
+### Development
 
 ```bash
-bun run serve          # Start all apps + API
-bun serve:mail         # Start single app + API (works for any app name)
-bun run lint           # Check lint + format (Biome)
-bun run lint:fix       # Auto-fix lint + format
+bun run serve          # All apps + API
+bun serve:mail         # Single app + API (works for any app name)
+bun run lint           # Lint + format check (Biome)
+bun run lint:fix       # Auto-fix
 bun run typecheck      # Type check all packages
 bun run test           # Run all tests
-bun run check          # All of the above: lint + typecheck + test
+bun run check          # lint + typecheck + test
 ```
 
-A pre-commit hook auto-fixes lint and formatting on every commit. CI runs the full check on every push.
+## Architecture
 
-## Project Structure
+Each user gets their own directory on the server. SQLite databases (per user) store metadata and structured data.
+Files are stored separately. No shared database means no way to accidentally access someone else's data. Backups
+are trivial — just copy a user's directory.
+
+```
+data/home/{userId}/
+├── mounts/default/       # Drive files + metadata.db
+├── eigen.mail/           # Maildir + mail.db
+├── eigen.contacts/       # contacts.db + avatars
+├── eigen.calendar/       # calendar.db
+└── eigen.notifications/  # notifications.db
+```
+
+Organizations and teams add shared resources on top: team drives, team calendars, and group-based ACL. Real-time
+collaboration runs through Yjs over WebSocket, while Server-Sent Events push live updates to all connected clients.
+
+## Tech stack
+
+| Layer     | Technology                                                        |
+|-----------|-------------------------------------------------------------------|
+| Runtime   | [Bun](https://bun.sh)                                            |
+| Backend   | [Elysia](https://elysiajs.com) + [Drizzle ORM](https://orm.drizzle.team) (SQLite) |
+| Frontend  | React 19 + TypeScript + [TanStack Router](https://tanstack.com/router) + [TanStack Query](https://tanstack.com/query) |
+| API       | [Eden Treaty](https://elysiajs.com/eden/overview) (end-to-end type-safe) |
+| Styling   | [Tailwind CSS 4](https://tailwindcss.com) + [shadcn/ui](https://ui.shadcn.com) + [Lucide](https://lucide.dev) |
+| Auth      | [better-auth](https://www.better-auth.com) (email/password, 2FA, organizations, teams) |
+| Real-time | [Yjs](https://yjs.dev) (collaborative editing) + WebSocket + SSE |
+| Tooling   | [Biome](https://biomejs.dev) (lint + format) + [Vite](https://vite.dev) (build) |
+
+## Project structure
 
 ```
 apps/
-  api/            # Elysia backend (port 8000)
-  mail/           # Email client         calendar/  # Calendar
-  drive/          # File storage         contacts/  # Contacts
-  docs/           # Document editor      chat/      # Real-time chat
-  sheets/         # Spreadsheet editor   space/     # User settings
-  slides/         # Presentations        people/    # Org/team admin
-  stickies/       # Kanban board         index/     # Landing page
+  api/          # Elysia backend (port 8000)
+  mail/         # Email client
+  drive/        # File storage
+  docs/         # Document editor
+  sheets/       # Spreadsheet editor
+  slides/       # Presentations
+  stickies/     # Kanban boards
+  calendar/     # Calendar
+  contacts/     # Contact management
+  chat/         # Real-time chat
+  space/        # Account settings
+  people/       # Org/team admin
+  index/        # Landing page
+  setup/        # First-run wizard
 
 packages/
-  lib/            # Shared types, hooks, API client, validation
-  ui/             # Shared components and layout system
+  lib/          # Shared types, hooks, API client, validation
+  ui/           # Shared components and layout system
   fortune-sheet/  # Forked spreadsheet engine
 
-data/             # Runtime storage (gitignored)
-docs/             # Architecture documentation
+data/           # Runtime storage (gitignored)
+docs/           # Architecture documentation
 ```
 
-## Documentation
+## Contributing
 
-Architecture docs live in `docs/`. Start with [CONTRIBUTING.md](docs/CONTRIBUTING.md) for code patterns and
-development workflow, or [CLAUDE.md](AGENTS.md) for the full project context.
+Eigen is open source and contributions are welcome. The project is still in active early development — there's plenty
+to do and plenty of room to shape the direction.
+
+Start with [CONTRIBUTING.md](docs/CONTRIBUTING.md) for code patterns, architecture conventions, and development
+workflow. The full project context (for humans and AI agents alike) lives in [AGENTS.md](AGENTS.md).
+
+### Documentation
+
+Architecture docs live in `docs/`:
 
 | Area | Docs |
 |------|------|
 | Architecture | [Storage](docs/STORAGE.md), [Database](docs/DATABASE.md), [SSE](docs/SSE.md), [ACL](docs/ACL.md) |
-| Frontend | [Layout](docs/LAYOUT.md), [Clipboard](docs/CLIPBOARD.md), [Media References](docs/MEDIA-REFERENCES.md) |
-| Features | [Calendar](docs/CALENDAR.md), [Chat](docs/CHAT.md), [Notifications](docs/NOTIFICATIONS.md), [Previews](docs/PREVIEWS.md) |
+| Deployment | [Deployment](docs/DEPLOYMENT.md), [Docker Setup](docker/SETUP-GUIDE.md), [Testing](docs/TESTING.md) |
+| Frontend | [Layout](docs/LAYOUT.md), [Clipboard](docs/CLIPBOARD.md), [Previews](docs/PREVIEWS.md) |
+| Features | [Calendar](docs/CALENDAR.md), [Chat](docs/CHAT.md), [Notifications](docs/NOTIFICATIONS.md), [IMAP](docs/IMAP.md) |
 | Apps | [Sheets](docs/SHEETS.md), [Slides](docs/SLIDES.md), [Stickies](docs/STICKIES.md), [Comments](docs/COMMENTS_IN_DOCS.md) |
-| Operations | [Docker](docs/DOCKER.md), [Testing](docs/TESTING.md), [Quota](docs/QUOTA.md), [Server Settings](docs/SERVER-SETTINGS.md) |
+| Operations | [Quota](docs/QUOTA.md), [Server Settings](docs/SERVER-SETTINGS.md), [Export](docs/EXPORT.md), [Organizations](docs/ORGANISATIONS-AND-TEAMS.md) |
 
-## License
+## Contact
 
-[MIT License](LICENSE)
+Questions, ideas, or want to contribute? Reach out at [reinder@eigen.is](mailto:reinder@eigen.is).
