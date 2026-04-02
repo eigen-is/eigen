@@ -1,13 +1,12 @@
-import { useComments, useResolveComment } from '@workspace/lib/chat';
+import { useComments } from '@workspace/lib/chat';
 import type { CommentEntry } from '@workspace/lib/types/chat';
-import { MessageSquareOff, X } from 'lucide-react';
+import { Check, Circle, MessageSquareOff, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { Button } from '../../button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../select';
 import { Tabs, TabsList, TabsTrigger } from '../../tabs';
+import { NoteCard } from '../notes/note-card';
 import { PropertiesPanel } from '../properties-panel';
 import { TooltipButton } from '../toolbar/tooltip-button';
-import { CommentThread } from './comment-thread';
 
 type StatusFilter = 'open' | 'resolved' | 'all';
 
@@ -19,7 +18,8 @@ type CommentPanelProps = {
     activeCommentIds: Set<string>;
     anchorTexts: Map<string, string>;
     onClose: () => void;
-    onScrollToComment?: (chatName: string) => void;
+    onCommentClick?: (chatName: string) => void;
+    onCommentContextMenu?: (e: React.MouseEvent, comment: CommentEntry) => void;
 };
 
 export function CommentPanel({
@@ -30,14 +30,13 @@ export function CommentPanel({
     activeCommentIds,
     anchorTexts,
     onClose,
-    onScrollToComment,
+    onCommentClick,
+    onCommentContextMenu,
 }: CommentPanelProps) {
     const { data: comments = [] } = useComments(ownerId, mountId, containerId);
-    const resolveComment = useResolveComment(ownerId, mountId, containerId);
 
     const [tab, setTab] = useState<'all' | 'mine'>('all');
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('open');
-    const [expandedChat, setExpandedChat] = useState<string | null>(null);
 
     const filtered = useMemo(() => {
         return (comments as CommentEntry[]).filter((c) => {
@@ -47,14 +46,6 @@ export function CommentPanel({
             return true;
         });
     }, [comments, activeCommentIds, statusFilter, tab, currentUserEmail]);
-
-    const handleResolve = (chatName: string) => {
-        resolveComment.mutate({ chatName, status: 'resolved' });
-    };
-
-    const handleReopen = (chatName: string) => {
-        resolveComment.mutate({ chatName, status: 'open' });
-    };
 
     return (
         <PropertiesPanel className="w-80">
@@ -93,63 +84,29 @@ export function CommentPanel({
                     <p className="text-xs">No comments</p>
                 </div>
             ) : (
-                <div className="divide-y">
-                    {filtered.map((comment) => {
-                        const isExpanded = expandedChat === comment.chatName;
-
-                        return (
-                            <div key={comment.chatName} className="px-3 py-3">
-                                {isExpanded ? (
-                                    <div>
-                                        <div className="flex justify-end mb-1">
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                className="h-6 text-xs"
-                                                onClick={() => setExpandedChat(null)}
-                                            >
-                                                Collapse
-                                            </Button>
-                                        </div>
-                                        <CommentThread
-                                            ownerId={ownerId}
-                                            mountId={mountId}
-                                            comment={comment}
-                                            anchorText={anchorTexts.get(comment.chatName)}
-                                            onResolve={() => handleResolve(comment.chatName)}
-                                            onReopen={() => handleReopen(comment.chatName)}
-                                            onScrollToAnchor={
-                                                onScrollToComment
-                                                    ? () => onScrollToComment(comment.chatName)
-                                                    : undefined
-                                            }
-                                        />
-                                    </div>
+                <div className="p-2 space-y-2">
+                    {filtered.map((comment) => (
+                        <NoteCard
+                            key={comment.chatName}
+                            title={anchorTexts.get(comment.chatName) || comment.chatName}
+                            description={
+                                comment.lastAuthorEmail
+                                    ? `Comment by ${comment.lastAuthorEmail.split('@')[0]}`
+                                    : undefined
+                            }
+                            color={comment.color}
+                            replyCount={comment.messageCount > 1 ? comment.messageCount - 1 : undefined}
+                            statusIcon={
+                                comment.status === 'resolved' ? (
+                                    <Check className="h-3.5 w-3.5 opacity-50" />
                                 ) : (
-                                    <button
-                                        type="button"
-                                        className="w-full text-left cursor-pointer"
-                                        onClick={() => setExpandedChat(comment.chatName)}
-                                    >
-                                        <CommentThread
-                                            ownerId={ownerId}
-                                            mountId={mountId}
-                                            comment={comment}
-                                            anchorText={anchorTexts.get(comment.chatName)}
-                                            compact
-                                            onResolve={() => handleResolve(comment.chatName)}
-                                            onReopen={() => handleReopen(comment.chatName)}
-                                            onScrollToAnchor={
-                                                onScrollToComment
-                                                    ? () => onScrollToComment(comment.chatName)
-                                                    : undefined
-                                            }
-                                        />
-                                    </button>
-                                )}
-                            </div>
-                        );
-                    })}
+                                    <Circle className="h-2.5 w-2.5 fill-current opacity-40" />
+                                )
+                            }
+                            onClick={() => onCommentClick?.(comment.chatName)}
+                            onContextMenu={onCommentContextMenu ? (e) => onCommentContextMenu(e, comment) : undefined}
+                        />
+                    ))}
                 </div>
             )}
         </PropertiesPanel>
