@@ -34,6 +34,7 @@ function SheetView() {
     );
 
     const canWrite = docInfo?.canWrite ?? false;
+    const chatFolderId = docInfo?.folderContents?.find((f) => f.name === 'chat')?.id ?? null;
 
     const handleAccessDialogOpen = useCallback(() => setAccessDialogOpen(true), []);
 
@@ -46,6 +47,7 @@ function SheetView() {
                 ownerId={ownerId}
                 path={path}
                 canWrite={canWrite}
+                chatFolderId={chatFolderId}
                 onAccessDialogOpen={handleAccessDialogOpen}
             />
             <DriveAccessDialog path={path} open={accessDialogOpen} onOpenChange={setAccessDialogOpen} />
