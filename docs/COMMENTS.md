@@ -93,6 +93,12 @@ slide-in animation as the figure/table panels in the docs editor.
 Single comment thread: resolves `chatName` to `chatId` via `useMediaResolver`, renders `ChatMessageList` +
 `ChatMessageInput`. Used inside `NoteCardDialog` when viewing a comment.
 
+### CreateCommentDialog (`packages/ui/src/components/layout/comments/create-comment-dialog.tsx`)
+
+Shared dialog for creating a new comment. Shows a text preview of the anchor (selected text or object
+description), a textarea for the comment, and creates the `.eigenchat` folder + first message on submit.
+Used by both docs and slides editors.
+
 ## Docs Editor Integration
 
 ### Active Comments
@@ -130,6 +136,36 @@ The comment icon in `EditorToolbar` toggles the panel. An unresolved-count badge
 Right-click context menus are provided via `NoteCardContextMenu` for comment actions (edit, color,
 resolve/reopen, delete mark).
 
+## Slides Editor Integration
+
+### Anchoring
+
+Slides don't use Tiptap/ProseMirror, so comments anchor to **slide objects** instead of text ranges. Each
+`SlideObject` has an optional `commentChatNames: string[]` stored as a plain JSON array in the Yjs map.
+One comment per object (enforced in UI, not data model). Comment mutations use `'comment'` transaction
+origin to exclude them from the Yjs UndoManager.
+
+### Active Comments
+
+`useActiveComments(deck)` in `hooks/use-active-comments.ts` scans all objects for `commentChatNames`,
+returning `{ ids: Set<string>, anchorTexts: Map<string, string> }`. Anchor text is the first 100 chars
+of text objects or `"Image"` for image objects.
+
+### Visual Indicator
+
+Objects with unresolved comments show a colored corner triangle (top-right, CSS border trick). Clicking
+the indicator opens the thread dialog. Resolved comments have no indicator.
+
+### Context Menu
+
+Right-click an object without a comment: "Add comment" item. With a comment: View, Color (submenu with
+palette), Resolve/Reopen, Delete actions shown directly (no nested submenu).
+
+### Panel
+
+The `CommentPanel` replaces the properties/background panel when toggled via the toolbar button.
+Clicking a comment card navigates to the slide containing the commented object and selects it.
+
 ## Active vs Orphaned Comments
 
 The Yjs document is the source of truth for which comments are "active". When a user deletes a `CommentMark`,
@@ -151,7 +187,9 @@ results with `activeCommentIds` from the doc to show only live comments.
 | `packages/ui/src/components/layout/notes/note-card.tsx`       | Shared card component                     |
 | `packages/ui/src/components/layout/notes/note-card-context-menu.tsx` | Shared context menu              |
 | `packages/ui/src/components/layout/notes/note-card-dialog.tsx` | Shared dialog shell                      |
+| `packages/ui/src/components/layout/comments/create-comment-dialog.tsx` | Shared comment creation dialog  |
 | `apps/docs/src/components/docs/editor.tsx`                    | Docs editor integration                   |
 | `apps/docs/src/components/docs/extensions/comment-mark.ts`   | ProseMirror plugins (interaction + decorations) |
-| `apps/docs/src/components/docs/comment-dialog.tsx`            | Comment creation dialog                   |
+| `apps/slides/src/components/slides/editor.tsx`                | Slides editor integration                 |
+| `apps/slides/src/components/slides/hooks/use-active-comments.ts` | Scan objects for comment IDs          |
 | `packages/ui/src/styles/eigen-prose.css`                      | Comment highlight CSS                     |

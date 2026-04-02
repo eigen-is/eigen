@@ -593,13 +593,6 @@ function SlideEditorInner({
         [commentObjectId, addCommentToObject, updateColor],
     );
 
-    const handleDeleteComment = useCallback(
-        (objId: string, chatName: string) => {
-            removeCommentFromObject(objId, chatName);
-        },
-        [removeCommentFromObject],
-    );
-
     const activeSlide = activeSlideId ? deck.slides[activeSlideId] : null;
     const activeObjects = activeSlide ? activeSlide.objectIds.map((id) => deck.objects[id]).filter(Boolean) : [];
     const selectedObjects = useMemo(
@@ -729,7 +722,7 @@ function SlideEditorInner({
                                         onCommentChangeColor={(chatName, color) =>
                                             updateColor.mutate({ chatName, color })
                                         }
-                                        onCommentDelete={handleDeleteComment}
+                                        onCommentDelete={removeCommentFromObject}
                                     />
                                     <div className="h-8 bg-muted border-t flex items-center justify-between px-4 text-xs text-muted-foreground">
                                         <span>
