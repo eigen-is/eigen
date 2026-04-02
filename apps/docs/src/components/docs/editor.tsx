@@ -551,8 +551,7 @@ const TiptapEditor = ({
                         className={`h-full w-full overflow-y-scroll bg-muted p-4 ${needsScale ? 'overflow-x-hidden' : ''}`}
                         onClick={(e) => {
                             if (e.target === scrollContainerRef.current) {
-                                // Move cursor to end (deselects any NodeSelection) then blur
-                                editor.chain().focus('end').blur().run();
+                                editor.commands.blur();
                             }
                         }}
                     >
