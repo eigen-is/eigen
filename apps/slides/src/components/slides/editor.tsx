@@ -84,29 +84,45 @@ type SlideEditorProps = {
     path: DrivePath;
     canWrite: boolean;
     mediaFolderId: string | null;
+    chatFolderId: string | null;
     onAccessDialogOpen: () => void;
 };
 
-export function SlideEditor({ ownerId, path, canWrite, mediaFolderId, onAccessDialogOpen }: SlideEditorProps) {
+export function SlideEditor({
+    ownerId,
+    path,
+    canWrite,
+    mediaFolderId,
+    chatFolderId,
+    onAccessDialogOpen,
+}: SlideEditorProps) {
     return (
         <MediaResolverProvider
             ownerId={ownerId}
             mountId={path.mountId}
             mediaFolderId={mediaFolderId}
-            chatFolderId={null}
+            chatFolderId={chatFolderId}
         >
             <SlideEditorInner
                 ownerId={ownerId}
                 path={path}
                 canWrite={canWrite}
                 mediaFolderId={mediaFolderId}
+                chatFolderId={chatFolderId}
                 onAccessDialogOpen={onAccessDialogOpen}
             />
         </MediaResolverProvider>
     );
 }
 
-function SlideEditorInner({ ownerId, path, canWrite, mediaFolderId, onAccessDialogOpen }: SlideEditorProps) {
+function SlideEditorInner({
+    ownerId,
+    path,
+    canWrite,
+    mediaFolderId,
+    chatFolderId,
+    onAccessDialogOpen,
+}: SlideEditorProps) {
     const {
         deck,
         activeSlideId,
