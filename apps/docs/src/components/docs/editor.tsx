@@ -6,7 +6,7 @@ import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
 import { yUndoPluginKey } from '@tiptap/y-tiptap';
 import { getCollabWebSocketUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
-import { useComments, useResolveComment } from '@workspace/lib/chat';
+import { useComments, useResolveComment, useUpdateCommentColor } from '@workspace/lib/chat';
 import { needsReUpload, readEigenClipboard, reUploadImage, writeEigenClipboard } from '@workspace/lib/clipboard';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
@@ -15,15 +15,15 @@ import { useMediaQuery } from '@workspace/lib/media';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardData, EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { Column, CommentPanel, CommentThread, LoadingState } from '@workspace/ui';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { Column, CommentPanel, CommentThread, LoadingState, NoteCardContextMenu, NoteCardDialog } from '@workspace/ui';
+import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { common, createLowlight } from 'lowlight';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
 import { CreateCommentDialog } from './comment-dialog';
 import { EditorToolbar } from './editor-toolbar';
-import { CommentMark, updateResolvedComments } from './extensions/comment-mark';
+import { CommentMark, updateCommentDecorations } from './extensions/comment-mark';
 import { Figure } from './extensions/figure';
 import { TableWidthClamp } from './extensions/table-width-clamp';
 import { FigurePropertiesPanel } from './figure-properties-panel';
@@ -170,6 +170,7 @@ const TiptapEditor = ({
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const editorRef = useRef<ReturnType<typeof useEditor>>(null);
     const handleAddCommentRef = useRef<(() => void) | null>(null);
+    const allCommentsRef = useRef<unknown[]>([]);
     const mediaFolderIdRef = useRef(mediaFolderId);
     mediaFolderIdRef.current = mediaFolderId;
 
@@ -211,6 +212,11 @@ const TiptapEditor = ({
                 TableWidthClamp,
                 CommentMark.configure({
                     onCommentClick: handleCommentClick,
+                    onCommentContextMenu: (chatName, event) => {
+                        const comment = (allCommentsRef.current as CommentEntry[]).find((c) => c.chatName === chatName);
+                        if (comment)
+                            commentContextMenu.handleContextMenu(event as unknown as React.MouseEvent, comment);
+                    },
                     onAddComment: () => handleAddCommentRef.current?.(),
                     onToggleCommentPanel: () => setCommentPanelOpen((v) => !v),
                 }),
@@ -457,7 +463,10 @@ const TiptapEditor = ({
     const [commentPanelOpen, setCommentPanelOpen] = useState(false);
     const activeComments = useActiveComments(editor);
     const resolveComment = useResolveComment(path.ownerId, path.mountId, path.id);
+    const updateColor = useUpdateCommentColor(path.ownerId, path.mountId, path.id);
     const { data: allComments = [] } = useComments(path.ownerId, path.mountId, path.id);
+    allCommentsRef.current = allComments;
+    const commentContextMenu = useContextMenu<CommentEntry>();
 
     const unresolvedCount = useMemo(() => {
         return (allComments as CommentEntry[]).filter((c) => c.status === 'open' && activeComments.ids.has(c.chatName))
@@ -468,14 +477,16 @@ const TiptapEditor = ({
         ? (allComments as CommentEntry[]).find((c) => c.chatName === viewCommentChatName)
         : null;
 
-    // Sync resolved comment IDs into the ProseMirror decoration plugin
+    // Sync resolved IDs + colors into the ProseMirror decoration plugin
     useEffect(() => {
         if (!editor) return;
         const resolved = new Set<string>();
+        const colorMap = new Map<string, string>();
         for (const c of allComments as CommentEntry[]) {
             if (c.status === 'resolved') resolved.add(c.chatName);
+            if (c.color) colorMap.set(c.chatName, c.color);
         }
-        updateResolvedComments(editor, resolved);
+        updateCommentDecorations(editor, resolved, colorMap);
     }, [editor, allComments]);
 
     useEffect(() => {
@@ -575,7 +586,11 @@ const TiptapEditor = ({
                                     activeCommentIds={activeComments.ids}
                                     anchorTexts={activeComments.anchorTexts}
                                     onClose={() => setCommentPanelOpen(false)}
-                                    onScrollToComment={handleScrollToComment}
+                                    onCommentClick={(chatName) => {
+                                        handleScrollToComment(chatName);
+                                        setViewCommentChatName(chatName);
+                                    }}
+                                    onCommentContextMenu={commentContextMenu.handleContextMenu}
                                 />
                             ) : lastPanelRef.current === 'figure' ? (
                                 <FigurePropertiesPanel
@@ -604,34 +619,47 @@ const TiptapEditor = ({
             )}
 
             {viewCommentChatName && viewCommentEntry && (
-                <Dialog
+                <NoteCardDialog
                     open
                     onOpenChange={(open) => {
                         if (!open) setViewCommentChatName(null);
                     }}
+                    title={activeComments.anchorTexts.get(viewCommentChatName) || viewCommentChatName}
+                    description={
+                        viewCommentEntry.lastAuthorEmail
+                            ? `Comment by ${viewCommentEntry.lastAuthorEmail.split('@')[0]}`
+                            : undefined
+                    }
                 >
-                    <DialogContent className="max-h-[80vh] flex flex-col p-0 gap-0">
-                        <DialogHeader className="px-6 pt-6 pb-4">
-                            <DialogTitle>Comment</DialogTitle>
-                        </DialogHeader>
-                        <div className="flex flex-col flex-1 min-h-0 overflow-hidden px-2 pb-2">
-                            <CommentThread
-                                ownerId={path.ownerId}
-                                mountId={path.mountId}
-                                comment={viewCommentEntry}
-                                anchorText={activeComments.anchorTexts.get(viewCommentChatName)}
-                                onResolve={() => {
-                                    resolveComment.mutate({ chatName: viewCommentChatName, status: 'resolved' });
-                                    setViewCommentChatName(null);
-                                }}
-                                onReopen={() =>
-                                    resolveComment.mutate({ chatName: viewCommentChatName, status: 'open' })
-                                }
-                            />
-                        </div>
-                    </DialogContent>
-                </Dialog>
+                    <CommentThread ownerId={path.ownerId} mountId={path.mountId} chatName={viewCommentChatName} />
+                </NoteCardDialog>
             )}
+
+            <ContextMenuAnchor contextMenu={commentContextMenu}>
+                <NoteCardContextMenu
+                    currentColor={commentContextMenu.item?.color}
+                    status={commentContextMenu.item?.status}
+                    onEdit={() => {
+                        if (commentContextMenu.item) setViewCommentChatName(commentContextMenu.item.chatName);
+                        commentContextMenu.close();
+                    }}
+                    onChangeColor={(color) => {
+                        if (commentContextMenu.item)
+                            updateColor.mutate({ chatName: commentContextMenu.item.chatName, color: color || null });
+                        commentContextMenu.close();
+                    }}
+                    onResolve={() => {
+                        if (commentContextMenu.item)
+                            resolveComment.mutate({ chatName: commentContextMenu.item.chatName, status: 'resolved' });
+                        commentContextMenu.close();
+                    }}
+                    onReopen={() => {
+                        if (commentContextMenu.item)
+                            resolveComment.mutate({ chatName: commentContextMenu.item.chatName, status: 'open' });
+                        commentContextMenu.close();
+                    }}
+                />
+            </ContextMenuAnchor>
         </>
     );
 };

@@ -601,11 +601,123 @@ of hiding panels on narrow screens is acceptable for now.
 |------|--------|
 | `apps/docs/src/components/docs/comment-dialog.tsx` | Replaced by shared components |
 
-## No Backend Changes Required
+## Backend Changes (Done)
 
-The existing backend fully supports this redesign:
-- `GET /collab/.../comments` — list with mentions (used by side panel)
-- `PATCH .../comments/:chatName/status` — resolve/reopen (used by CommentThread)
-- `GET /collab/.../comments/unresolved-count` — badge count
-- SSE `CHAT_COMMENT_INDEX_UPDATED` — real-time updates
-- Chat creation + message posting — unchanged
+- `color` column added to `comments` table (version 2 migration)
+- `PATCH .../comments/:chatName/color` — set comment color
+- `useUpdateCommentColor` hook added
+- `unresolved-count` endpoint removed (count computed client-side from `useComments` + `activeCommentIds`)
+- Default comment color: first stickies yellow (`EIGEN_STICKIES_COLORS[0][0].value`)
+
+## Phase 2: Shared NoteCard Components
+
+### Goal
+
+Stickies cards and comment cards should be rendered by the **same shared components**. Both have:
+title, description, color, a chat thread dialog, and a right-click context menu (edit, color, delete).
+
+### Shared Components (packages/ui)
+
+#### `NoteCard` — visual card
+
+Replaces both stickies `StickyCard` (card rendering part) and `CommentCard`.
+
+```typescript
+type NoteCardProps = {
+    title: string;
+    description?: string;
+    color?: string | null;
+    statusIcon?: ReactNode;       // e.g. Circle (open) or Check (resolved) — comments only
+    onClick?: () => void;
+    onContextMenu?: (e: React.MouseEvent) => void;
+    className?: string;
+};
+```
+
+Renders: shadcn `Card` + `CardContent` with colored background (using `lightenColor`), title, description
+(`opacity: 0.7`, `line-clamp-2`), optional status icon top-right. Exact same CSS as current stickies card.
+
+**Location**: `packages/ui/src/components/layout/notes/note-card.tsx`
+
+#### `NoteCardContextMenu` — right-click menu
+
+Shared context menu content (children of `ContextMenuAnchor`). Configurable actions via callbacks.
+
+```typescript
+type NoteCardContextMenuProps = {
+    item: { color?: string | null };
+    onEdit?: () => void;
+    onChangeColor?: (color: string) => void;
+    onDelete?: () => void;
+    onResolve?: () => void;        // comment-specific
+    onReopen?: () => void;         // comment-specific
+    status?: 'open' | 'resolved'; // comment-specific
+};
+```
+
+Renders: Edit, Color (submenu with `EIGEN_STICKIES_COLORS[0]` dots + no-color button), separator,
+Resolve/Reopen (if callbacks provided), Delete. Uses existing `ContextMenuAnchor` + `useContextMenu` pattern.
+
+**Location**: `packages/ui/src/components/layout/notes/note-card-context-menu.tsx`
+
+#### `NoteCardDialog` — dialog shell
+
+Shared dialog structure matching stickies `CardDialog`. Title, description, separator, chat thread.
+
+```typescript
+type NoteCardDialogProps = {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    title: string;
+    description?: string;
+    canWrite?: boolean;
+    onEdit?: () => void;
+    children: ReactNode;           // chat thread content
+};
+```
+
+**Location**: `packages/ui/src/components/layout/notes/note-card-dialog.tsx`
+
+### What Changes in Stickies
+
+- `card.tsx`: wraps `NoteCard` in dnd-kit sortable (keeps drag-and-drop, removes inline Card/CardContent)
+- `board.tsx`: context menu body replaced with `NoteCardContextMenu`
+- `card-dialog.tsx`: uses `NoteCardDialog` shell, passes `CardChat` as children
+
+### What Changes in Comments
+
+- `comment-panel.tsx`: renders `NoteCard` per comment (title=anchor text, description="Comment by xxx")
+- `comment-card.tsx`: DELETE — replaced by `NoteCard`
+- Editor right-click on highlighted text: opens same `NoteCardContextMenu` with comment actions
+- Comment dialog: uses `NoteCardDialog` shell, passes `CommentThread` as children
+
+### Color in Highlights
+
+The ProseMirror decoration plugin (already implemented for resolved state) is extended to also set
+a CSS custom property `--comment-color` per comment. The shared `eigen-prose.css` uses this for the
+highlight background:
+
+```css
+.tiptap .comment-highlight {
+    background-color: var(--comment-color, oklch(0.94 0.15 95));
+    border-bottom: 2px solid color-mix(in oklch, var(--comment-color, oklch(0.75 0.15 85)) 80%, black);
+}
+```
+
+Default color = stickies yellow. The decoration plugin reads `color` from `useComments` data.
+
+### Right-Click on Highlighted Text
+
+The existing `CommentMark` ProseMirror click handler is extended with a context menu handler. When the
+user right-clicks on `.comment-highlight`, it prevents the default browser context menu and opens
+`NoteCardContextMenu` with comment-specific actions (Edit → open dialog, Color, Resolve/Reopen, Delete).
+
+### Implementation Order
+
+1. Create `NoteCard`, `NoteCardContextMenu`, `NoteCardDialog` in `packages/ui/src/components/layout/notes/`
+2. Refactor stickies to use shared components (card.tsx, board.tsx, card-dialog.tsx)
+3. Rewrite CommentPanel to use `NoteCard`, delete `CommentCard`
+4. Rewrite comment dialog to use `NoteCardDialog`
+5. Wire color into ProseMirror decorations (highlight color per comment)
+6. Add right-click context menu on highlighted text in docs editor
+7. Clean up, verify lint + typecheck + test
