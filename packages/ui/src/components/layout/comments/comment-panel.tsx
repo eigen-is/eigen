@@ -48,7 +48,7 @@ export function CommentPanel({
     }, [comments, activeCommentIds, statusFilter, tab, currentUserEmail]);
 
     return (
-        <PropertiesPanel className="w-80">
+        <PropertiesPanel>
             <div className="px-3 py-2 border-b flex items-center justify-between">
                 <span className="text-sm font-medium">Comments</span>
                 <TooltipButton icon={X} tooltipText="Close" className="h-6 w-6" onClick={onClose} />
