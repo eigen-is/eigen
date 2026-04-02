@@ -16,7 +16,7 @@ export function SheetList() {
 
     return (
         <div
-            className="overflow-y-auto overflow-x-hidden min-w-[120px] absolute bottom-[53px] ml-[72px] max-h-[60%] rounded-md border bg-popover p-1 shadow-lg"
+            className="overflow-y-auto overflow-x-hidden min-w-[120px] fixed bottom-[53px] left-[72px] max-h-[60%] rounded-md border bg-popover p-1 shadow-lg"
             style={{zIndex: 10002}}
             ref={containerRef}
         >
