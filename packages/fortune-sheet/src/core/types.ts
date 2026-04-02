@@ -244,7 +244,6 @@ export type GlobalCache = {
     visibleRowsUnique?: number[];
     undoList: History[];
     redoList: History[];
-    editingCommentBoxEle?: HTMLDivElement;
     freezen?: Record<string, Freezen>;
 
     // Scroll state stored outside React/immer to avoid triggering full
