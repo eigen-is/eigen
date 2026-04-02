@@ -11,6 +11,7 @@ export const comments = sqliteTable('comments', {
     lastActivityAt: integer('lastActivityAt', { mode: 'timestamp' }),
     messageCount: integer('messageCount').notNull().default(0),
     createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+    color: text('color'),
 });
 
 export const commentMentions = sqliteTable(
