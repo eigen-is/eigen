@@ -130,7 +130,7 @@ All containers should show `Up` and `healthy`.
 
 ### First-time setup
 
-Open `https://eigen.example.com/setup` in your browser. The setup wizard will ask you to:
+Open `https://eigen.example.com/admin` in your browser. The setup wizard will ask you to:
 1. Choose a name for your organization
 2. Create your admin account (email + password)
 3. Configure storage settings

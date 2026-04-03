@@ -122,7 +122,7 @@ email exists. This must be fixed before deploying to a real server.
 - [ ] **Setup wizard cleanup**
   - The `DOMAIN` env var is already set in `.env.production`, but the setup wizard also asks for
     domain. These should be consistent — either pre-populate from env var or remove the duplicate field
-  - File: `apps/setup/` + `apps/api/src/routes/setup.ts`
+  - File: `apps/admin/src/components/admin/setup-wizard.tsx` + `apps/api/src/routes/setup.ts`
 
 ### Phase 5: CalDAV — Done (personal calendars)
 

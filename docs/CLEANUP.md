@@ -9,10 +9,10 @@ Items still to address. Ordered by priority.
 ### Avatar N+1 Problem [HIGH]
 
 Each `<UserAvatar>` calls `useResolvedUser()` which fires 4 queries: `useContacts()`,
-`usePublicUser(emailOrId)`, `usePublicConfig()`, and `usePeopleTeams(orgId)`.
+`usePublicUser(emailOrId)`, `usePublicConfig()`, and `useTeams(orgId)`.
 
 TanStack Query deduplicates concurrent requests with the same queryKey, so shared queries
-(`useContacts`, `usePublicConfig`, `usePeopleTeams`) only fetch once. But `usePublicUser(emailOrId)`
+(`useContacts`, `usePublicConfig`, `useTeams`) only fetch once. But `usePublicUser(emailOrId)`
 is unique per user — 10 unique users = 10 separate fetches.
 
 **Fix:** Batch user resolution — fetch all visible users in one query via a batch endpoint.

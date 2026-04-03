@@ -43,6 +43,14 @@
         "vite-tsconfig-paths": "^6.1.1",
       },
     },
+    "apps/admin": {
+      "name": "@apps/admin",
+      "version": "0.0.1",
+      "dependencies": {
+        "@workspace/lib": "workspace:*",
+        "@workspace/ui": "workspace:*",
+      },
+    },
     "apps/api": {
       "name": "@apps/api",
       "version": "1.0.50",
@@ -217,22 +225,6 @@
         "@workspace/ui": "workspace:*",
       },
     },
-    "apps/people": {
-      "name": "@apps/people",
-      "version": "0.0.1",
-      "dependencies": {
-        "@workspace/lib": "workspace:*",
-        "@workspace/ui": "workspace:*",
-      },
-    },
-    "apps/setup": {
-      "name": "@apps/setup",
-      "version": "0.0.1",
-      "dependencies": {
-        "@workspace/lib": "workspace:*",
-        "@workspace/ui": "workspace:*",
-      },
-    },
     "apps/sheets": {
       "name": "@apps/sheets",
       "version": "0.0.0",
@@ -369,6 +361,8 @@
   "packages": {
     "@alloc/quick-lru": ["@alloc/quick-lru@5.2.0", "", {}, "sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw=="],
 
+    "@apps/admin": ["@apps/admin@workspace:apps/admin"],
+
     "@apps/api": ["@apps/api@workspace:apps/api"],
 
     "@apps/calendar": ["@apps/calendar@workspace:apps/calendar"],
@@ -384,10 +378,6 @@
     "@apps/index": ["@apps/index@workspace:apps/index"],
 
     "@apps/mail": ["@apps/mail@workspace:apps/mail"],
-
-    "@apps/people": ["@apps/people@workspace:apps/people"],
-
-    "@apps/setup": ["@apps/setup@workspace:apps/setup"],
 
     "@apps/sheets": ["@apps/sheets@workspace:apps/sheets"],
 

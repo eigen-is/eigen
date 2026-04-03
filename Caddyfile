@@ -50,8 +50,7 @@
     import app slides
     import app sheets
     import app space
-    import app people
-    import app setup
+    import app admin
 
     # Landing page (fallback)
     handle {

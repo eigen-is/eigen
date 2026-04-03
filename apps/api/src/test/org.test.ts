@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import type { FullOrganization, OrgTeam } from '@workspace/lib/types/people';
+import type { FullOrganization, OrgTeam } from '@workspace/lib/types/admin';
 import { getServerConfig } from '../lib/config/server-config';
 import { authedRequest, findOrFail, getTestContext } from './setup';
 

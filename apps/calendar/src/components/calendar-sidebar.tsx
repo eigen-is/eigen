@@ -1,6 +1,6 @@
+import { useTeams } from '@workspace/lib/admin';
 import { useAuth } from '@workspace/lib/auth';
 import { useCalendars, useSharedCalendars, useUpdateCalendar, useUpdateSharedCalendar } from '@workspace/lib/calendar';
-import { usePeopleTeams } from '@workspace/lib/people';
 import { usePublicConfig } from '@workspace/lib/public';
 import { parseOwnerId } from '@workspace/lib/types';
 import type { CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
@@ -86,7 +86,7 @@ export function CalendarSidebar({ condensed = false, isMobile = false, onClose }
     const { data: calendars = [], isLoading: calendarsLoading } = useCalendars(ownerId);
     const { data: sharedCalendars = [], isLoading: sharedLoading } = useSharedCalendars(ownerId);
     const { data: config } = usePublicConfig();
-    const { data: teams } = usePeopleTeams(config?.orgId);
+    const { data: teams } = useTeams(config?.orgId);
     const updateCalendar = useUpdateCalendar(ownerId);
     const updateSharedCalendar = useUpdateSharedCalendar(ownerId);
 

@@ -11,6 +11,7 @@ import {
     saveServerConfig,
 } from '../config/server-config';
 import { updateServerSettings } from '../config/server-settings';
+import { checkS3Connection } from '../storage/s3-storage';
 
 export const isSetupRequired = checkSetupRequired;
 
@@ -219,7 +220,8 @@ export async function getSetupStatus() {
         return { setupRequired: false, domain: config?.domain };
     }
 
-    return { setupRequired: true };
+    const envDomain = process.env['DOMAIN'];
+    return { setupRequired: true, ...(envDomain ? { domain: envDomain } : {}) };
 }
 
 export async function completeSetup(input: SetupInput): Promise<SetupResult> {
@@ -240,10 +242,25 @@ export async function completeSetup(input: SetupInput): Promise<SetupResult> {
     }
 
     if (input.storageType === 's3') {
-        if (!input.s3Bucket || !input.s3Region || !input.s3AccessKeyId || !input.s3SecretAccessKey) {
-            return { success: false, error: 'S3 configuration requires bucket, region, access key, and secret key' };
+        if (!input.s3Bucket || !input.s3AccessKeyId || !input.s3SecretAccessKey) {
+            return { success: false, error: 'S3 configuration requires bucket, access key, and secret key' };
+        }
+        const s3Result = await checkS3Connection({
+            endpoint: input.s3Endpoint ?? '',
+            bucket: input.s3Bucket,
+            prefix: '',
+            accessKeyId: input.s3AccessKeyId,
+            secretAccessKey: input.s3SecretAccessKey,
+            region: input.s3Region,
+        });
+        if (!s3Result.ok) {
+            return { success: false, error: `S3 connection failed: ${s3Result.message}` };
         }
     }
+
+    // Use DOMAIN env var if set (Docker deployments)
+    const envDomain = process.env['DOMAIN'];
+    if (envDomain) input.domain = envDomain;
 
     if (!input.adminEmail || !input.adminPassword || !input.adminName) {
         return { success: false, error: 'Admin email, password, and name are required' };

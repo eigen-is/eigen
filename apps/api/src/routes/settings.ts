@@ -6,6 +6,7 @@ import { requireAdmin } from '../lib/core/access';
 import { checkS3Connection } from '../lib/storage/s3-storage';
 import { deleteUserCompletely } from '../lib/user/delete-user';
 import { betterAuth } from './auth';
+import { s3ConfigBody, toS3Config } from './shared-schemas';
 
 export const settingsRouter = new Elysia({ name: 'settings' })
     .use(betterAuth)
@@ -66,31 +67,13 @@ export const settingsRouter = new Elysia({ name: 'settings' })
         '/settings/s3config',
         async ({ body, user }) => {
             await requireAdmin(user.id);
-            await updateServerConfig({
-                storage: {
-                    s3: {
-                        endpoint: body.endpoint,
-                        bucket: body.bucket,
-                        prefix: body.prefix ?? '',
-                        accessKeyId: body.accessKeyId,
-                        secretAccessKey: body.secretAccessKey,
-                        region: body.region,
-                    },
-                },
-            });
+            const s3Config = toS3Config(body);
+            const s3Result = await checkS3Connection(s3Config);
+            if (!s3Result.ok) throw new ApiError(400, `S3 connection failed: ${s3Result.message}`);
+            await updateServerConfig({ storage: { s3: s3Config } });
             return getS3Config() ?? null;
         },
-        {
-            body: t.Object({
-                endpoint: t.String({ minLength: 1 }),
-                bucket: t.String({ minLength: 1 }),
-                prefix: t.Optional(t.String()),
-                accessKeyId: t.String({ minLength: 1 }),
-                secretAccessKey: t.String({ minLength: 1 }),
-                region: t.Optional(t.String()),
-            }),
-            auth: true,
-        },
+        { body: s3ConfigBody, auth: true },
     )
 
     .delete(
@@ -110,24 +93,7 @@ export const settingsRouter = new Elysia({ name: 'settings' })
         '/settings/s3check',
         async ({ body, user }) => {
             await requireAdmin(user.id);
-            return checkS3Connection({
-                endpoint: body.endpoint,
-                bucket: body.bucket,
-                prefix: body.prefix ?? '',
-                accessKeyId: body.accessKeyId,
-                secretAccessKey: body.secretAccessKey,
-                region: body.region,
-            });
+            return checkS3Connection(toS3Config(body));
         },
-        {
-            body: t.Object({
-                endpoint: t.String({ minLength: 1 }),
-                bucket: t.String({ minLength: 1 }),
-                prefix: t.Optional(t.String()),
-                accessKeyId: t.String({ minLength: 1 }),
-                secretAccessKey: t.String({ minLength: 1 }),
-                region: t.Optional(t.String()),
-            }),
-            auth: true,
-        },
+        { body: s3ConfigBody, auth: true },
     );

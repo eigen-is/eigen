@@ -1,8 +1,21 @@
 import { Elysia, t } from 'elysia';
-import { completeSetup, getSetupStatus } from '../lib/setup/setup';
+import { completeSetup, getSetupStatus, isSetupRequired } from '../lib/setup/setup';
+import { checkS3Connection } from '../lib/storage/s3-storage';
+import { s3ConfigBody, toS3Config } from './shared-schemas';
 
 export const setupRouter = new Elysia({ name: 'setup' })
     .get('/setup/status', () => getSetupStatus())
+    .post(
+        '/setup/s3check',
+        async ({ body, set }) => {
+            if (!isSetupRequired()) {
+                set.status = 403;
+                return { ok: false, message: 'Setup already completed' };
+            }
+            return checkS3Connection(toS3Config(body));
+        },
+        { body: s3ConfigBody },
+    )
     .post(
         '/setup/complete',
         async ({ body, set }) => {
