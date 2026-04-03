@@ -25,6 +25,13 @@ function parseDriveTag(tag: string | null): { ownerId: string; mountId: string; 
     return { ownerId, mountId, pathId };
 }
 
+function parseAccessRequestTag(tag: string | null): { mountId: string; pathId: string; email: string } | null {
+    if (!tag) return null;
+    const parts = tag.split(':');
+    if (parts[0] !== 'access-request' || !parts[1] || !parts[2] || !parts[3]) return null;
+    return { mountId: parts[1], pathId: parts[2], email: parts.slice(3).join(':') };
+}
+
 async function resolveDriveLink(tag: string | null): Promise<string> {
     const parsed = parseDriveTag(tag);
     if (!parsed) return getDriveAppUrl();
@@ -49,6 +56,7 @@ function resolveLink(notification: Notification): string | null {
         case 'calendar-invite-updated':
         case 'calendar-invite-cancelled':
         case 'mail':
+        case 'access-request':
             return notification.type;
         default:
             return null;
@@ -63,7 +71,7 @@ function parseCalendarInviteTag(tag: string | null): { eventId: string; startTim
     return { eventId: parts[1], startTime };
 }
 
-async function navigateToNotification(notification: Notification): Promise<void> {
+async function navigateToNotification(notification: Notification, ownerId: string): Promise<void> {
     switch (notification.type) {
         case 'share':
         case 'mention-chat':
@@ -95,21 +103,36 @@ async function navigateToNotification(notification: Notification): Promise<void>
             );
             return;
         }
+        case 'access-request': {
+            const parsed = parseAccessRequestTag(notification.tag);
+            if (!parsed) return;
+            const pathResponse = await driveApi({ ownerId })({ mountId: parsed.mountId })
+                .path({ pathId: parsed.pathId })
+                .get();
+            const path = pathResponse.data as DrivePath | null;
+            if (!path) return;
+            const parentId = path.parentId || path.id;
+            window.location.href = getDriveAppUrl(
+                `fs/${ownerId}/${parsed.mountId}/${parentId}?sharePathId=${parsed.pathId}&shareEmail=${encodeURIComponent(parsed.email)}`,
+            );
+            return;
+        }
     }
 }
 
 type NotificationItemProps = {
     notification: Notification;
+    ownerId: string;
     onMarkRead: (id: string) => void;
     onDismiss: (id: string) => void;
 };
 
-function NotificationItem({ notification, onMarkRead, onDismiss }: NotificationItemProps) {
+function NotificationItem({ notification, ownerId, onMarkRead, onDismiss }: NotificationItemProps) {
     const isClickable = resolveLink(notification) !== null;
 
     const handleClick = async () => {
         if (!notification.read) onMarkRead(notification.id);
-        await navigateToNotification(notification);
+        await navigateToNotification(notification, ownerId);
     };
 
     return (
@@ -194,6 +217,7 @@ export function NotificationBell() {
                             <div key={n.id} className="group/item border-b last:border-b-0">
                                 <NotificationItem
                                     notification={n}
+                                    ownerId={ownerId}
                                     onMarkRead={(id) => markRead.mutate(id)}
                                     onDismiss={(id) => dismiss.mutate(id)}
                                 />

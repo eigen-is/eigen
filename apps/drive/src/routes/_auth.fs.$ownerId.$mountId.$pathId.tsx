@@ -11,9 +11,10 @@ import {
 } from '@workspace/lib/types/drive';
 import { LoadingState, NotFound, RequestAccessView } from '@workspace/ui';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context.tsx';
+import { DriveAccessDialog } from '@workspace/ui/components/layout/drive/drive-access-dialog';
 import { DriveLayout } from '@workspace/ui/components/layout/drive/drive-layout';
 import { usePreview } from '@workspace/ui/components/layout/preview-provider';
-import { useContext, useEffect } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { DriveContext } from './__root';
 
 export const Route = createFileRoute('/_auth/fs/$ownerId/$mountId/$pathId')({
@@ -21,13 +22,15 @@ export const Route = createFileRoute('/_auth/fs/$ownerId/$mountId/$pathId')({
     validateSearch: (search: Record<string, unknown>) => {
         const pid = typeof search.pid === 'string' ? search.pid : undefined;
         const uid = typeof search.uid === 'string' ? search.uid : undefined;
-        return { pid, uid } as DriveSearchParams;
+        const sharePathId = typeof search.sharePathId === 'string' ? search.sharePathId : undefined;
+        const shareEmail = typeof search.shareEmail === 'string' ? search.shareEmail : undefined;
+        return { pid, uid, sharePathId, shareEmail } as DriveSearchParams;
     },
 });
 
 function DriveRoute() {
     const { ownerId, mountId, pathId } = Route.useParams();
-    const { pid } = Route.useSearch();
+    const { pid, sharePathId, shareEmail } = Route.useSearch();
     const navigate = useNavigate();
     const { isMobile } = useLayout();
     const { rootPath } = useContext(DriveContext);
@@ -54,6 +57,25 @@ function DriveRoute() {
     } = useFolderContent(ownerId, mountId, skipDataFetch ? '' : pathId);
     const { data: selectedPath = null } = usePathInfo(ownerId, mountId, pid);
     const { data: currentPath = null } = usePathInfo(ownerId, mountId, pathId);
+    const { data: shareTargetPath = null } = usePathInfo(ownerId, mountId, sharePathId || '');
+    const [shareDialogOpen, setShareDialogOpen] = useState(!!sharePathId);
+
+    useEffect(() => {
+        if (sharePathId && shareTargetPath) {
+            setShareDialogOpen(true);
+        }
+    }, [sharePathId, shareTargetPath]);
+
+    const handleShareDialogClose = (open: boolean) => {
+        setShareDialogOpen(open);
+        if (!open && sharePathId) {
+            navigate({
+                to: Route.fullPath,
+                params: { ownerId, mountId, pathId },
+                search: { pid, sharePathId: undefined, shareEmail: undefined },
+            });
+        }
+    };
 
     // Handle row click to show path details
     const onRowSelect = (path: DrivePath) => {
@@ -135,29 +157,39 @@ function DriveRoute() {
     }
 
     return (
-        <DriveLayout
-            ownerId={ownerId}
-            mountId={mountId}
-            pathId={pathId}
-            folderContents={folderContents}
-            isLoading={isFolderContentLoading}
-            error={isFolderContentLoadingError}
-            selectedPath={selectedPath}
-            currentPath={currentPath}
-            onRowSelect={onRowSelect}
-            onRowActivate={onRowActivate}
-            onBackToList={handleBackToList}
-            onAfterAction={handleAfterAction}
-            allowCreateFolder={true}
-            allowCreateDoc={true}
-            allowCreateStickies={true}
-            allowDelete={true}
-            allowShare={true}
-            allowUpload={true}
-            allowMove={true}
-            onQuickLook={onQuickLook}
-            showBreadcrumb={true}
-            pid={pid}
-        />
+        <>
+            <DriveLayout
+                ownerId={ownerId}
+                mountId={mountId}
+                pathId={pathId}
+                folderContents={folderContents}
+                isLoading={isFolderContentLoading}
+                error={isFolderContentLoadingError}
+                selectedPath={selectedPath}
+                currentPath={currentPath}
+                onRowSelect={onRowSelect}
+                onRowActivate={onRowActivate}
+                onBackToList={handleBackToList}
+                onAfterAction={handleAfterAction}
+                allowCreateFolder={true}
+                allowCreateDoc={true}
+                allowCreateStickies={true}
+                allowDelete={true}
+                allowShare={true}
+                allowUpload={true}
+                allowMove={true}
+                onQuickLook={onQuickLook}
+                showBreadcrumb={true}
+                pid={pid}
+            />
+            {shareTargetPath && (
+                <DriveAccessDialog
+                    open={shareDialogOpen}
+                    onOpenChange={handleShareDialogClose}
+                    path={shareTargetPath}
+                    prefillEmail={shareEmail}
+                />
+            )}
+        </>
     );
 }
