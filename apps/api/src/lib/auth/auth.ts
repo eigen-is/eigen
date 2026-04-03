@@ -98,7 +98,9 @@ export const auth = betterAuth({
                 },
             },
         }),
-        apiKey(),
+        apiKey({
+            rateLimit: { enabled: false },
+        }),
     ],
     trustedOrigins,
     appName: 'eigen',
