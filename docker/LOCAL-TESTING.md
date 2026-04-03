@@ -9,8 +9,11 @@ Run the full Eigen stack locally to test the Docker deployment, debug issues, or
 | HTTPS | Let's Encrypt (automatic) | Self-signed cert (browser warning) |
 | Email sending | Postfix → SMTP relay → internet | Mailpit (catches all mail) |
 | Email receiving | Postfix on port 25 | Simulate via API endpoint |
-| Domain | Your real domain | `localhost` |
+| Domain | Your real domain | `eigen.local` (mapped to 127.0.0.1 via /etc/hosts) |
 | IMAP | Dovecot with real TLS cert | Dovecot with self-signed cert |
+
+> **Why not `localhost`?** better-auth requires email addresses with a proper TLD (e.g., `admin@eigen.local`).
+> Bare `localhost` emails like `admin@localhost` are rejected. Use any `.local` domain and map it in `/etc/hosts`.
 
 ## Prerequisites
 
@@ -20,20 +23,20 @@ Run the full Eigen stack locally to test the Docker deployment, debug issues, or
 
 ## Quick Start
 
-### 1. Generate environment file
+### 1. Add local domain to /etc/hosts
+
+```bash
+echo '127.0.0.1 eigen.local' | sudo tee -a /etc/hosts
+```
+
+### 2. Generate environment file
 
 ```bash
 cd /path/to/eigen
-./scripts/generate-env.sh localhost > .env.production
+./scripts/generate-env.sh eigen.local > .env.production
 ```
 
-Edit `.env.production` — change `COOKIE_DOMAIN` from `.localhost` to `localhost`:
-
-```bash
-sed -i '' 's/COOKIE_DOMAIN=.localhost/COOKIE_DOMAIN=localhost/' .env.production
-```
-
-### 2. Build the frontend
+### 3. Build the frontend
 
 ```bash
 set -a && source .env.production && set +a
@@ -41,38 +44,38 @@ bun install
 bun run build:prod
 ```
 
-### 3. Start the stack
+### 4. Start the stack
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.production up -d
 ```
 
 This starts 4 containers:
-- **caddy** — Reverse proxy at `https://localhost` (self-signed cert)
+- **caddy** — Reverse proxy at `https://eigen.local` (self-signed cert)
 - **eigen-api** — Backend API
 - **mailpit** — Catches all outbound email (replaces Postfix in dev)
 - **dovecot** — IMAP server for testing mail clients
 
-### 4. Open Eigen
+### 5. Open Eigen
 
-Go to **https://localhost** in your browser. Accept the self-signed certificate warning.
+Go to **https://eigen.local** in your browser. Accept the self-signed certificate warning.
 
-If this is a fresh install, go to **https://localhost/admin** to create your admin account.
+If this is a fresh install, go to **https://eigen.local/admin** to create your admin account.
 
 ## URLs
 
 | Service | URL | What it does |
 |---------|-----|-------------|
-| Eigen web app | `https://localhost` | Main application |
-| Admin / Setup | `https://localhost/admin` | Admin panel (shows setup wizard on first run) |
+| Eigen web app | `https://eigen.local` | Main application |
+| Admin / Setup | `https://eigen.local/admin` | Admin panel (shows setup wizard on first run) |
 | Mailpit | `http://localhost:8025` | Web UI showing all caught outbound mail |
-| API direct | `https://localhost/eigen/health` | API health check |
+| API direct | `https://eigen.local/eigen/health` | API health check |
 
 ## Testing Email
 
 ### Sending mail (outbound)
 
-1. Open Eigen's mail app at `https://localhost/mail`
+1. Open Eigen's mail app at `https://eigen.local/mail`
 2. Compose and send an email to anyone
 3. Open **http://localhost:8025** — your sent email appears in Mailpit
 4. No real email is sent — Mailpit catches everything
@@ -85,7 +88,7 @@ Simulate incoming mail by POSTing to the delivery endpoint:
 # Create a test email
 cat > /tmp/test.eml <<'EOF'
 From: sender@example.com
-To: you@localhost
+To: you@eigen.local
 Subject: Test incoming mail
 Date: Mon, 30 Mar 2026 12:00:00 +0000
 Content-Type: text/plain
@@ -97,10 +100,10 @@ EOF
 curl -sk -X POST \
     -H "Content-Type: application/octet-stream" \
     --data-binary @/tmp/test.eml \
-    https://localhost/eigen/mail/deliver/YOUR_EMAIL@localhost
+    https://eigen.local/eigen/mail/deliver/YOUR_EMAIL@eigen.local
 ```
 
-Replace `YOUR_EMAIL@localhost` with the email you used during setup. The email appears in your Eigen inbox immediately.
+Replace `YOUR_EMAIL@eigen.local` with the email you used during setup. The email appears in your Eigen inbox immediately.
 
 ### Testing IMAP (Thunderbird / Apple Mail)
 
@@ -108,25 +111,28 @@ Connect your mail client with these settings:
 
 | Setting | Value |
 |---------|-------|
-| Server | `localhost` |
+| Server | `eigen.local` |
 | Port | `993` |
 | Security | SSL/TLS |
-| Username | Your email (e.g., `admin@localhost`) |
-| Password | Any password (auth is disabled in dev) |
+| Username | Your email (e.g., `admin@eigen.local`) |
+| Password | Your password or an app password |
 
 Accept the self-signed certificate warning. You'll see the same mailbox as in the Eigen web app.
+
+> **App passwords:** Generate one in **Space → Calendar & Mail → App Passwords**. Required when 2FA is enabled.
+> Without 2FA, your regular password works too.
 
 **Testing flag sync:** Mark a message as read in Thunderbird → refresh in Eigen web UI (or vice versa). The flag change should appear on both sides.
 
 ### Testing IMAP via command line
 
 ```bash
-# Connect and list mailboxes
-(echo '1 LOGIN "admin@localhost" "anything"'
+# Connect and list mailboxes (replace YOUR_PASSWORD with your password or app password)
+(echo '1 LOGIN "admin@eigen.local" "YOUR_PASSWORD"'
  echo '2 LIST "" "*"'
  echo '3 SELECT INBOX'
  echo '4 FETCH 1:* (ENVELOPE)'
- echo '5 LOGOUT') | openssl s_client -connect localhost:993 -quiet 2>/dev/null
+ echo '5 LOGOUT') | openssl s_client -connect eigen.local:993 -quiet 2>/dev/null
 ```
 
 ## Testing CalDAV (Calendar Sync)
@@ -138,13 +144,13 @@ Accept the self-signed certificate warning. You'll see the same mailbox as in th
 3. Find your user ID:
 ```bash
 curl -sk -X POST -H "Content-Type: application/json" \
-    -d '{"email":"YOUR_EMAIL","password":"x"}' \
-    https://localhost/eigen/internal/auth/verify
+    -d '{"email":"YOUR_EMAIL","password":"YOUR_PASSWORD"}' \
+    https://eigen.local/eigen/internal/auth/verify
 ```
 4. Enter:
-   - **Location:** `https://localhost/dav/calendars/{userId}/`
+   - **Location:** `https://eigen.local/dav/calendars/{userId}/`
    - **Username:** your email
-   - **Password:** anything (auth is open in dev)
+   - **Password:** your password or app password
 5. Accept the self-signed cert warning
 
 Your Eigen calendars appear in Thunderbird. Changes sync both ways — create, edit, and delete events
@@ -156,11 +162,11 @@ in either client.
 USER_ID="your-user-id"
 
 # List calendars
-curl -sk -u your@email:x -X PROPFIND -H "Depth: 1" \
-    https://localhost/dav/calendars/$USER_ID/ | xmllint --format -
+curl -sk -u your@email:YOUR_PASSWORD -X PROPFIND -H "Depth: 1" \
+    https://eigen.local/dav/calendars/$USER_ID/ | xmllint --format -
 
 # Create an event
-curl -sk -u your@email:x -X PUT \
+curl -sk -u your@email:YOUR_PASSWORD -X PUT \
     -H "Content-Type: text/calendar" \
     -d 'BEGIN:VCALENDAR
 VERSION:2.0
@@ -171,7 +177,7 @@ DTSTART:20260401T100000Z
 DTEND:20260401T110000Z
 END:VEVENT
 END:VCALENDAR' \
-    https://localhost/dav/calendars/$USER_ID/<CALENDAR_ID>/test-123.ics
+    https://eigen.local/dav/calendars/$USER_ID/<CALENDAR_ID>/test-123.ics
 ```
 
 **Note:** On a real server, CalDAV clients like Apple Calendar and DAVx5 auto-discover calendars —
@@ -207,23 +213,23 @@ rm -rf data/ caddy-data/
 ## Architecture
 
 ```
-Browser (https://localhost)
+Browser (https://eigen.local)
     │
     ▼
-┌─────────┐     ┌───────────┐     ┌─────────┐
-│  Caddy  │────▶│ Eigen API │◀────│ Dovecot │
-│  :80/:443│     │  :8000    │     │  :993   │
-└─────────┘     └───────────┘     └─────────┘
-                     │
-                ┌────▼────┐
-                │ Mailpit │
-                │  :8025  │
-                └─────────┘
+┌──────────┐     ┌───────────┐     ┌─────────┐
+│  Caddy   │────▶│ Eigen API │◀────│ Dovecot │
+│ :80/:443 │     │   :8000   │     │  :993   │
+└──────────┘     └───────────┘     └─────────┘
+                       │
+                  ┌────▼────┐
+                  │ Mailpit │
+                  │  :8025  │
+                  └─────────┘
 
 Caddy:     HTTPS termination, static files, API proxy
 Eigen API: All business logic, data storage
 Mailpit:   Catches outbound email (dev only)
-Dovecot:   IMAP server (reads same Maildir as API)
+Dovecot:   IMAP server (reads same Maildir as API, auth via API)
 ```
 
 All containers share `./data/` — user files, databases, and emails live there.
@@ -243,7 +249,7 @@ Use `bun run serve` for fast frontend development. Use Docker dev for testing de
 ## Common Issues
 
 ### "Not Found" when opening an app
-Add a trailing slash: `https://localhost/mail/` not `https://localhost/mail` (Caddy redirects automatically, but some browsers cache the non-slash version).
+Add a trailing slash: `https://eigen.local/mail/` not `https://eigen.local/mail`.
 
 ### CORS / "Failed to fetch" errors
 The frontend was built with wrong environment variables. Rebuild:
