@@ -72,6 +72,7 @@ Eigen doesn't lock you into its web interface. Standard protocols let you use yo
 ```bash
 git clone https://github.com/eigen-foundation/eigen.git
 cd eigen
+cp .env.development .env
 bun install
 bun run serve
 ```
