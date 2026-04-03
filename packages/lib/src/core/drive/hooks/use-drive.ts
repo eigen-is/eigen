@@ -533,6 +533,18 @@ export function useEmptyTrash(ownerId: string, mountId: string) {
     });
 }
 
+// REQUEST ACCESS
+export function useRequestAccess(ownerId: string, mountId: string, pathId: string) {
+    return useMutation({
+        mutationFn: async (body: { message?: string }) => {
+            const response = await driveApi({ ownerId })({ mountId }).path({ pathId })['request-access'].post(body);
+            if (response.error) throw new AppError(response);
+            return response.data;
+        },
+        onError: onMutationError,
+    });
+}
+
 // SSE invalidation functions
 export function invalidateAclSharedOrUnshared(queryClient: QueryClient, ownerId: string): void {
     queryClient.invalidateQueries({ queryKey: driveKeys.shared(ownerId, 'with-me') });
