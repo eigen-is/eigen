@@ -75,10 +75,20 @@ SSEProvider → UploadProvider → PreviewProvider → GlobalHotkeys → ErrorBo
 ## LayoutContext
 
 `useLayout()` provides: `appName`, `setAppName`, `documentTitle`, `setDocumentTitle`, `sidebarOpen`,
-`setSidebarOpen`, `sidebarMode`, `isMobile`, `isTablet`.
+`setSidebarOpen`, `sidebarMode`, `sidebarHidden`, `setSidebarHidden`, `isMobile`, `isTablet`.
 
 Convenience hooks: `useApp()` → `{appName, setAppName}`, `useSidebar()` → `{sidebarOpen, setSidebarOpen}`. Use
 `setDocumentTitle()` to update the browser tab title dynamically (e.g., showing the current document name).
+
+`setSidebarHidden(true)` removes the sidebar entirely from the layout. Used by `RequestAccessView` and the admin
+access denied screen to show a fullscreen view with only the topbar. Always restore on unmount:
+
+```tsx
+useEffect(() => {
+    setSidebarHidden(true);
+    return () => setSidebarHidden(false);
+}, [setSidebarHidden]);
+```
 
 ## Adding a New App
 
@@ -109,7 +119,8 @@ menu needs submenu.
 | `ThemeProvider` | `app/theme-provider.tsx`   | Applies light/dark/system theme from space settings                                |
 | `NotificationBell` | `app/notification-bell.tsx` | Unread notification count + popover                                            |
 | `NotFound`      | `app/not-found.tsx`        | Empty state for missing resources                                                  |
-| `AccessDenied`  | `app/access-denied.tsx`    | Empty state for permission errors                                                  |
+| `AccessDenied`  | `app/access-denied.tsx`    | Role-based access denied (admin app only). For resource access, use `RequestAccessView` |
+| `RequestAccessView` | `app/request-access-view.tsx` | Fullscreen "request access" screen with owner info, message field, request button. Hides sidebar via `setSidebarHidden` |
 | `EmptyState`    | `app/empty-state.tsx`      | Centered message with optional icon + action                                       |
 | `ErrorState`    | `app/error-state.tsx`      | Error message with optional detail                                                 |
 | `LoadingState`  | `app/loading-state.tsx`    | Centered EigenLoader spinner                                                       |
