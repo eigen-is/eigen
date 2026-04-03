@@ -1,124 +1,20 @@
-import { driveApi, getCalendarAppUrl, getDocumentUrl, getDriveAppUrl, getMailAppUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth/auth-context.tsx';
-import { getMonthRange } from '@workspace/lib/calendar';
 import { formatTimeAgo } from '@workspace/lib/date';
 import {
+    isClickableNotification,
+    resolveNotificationLink,
     useDismissNotification,
     useMarkAllNotificationsRead,
     useMarkNotificationRead,
     useNotifications,
     useUnreadNotificationCount,
 } from '@workspace/lib/notification';
-import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Notification } from '@workspace/lib/types/notification';
 import { Bell, Check, X } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '../../button';
 import { Popover, PopoverContent, PopoverTrigger } from '../../popover';
 import { UserAvatar } from '../user-avatar';
-
-function parseDriveTag(tag: string | null): { ownerId: string; mountId: string; pathId: string } | null {
-    if (!tag) return null;
-    // Matches share:{ownerId}:{mountId}:{pathId} and mention:{ownerId}:{mountId}:{pathId}:{email}
-    const [prefix, ownerId, mountId, pathId] = tag.split(':');
-    if (!['share', 'mention'].includes(prefix) || !ownerId || !mountId || !pathId) return null;
-    return { ownerId, mountId, pathId };
-}
-
-function parseAccessRequestTag(tag: string | null): { mountId: string; pathId: string; email: string } | null {
-    if (!tag) return null;
-    const parts = tag.split(':');
-    if (parts[0] !== 'access-request' || !parts[1] || !parts[2] || !parts[3]) return null;
-    return { mountId: parts[1], pathId: parts[2], email: parts.slice(3).join(':') };
-}
-
-async function resolveDriveLink(tag: string | null): Promise<string> {
-    const parsed = parseDriveTag(tag);
-    if (!parsed) return getDriveAppUrl();
-
-    const response = await driveApi({ ownerId: parsed.ownerId })({ mountId: parsed.mountId })
-        .path({ pathId: parsed.pathId })
-        .get();
-    const path = response.data as DrivePath | null;
-    if (!path) return getDriveAppUrl();
-
-    return getDocumentUrl(path) || getDriveAppUrl(`fs/${path.ownerId}/${path.mountId}/${path.id}`);
-}
-
-function resolveLink(notification: Notification): string | null {
-    switch (notification.type) {
-        case 'share':
-        case 'mention-chat':
-        case 'mention-comment':
-        case 'calendar-share':
-        case 'calendar-unshare':
-        case 'calendar-invite':
-        case 'calendar-invite-updated':
-        case 'calendar-invite-cancelled':
-        case 'mail':
-        case 'access-request':
-            return notification.type;
-        default:
-            return null;
-    }
-}
-
-function parseCalendarInviteTag(tag: string | null): { eventId: string; startTime: number } | null {
-    if (!tag) return null;
-    const parts = tag.split(':');
-    if (parts[0] !== 'calendar-invite' || !parts[1]) return null;
-    const startTime = parts[2] ? Number(parts[2]) || 0 : 0;
-    return { eventId: parts[1], startTime };
-}
-
-async function navigateToNotification(notification: Notification, ownerId: string): Promise<void> {
-    switch (notification.type) {
-        case 'share':
-        case 'mention-chat':
-        case 'mention-comment':
-            window.location.href = await resolveDriveLink(notification.tag);
-            return;
-        case 'calendar-invite':
-        case 'calendar-invite-updated':
-        case 'calendar-invite-cancelled': {
-            const parsed = parseCalendarInviteTag(notification.tag);
-            if (parsed?.startTime) {
-                const { from, to } = getMonthRange(new Date(parsed.startTime * 1000));
-                window.location.href = getCalendarAppUrl(
-                    `view/month/${from}/${to}?eventId=${encodeURIComponent(parsed.eventId)}`,
-                );
-            } else {
-                window.location.href = getCalendarAppUrl();
-            }
-            return;
-        }
-        case 'calendar-share':
-        case 'calendar-unshare':
-            window.location.href = getCalendarAppUrl();
-            return;
-        case 'mail': {
-            const mailId = notification.tag?.startsWith('mail:') ? notification.tag.slice(5) : null;
-            window.location.href = getMailAppUrl(
-                mailId ? `box/inbox?mailId=${encodeURIComponent(mailId)}` : 'box/inbox',
-            );
-            return;
-        }
-        case 'access-request': {
-            const parsed = parseAccessRequestTag(notification.tag);
-            if (!parsed) return;
-            const pathResponse = await driveApi({ ownerId })({ mountId: parsed.mountId })
-                .path({ pathId: parsed.pathId })
-                .get();
-            const path = pathResponse.data as DrivePath | null;
-            if (!path) return;
-            const parentId = path.parentId || path.id;
-            window.location.href = getDriveAppUrl(
-                `fs/${ownerId}/${parsed.mountId}/${parentId}?sharePathId=${parsed.pathId}&shareEmail=${encodeURIComponent(parsed.email)}`,
-            );
-            return;
-        }
-    }
-}
 
 type NotificationItemProps = {
     notification: Notification;
@@ -128,11 +24,12 @@ type NotificationItemProps = {
 };
 
 function NotificationItem({ notification, ownerId, onMarkRead, onDismiss }: NotificationItemProps) {
-    const isClickable = resolveLink(notification) !== null;
+    const isClickable = isClickableNotification(notification.type);
 
     const handleClick = async () => {
         if (!notification.read) onMarkRead(notification.id);
-        await navigateToNotification(notification, ownerId);
+        const url = await resolveNotificationLink(notification, ownerId);
+        if (url) window.location.href = url;
     };
 
     return (
