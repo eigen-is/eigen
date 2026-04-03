@@ -11,16 +11,19 @@ submission inet n       -       n       -       -       smtpd
     -o smtpd_sasl_type=dovecot
     -o smtpd_sasl_path=inet:dovecot:12345
     -o smtpd_sasl_security_options=noanonymous
+    -o smtpd_sender_restrictions=permit_sasl_authenticated,reject
     -o smtpd_recipient_restrictions=permit_sasl_authenticated,reject
 
 # SMTPS (port 465) — implicit TLS, same auth as submission
 smtps     inet  n       -       n       -       -       smtpd
     -o syslog_name=postfix/smtps
     -o smtpd_tls_wrappermode=yes
+    -o smtpd_tls_security_level=encrypt
     -o smtpd_sasl_auth_enable=yes
     -o smtpd_sasl_type=dovecot
     -o smtpd_sasl_path=inet:dovecot:12345
     -o smtpd_sasl_security_options=noanonymous
+    -o smtpd_sender_restrictions=permit_sasl_authenticated,reject
     -o smtpd_recipient_restrictions=permit_sasl_authenticated,reject
 pickup    unix  n       -       y       60      1       pickup
 cleanup   unix  n       -       y       -       0       cleanup
