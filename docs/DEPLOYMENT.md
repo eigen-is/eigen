@@ -138,13 +138,15 @@ Read-write CalDAV server implemented and tested with Thunderbird. Files in `apps
 - [ ] Test with Apple Calendar, DAVx5 (Android)
 - [ ] VTIMEZONE generation (most clients don't require it)
 
-### Phase 6: SMTP Submission (port 587) — Future
+### Phase 6: SMTP Submission — Done
 
-Allow IMAP clients to send email via SMTP (not just the web UI).
+SMTP submission on ports 587 (STARTTLS) and 465 (implicit TLS). Auth via Dovecot SASL which
+calls `eigen-checkpassword` → Eigen API `verifyProtocolAuth()`. Same app password / primary
+password flow as IMAP and CalDAV.
 
-- [ ] Postfix submission config (port 587, authenticated)
-- [ ] SASL auth via Dovecot auth socket
-- [ ] Test: Thunderbird sends via SMTP submission
+- [x] Postfix submission + smtps config in `master.cf.template`
+- [x] SASL auth via Dovecot inet listener (port 12345, Docker-network-only)
+- [x] Tested with swaks: app password, regular password, wrong password rejected
 
 ### Known Issues / Improvements
 

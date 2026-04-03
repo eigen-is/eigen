@@ -225,6 +225,8 @@ ufw allow 80/tcp     # HTTP (redirects to HTTPS)
 ufw allow 443/tcp    # HTTPS (web interface)
 ufw allow 443/udp    # HTTP/3 (optional, faster connections)
 ufw allow 25/tcp     # SMTP (receive email)
+ufw allow 465/tcp    # SMTPS (send email from external clients)
+ufw allow 587/tcp    # SMTP submission (send email from external clients)
 ufw allow 993/tcp    # IMAP (email clients)
 ufw allow 22/tcp     # SSH (your access)
 ```
