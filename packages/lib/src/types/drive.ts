@@ -202,6 +202,8 @@ export type DriveSearchParams = {
     pid?: string;
     uid?: string;
     mid?: string;
+    sharePathId?: string;
+    shareEmail?: string;
 };
 
 export type DriveContextType = {
