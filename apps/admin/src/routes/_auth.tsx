@@ -3,7 +3,8 @@ import { useMembers } from '@workspace/lib/admin';
 import { authClient, useAuth } from '@workspace/lib/auth';
 import { usePublicConfig } from '@workspace/lib/public';
 import { AccessDenied, EmptyState, LoadingState } from '@workspace/ui';
-import { useEffect, useRef, useState } from 'react';
+import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
+import { useEffect, useRef } from 'react';
 
 export const Route = createFileRoute('/_auth')({
     beforeLoad: ({ context, location }) => {
@@ -22,19 +23,26 @@ export const Route = createFileRoute('/_auth')({
 function AuthGuard() {
     const { user } = useAuth();
     const { data: config, isLoading: configLoading } = usePublicConfig();
-    const [orgActivated, setOrgActivated] = useState(false);
+    const { data: members, isLoading: membersLoading } = useMembers(config?.orgId);
+    const { setSidebarHidden } = useLayout();
     const activatedRef = useRef(false);
 
     useEffect(() => {
         if (config?.orgId && !activatedRef.current) {
             activatedRef.current = true;
-            authClient.organization.setActive({ organizationId: config.orgId }).then(() => setOrgActivated(true));
+            authClient.organization.setActive({ organizationId: config.orgId });
         }
     }, [config]);
 
-    const { data: members = [], isLoading: membersLoading } = useMembers(orgActivated ? config?.orgId : undefined);
+    const currentMember = members?.find((m) => m.userId === user?.id);
+    const isAdmin = currentMember?.role === 'admin' || currentMember?.role === 'owner';
 
-    if (configLoading || membersLoading || !orgActivated) {
+    useEffect(() => {
+        setSidebarHidden(!isAdmin);
+        return () => setSidebarHidden(false);
+    }, [isAdmin, setSidebarHidden]);
+
+    if (configLoading || membersLoading) {
         return <LoadingState />;
     }
 
@@ -42,9 +50,7 @@ function AuthGuard() {
         return <EmptyState message="No organization found." />;
     }
 
-    const currentMember = members.find((m) => m.userId === user?.id);
-
-    if (!currentMember || currentMember.role === 'member') {
+    if (!isAdmin) {
         return <AccessDenied message="You need admin or owner privileges to access this page." />;
     }
 
