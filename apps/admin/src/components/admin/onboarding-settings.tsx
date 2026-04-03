@@ -1,0 +1,153 @@
+import { useServerSettings, useUpdateServerSettings } from '@workspace/lib/settings';
+import type { ServerSettings } from '@workspace/lib/types/settings';
+import { LoadingState } from '@workspace/ui';
+import { Button } from '@workspace/ui/components/button';
+import { Input } from '@workspace/ui/components/input';
+import { Label } from '@workspace/ui/components/label';
+import { Separator } from '@workspace/ui/components/separator';
+import { Switch } from '@workspace/ui/components/switch';
+import { Textarea } from '@workspace/ui/components/textarea';
+import { useState } from 'react';
+
+type OnboardingDraft = {
+    waitlist?: Partial<ServerSettings['onboarding']['waitlist']>;
+    autoAddOwnerContact?: boolean;
+    welcomeMail?: Partial<ServerSettings['onboarding']['welcomeMail']>;
+};
+
+export function OnboardingSettingsPage() {
+    const { data: settings, isLoading } = useServerSettings();
+    const updateSettings = useUpdateServerSettings();
+
+    const [draft, setDraft] = useState<OnboardingDraft>({});
+    const [dirty, setDirty] = useState(false);
+
+    if (isLoading || !settings) {
+        return <LoadingState />;
+    }
+
+    const current = {
+        waitlist: { ...settings.onboarding.waitlist, ...draft.waitlist },
+        autoAddOwnerContact: draft.autoAddOwnerContact ?? settings.onboarding.autoAddOwnerContact,
+        welcomeMail: { ...settings.onboarding.welcomeMail, ...draft.welcomeMail },
+    };
+
+    const update = (patch: OnboardingDraft) => {
+        setDirty(true);
+        setDraft((prev) => ({
+            ...prev,
+            ...patch,
+            waitlist: patch.waitlist ? { ...prev.waitlist, ...patch.waitlist } : prev.waitlist,
+            welcomeMail: patch.welcomeMail ? { ...prev.welcomeMail, ...patch.welcomeMail } : prev.welcomeMail,
+        }));
+    };
+
+    const handleSave = async () => {
+        await updateSettings.mutateAsync({ onboarding: draft } as Record<string, unknown>);
+        setDraft({});
+        setDirty(false);
+    };
+
+    const handleReset = () => {
+        setDraft({});
+        setDirty(false);
+    };
+
+    return (
+        <div className="p-6 max-w-2xl space-y-6">
+            <h2 className="text-xl font-semibold">Onboarding</h2>
+
+            <div className="space-y-4">
+                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Waitlist</h3>
+                <p className="text-sm text-muted-foreground">
+                    When enabled, the landing page shows a "Join Waitlist" form. Submissions are sent to the configured
+                    email address.
+                </p>
+
+                <div className="flex items-center gap-3">
+                    <Switch
+                        checked={current.waitlist.enabled}
+                        onCheckedChange={(enabled) => update({ waitlist: { enabled } })}
+                    />
+                    <Label>Enable waitlist</Label>
+                </div>
+
+                {current.waitlist.enabled && (
+                    <div className="space-y-1.5">
+                        <Label>Notification email</Label>
+                        <Input
+                            type="email"
+                            placeholder="admin@example.com"
+                            value={current.waitlist.notifyEmail}
+                            onChange={(e) => update({ waitlist: { notifyEmail: e.target.value } })}
+                        />
+                    </div>
+                )}
+            </div>
+
+            <Separator />
+
+            <div className="space-y-4">
+                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+                    Auto-add admin contact
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                    Automatically add the organization owner as a contact for new users.
+                </p>
+
+                <div className="flex items-center gap-3">
+                    <Switch
+                        checked={current.autoAddOwnerContact}
+                        onCheckedChange={(autoAddOwnerContact) => update({ autoAddOwnerContact })}
+                    />
+                    <Label>Add owner to new user contacts</Label>
+                </div>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-4">
+                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Welcome mail</h3>
+                <p className="text-sm text-muted-foreground">
+                    Send a welcome email to new users when their account is created.
+                </p>
+
+                <div className="flex items-center gap-3">
+                    <Switch
+                        checked={current.welcomeMail.enabled}
+                        onCheckedChange={(enabled) => update({ welcomeMail: { enabled } })}
+                    />
+                    <Label>Send welcome email</Label>
+                </div>
+
+                {current.welcomeMail.enabled && (
+                    <div className="space-y-1.5">
+                        <Label>Email body</Label>
+                        <Textarea
+                            rows={6}
+                            value={current.welcomeMail.body}
+                            onChange={(e) => update({ welcomeMail: { body: e.target.value } })}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                            Available placeholders: {'{name}'}, {'{orgName}'}, {'{domain}'}
+                        </p>
+                    </div>
+                )}
+            </div>
+
+            {dirty && (
+                <>
+                    <Separator />
+                    <div className="flex items-center justify-end gap-2">
+                        <Button variant="outline" onClick={handleReset}>
+                            Reset
+                        </Button>
+                        <Button onClick={handleSave} disabled={updateSettings.isPending}>
+                            {updateSettings.isPending ? 'Saving...' : 'Save Changes'}
+                        </Button>
+                    </div>
+                </>
+            )}
+        </div>
+    );
+}
