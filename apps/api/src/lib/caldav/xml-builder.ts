@@ -34,6 +34,7 @@ export function calendarCollectionProps(cal: CalendarItem): string[] {
         `<CS:getctag>${cal.ctag}</CS:getctag>`,
         `<D:sync-token>https://eigen.is/ns/sync/${cal.ctag}</D:sync-token>`,
         `<C:supported-calendar-component-set><C:comp name="VEVENT"/></C:supported-calendar-component-set>`,
+        `<D:current-user-privilege-set><D:privilege><D:read/></D:privilege><D:privilege><D:read-current-user-privilege-set/></D:privilege><D:privilege><D:write/></D:privilege><D:privilege><D:write-content/></D:privilege><D:privilege><D:bind/></D:privilege><D:privilege><D:unbind/></D:privilege></D:current-user-privilege-set>`,
     ];
 }
 
