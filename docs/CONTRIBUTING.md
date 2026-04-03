@@ -88,6 +88,7 @@ Fastest way to get going. Runs the API and frontend apps directly on your machin
 ```bash
 git clone https://github.com/eigen-foundation/eigen.git
 cd eigen
+cp .env.development .env
 bun install
 bun run serve
 ```
