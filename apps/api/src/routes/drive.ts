@@ -381,6 +381,31 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
         { auth: true },
     )
+    .post(
+        '/drive/:ownerId/:mountId/path/:pathId/request-access',
+        async ({ params, user, body }) => {
+            const home = await getHome(params.ownerId);
+            const mount = home.drive.getMount(params.mountId);
+            const path = await mount.getActivePath(params.pathId);
+
+            const requesterName = user.name || user.email;
+            home.notifications?.persist({
+                type: 'access-request',
+                tag: `access-request:${params.mountId}:${params.pathId}:${user.email}`,
+                title: `${requesterName} requested access`,
+                body: body.message || null,
+                actorEmail: user.email,
+            });
+
+            return { success: true };
+        },
+        {
+            auth: true,
+            body: t.Object({
+                message: t.Optional(t.String()),
+            }),
+        },
+    )
     .delete(
         '/drive/:ownerId/:mountId/trash',
         async ({ params, user }) => {
