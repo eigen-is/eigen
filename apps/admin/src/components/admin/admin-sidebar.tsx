@@ -12,7 +12,7 @@ import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
 import { UserAvatar } from '@workspace/ui/components/layout/user-avatar';
 import { Separator } from '@workspace/ui/components/separator';
-import { Plus, Settings, Users, UsersRound } from 'lucide-react';
+import { ClipboardList, Plus, Settings, Users, UsersRound } from 'lucide-react';
 import { useState } from 'react';
 
 interface AdminSidebarProps {
@@ -20,6 +20,7 @@ interface AdminSidebarProps {
     onClose?: () => void;
     isMobile?: boolean;
     teams?: OrgTeam[];
+    isOwner?: boolean;
     onAddMembersToTeam?: (memberIds: string[], teamId: string) => void;
 }
 
@@ -28,6 +29,7 @@ export function AdminSidebar({
     onClose,
     isMobile = false,
     teams = [],
+    isOwner = false,
     onAddMembersToTeam,
 }: AdminSidebarProps) {
     const { data: config } = usePublicConfig();
@@ -49,6 +51,22 @@ export function AdminSidebar({
 
             <div className="overflow-auto flex-1 pt-2">
                 <SidebarSection condensed={condensed}>
+                    {isOwner && (
+                        <>
+                            <SidebarItem
+                                icon={<Settings className="h-4 w-4" />}
+                                label="Settings"
+                                to="/settings"
+                                condensed={condensed}
+                            />
+                            <SidebarItem
+                                icon={<ClipboardList className="h-4 w-4" />}
+                                label="Onboarding"
+                                to="/onboarding"
+                                condensed={condensed}
+                            />
+                        </>
+                    )}
                     <SidebarItem
                         icon={<Users className="h-4 w-4" />}
                         label="Members"
@@ -59,12 +77,6 @@ export function AdminSidebar({
                         icon={<UsersRound className="h-4 w-4" />}
                         label="Teams"
                         to="/teams"
-                        condensed={condensed}
-                    />
-                    <SidebarItem
-                        icon={<Settings className="h-4 w-4" />}
-                        label="Settings"
-                        to="/settings"
                         condensed={condensed}
                     />
                 </SidebarSection>
