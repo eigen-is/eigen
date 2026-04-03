@@ -107,8 +107,9 @@ DELETE /notifications/:ownerId/:id                 Dismiss
 | Incoming mail          | `Maildir` sync                           | `mail`                      | `mail:{messageId}`                                  |
 | Chat @mention          | `ChatRoom.postMessage()`                 | `mention-chat`              | `mention:{ownerId}:{mountId}:{chatId}:{email}`      |
 | Comment @mention       | `ChatRoom.postMessage()` (embedded chat) | `mention-comment`           | `mention:{ownerId}:{mountId}:{containerId}:{email}` |
+| Access request         | `POST .../request-access` route          | `access-request`            | `access-request:{ownerId}:{mountId}:{pathId}:{email}` |
 
-`actorEmail` is set on all sources — the sharer, organizer, mail sender, or mention author.
+`actorEmail` is set on all sources — the sharer, organizer, mail sender, mention author, or access requester.
 
 ## Frontend
 
@@ -123,12 +124,16 @@ Links are constructed client-side based on notification `type` and `tag`:
 
 - `share`, `mention-chat`, `mention-comment` → async: fetches `DrivePath` via API on click, routes to correct app
   using `getDocumentUrl()` (eigendoc → Docs, eigenchat → Chat, etc.) or falls back to Drive
+- `access-request` → async: fetches `DrivePath` to resolve parent folder, navigates to Drive at
+  `/fs/{ownerId}/{mountId}/{parentId}?sharePathId={pathId}&shareEmail={email}`, auto-opening the share dialog
+  with the requester's email pre-filled
 - `calendar-share`, `calendar-unshare`, `calendar-invite`, `calendar-invite-updated`, `calendar-invite-cancelled` →
   `getCalendarAppUrl()`
 - `mail` → `getMailAppUrl('box/inbox')`
 - `unshare` → not clickable (resource no longer accessible)
 
-No URLs stored in the database — `tag` contains the IDs, frontend resolves using `get*AppUrl()` helpers from `api.ts`.
+Link resolution logic lives in `packages/lib/src/core/notification/resolve-link.ts`. No URLs stored in the
+database — `tag` contains the IDs, frontend resolves using `get*AppUrl()` helpers from `api.ts`.
 
 ### Display Names
 

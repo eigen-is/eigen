@@ -200,6 +200,7 @@ Before building custom UI, check these exist in `packages/ui/src/components/layo
 | `ErrorState`    | `app/error-state.tsx`        | Error message display                |
 | `SearchBar`     | `search-bar/search-bar.tsx`  | Search input with icon               |
 | `FileMenu`      | `toolbar/file-menu.tsx`      | File dropdown (rename, delete, etc.) |
+| `RequestAccessView` | `app/request-access-view.tsx` | "Request access" screen for shared resources (hides sidebar) |
 
 Full component list: [LAYOUT.md](docs/LAYOUT.md)
 
