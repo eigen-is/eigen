@@ -103,7 +103,8 @@ bun run check          # lint + typecheck + test
 | **Errors**            | `apps/api/src/lib/core/errors.ts`            | `throw new ApiError(status, message)`                                                                      |
 | **SSE emission**      | `apps/api/src/lib/[domain]/sse-events.ts`    | `home.broadcast(buildEvent(...))`                                                                          |
 | **Notifications**     | `apps/api/src/lib/notification-center/`      | `home.notifications.persist({...})` — per-user SQLite, broadcasts SSE                                      |
-| **Auth**              | `apps/api/src/lib/auth/auth.ts`              | better-auth with org/team/2FA plugins                                                                      |
+| **Auth**              | `apps/api/src/lib/auth/auth.ts`              | better-auth with org/team/2FA/API key plugins                                                              |
+| **Protocol auth**     | `apps/api/src/lib/auth/protocol-auth.ts`     | `verifyProtocolAuth()` — shared IMAP/CalDAV auth (app password → primary password fallback)                |
 | **Server settings**   | `apps/api/src/lib/config/server-settings.ts` | Runtime-adjustable quotas & defaults via `JsonStore<ServerSettings>`                                       |
 | **Quota resolution**  | `apps/api/src/lib/config/quota.ts`           | `resolveUserQuotas()` — server default + team overrides (most permissive wins)                             |
 | **Quota enforcement** | `apps/api/src/lib/config/enforcement.ts`     | `getUploadMaxSize`, `enforceAvatarUpload`                                                                  |
@@ -321,7 +322,9 @@ Detailed architecture docs in `docs/`:
 | [NOTIFICATIONS.md](docs/NOTIFICATIONS.md)                     | Error/success toasts, SSE notification pattern                               |
 | [NOTIFICATION-CENTER.md](docs/NOTIFICATION-CENTER.md)         | Notification center: persistent bell, per-user DB                            |
 | [TESTING.md](docs/TESTING.md)                                 | Test setup, patterns, test files                                             |
-| [IMAP.md](docs/IMAP.md)                                       | Maildir storage format, Dovecot compatibility                                |
+| [IMAP.md](docs/IMAP.md)                                       | Maildir storage, Dovecot deployment, IMAP auth                               |
+| [DEPLOYMENT.md](docs/DEPLOYMENT.md)                           | Docker deployment: Caddy, Postfix, Dovecot, auth, remaining work            |
+| [PRE-PUBLISH-CHECKLIST.md](docs/PRE-PUBLISH-CHECKLIST.md)     | Pre-publish review items and status                                          |
 | [TYPOGRAPHY.md](docs/TYPOGRAPHY.md)                           | Self-hosted font system, FontPicker                                          |
 | [SOFT-DELETE.md](docs/SOFT-DELETE.md)                         | Trash / recycle bin — soft delete, restore, auto-purge                       |
 
@@ -331,12 +334,9 @@ Detailed architecture docs in `docs/`:
 
 | Doc                                                         | Topic                                    |
 |-------------------------------------------------------------|------------------------------------------|
-| [TODO-MENTIONS.md](docs/TODO-MENTIONS.md)                   | Cross-app @mention system                |
 | [TODO-CHAT-ACL.md](docs/TODO-CHAT-ACL.md)                   | Chat membership vs ACL design discussion |
 | [TODO-ENCRYPTION.md](docs/TODO-ENCRYPTION.md)               | E2E encryption design                    |
 | [TODO-SCALABILITY.md](docs/TODO-SCALABILITY.md)             | Multi-server scaling design              |
 | [TODO-GUEST-ACCESS.md](docs/TODO-GUEST-ACCESS.md)           | Guest access, OTP auth, access requests  |
-| [TODO-GUEST-USERS.md](docs/TODO-GUEST-USERS.md)             | Guest user access plan (superseded)      |
-| [TODO-CALENDAR-TIMEZONE.md](docs/TODO-CALENDAR-TIMEZONE.md) | Timezone-aware recurrence expansion      |
 | [TODO-FORTUNE-SHEETS.md](docs/TODO-FORTUNE-SHEETS.md)       | Fortune-sheet refactoring audit          |
 | [RESEARCH_AI.md](docs/PROPOSAL_AI.md)                       | Local/private AI integration research    |
