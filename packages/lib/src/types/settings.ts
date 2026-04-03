@@ -31,12 +31,22 @@ export type ServerSettings = {
         mailAndContactsMaxMB: number;
         defaultMountMaxSizeMB: number;
         maxUploadSizeMB: number;
-        maxBatchUploadSizeMB: number;
         trashRetentionDays: number;
     };
     defaults: {
         mount: {
             storageType: ServerStorageType;
+        };
+    };
+    onboarding: {
+        waitlist: {
+            enabled: boolean;
+            notifyEmail: string;
+        };
+        autoAddOwnerContact: boolean;
+        welcomeMail: {
+            enabled: boolean;
+            body: string;
         };
     };
 };

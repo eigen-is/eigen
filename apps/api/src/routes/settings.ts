@@ -24,6 +24,12 @@ export const settingsRouter = new Elysia({ name: 'settings' })
         '/settings/server',
         async ({ body, user }) => {
             await requireAdmin(user.id);
+            if (body.defaults?.mount?.storageType === 's3') {
+                const s3 = getS3Config();
+                if (!s3) throw new ApiError(400, 'Cannot set storage type to S3 without a saved S3 configuration');
+                const s3Result = await checkS3Connection(s3);
+                if (!s3Result.ok) throw new ApiError(400, `Cannot set storage type to S3: ${s3Result.message}`);
+            }
             await updateServerSettings(body);
             return getServerSettings();
         },
@@ -34,7 +40,6 @@ export const settingsRouter = new Elysia({ name: 'settings' })
                         mailAndContactsMaxMB: t.Optional(t.Number({ minimum: 10 })),
                         defaultMountMaxSizeMB: t.Optional(t.Number({ minimum: 10 })),
                         maxUploadSizeMB: t.Optional(t.Number({ minimum: 1 })),
-                        maxBatchUploadSizeMB: t.Optional(t.Number({ minimum: 1 })),
                         trashRetentionDays: t.Optional(t.Number({ minimum: 1 })),
                     }),
                 ),
@@ -45,6 +50,23 @@ export const settingsRouter = new Elysia({ name: 'settings' })
                                 storageType: t.Optional(
                                     t.Union([t.Literal('local-id'), t.Literal('local-fullnames'), t.Literal('s3')]),
                                 ),
+                            }),
+                        ),
+                    }),
+                ),
+                onboarding: t.Optional(
+                    t.Object({
+                        waitlist: t.Optional(
+                            t.Object({
+                                enabled: t.Optional(t.Boolean()),
+                                notifyEmail: t.Optional(t.String()),
+                            }),
+                        ),
+                        autoAddOwnerContact: t.Optional(t.Boolean()),
+                        welcomeMail: t.Optional(
+                            t.Object({
+                                enabled: t.Optional(t.Boolean()),
+                                body: t.Optional(t.String()),
                             }),
                         ),
                     }),

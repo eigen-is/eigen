@@ -13,12 +13,22 @@ const settingsStore = new JsonStore<ServerSettings>(serverFs, 'settings.json', {
         mailAndContactsMaxMB: 100,
         defaultMountMaxSizeMB: 500,
         maxUploadSizeMB: 35,
-        maxBatchUploadSizeMB: 10,
         trashRetentionDays: 30,
     },
     defaults: {
         mount: {
             storageType: 'local-fullnames',
+        },
+    },
+    onboarding: {
+        waitlist: {
+            enabled: false,
+            notifyEmail: '',
+        },
+        autoAddOwnerContact: false,
+        welcomeMail: {
+            enabled: true,
+            body: 'Welcome to {orgName}, {name}!\n\nA personal workspace in the cloud. Simple and secure. You control your data.',
         },
     },
 });
