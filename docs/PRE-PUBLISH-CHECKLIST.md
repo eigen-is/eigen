@@ -58,21 +58,11 @@ The waitlist signup notification is hardcoded to send to your personal email.
 **Fix:** Make the recipient configurable via server settings (the TODO is already there). At minimum, replace with a
 placeholder or read from config before publishing.
 
-### 6. CalDAV and IMAP auth accept ANY password
+### ~~6. CalDAV and IMAP auth accept ANY password~~ — FIXED
 
-Both authentication paths skip password verification entirely:
-
-- **CalDAV:** `apps/api/src/lib/caldav/auth.ts:33` — comment says "SECURITY: password validation not yet implemented"
-- **Internal (IMAP/Dovecot):** `apps/api/src/routes/internal.ts:14` — "For now: accept any password"
-
-This is a **known security hole**. It's already documented in `DEPLOYMENT.md`, but for a public repo people will
-deploy this. At minimum:
-
-**Fix options:**
-- Implement app-specific passwords before publishing
-- Or add a loud `⚠️ WARNING` in the README, DEPLOYMENT.md, and in the setup wizard that CalDAV/IMAP auth is not
-  production-safe
-- Or disable the internal auth endpoint and CalDAV by default, requiring explicit opt-in
+Both paths now use `verifyProtocolAuth()` (`apps/api/src/lib/auth/protocol-auth.ts`):
+app passwords (better-auth API keys) first, primary password fallback (rejected when 2FA enabled).
+App passwords UI in Space → Calendar & Mail page. Integration tests in `protocol-auth.test.ts`.
 
 ---
 
@@ -184,9 +174,9 @@ Old module artifacts exist locally. Not tracked in git, so not a problem for the
 ### Minimum viable checklist before `git push`
 
 1. [x] Create `LICENSE` file
-2. [ ] `git rm --cached .claude/settings.local.json .env .env.eigen` + update `.gitignore`
-3. [ ] Remove or configure `reinder@infi.nl` in waitlist.ts
-4. [ ] Remove auto-add-Reinder logic from contacts.ts
-5. [ ] Make welcome email sender configurable
-6. [ ] Add prominent security warning about CalDAV/IMAP auth bypass
+2. [x] `git rm --cached .claude/settings.local.json .env .env.eigen` + update `.gitignore`
+3. [x] Remove or configure `reinder@infi.nl` in waitlist.ts — now reads from server settings
+4. [x] Remove auto-add-Reinder logic from contacts.ts — behind configurable flag
+5. [x] Make welcome email sender configurable — uses orgName from config
+6. [x] Implement real CalDAV/IMAP authentication with app passwords
 7. [ ] Verify deleted `.env.backup` / `.env.dev.local` never contained secrets

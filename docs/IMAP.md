@@ -193,11 +193,18 @@ maildir_very_dirty_syncs = no
 
 `~/Maildir` maps to `data/home/{userId}/eigen.mail/Maildir` in Eigen's data layout.
 
+## Dovecot Deployment
+
+Dovecot runs as a Docker container alongside Eigen. Authentication uses Dovecot's `checkpassword` mechanism:
+Dovecot calls `eigen-checkpassword` (a bash script) which `POST`s to Eigen's `/internal/auth/verify` endpoint.
+The endpoint verifies the password via `verifyProtocolAuth()` — tries app passwords (better-auth API keys) first,
+falls back to primary password (rejected if 2FA is enabled). See [DEPLOYMENT.md](DEPLOYMENT.md) for the full
+Docker architecture.
+
+**Files:** `docker/dovecot/dovecot.conf`, `docker/dovecot/eigen-checkpassword`
+
 ## Not Yet Implemented
 
-- **Dovecot IMAP server deployment.** The filesystem format is Dovecot-compatible, but no actual Dovecot deployment
-  configuration, UID/UIDVALIDITY tracking, or IMAP authentication wiring exists. Running an IMAP server alongside
-  Eigen has not been set up.
 - **Stale `tmp/` cleanup.** Per Maildir spec, files in `tmp/` older than 36 hours can be safely deleted. No
   housekeeping code exists.
 
