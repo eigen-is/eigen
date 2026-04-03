@@ -29,7 +29,6 @@ type ServerSettings = {
         mailAndContactsMaxMB: number;      // Default: 100
         defaultMountMaxSizeMB: number;     // Default: 500
         maxUploadSizeMB: number;           // Default: 35
-        maxBatchUploadSizeMB: number;      // Default: 10
     };
     defaults: {
         mount: {

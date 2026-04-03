@@ -1,5 +1,5 @@
 import { createRootRouteWithContext, Outlet, useLocation } from '@tanstack/react-router';
-import { useAddTeamMember, useSetupStatus, useTeams } from '@workspace/lib/admin';
+import { useAddTeamMember, useMembers, useSetupStatus, useTeams } from '@workspace/lib/admin';
 import { type AuthContextType, useAuth } from '@workspace/lib/auth';
 import { usePublicConfig } from '@workspace/lib/public';
 import { LoadingState } from '@workspace/ui';
@@ -24,8 +24,12 @@ function AdminApp() {
     const { user } = useAuth();
     const { data: config } = usePublicConfig();
     const { data: teams = [] } = useTeams(config?.orgId);
+    const { data: members = [] } = useMembers(config?.orgId);
     const addMember = useAddTeamMember(config?.orgId);
     const location = useLocation();
+
+    const currentMember = members.find((m) => m.userId === user?.id);
+    const isOwner = currentMember?.role === 'owner';
 
     if (!user) {
         return (
@@ -54,6 +58,7 @@ function AdminApp() {
                     isMobile={isMobile}
                     onClose={onClose}
                     teams={teams}
+                    isOwner={isOwner}
                     onAddMembersToTeam={handleAddMembersToTeam}
                 />
             )}

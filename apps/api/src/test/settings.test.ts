@@ -18,7 +18,6 @@ describe('Server Settings', () => {
         expect(data.quotas.mailAndContactsMaxMB).toBeGreaterThan(0);
         expect(data.quotas.defaultMountMaxSizeMB).toBeGreaterThan(0);
         expect(data.quotas.maxUploadSizeMB).toBeGreaterThan(0);
-        expect(data.quotas.maxBatchUploadSizeMB).toBeGreaterThan(0);
         expect(data.defaults).toBeDefined();
         expect(data.defaults.mount.storageType).toBeDefined();
     });
@@ -411,6 +410,5 @@ describe('Setup Flow', () => {
         expect(data.quotas.mailAndContactsMaxMB).toBe(100);
         expect(data.quotas.defaultMountMaxSizeMB).toBe(500);
         expect(data.quotas.maxUploadSizeMB).toBe(35);
-        expect(data.quotas.maxBatchUploadSizeMB).toBe(10);
     });
 });
