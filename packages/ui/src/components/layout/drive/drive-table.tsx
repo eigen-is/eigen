@@ -47,6 +47,7 @@ export type DriveTableProps = {
     sortFn?: (a: DrivePath, b: DrivePath) => number;
     allowDelete?: boolean;
     ancestorBreadcrumb?: DrivePath[];
+    showParentRow?: boolean;
 };
 
 export function DriveTable({
@@ -66,12 +67,13 @@ export function DriveTable({
     sortFn = defaultDriveSort,
     allowDelete = false,
     ancestorBreadcrumb,
+    showParentRow,
 }: DriveTableProps) {
     const tableRef = useRef<HTMLTableElement>(null);
     const [hasFocus, setHasFocus] = useState(false);
     const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
 
-    const hasParentItem = Boolean(currentPath?.parentId);
+    const hasParentItem = showParentRow ?? Boolean(currentPath?.parentId);
 
     const sortedItems = useMemo(() => {
         return [...items].sort(sortFn);

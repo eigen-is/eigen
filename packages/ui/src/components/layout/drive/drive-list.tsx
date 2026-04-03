@@ -337,6 +337,7 @@ export function DriveList({
                 onRename={onRename}
                 onMove={onMove}
                 ancestorBreadcrumb={breadcrumbPaths ?? []}
+                showParentRow={(breadcrumbPaths?.length ?? 0) > 1}
                 onQuickLook={onQuickLook}
                 sortFn={sortFn}
             />
