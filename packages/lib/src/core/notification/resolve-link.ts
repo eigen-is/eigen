@@ -67,7 +67,7 @@ export function isClickableNotification(type: string): boolean {
     ].includes(type);
 }
 
-export async function resolveNotificationLink(notification: Notification, ownerId: string): Promise<string | null> {
+export async function resolveNotificationLink(notification: Notification): Promise<string | null> {
     const { type, tag } = notification;
     if (!tag) return null;
 

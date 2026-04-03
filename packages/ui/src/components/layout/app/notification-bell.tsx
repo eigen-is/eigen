@@ -18,17 +18,16 @@ import { UserAvatar } from '../user-avatar';
 
 type NotificationItemProps = {
     notification: Notification;
-    ownerId: string;
     onMarkRead: (id: string) => void;
     onDismiss: (id: string) => void;
 };
 
-function NotificationItem({ notification, ownerId, onMarkRead, onDismiss }: NotificationItemProps) {
+function NotificationItem({ notification, onMarkRead, onDismiss }: NotificationItemProps) {
     const isClickable = isClickableNotification(notification.type);
 
     const handleClick = async () => {
         if (!notification.read) onMarkRead(notification.id);
-        const url = await resolveNotificationLink(notification, ownerId);
+        const url = await resolveNotificationLink(notification);
         if (url) window.location.href = url;
     };
 
@@ -114,7 +113,6 @@ export function NotificationBell() {
                             <div key={n.id} className="group/item border-b last:border-b-0">
                                 <NotificationItem
                                     notification={n}
-                                    ownerId={ownerId}
                                     onMarkRead={(id) => markRead.mutate(id)}
                                     onDismiss={(id) => dismiss.mutate(id)}
                                 />
