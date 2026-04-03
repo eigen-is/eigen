@@ -22,6 +22,7 @@ export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient, use
         case SSEventType.DRIVE_ACL_UNSHARED:
             if (userId) invalidateAclSharedOrUnshared(queryClient, userId);
             invalidateAclUpdated(queryClient, path.ownerId, path.mountId, path.id, path.parentId);
+            queryClient.invalidateQueries({ queryKey: ['collab', 'info', path.ownerId, path.mountId, path.id] });
             return true;
 
         case SSEventType.DRIVE_FOLDER_CREATED:
