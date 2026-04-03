@@ -305,6 +305,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@apps/api": "workspace:*",
+        "@better-auth/api-key": "^1.5.6",
         "@elysiajs/eden": "^1.4.8",
         "better-auth": "^1.5.6",
       },
