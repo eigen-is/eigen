@@ -6,7 +6,7 @@ describe('CalDAV', () => {
     let userId: string;
     let defaultCalendarId: string;
 
-    const basicAuth = (email: string) => `Basic ${btoa(`${email}:anything`)}`;
+    const basicAuth = (email: string, password = 'testpassword123') => `Basic ${btoa(`${email}:${password}`)}`;
 
     beforeAll(async () => {
         ctx = await getTestContext();
