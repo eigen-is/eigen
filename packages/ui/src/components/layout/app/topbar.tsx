@@ -1,5 +1,5 @@
 import { useRouter } from '@tanstack/react-router';
-import { useActiveMember } from '@workspace/lib/admin';
+import { useIsAdmin } from '@workspace/lib/admin';
 import { getAdminAppUrl, getSpacePasswordUrl, getSpaceProfileUrl } from '@workspace/lib/api.ts';
 import { apps } from '@workspace/lib/apps.ts';
 import { useAuth } from '@workspace/lib/auth/auth-context.tsx';
@@ -44,8 +44,7 @@ function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
     const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
     const { data: settings } = useSpaceSettings();
     const updateSettings = useUpdateSpaceSettings();
-    const { data: activeMember } = useActiveMember();
-    const isAdmin = activeMember?.role === 'admin' || activeMember?.role === 'owner';
+    const isAdmin = useIsAdmin();
 
     const handleLogout = () => {
         auth.logout().then(() => {

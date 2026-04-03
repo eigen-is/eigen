@@ -7,6 +7,7 @@ export type SidebarItemProps = {
     icon: ReactNode;
     label?: string;
     to?: string;
+    href?: string;
     params?: Record<string, string>;
     isActive?: boolean;
     colorDot?: string;
@@ -20,6 +21,7 @@ export function SidebarItem({
     icon,
     label,
     to,
+    href,
     params,
     isActive,
     colorDot,
@@ -53,7 +55,7 @@ export function SidebarItem({
         </>
     );
 
-    // Render as a Link if 'to' is provided, otherwise as a Button
+    // Render as a Link if 'to' is provided, an anchor if 'href', otherwise a Button
     if (to) {
         return (
             <Link
@@ -70,6 +72,14 @@ export function SidebarItem({
             >
                 {content}
             </Link>
+        );
+    }
+
+    if (href) {
+        return (
+            <a href={href} className={baseStyles}>
+                {content}
+            </a>
         );
     }
 
