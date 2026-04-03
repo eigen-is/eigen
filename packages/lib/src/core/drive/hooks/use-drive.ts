@@ -287,7 +287,7 @@ export function useUpdateACL(ownerId: string, mountId: string = DEFAULT_MOUNT_ID
             }
             // Invalidate collab info so canWrite refreshes in document views
             queryClient.invalidateQueries({
-                queryKey: ['collab', 'info', ownerId, variables.path.mountId, variables.path.id],
+                queryKey: collabKeys.document(ownerId, variables.path.mountId, variables.path.id),
             });
             toast.success('Sharing updated');
         },
