@@ -321,7 +321,6 @@ Detailed architecture docs in `docs/`:
 | [NOTIFICATIONS.md](docs/NOTIFICATIONS.md)                     | Error/success toasts, SSE notification pattern                               |
 | [NOTIFICATION-CENTER.md](docs/NOTIFICATION-CENTER.md)         | Notification center: persistent bell, per-user DB                            |
 | [TESTING.md](docs/TESTING.md)                                 | Test setup, patterns, test files                                             |
-| [DOCKER.md](docs/DOCKER.md)                                   | Docker deployment                                                            |
 | [IMAP.md](docs/IMAP.md)                                       | Maildir storage format, Dovecot compatibility                                |
 | [TYPOGRAPHY.md](docs/TYPOGRAPHY.md)                           | Self-hosted font system, FontPicker                                          |
 | [SOFT-DELETE.md](docs/SOFT-DELETE.md)                         | Trash / recycle bin — soft delete, restore, auto-purge                       |
