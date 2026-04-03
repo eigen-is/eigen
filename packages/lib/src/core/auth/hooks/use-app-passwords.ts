@@ -12,7 +12,7 @@ export function useAppPasswords() {
         queryFn: async () => {
             const result = await authClient.apiKey.list();
             if (result.error) throw result.error;
-            return result.data ?? [];
+            return result.data?.apiKeys ?? [];
         },
     });
 }
