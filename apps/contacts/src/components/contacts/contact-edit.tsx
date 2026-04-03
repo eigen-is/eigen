@@ -619,7 +619,7 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
                                                 <FormControl>
                                                     <Input
                                                         type="date"
-                                                        value={field.value ? formatInputDate(field.value) : ''}
+                                                        defaultValue={field.value ? formatInputDate(field.value) : ''}
                                                         onChange={(e) => {
                                                             const val = e.target.value;
                                                             field.onChange(val ? new Date(`${val}T00:00:00`) : null);
