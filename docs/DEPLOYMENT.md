@@ -51,7 +51,7 @@ Postfix (email), Dovecot (IMAP).
 | **SMTP transport** | Done | `mailer.ts` uses SMTP when `SMTP_HOST` is set, sendmail fallback |
 | **Postfix container** | Done | Receives mail (port 25), sends via relay, DKIM signing |
 | **Dovecot container** | Done | IMAP on port 993, checkpassword auth via API |
-| **Internal auth endpoint** | Done | `POST /internal/auth/verify` — returns userId for email lookup |
+| **Internal auth endpoint** | Done | `POST /internal/auth/verify` — verifies app password or primary password |
 | **Cert export** | Done | Background script copies Caddy certs to shared volume |
 | **Dev mode** | Done | `docker-compose.dev.yml` with mailpit + self-signed certs |
 | **Env generator** | Done | `scripts/generate-env.sh` derives all vars from DOMAIN |
@@ -101,28 +101,22 @@ All changes are backward-compatible: without the new env vars, behavior is ident
 
 ## Remaining Work
 
-### Phase 4: Authentication (required before production use)
+### Phase 4: Authentication — Done
 
-The `/internal/auth/verify` endpoint currently accepts **any password** — it only checks that the
-email exists. This must be fixed before deploying to a real server.
+Implemented real password verification for both IMAP and CalDAV using a shared
+`verifyProtocolAuth()` function (`apps/api/src/lib/auth/protocol-auth.ts`).
 
-**Tasks:**
+**How it works:**
+1. Tries app password first (`auth.api.verifyApiKey` — better-auth API key plugin)
+2. Falls back to primary password (`auth.api.signInEmail` — rejects 2FA users, they must use app passwords)
 
-- [ ] **Implement real password verification** in `/internal/auth/verify`
-  - Check app-specific password first (better-auth API key plugin — already in `package.json`)
-  - Fall back to primary password verification via better-auth
-  - File: `apps/api/src/routes/internal.ts`
+**What's done:**
+- [x] Real password verification in `/internal/auth/verify` and CalDAV Basic Auth
+- [x] App passwords UI in Space → Calendar & Mail (`/space/services`)
+- [x] Integration tests (`apps/api/src/test/protocol-auth.test.ts`)
 
-- [ ] **App-specific passwords UI** in Space settings
-  - Users generate "app passwords" for IMAP/CalDAV clients
-  - These are revocable and don't expose the primary password
-  - Uses `@better-auth/api-key` plugin (already installed)
-  - Files: new component in `apps/space/`, new hooks in `packages/lib/src/core/space/hooks/`
-
-- [ ] **Setup wizard cleanup**
-  - The `DOMAIN` env var is already set in `.env.production`, but the setup wizard also asks for
-    domain. These should be consistent — either pre-populate from env var or remove the duplicate field
-  - File: `apps/admin/src/components/admin/setup-wizard.tsx` + `apps/api/src/routes/setup.ts`
+**Remaining:**
+- [ ] **Setup wizard cleanup** — `DOMAIN` env var vs setup wizard domain field should be consistent
 
 ### Phase 5: CalDAV — Done (personal calendars)
 
@@ -137,7 +131,7 @@ Read-write CalDAV server implemented and tested with Thunderbird. Files in `apps
 - [x] iCalendar serialization/parsing (ical.js) with RFC 5545 compliance
 - [x] Recurring events with RRULE, exceptions (RECURRENCE-ID), EXDATE handling
 - [x] Two-way sync tested with Thunderbird (create, edit, delete — including single occurrences)
-- [x] HTTP Basic Auth (password validation deferred — same as Dovecot IMAP)
+- [x] HTTP Basic Auth with app passwords + primary password fallback
 
 **Remaining CalDAV work:**
 - [ ] Shared & team calendar proxying via CalDAV
