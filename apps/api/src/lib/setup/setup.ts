@@ -258,9 +258,9 @@ export async function completeSetup(input: SetupInput): Promise<SetupResult> {
         }
     }
 
-    // Use DOMAIN env var if set (Docker deployments)
+    // Use DOMAIN env var if set to a real domain (not localhost)
     const envDomain = process.env['DOMAIN'];
-    if (envDomain) input.domain = envDomain;
+    if (envDomain && envDomain !== 'localhost') input.domain = envDomain;
 
     if (!input.adminEmail || !input.adminPassword || !input.adminName) {
         return { success: false, error: 'Admin email, password, and name are required' };

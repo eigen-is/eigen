@@ -43,8 +43,8 @@ export function SetupWizard() {
                     setStep('already-setup');
                 } else {
                     if (data.domain) {
-                        setDomain(data.domain);
-                        setDomainFromEnv(true);
+                        setDomain(data.domain === 'localhost' ? 'eigen.localhost' : data.domain);
+                        setDomainFromEnv(data.domain !== 'localhost');
                     }
                     setStep('config');
                 }
