@@ -50,11 +50,12 @@ bun run build:prod
 docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.production up -d
 ```
 
-This starts 4 containers:
+This starts 5 containers:
 - **caddy** — Reverse proxy at `https://eigen.local` (self-signed cert)
 - **eigen-api** — Backend API
-- **mailpit** — Catches all outbound email (replaces Postfix in dev)
+- **postfix** — SMTP server (submission on ports 587/465 for external clients)
 - **dovecot** — IMAP server for testing mail clients
+- **mailpit** — Catches outbound email from the Eigen web UI (port 8025)
 
 ### 5. Open Eigen
 
@@ -220,16 +221,17 @@ Browser (https://eigen.local)
 │  Caddy   │────▶│ Eigen API │◀────│ Dovecot │
 │ :80/:443 │     │   :8000   │     │  :993   │
 └──────────┘     └───────────┘     └─────────┘
-                       │
-                  ┌────▼────┐
-                  │ Mailpit │
-                  │  :8025  │
-                  └─────────┘
+                       │                 │
+                  ┌────▼────┐      ┌─────▼─────┐
+                  │ Mailpit │      │  Postfix   │
+                  │  :8025  │      │ :25/465/587│
+                  └─────────┘      └────────────┘
 
 Caddy:     HTTPS termination, static files, API proxy
 Eigen API: All business logic, data storage
-Mailpit:   Catches outbound email (dev only)
+Postfix:   SMTP (inbound on 25, submission on 465/587 via Dovecot SASL)
 Dovecot:   IMAP server (reads same Maildir as API, auth via API)
+Mailpit:   Catches outbound email from web UI (dev only)
 ```
 
 All containers share `./data/` — user files, databases, and emails live there.

@@ -9,6 +9,15 @@ echo "Domain: ${DOMAIN}"
 envsubst '$DOMAIN' < /etc/postfix/main.cf.template > /etc/postfix/main.cf
 envsubst '$DOMAIN' < /etc/postfix/master.cf.template > /etc/postfix/master.cf
 
+# --- TLS cert fallback ---
+if [ ! -f /certs/cert.pem ]; then
+    echo "No TLS certificate found. Generating self-signed cert for ${DOMAIN:-localhost}..."
+    openssl req -x509 -newkey rsa:2048 \
+        -keyout /certs/key.pem -out /certs/cert.pem \
+        -days 365 -nodes -subj "/CN=${DOMAIN:-localhost}" 2>/dev/null
+    echo "Self-signed certificate generated."
+fi
+
 # --- SMTP relay (optional) ---
 if [ -n "${SMTP_RELAY_HOST}" ]; then
     echo "Configuring SMTP relay: ${SMTP_RELAY_HOST}:${SMTP_RELAY_PORT:-587}"

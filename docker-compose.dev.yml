@@ -1,4 +1,6 @@
-# Dev overrides: HTTP-only, mailpit for catching mail, self-signed certs
+# Dev overrides: HTTP-only, mailpit for catching mail, self-signed certs.
+# DOMAIN=localhost is the hostname for TLS certs and Postfix. Email addresses use a separate
+# domain configured during setup (e.g., eigen.localhost) — see LOCAL-TESTING.md.
 services:
   caddy:
     environment:
