@@ -32,7 +32,7 @@ mkdir -p /data/dkim
 if [ ! -f "/data/dkim/eigen.private" ]; then
     echo "Generating DKIM key for ${DOMAIN}..."
     opendkim-genkey -b 2048 -d "${DOMAIN}" -s eigen -D /data/dkim/
-    chown opendkim:opendkim /data/dkim/eigen.private
+    chown opendkim:opendkim /data/dkim/eigen.private /data/dkim/eigen.txt
     echo ""
     echo "============================================"
     echo "=== Add this DNS TXT record for DKIM:    ==="
@@ -41,6 +41,9 @@ if [ ! -f "/data/dkim/eigen.private" ]; then
     echo "============================================"
     echo ""
 fi
+
+# Ensure correct ownership (files may have been created by another container)
+chown opendkim:opendkim /data/dkim/eigen.private 2>/dev/null || true
 
 # OpenDKIM config
 cat > /etc/opendkim.conf <<EOF
@@ -52,11 +55,18 @@ Domain              ${DOMAIN}
 Selector            eigen
 KeyFile             /data/dkim/eigen.private
 Canonicalization    relaxed/simple
+UserID              root
 EOF
 
 # --- Start services ---
 echo "Starting OpenDKIM..."
-opendkim -x /etc/opendkim.conf
+if opendkim -x /etc/opendkim.conf 2>/dev/null; then
+    echo "OpenDKIM started."
+else
+    echo "WARNING: OpenDKIM failed to start (DKIM signing disabled). This is normal on macOS Docker due to file ownership."
+    # Remove DKIM milter from Postfix config so it doesn't try to connect
+    sed -i '/milter/d' /etc/postfix/main.cf
+fi
 
 echo "Starting Postfix..."
 exec postfix start-fg

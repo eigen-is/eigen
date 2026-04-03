@@ -2,6 +2,7 @@ FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     postfix \
+    libsasl2-modules \
     opendkim \
     opendkim-tools \
     curl \
@@ -16,6 +17,6 @@ COPY entrypoint.sh /entrypoint.sh
 
 RUN chmod +x /usr/local/bin/eigen-deliver /entrypoint.sh
 
-EXPOSE 25
+EXPOSE 25 465 587
 
 ENTRYPOINT ["/entrypoint.sh"]
