@@ -8,10 +8,12 @@ function parseDriveTag(tag: string): { ownerId: string; mountId: string; pathId:
     return { ownerId, mountId, pathId };
 }
 
-function parseAccessRequestTag(tag: string): { mountId: string; pathId: string; email: string } | null {
+function parseAccessRequestTag(
+    tag: string,
+): { ownerId: string; mountId: string; pathId: string; email: string } | null {
     const parts = tag.split(':');
-    if (parts[0] !== 'access-request' || !parts[1] || !parts[2] || !parts[3]) return null;
-    return { mountId: parts[1], pathId: parts[2], email: parts.slice(3).join(':') };
+    if (parts[0] !== 'access-request' || !parts[1] || !parts[2] || !parts[3] || !parts[4]) return null;
+    return { ownerId: parts[1], mountId: parts[2], pathId: parts[3], email: parts.slice(4).join(':') };
 }
 
 function parseCalendarInviteTag(tag: string): { eventId: string; startTime: number } | null {
@@ -35,16 +37,18 @@ async function resolveDriveLink(tag: string): Promise<string> {
     );
 }
 
-async function resolveAccessRequestLink(tag: string, ownerId: string): Promise<string | null> {
+async function resolveAccessRequestLink(tag: string): Promise<string | null> {
     const parsed = parseAccessRequestTag(tag);
     if (!parsed) return null;
 
-    const response = await driveApi({ ownerId })({ mountId: parsed.mountId }).path({ pathId: parsed.pathId }).get();
+    const response = await driveApi({ ownerId: parsed.ownerId })({ mountId: parsed.mountId })
+        .path({ pathId: parsed.pathId })
+        .get();
     if (response.error || !response.data) return null;
 
     const parentId = response.data.parentId || response.data.id;
     return getDriveAppUrl(
-        `fs/${ownerId}/${parsed.mountId}/${parentId}?sharePathId=${parsed.pathId}&shareEmail=${encodeURIComponent(parsed.email)}`,
+        `fs/${parsed.ownerId}/${parsed.mountId}/${parentId}?sharePathId=${parsed.pathId}&shareEmail=${encodeURIComponent(parsed.email)}`,
     );
 }
 
@@ -94,7 +98,7 @@ export async function resolveNotificationLink(notification: Notification, ownerI
         }
 
         case 'access-request':
-            return resolveAccessRequestLink(tag, ownerId);
+            return resolveAccessRequestLink(tag);
 
         default:
             return null;

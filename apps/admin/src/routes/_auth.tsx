@@ -34,15 +34,16 @@ function AuthGuard() {
         }
     }, [config]);
 
+    const isLoading = configLoading || membersLoading;
     const currentMember = members?.find((m) => m.userId === user?.id);
     const isAdmin = currentMember?.role === 'admin' || currentMember?.role === 'owner';
 
     useEffect(() => {
-        setSidebarHidden(!isAdmin);
+        if (!isLoading) setSidebarHidden(!isAdmin);
         return () => setSidebarHidden(false);
-    }, [isAdmin, setSidebarHidden]);
+    }, [isLoading, isAdmin, setSidebarHidden]);
 
-    if (configLoading || membersLoading) {
+    if (isLoading) {
         return <LoadingState />;
     }
 
