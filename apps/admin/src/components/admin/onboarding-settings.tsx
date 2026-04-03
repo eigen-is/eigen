@@ -26,10 +26,16 @@ export function OnboardingSettingsPage() {
         return <LoadingState />;
     }
 
+    const onboarding = settings.onboarding ?? {
+        waitlist: { enabled: false, notifyEmail: '' },
+        autoAddOwnerContact: false,
+        welcomeMail: { enabled: true, body: '' },
+    };
+
     const current = {
-        waitlist: { ...settings.onboarding.waitlist, ...draft.waitlist },
-        autoAddOwnerContact: draft.autoAddOwnerContact ?? settings.onboarding.autoAddOwnerContact,
-        welcomeMail: { ...settings.onboarding.welcomeMail, ...draft.welcomeMail },
+        waitlist: { ...onboarding.waitlist, ...draft.waitlist },
+        autoAddOwnerContact: draft.autoAddOwnerContact ?? onboarding.autoAddOwnerContact,
+        welcomeMail: { ...onboarding.welcomeMail, ...draft.welcomeMail },
     };
 
     const update = (patch: OnboardingDraft) => {
