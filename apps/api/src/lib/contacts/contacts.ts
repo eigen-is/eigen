@@ -88,7 +88,7 @@ export class Contacts {
                 const owner = await getOrgOwner();
                 if (owner && owner.id !== user.id) {
                     const [firstName, ...rest] = (owner.name || '').split(' ');
-                    this.addContact({
+                    await this.addContact({
                         eigenId: owner.id,
                         firstName: firstName || '',
                         lastName: rest.join(' '),
