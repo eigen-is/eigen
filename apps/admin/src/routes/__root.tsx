@@ -22,14 +22,6 @@ function AdminRoot() {
 
 function AdminApp() {
     const { user } = useAuth();
-    const { data: config } = usePublicConfig();
-    const { data: teams = [] } = useTeams(config?.orgId);
-    const { data: members = [] } = useMembers(config?.orgId);
-    const addMember = useAddTeamMember(config?.orgId);
-    const location = useLocation();
-
-    const currentMember = members.find((m) => m.userId === user?.id);
-    const isOwner = currentMember?.role === 'owner';
 
     if (!user) {
         return (
@@ -38,6 +30,20 @@ function AdminApp() {
             </AppShell>
         );
     }
+
+    return <AuthenticatedAdmin />;
+}
+
+function AuthenticatedAdmin() {
+    const { user } = useAuth();
+    const { data: config } = usePublicConfig();
+    const { data: teams = [] } = useTeams(config?.orgId);
+    const { data: members = [] } = useMembers(config?.orgId);
+    const addMember = useAddTeamMember(config?.orgId);
+    const location = useLocation();
+
+    const currentMember = members.find((m) => m.userId === user?.id);
+    const isOwner = currentMember?.role === 'owner';
 
     const isTeamDetailSelected = location.pathname === '/teams' && location.search.teamId;
 
