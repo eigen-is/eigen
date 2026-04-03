@@ -182,7 +182,8 @@
       "Bash(kill 85967)",
       "Bash(perl:*)",
       "Bash(/Users/reinder/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.7/skills/brainstorming/scripts/start-server.sh:*)",
-      "Bash(/Users/reinder/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.7/skills/brainstorming/scripts/stop-server.sh:*)"
+      "Bash(/Users/reinder/.claude/plugins/cache/claude-plugins-official/superpowers/5.0.7/skills/brainstorming/scripts/stop-server.sh:*)",
+      "Bash(sort -t' ' -k2 -rn)"
     ]
   },
   "enabledPlugins": {
