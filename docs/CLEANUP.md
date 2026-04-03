@@ -73,12 +73,6 @@ Thumbnail generation is fire-and-forget with `.catch(console.error)`. No retry, 
 
 **Fix:** Store `thumbnailStatus` field. Retry on next access if missing.
 
-### Recycle Bin [MEDIUM]
-
-File deletion is permanent.
-
-**Fix (when ready):** Add `deletedAt` column. Filter deleted items. Background job purges after 30 days.
-
 ### Contacts.size() N+1 [LOW]
 
 Lists all avatar files, then calls `storage.size()` per file.
@@ -117,7 +111,6 @@ Lists all avatar files, then calls `storage.size()` per file.
 | List virtualization (Drive, email, chat) | P2       | 2-3 days | Frontend |
 | Font lazy-loading                        | P2       | 2-4 hr   | Bundle   |
 | Thumbnail retry                          | P2       | 1-2 hr   | Backend  |
-| Recycle bin / soft delete                | P2       | 1-2 days | Backend  |
 | Contacts.size() N+1                      | P2       | 30 min   | Backend  |
 | Console stripping in production          | P3       | 30 min   | Bundle   |
 | Image lazy loading                       | P3       | 2-3 hr   | Bundle   |
@@ -133,3 +126,4 @@ Lists all avatar files, then calls `storage.size()` per file.
 | CI pipeline                              | Done -- `.github/workflows/check.yml` (lint + typecheck + test) |
 | Console call cleanup (fortune-sheet)     | Mostly done -- reduced from 400+ to ~17 |
 | `interface` -> `type` bulk conversion    | Mostly done -- reduced from 131 to ~35 (many in generated files) |
+| Recycle bin / soft delete                | Done -- trash with auto-purge, ACL propagation, frontend UI. See [SOFT-DELETE.md](SOFT-DELETE.md) |
