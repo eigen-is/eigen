@@ -1,4 +1,4 @@
-import { useActiveMember } from '@workspace/lib/admin';
+import { useIsAdmin } from '@workspace/lib/admin';
 import { getAdminAppUrl } from '@workspace/lib/api';
 import { SidebarItem, StorageUsage } from '@workspace/ui';
 import { SidebarHeader } from '@workspace/ui/components/layout/sidebar/sidebar-header';
@@ -13,8 +13,7 @@ type SpaceSidebarProps = {
 };
 
 export function SpaceSidebar({ condensed = false, onClose, isMobile = false }: SpaceSidebarProps) {
-    const { data: activeMember } = useActiveMember();
-    const isAdmin = activeMember?.role === 'admin' || activeMember?.role === 'owner';
+    const isAdmin = useIsAdmin();
 
     return (
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
@@ -71,13 +70,12 @@ export function SpaceSidebar({ condensed = false, onClose, isMobile = false }: S
                 <>
                     <Separator />
                     <SidebarSection condensed={condensed}>
-                        <a
+                        <SidebarItem
+                            icon={<Shield className="h-4 w-4" />}
+                            label="Admin"
+                            condensed={condensed}
                             href={getAdminAppUrl()}
-                            className={`flex items-center rounded-md px-3 py-2 text-sm font-medium select-none text-muted-foreground hover:bg-muted hover:text-foreground ${condensed ? 'justify-center' : 'gap-3'}`}
-                        >
-                            <Shield className="h-4 w-4" />
-                            {!condensed && <span>Admin</span>}
-                        </a>
+                        />
                     </SidebarSection>
                 </>
             )}
