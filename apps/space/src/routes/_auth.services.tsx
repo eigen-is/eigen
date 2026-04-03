@@ -67,7 +67,7 @@ function AppPasswords() {
             </CardHeader>
             <CardContent className="space-y-4">
                 {newKey && (
-                    <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-4 space-y-2">
+                    <div className="rounded-md border bg-accent text-accent-foreground p-4 space-y-2">
                         <p className="text-sm font-medium">
                             Copy this password now. You won't be able to see it again.
                         </p>

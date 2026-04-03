@@ -13,11 +13,11 @@ describe('Protocol Auth', () => {
     });
 
     test('rejects unknown email', async () => {
-        expect(verifyProtocolAuth('nobody@test.eigen.is', 'anything')).rejects.toThrow();
+        await expect(verifyProtocolAuth('nobody@test.eigen.is', 'anything')).rejects.toThrow();
     });
 
     test('rejects wrong password', async () => {
-        expect(verifyProtocolAuth(ctx.alice.user.email, 'wrongpassword')).rejects.toThrow();
+        await expect(verifyProtocolAuth(ctx.alice.user.email, 'wrongpassword')).rejects.toThrow();
     });
 
     test('accepts correct primary password', async () => {
@@ -47,7 +47,7 @@ describe('Protocol Auth', () => {
             },
         });
 
-        expect(verifyProtocolAuth(ctx.bob.user.email, created!.key!)).rejects.toThrow();
+        await expect(verifyProtocolAuth(ctx.bob.user.email, created!.key!)).rejects.toThrow();
     });
 
     test('internal auth endpoint accepts correct password', async () => {

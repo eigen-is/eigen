@@ -1,7 +1,6 @@
-import { type ProtocolUser, verifyProtocolAuth } from '../auth/protocol-auth';
+import type { ProtocolUser } from '../auth/protocol-auth';
+import { verifyProtocolAuth } from '../auth/protocol-auth';
 import { ApiError } from '../core/errors';
-
-export type CalDavUser = ProtocolUser;
 
 export async function authenticateBasic(request: Request): Promise<ProtocolUser> {
     const authHeader = request.headers.get('Authorization');
