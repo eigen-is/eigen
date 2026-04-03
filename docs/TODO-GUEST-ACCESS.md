@@ -198,11 +198,20 @@ export function getGuestHomePath(userId: string): string {
 
 ---
 
-## Phase 1: Access Request Screen
+## Phase 1: Access Request Screen — Done
 
-Independently useful. Works for any logged-in user who visits a resource without access. Follows the Google
-Docs/Drive standard: same URL shows either the resource or a "request access" screen — no redirect, no ambiguous
-error page.
+Implemented. `<RequestAccessView>` replaces `<AccessDenied/>` in all resource-access apps (docs, stickies,
+slides, sheets, drive, chat). Notification click navigates to Drive with share dialog pre-filled.
+
+Tag format: `access-request:{ownerId}:{mountId}:{pathId}:{email}`. Endpoint always returns 200 (no path
+existence leak). Notification link resolution in `packages/lib/src/core/notification/resolve-link.ts`.
+
+**Known limitation**: Team-owned resources (`team_xyz` ownerId) — `TeamHome` has no NotificationCenter, so
+`home.notifications?.persist()` silently skips. Access requests for team drives appear to succeed but no
+notification is delivered. Future fix: route team notifications to org owners.
+
+<details>
+<summary>Original design (kept for Phase 2/3 context)</summary>
 
 ### Current Access-Denied Behavior (Problems)
 
@@ -404,6 +413,8 @@ idempotent (tag-based `onConflictDoUpdate` in NotificationCenter just updates th
 
 Future improvement: a dedicated `access_requests` table in the central DB to track pending requests, enabling
 "already requested" state on page load and a "pending requests" view for owners.
+
+</details>
 
 ---
 
