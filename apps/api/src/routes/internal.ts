@@ -6,13 +6,8 @@ export const internalRouter = new Elysia({ name: 'internal' }).post(
     '/internal/auth/verify',
     async ({ body, request, server }) => {
         requireLocalhost(request, server);
-
-        try {
-            const user = await verifyProtocolAuth(body.email, body.password);
-            return { userId: user.id, email: user.email };
-        } catch {
-            return new Response('Unauthorized', { status: 401 });
-        }
+        const user = await verifyProtocolAuth(body.email, body.password);
+        return { userId: user.id, email: user.email };
     },
     {
         body: t.Object({
