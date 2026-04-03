@@ -87,7 +87,7 @@ team's default calendar: `{targetId: 'team_{teamId}', permission: 'write'}`. Per
 `checkPermission()` and synced on every fetch. When disabled, the `TeamHome.calendar` getter throws a 404, so
 `syncTeamCalendars` catches the error and removes entries from members' `shared_calendars`.
 Displayed in a separate "Team Calendars" section in the sidebar, using the same `SharedCalendar` infrastructure for
-visibility/color prefs. Managed in the People app team detail page (via `PUT /team/:teamId/settings`).
+visibility/color prefs. Managed in the Admin app team detail page (via `PUT /team/:teamId/settings`).
 
 ## Invitations
 

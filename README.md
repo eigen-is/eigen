@@ -76,7 +76,7 @@ bun install
 bun run serve
 ```
 
-Open `http://localhost:3011/setup` to run the first-time setup wizard. It creates your admin account and configures
+Open `http://localhost:3009/admin` to run the first-time setup wizard. It creates your admin account and configures
 storage.
 
 ### Docker deployment
@@ -144,7 +144,7 @@ apps/
   contacts/     # Contact management
   chat/         # Real-time chat
   space/        # Account settings
-  people/       # Org/team admin
+  admin/        # Org/team admin
   index/        # Landing page
   setup/        # First-run wizard
 
@@ -162,8 +162,9 @@ docs/           # Architecture documentation
 Eigen is open source and contributions are welcome. The project is still in active early development — there's plenty
 to do and plenty of room to shape the direction.
 
-Start with [CONTRIBUTING.md](docs/CONTRIBUTING.md) for code patterns, architecture conventions, and development
-workflow. The full project context (for humans and AI agents alike) lives in [AGENTS.md](AGENTS.md).
+See [CONTRIBUTING.md](docs/CONTRIBUTING.md) for how to get involved — whether that's reporting bugs, submitting PRs,
+adopting a subsystem, or sponsoring the project. The full project context (for humans and AI agents alike) lives in
+[AGENTS.md](AGENTS.md), and [CODE-STANDARDS.md](docs/CODE-STANDARDS.md) covers code style and architecture patterns.
 
 ### Documentation
 

@@ -1,4 +1,4 @@
-import { usePeopleTeams } from '@workspace/lib/people';
+import { useTeams } from '@workspace/lib/admin';
 import { usePublicConfig } from '@workspace/lib/public';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { CalendarShare } from '@workspace/lib/types/calendar';
@@ -28,7 +28,7 @@ export function CalendarShareEditor({ shares, onChange }: CalendarShareEditorPro
     const currentShares = shares || [];
 
     const { data: config } = usePublicConfig();
-    const { data: teams } = usePeopleTeams(config?.orgId);
+    const { data: teams } = useTeams(config?.orgId);
 
     const addShare = useCallback(
         (targetId: string, permission: CalendarShare['permission'] = 'read') => {

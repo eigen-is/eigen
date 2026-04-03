@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
 import { parseOwnerId } from '../../../types';
 import type { DrivePath } from '../../../types/drive';
+import { useTeams } from '../../admin';
 import { useAuth } from '../../auth';
-import { usePeopleTeams } from '../../people';
 import { usePublicConfig, usePublicUser } from '../../public';
 import { useBreadcrumb } from '../index';
 
@@ -143,7 +143,7 @@ export function useDriveAccess(
 export function useIsEffectiveOwner(ownerId: string): boolean {
     const { user } = useAuth();
     const { data: config } = usePublicConfig();
-    const { data: teams } = usePeopleTeams(config?.orgId);
+    const { data: teams } = useTeams(config?.orgId);
 
     return useMemo(() => {
         if (!user) return false;

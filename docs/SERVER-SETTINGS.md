@@ -3,7 +3,7 @@
 ## TLDR
 
 Runtime-configurable server settings stored in `data/server/settings.json` via `JsonStore`. Admins manage quotas and
-defaults through the People app settings page. Separate from `config.json` (infrastructure, immutable at runtime).
+defaults through the Admin app settings page. Separate from `config.json` (infrastructure, immutable at runtime).
 
 ## JsonStore
 
@@ -94,7 +94,7 @@ Query keys: `['settings', 'server']`, `['settings', 's3config']`
 
 ## Settings UI
 
-The People app has a `/settings` route with the `ServerSettingsPage` component. Contains:
+The Admin app has a `/settings` route with the `ServerSettingsPage` component. Contains:
 
 - **Storage Quotas** -- mail/contacts max, default mount max, upload limits
 - **Default Mount Storage Type** -- dropdown for new user mounts
@@ -102,8 +102,8 @@ The People app has a `/settings` route with the `ServerSettingsPage` component. 
 
 | File                                                    | Purpose            |
 |---------------------------------------------------------|--------------------|
-| `apps/people/src/routes/_auth.settings.tsx`             | Route definition   |
-| `apps/people/src/components/people/server-settings.tsx` | Settings form page |
+| `apps/admin/src/routes/_auth.settings.tsx`             | Route definition   |
+| `apps/admin/src/components/admin/server-settings.tsx` | Settings form page |
 
 ## config.json vs settings.json
 
@@ -125,5 +125,5 @@ The People app has a `/settings` route with the `ServerSettingsPage` component. 
 | `packages/lib/src/core/settings/hooks/use-server-settings.ts` | Server settings hooks and query keys                                    |
 | `packages/lib/src/core/settings/hooks/use-s3-config.ts`       | S3 config hooks                                                         |
 | `packages/lib/src/core/settings/hooks/use-s3-check.ts`        | S3 connection test hook                                                 |
-| `apps/people/src/routes/_auth.settings.tsx`                   | Settings route                                                          |
-| `apps/people/src/components/people/server-settings.tsx`       | Settings form UI                                                        |
+| `apps/admin/src/routes/_auth.settings.tsx`                   | Settings route                                                          |
+| `apps/admin/src/components/admin/server-settings.tsx`       | Settings form UI                                                        |

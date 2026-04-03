@@ -1,7 +1,7 @@
 'use client';
 
+import { useTeams } from '@workspace/lib/admin';
 import { type DirectAccessItem, useDriveAccess, useIsEffectiveOwner } from '@workspace/lib/drive';
-import { usePeopleTeams } from '@workspace/lib/people';
 import { usePublicConfig } from '@workspace/lib/public';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DriveACL, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
@@ -46,7 +46,7 @@ export function DriveAccessListEdit({ path, onSave, onCancel, className }: Drive
 
     // Fetch org and teams for the team sharing picker
     const { data: config } = usePublicConfig();
-    const { data: teams } = usePeopleTeams(config?.orgId);
+    const { data: teams } = useTeams(config?.orgId);
 
     const isEffectiveOwner = useIsEffectiveOwner(path.ownerId);
 
@@ -289,7 +289,7 @@ export function DriveAccessListEdit({ path, onSave, onCancel, className }: Drive
                             <p className="text-xs text-muted-foreground">
                                 {visibility !== 'private'
                                     ? 'Anyone with the link can access'
-                                    : 'Only people with access can open with the link'}
+                                    : 'Only admin with access can open with the link'}
                             </p>
                         </div>
                     </div>

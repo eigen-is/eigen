@@ -1,3 +1,4 @@
+export * from './admin';
 export * from './calendar';
 export * from './chat';
 export * from './clipboard';
@@ -9,7 +10,6 @@ export * from './mail';
 export * from './mount';
 export * from './notification';
 export * from './owner';
-export * from './people';
 export * from './public';
 export * from './settings';
 export * from './sse';

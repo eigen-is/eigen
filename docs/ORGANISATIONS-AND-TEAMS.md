@@ -42,7 +42,7 @@ to the new member's Home.
 - Synthetic user ID: `team_{teamId}`
 - Path: `data/team/{teamId}/`
 - Services: Drive + Calendar only (no mail/contacts/notifications)
-- Starts with zero mounts — mounts are added explicitly via "Add Mount" in People app
+- Starts with zero mounts — mounts are added explicitly via "Add Mount" in Admin app
 - Settings stored in `settings.json` (`JsonStore<TeamSettings>`)
 - Calendar can be disabled via `settings.calendar.enabled`
 - Created lazily, auto-destructs after 5min inactivity
@@ -122,7 +122,7 @@ path owned by the same team).
 
 - **Sidebar**: Team drives appear under "Shared Drives" in Drive app
 - **Share dialog**: `drive-access-list-edit.tsx` supports team picker + team display
-- **People hooks** (`packages/lib/src/core/people/hooks/`): `usePeopleMembers(orgId?)`, `usePeopleTeams(orgId?)`,
+- **Admin hooks** (`packages/lib/src/core/admin/hooks/`): `useMembers(orgId?)`, `useTeams(orgId?)`,
   `useTeamMembers(orgId?, teamId?)`, `useActiveMember()`
 
 ## Files
@@ -138,11 +138,11 @@ path owned by the same team).
 | `apps/api/src/lib/user/user.ts`               | `getMemberships()`, `getOrgRole()`                        |
 | `apps/api/src/lib/core/access.ts`             | `requireTeamAccess`, `requireTeamAdmin`                   |
 | `apps/api/src/lib/share/reconciliation.ts`    | Share reconciliation on user/team-member creation         |
-| `packages/lib/src/core/people/hooks/keys.ts`  | Query key definitions for people hooks                    |
+| `packages/lib/src/core/admin/hooks/keys.ts`   | Query key definitions for admin hooks                     |
 
-## People App
+## Admin App
 
-Admin UI for org member + team management at `apps/people/`. Requires org role `admin` or `owner`. Uses better-auth
+Admin UI for org member + team management at `apps/admin/`. Requires org role `admin` or `owner`. Uses better-auth
 client API (`authClient.organization.*`) for org/team operations and Eden Treaty for server settings.
 
 ### Pages
@@ -157,7 +157,7 @@ client API (`authClient.organization.*`) for org/team operations and Eden Treaty
 ### Access
 
 Route guard in `_auth.tsx`: fetches org members, checks current user has role `admin` or `owner`. Non-admins see
-`AccessDenied`. Visible via "People" in app switcher.
+`AccessDenied`. Visible via "Admin" in app switcher.
 
 ### API
 
@@ -189,5 +189,5 @@ Team settings are stored in `data/team/{teamId}/settings.json` via `TeamHome.set
 
 Cannot delete own account (server-side guard).
 
-**Frontend**: `useDeleteUser(organizationId)` hook in `packages/lib/src/core/people/hooks/use-members.ts`.
+**Frontend**: `useDeleteUser(organizationId)` hook in `packages/lib/src/core/admin/hooks/use-members.ts`.
 "Danger zone" section in member detail with confirmation dialog.

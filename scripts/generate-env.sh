@@ -51,10 +51,9 @@ VITE_APP_DRIVE_URL=https://${DOMAIN}/drive
 VITE_APP_DOCS_URL=https://${DOMAIN}/docs
 VITE_APP_STICKIES_URL=https://${DOMAIN}/stickies
 VITE_APP_CHAT_URL=https://${DOMAIN}/chat
-VITE_APP_PEOPLE_URL=https://${DOMAIN}/people
+VITE_APP_ADMIN_URL=https://${DOMAIN}/admin
 VITE_APP_SLIDES_URL=https://${DOMAIN}/slides
 VITE_APP_SHEETS_URL=https://${DOMAIN}/sheets
-VITE_APP_SETUP_URL=https://${DOMAIN}/setup
 
 TRUSTED_NETWORKS=127.0.0.0/8,::1,172.16.0.0/12
 

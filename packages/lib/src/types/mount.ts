@@ -9,6 +9,8 @@ export type S3Config = {
     region?: string;
 };
 
+export const EMPTY_S3: S3Config = { endpoint: '', bucket: '', prefix: '', accessKeyId: '', secretAccessKey: '' };
+
 export type MountConfig = {
     id: string;
     name: string;

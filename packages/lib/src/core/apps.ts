@@ -95,9 +95,9 @@ const apps = [
         description: 'Find your contacts',
     },
     // {
-    //     name: 'People',
-    //     color: 'var(--app-people-color)',
-    //     href: getPeopleAppUrl(),
+    //     name: 'Admin',
+    //     color: 'var(--app-admin-color)',
+    //     href: getAdminAppUrl(),
     //     icon: UsersRound,
     //     description: 'Manage your organization',
     // },
