@@ -70,7 +70,9 @@ export function getS3Config(): S3Config | undefined {
 }
 
 export function getDomain(): string {
-    return process.env['DOMAIN'] || store.get().domain || 'localhost';
+    const envDomain = process.env['DOMAIN'];
+    if (envDomain && envDomain !== 'localhost') return envDomain;
+    return store.get().domain || envDomain || 'localhost';
 }
 
 export async function getPublicConfig() {
