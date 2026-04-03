@@ -30,9 +30,10 @@ export type DriveAccessListEditProps = {
     onSave: (updatedAcl: DriveACL[], visibility: DriveVisibility, sharingRestricted?: boolean) => void;
     onCancel?: () => void;
     className?: string;
+    prefillEmail?: string;
 };
 
-export function DriveAccessListEdit({ path, onSave, onCancel, className }: DriveAccessListEditProps) {
+export function DriveAccessListEdit({ path, onSave, onCancel, className, prefillEmail }: DriveAccessListEditProps) {
     const [pendingChanges, setPendingChanges] = useState(false);
     const [newContactInput, setNewContactInput] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
@@ -55,6 +56,12 @@ export function DriveAccessListEdit({ path, onSave, onCancel, className }: Drive
         setVisibility(path.visibility ?? 'private');
         setSharingRestricted(path.sharingRestricted ?? false);
     }, [path]);
+
+    useEffect(() => {
+        if (prefillEmail) {
+            setNewContactInput(prefillEmail);
+        }
+    }, [prefillEmail]);
 
     const handleAddUser = useCallback(
         (suggestion: ContactSuggestion) => {
