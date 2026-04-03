@@ -3,7 +3,7 @@ import { useMembers } from '@workspace/lib/admin';
 import { authClient, useAuth } from '@workspace/lib/auth';
 import { usePublicConfig } from '@workspace/lib/public';
 import { AccessDenied, EmptyState, LoadingState } from '@workspace/ui';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export const Route = createFileRoute('/_auth')({
     beforeLoad: ({ context, location }) => {
@@ -22,17 +22,19 @@ export const Route = createFileRoute('/_auth')({
 function AuthGuard() {
     const { user } = useAuth();
     const { data: config, isLoading: configLoading } = usePublicConfig();
-    const { data: members = [], isLoading: membersLoading } = useMembers(config?.orgId);
+    const [orgActivated, setOrgActivated] = useState(false);
     const activatedRef = useRef(false);
 
     useEffect(() => {
         if (config?.orgId && !activatedRef.current) {
             activatedRef.current = true;
-            authClient.organization.setActive({ organizationId: config.orgId });
+            authClient.organization.setActive({ organizationId: config.orgId }).then(() => setOrgActivated(true));
         }
     }, [config]);
 
-    if (configLoading || membersLoading) {
+    const { data: members = [], isLoading: membersLoading } = useMembers(orgActivated ? config?.orgId : undefined);
+
+    if (configLoading || membersLoading || !orgActivated) {
         return <LoadingState />;
     }
 
