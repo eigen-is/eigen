@@ -4,7 +4,7 @@ import { authClient, useAuth } from '@workspace/lib/auth';
 import { usePublicConfig } from '@workspace/lib/public';
 import { AccessDenied, EmptyState, LoadingState } from '@workspace/ui';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export const Route = createFileRoute('/_auth')({
     beforeLoad: ({ context, location }) => {
@@ -23,16 +23,23 @@ export const Route = createFileRoute('/_auth')({
 function AuthGuard() {
     const { user } = useAuth();
     const { data: config, isLoading: configLoading } = usePublicConfig();
-    const { data: members, isLoading: membersLoading } = useMembers(config?.orgId);
-    const { setSidebarHidden } = useLayout();
+    const [orgReady, setOrgReady] = useState(false);
     const activatedRef = useRef(false);
+    const { setSidebarHidden } = useLayout();
 
+    // setActive must complete before listMembers will return correct data,
+    // because the session needs activeOrganizationId to be set server-side
     useEffect(() => {
         if (config?.orgId && !activatedRef.current) {
             activatedRef.current = true;
-            authClient.organization.setActive({ organizationId: config.orgId });
+            authClient.organization
+                .setActive({ organizationId: config.orgId })
+                .then(() => setOrgReady(true))
+                .catch(() => setOrgReady(true));
         }
     }, [config]);
+
+    const { data: members, isLoading: membersLoading } = useMembers(orgReady ? config?.orgId : undefined);
 
     const currentMember = members?.find((m) => m.userId === user?.id);
     const isAdmin = currentMember?.role === 'admin' || currentMember?.role === 'owner';
@@ -42,7 +49,7 @@ function AuthGuard() {
         return () => setSidebarHidden(false);
     }, [isAdmin, setSidebarHidden]);
 
-    if (configLoading || membersLoading) {
+    if (configLoading || !orgReady || membersLoading) {
         return <LoadingState />;
     }
 
