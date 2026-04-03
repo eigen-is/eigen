@@ -386,16 +386,17 @@ export const driveRouter = new Elysia({ name: 'drive' })
         async ({ params, user, body }) => {
             const home = await getHome(params.ownerId);
             const path = await home.drive.getPath(params.mountId, params.pathId);
-            if (!path || path.trashedAt) throw new ApiError(404, 'Path not found');
 
-            const requesterName = user.name || user.email;
-            home.notifications?.persist({
-                type: 'access-request',
-                tag: `access-request:${params.mountId}:${params.pathId}:${user.email}`,
-                title: `${requesterName} requested access`,
-                body: body.message || null,
-                actorEmail: user.email,
-            });
+            if (path && !path.trashedAt) {
+                const requesterName = user.name || user.email;
+                home.notifications?.persist({
+                    type: 'access-request',
+                    tag: `access-request:${params.ownerId}:${params.mountId}:${params.pathId}:${user.email}`,
+                    title: `${requesterName} requested access to "${path.name}"`,
+                    body: body.message || null,
+                    actorEmail: user.email,
+                });
+            }
 
             return { success: true };
         },

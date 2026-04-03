@@ -14,7 +14,7 @@ import { useLayout } from '@workspace/ui/components/layout/app/layout-context.ts
 import { DriveAccessDialog } from '@workspace/ui/components/layout/drive/drive-access-dialog';
 import { DriveLayout } from '@workspace/ui/components/layout/drive/drive-layout';
 import { usePreview } from '@workspace/ui/components/layout/preview-provider';
-import { useContext, useEffect, useState } from 'react';
+import { useContext, useEffect } from 'react';
 import { DriveContext } from './__root';
 
 export const Route = createFileRoute('/_auth/fs/$ownerId/$mountId/$pathId')({
@@ -58,17 +58,10 @@ function DriveRoute() {
     const { data: selectedPath = null } = usePathInfo(ownerId, mountId, pid);
     const { data: currentPath = null } = usePathInfo(ownerId, mountId, pathId);
     const { data: shareTargetPath = null } = usePathInfo(ownerId, mountId, sharePathId || '');
-    const [shareDialogOpen, setShareDialogOpen] = useState(!!sharePathId);
-
-    useEffect(() => {
-        if (sharePathId && shareTargetPath) {
-            setShareDialogOpen(true);
-        }
-    }, [sharePathId, shareTargetPath]);
+    const shareDialogOpen = !!sharePathId && !!shareTargetPath;
 
     const handleShareDialogClose = (open: boolean) => {
-        setShareDialogOpen(open);
-        if (!open && sharePathId) {
+        if (!open) {
             navigate({
                 to: Route.fullPath,
                 params: { ownerId, mountId, pathId },

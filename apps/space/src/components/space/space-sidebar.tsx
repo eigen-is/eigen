@@ -66,17 +66,19 @@ export function SpaceSidebar({ condensed = false, onClose, isMobile = false }: S
                     to='/security/recovery-codes' params={{}}/> */}
             </SidebarSection>
 
-            <Separator />
-            <SidebarSection condensed={condensed}>
-                {isAdmin && (
-                    <SidebarItem
-                        icon={<Shield className="h-4 w-4" />}
-                        label="Admin"
-                        condensed={condensed}
-                        href={getAdminAppUrl()}
-                    />
-                )}
-            </SidebarSection>
+            {isAdmin && (
+                <>
+                    <Separator />
+                    <SidebarSection condensed={condensed}>
+                        <SidebarItem
+                            icon={<Shield className="h-4 w-4" />}
+                            label="Admin"
+                            condensed={condensed}
+                            href={getAdminAppUrl()}
+                        />
+                    </SidebarSection>
+                </>
+            )}
 
             {/* Storage usage indicator at the bottom of sidebar */}
             <StorageUsage className="mt-auto" condensed={condensed} />
