@@ -549,8 +549,7 @@ export function invalidateItemCreated(
         queryClient.invalidateQueries({ queryKey: driveKeys.folder(ownerId, mountId, parentId) });
     }
     if (mimeType) {
-        const normalizedMimeType = mimeType.replace('/', '-');
-        queryClient.invalidateQueries({ queryKey: driveKeys.mime(ownerId, normalizedMimeType) });
+        queryClient.invalidateQueries({ queryKey: driveKeys.mimeTypes(ownerId) });
     }
     invalidateHomeSize(queryClient, ownerId);
 }
@@ -568,8 +567,7 @@ export function invalidateItemDeleted(
     }
     queryClient.removeQueries({ queryKey: driveKeys.path(ownerId, mountId, pathId) });
     if (mimeType) {
-        const normalizedMimeType = mimeType.replace('/', '-');
-        queryClient.invalidateQueries({ queryKey: driveKeys.mime(ownerId, normalizedMimeType) });
+        queryClient.invalidateQueries({ queryKey: driveKeys.mimeTypes(ownerId) });
     }
     invalidateHomeSize(queryClient, ownerId);
 }
@@ -588,8 +586,7 @@ export function invalidatePathRenamed(
         queryClient.invalidateQueries({ queryKey: driveKeys.folder(ownerId, mountId, parentId) });
     }
     if (mimeType) {
-        const normalizedMimeType = mimeType.replace('/', '-');
-        queryClient.invalidateQueries({ queryKey: driveKeys.mime(ownerId, normalizedMimeType) });
+        queryClient.invalidateQueries({ queryKey: driveKeys.mimeTypes(ownerId) });
     }
 }
 
