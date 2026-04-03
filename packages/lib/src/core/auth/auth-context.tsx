@@ -63,6 +63,7 @@ export function AuthProvider({
 
             if (data) {
                 setUser(data.user);
+                await authClient.getSession();
                 return { success: true };
             }
 
