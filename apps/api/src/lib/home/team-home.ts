@@ -40,7 +40,7 @@ export class TeamHome extends Home {
         this.homeDir = getTeamDataPath(parsed.id);
         this.fs = new LocalFilesystem(this.homeDir);
 
-        this.settings = new JsonStore<TeamSettings>(this.fs, 'settings.json', { calendar: { enabled: true } });
+        this.settings = new JsonStore<TeamSettings>(this.fs, 'settings.json', { calendar: { enabled: false } });
         // Teams start with no mounts by default — mounts are added explicitly via "Add Mount" wizard
         this._drive = new Drive(this);
         this._calendar = new Calendar(this);
