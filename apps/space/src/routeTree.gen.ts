@@ -14,6 +14,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthRouteImport } from './routes/_auth'
 import { Route as AuthIndexRouteImport } from './routes/_auth.index'
 import { Route as AuthUserRouteImport } from './routes/_auth.user'
+import { Route as AuthServicesRouteImport } from './routes/_auth.services'
 import { Route as AuthDataRouteImport } from './routes/_auth.data'
 import { Route as AuthSecurityPasswordRouteImport } from './routes/_auth.security.password'
 import { Route as AuthSecurity2faRouteImport } from './routes/_auth.security.2fa'
@@ -42,6 +43,11 @@ const AuthUserRoute = AuthUserRouteImport.update({
   path: '/user',
   getParentRoute: () => AuthRoute,
 } as any)
+const AuthServicesRoute = AuthServicesRouteImport.update({
+  id: '/services',
+  path: '/services',
+  getParentRoute: () => AuthRoute,
+} as any)
 const AuthDataRoute = AuthDataRouteImport.update({
   id: '/data',
   path: '/data',
@@ -63,6 +69,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/login-2fa': typeof Login2faRoute
   '/data': typeof AuthDataRoute
+  '/services': typeof AuthServicesRoute
   '/user': typeof AuthUserRoute
   '/security/2fa': typeof AuthSecurity2faRoute
   '/security/password': typeof AuthSecurityPasswordRoute
@@ -71,6 +78,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/login-2fa': typeof Login2faRoute
   '/data': typeof AuthDataRoute
+  '/services': typeof AuthServicesRoute
   '/user': typeof AuthUserRoute
   '/': typeof AuthIndexRoute
   '/security/2fa': typeof AuthSecurity2faRoute
@@ -82,6 +90,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/login-2fa': typeof Login2faRoute
   '/_auth/data': typeof AuthDataRoute
+  '/_auth/services': typeof AuthServicesRoute
   '/_auth/user': typeof AuthUserRoute
   '/_auth/': typeof AuthIndexRoute
   '/_auth/security/2fa': typeof AuthSecurity2faRoute
@@ -94,6 +103,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/login-2fa'
     | '/data'
+    | '/services'
     | '/user'
     | '/security/2fa'
     | '/security/password'
@@ -102,6 +112,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/login-2fa'
     | '/data'
+    | '/services'
     | '/user'
     | '/'
     | '/security/2fa'
@@ -112,6 +123,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/login-2fa'
     | '/_auth/data'
+    | '/_auth/services'
     | '/_auth/user'
     | '/_auth/'
     | '/_auth/security/2fa'
@@ -161,6 +173,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthUserRouteImport
       parentRoute: typeof AuthRoute
     }
+    '/_auth/services': {
+      id: '/_auth/services'
+      path: '/services'
+      fullPath: '/services'
+      preLoaderRoute: typeof AuthServicesRouteImport
+      parentRoute: typeof AuthRoute
+    }
     '/_auth/data': {
       id: '/_auth/data'
       path: '/data'
@@ -187,6 +206,7 @@ declare module '@tanstack/react-router' {
 
 interface AuthRouteChildren {
   AuthDataRoute: typeof AuthDataRoute
+  AuthServicesRoute: typeof AuthServicesRoute
   AuthUserRoute: typeof AuthUserRoute
   AuthIndexRoute: typeof AuthIndexRoute
   AuthSecurity2faRoute: typeof AuthSecurity2faRoute
@@ -195,6 +215,7 @@ interface AuthRouteChildren {
 
 const AuthRouteChildren: AuthRouteChildren = {
   AuthDataRoute: AuthDataRoute,
+  AuthServicesRoute: AuthServicesRoute,
   AuthUserRoute: AuthUserRoute,
   AuthIndexRoute: AuthIndexRoute,
   AuthSecurity2faRoute: AuthSecurity2faRoute,

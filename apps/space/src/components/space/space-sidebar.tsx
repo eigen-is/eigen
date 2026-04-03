@@ -4,7 +4,7 @@ import { SidebarItem, StorageUsage } from '@workspace/ui';
 import { SidebarHeader } from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import { Separator } from '@workspace/ui/components/separator';
-import { BookUser, Download, KeySquare, LockKeyholeIcon, Shield, UserRound } from 'lucide-react';
+import { BookUser, KeySquare, LockKeyholeIcon, Mail, Shield, UserRound } from 'lucide-react';
 
 type SpaceSidebarProps = {
     condensed?: boolean;
@@ -35,10 +35,10 @@ export function SpaceSidebar({ condensed = false, onClose, isMobile = false }: S
                     params={{}}
                 />
                 <SidebarItem
-                    icon={<Download className="h-4 w-4" />}
-                    label="Data export"
+                    icon={<Mail className="h-4 w-4" />}
+                    label="Calendar & Mail"
                     condensed={condensed}
-                    to="/data"
+                    to="/services"
                     params={{}}
                 />
             </SidebarSection>
@@ -66,19 +66,26 @@ export function SpaceSidebar({ condensed = false, onClose, isMobile = false }: S
                     to='/security/recovery-codes' params={{}}/> */}
             </SidebarSection>
 
-            {isAdmin && (
-                <>
-                    <Separator />
-                    <SidebarSection condensed={condensed}>
+            <Separator />
+            <>
+                <SidebarSection condensed={condensed}>
+                    {isAdmin && (
                         <SidebarItem
                             icon={<Shield className="h-4 w-4" />}
                             label="Admin"
                             condensed={condensed}
                             href={getAdminAppUrl()}
                         />
-                    </SidebarSection>
-                </>
-            )}
+                    )}
+                    {/*<SidebarItem*/}
+                    {/*    icon={<Download className="h-4 w-4" />}*/}
+                    {/*    label="Data export"*/}
+                    {/*    condensed={condensed}*/}
+                    {/*    to="/data"*/}
+                    {/*    params={{}}*/}
+                    {/*/>*/}
+                </SidebarSection>
+            </>
 
             {/* Storage usage indicator at the bottom of sidebar */}
             <StorageUsage className="mt-auto" condensed={condensed} />
