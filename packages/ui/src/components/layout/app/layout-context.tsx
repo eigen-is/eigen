@@ -8,6 +8,8 @@ export type LayoutContextType = {
     sidebarOpen: boolean;
     setSidebarOpen: (open: boolean) => void;
     sidebarMode: 'collapsible' | 'hidden' | 'none';
+    sidebarHidden: boolean;
+    setSidebarHidden: (hidden: boolean) => void;
     isMobile: boolean;
     isTablet: boolean;
 };
@@ -20,6 +22,8 @@ export const LayoutContext = createContext<LayoutContextType>({
     sidebarOpen: false,
     setSidebarOpen: () => {},
     sidebarMode: 'collapsible',
+    sidebarHidden: false,
+    setSidebarHidden: () => {},
     isMobile: false,
     isTablet: false,
 });
