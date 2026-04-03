@@ -1,13 +1,9 @@
+import { type ProtocolUser, verifyProtocolAuth } from '../auth/protocol-auth';
 import { ApiError } from '../core/errors';
-import { getUserByEmail } from '../user';
 
-export type CalDavUser = {
-    id: string;
-    email: string;
-    name: string;
-};
+export type CalDavUser = ProtocolUser;
 
-export async function authenticateBasic(request: Request): Promise<CalDavUser> {
+export async function authenticateBasic(request: Request): Promise<ProtocolUser> {
     const authHeader = request.headers.get('Authorization');
     if (!authHeader?.startsWith('Basic ')) {
         throw new ApiError(401, 'Unauthorized');
@@ -25,12 +21,7 @@ export async function authenticateBasic(request: Request): Promise<CalDavUser> {
     }
 
     const email = decoded.slice(0, colonIndex);
-    const user = await getUserByEmail(email);
-    if (!user) {
-        throw new ApiError(401, 'Unauthorized');
-    }
+    const password = decoded.slice(colonIndex + 1);
 
-    // SECURITY: password validation not yet implemented — accepts any password.
-    // CalDAV is not safe for production until app-specific passwords are added.
-    return { id: user.id, email: user.email, name: user.name };
+    return verifyProtocolAuth(email, password);
 }
