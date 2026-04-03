@@ -60,10 +60,10 @@ EOF
 
 # --- Start services ---
 echo "Starting OpenDKIM..."
-if opendkim -x /etc/opendkim.conf 2>/dev/null; then
+if opendkim -x /etc/opendkim.conf; then
     echo "OpenDKIM started."
 else
-    echo "WARNING: OpenDKIM failed to start (DKIM signing disabled). This is normal on macOS Docker due to file ownership."
+    echo "WARNING: OpenDKIM failed to start (DKIM signing disabled). Common on macOS Docker due to file ownership."
     # Remove DKIM milter from Postfix config so it doesn't try to connect
     sed -i '/milter/d' /etc/postfix/main.cf
 fi
