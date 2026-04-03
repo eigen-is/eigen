@@ -47,27 +47,23 @@ export function ServerSettingsPage() {
         setDraft((prev) => ({ ...prev, quotas: { ...prev.quotas, [key]: value } }));
     };
 
+    const currentS3 = s3Draft ?? s3Config ?? EMPTY_S3;
+    const anyDirty = dirty || s3Dirty;
+    const saving = updateSettings.isPending || updateS3Config.isPending;
+
     const handleSave = async () => {
-        await updateSettings.mutateAsync(draft as Record<string, unknown>);
+        if (s3Dirty && s3Draft && current.defaults.mount.storageType === 's3')
+            await updateS3Config.mutateAsync(s3Draft);
+        if (dirty) await updateSettings.mutateAsync(draft as Record<string, unknown>);
         setDraft({});
         setDirty(false);
+        setS3Draft(null);
+        setS3Dirty(false);
     };
 
     const handleReset = () => {
         setDraft({});
         setDirty(false);
-    };
-
-    const currentS3 = s3Draft ?? s3Config ?? EMPTY_S3;
-
-    const handleSaveS3 = async () => {
-        if (!s3Draft) return;
-        await updateS3Config.mutateAsync(s3Draft);
-        setS3Draft(null);
-        setS3Dirty(false);
-    };
-
-    const handleResetS3 = () => {
         setS3Draft(null);
         setS3Dirty(false);
     };
@@ -108,15 +104,6 @@ export function ServerSettingsPage() {
                         />
                     </div>
                     <div className="space-y-1.5">
-                        <Label>Max Batch Upload (MB)</Label>
-                        <Input
-                            type="number"
-                            min={1}
-                            value={current.quotas.maxBatchUploadSizeMB}
-                            onChange={(e) => updateQuota('maxBatchUploadSizeMB', e.target.valueAsNumber)}
-                        />
-                    </div>
-                    <div className="space-y-1.5">
                         <Label>Trash Retention (days)</Label>
                         <Input
                             type="number"
@@ -133,6 +120,11 @@ export function ServerSettingsPage() {
             <div className="space-y-4">
                 <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Defaults</h3>
 
+                <p className="text-sm text-muted-foreground">
+                    The storage type used for user Drives. Changing this only affects new users: existing users will not
+                    be migrated to the newly selected storage type.
+                </p>
+
                 <StorageTypePicker
                     storageType={current.defaults.mount.storageType}
                     onStorageTypeChange={(type: ServerStorageType) => {
@@ -145,38 +137,27 @@ export function ServerSettingsPage() {
                         setS3Draft(config);
                     }}
                 />
-
-                {s3Dirty && (
-                    <div className="flex items-center justify-end gap-2">
-                        <Button variant="outline" size="sm" onClick={handleResetS3}>
-                            Reset
-                        </Button>
-                        <Button
-                            size="sm"
-                            onClick={handleSaveS3}
-                            disabled={
-                                !currentS3.endpoint ||
-                                !currentS3.bucket ||
-                                !currentS3.accessKeyId ||
-                                !currentS3.secretAccessKey ||
-                                updateS3Config.isPending
-                            }
-                        >
-                            {updateS3Config.isPending ? 'Saving...' : 'Save S3 Config'}
-                        </Button>
-                    </div>
-                )}
             </div>
 
-            {dirty && (
+            {anyDirty && (
                 <>
                     <Separator />
                     <div className="flex items-center justify-end gap-2">
                         <Button variant="outline" onClick={handleReset}>
                             Reset
                         </Button>
-                        <Button onClick={handleSave} disabled={updateSettings.isPending}>
-                            {updateSettings.isPending ? 'Saving...' : 'Save Changes'}
+                        <Button
+                            onClick={handleSave}
+                            disabled={
+                                saving ||
+                                (current.defaults.mount.storageType === 's3' &&
+                                    (!currentS3.endpoint ||
+                                        !currentS3.bucket ||
+                                        !currentS3.accessKeyId ||
+                                        !currentS3.secretAccessKey))
+                            }
+                        >
+                            {saving ? 'Saving...' : 'Save Changes'}
                         </Button>
                     </div>
                 </>

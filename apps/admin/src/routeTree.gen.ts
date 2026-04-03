@@ -14,6 +14,7 @@ import { Route as AuthRouteImport } from './routes/_auth'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthTeamsRouteImport } from './routes/_auth.teams'
 import { Route as AuthSettingsRouteImport } from './routes/_auth.settings'
+import { Route as AuthOnboardingRouteImport } from './routes/_auth.onboarding'
 import { Route as AuthMembersRouteImport } from './routes/_auth.members'
 
 const LoginRoute = LoginRouteImport.update({
@@ -40,6 +41,11 @@ const AuthSettingsRoute = AuthSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AuthRoute,
 } as any)
+const AuthOnboardingRoute = AuthOnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
+  getParentRoute: () => AuthRoute,
+} as any)
 const AuthMembersRoute = AuthMembersRouteImport.update({
   id: '/members',
   path: '/members',
@@ -50,6 +56,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/members': typeof AuthMembersRoute
+  '/onboarding': typeof AuthOnboardingRoute
   '/settings': typeof AuthSettingsRoute
   '/teams': typeof AuthTeamsRoute
 }
@@ -57,6 +64,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/members': typeof AuthMembersRoute
+  '/onboarding': typeof AuthOnboardingRoute
   '/settings': typeof AuthSettingsRoute
   '/teams': typeof AuthTeamsRoute
 }
@@ -66,20 +74,28 @@ export interface FileRoutesById {
   '/_auth': typeof AuthRouteWithChildren
   '/login': typeof LoginRoute
   '/_auth/members': typeof AuthMembersRoute
+  '/_auth/onboarding': typeof AuthOnboardingRoute
   '/_auth/settings': typeof AuthSettingsRoute
   '/_auth/teams': typeof AuthTeamsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/members' | '/settings' | '/teams'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/members'
+    | '/onboarding'
+    | '/settings'
+    | '/teams'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/members' | '/settings' | '/teams'
+  to: '/' | '/login' | '/members' | '/onboarding' | '/settings' | '/teams'
   id:
     | '__root__'
     | '/'
     | '/_auth'
     | '/login'
     | '/_auth/members'
+    | '/_auth/onboarding'
     | '/_auth/settings'
     | '/_auth/teams'
   fileRoutesById: FileRoutesById
@@ -127,6 +143,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthSettingsRouteImport
       parentRoute: typeof AuthRoute
     }
+    '/_auth/onboarding': {
+      id: '/_auth/onboarding'
+      path: '/onboarding'
+      fullPath: '/onboarding'
+      preLoaderRoute: typeof AuthOnboardingRouteImport
+      parentRoute: typeof AuthRoute
+    }
     '/_auth/members': {
       id: '/_auth/members'
       path: '/members'
@@ -139,12 +162,14 @@ declare module '@tanstack/react-router' {
 
 interface AuthRouteChildren {
   AuthMembersRoute: typeof AuthMembersRoute
+  AuthOnboardingRoute: typeof AuthOnboardingRoute
   AuthSettingsRoute: typeof AuthSettingsRoute
   AuthTeamsRoute: typeof AuthTeamsRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
   AuthMembersRoute: AuthMembersRoute,
+  AuthOnboardingRoute: AuthOnboardingRoute,
   AuthSettingsRoute: AuthSettingsRoute,
   AuthTeamsRoute: AuthTeamsRoute,
 }
