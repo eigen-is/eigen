@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
 import { publicApi } from '@workspace/lib/api';
 import { apps } from '@workspace/lib/apps';
+import { usePublicConfig } from '@workspace/lib/public';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@workspace/ui/components/card';
 import { Input } from '@workspace/ui/components/input';
@@ -20,6 +21,8 @@ export function HomeComponent() {
     const [email, setEmail] = React.useState('');
     const [notes, setNotes] = React.useState('');
     const [isSubmitting, setIsSubmitting] = React.useState(false);
+    const { data: config } = usePublicConfig();
+    const waitlistEnabled = config?.waitlistEnabled ?? false;
     const app = apps[appIndex];
 
     React.useEffect(() => {
@@ -96,9 +99,11 @@ export function HomeComponent() {
                         <Button className="px-8 py-2 font-medium flex-3" onClick={handleLogin}>
                             Login
                         </Button>
-                        <Button variant="outline" className="px-6 py-2 flex-1" onClick={handleShowWaitlist}>
-                            Join Waitlist
-                        </Button>
+                        {waitlistEnabled && (
+                            <Button variant="outline" className="px-6 py-2 flex-1" onClick={handleShowWaitlist}>
+                                Join Waitlist
+                            </Button>
+                        )}
                     </div>
                     <div className="flex justify-center mt-4">
                         <Link to="/blog" className="text-blue-600 hover:text-blue-800 underline text-sm">
