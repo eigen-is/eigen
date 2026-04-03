@@ -10,9 +10,10 @@ export type DriveAccessDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     path: DrivePath | null;
+    prefillEmail?: string;
 };
 
-export function DriveAccessDialog({ open, onOpenChange, path }: DriveAccessDialogProps) {
+export function DriveAccessDialog({ open, onOpenChange, path, prefillEmail }: DriveAccessDialogProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const { user } = useAuth();
     const updateACL = useUpdateACL(path?.ownerId || '', path?.mountId, user?.id);
@@ -53,6 +54,7 @@ export function DriveAccessDialog({ open, onOpenChange, path }: DriveAccessDialo
                         path={path}
                         onSave={handleSave}
                         onCancel={!isSubmitting ? () => onOpenChange(false) : undefined}
+                        prefillEmail={prefillEmail}
                     />
                 )}
             </DialogContent>
