@@ -1,102 +1,172 @@
 # Contributing to Eigen
 
-## Code Style
+Eigen started as a solo project. I wanted to see how far one person could get building a self-hosted workspace
+from scratch. Turns out: pretty far, but not far enough. There's way more to build than one person can do, and
+I'm looking for people who want to help.
 
-- **English everywhere** — code, comments, docs, commit messages
-- **`type` over `interface`** — except when methods are needed
-- **No JSDoc** — code should be self-documenting. Comments only where logic isn't obvious
-- **No `as any`** — fix the type at the source. Eden Treaty gives end-to-end safety; casting breaks it
-- **Theme tokens, not colors** — use `text-muted-foreground`, `bg-muted`, not `text-gray-500`, `bg-blue-50`
-- **Imports** — use `@workspace/lib/[domain]` and `@workspace/ui/components/...`, avoid deep relative paths
+If you're curious about how this started, I wrote about it here:
+[Eigen: Building a Workspace](https://reindernijhoff.net/2025/10/eigen-building-a-workspace/).
 
-## Architecture
+## Current state
 
-| Layer         | Location                                         | Pattern                                                    |
-|---------------|--------------------------------------------------|------------------------------------------------------------|
-| API routes    | `apps/api/src/routes/[domain].ts`                | Elysia router, `{auth: true}` for protected                |
-| Domain logic  | `apps/api/src/lib/[domain]/[domain].ts`          | Class owned by Home singleton                              |
-| DB schemas    | `apps/api/src/lib/[domain]/schema.ts`            | Drizzle ORM + `db-config.ts` for migrations                |
-| Shared types  | `packages/lib/src/types/[domain].ts`             | Shared between frontend and backend                        |
-| Data hooks    | `packages/lib/src/core/[domain]/hooks/`          | TanStack Query — **never** use `useQuery` directly in apps |
-| SSE handlers  | `packages/lib/src/core/[domain]/sse-handlers.ts` | Invalidate query cache on server events                    |
-| SSE builders  | `apps/api/src/lib/[domain]/sse-events.ts`        | Build SSEvent payloads on the backend                      |
-| Frontend apps | `apps/[name]/src/routes/`                        | TanStack Router, file-based                                |
-| Shared UI     | `packages/ui/src/components/`                    | shadcn/ui components and layout system                     |
-| Validation    | `packages/lib/src/validation/`                   | Shared frontend/backend validation                         |
+The basics work. You can send email, edit documents together, manage files, sync calendars with Thunderbird.
+But it's early. Rough edges everywhere, missing features, architecture decisions that could still go either
+way. If you like working on something where your input actually matters, this is that kind of project.
 
-Detailed docs: [Database](DATABASE.md) | [Storage](STORAGE.md) | [SSE](SSE.md) | [ACL](ACL.md) | [Layout](LAYOUT.md)
+I move fast on the codebase; things change week to week. A few things to keep in mind:
 
-## Key Patterns
+- **PRs may need rebasing** if the area you touched has changed. Don't take it personally.
+- **Open an issue first** if you're planning something bigger. Saves everyone time.
+- **Bug reports and ideas** are just as useful as code. Sometimes more.
 
-### Query Keys
+## Ways to contribute
 
-Every domain defines hierarchical query keys for TanStack Query. Export invalidation functions alongside hooks
-so SSE handlers and mutation callbacks can reuse them.
+### Use it and break things
 
-```typescript
-export const driveKeys = {
-    all: ['drive'] as const,
-    folders: () => [...driveKeys.all, 'folder'] as const,
-    folder: (pathId: string) => [...driveKeys.folders(), pathId] as const,
-};
+Honestly, the most helpful thing right now is just using Eigen and telling me what's broken. Deploy it, connect
+a CalDAV client, try editing a doc with two people, upload weird files. Then open an issue when something
+doesn't work.
+
+### Adopt an app or area
+
+Eigen has 12 apps and a lot of infrastructure underneath. I can't give everything equal attention. If
+something here interests you, I'd love to hand you the keys. Maintain it, improve it, triage bugs.
+
+Every app needs work:
+
+- **Mail**: threading, search, filters, attachment handling
+- **Drive**: bulk operations, drag-and-drop improvements
+- **Docs**: export quality, tables, import from DOCX/Markdown
+- **Sheets**: import, export, the forked fortune-sheet engine cleanup
+- **Slides**: import, export to PDF/PPTX, more object types
+- **Stickies**: labels, filters, archiving, assigning cards to people
+- **Calendar**: recurring event edge cases, CalDAV compliance
+- **Contacts**: import, export (vCard), CardDAV support
+- **Chat**: better integration, unread indicators, notifications
+- **Admin**: settings UI, team management, dashboards
+
+And cross-cutting concerns:
+
+- **IMAP/Dovecot**: edge cases, flag sync, mailbox management
+- **CalDAV**: client compatibility (Apple Calendar, DAVx5, etc.)
+- **Mobile/responsive**: works on desktop, needs love on smaller screens
+- **Accessibility**: keyboard nav, screen readers, ARIA
+- **Performance**: profiling, optimizations, offloading heavy work to off-thread workers
+- **Security**: audits, penetration testing, hardening
+- **Copy/paste**: from external sources into Docs/Sheets/Slides, and between apps
+- **Testing**: more coverage, CI pipeline
+- **Documentation**: tutorials, guides, API docs
+
+Reach out at [reinder@eigen.is](mailto:reinder@eigen.is) or just open an issue saying "I want to work on X".
+
+### Sponsor
+
+If you or your company want to support the project, reach out at
+[reinder@eigen.is](mailto:reinder@eigen.is).
+
+### Pull requests
+
+Small fixes (bugs, typos, UI tweaks): just open a PR. For bigger changes, open an issue first.
+
+1. Fork the repo, create a branch
+2. Run `bun run check` before pushing (lint + typecheck + tests)
+3. One concern per PR
+4. Link to a related issue if there is one
+5. Enable "Allow edits from maintainers" so I can help land your PR
+
+## Setting up your development environment
+
+### Prerequisites
+
+- [Bun](https://bun.sh)
+- [Git](https://git-scm.com)
+
+### Option 1: Direct with Bun (recommended)
+
+Fastest way to get going. Runs the API and frontend apps directly on your machine.
+
+```bash
+git clone https://github.com/eigen-foundation/eigen.git
+cd eigen
+bun install
+bun run serve
 ```
 
-### API Client (Eden Treaty)
+Open `http://localhost:3009/admin` to run the setup wizard. It creates your admin account and initializes storage.
 
-Types flow directly from Elysia route definitions — no manual type sync needed.
-
-```typescript
-import { driveApi } from '@workspace/lib/api';
-const response = await driveApi({ ownerId })({ mountId }).folder({ pathId }).get();
-```
-
-### Error Handling
-
-Mutation error/success handling belongs in hooks (`packages/lib/src/core/[domain]/hooks/`), not in app
-components. Every `useMutation` must have an `onError` callback using `onMutationError` from `api-error.ts`.
-Apps should never add their own `try/catch` + `toast.error()` around mutations.
-
-See [NOTIFICATIONS.md](NOTIFICATIONS.md) for the full pattern.
-
-### Eigen File Types
-
-| Type     | MIME                        | Extension        | Storage                       |
-|----------|-----------------------------|------------------|-------------------------------|
-| Document | `application/eigendoc`      | `.eigendoc`      | Dir with `data.db` (Yjs)      |
-| Stickies | `application/eigenstickies` | `.eigenstickies` | Dir with `data.db` (Yjs)      |
-| Chat     | `application/eigenchat`     | `.eigenchat`     | Dir with `data.db` + `media/` |
-| Slides   | `application/eigenslides`   | `.eigenslides`   | Dir with `data.db` (Yjs)      |
-| Sheets   | `application/eigensheets`   | `.eigensheets`   | Dir with `data.db` (Yjs)      |
-
-URL parameters use hyphens (`application-eigendoc`), database stores slashes.
-
-## Public API
-
-Unauthenticated endpoints under `/p/`:
-
-| Endpoint                    | Returns                                          |
-|-----------------------------|--------------------------------------------------|
-| `GET /p/avatar/:emailOrId`  | Avatar image (cached 24h) or generated SVG       |
-| `GET /p/user/:emailOrId`    | `{ name, email, avatar }`                        |
-| `GET /p/config`             | Public server config (org name, registration)     |
-| `POST /p/waitlist`          | Waitlist signup                                   |
-
-Avatar component: `UserAvatar` (`packages/ui/.../user-avatar.tsx`), backed by `useResolvedUser`.
-
-Route: `apps/api/src/routes/public.ts`
-
-## Development
+After that, run everything or just what you need:
 
 ```bash
 bun run serve          # All apps + API
-bun serve:mail         # Single app + API
+bun serve:mail         # Just Mail + API
+bun serve:calendar     # Just Calendar + API
+bun serve:docs         # Just Docs + API
+# ... works for any app name
+```
+
+### Option 2: Docker (full stack)
+
+For testing email, IMAP, HTTPS, and CalDAV you'll want the Docker setup. Four containers: Caddy, Eigen API,
+Mailpit (catches outbound mail), and Dovecot (IMAP).
+
+```bash
+./scripts/generate-env.sh localhost > .env.production
+sed -i '' 's/COOKIE_DOMAIN=.localhost/COOKIE_DOMAIN=localhost/' .env.production
+
+set -a && source .env.production && set +a
+bun install
+bun run build:prod
+
+docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.production up -d
+```
+
+Open `https://localhost` (accept the self-signed certificate warning), then go to `/admin`.
+
+See the [Local Testing Guide](../docker/LOCAL-TESTING.md) for detailed instructions on testing email, IMAP,
+and CalDAV with the Docker setup.
+
+### Useful commands
+
+```bash
+bun run serve          # All apps + API (dev mode with hot reload)
 bun run lint           # Lint + format check (Biome)
 bun run lint:fix       # Auto-fix lint + format
 bun run typecheck      # Type check all packages
 bun run test           # Run all tests
-bun run check          # lint + typecheck + test
+bun run check          # lint + typecheck + test (run this before submitting a PR)
 ```
 
-- **No migrations** — data is throwaway during dev. Prefer clean schemas over backward compatibility
-- **Never run package install commands** — ask the user
-- See [TESTING.md](TESTING.md) for test patterns, [DOCKER.md](DOCKER.md) for deployment
+## Finding your way around
+
+It's a monorepo: one API server in `apps/api/`, a dozen frontend apps in `apps/*/`, and shared code in
+`packages/lib/` (types, hooks, API client) and `packages/ui/` (components).
+
+Start here:
+
+- **[AGENTS.md](../AGENTS.md)** has the full project context, architecture, and critical rules. Written for
+  humans and AI assistants alike.
+- **[CODE-STANDARDS.md](CODE-STANDARDS.md)** covers code patterns, the architecture table, Eden Treaty usage,
+  and file types.
+- **[STORAGE.md](STORAGE.md)** explains the per-user SQLite + file storage design.
+- **[ACL.md](ACL.md)** describes sharing and permissions.
+
+Most subsystems have their own doc in `docs/`.
+
+## Code style (short version)
+
+- English everywhere: code, comments, commits
+- `type` over `interface`
+- No `as any`. Fix the type at the source
+- Theme tokens (`text-muted-foreground`), not hardcoded colors (`text-gray-500`)
+- Data hooks go in `packages/lib/`, not in app components
+- Error handling goes in hooks, not in UI code
+
+Full version: [CODE-STANDARDS.md](CODE-STANDARDS.md).
+
+## License
+
+Contributions are licensed under [MIT](../LICENSE.txt), same as the rest of the project.
+
+## Get in touch
+
+Questions, ideas, or just want to say hi: [reinder@eigen.is](mailto:reinder@eigen.is), or open an issue.

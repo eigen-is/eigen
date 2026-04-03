@@ -57,14 +57,14 @@ This starts 4 containers:
 
 Go to **https://localhost** in your browser. Accept the self-signed certificate warning.
 
-If this is a fresh install, go to **https://localhost/setup** to create your admin account.
+If this is a fresh install, go to **https://localhost/admin** to create your admin account.
 
 ## URLs
 
 | Service | URL | What it does |
 |---------|-----|-------------|
 | Eigen web app | `https://localhost` | Main application |
-| Setup wizard | `https://localhost/setup` | First-run configuration |
+| Admin / Setup | `https://localhost/admin` | Admin panel (shows setup wizard on first run) |
 | Mailpit | `http://localhost:8025` | Web UI showing all caught outbound mail |
 | API direct | `https://localhost/eigen/health` | API health check |
 

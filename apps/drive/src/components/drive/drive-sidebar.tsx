@@ -1,7 +1,7 @@
 import { useMatch, useNavigate } from '@tanstack/react-router';
+import { useTeams } from '@workspace/lib/admin';
 import { useAuth } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, useListTrash, usePathInfo, useRootFolder } from '@workspace/lib/drive';
-import { usePeopleTeams } from '@workspace/lib/people';
 import { usePublicConfig } from '@workspace/lib/public';
 import { useTeamMounts } from '@workspace/lib/team';
 import { teamOwnerId } from '@workspace/lib/types';
@@ -149,7 +149,7 @@ export function DriveSidebar({ condensed = false, onClose, isMobile = false, roo
 
     // Fetch org data for shared drives section
     const { data: config } = usePublicConfig();
-    const { data: teams } = usePeopleTeams(config?.orgId);
+    const { data: teams } = useTeams(config?.orgId);
 
     // Handle file input change
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {

@@ -17,22 +17,28 @@ export function EigenLoader({ className }: EigenLoaderProps) {
             strokeLinejoin="round"
         >
             <g>
-                <path d="m9 0 -4 7.5 4 7.5" />
+                <path d="m12 0 -4 7.5 4 7.5" />
                 <animateTransform
                     attributeName="transform"
                     type="translate"
-                    values="0,0;-6,0;0,0"
+                    values="0,0;-4,0;0,0"
+                    keyTimes="0;0.5;1"
+                    keySplines="0.42 0 0.58 1;0.42 0 0.58 1"
+                    calcMode="spline"
                     dur="1.5s"
                     begin="0.3s"
                     repeatCount="indefinite"
                 />
             </g>
             <g>
-                <path d="m17 0 4 7.5 -4 7.5" />
+                <path d="m16 0 4 7.5 -4 7.5" />
                 <animateTransform
                     attributeName="transform"
                     type="translate"
-                    values="0,0;6,0;0,0"
+                    values="0,0;4,0;0,0"
+                    keyTimes="0;0.5;1"
+                    keySplines="0.42 0 0.58 1;0.42 0 0.58 1"
+                    calcMode="spline"
                     dur="1.5s"
                     begin="0.3s"
                     repeatCount="indefinite"

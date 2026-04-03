@@ -27,9 +27,8 @@ apps/
   slides/       # Presentations (Yjs)
   sheets/       # Spreadsheets (fortune-sheet + Yjs)
   space/        # Team workspace
-  people/       # Org/team admin
+  admin/        # Org/team admin + first-run setup wizard
   index/        # Landing page
-  setup/        # First-run wizard
 
 packages/
   lib/          # @workspace/lib — shared types, hooks, API client, SSE handlers, validation
@@ -307,7 +306,7 @@ Detailed architecture docs in `docs/`:
 | [QUOTA.md](docs/QUOTA.md)                                     | Quota model, resolution, enforcement functions                               |
 | [SSE.md](docs/SSE.md)                                         | Real-time events, adding SSE to new domains                                  |
 | [ACL.md](docs/ACL.md)                                         | ACL inheritance, share propagation, chat invite bubbling, reshare prevention |
-| [ORGANISATIONS-AND-TEAMS.md](docs/ORGANISATIONS-AND-TEAMS.md) | Org/team model, team drives, prefixed owner IDs, People app                  |
+| [ORGANISATIONS-AND-TEAMS.md](docs/ORGANISATIONS-AND-TEAMS.md) | Org/team model, team drives, prefixed owner IDs, Admin app                   |
 | [LAYOUT.md](docs/LAYOUT.md)                                   | AppShell, ColumnLayout, shared components, Drive UI, list patterns           |
 | [CHAT.md](docs/CHAT.md)                                       | Chat rooms, slash commands, embedded chats                                   |
 | [COMMENTS.md](docs/COMMENTS.md)                               | Comment system: index, panel, decorations, shared NoteCard components        |

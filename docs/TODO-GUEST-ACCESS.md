@@ -394,7 +394,7 @@ function ChatView() {
 }
 ```
 
-**People app**: No changes. Uses role-based `<AccessDenied/>` which is correct for admin-only access.
+**Admin app**: No changes. Uses role-based `<AccessDenied/>` which is correct for admin-only access.
 
 ### "Request Already Sent" State
 
@@ -504,7 +504,7 @@ For `user.role === 'guest'`:
 - Hide Mail, Contacts, Calendar, Space navigation items
 
 **App roots** (`apps/*/src/routes/__root.tsx`):
-- Redirect guests away from personal apps (mail, contacts, calendar, space, people)
+- Redirect guests away from personal apps (mail, contacts, calendar, space, admin)
 
 ### Guest Restrictions
 

@@ -1,4 +1,4 @@
-import type { S3Config } from '@workspace/lib/types';
+import { EMPTY_S3, type S3Config } from '@workspace/lib/types';
 import { AlertTriangle, CheckCircle2, Loader2, Wifi } from 'lucide-react';
 import { useState } from 'react';
 import { Alert, AlertDescription } from '../../alert';
@@ -25,14 +25,6 @@ type MountFormProps = {
     onS3Check?: (config: S3Config) => Promise<{ ok: boolean; message: string }>;
     submitLabel?: string;
     isEdit?: boolean;
-};
-
-const EMPTY_S3: S3Config = {
-    endpoint: '',
-    bucket: '',
-    prefix: '',
-    accessKeyId: '',
-    secretAccessKey: '',
 };
 
 export function MountForm({
@@ -177,9 +169,9 @@ export function MountForm({
                         <div className="space-y-1.5">
                             <Label>Region</Label>
                             <Input
-                                value={s3Config.region}
+                                value={s3Config.region ?? ''}
                                 onChange={(e) => updateS3('region', e.target.value)}
-                                placeholder="us-east-1"
+                                placeholder="eu-west-1"
                             />
                         </div>
                         <div className="space-y-1.5">

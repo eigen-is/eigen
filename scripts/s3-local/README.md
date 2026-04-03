@@ -13,14 +13,14 @@ docker compose up -d
 
 In the admin settings (or via `PUT /settings/s3config`), use:
 
-| Field      | Value                    |
-|------------|--------------------------|
-| Endpoint   | `http://localhost:9000`  |
-| Bucket     | `eigen`                  |
-| Prefix     | `test`                   |
-| Access Key | `minioadmin`             |
-| Secret Key | `minioadmin`             |
-| Region     | `us-east-1`             |
+| Field      | Value                                                         |
+|------------|---------------------------------------------------------------|
+| Endpoint   | `http://localhost:9000` or `http://host.docker.internal:9000` | 
+| Bucket     | `eigen`                                                       |
+| Prefix     | `test`                                                        |
+| Access Key | `minioadmin`                                                  |
+| Secret Key | `minioadmin`                                                  |
+| Region     | `eu-west-1`                                                   |
 
 Use `POST /settings/s3check` to verify the connection, then set storage type to `s3`.
 

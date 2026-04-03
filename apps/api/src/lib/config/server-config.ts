@@ -1,4 +1,5 @@
 import type { S3Config } from '@workspace/lib/types';
+import type { ServerStorageType } from '@workspace/lib/types/settings';
 import type { DeepPartial } from '../core';
 import { JsonStore } from '../core/json-store';
 import { LocalFilesystem } from '../core/local-filesystem';
@@ -11,7 +12,7 @@ export type ServerConfig = {
     orgName: string;
     orgId: string;
     storage: {
-        type: 'local-id' | 'local-fullnames' | 's3';
+        type: ServerStorageType;
         s3?: S3Config;
     };
     secret: string;
@@ -69,13 +70,13 @@ export function getS3Config(): S3Config | undefined {
 }
 
 export function getDomain(): string {
-    return store.get().domain || 'localhost';
+    return process.env['DOMAIN'] || store.get().domain || 'localhost';
 }
 
 export async function getPublicConfig() {
     const config = store.get();
     return {
-        domain: config.domain,
+        domain: getDomain(),
         orgName: config.orgName,
         orgId: config.orgId,
     };

@@ -183,7 +183,7 @@ Old module artifacts exist locally. Not tracked in git, so not a problem for the
 
 ### Minimum viable checklist before `git push`
 
-1. [ ] Create `LICENSE` file
+1. [x] Create `LICENSE` file
 2. [ ] `git rm --cached .claude/settings.local.json .env .env.eigen` + update `.gitignore`
 3. [ ] Remove or configure `reinder@infi.nl` in waitlist.ts
 4. [ ] Remove auto-add-Reinder logic from contacts.ts

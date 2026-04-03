@@ -9,6 +9,7 @@ import { getServerSettings, mapStorageType } from '../config/server-settings';
 import { ApiError, JsonStore, LocalFilesystem } from '../core';
 import { Drive } from '../drive';
 import { createMountConfig } from '../mount';
+import { checkS3Connection } from '../storage/s3-storage';
 import { Home } from './home';
 
 export function getSyntheticTeamUser(ownerId: string): User {
@@ -59,6 +60,13 @@ export class TeamHome extends Home {
         maxSizeMB?: number;
         s3Config?: S3Config;
     }): Promise<{ id: string } & MountSettings> {
+        const resolvedType = (input.storageType ??
+            mapStorageType(getServerSettings().defaults.mount.storageType)) as MountSettings['storageType'];
+        if (resolvedType === 's3' && input.s3Config) {
+            const s3Result = await checkS3Connection(input.s3Config);
+            if (!s3Result.ok) throw new ApiError(400, `S3 connection failed: ${s3Result.message}`);
+        }
+
         const mountId = randomUUID().slice(0, 8);
         const serverSettings = getServerSettings();
         const mountSettings: MountSettings = {

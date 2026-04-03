@@ -1,6 +1,6 @@
 import { useNavigate } from '@tanstack/react-router';
+import { useTeams } from '@workspace/lib/admin';
 import { useChats, useCreateChat } from '@workspace/lib/chat';
-import { usePeopleTeams } from '@workspace/lib/people';
 import { usePublicConfig } from '@workspace/lib/public';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -60,7 +60,7 @@ export function ChatSidebar({
     const navigate = useNavigate();
 
     const { data: config } = usePublicConfig();
-    const { data: teams } = usePeopleTeams(config?.orgId);
+    const { data: teams } = useTeams(config?.orgId);
 
     const handleCreateChat = async (fileName: string) => {
         if (!rootPath) return;
