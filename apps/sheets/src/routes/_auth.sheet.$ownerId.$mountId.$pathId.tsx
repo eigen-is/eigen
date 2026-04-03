@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useCollabDocumentInfo } from '@workspace/lib/collab';
-import { AccessDenied, LoadingState } from '@workspace/ui';
+import { LoadingState, RequestAccessView } from '@workspace/ui';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
 import { DriveAccessDialog } from '@workspace/ui/components/layout/drive/drive-access-dialog';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -39,7 +39,7 @@ function SheetView() {
     const handleAccessDialogOpen = useCallback(() => setAccessDialogOpen(true), []);
 
     if (isLoading) return <LoadingState />;
-    if (!path) return <AccessDenied />;
+    if (!path) return <RequestAccessView ownerId={ownerId} mountId={mountId} pathId={pathId} />;
 
     return (
         <>

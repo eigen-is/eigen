@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { openDocument } from '@workspace/lib/api';
+import { AppError } from '@workspace/lib/core/api-error';
 import { useFolderContent, usePathInfo } from '@workspace/lib/drive';
 import {
     type DrivePath,
@@ -8,7 +9,7 @@ import {
     isFolderType,
     isInlineEditable,
 } from '@workspace/lib/types/drive';
-import { LoadingState, NotFound } from '@workspace/ui';
+import { LoadingState, NotFound, RequestAccessView } from '@workspace/ui';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context.tsx';
 import { DriveLayout } from '@workspace/ui/components/layout/drive/drive-layout';
 import { usePreview } from '@workspace/ui/components/layout/preview-provider';
@@ -127,6 +128,9 @@ function DriveRoute() {
     }
 
     if (isFolderContentLoadingError) {
+        if (isFolderContentLoadingError instanceof AppError && isFolderContentLoadingError.status === 403) {
+            return <RequestAccessView ownerId={ownerId} mountId={mountId} pathId={pathId} />;
+        }
         return <NotFound />;
     }
 
