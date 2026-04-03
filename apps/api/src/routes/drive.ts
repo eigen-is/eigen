@@ -386,7 +386,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
         async ({ params, user, body }) => {
             const home = await getHome(params.ownerId);
             const mount = home.drive.getMount(params.mountId);
-            const path = await mount.getActivePath(params.pathId);
+            const _path = await mount.getActivePath(params.pathId);
 
             const requesterName = user.name || user.email;
             home.notifications?.persist({
