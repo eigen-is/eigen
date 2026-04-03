@@ -5,14 +5,14 @@ import type { User } from 'better-auth/types';
 import { eq, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { v4 as uuidv4 } from 'uuid';
-import { getDomain } from '../config/server-config';
+import { getServerSettings } from '../config/server-settings';
 import { DEFAULT_LABELS, LocalFilesystem, PATHS } from '../core';
 import type { ManagedDatabase } from '../core/';
 import { ApiError } from '../core/';
 import type { Home } from '../home';
 import { getHome } from '../home';
 import { generateImagePreview } from '../shared/thumbnails';
-import { getUserByEmail, updateUser } from '../user/';
+import { getOrgOwner, updateUser } from '../user/';
 import { CONTACTS_DB_CONFIG } from './db-config';
 import * as schema from './schema';
 import { buildContactEvent, buildLabelEvent } from './sse-events';
@@ -83,23 +83,26 @@ export class Contacts {
 
             // add the user to the contacts table
             await this.addYourself();
-            // add reinder, zodat het een beetje gezellig is
-            const reinder = await getUserByEmail(`reinder@${getDomain()}`);
-            if (reinder && reinder.id !== user.id) {
-                this.addContact({
-                    eigenId: reinder.id,
-                    firstName: 'Reinder',
-                    lastName: 'Nijhoff',
-                    email: [reinder.email],
-                    phone: [],
-                    company: '',
-                    jobTitle: '',
-                    address: [],
-                    birthday: '',
-                    notes: '',
-                    avatar: '',
-                    labels: [],
-                });
+            const settings = getServerSettings();
+            if (settings.onboarding.autoAddOwnerContact) {
+                const owner = await getOrgOwner();
+                if (owner && owner.id !== user.id) {
+                    const [firstName, ...rest] = (owner.name || '').split(' ');
+                    this.addContact({
+                        eigenId: owner.id,
+                        firstName: firstName || '',
+                        lastName: rest.join(' '),
+                        email: [owner.email],
+                        phone: [],
+                        company: '',
+                        jobTitle: '',
+                        address: [],
+                        birthday: '',
+                        notes: '',
+                        avatar: '',
+                        labels: [],
+                    });
+                }
             }
         }
 

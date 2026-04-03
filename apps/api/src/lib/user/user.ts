@@ -43,3 +43,10 @@ export async function getOrgRole(userId: string): Promise<string | null> {
     const row = await db.select({ role: member.role }).from(member).where(eq(member.userId, userId)).get();
     return row?.role ?? null;
 }
+
+export async function getOrgOwner(): Promise<User | null> {
+    const db = getAuthDrizzleDb();
+    const ownerMember = await db.select({ userId: member.userId }).from(member).where(eq(member.role, 'owner')).get();
+    if (!ownerMember) return null;
+    return getUserById(ownerMember.userId);
+}
