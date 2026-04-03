@@ -4,8 +4,9 @@ import { usePublicUser } from '@workspace/lib/public';
 import { Button } from '@workspace/ui/components/button';
 import { Textarea } from '@workspace/ui/components/textarea';
 import { LockKeyhole } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { UserAvatar } from '../user-avatar';
+import { useLayout } from './layout-context';
 
 type RequestAccessViewProps = {
     ownerId: string;
@@ -15,10 +16,16 @@ type RequestAccessViewProps = {
 
 export function RequestAccessView({ ownerId, mountId, pathId }: RequestAccessViewProps) {
     const auth = useAuth();
+    const { setSidebarHidden } = useLayout();
     const { data: owner } = usePublicUser(ownerId);
     const requestAccess = useRequestAccess(ownerId, mountId, pathId);
     const [message, setMessage] = useState('');
     const [showMessage, setShowMessage] = useState(false);
+
+    useEffect(() => {
+        setSidebarHidden(true);
+        return () => setSidebarHidden(false);
+    }, [setSidebarHidden]);
 
     const handleSubmit = () => {
         requestAccess.mutate({ message: message || undefined });

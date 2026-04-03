@@ -29,11 +29,12 @@ export function AppShell({
     const [appName, setAppName] = useState(initialAppName);
     const [documentTitle, setDocumentTitle] = useState('');
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [sidebarHidden, setSidebarHidden] = useState(false);
 
     const isMobile = useIsMobile();
     const isTablet = useIsTablet();
 
-    const effectiveSidebarMode = sidebar ? sidebarMode : 'none';
+    const effectiveSidebarMode = sidebar && !sidebarHidden ? sidebarMode : 'none';
 
     return (
         <LayoutContext.Provider
@@ -45,6 +46,8 @@ export function AppShell({
                 sidebarOpen,
                 setSidebarOpen,
                 sidebarMode: effectiveSidebarMode,
+                sidebarHidden,
+                setSidebarHidden,
                 isMobile,
                 isTablet,
             }}
@@ -52,7 +55,7 @@ export function AppShell({
             <div className="flex flex-col h-dvh">
                 <Topbar rootRoute={rootRoute} />
                 <div className="flex flex-1 w-full overflow-hidden">
-                    {sidebar && <SidebarContainer sidebar={sidebar} />}
+                    {sidebar && !sidebarHidden && <SidebarContainer sidebar={sidebar} />}
                     <main className="flex-1 flex h-full overflow-hidden">{children ?? <Outlet />}</main>
                 </div>
             </div>

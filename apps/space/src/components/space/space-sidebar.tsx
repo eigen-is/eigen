@@ -67,25 +67,16 @@ export function SpaceSidebar({ condensed = false, onClose, isMobile = false }: S
             </SidebarSection>
 
             <Separator />
-            <>
-                <SidebarSection condensed={condensed}>
-                    {isAdmin && (
-                        <SidebarItem
-                            icon={<Shield className="h-4 w-4" />}
-                            label="Admin"
-                            condensed={condensed}
-                            href={getAdminAppUrl()}
-                        />
-                    )}
-                    {/*<SidebarItem*/}
-                    {/*    icon={<Download className="h-4 w-4" />}*/}
-                    {/*    label="Data export"*/}
-                    {/*    condensed={condensed}*/}
-                    {/*    to="/data"*/}
-                    {/*    params={{}}*/}
-                    {/*/>*/}
-                </SidebarSection>
-            </>
+            <SidebarSection condensed={condensed}>
+                {isAdmin && (
+                    <SidebarItem
+                        icon={<Shield className="h-4 w-4" />}
+                        label="Admin"
+                        condensed={condensed}
+                        href={getAdminAppUrl()}
+                    />
+                )}
+            </SidebarSection>
 
             {/* Storage usage indicator at the bottom of sidebar */}
             <StorageUsage className="mt-auto" condensed={condensed} />
