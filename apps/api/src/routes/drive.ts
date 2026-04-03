@@ -385,8 +385,8 @@ export const driveRouter = new Elysia({ name: 'drive' })
         '/drive/:ownerId/:mountId/path/:pathId/request-access',
         async ({ params, user, body }) => {
             const home = await getHome(params.ownerId);
-            const mount = home.drive.getMount(params.mountId);
-            const _path = await mount.getActivePath(params.pathId);
+            const path = await home.drive.getPath(params.mountId, params.pathId);
+            if (!path || path.trashedAt) throw new ApiError(404, 'Path not found');
 
             const requesterName = user.name || user.email;
             home.notifications?.persist({
