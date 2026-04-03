@@ -18,9 +18,6 @@ interface MyRouterContext {
 
 function DriveRoot() {
     const { user } = useAuth();
-    const mountId = DEFAULT_MOUNT_ID;
-    const { data: root, isLoading, error } = useRootFolder(user?.id || '', mountId);
-    const rootPath = root || null;
 
     if (!user) {
         return (
@@ -29,6 +26,15 @@ function DriveRoot() {
             </AppShell>
         );
     }
+
+    return <AuthenticatedDriveRoot />;
+}
+
+function AuthenticatedDriveRoot() {
+    const { user } = useAuth();
+    const mountId = DEFAULT_MOUNT_ID;
+    const { data: root, isLoading, error } = useRootFolder(user!.id, mountId);
+    const rootPath = root || null;
 
     if (isLoading) {
         return (
