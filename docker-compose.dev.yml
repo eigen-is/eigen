@@ -20,7 +20,13 @@ services:
       TRUSTED_NETWORKS: "127.0.0.0/8,::1,172.16.0.0/12"
 
   postfix:
-    profiles: ["production"]
+    volumes:
+      - ./data/dkim:/data/dkim
+      - ./data/certs/dev:/certs:ro
+      - postfix-queue:/var/spool/postfix
+    environment:
+      DOMAIN: localhost
+      SMTP_RELAY_HOST: ""
 
   dovecot:
     volumes:
