@@ -1,7 +1,15 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useChatRoom } from '@workspace/lib/chat';
+import { useCheckReadPermission } from '@workspace/lib/drive';
 import type { ChatMessage } from '@workspace/lib/types/chat';
-import { ChatMessageInput, ChatMessageList, Toolbar, TooltipButton } from '@workspace/ui';
+import {
+    ChatMessageInput,
+    ChatMessageList,
+    LoadingState,
+    RequestAccessView,
+    Toolbar,
+    TooltipButton,
+} from '@workspace/ui';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
 import { DriveAccessDialog } from '@workspace/ui/components/layout/drive/drive-access-dialog';
@@ -14,11 +22,18 @@ function ChatView() {
     const { ownerId, mountId, chatId } = Route.useParams();
     const chat = useChatRoom(ownerId, mountId, chatId);
 
+    const { data: readPermission, isLoading: permLoading } = useCheckReadPermission(ownerId, mountId, chatId);
+
     const [accessDialogOpen, setAccessDialogOpen] = useState(false);
     const [renameDialogOpen, setRenameDialogOpen] = useState(false);
     const [deleteTarget, setDeleteTarget] = useState<ChatMessage | null>(null);
     const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
     const [focusTrigger, setFocusTrigger] = useState(0);
+
+    if (permLoading) return <LoadingState />;
+    if (!readPermission?.canRead) {
+        return <RequestAccessView ownerId={ownerId} mountId={mountId} pathId={chatId} />;
+    }
 
     const handleDeleteConfirm = async () => {
         if (!deleteTarget) return;
