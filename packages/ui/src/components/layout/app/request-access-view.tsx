@@ -31,7 +31,7 @@ export function RequestAccessView({ ownerId, mountId, pathId }: RequestAccessVie
                 <h2 className="text-lg font-semibold">You need access</h2>
                 {owner && (
                     <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                        <UserAvatar email={ownerId} size="xs" />
+                        <UserAvatar email={ownerId} size="sm" />
                         <span>{owner.name}</span>
                     </div>
                 )}
