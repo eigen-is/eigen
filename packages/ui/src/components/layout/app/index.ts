@@ -10,4 +10,5 @@ export type { LayoutContextType } from './layout-context.tsx';
 export { LayoutContext, useApp, useLayout, useSidebar } from './layout-context.tsx';
 export { LoadingState } from './loading-state.tsx';
 export { NotFound } from './not-found.tsx';
+export { RequestAccessView } from './request-access-view.tsx';
 export { Topbar } from './topbar.tsx';
