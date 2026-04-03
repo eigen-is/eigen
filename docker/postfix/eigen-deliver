@@ -12,6 +12,6 @@ HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
 case "$HTTP_CODE" in
     200|201) exit 0 ;;       # Success
     404)     exit 67 ;;      # EX_NOUSER — unknown recipient, permanent bounce
-    4[0-9][0-9]) exit 65 ;;  # EX_DATAERR — other client error, permanent
-    *)       exit 75 ;;      # EX_TEMPFAIL — server error or unreachable, defer + retry
+    400|413) exit 65 ;;      # EX_DATAERR — malformed message, permanent
+    *)       exit 75 ;;      # EX_TEMPFAIL — server error, transient, or unreachable — defer + retry
 esac
