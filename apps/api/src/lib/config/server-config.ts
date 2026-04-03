@@ -81,7 +81,7 @@ export async function getPublicConfig() {
         domain: getDomain(),
         orgName: config.orgName,
         orgId: config.orgId,
-        waitlistEnabled: settings.onboarding.waitlist.enabled,
+        waitlistEnabled: settings.onboarding?.waitlist?.enabled ?? false,
     };
 }
 
