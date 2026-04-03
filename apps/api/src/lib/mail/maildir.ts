@@ -45,7 +45,8 @@ export default class Maildir {
         this.db = new MailDB(this.home);
         await this.db.init();
         if (isNew) {
-            await this.mailboxDeliver(welcomeMail(this.home.user.name, this.home.user.email));
+            const welcome = welcomeMail(this.home.user.name, this.home.user.email);
+            if (welcome) await this.mailboxDeliver(welcome);
         }
         this.store.watchMailboxes((mailbox) => this.syncMailbox(mailbox));
     }
