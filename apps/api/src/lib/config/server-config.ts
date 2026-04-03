@@ -4,6 +4,7 @@ import type { DeepPartial } from '../core';
 import { JsonStore } from '../core/json-store';
 import { LocalFilesystem } from '../core/local-filesystem';
 import { getServerDataPath } from './paths';
+import { getServerSettings } from './server-settings';
 
 export type { S3Config };
 
@@ -75,10 +76,12 @@ export function getDomain(): string {
 
 export async function getPublicConfig() {
     const config = store.get();
+    const settings = getServerSettings();
     return {
         domain: getDomain(),
         orgName: config.orgName,
         orgId: config.orgId,
+        waitlistEnabled: settings.onboarding.waitlist.enabled,
     };
 }
 

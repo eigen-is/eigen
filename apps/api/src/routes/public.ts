@@ -1,5 +1,6 @@
 import Elysia, { t } from 'elysia';
 import { getPublicConfig } from '../lib/config/server-config.ts';
+import { getServerSettings } from '../lib/config/server-settings.ts';
 import { setCacheHeaders } from '../lib/core/http';
 import { generateFallbackSvg, getAvatarByEmailOrId, getPublicInfo } from '../lib/space/public';
 import { waitlist } from '../lib/space/waitlist';
@@ -19,10 +20,21 @@ export const publicRouter = new Elysia({ name: 'public' })
         return await generateFallbackSvg(params.emailOrId);
     })
     .get('/p/user/:emailOrId', async ({ params }) => await getPublicInfo(params.emailOrId))
-    .post('/p/waitlist', async ({ body }) => await waitlist(body.email, body.notes), {
-        body: t.Object({
-            email: t.String(),
-            notes: t.String(),
-        }),
-    })
+    .post(
+        '/p/waitlist',
+        async ({ body, set }) => {
+            const settings = getServerSettings();
+            if (!settings.onboarding.waitlist.enabled) {
+                set.status = 403;
+                return { error: 'Waitlist is not enabled' };
+            }
+            return await waitlist(body.email, body.notes);
+        },
+        {
+            body: t.Object({
+                email: t.String(),
+                notes: t.String(),
+            }),
+        },
+    )
     .get('/p/config', async () => getPublicConfig());
