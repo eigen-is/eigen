@@ -1,10 +1,11 @@
 import { useRouter } from '@tanstack/react-router';
-import { getSpacePasswordUrl, getSpaceProfileUrl } from '@workspace/lib/api.ts';
+import { useActiveMember } from '@workspace/lib/admin';
+import { getAdminAppUrl, getSpacePasswordUrl, getSpaceProfileUrl } from '@workspace/lib/api.ts';
 import { apps } from '@workspace/lib/apps.ts';
 import { useAuth } from '@workspace/lib/auth/auth-context.tsx';
 import { useUnreadNotificationCount } from '@workspace/lib/notification';
 import { useSpaceSettings, useUpdateSpaceSettings } from '@workspace/lib/space';
-import { LogOut, Menu, Palette, Settings, UserRound } from 'lucide-react';
+import { LogOut, Menu, Palette, Settings, Shield, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '../../button.tsx';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../dialog.tsx';
@@ -43,6 +44,8 @@ function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
     const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
     const { data: settings } = useSpaceSettings();
     const updateSettings = useUpdateSpaceSettings();
+    const { data: activeMember } = useActiveMember();
+    const isAdmin = activeMember?.role === 'admin' || activeMember?.role === 'owner';
 
     const handleLogout = () => {
         auth.logout().then(() => {
@@ -103,6 +106,17 @@ function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
                             </DropdownMenuItem>
                         );
                     })}
+                    {isAdmin && (
+                        <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem asChild>
+                                <a href={getAdminAppUrl()}>
+                                    <Shield />
+                                    Admin
+                                </a>
+                            </DropdownMenuItem>
+                        </>
+                    )}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>
                         <a href={getSpaceProfileUrl()}>
