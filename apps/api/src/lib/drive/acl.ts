@@ -78,12 +78,8 @@ export function normalizeACL(acl: DriveACL[] | null): DriveACL[] | null {
     });
 }
 
-/**
- * Walk the ancestors list to find the outermost collab container
- * (doc/stickies/slides/sheets). Returns null for standalone chats that
- * are not inside a container.
- * `ancestors` should be ordered root-first (as returned by `getBreadcrumb`).
- */
+// Walk the ancestors list (root-first) to find the outermost collab container.
+// Returns null for standalone chats not inside a container.
 export function findContainerFromAncestors(ancestors: DrivePath[]): DrivePath | null {
     let container: DrivePath | null = null;
 
@@ -96,11 +92,8 @@ export function findContainerFromAncestors(ancestors: DrivePath[]): DrivePath | 
     return container;
 }
 
-/**
- * Checks if an ACL entry is already covered by inherited permissions from ancestor
- * paths or by ownership of the drive (team membership).
- * `ancestors` is the breadcrumb from root to the path's parent (excludes the path itself).
- */
+// Checks if an ACL entry is already covered by inherited permissions from ancestor
+// paths or by ownership of the drive (team membership).
 export function filterRedundantACL(
     acl: DriveACL[],
     path: DrivePath,

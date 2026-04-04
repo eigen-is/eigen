@@ -1,5 +1,5 @@
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { getMailComposeUrl, mailApi } from '@workspace/lib/api.ts';
+import { getMailComposeUrl, mailApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import type { Email, EmailSummary } from '@workspace/lib/types/mail';
 import { AppError, onMutationError } from '../../api-error';

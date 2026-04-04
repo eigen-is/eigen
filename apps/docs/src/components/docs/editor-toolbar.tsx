@@ -743,5 +743,3 @@ export const EditorToolbar = ({
         </Toolbar>
     );
 };
-
-export default EditorToolbar;

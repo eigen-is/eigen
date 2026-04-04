@@ -1,11 +1,11 @@
 import { cn } from '../../../lib/utils.ts';
 
-interface BraProps {
+type KetProps = {
     className?: string;
     style?: React.CSSProperties;
-}
+};
 
-export function Ket({ className, style, ...props }: BraProps) {
+export function Ket({ className, style, ...props }: KetProps) {
     return (
         <svg
             className={cn('inline align-baseline overflow-visible', className)}

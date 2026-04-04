@@ -73,38 +73,29 @@ export function CalendarConfigDialog({ open, onOpenChange, calendar, calendarCou
     }, [calendar, form, open, defaultColor]);
 
     const handleSubmit = async (data: CalendarFormValues) => {
-        try {
-            setIsLoading(true);
-            if (isEditMode) {
-                await updateCalendar.mutateAsync({
-                    id: calendar.id,
-                    name: data.name,
-                    color: data.color,
-                    shares,
-                });
-            } else {
-                await createCalendar.mutateAsync({
-                    name: data.name,
-                    color: data.color,
-                });
-            }
-            onOpenChange(false);
-        } catch (error) {
-            console.error('Error saving calendar:', error);
-        } finally {
-            setTimeout(() => setIsLoading(false), 350);
+        setIsLoading(true);
+        if (isEditMode) {
+            await updateCalendar.mutateAsync({
+                id: calendar.id,
+                name: data.name,
+                color: data.color,
+                shares,
+            });
+        } else {
+            await createCalendar.mutateAsync({
+                name: data.name,
+                color: data.color,
+            });
         }
+        onOpenChange(false);
+        setTimeout(() => setIsLoading(false), 350);
     };
 
     const handleDelete = async () => {
         if (!calendar) return;
-        try {
-            await deleteCalendar.mutateAsync(calendar.id);
-            setShowDeleteConfirmation(false);
-            onOpenChange(false);
-        } catch (error) {
-            console.error('Error deleting calendar:', error);
-        }
+        await deleteCalendar.mutateAsync(calendar.id);
+        setShowDeleteConfirmation(false);
+        onOpenChange(false);
     };
 
     return (

@@ -52,28 +52,19 @@ export function SharedCalendarConfigDialog({ open, onOpenChange, sharedCalendar 
     const isTeamCalendar = parseOwnerId(sharedCalendar.ownerUserId).type === 'team';
 
     const handleSave = async () => {
-        try {
-            setIsLoading(true);
-            await updateSharedCalendar.mutateAsync({
-                id: sharedCalendar.id,
-                color: color !== sharedCalendar.calendarColor ? color : null,
-            });
-            onOpenChange(false);
-        } catch (error) {
-            console.error('Error updating shared calendar:', error);
-        } finally {
-            setTimeout(() => setIsLoading(false), 350);
-        }
+        setIsLoading(true);
+        await updateSharedCalendar.mutateAsync({
+            id: sharedCalendar.id,
+            color: color !== sharedCalendar.calendarColor ? color : null,
+        });
+        onOpenChange(false);
+        setTimeout(() => setIsLoading(false), 350);
     };
 
     const handleDelete = async () => {
-        try {
-            await deleteSharedCalendar.mutateAsync(sharedCalendar.id);
-            setShowDeleteConfirmation(false);
-            onOpenChange(false);
-        } catch (error) {
-            console.error('Error removing shared calendar:', error);
-        }
+        await deleteSharedCalendar.mutateAsync(sharedCalendar.id);
+        setShowDeleteConfirmation(false);
+        onOpenChange(false);
     };
 
     return (

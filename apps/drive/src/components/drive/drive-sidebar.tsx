@@ -43,12 +43,12 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 
-interface DriveSidebarProps {
+type DriveSidebarProps = {
     condensed?: boolean;
     onClose?: () => void;
     isMobile?: boolean;
     rootPath: DrivePath | null;
-}
+};
 
 function TeamMountItem({
     ownerId,
@@ -75,17 +75,7 @@ function TeamMountItem({
     );
 }
 
-function TeamDriveItems({
-    teamId,
-    teamName: _teamName,
-    icon,
-    condensed,
-}: {
-    teamId: string;
-    teamName: string;
-    icon: React.ReactNode;
-    condensed: boolean;
-}) {
+function TeamDriveItems({ teamId, icon, condensed }: { teamId: string; icon: React.ReactNode; condensed: boolean }) {
     const ownerId = teamOwnerId(teamId);
     const { data: mounts } = useTeamMounts(teamId);
 
@@ -302,7 +292,6 @@ export function DriveSidebar({ condensed = false, onClose, isMobile = false, roo
                             <TeamDriveItems
                                 key={team.id}
                                 teamId={team.id}
-                                teamName={team.name}
                                 icon={<UserAvatar email={teamOwnerId(team.id)} className="h-4 w-4" />}
                                 condensed={condensed}
                             />

@@ -193,7 +193,6 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
     const [editingMount, setEditingMount] = useState<{ id: string; mount: MountSettings } | null>(null);
     const [showSettingsForm, setShowSettingsForm] = useState(false);
 
-    // Settings form draft state
     const [draftName, setDraftName] = useState(team.name);
     const [draftCalEnabled, setDraftCalEnabled] = useState(true);
     const [draftCalPermission, setDraftCalPermission] = useState('read');
@@ -307,7 +306,6 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
 
     return (
         <div className="p-6 space-y-6 h-full overflow-y-auto">
-            {/* Header */}
             <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold truncate">{team.name}</h2>
                 {!showSettingsForm && (
@@ -318,7 +316,6 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
                 )}
             </div>
 
-            {/* Settings form (toggled) */}
             {showSettingsForm ? (
                 <div className="space-y-5 border rounded-lg p-4">
                     <div className="space-y-1.5">
@@ -391,7 +388,6 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
                     </div>
                 </div>
             ) : (
-                /* Read-only settings display */
                 <div className="space-y-4">
                     <div className="flex items-center justify-between">
                         <span className="text-sm text-muted-foreground">Calendar</span>
@@ -419,7 +415,6 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
 
             <Separator />
 
-            {/* Mounts */}
             <div className="space-y-3">
                 <div className="flex items-center justify-between">
                     <h3 className="text-sm font-medium">Mounts ({Object.keys(mounts).length})</h3>
@@ -499,7 +494,6 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
 
             <Separator />
 
-            {/* Members */}
             <div className="space-y-3">
                 <div className="flex items-center justify-between">
                     <h3 className="text-sm font-medium">Members ({teamMembers.length})</h3>

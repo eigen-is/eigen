@@ -154,7 +154,6 @@ function MailRoute() {
                         isDraft ? (
                             <EmailDraft
                                 email={selectedEmail as EmailDraftType}
-                                onDelete={handleDeleteEmail}
                                 sendDraft={actions.handleSendEmail}
                                 onAutoSave={actions.saveDraft}
                                 to={to}

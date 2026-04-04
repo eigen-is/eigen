@@ -1,16 +1,6 @@
-import { type Context, Elysia } from 'elysia';
+import { Elysia } from 'elysia';
 import { auth } from '../lib/auth/auth';
 import { ApiError } from '../lib/core';
-
-export const betterAuthView = (context: Context) => {
-    const BETTER_AUTH_ACCEPT_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'];
-    // validate request method
-    if (BETTER_AUTH_ACCEPT_METHODS.includes(context.request.method)) {
-        return auth.handler(context.request);
-    } else {
-        return new Response('Method Not Allowed', { status: 405 });
-    }
-};
 
 // user middleware (compute user and session and pass to routes)
 export const betterAuth = new Elysia({ name: 'better-auth' }).mount(auth.handler).macro({

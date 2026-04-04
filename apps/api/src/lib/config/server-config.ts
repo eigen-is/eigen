@@ -5,8 +5,6 @@ import { JsonStore } from '../core/json-store';
 import { LocalFilesystem } from '../core/local-filesystem';
 import { getServerDataPath } from './paths';
 
-export type { S3Config };
-
 export type ServerConfig = {
     domain: string;
     orgName: string;
@@ -75,7 +73,7 @@ export function getDomain(): string {
     return store.get().domain || envDomain || 'localhost';
 }
 
-export async function getPublicConfig() {
+export function getPublicConfig() {
     const config = store.get();
     return {
         domain: getDomain(),
@@ -84,5 +82,4 @@ export async function getPublicConfig() {
     };
 }
 
-// Load on import
 await ensureLoaded();

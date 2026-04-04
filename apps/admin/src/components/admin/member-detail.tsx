@@ -11,10 +11,10 @@ import { KeyRound, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { ResetPasswordDialog } from './reset-password-dialog';
 
-interface MemberDetailToolbarProps {
+type MemberDetailToolbarProps = {
     member: OrgMember;
     organizationId?: string;
-}
+};
 
 export function MemberDetailToolbar({ member, organizationId }: MemberDetailToolbarProps) {
     const [showRemove, setShowRemove] = useState(false);
@@ -50,10 +50,10 @@ export function MemberDetailToolbar({ member, organizationId }: MemberDetailTool
     );
 }
 
-interface MemberDetailProps {
+type MemberDetailProps = {
     member: OrgMember;
     organizationId?: string;
-}
+};
 
 export function MemberDetail({ member, organizationId }: MemberDetailProps) {
     const [showDelete, setShowDelete] = useState(false);

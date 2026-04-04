@@ -31,7 +31,6 @@ export function ProfileEditor() {
     const { user } = useAuth();
     const { data: contact, isLoading, error: fetchError } = useMeContact();
     const [avatar, setAvatar] = useState<string | null>(null);
-    const [submitError, setSubmitError] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const initializedRef = useRef(false);
 
@@ -62,23 +61,15 @@ export function ProfileEditor() {
     const handleSubmit = form.handleSubmit(async (data) => {
         if (!contact) return;
 
-        try {
-            const updateData = {
-                ...contact,
-                firstName: data.firstName,
-                lastName: data.lastName || '',
-                avatar: avatar || '',
-            };
+        const updateData = {
+            ...contact,
+            firstName: data.firstName,
+            lastName: data.lastName || '',
+            avatar: avatar || '',
+        };
 
-            await updateContactMutation.mutateAsync(updateData);
-
-            setSubmitError(null);
-
-            await navigate({ to: '/' });
-        } catch (err) {
-            console.error('Error updating profile:', err);
-            setSubmitError('Failed to update your profile. Please try again.');
-        }
+        await updateContactMutation.mutateAsync(updateData);
+        await navigate({ to: '/' });
     });
 
     if (isLoading && !contact) {
@@ -90,144 +81,136 @@ export function ProfileEditor() {
     }
 
     return (
-        <>
-            {submitError && (
-                <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 text-destructive rounded-md">
-                    {submitError}
-                </div>
-            )}
+        <Form {...form}>
+            <form onSubmit={handleSubmit} className="space-y-8">
+                <div className="flex justify-center mb-8">
+                    <div className="h-32 w-32 relative group">
+                        <UserAvatar
+                            name={contact ? `${contact.firstName} ${contact.lastName}` : ''}
+                            email={contact?.email?.[0]}
+                            imageUrl={avatar || ''}
+                            className="h-full w-full"
+                            size="lg"
+                        />
 
-            <Form {...form}>
-                <form onSubmit={handleSubmit} className="space-y-8">
-                    <div className="flex justify-center mb-8">
-                        <div className="h-32 w-32 relative group">
-                            <UserAvatar
-                                name={contact ? `${contact.firstName} ${contact.lastName}` : ''}
-                                email={contact?.email?.[0]}
-                                imageUrl={avatar || ''}
-                                className="h-full w-full"
-                                size="lg"
-                            />
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                    const formData = new FormData();
+                                    formData.append('file', file);
 
-                            <input
-                                ref={fileInputRef}
-                                type="file"
-                                accept="image/*"
-                                className="hidden"
-                                onChange={async (e) => {
-                                    const file = e.target.files?.[0];
-                                    if (file) {
-                                        const formData = new FormData();
-                                        formData.append('file', file);
+                                    const uploadHandler = upload.createUpload(file.name);
 
-                                        const uploadHandler = upload.createUpload(file.name);
-
-                                        try {
-                                            await uploadWithProgress({
-                                                url: getContactsAvatarUploadUrl(user?.id || ''),
-                                                formData,
-                                                onProgress: (progress: number) => {
-                                                    uploadHandler.updateProgress(progress);
-                                                },
-                                                onSuccess: (response: string) => {
-                                                    uploadHandler.complete();
-                                                    setAvatar(response);
-                                                },
-                                                onError: (err) => {
-                                                    uploadHandler.error();
-                                                    console.error('Upload error:', err);
-                                                },
-                                            });
-                                        } catch (err: unknown) {
-                                            console.error('Error uploading file:', err);
-                                            uploadHandler.error();
-                                        }
-
-                                        e.target.value = '';
+                                    try {
+                                        await uploadWithProgress({
+                                            url: getContactsAvatarUploadUrl(user?.id || ''),
+                                            formData,
+                                            onProgress: (progress: number) => {
+                                                uploadHandler.updateProgress(progress);
+                                            },
+                                            onSuccess: (response: string) => {
+                                                uploadHandler.complete();
+                                                setAvatar(response);
+                                            },
+                                            onError: (err) => {
+                                                uploadHandler.error();
+                                                console.error('Upload error:', err);
+                                            },
+                                        });
+                                    } catch (err: unknown) {
+                                        console.error('Error uploading file:', err);
+                                        uploadHandler.error();
                                     }
-                                }}
-                            />
 
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button
-                                        size="icon"
-                                        variant="secondary"
-                                        className="absolute bottom-1 right-1 rounded-full h-8 w-8 shadow-md opacity-80 hover:opacity-100"
-                                    >
-                                        <Camera className="h-4 w-4" />
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
+                                    e.target.value = '';
+                                }
+                            }}
+                        />
+
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button
+                                    size="icon"
+                                    variant="secondary"
+                                    className="absolute bottom-1 right-1 rounded-full h-8 w-8 shadow-md opacity-80 hover:opacity-100"
+                                >
+                                    <Camera className="h-4 w-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                    onSelect={() => {
+                                        fileInputRef.current?.click();
+                                    }}
+                                >
+                                    Upload from files
+                                </DropdownMenuItem>
+                                {avatar && (
                                     <DropdownMenuItem
                                         onSelect={() => {
-                                            fileInputRef.current?.click();
+                                            setAvatar(null);
                                         }}
                                     >
-                                        Upload from files
+                                        Remove avatar
                                     </DropdownMenuItem>
-                                    {avatar && (
-                                        <DropdownMenuItem
-                                            onSelect={() => {
-                                                setAvatar(null);
-                                            }}
-                                        >
-                                            Remove avatar
-                                        </DropdownMenuItem>
-                                    )}
-                                </DropdownMenuContent>
-                            </DropdownMenu>
+                                )}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                    <FormField
+                        control={form.control}
+                        name="firstName"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>First Name</FormLabel>
+                                <FormControl>
+                                    <Input placeholder="Enter your first name" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+
+                    <FormField
+                        control={form.control}
+                        name="lastName"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Last Name</FormLabel>
+                                <FormControl>
+                                    <Input placeholder="Enter your last name" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+                </div>
+                <div className="bg-accent border text-accent-foreground rounded-md p-4">
+                    <div className="flex">
+                        <InfoIcon className="h-5 w-5 text-primary mr-2" />
+                        <div>
+                            <h3 className="font-medium">Important</h3>
+                            <p className="text-sm">
+                                Your profile picture and name are public information visible to other users. These
+                                details may appear in shared workspaces, messages, and documents throughout eigen.
+                            </p>
                         </div>
                     </div>
-
-                    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                        <FormField
-                            control={form.control}
-                            name="firstName"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>First Name</FormLabel>
-                                    <FormControl>
-                                        <Input placeholder="Enter your first name" {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-
-                        <FormField
-                            control={form.control}
-                            name="lastName"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Last Name</FormLabel>
-                                    <FormControl>
-                                        <Input placeholder="Enter your last name" {...field} />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                    </div>
-                    <div className="bg-accent border text-accent-foreground rounded-md p-4">
-                        <div className="flex">
-                            <InfoIcon className="h-5 w-5 text-primary mr-2" />
-                            <div>
-                                <h3 className="font-medium">Important</h3>
-                                <p className="text-sm">
-                                    Your profile picture and name are public information visible to other users. These
-                                    details may appear in shared workspaces, messages, and documents throughout eigen.
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                    <div className="flex justify-end">
-                        <Button type="submit" disabled={updateContactMutation.isPending} className="w-full sm:w-auto">
-                            {updateContactMutation.isPending ? 'Saving...' : 'Save Changes'}
-                        </Button>
-                    </div>
-                </form>
-            </Form>
-        </>
+                </div>
+                <div className="flex justify-end">
+                    <Button type="submit" disabled={updateContactMutation.isPending} className="w-full sm:w-auto">
+                        {updateContactMutation.isPending ? 'Saving...' : 'Save Changes'}
+                    </Button>
+                </div>
+            </form>
+        </Form>
     );
 }

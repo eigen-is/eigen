@@ -1,18 +1,16 @@
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
 import { useState } from 'react';
 import type * as Y from 'yjs';
-import type { DeckData } from '../types';
 
 type DragState = {
     activeId: string | null;
 };
 
 type UseSlideDndProps = {
-    deck: DeckData;
     yjsDoc: Y.Doc | null;
 };
 
-export const useSlideDnd = ({ deck: _deck, yjsDoc }: UseSlideDndProps) => {
+export const useSlideDnd = ({ yjsDoc }: UseSlideDndProps) => {
     const [dragState, setDragState] = useState<DragState>({ activeId: null });
 
     const handleDragStart = (event: DragStartEvent) => {

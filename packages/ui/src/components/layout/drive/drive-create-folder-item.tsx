@@ -6,7 +6,7 @@ import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { useEffect, useState } from 'react';
 
-interface DriveCreateItemDialogProps {
+type DriveCreateItemDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     onCreateItem: (itemName: string) => void;
@@ -16,7 +16,7 @@ interface DriveCreateItemDialogProps {
     title?: string;
     defaultValue?: string;
     confirmLabel?: string;
-}
+};
 
 export function DriveCreateItemDialog({
     open,

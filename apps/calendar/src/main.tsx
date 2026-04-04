@@ -7,18 +7,16 @@ import { routeTree } from './routeTree.gen';
 import '@workspace/ui/globals.css';
 import './../css/globals.css';
 
-// Set up a Router instance
 const router = createRouter({
     routeTree,
     defaultPreload: 'intent',
     basepath: '/calendar',
     scrollRestoration: true,
     context: {
-        auth: undefined!, // This will be set after we wrap the app in an AuthProvider
+        auth: undefined!,
     },
 });
 
-// Register things for typesafety
 declare module '@tanstack/react-router' {
     interface Register {
         router: typeof router;

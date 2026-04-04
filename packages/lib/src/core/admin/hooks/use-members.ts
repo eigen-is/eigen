@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { settingsApi } from '../../api';
 import { AppError, onMutationError } from '../../api-error';
 import { authClient } from '../../auth/hooks/use-auth-client';
-import { adminKeys } from './keys.ts';
+import { adminKeys } from './keys';
 
 export function useMembers(organizationId?: string) {
     return useQuery({

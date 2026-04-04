@@ -1,11 +1,11 @@
 import { useHotkey } from '@tanstack/react-hotkeys';
 
-interface MediaPreviewProps {
+type MediaPreviewProps = {
     src: string;
     type: 'image' | 'video';
     caption?: string;
     onClose: () => void;
-}
+};
 
 export function MediaPreview({ src, type, caption, onClose }: MediaPreviewProps) {
     useHotkey('Escape', () => onClose());

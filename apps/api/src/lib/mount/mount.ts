@@ -10,6 +10,7 @@ import {
     DRIVE_MIME_STICKIES,
     DRIVE_TYPE_CHAT,
     DRIVE_TYPE_DOC,
+    DRIVE_TYPE_FOLDER,
     DRIVE_TYPE_SHEETS,
     DRIVE_TYPE_SLIDES,
     DRIVE_TYPE_STICKIES,
@@ -166,10 +167,10 @@ export class Mount {
                 id: randomUUID(),
                 file: '',
                 name: 'Drive',
-                type: 'folder',
+                type: DRIVE_TYPE_FOLDER,
                 parentId: null,
                 ownerId: this.ownerId,
-                mimeType: 'folder',
+                mimeType: DRIVE_MIME_FOLDER,
                 acl: null,
                 createdAt: new Date(),
                 updatedAt: new Date(),
@@ -257,7 +258,7 @@ export class Mount {
             sheets: DRIVE_MIME_SHEETS,
             chat: DRIVE_MIME_CHAT,
         };
-        const mimeType = mimeTypeMap[type] ?? 'folder';
+        const mimeType = mimeTypeMap[type] ?? DRIVE_MIME_FOLDER;
         const fileValue = this.isPathBased ? name : '';
 
         // Create directory before DB insert so a crash leaves an orphaned

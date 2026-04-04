@@ -100,10 +100,8 @@ export function ContactAutosuggest({
         [isOpen, displayedSuggestions, selectedIndex, handleSelect],
     );
 
-    // Handle Enter key for onSubmit
     const handleKeyDownSubmit = (event: React.KeyboardEvent<HTMLInputElement>) => {
         if (event.key === 'Enter' && onSubmit) {
-            console.log('Submitting value:', inputValue);
             onSubmit(inputValue);
         }
     };

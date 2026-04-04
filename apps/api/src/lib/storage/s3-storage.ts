@@ -1,4 +1,5 @@
 import { type BunFile, S3Client, type S3File } from 'bun';
+import { ApiError } from '../core';
 import type { S3Config, StorageBackend } from './types';
 
 export async function checkS3Connection(config: S3Config): Promise<{ ok: boolean; message: string }> {
@@ -39,7 +40,7 @@ export class S3Storage implements StorageBackend {
 
     private getKey(key: string): string {
         if (key.split('/').some((seg) => seg === '..')) {
-            throw new Error(`Path traversal blocked: ${key}`);
+            throw new ApiError(400, 'Invalid storage path: path traversal detected');
         }
         return this.prefix ? `${this.prefix}/${key}` : key;
     }

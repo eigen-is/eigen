@@ -1,7 +1,7 @@
+import { randomUUID } from 'node:crypto';
 import type { Notification } from '@workspace/lib/types/notification';
 import { desc, eq, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
-import { v4 as uuidv4 } from 'uuid';
 import type { ManagedDatabase } from '../core';
 import type { Home } from '../home';
 import { NOTIFICATION_CENTER_DB_CONFIG } from './db-config';
@@ -53,7 +53,7 @@ export class NotificationCenter {
     }
 
     persist(input: PersistInput): Notification {
-        const id = uuidv4();
+        const id = randomUUID();
         const now = new Date();
         const row = {
             id,
