@@ -1,15 +1,15 @@
-interface MediaItem {
+type MediaItem = {
     src: string;
     type: 'image' | 'video';
     caption?: string;
     thumbnail?: string;
     poster?: string;
-}
+};
 
-interface MediaGridData {
+type MediaGridData = {
     columns: string;
     items: MediaItem[];
-}
+};
 
 export function parseMediaGrids(markdown: string): {
     content: string;

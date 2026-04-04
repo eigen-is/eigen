@@ -1,5 +1,3 @@
-'use client';
-
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { cn } from '@workspace/ui/lib/utils';
 import { Command as CommandPrimitive } from 'cmdk';

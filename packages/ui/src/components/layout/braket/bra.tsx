@@ -1,9 +1,9 @@
 import { cn } from '../../../lib/utils.ts';
 
-interface BraProps {
+type BraProps = {
     className?: string;
     style?: React.CSSProperties;
-}
+};
 
 export function Bra({ className, style, ...props }: BraProps) {
     return (

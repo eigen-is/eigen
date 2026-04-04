@@ -12,13 +12,13 @@ import { Plus } from 'lucide-react';
 import { useMemo, useRef } from 'react';
 import { CreateUserDialog } from './create-user-dialog';
 
-interface MembersListToolbarProps {
+type MembersListToolbarProps = {
     searchQuery: string;
     onSearchChange: (query: string) => void;
     showCreateDialog: boolean;
     onShowCreateDialog: (show: boolean) => void;
     organizationId?: string;
-}
+};
 
 export function MembersListToolbar({
     searchQuery,
@@ -54,12 +54,12 @@ const roleBadgeVariant: Record<string, 'default' | 'secondary' | 'outline'> = {
     member: 'outline',
 };
 
-interface MembersListProps {
+type MembersListProps = {
     members: OrgMember[];
     searchQuery: string;
     activeMemberId?: string;
     onRowClick: (memberId: string) => void;
-}
+};
 
 export function MembersList({ members, searchQuery, activeMemberId, onRowClick }: MembersListProps) {
     const listRef = useRef<HTMLDivElement>(null);

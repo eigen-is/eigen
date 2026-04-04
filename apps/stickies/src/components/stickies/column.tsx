@@ -95,7 +95,6 @@ export function Column({
                                     key={card.id}
                                     card={card}
                                     canWrite={canWrite}
-                                    isMobile={isMobile}
                                     yjsDoc={yjsDoc}
                                     ownerId={ownerId}
                                     mountId={mountId}

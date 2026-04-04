@@ -17,7 +17,6 @@ function ChatIndex() {
     const [createChatOpen, setCreateChatOpen] = useState(false);
     const createChatMutation = useCreateChat(user?.id || '', mountId);
 
-    // Auto-redirect to first chat if available
     useEffect(() => {
         if (data && data.length > 0) {
             const chat = data[0];

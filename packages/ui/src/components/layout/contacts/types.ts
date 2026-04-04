@@ -1,4 +1,3 @@
-// TypeScript interfaces for the contact autosuggest component
 import type { Ref } from 'react';
 
 export type ContactAutosuggestProps = {

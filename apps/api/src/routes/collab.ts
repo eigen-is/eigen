@@ -1,13 +1,13 @@
 import type { User } from 'better-auth/types';
 import type { ServerWebSocket } from 'bun';
 import { Elysia, t } from 'elysia';
-import { getCommentIndex } from '../lib/chat/comment-index.ts';
-import type CollabDocument from '../lib/collab/collabDocument.ts';
-import { ApiError } from '../lib/core/errors.ts';
+import { getCommentIndex } from '../lib/chat/comment-index';
+import type CollabDocument from '../lib/collab/collabDocument';
+import { ApiError } from '../lib/core/errors';
 import { getSharedDrive } from '../lib/drive';
-import type Drive from '../lib/drive/drive.ts';
-import type SharedDrive from '../lib/drive/sharedDrive.ts';
-import { keepWebSocketAlive } from '../utils/websockets.ts';
+import type Drive from '../lib/drive/drive';
+import type SharedDrive from '../lib/drive/sharedDrive';
+import { keepWebSocketAlive } from '../utils/websockets';
 import { betterAuth } from './auth';
 
 type CollabWsData = {

@@ -10,16 +10,14 @@ import { useEffect, useState } from 'react';
 
 type S3CheckResult = { ok: boolean; message: string };
 
-interface StorageTypePickerProps {
+type StorageTypePickerProps = {
     storageType: ServerStorageType;
     onStorageTypeChange: (type: ServerStorageType) => void;
     s3Config: S3Config;
     onS3ConfigChange: (config: S3Config) => void;
-    /** Custom S3 check function. Defaults to the authenticated settings endpoint. */
     checkS3?: (config: S3Config) => Promise<S3CheckResult>;
-    /** Called when S3 connection verified status changes. */
     onS3Verified?: (verified: boolean) => void;
-}
+};
 
 export function StorageTypePicker({
     storageType,
@@ -36,7 +34,6 @@ export function StorageTypePicker({
     const isS3 = storageType === 's3';
     const s3Valid = s3Config.endpoint && s3Config.bucket && s3Config.accessKeyId && s3Config.secretAccessKey;
 
-    // Notify parent when verified status changes
     useEffect(() => {
         onS3Verified?.(!isS3 || !!s3CheckResult?.ok);
     }, [isS3, s3CheckResult, onS3Verified]);

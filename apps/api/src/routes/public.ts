@@ -1,6 +1,6 @@
-import Elysia, { t } from 'elysia';
-import { getPublicConfig } from '../lib/config/server-config.ts';
-import { getServerSettings } from '../lib/config/server-settings.ts';
+import { Elysia, t } from 'elysia';
+import { getPublicConfig } from '../lib/config/server-config';
+import { getServerSettings } from '../lib/config/server-settings';
 import { setCacheHeaders } from '../lib/core/http';
 import { generateFallbackSvg, getAvatarByEmailOrId, getPublicInfo } from '../lib/space/public';
 import { waitlist } from '../lib/space/waitlist';

@@ -15,14 +15,14 @@ import { Separator } from '@workspace/ui/components/separator';
 import { ClipboardList, Plus, Settings, Users, UsersRound } from 'lucide-react';
 import { useState } from 'react';
 
-interface AdminSidebarProps {
+type AdminSidebarProps = {
     condensed?: boolean;
     onClose?: () => void;
     isMobile?: boolean;
     teams?: OrgTeam[];
     isOwner?: boolean;
     onAddMembersToTeam?: (memberIds: string[], teamId: string) => void;
-}
+};
 
 export function AdminSidebar({
     condensed = false,

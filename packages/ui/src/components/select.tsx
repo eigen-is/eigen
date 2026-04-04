@@ -1,5 +1,3 @@
-'use client';
-
 import { cn } from '@workspace/ui/lib/utils';
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from 'lucide-react';
 import { Select as SelectPrimitive } from 'radix-ui';

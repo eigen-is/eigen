@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { authClient } from '../../auth/hooks/use-auth-client';
-import { adminKeys } from './keys.ts';
+import { adminKeys } from './keys';
 
 export function useActiveMember() {
     return useQuery({

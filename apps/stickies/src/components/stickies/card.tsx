@@ -15,22 +15,13 @@ function hashRotation(id: string): number {
 type CardProps = {
     card: CardItem;
     canWrite?: boolean;
-    isMobile: boolean;
     yjsDoc: Y.Doc | null;
     ownerId: string;
     mountId: string;
     onContextMenu?: (e: React.MouseEvent, card: CardItem) => void;
 };
 
-export function StickyCard({
-    card,
-    canWrite = true,
-    isMobile: _isMobile,
-    yjsDoc,
-    ownerId,
-    mountId,
-    onContextMenu,
-}: CardProps) {
+export function StickyCard({ card, canWrite = true, yjsDoc, ownerId, mountId, onContextMenu }: CardProps) {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
 
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({

@@ -9,6 +9,7 @@ import * as awarenessProtocol from 'y-protocols/awareness';
 import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
 import type { ManagedDatabase } from '../core';
+import { ApiError } from '../core/errors';
 import type { Drive } from '../drive';
 import { COLLAB_DB_CONFIG } from './db-config';
 import * as schema from './schema.ts';
@@ -185,7 +186,7 @@ export default class CollabDocument {
             await CollabDocument.create(this.drive, this.path.mountId, this.path.id);
             dataDbPath = await this.drive.getChildByName(this.path.mountId, this.path.id, 'data.db');
             if (!dataDbPath) {
-                throw new Error(`Failed to create data.db in ${this.path.name}`);
+                throw new ApiError(500, `Failed to create data.db in ${this.path.name}`);
             }
         }
 
@@ -296,9 +297,8 @@ export default class CollabDocument {
                 this.connectionClientIds.delete(connection);
             }
         }
-        // check if this.connections is empty
-        if (this.connections.size <= 0) {
-            this.drive.closeCollabDocument(this.path.mountId, this.path.id);
+        if (this.connections.size === 0) {
+            this.drive.closeCollabDocument(this.path.mountId, this.path.id).catch(() => {});
         }
     }
 
@@ -306,37 +306,27 @@ export default class CollabDocument {
         if (this.closed) {
             return;
         }
-        // Create a decoder from the message
         const decoder = decoding.createDecoder(update);
         const messageType = decoding.readVarUint(decoder);
 
         if (messageType === MESSAGE_SYNC) {
-            // Check if the message is a read-only update
             const updateType = decoding.peekUint8(decoder);
             if (!canWrite && (updateType === 1 || updateType === 2)) {
                 return;
             }
 
-            // Create response encoder
             const encoder = encoding.createEncoder();
             encoding.writeVarUint(encoder, MESSAGE_SYNC);
-
-            // Process sync message
             syncProtocol.readSyncMessage(decoder, encoder, this.doc, conn);
 
-            // Only send a response if we have content beyond the message type
             if (encoding.length(encoder) > 1) {
                 const responseMessage = encoding.toUint8Array(encoder);
                 conn.send(Buffer.from(responseMessage));
             }
-
-            // No need to broadcast - updates trigger the doc's 'update' event which is handled separately
         } else if (messageType === MESSAGE_AWARENESS) {
-            // Process awareness message
             const awarenessUpdate = decoding.readVarUint8Array(decoder);
             awarenessProtocol.applyAwarenessUpdate(this.awareness, awarenessUpdate, conn);
 
-            // Track which clientIds belong to this connection
             try {
                 const trackDecoder = decoding.createDecoder(awarenessUpdate);
                 const len = decoding.readVarUint(trackDecoder);
@@ -351,7 +341,6 @@ export default class CollabDocument {
                 // ignore parsing errors
             }
 
-            // Broadcast the awareness update to all other clients
             const encoder = encoding.createEncoder();
             encoding.writeVarUint(encoder, MESSAGE_AWARENESS);
             encoding.writeVarUint8Array(encoder, awarenessUpdate);
@@ -361,7 +350,6 @@ export default class CollabDocument {
         }
     }
 
-    // Helper function to broadcast a message to all clients
     private broadcastMessage(originConn: ServerWebSocket<undefined>, message: Uint8Array) {
         if (this.closed) {
             return;
@@ -378,22 +366,17 @@ export default class CollabDocument {
         }
     }
 
-    // Helper function to send full document state to a client
     private sendSyncStep1(conn: ServerWebSocket<undefined>) {
         if (this.closed) {
             return;
         }
         try {
-            // Create encoder for sync step 1 message
             const encoder = encoding.createEncoder();
             encoding.writeVarUint(encoder, MESSAGE_SYNC);
             syncProtocol.writeSyncStep1(encoder, this.doc);
             const syncMessage = encoding.toUint8Array(encoder);
-
-            // Send the message
             conn.send(Buffer.from(syncMessage));
 
-            // Send awareness information if any exists
             const awarenessStates = this.awareness.getStates();
             if (awarenessStates.size > 0) {
                 const awarenessEncoder = encoding.createEncoder();

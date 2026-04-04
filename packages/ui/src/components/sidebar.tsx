@@ -1,5 +1,3 @@
-'use client';
-
 import { Slot } from '@radix-ui/react-slot';
 import { useHotkey } from '@tanstack/react-hotkeys';
 import { Button } from '@workspace/ui/components/button';

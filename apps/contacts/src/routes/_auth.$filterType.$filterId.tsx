@@ -146,7 +146,7 @@ function ContactsRoute() {
                 </Column>
                 <Column id="detail" width="flex" onBack={handleBackToList} toolbar={detailToolbar}>
                     {contact ? (
-                        <ContactDetail contact={contact} onDelete={(_id) => setDeleteTargets([contact])} />
+                        <ContactDetail contact={contact} />
                     ) : (
                         <EmptyState message="Select a contact to view details" />
                     )}

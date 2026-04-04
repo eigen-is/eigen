@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { OrgTeam } from '@workspace/lib/types/admin';
 import { onMutationError } from '../../api-error';
 import { authClient } from '../../auth/hooks/use-auth-client';
-import { adminKeys } from './keys.ts';
+import { adminKeys } from './keys';
 
 export function useTeams(organizationId?: string) {
     return useQuery({

@@ -1,5 +1,5 @@
 import { type QueryClient, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { calendarApi } from '@workspace/lib/api.ts';
+import { calendarApi } from '@workspace/lib/api';
 import type {
     CalendarEventOccurrence,
     CalendarItem,

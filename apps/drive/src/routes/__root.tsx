@@ -12,9 +12,9 @@ export const DriveContext = createContext<DriveContextType>({
     mountId: DEFAULT_MOUNT_ID,
 });
 
-interface MyRouterContext {
+type MyRouterContext = {
     auth: AuthContextType;
-}
+};
 
 function DriveRoot() {
     const { user } = useAuth();

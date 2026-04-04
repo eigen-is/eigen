@@ -44,7 +44,7 @@ export class ChatRoom {
             await ChatRoom.create(this.drive, this.path.mountId, this.path.id);
             dataDbPath = await this.drive.getChildByName(this.path.mountId, this.path.id, 'data.db');
             if (!dataDbPath) {
-                throw new Error(`Failed to create data.db in ${this.path.name}`);
+                throw new ApiError(500, `Failed to create data.db in ${this.path.name}`);
             }
         }
 

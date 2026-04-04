@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import React, { createContext, type ReactNode, useEffect, useState } from 'react';
-import { authClient } from './hooks/use-auth-client.ts';
+import { authClient } from './hooks/use-auth-client';
 
 export type AuthUser = {
     id: string;

@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { MediaPreview } from './MediaPreview';
 
-interface MediaItemProps {
+type MediaItemProps = {
     src: string;
     type: 'image' | 'video';
     caption?: string;
     thumbnail?: string;
     poster?: string;
-}
+};
 
 function MediaItem({ src, type, caption, thumbnail, poster }: MediaItemProps) {
     const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -55,10 +55,10 @@ function MediaItem({ src, type, caption, thumbnail, poster }: MediaItemProps) {
     );
 }
 
-interface MediaGridProps {
+type MediaGridProps = {
     columns?: string;
     items?: MediaItemProps[];
-}
+};
 
 export function MediaGrid({ columns = '2', items = [] }: MediaGridProps) {
     if (items.length === 0) {

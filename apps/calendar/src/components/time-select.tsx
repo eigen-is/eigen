@@ -23,7 +23,7 @@ export function timeToMinutes(time: string): number {
 
 function formatDuration(startMinutes: number, endMinutes: number): string {
     let diff = endMinutes - startMinutes;
-    if (diff <= 0) diff += 24 * 60; // Add 24 hours for next day
+    if (diff <= 0) diff += 24 * 60;
     const hours = Math.floor(diff / 60);
     const mins = diff % 60;
     if (hours === 0) return `(${mins}m)`;
@@ -50,22 +50,18 @@ export function TimeSelect({ value, onChange, referenceTime, minTime }: TimeSele
     const refMinutes = referenceTime ? timeToMinutes(referenceTime) : null;
     const minMinutes = minTime ? timeToMinutes(minTime) : -1;
 
-    // Generate time slots with day offset for accurate duration calculation, limited to 23:45 max duration
     const filteredTimeSlots =
         minMinutes >= 0
             ? (() => {
                   const slots: Array<{ time: string; dayOffset: number }> = [];
-                  const maxDuration = 23 * 60 + 45; // 23 hours 45 minutes in minutes
-                  const maxSlots = 95; // 23:45 / 15 minutes = 95 intervals
-
-                  // Generate time slots starting from minTime in 15-minute intervals
+                  const maxDuration = 23 * 60 + 45;
+                  const maxSlots = 95;
                   for (let i = 0; i <= maxSlots; i++) {
                       const totalMinutes = minMinutes + i * 15;
-                      const duration = 15 + i * 15; // Always 15 minutes minimum, then add intervals
+                      const duration = 15 + i * 15;
 
                       if (duration > maxDuration) break;
 
-                      // Handle wrap to next day
                       let dayOffset = 0;
                       let timeMinutes = totalMinutes;
 
@@ -91,14 +87,11 @@ export function TimeSelect({ value, onChange, referenceTime, minTime }: TimeSele
 
     useEffect(() => {
         if (open) {
-            // Use setTimeout to ensure the popover is fully rendered
             setTimeout(() => {
                 if (!listRef.current) return;
 
                 const valueInMinutes = timeToMinutes(value);
-                if (valueInMinutes === -1) return; // Don't scroll if value is invalid
-
-                // Always find the closest time slot
+                if (valueInMinutes === -1) return;
                 const target = filteredTimeSlots.reduce((prev, curr) => {
                     const prevDiff = Math.abs(timeToMinutes(prev.time) - valueInMinutes);
                     const currDiff = Math.abs(timeToMinutes(curr.time) - valueInMinutes);
@@ -120,7 +113,6 @@ export function TimeSelect({ value, onChange, referenceTime, minTime }: TimeSele
     const commitInput = () => {
         const trimmed = inputValue.trim();
         if (isValidTime(trimmed)) {
-            // Format the time to ensure proper display (e.g., "9:10" -> "09:10")
             const [h, m] = trimmed.split(':');
             const formattedTime = `${String(parseInt(h, 10)).padStart(2, '0')}:${m.padStart(2, '0')}`;
             onChange(formattedTime);
@@ -155,7 +147,6 @@ export function TimeSelect({ value, onChange, referenceTime, minTime }: TimeSele
                     className="max-h-[240px] overflow-y-auto p-1"
                     tabIndex={-1}
                     onWheel={(e: React.WheelEvent<HTMLDivElement>) => {
-                        // Ensure mouse wheel events work for scrolling
                         e.stopPropagation();
                     }}
                 >

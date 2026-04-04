@@ -1,5 +1,3 @@
-'use client';
-
 import { useTeams } from '@workspace/lib/admin';
 import { type DirectAccessItem, useDriveAccess, useIsEffectiveOwner } from '@workspace/lib/drive';
 import { usePublicConfig } from '@workspace/lib/public';

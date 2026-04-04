@@ -9,14 +9,14 @@ export class LocalStorage implements StorageBackend {
     private dataDir: string;
 
     constructor(baseDir: string) {
-        this.dataDir = path.resolve(path.join(baseDir, 'data'));
+        this.dataDir = path.resolve(baseDir, 'data');
         if (!fs.existsSync(this.dataDir)) {
             fs.mkdirSync(this.dataDir, { recursive: true });
         }
     }
 
     private resolve(key: string): string {
-        const resolved = path.resolve(path.join(this.dataDir, key));
+        const resolved = path.resolve(this.dataDir, key);
         if (!resolved.startsWith(this.dataDir + path.sep) && resolved !== this.dataDir) {
             throw new ApiError(400, 'Invalid storage path: path traversal detected');
         }

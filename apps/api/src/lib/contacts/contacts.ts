@@ -80,8 +80,6 @@ export class Contacts {
 
         if (!(await this.getContacts()).length) {
             const user = this.home.user;
-
-            // add the user to the contacts table
             await this.addYourself();
             const settings = getServerSettings();
             if (settings.onboarding.autoAddOwnerContact) {
@@ -106,7 +104,7 @@ export class Contacts {
             }
         }
 
-        this.cleanupAvatarImages();
+        this.cleanupAvatarImages().catch(() => {});
     }
 
     public async size(): Promise<number> {
@@ -147,7 +145,6 @@ export class Contacts {
             updatedAt: sql`unixepoch()`,
         });
 
-        // Add labels if provided
         await this.setContactLabels(contactId, labels || []);
 
         this.emitContact(SSEventType.CONTACT_CREATED, contactId);
@@ -156,7 +153,6 @@ export class Contacts {
     }
 
     public async deleteContact(id: string) {
-        // you can't delete yourself!
         if (await this.you(id)) {
             throw new ApiError(400, 'You cannot delete yourself');
         } else {
@@ -168,7 +164,6 @@ export class Contacts {
     public async updateContact(id: string, contact: Omit<Contact, 'id'>) {
         if (await this.you(id)) {
             await updateUser(this.home.user, `${contact.firstName} ${contact.lastName}`, contact.avatar || '');
-            // check if this.home.user.email is included in contact.email, add as first element if not
             if (!contact.email.includes(this.home.user.email)) {
                 contact.email = [this.home.user.email, ...contact.email];
             }
@@ -176,7 +171,6 @@ export class Contacts {
 
         const { data, contactData, labels } = extractContactData(contact);
 
-        // Update contact
         await this.db
             .update(schema.contacts)
             .set({
@@ -239,67 +233,38 @@ export class Contacts {
         this.emitLabel(SSEventType.LABEL_DELETED, id);
     }
 
-    public async getContactById(id: string): Promise<Contact | null> {
-        const contact = await this.db.select().from(schema.contacts).where(eq(schema.contacts.id, id)).get();
-
-        if (!contact) return null;
-
-        const labelRelations = this.db
-            .select({
-                labelId: schema.contactsToLabels.labelId,
-            })
+    private dbRowToContact(row: typeof schema.contacts.$inferSelect): Contact {
+        const labelIds = this.db
+            .select({ labelId: schema.contactsToLabels.labelId })
             .from(schema.contactsToLabels)
-            .where(eq(schema.contactsToLabels.contactId, id))
-            .all();
+            .where(eq(schema.contactsToLabels.contactId, row.id))
+            .all()
+            .map((rel) => rel.labelId);
 
-        const labelIds = labelRelations.map((rel) => rel.labelId);
-
-        // Parse the stored JSON data
-        const data = contact.data ?? {};
+        const data = row.data ?? {};
 
         return {
-            id: contact.id,
-            firstName: contact.firstName.trim(),
-            lastName: contact.lastName.trim(),
-            eigenId: contact.eigenId,
+            id: row.id,
+            firstName: row.firstName.trim(),
+            lastName: row.lastName.trim(),
+            eigenId: row.eigenId,
             ...(data as Omit<Contact, 'id' | 'firstName' | 'lastName' | 'labels'>),
             labels: labelIds,
         };
     }
 
+    public async getContactById(id: string): Promise<Contact | null> {
+        const row = await this.db.select().from(schema.contacts).where(eq(schema.contacts.id, id)).get();
+        return row ? this.dbRowToContact(row) : null;
+    }
+
     public async getContacts(): Promise<Contact[]> {
-        const contacts = await this.db.select().from(schema.contacts).all();
-        const results = [];
-
-        for (const contact of contacts) {
-            const labelRelations = this.db
-                .select({
-                    labelId: schema.contactsToLabels.labelId,
-                })
-                .from(schema.contactsToLabels)
-                .where(eq(schema.contactsToLabels.contactId, contact.id))
-                .all();
-
-            const labelIds = labelRelations.map((rel) => rel.labelId);
-
-            // Parse the stored JSON data
-            const data = contact.data ?? {};
-
-            results.push({
-                id: contact.id,
-                firstName: contact.firstName.trim(),
-                lastName: contact.lastName.trim(),
-                eigenId: contact.eigenId,
-                ...(data as Omit<Contact, 'id' | 'firstName' | 'lastName' | 'labels'>),
-                labels: labelIds,
-            });
-        }
-
-        return results;
+        const rows = await this.db.select().from(schema.contacts).all();
+        return rows.map((row) => this.dbRowToContact(row));
     }
 
     public async uploadAvatar(file: File) {
-        this.cleanupAvatarImages();
+        this.cleanupAvatarImages().catch(() => {});
 
         const buffer = Buffer.from(await file.arrayBuffer());
         const result = await generateImagePreview(buffer, file.type, file.name, '', 'avatar', {
@@ -349,7 +314,6 @@ export class Contacts {
     private async addYourself() {
         const user = this.home.user;
         const nameParts = (user.name || '').split(' ');
-        // add the user to the contacts table
         return await this.addContact({
             eigenId: user.id,
             firstName: nameParts[0] || '',
