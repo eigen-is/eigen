@@ -19,19 +19,7 @@ function parseDavPath(wildcard: string): { calendarId?: string; resourceUri?: st
     };
 }
 
-function logDav(method: string, path: string, status: number, extra?: string) {
-    console.log(`[CalDAV] ${method} ${path} → ${status}${extra ? ` (${extra})` : ''}`);
-}
-
 export const caldavRouter = new Elysia({ name: 'caldav' })
-    .onAfterResponse(({ request, response }) => {
-        const url = new URL(request.url);
-        if (url.pathname.startsWith('/dav')) {
-            const status = response instanceof Response ? response.status : typeof response === 'object' ? 207 : 200;
-            logDav(request.method, url.pathname, status);
-        }
-    })
-
     // PROPFIND /dav/ — discovery root
     .route('PROPFIND', '/dav', async ({ request }) => {
         const user = await authenticateBasic(request);
