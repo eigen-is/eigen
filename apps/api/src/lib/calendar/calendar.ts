@@ -520,7 +520,7 @@ export class Calendar {
         return this.db
             .select()
             .from(schema.events)
-            .where(and(eq(schema.events.calendarId, calendarId), gte(schema.events.eventCtag, sinceCtag)))
+            .where(and(eq(schema.events.calendarId, calendarId), gt(schema.events.eventCtag, sinceCtag)))
             .all()
             .map(dbEventToCalendarEventRow);
     }
