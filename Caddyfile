@@ -39,6 +39,16 @@
         redir /dav/ 301
     }
 
+    # CalDAV discovery — Apple Calendar sends PROPFIND/OPTIONS to the root URL
+    @caldav_root {
+        method PROPFIND OPTIONS
+        path /
+    }
+    handle @caldav_root {
+        rewrite * /dav/
+        reverse_proxy eigen-api:8000
+    }
+
     # Frontend apps (SPA routing via snippet)
     import app mail
     import app drive

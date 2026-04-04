@@ -351,7 +351,8 @@ export class Calendar {
             data: input.data,
         });
 
-        const currentCtag = cal.ctag ?? 0;
+        this.incrementCtag(calendarId);
+        const newCtag = this.getCalendarById(calendarId)!.ctag;
 
         this.db
             .insert(schema.events)
@@ -378,11 +379,9 @@ export class Calendar {
                 etag,
                 data: input.data ?? null,
                 createByUserId: input.createByUserId ?? null,
-                eventCtag: currentCtag,
+                eventCtag: newCtag,
             })
             .run();
-
-        this.incrementCtag(calendarId);
         const event = this.getEventById(id)!;
 
         // When creating an exception, touch the master event so its etag changes (CalDAV sync)
@@ -606,8 +605,8 @@ export class Calendar {
             data,
         });
 
-        const updateCal = this.getCalendarById(existing.calendarId);
-        const updateCtag = updateCal?.ctag ?? 0;
+        this.incrementCtag(existing.calendarId);
+        const newCtag = this.getCalendarById(existing.calendarId)!.ctag;
 
         this.db
             .update(schema.events)
@@ -623,13 +622,11 @@ export class Calendar {
                 status,
                 etag,
                 data,
-                eventCtag: updateCtag,
+                eventCtag: newCtag,
                 updatedAt: sql`unixepoch()`,
             })
             .where(eq(schema.events.id, id))
             .run();
-
-        this.incrementCtag(existing.calendarId);
 
         // When updating an exception, touch the master event so its etag changes (CalDAV sync)
         if (existing.parentEventId) {
@@ -671,13 +668,15 @@ export class Calendar {
             propagateCancellation(this.home, existing).catch(console.error);
         }
 
-        const deleteCal = this.getCalendarById(existing.calendarId);
+        this.incrementCtag(existing.calendarId);
+        const newCtag = this.getCalendarById(existing.calendarId)!.ctag;
+
         this.db
             .insert(schema.eventTombstones)
             .values({
                 uri: existing.uri,
                 calendarId: existing.calendarId,
-                deletedAtCtag: (deleteCal?.ctag ?? 0) + 1,
+                deletedAtCtag: newCtag,
             })
             .run();
 
@@ -687,8 +686,6 @@ export class Calendar {
         if (existing.parentEventId) {
             this.touchEvent(existing.parentEventId);
         }
-
-        this.incrementCtag(existing.calendarId);
         const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_DELETED, this.home.user.id);
         this.home.broadcast(sseEvent);
         const cal = this.getCalendarById(existing.calendarId);
