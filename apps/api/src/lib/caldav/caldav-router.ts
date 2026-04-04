@@ -19,12 +19,18 @@ function parseDavPath(wildcard: string): { calendarId?: string; resourceUri?: st
     };
 }
 
-function logDav(method: string, path: string, status: number, detail?: string) {
-    const line = `[CalDAV] ${method} ${path} → ${status}`;
-    console.log(detail ? `${line}\n  ${detail}` : line);
+function logDav(method: string, path: string, status: number, extra?: string) {
+    console.log(`[CalDAV] ${method} ${path} → ${status}${extra ? ` (${extra})` : ''}`);
 }
 
 export const caldavRouter = new Elysia({ name: 'caldav' })
+    .onAfterResponse(({ request, response }) => {
+        const url = new URL(request.url);
+        if (url.pathname.startsWith('/dav')) {
+            const status = response instanceof Response ? response.status : typeof response === 'object' ? 207 : 200;
+            logDav(request.method, url.pathname, status);
+        }
+    })
 
     // PROPFIND /dav/ — discovery root
     .route('PROPFIND', '/dav', async ({ request }) => {
@@ -76,12 +82,6 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         if (!calendar) return new Response('Not Found', { status: 404 });
         const depth = request.headers.get('Depth') || '0';
         const events = depth === '1' ? home.calendar.getRawEvents(calendarId) : [];
-        logDav(
-            'PROPFIND',
-            `/dav/calendars/.../${calendarId}/`,
-            207,
-            `Depth=${depth} ctag=${calendar.ctag} events=${events.length}`,
-        );
         return handleCalendarPropfind(params.ownerId, calendar, events, depth);
     })
 
@@ -118,23 +118,7 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         const body = await request.text();
         const ifMatch = request.headers.get('If-Match');
         const ifNoneMatch = request.headers.get('If-None-Match');
-        const res = await handlePut(
-            home.calendar,
-            params.ownerId,
-            calendarId,
-            resourceUri,
-            body,
-            ifMatch,
-            ifNoneMatch,
-            user.id,
-        );
-        logDav(
-            'PUT',
-            `/dav/calendars/.../${resourceUri}`,
-            res.status,
-            `If-Match: ${ifMatch}, ETag: ${res.headers.get('ETag')}`,
-        );
-        return res;
+        return handlePut(home.calendar, params.ownerId, calendarId, resourceUri, body, ifMatch, ifNoneMatch, user.id);
     })
 
     // DELETE .ics resource
@@ -146,9 +130,7 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
 
         const home = await getHome(params.ownerId);
         const ifMatch = request.headers.get('If-Match');
-        const res = handleDelete(home.calendar, calendarId, resourceUri, ifMatch);
-        logDav('DELETE', `/dav/calendars/.../${resourceUri}`, res.status, `If-Match: ${ifMatch}`);
-        return res;
+        return handleDelete(home.calendar, calendarId, resourceUri, ifMatch);
     })
 
     // REPORT — calendar-query, multiget, sync-collection
@@ -163,23 +145,7 @@ export const caldavRouter = new Elysia({ name: 'caldav' })
         if (!calendarItem) return new Response('Not Found', { status: 404 });
 
         const body = await request.text();
-        const res = handleReport(home.calendar, calendarId, calendarItem, params.ownerId, body);
-        const resBody = await res.clone().text();
-        // Log report type + abbreviated response
-        const reportType = body.includes('sync-collection')
-            ? 'sync-collection'
-            : body.includes('multiget')
-              ? 'multiget'
-              : 'calendar-query';
-        const syncToken = body.match(/sync\/(\d+)/)?.[1] ?? 'none';
-        const responseCount = (resBody.match(/<D:response>/g) || []).length;
-        logDav(
-            'REPORT',
-            `/dav/calendars/.../${calendarId}/`,
-            res.status,
-            `type=${reportType} syncToken=${syncToken} responses=${responseCount}`,
-        );
-        return res;
+        return handleReport(home.calendar, calendarId, calendarItem, params.ownerId, body);
     })
 
     // MKCALENDAR
