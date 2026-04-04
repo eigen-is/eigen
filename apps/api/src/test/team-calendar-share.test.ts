@@ -38,6 +38,13 @@ describe('Team Calendar Share (push to existing members)', () => {
         const team = await assertJson<{ id: string }>(teamRes);
         teamId = team.id;
 
+        // Enable calendar for the team (disabled by default)
+        await authedRequest(ctx.alice.user.sessionToken, `/team/${teamId}/settings`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ calendar: { enabled: true } }),
+        });
+
         // Add Bob to the team
         await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/add-team-member', {
             method: 'POST',
@@ -287,6 +294,13 @@ describe('Regression: Team calendar permission enforcement', () => {
         });
         const team = await assertJson<{ id: string }>(teamRes);
         permTeamId = team.id;
+
+        // Enable calendar for the team (disabled by default)
+        await authedRequest(ctx.alice.user.sessionToken, `/team/${permTeamId}/settings`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ calendar: { enabled: true } }),
+        });
 
         // Add Bob to the team
         await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/add-team-member', {
