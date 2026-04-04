@@ -3,9 +3,9 @@ import { type AuthContextType, useAuth } from '@workspace/lib/auth';
 import { AppShell } from '@workspace/ui/components/layout/app/app-shell.tsx';
 import { CalendarSidebar } from '../components/calendar-sidebar';
 
-interface MyRouterContext {
+type MyRouterContext = {
     auth: AuthContextType;
-}
+};
 
 function CalendarRoot() {
     const { user } = useAuth();

@@ -1,5 +1,5 @@
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { contactsApi } from '@workspace/lib/api.ts';
+import { contactsApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import type { Contact } from '@workspace/lib/types/contact';
 import { AppError, onMutationError } from '../../api-error';

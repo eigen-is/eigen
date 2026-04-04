@@ -156,7 +156,7 @@ function SlideEditorInner({
 
     const { isMobile } = useLayout();
     const { resolveMediaUrl, resolveMediaPath } = useMediaResolver();
-    const { dragState, handleDragStart, handleDragEnd } = useSlideDnd({ deck, yjsDoc });
+    const { dragState, handleDragStart, handleDragEnd } = useSlideDnd({ yjsDoc });
 
     const [selectedObjectIds, setSelectedObjectIds] = useState<string[]>([]);
     const [editingObjectId, setEditingObjectId] = useState<string | null>(null);

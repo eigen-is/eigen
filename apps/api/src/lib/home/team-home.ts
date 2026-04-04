@@ -60,18 +60,18 @@ export class TeamHome extends Home {
         maxSizeMB?: number;
         s3Config?: S3Config;
     }): Promise<{ id: string } & MountSettings> {
+        const serverSettings = getServerSettings();
         const resolvedType = (input.storageType ??
-            mapStorageType(getServerSettings().defaults.mount.storageType)) as MountSettings['storageType'];
+            mapStorageType(serverSettings.defaults.mount.storageType)) as MountSettings['storageType'];
+
         if (resolvedType === 's3' && input.s3Config) {
             const s3Result = await checkS3Connection(input.s3Config);
             if (!s3Result.ok) throw new ApiError(400, `S3 connection failed: ${s3Result.message}`);
         }
 
         const mountId = randomUUID().slice(0, 8);
-        const serverSettings = getServerSettings();
         const mountSettings: MountSettings = {
-            storageType: (input.storageType ??
-                mapStorageType(serverSettings.defaults.mount.storageType)) as MountSettings['storageType'],
+            storageType: resolvedType,
             maxSizeMB: input.maxSizeMB ?? serverSettings.quotas.defaultMountMaxSizeMB,
             enabled: true,
             name: input.name,

@@ -48,7 +48,7 @@ export default class Maildir {
             const welcome = welcomeMail(this.home.user.name, this.home.user.email);
             if (welcome) await this.mailboxDeliver(welcome);
         }
-        this.store.watchMailboxes((mailbox) => this.syncMailbox(mailbox));
+        this.store.watchMailboxes((mailbox) => this.syncMailbox(mailbox).catch(() => {}));
     }
 
     async size(): Promise<number> {

@@ -60,10 +60,6 @@ export function SpaceSidebar({ condensed = false, onClose, isMobile = false }: S
                     to="/security/2fa"
                     params={{}}
                 />
-                {/*SidebarItem
-                    icon={<Smartphone className="h-4 w-4"/>}
-                    label="Recovery codes"
-                    to='/security/recovery-codes' params={{}}/> */}
             </SidebarSection>
 
             {isAdmin && (
@@ -80,7 +76,6 @@ export function SpaceSidebar({ condensed = false, onClose, isMobile = false }: S
                 </>
             )}
 
-            {/* Storage usage indicator at the bottom of sidebar */}
             <StorageUsage className="mt-auto" condensed={condensed} />
         </div>
     );

@@ -1,4 +1,4 @@
-import Elysia, { t } from 'elysia';
+import { Elysia, t } from 'elysia';
 import { requireSelf } from '../lib/core/access';
 import type { UserHome } from '../lib/home';
 import { getHome } from '../lib/home';

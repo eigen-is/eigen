@@ -53,12 +53,11 @@ export function EmailDraftToolbar({
 type EmailDraftProps = {
     email: EmailDraftType | null;
     to?: string;
-    onDelete: (mail: EmailDraftType) => void;
     sendDraft: (mail: EmailDraftType) => Promise<unknown>;
     onAutoSave?: (mail: EmailDraftType) => Promise<unknown>;
 };
 
-export function EmailDraft({ email, to, onDelete: _onDelete, sendDraft, onAutoSave }: EmailDraftProps) {
+export function EmailDraft({ email, to, sendDraft, onAutoSave }: EmailDraftProps) {
     // Create refs for the input fields
     const toFieldRef = useRef<HTMLInputElement>(null);
     const subjectFieldRef = useRef<HTMLInputElement>(null);

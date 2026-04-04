@@ -4,9 +4,9 @@ import type { BlogPost as BlogPostType } from '../data/blog-posts';
 import { MediaGrid } from './MediaGrid';
 import { parseMediaGrids } from './parse-media-grids';
 
-interface BlogPostProps {
+type BlogPostProps = {
     post: BlogPostType;
-}
+};
 
 export function BlogPost({ post }: BlogPostProps) {
     const { content, mediaGrids } = useMemo(() => parseMediaGrids(post.content), [post.content]);
@@ -46,7 +46,7 @@ export function BlogPost({ post }: BlogPostProps) {
                             <ol className="list-decimal list-outside mb-4 space-y-2 pl-5" {...props} />
                         ),
                         li: ({ node, ...props }) => <li className="leading-7" {...props} />,
-                        a: ({ node, ...props }) => <a className="text-blue-600 hover:underline" {...props} />,
+                        a: ({ node, ...props }) => <a className="text-link hover:underline" {...props} />,
                         strong: ({ node, ...props }) => <strong className="font-semibold" {...props} />,
                         blockquote: ({ node, ...props }) => (
                             <blockquote className="border-l-4 border-border pl-4 italic my-4" {...props} />

@@ -111,7 +111,9 @@ export class Home {
         this.timeout = setTimeout(
             () => {
                 console.log(`[Home] Idle timeout for ${this.user.id}, destructing`);
-                this.destruct().finally(() => this.cleanUp?.());
+                this.destruct()
+                    .catch((e) => console.error(`[Home] Destruct failed for ${this.user.id}:`, e))
+                    .finally(() => this.cleanUp?.());
             },
             1000 * 60 * 5,
         );

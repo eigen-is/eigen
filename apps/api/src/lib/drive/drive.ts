@@ -53,8 +53,6 @@ import * as sharedSchema from './sharedschema';
 import { buildDriveEvent } from './sse-events';
 import { streamFilesToTemp } from './streaming';
 
-export type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
-
 const COLLAB_EXTENSIONS: Record<string, string> = {
     doc: '.eigendoc',
     stickies: '.eigenstickies',
@@ -229,7 +227,7 @@ export default class Drive {
     async uploadFiles(mountId: string, parentId: string, request: Request, maxSize: number): Promise<DrivePath[]> {
         const mount = this.getMount(mountId);
         const parent = await mount.getActivePath(parentId);
-        if (parent.type !== 'folder') {
+        if (parent.type !== DRIVE_TYPE_FOLDER) {
             throw new ApiError(404, 'Parent folder not found');
         }
 

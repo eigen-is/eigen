@@ -60,19 +60,19 @@ export function ImageResizeHandles({
             {selected && editable && (
                 <>
                     <div
-                        className="absolute top-1/2 -left-1.5 -translate-y-1/2 w-3 h-3 bg-white border border-blue-500 rounded-sm cursor-ew-resize"
+                        className="absolute top-1/2 -left-1.5 -translate-y-1/2 w-3 h-3 bg-background border border-selection-handle rounded-sm cursor-ew-resize"
                         onMouseDown={(e) => handleResizeStart(e, 'w')}
                     />
                     <div
-                        className="absolute top-1/2 -right-1.5 -translate-y-1/2 w-3 h-3 bg-white border border-blue-500 rounded-sm cursor-ew-resize"
+                        className="absolute top-1/2 -right-1.5 -translate-y-1/2 w-3 h-3 bg-background border border-selection-handle rounded-sm cursor-ew-resize"
                         onMouseDown={(e) => handleResizeStart(e, 'e')}
                     />
                     <div
-                        className="absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-white border border-blue-500 rounded-sm cursor-nwse-resize"
+                        className="absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-background border border-selection-handle rounded-sm cursor-nwse-resize"
                         onMouseDown={(e) => handleResizeStart(e, 'se')}
                     />
                     <div
-                        className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-white border border-blue-500 rounded-sm cursor-nesw-resize"
+                        className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-background border border-selection-handle rounded-sm cursor-nesw-resize"
                         onMouseDown={(e) => handleResizeStart(e, 'ne')}
                     />
                 </>

@@ -7,7 +7,7 @@ export const sharedPaths = sqliteTable('shared_paths', {
     mountId: text('mountId').notNull(),
     name: text('name').notNull(),
     type: text('type').notNull().$type<DrivePathType>(),
-    parentId: text('parentId'), // We'll reference this in the relations
+    parentId: text('parentId'),
     ownerId: text('ownerId').notNull(),
     mimeType: text('mimeType').notNull(),
     size: integer('size'),

@@ -1,9 +1,9 @@
 import { cn } from '../../../lib/utils.ts';
 
-interface BarProps {
+type BarProps = {
     className?: string;
     style?: React.CSSProperties;
-}
+};
 
 export function Bar({ className, style, ...props }: BarProps) {
     return (

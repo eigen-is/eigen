@@ -2,7 +2,6 @@ import type { Contact } from '@workspace/lib/types/contact';
 import { relations, sql } from 'drizzle-orm';
 import { integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
-// Contacts table
 export const contacts = sqliteTable('contacts', {
     id: text('id').primaryKey(),
     firstName: text('firstName').notNull(),
@@ -16,7 +15,6 @@ export const contacts = sqliteTable('contacts', {
     updatedAt: integer('updatedAt', { mode: 'timestamp' }).default(sql`(unixepoch())`),
 });
 
-// Labels table
 export const labels = sqliteTable('labels', {
     id: text('id').primaryKey(),
     name: text('name').notNull(),
@@ -25,7 +23,6 @@ export const labels = sqliteTable('labels', {
     updatedAt: integer('updatedAt', { mode: 'timestamp' }).default(sql`(unixepoch())`),
 });
 
-// Junction table for contacts and labels
 export const contactsToLabels = sqliteTable(
     'contacts_to_labels',
     {
@@ -41,7 +38,6 @@ export const contactsToLabels = sqliteTable(
     }),
 );
 
-// Establish relations
 export const contactsRelations = relations(contacts, ({ many }) => ({
     labels: many(contactsToLabels),
 }));
@@ -60,11 +56,3 @@ export const contactsToLabelsRelations = relations(contactsToLabels, ({ one }) =
         references: [labels.id],
     }),
 }));
-
-// Types based on the schema
-export type ContactInsert = typeof contacts.$inferInsert;
-export type ContactSelect = typeof contacts.$inferSelect;
-export type LabelInsert = typeof labels.$inferInsert;
-export type LabelSelect = typeof labels.$inferSelect;
-export type ContactToLabelInsert = typeof contactsToLabels.$inferInsert;
-export type ContactToLabelSelect = typeof contactsToLabels.$inferSelect;

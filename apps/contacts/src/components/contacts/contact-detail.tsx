@@ -93,14 +93,13 @@ export function ContactDetailToolbar({ contact, filterType, filterId, onDeleteCl
 
 type ContactDetailProps = {
     contact: Contact;
-    onDelete: (id: string) => void;
 };
 
-export function ContactDetail({ contact, onDelete: _onDelete }: ContactDetailProps) {
+export function ContactDetail({ contact }: ContactDetailProps) {
     const { data: labels = [], isLoading: labelsLoading, error: labelsError } = useLabels();
 
     const formatPhoneNumber = (phone: string) => {
-        return phone; // You might want to add formatting logic here
+        return phone;
     };
 
     const formatAddress = (address: Address) => {

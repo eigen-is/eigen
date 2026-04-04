@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { BunFile } from 'bun';
+import { ApiError } from '../core';
 import type { StorageBackend } from './types';
 
 export class LocalKeyStorage implements StorageBackend {
@@ -16,7 +17,7 @@ export class LocalKeyStorage implements StorageBackend {
     private getFilePath(key: string): string {
         const resolved = path.resolve(this.dataDir, key);
         if (!resolved.startsWith(this.dataDir + path.sep) && resolved !== this.dataDir) {
-            throw new Error(`Path traversal blocked: ${key}`);
+            throw new ApiError(400, 'Invalid storage path: path traversal detected');
         }
         return resolved;
     }

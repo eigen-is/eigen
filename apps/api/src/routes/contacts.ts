@@ -2,6 +2,7 @@ import { Elysia, t } from 'elysia';
 import { enforceAvatarUpload } from '../lib/config/enforcement';
 import { getContacts } from '../lib/contacts/contacts';
 import { requireSelf } from '../lib/core/access';
+import { ApiError } from '../lib/core/errors';
 import { setCacheHeaders } from '../lib/core/http';
 import { betterAuth } from './auth';
 
@@ -140,15 +141,11 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
         '/contacts/:ownerId/avatar/:filename',
         async ({ params, user, set }) => {
             requireSelf(params.ownerId, user.id);
-            try {
-                const data = await (await getContacts(user)).downloadAvatar(params.filename);
-                setCacheHeaders(set, 900);
-                set.headers['Content-Type'] = 'image/webp';
-                return new Response(data);
-            } catch (_e) {
-                set.status = 404;
-                return null;
-            }
+            const data = await (await getContacts(user)).downloadAvatar(params.filename);
+            if (!data) throw new ApiError(404, 'Avatar not found');
+            setCacheHeaders(set, 900);
+            set.headers['Content-Type'] = 'image/webp';
+            return new Response(data);
         },
         { auth: true },
     )

@@ -242,7 +242,7 @@ export function SlideCanvas({
                 {activeSnapLines.map((line, i) => (
                     <div
                         key={i}
-                        className="absolute pointer-events-none z-50 bg-blue-500"
+                        className="absolute pointer-events-none z-50 bg-selection-handle"
                         style={
                             line.orientation === 'vertical'
                                 ? { left: `${pxToPercent(line.position, 'x')}%`, top: 0, bottom: 0, width: '1px' }
@@ -252,7 +252,7 @@ export function SlideCanvas({
                 ))}
                 {multiSelectBounds && !dragPreviews.length && (
                     <div
-                        className="absolute z-40 border border-dashed border-blue-500 cursor-move"
+                        className="absolute z-40 border border-dashed border-selection-handle cursor-move"
                         style={{
                             left: `${pxToPercent(multiSelectBounds.x, 'x')}%`,
                             top: `${pxToPercent(multiSelectBounds.y, 'y')}%`,
@@ -264,7 +264,7 @@ export function SlideCanvas({
                 )}
                 {marquee && (
                     <div
-                        className="absolute pointer-events-none z-50 border border-blue-500 bg-blue-500/10"
+                        className="absolute pointer-events-none z-50 border border-selection-handle bg-selection-handle/10"
                         style={{
                             left: `${pxToPercent(marquee.x, 'x')}%`,
                             top: `${pxToPercent(marquee.y, 'y')}%`,

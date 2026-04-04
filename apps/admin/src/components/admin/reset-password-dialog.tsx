@@ -12,12 +12,12 @@ import { Field, FieldContent, FieldGroup, FieldLabel } from '@workspace/ui/compo
 import { Input } from '@workspace/ui/components/input';
 import { useEffect, useState } from 'react';
 
-interface ResetPasswordDialogProps {
+type ResetPasswordDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     userId: string;
     userName: string;
-}
+};
 
 function generatePassword() {
     const chars = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';

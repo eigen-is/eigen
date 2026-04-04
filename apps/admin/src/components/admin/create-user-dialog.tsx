@@ -8,11 +8,11 @@ import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@w
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { useState } from 'react';
 
-interface CreateUserDialogProps {
+type CreateUserDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     organizationId?: string;
-}
+};
 
 export function CreateUserDialog({ open, onOpenChange }: CreateUserDialogProps) {
     const [name, setName] = useState('');

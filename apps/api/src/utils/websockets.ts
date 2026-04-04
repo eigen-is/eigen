@@ -11,7 +11,7 @@ export function keepWebSocketAlive(
             // OPEN
             try {
                 ws.ping();
-            } catch (_err) {
+            } catch {
                 clearInterval(pingInterval);
                 console.log(`Ping failed, closing connection for user ${user.id}`);
                 onClose();

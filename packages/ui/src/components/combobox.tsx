@@ -1,5 +1,3 @@
-'use client';
-
 import { Combobox as ComboboxPrimitive } from '@base-ui/react';
 import { Button } from '@workspace/ui/components/button';
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@workspace/ui/components/input-group';

@@ -1,7 +1,5 @@
-// Re-export types that might be useful for consumers
 export type { UploadItem } from './upload-provider';
 
-// Helper function for handling file upload with progress tracking
 type UploadWithProgressOptions = {
     url: string;
     formData: FormData;

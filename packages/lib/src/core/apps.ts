@@ -94,13 +94,6 @@ const apps = [
         icon: UsersRound,
         description: 'Find your contacts',
     },
-    // {
-    //     name: 'Admin',
-    //     color: 'var(--app-admin-color)',
-    //     href: getAdminAppUrl(),
-    //     icon: UsersRound,
-    //     description: 'Manage your organization',
-    // },
 ];
 
 export { apps };

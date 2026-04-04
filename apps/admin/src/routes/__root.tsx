@@ -7,9 +7,9 @@ import { AppShell } from '@workspace/ui/components/layout/app/app-shell.tsx';
 import { AdminSidebar } from '../components/admin/admin-sidebar.tsx';
 import { SetupWizard } from '../components/admin/setup-wizard.tsx';
 
-interface MyRouterContext {
+type MyRouterContext = {
     auth: AuthContextType;
-}
+};
 
 function AdminRoot() {
     const { data: setupStatus, isLoading: setupLoading } = useSetupStatus();

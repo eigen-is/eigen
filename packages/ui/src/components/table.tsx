@@ -1,5 +1,3 @@
-'use client';
-
 import { cn } from '@workspace/ui/lib/utils';
 import type * as React from 'react';
 

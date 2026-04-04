@@ -81,7 +81,6 @@ export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCale
             const now = new Date();
             const rounded = roundToNext15Minutes(now);
 
-            // Use the date from defaultDate if provided, otherwise use today's date
             const targetDate = defaultDate ? new Date(defaultDate) : rounded;
             targetDate.setHours(rounded.getHours(), rounded.getMinutes(), 0, 0);
 
@@ -109,13 +108,10 @@ export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCale
     const handleStartTimeChange = (newStart: string) => {
         setStartTime(newStart);
 
-        // Calculate minimum end time (start + 15 minutes)
         const minEnd = addMinutes(newStart, 15);
         const currentEndMinutes = timeToMinutes(endTime);
         const minEndMinutes = timeToMinutes(minEnd);
 
-        // If current end time is before the new minimum, update it to minimum + 15 minutes
-        // Otherwise, keep the current end time if it's still valid
         if (currentEndMinutes < minEndMinutes) {
             setEndTime(addMinutes(newStart, 30));
         }

@@ -1,4 +1,3 @@
-'use client';
 import { useDriveAccess } from '@workspace/lib/drive';
 import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
 import { AvatarIcon } from '@workspace/ui/components/avatar';

@@ -1,5 +1,5 @@
 import { type QueryClient, useQuery } from '@tanstack/react-query';
-import { mailApi } from '@workspace/lib/api.ts';
+import { mailApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 
 export const mailboxKeys = {

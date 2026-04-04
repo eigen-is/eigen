@@ -44,7 +44,7 @@ function BlogOverviewComponent() {
         <div className="min-h-screen bg-muted/50">
             <div className="container mx-auto px-4 py-8 max-w-3xl">
                 <div className="mb-8">
-                    <Link to="/" className="text-blue-600 hover:text-blue-800 hover:underline">
+                    <Link to="/" className="text-link hover:text-link/80 hover:underline">
                         ← Back to home
                     </Link>
                 </div>

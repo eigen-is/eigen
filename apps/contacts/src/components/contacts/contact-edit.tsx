@@ -298,7 +298,8 @@ export function ContactEdit({ contact, onSave, onCancel }: ContactEditProps) {
                                                                 key={index}
                                                                 className="px-3 py-1 text-primary-foreground"
                                                                 style={{
-                                                                    backgroundColor: labelObj?.color || '#3b82f6',
+                                                                    backgroundColor:
+                                                                        labelObj?.color || 'var(--primary)',
                                                                 }}
                                                             >
                                                                 {labelObj?.name}
