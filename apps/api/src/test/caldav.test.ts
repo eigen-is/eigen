@@ -295,6 +295,236 @@ describe('CalDAV', () => {
         expect(res.status).toBe(403);
     });
 
+    test('sync-collection returns events created after sync token', async () => {
+        // Get initial sync token
+        const initialReport = `<?xml version="1.0" encoding="utf-8"?>
+<D:sync-collection xmlns:D="DAV:">
+  <D:sync-token/>
+  <D:prop><D:getetag/></D:prop>
+</D:sync-collection>`;
+
+        const initialRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                method: 'REPORT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'application/xml',
+                },
+                body: initialReport,
+            }),
+        );
+        expect(initialRes.status).toBe(207);
+        const initialXml = await initialRes.text();
+        const tokenMatch = initialXml.match(/<D:sync-token>([^<]+)<\/D:sync-token>/);
+        expect(tokenMatch).toBeTruthy();
+        const syncToken = tokenMatch![1];
+
+        // Create a new event
+        const ics =
+            'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:sync-test-1@eigen\r\nSUMMARY:Sync Test\r\nDTSTART:20260601T100000Z\r\nDTEND:20260601T110000Z\r\nEND:VEVENT\r\nEND:VCALENDAR';
+
+        await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/sync-test-1.ics`, {
+                method: 'PUT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'text/calendar',
+                    'If-None-Match': '*',
+                },
+                body: ics,
+            }),
+        );
+
+        // Incremental sync — should return the new event
+        const incrementalReport = `<?xml version="1.0" encoding="utf-8"?>
+<D:sync-collection xmlns:D="DAV:">
+  <D:sync-token>${syncToken}</D:sync-token>
+  <D:prop><D:getetag/></D:prop>
+</D:sync-collection>`;
+
+        const syncRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                method: 'REPORT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'application/xml',
+                },
+                body: incrementalReport,
+            }),
+        );
+        expect(syncRes.status).toBe(207);
+        const syncXml = await syncRes.text();
+        expect(syncXml).toContain('sync-test-1.ics');
+    });
+
+    test('sync-collection returns events updated after sync token', async () => {
+        // Get current sync token
+        const reportBody = `<?xml version="1.0" encoding="utf-8"?>
+<D:sync-collection xmlns:D="DAV:">
+  <D:sync-token/>
+  <D:prop><D:getetag/></D:prop>
+</D:sync-collection>`;
+
+        const initialRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                method: 'REPORT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'application/xml',
+                },
+                body: reportBody,
+            }),
+        );
+        const initialXml = await initialRes.text();
+        const syncToken = initialXml.match(/<D:sync-token>([^<]+)<\/D:sync-token>/)![1];
+
+        // Update an existing event (sync-test-1 from previous test)
+        const updatedIcs =
+            'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:sync-test-1@eigen\r\nSUMMARY:Sync Test Updated\r\nDTSTART:20260601T100000Z\r\nDTEND:20260601T120000Z\r\nEND:VEVENT\r\nEND:VCALENDAR';
+
+        await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/sync-test-1.ics`, {
+                method: 'PUT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'text/calendar',
+                },
+                body: updatedIcs,
+            }),
+        );
+
+        // Sync should return the updated event
+        const syncReport = `<?xml version="1.0" encoding="utf-8"?>
+<D:sync-collection xmlns:D="DAV:">
+  <D:sync-token>${syncToken}</D:sync-token>
+  <D:prop><D:getetag/></D:prop>
+</D:sync-collection>`;
+
+        const syncRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/`, {
+                method: 'REPORT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'application/xml',
+                },
+                body: syncReport,
+            }),
+        );
+        const syncXml = await syncRes.text();
+        expect(syncXml).toContain('sync-test-1.ics');
+    });
+
+    test('PUT preserves SEQUENCE from ICS', async () => {
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:seq-preserve-test@eigen',
+            'SUMMARY:Sequence Preserve',
+            'DTSTART:20260501T100000Z',
+            'DTEND:20260501T110000Z',
+            'SEQUENCE:5',
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        // Create
+        const putRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/seq-preserve.ics`, {
+                method: 'PUT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'text/calendar',
+                    'If-None-Match': '*',
+                },
+                body: ics,
+            }),
+        );
+        expect(putRes.status).toBe(201);
+
+        // GET and verify sequence is preserved
+        const getRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/seq-preserve.ics`, {
+                method: 'GET',
+                headers: { Authorization: basicAuth(ctx.alice.user.email) },
+            }),
+        );
+        const body = await getRes.text();
+        expect(body).toContain('SEQUENCE:5');
+
+        // Update with new sequence
+        const updatedIcs = ics.replace('SEQUENCE:5', 'SEQUENCE:7').replace('Sequence Preserve', 'Sequence Updated');
+        const updateRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/seq-preserve.ics`, {
+                method: 'PUT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'text/calendar',
+                },
+                body: updatedIcs,
+            }),
+        );
+        expect(updateRes.status).toBe(204);
+
+        // Verify new sequence is preserved
+        const getRes2 = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/seq-preserve.ics`, {
+                method: 'GET',
+                headers: { Authorization: basicAuth(ctx.alice.user.email) },
+            }),
+        );
+        const body2 = await getRes2.text();
+        expect(body2).toContain('SEQUENCE:7');
+    });
+
+    test('ETag is stable on identical re-PUT', async () => {
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:etag-stable-test@eigen',
+            'SUMMARY:ETag Stability',
+            'DTSTART:20260501T100000Z',
+            'DTEND:20260501T110000Z',
+            'SEQUENCE:1',
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        // Create
+        const putRes = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/etag-stable.ics`, {
+                method: 'PUT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'text/calendar',
+                    'If-None-Match': '*',
+                },
+                body: ics,
+            }),
+        );
+        expect(putRes.status).toBe(201);
+        const etag1 = putRes.headers.get('ETag');
+
+        // Re-PUT identical content
+        const putRes2 = await app.handle(
+            new Request(`http://localhost/dav/calendars/${userId}/${defaultCalendarId}/etag-stable.ics`, {
+                method: 'PUT',
+                headers: {
+                    Authorization: basicAuth(ctx.alice.user.email),
+                    'Content-Type': 'text/calendar',
+                    'If-Match': etag1!,
+                },
+                body: ics,
+            }),
+        );
+        expect(putRes2.status).toBe(204);
+        const etag2 = putRes2.headers.get('ETag');
+
+        // ETags should be identical — no spurious re-PUT loop
+        expect(etag2).toBe(etag1);
+    });
+
     test('REPORT calendar-multiget returns requested events', async () => {
         // Create an event first
         const ics =
