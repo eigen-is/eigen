@@ -56,8 +56,14 @@ export async function handleProppatch(
                 updatedProps.push('<D:displayname/>');
             }
 
-            const calColor = prop['calendar-color'] || prop['ICAL:calendar-color'];
-            if (calColor && typeof calColor === 'string') {
+            const calColorRaw = prop['calendar-color'] || prop['ICAL:calendar-color'];
+            const calColor =
+                typeof calColorRaw === 'string'
+                    ? calColorRaw
+                    : calColorRaw && typeof calColorRaw === 'object' && '#text' in calColorRaw
+                      ? String(calColorRaw['#text'])
+                      : null;
+            if (calColor) {
                 updates.color = calColor;
                 updatedProps.push('<ICAL:calendar-color/>');
             }
