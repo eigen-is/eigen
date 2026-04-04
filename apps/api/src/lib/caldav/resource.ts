@@ -66,6 +66,7 @@ export async function handlePut(
             rrule: masterParsed.rrule,
             timezone: masterParsed.timezone,
             status: masterParsed.status,
+            sequence: masterParsed.sequence,
             data: masterParsed.data,
         });
 
@@ -89,6 +90,7 @@ export async function handlePut(
         rrule: masterParsed.rrule,
         timezone: masterParsed.timezone,
         status: masterParsed.status,
+        sequence: masterParsed.sequence,
         data: masterParsed.data,
         createByUserId: userId,
         uid: masterParsed.uid || null,
