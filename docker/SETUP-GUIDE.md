@@ -51,12 +51,17 @@ Go to your DNS provider and add these records (replace `eigen.example.com` with 
 |------|------|-------|-----|
 | A | `eigen.example.com` | `1.2.3.4` | Points your domain to your server |
 | MX | `eigen.example.com` | `10 eigen.example.com` | Tells the internet where to deliver email |
+| SRV | `_imaps._tcp.eigen.example.com` | `0 1 993 eigen.example.com` | Apple Mail / Thunderbird find IMAP automatically |
+| SRV | `_submission._tcp.eigen.example.com` | `0 1 587 eigen.example.com` | Apple Mail / Thunderbird find SMTP automatically |
+
+The SRV records enable auto-discovery: when you add an account in Apple Mail, Thunderbird, or other clients with just your email and password, they find IMAP and SMTP automatically. CalDAV (calendar sync) is discovered via `/.well-known/caldav` — no SRV record needed.
 
 Wait for DNS propagation (usually 5-30 minutes). Verify:
 
 ```bash
 dig eigen.example.com A     # Should show your server IP
 dig eigen.example.com MX    # Should show your domain
+dig _imaps._tcp.eigen.example.com SRV  # Should show 993
 ```
 
 You'll add DKIM, SPF, and DMARC records in Step 6 (after the server generates your DKIM key).
