@@ -310,6 +310,7 @@ export class Calendar {
             parentEventId?: string | null;
             recurrenceDate?: string | null;
             status?: CalendarEvent['status'];
+            sequence?: number;
             data?: EventData | null;
             createByUserId?: string | null;
             uid?: string | null;
@@ -376,6 +377,7 @@ export class Calendar {
                 parentEventId: input.parentEventId ?? null,
                 recurrenceDate: input.recurrenceDate ?? null,
                 status,
+                sequence: input.sequence ?? 0,
                 etag,
                 data: input.data ?? null,
                 createByUserId: input.createByUserId ?? null,
@@ -555,6 +557,7 @@ export class Calendar {
             rrule?: string | null;
             timezone?: string | null;
             status?: CalendarEvent['status'];
+            sequence?: number;
             data?: EventData | null;
         },
         user?: UserIdentity,
@@ -580,6 +583,7 @@ export class Calendar {
         const endTime = input.endTime ?? existing.endTime;
         const allDay = input.allDay ?? existing.allDay;
         const status = input.status ?? existing.status;
+        const sequence = input.sequence ?? existing.sequence;
         const data = input.data !== undefined ? input.data : existing.data;
 
         const rruleStr = input.rrule !== undefined ? (input.rrule ?? null) : (existing.rrule ?? null);
@@ -620,6 +624,7 @@ export class Calendar {
                 rrule: rruleStr,
                 timezone,
                 status,
+                sequence,
                 etag,
                 data,
                 eventCtag: newCtag,
