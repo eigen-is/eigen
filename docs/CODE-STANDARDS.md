@@ -8,7 +8,11 @@ Reference for code style, architecture patterns, and conventions used in the Eig
 - **`type` over `interface`** — except when methods are needed
 - **No JSDoc** — code should be self-documenting. Comments only where logic isn't obvious
 - **No `as any`** — fix the type at the source. Eden Treaty gives end-to-end safety; casting breaks it
-- **Theme tokens, not colors** — use `text-muted-foreground`, `bg-muted`, not `text-gray-500`, `bg-blue-50`
+- **No `as Type` on Eden Treaty responses** — add explicit return types to backend methods instead of casting
+  `response.data` in hooks. Types flow from backend → Eden Treaty → frontend automatically
+- **Backend errors use `ApiError`** — `throw new ApiError(status, message)`, never `throw new Error()`
+- **Theme tokens, not colors** — use `text-muted-foreground`, `bg-muted`, not `text-gray-500`, `bg-blue-50`.
+  Use `selection-handle` token for selection UI (resize handles, bounding boxes)
 - **Imports** — use `@workspace/lib/[domain]` and `@workspace/ui/components/...`, avoid deep relative paths
 
 ## Architecture
@@ -54,11 +58,17 @@ const response = await driveApi({ ownerId })({ mountId }).folder({ pathId }).get
 
 ### Error Handling
 
-Mutation error/success handling belongs in hooks (`packages/lib/src/core/[domain]/hooks/`), not in app
-components. Every `useMutation` must have an `onError` callback using `onMutationError` from `api-error.ts`.
-Apps should never add their own `try/catch` + `toast.error()` around mutations.
+All error/success handling belongs in hooks (`packages/lib/src/core/[domain]/hooks/`), not in app
+components. This applies to mutations, direct API calls (e.g., `authClient`), and any async operation
+that can fail. Every `useMutation` must have an `onError` callback using `onMutationError` from
+`api-error.ts`. Apps should never add their own `try/catch` + `toast.error()`.
 
 See [NOTIFICATIONS.md](NOTIFICATIONS.md) for the full pattern.
+
+### Invalidation Functions
+
+Export `invalidateFoo(queryClient, ...)` functions from hook files, next to the query key definitions.
+Apps use these instead of importing `useQueryClient` and calling `invalidateQueries()` directly.
 
 ### Eigen File Types
 

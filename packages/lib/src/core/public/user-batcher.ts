@@ -31,7 +31,7 @@ async function flushBatch() {
     // TanStack Query caches the miss instead of retrying.
     try {
         const res = await publicApi.users.post({ ids });
-        const users = (res.data ?? {}) as Record<string, PublicUser>;
+        const users = res.data ?? {};
         for (const [id, resolve] of batch) {
             resolve(users[id] ?? null);
         }
