@@ -9,8 +9,7 @@ import { ApiError } from '../core/errors';
 import type { ManagedDatabase } from '../core/managed-database';
 import type { Drive } from '../drive';
 import type { Home } from '../home';
-import { getHome } from '../home';
-import { atHome } from '../home/get-home.ts';
+import { sendToHome } from '../home/home-relay';
 import { getUserByEmail } from '../user/';
 import { formatEmoteForViewer, parseCommand } from './commands';
 import { type CommentIndex, openCommentIndex } from './comment-index';
@@ -162,16 +161,18 @@ export class ChatRoom {
                     try {
                         const mentionedUser = await getUserByEmail(email);
                         if (!mentionedUser) continue;
-                        const targetHome = await getHome(mentionedUser.id);
-                        targetHome.notifications?.persist({
-                            type: notificationType,
-                            actorEmail: authorEmail,
-                            title: `You were mentioned in "${displayName}"`,
-                            body: content.length > 100 ? `${content.slice(0, 100)}...` : content,
-                            tag: `mention:${targetPath.ownerId}:${targetPath.mountId}:${targetPath.id}:${email}`,
+                        await sendToHome(mentionedUser.id, {
+                            type: 'notification',
+                            notification: {
+                                type: notificationType,
+                                actorEmail: authorEmail,
+                                title: `You were mentioned in "${displayName}"`,
+                                body: content.length > 100 ? `${content.slice(0, 100)}...` : content,
+                                tag: `mention:${targetPath.ownerId}:${targetPath.mountId}:${targetPath.id}:${email}`,
+                            },
                         });
                     } catch {
-                        /* user may not exist */
+                        // user may not exist
                     }
                 }
             }
@@ -350,12 +351,9 @@ export class ChatRoom {
             const user = await getUserByEmail(member.email);
             if (!user) continue;
             try {
-                if (atHome(user.id)) {
-                    const home = await getHome(user.id);
-                    home.broadcast(event);
-                }
+                await sendToHome(user.id, { type: 'broadcast', event });
             } catch {
-                /* user home may not exist */
+                // user home may not exist
             }
         }
     }
