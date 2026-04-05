@@ -1,6 +1,6 @@
 import { useAuth } from '@workspace/lib/auth';
 import { createDraftEmail } from '@workspace/lib/mail';
-import type { EmailDraft as EmailDraftType } from '@workspace/lib/types/mail';
+import type { EmailDraft as EmailDraftType, NewDraft } from '@workspace/lib/types/mail';
 import { ContactAutosuggest, Toolbar, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import {
@@ -17,7 +17,7 @@ import { Textarea } from '@workspace/ui/components/textarea';
 import { Send, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-export function getEmailDraftStatus(draft: EmailDraftType) {
+export function getEmailDraftStatus(draft: NewDraft | EmailDraftType) {
     // Check if draft is sendable (to field is not empty)
     const isSendable = !!(draft.to?.text && draft.to.text.trim() !== '');
 
@@ -53,8 +53,8 @@ export function EmailDraftToolbar({
 type EmailDraftProps = {
     email: EmailDraftType | null;
     to?: string;
-    sendDraft: (mail: EmailDraftType) => Promise<unknown>;
-    onAutoSave?: (mail: EmailDraftType) => Promise<unknown>;
+    sendDraft: (mail: NewDraft | EmailDraftType) => Promise<unknown>;
+    onAutoSave?: (mail: NewDraft | EmailDraftType) => Promise<unknown>;
 };
 
 export function EmailDraft({ email, to, sendDraft, onAutoSave }: EmailDraftProps) {

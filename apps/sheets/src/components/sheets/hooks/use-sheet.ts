@@ -1,5 +1,6 @@
 import type { Op, Sheet, WorkbookInstance } from '@workspace/fortune-sheet';
 import { getCollabWebSocketUrl } from '@workspace/lib/api';
+import { restoreYjsDoc } from '@workspace/lib/collab';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
@@ -164,28 +165,7 @@ export function useSheet(
             const doc = docRef.current;
             if (!doc) return;
 
-            const tempDoc = new Y.Doc();
-            Y.applyUpdate(tempDoc, state);
-
-            const allKeys = new Set([...doc.share.keys(), ...tempDoc.share.keys()]);
-
-            doc.transact(() => {
-                for (const key of allKeys) {
-                    const localType = doc.get(key);
-                    if (localType instanceof Y.Map) {
-                        const json = tempDoc.getMap(key).toJSON();
-                        for (const k of [...localType.keys()]) localType.delete(k);
-                        for (const [k, v] of Object.entries(json)) {
-                            localType.set(k, v as never);
-                        }
-                    } else if (localType instanceof Y.Array) {
-                        const json = tempDoc.getArray(key).toJSON();
-                        localType.delete(0, localType.length);
-                        localType.push(json);
-                    }
-                }
-            });
-            tempDoc.destroy();
+            restoreYjsDoc(doc, state, (v) => v);
 
             const stateMap = doc.getMap('state');
             const snapshot = stateMap.get('snapshot') as string | undefined;
