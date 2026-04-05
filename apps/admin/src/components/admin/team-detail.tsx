@@ -17,21 +17,22 @@ import {
     useUpdateTeamSettings,
 } from '@workspace/lib/team';
 import { teamOwnerId } from '@workspace/lib/types';
-import type { OrgMember, OrgTeam } from '@workspace/lib/types/admin';
+import type { OrgTeam } from '@workspace/lib/types/admin';
 import { type MountSettings, mapStorageType } from '@workspace/lib/types/settings';
 import { Button } from '@workspace/ui/components/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
-import { MountForm, type MountFormValues } from '@workspace/ui/components/layout/mount/mount-form';
+import type { MountForm, MountFormValues } from '@workspace/ui/components/layout/mount/mount-form';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
 import { UserItem } from '@workspace/ui/components/layout/user-item';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Separator } from '@workspace/ui/components/separator';
 import { Switch } from '@workspace/ui/components/switch';
-import { HardDrive, Pencil, Plus, Settings, Trash2, UserRoundPlus, X } from 'lucide-react';
+import { HardDrive, Pencil, Settings, Trash2, UserRoundPlus, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { AddMemberDialog } from './add-member-dialog';
+import { MountDialog } from './mount-dialog';
 
 type TeamDetailToolbarProps = {
     team: OrgTeam;
@@ -59,124 +60,6 @@ export function TeamDetailToolbar({ team, organizationId }: TeamDetailToolbarPro
                 onDelete={handleRemove}
             />
         </div>
-    );
-}
-
-function AddMemberDialog({
-    open,
-    onOpenChange,
-    availableMembers,
-    onAdd,
-}: {
-    open: boolean;
-    onOpenChange: (open: boolean) => void;
-    availableMembers: OrgMember[];
-    onAdd: (userId: string) => void;
-}) {
-    const [search, setSearch] = useState('');
-
-    const filtered = useMemo(() => {
-        const sorted = [...availableMembers].sort((a, b) => a.name.localeCompare(b.name));
-        if (!search) return sorted;
-        const q = search.toLowerCase();
-        return sorted.filter((m) => m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q));
-    }, [availableMembers, search]);
-
-    return (
-        <Dialog
-            open={open}
-            onOpenChange={(v) => {
-                onOpenChange(v);
-                if (!v) setSearch('');
-            }}
-        >
-            <DialogContent size="sm">
-                <DialogHeader>
-                    <DialogTitle>Add Member to Team</DialogTitle>
-                </DialogHeader>
-                <Input
-                    placeholder="Search by name or email..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    autoFocus
-                />
-                <div className="max-h-64 overflow-y-auto -mx-2">
-                    {filtered.length === 0 ? (
-                        <p className="text-sm text-muted-foreground text-center py-4">
-                            {availableMembers.length === 0
-                                ? 'All members are already in this team.'
-                                : 'No members match your search.'}
-                        </p>
-                    ) : (
-                        filtered.map((m) => (
-                            <div
-                                key={m.userId}
-                                className="flex items-center gap-3 px-2 py-2 rounded-md cursor-pointer hover:bg-accent"
-                                onClick={() => {
-                                    onAdd(m.userId);
-                                    setSearch('');
-                                }}
-                            >
-                                <UserItem
-                                    name={m.name}
-                                    email={m.email}
-                                    imageUrl={m.image ?? undefined}
-                                    className="flex-1 min-w-0"
-                                />
-                                <Plus className="h-4 w-4 text-muted-foreground shrink-0" />
-                            </div>
-                        ))
-                    )}
-                </div>
-            </DialogContent>
-        </Dialog>
-    );
-}
-
-function MountDialog({
-    open,
-    onOpenChange,
-    onSubmit,
-    onS3Check,
-    initialValues,
-    title,
-    submitLabel,
-    isEdit,
-    defaultStorageType,
-    defaultMaxSizeMB,
-}: {
-    open: boolean;
-    onOpenChange: (open: boolean) => void;
-    onSubmit: (values: MountFormValues) => Promise<void>;
-    onS3Check?: MountFormProps['onS3Check'];
-    initialValues?: Partial<MountFormValues>;
-    title: string;
-    submitLabel: string;
-    isEdit?: boolean;
-    defaultStorageType?: MountFormValues['storageType'];
-    defaultMaxSizeMB?: number;
-}) {
-    return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent size="sm">
-                <DialogHeader>
-                    <DialogTitle>{title}</DialogTitle>
-                </DialogHeader>
-                <MountForm
-                    initialValues={initialValues}
-                    defaultStorageType={defaultStorageType}
-                    defaultMaxSizeMB={defaultMaxSizeMB}
-                    onSubmit={async (values) => {
-                        await onSubmit(values);
-                        onOpenChange(false);
-                    }}
-                    onCancel={() => onOpenChange(false)}
-                    onS3Check={onS3Check}
-                    submitLabel={submitLabel}
-                    isEdit={isEdit}
-                />
-            </DialogContent>
-        </Dialog>
     );
 }
 

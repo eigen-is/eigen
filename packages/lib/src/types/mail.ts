@@ -92,6 +92,23 @@ export type EmailDraft = Omit<Email, 'to' | 'cc' | 'bcc'> & {
     bcc?: AddressObject;
 };
 
+/** The minimal shape produced by createDraftEmail and accepted by the draft/send API. */
+export type NewDraft = {
+    id?: string;
+    subject?: string;
+    text?: string;
+    html?: string | false;
+    from?: AddressObject;
+    to?: AddressObject;
+    cc?: AddressObject;
+    bcc?: AddressObject;
+    isDraft?: boolean;
+    mailbox?: string;
+    messageId?: string;
+    inReplyTo?: string;
+    references?: string[] | string;
+};
+
 export type DraftInput = {
     to?: AddressObject;
     cc?: AddressObject;

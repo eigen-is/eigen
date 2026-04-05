@@ -2,6 +2,7 @@ import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@
 import { horizontalListSortingStrategy, SortableContext } from '@dnd-kit/sortable';
 import { useHotkey } from '@tanstack/react-hotkeys';
 import { useComments } from '@workspace/lib/chat';
+import { restoreYjsDoc } from '@workspace/lib/collab';
 import { MediaResolverProvider } from '@workspace/lib/drive';
 import { useIsMobile } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -19,22 +20,6 @@ import { useBoard } from './hooks/use-board';
 import { useDragAndDrop } from './hooks/use-drag-and-drop';
 import { Toolbar } from './toolbar';
 import type { CardItem, ColumnItem } from './types';
-
-function jsonToYType(value: unknown): unknown {
-    if (Array.isArray(value)) {
-        const arr = new Y.Array();
-        arr.push(value.map(jsonToYType));
-        return arr;
-    }
-    if (value !== null && typeof value === 'object') {
-        const map = new Y.Map();
-        for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-            map.set(k, jsonToYType(v));
-        }
-        return map;
-    }
-    return value;
-}
 
 type StickiesBoardProps = {
     ownerId: string;
@@ -160,28 +145,7 @@ export function StickiesBoard({ ownerId, path, canWrite, chatFolderId, onAccessD
     const handleRestore = useCallback(
         (state: Uint8Array) => {
             if (!yjsDoc) return;
-            const tempDoc = new Y.Doc();
-            Y.applyUpdate(tempDoc, state);
-
-            const allKeys = new Set([...yjsDoc.share.keys(), ...tempDoc.share.keys()]);
-
-            yjsDoc.transact(() => {
-                for (const key of allKeys) {
-                    const localType = yjsDoc.get(key);
-                    if (localType instanceof Y.Map) {
-                        const json = tempDoc.getMap(key).toJSON();
-                        for (const k of [...localType.keys()]) localType.delete(k);
-                        for (const [k, v] of Object.entries(json)) {
-                            localType.set(k, jsonToYType(v));
-                        }
-                    } else if (localType instanceof Y.Array) {
-                        const json = tempDoc.getArray(key).toJSON();
-                        localType.delete(0, localType.length);
-                        localType.push(json);
-                    }
-                }
-            });
-            tempDoc.destroy();
+            restoreYjsDoc(yjsDoc, state);
         },
         [yjsDoc],
     );

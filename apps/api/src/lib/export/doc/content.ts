@@ -23,7 +23,7 @@ export async function loadEigendocContent(mount: Mount, drivePath: DrivePath): P
     // Open (or reuse) the database — don't close it, as a collab session may share
     // this instance. Mount.closeAllDatabases handles cleanup on shutdown.
     const managedDb = await mount.openDatabase(COLLAB_DB_CONFIG, dataDbPath.id);
-    const ydoc = loadYjsState(managedDb);
+    const { doc: ydoc } = loadYjsState(managedDb);
     const pmJson = yXmlFragmentToProsemirrorJSON(ydoc.getXmlFragment('default'));
 
     // Build media name -> file lookup

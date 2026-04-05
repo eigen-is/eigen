@@ -2,6 +2,7 @@ import type { CalendarEventOccurrence, CalendarItem, FreeBusyBlock } from '@work
 import { Elysia, t } from 'elysia';
 import { resolveCalendar, resolveCalendarForEvents, syncTeamCalendars } from '../lib/calendar/get-calendar';
 import { ApiError } from '../lib/core';
+import { requireSelf } from '../lib/core/access';
 import { getHome } from '../lib/home';
 import { getMemberships } from '../lib/user';
 import { betterAuth } from './auth';
@@ -236,7 +237,8 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
     // then returns all shared calendars (both team and individually shared).
     .get(
         '/calendar/:ownerId/shared',
-        async ({ user }) => {
+        async ({ params, user }) => {
+            requireSelf(params.ownerId, user.id);
             return syncTeamCalendars(user);
         },
         { auth: true },
@@ -245,6 +247,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
     .put(
         '/calendar/:ownerId/shared/:id',
         async ({ params, body, user }) => {
+            requireSelf(params.ownerId, user.id);
             const cal = await resolveCalendar(user, user.id);
             return cal.updateSharedCalendar(params.id, body);
         },
@@ -254,6 +257,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
     .delete(
         '/calendar/:ownerId/shared/:id',
         async ({ params, user }) => {
+            requireSelf(params.ownerId, user.id);
             const cal = await resolveCalendar(user, user.id);
             cal.deleteSharedCalendar(params.id);
             return { success: true };

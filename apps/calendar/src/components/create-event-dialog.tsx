@@ -11,15 +11,10 @@ import { Textarea } from '@workspace/ui/components/textarea';
 import { AlignLeft, Calendar, Clock, MapPin, UsersRound } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { AttendeeEditor } from './attendee-editor';
+import type { CalendarOption } from './calendar-utils';
+import { toLocalDateString } from './calendar-utils';
 import { RecurrencePicker } from './recurrence-picker';
 import { addMinutes, roundToNext15Minutes, TimeSelect, timeToMinutes } from './time-select';
-
-type CalendarOption = {
-    id: string;
-    name: string;
-    color: string;
-    ownerId: string;
-};
 
 type CreateEventDialogProps = {
     open: boolean;
@@ -27,13 +22,6 @@ type CreateEventDialogProps = {
     defaultDate?: Date;
     defaultCalendarId?: string;
 };
-
-function toLocalDateString(date: Date): string {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-}
 
 function toTimeString(date: Date): string {
     return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;

@@ -10,7 +10,7 @@ import {
     useToggleReadEmail,
     useUpdateDraft,
 } from '@workspace/lib/mail';
-import type { Email, EmailDraft } from '@workspace/lib/types/mail';
+import type { Email, EmailDraft, NewDraft } from '@workspace/lib/types/mail';
 import { toast } from 'sonner';
 import { Route } from '../../../routes/_auth.$filterType.$filterId';
 
@@ -46,12 +46,12 @@ export function useMailActions() {
         navigateToList();
     };
 
-    const handleSendEmail = async (mail: EmailDraft) => {
+    const handleSendEmail = async (mail: NewDraft | EmailDraft) => {
         await sendDraftMutation.mutateAsync(mail);
         navigateToList();
     };
 
-    const handleNewDraftEmail = async (mail: EmailDraft) => {
+    const handleNewDraftEmail = async (mail: NewDraft | EmailDraft) => {
         const draft = await updateDraft.mutateAsync(mail);
         if (draft) {
             navigate({
