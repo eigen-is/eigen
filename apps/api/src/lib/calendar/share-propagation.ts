@@ -2,7 +2,7 @@ import { parseOwnerId } from '@workspace/lib/types';
 import type { CalendarItem, CalendarShare } from '@workspace/lib/types/calendar';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import type { Home } from '../home';
-import { atHome, getHome } from '../home';
+import { sendToHome } from '../home/home-relay';
 import { addRegistryEntry } from '../share';
 import { getTeamMembers } from '../team';
 import { getMemberships, getUserByEmail } from '../user/';
@@ -34,10 +34,7 @@ export async function notifySharedCalendarUsers(
 
     for (const userId of userIds) {
         try {
-            if (atHome(userId)) {
-                const targetHome = await getHome(userId);
-                targetHome.broadcast(event);
-            }
+            await sendToHome(userId, { type: 'broadcast', event });
         } catch (error) {
             console.error('Failed to notify shared calendar user:', error);
         }
@@ -52,14 +49,14 @@ export async function propagateCalendarShare(
     const newShares = calendar.shares || [];
     const allShares = [...(oldShares || []), ...newShares];
 
-    const userIds = new Set<string>();
+    const targets = new Map<string, string>();
 
     for (const share of allShares) {
         const parsed = parseOwnerId(share.targetId);
         if (parsed.type === 'user') {
             const user = await getUserByEmail(share.targetId);
             if (user) {
-                userIds.add(user.id);
+                targets.set(user.id, user.email);
             } else {
                 await addRegistryEntry(ownerHome.user.id, share.targetId);
             }
@@ -67,34 +64,28 @@ export async function propagateCalendarShare(
             await addRegistryEntry(ownerHome.user.id, `team_${parsed.id}`);
             const members = await getTeamMembers(parsed.id);
             for (const member of members) {
-                userIds.add(member.user.id);
+                targets.set(member.user.id, member.user.email);
             }
         }
     }
 
     // Don't propagate to the calendar owner
-    userIds.delete(ownerHome.user.id);
+    targets.delete(ownerHome.user.id);
 
-    for (const userId of userIds) {
+    for (const [userId, email] of targets) {
         try {
-            const targetHome = await getHome(userId);
-            const targetEmail = targetHome.user.email;
             const memberships = await getMemberships(userId);
+            const permission = ownerHome.calendar.checkPermission(calendar.id, email, memberships.teamIds);
 
-            const permission = ownerHome.calendar.checkPermission(calendar.id, targetEmail, memberships.teamIds);
-
-            if (permission) {
-                targetHome.calendar.receiveShare(
-                    ownerHome.user.id,
-                    calendar.id,
-                    calendar.name,
-                    calendar.color,
-                    permission,
-                    ownerHome.user.email,
-                );
-            } else {
-                targetHome.calendar.removeShare(ownerHome.user.id, calendar.id, ownerHome.user.email);
-            }
+            await sendToHome(userId, {
+                type: 'calendar:share',
+                ownerId: ownerHome.user.id,
+                calendarId: calendar.id,
+                name: calendar.name,
+                color: calendar.color,
+                permission,
+                actorEmail: ownerHome.user.email,
+            });
         } catch (error) {
             console.error('Failed to propagate calendar share:', error);
         }
