@@ -1,3 +1,14 @@
+// Cross-home relay — the sharding seam.
+//
+// Every interaction where one user's action touches another user's Home
+// flows through this module. Push operations (writes/notifications) use
+// sendToHome() with a typed HomeMessage. Pull operations (reads) use
+// individual pull*() functions.
+//
+// Today these are direct in-process calls via getHome(). In a sharded
+// deployment, only this file changes: sendToHome() routes to the correct
+// server (or enqueues a message), and pull functions become remote API calls.
+
 import type { Attendee, CalendarEvent, CalendarItem, CalendarShare } from '@workspace/lib/types/calendar';
 import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
 import type { SSEvent } from '@workspace/lib/types/sse';
