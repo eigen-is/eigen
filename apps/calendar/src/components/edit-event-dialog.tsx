@@ -24,19 +24,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@workspace/ui/components/textarea';
 import { AlignLeft, Calendar, Clock, MapPin, UsersRound } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { RRule } from 'rrule';
 import { AttendeeEditor, AttendeeList } from './attendee-editor';
+import type { CalendarOption } from './calendar-utils';
+import { toLocalDateString, truncateRRule } from './calendar-utils';
 import { RecurrencePicker } from './recurrence-picker';
 import type { RecurringAction } from './recurring-action-dialog';
 import { RecurringActionDialog } from './recurring-action-dialog';
 import { addMinutes, roundToNext15Minutes, TimeSelect } from './time-select';
-
-type CalendarOption = {
-    id: string;
-    name: string;
-    color: string;
-    ownerId: string;
-};
 
 type EditEventDialogProps = {
     open: boolean;
@@ -47,28 +41,10 @@ type EditEventDialogProps = {
     sharedCalendars?: SharedCalendar[];
 };
 
-function toLocalDateString(date: Date): string {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
-}
-
 function toLocalTimeString(date: Date): string {
     const h = String(date.getHours()).padStart(2, '0');
     const min = String(date.getMinutes()).padStart(2, '0');
     return `${h}:${min}`;
-}
-
-function truncateRRule(rruleStr: string, beforeDate: Date): string {
-    const options = RRule.parseString(rruleStr);
-    const until = new Date(beforeDate);
-    until.setUTCDate(until.getUTCDate() - 1);
-    until.setUTCHours(23, 59, 59, 0);
-    options.until = until;
-    delete options.count;
-    const result = new RRule(options).toString();
-    return result.replace(/^RRULE:/, '');
 }
 
 export function EditEventDialog({

@@ -50,8 +50,8 @@ export const driveRouter = new Elysia({ name: 'drive' })
     .get(
         '/drive/:ownerId/shared-with-me',
         async ({ params, user }) => {
-            const ownerHome = await getHome(params.ownerId);
-            return await ownerHome.drive.getSharedWith(user);
+            const drive = await getSharedDrive(params.ownerId, user);
+            return await drive.getSharedWith(user);
         },
         { auth: true },
     )

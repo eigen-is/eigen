@@ -1,7 +1,7 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { User } from 'better-auth/types';
 import type { ServerWebSocket } from 'bun';
-import { desc, eq, gt, lt, lte } from 'drizzle-orm';
+import { desc, eq, lt, lte } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import * as decoding from 'lib0/decoding';
 import * as encoding from 'lib0/encoding';
@@ -13,6 +13,7 @@ import { ApiError } from '../core/errors';
 import type { Drive } from '../drive';
 import { COLLAB_DB_CONFIG } from './db-config';
 import * as schema from './schema.ts';
+import { loadYjsState } from './yjs-loader';
 
 const MESSAGE_SYNC = 0;
 const MESSAGE_AWARENESS = 1;
@@ -33,42 +34,13 @@ class DbProvider {
         this.doc = doc;
         this.docId = docId;
 
-        this.loadState();
+        const { updatesApplied } = loadYjsState(managedDb, this.doc);
+        this.updatesSinceSnapshot = updatesApplied;
 
         this.updateHandler = (update: Uint8Array) => {
             this.storeUpdate(update);
         };
         doc.on('update', this.updateHandler);
-    }
-
-    private loadState(): void {
-        this.db.transaction((tx) => {
-            const snapshot = tx.select().from(schema.docSnapshots).orderBy(desc(schema.docSnapshots.id)).limit(1).get();
-
-            let loadedSnapshot = false;
-            if (snapshot) {
-                try {
-                    Y.applyUpdate(this.doc, snapshot.stateData as Uint8Array);
-                    loadedSnapshot = true;
-                } catch (_error) {
-                    console.error(`[DbProvider] Corrupted snapshot for ${this.docId}, loading all updates instead`);
-                }
-            }
-
-            const updates =
-                loadedSnapshot && snapshot
-                    ? tx.select().from(schema.docUpdates).where(gt(schema.docUpdates.id, snapshot.lastUpdateId)).all()
-                    : tx.select().from(schema.docUpdates).all();
-
-            for (const update of updates) {
-                try {
-                    Y.applyUpdate(this.doc, update.updateData as Uint8Array);
-                } catch (_error) {
-                    console.error(`[DbProvider] Skipping corrupted update ${update.id} for ${this.docId}`);
-                }
-            }
-            this.updatesSinceSnapshot = updates.length;
-        });
     }
 
     private storeUpdate(update: Uint8Array): void {

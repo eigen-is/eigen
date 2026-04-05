@@ -383,7 +383,9 @@ export default class SharedDrive extends Drive {
         throw new ApiError(403, 'Not available on shared drive');
     }
 
-    async getSharedWith(): Promise<never> {
-        throw new ApiError(403, 'Not available on shared drive');
+    async getSharedWith(user: User): Promise<DrivePath[]> {
+        // No owner/team check — getSharedWith is self-filtering: it only returns
+        // paths where the querying user has ACL read access.
+        return this.sharedDrive.getSharedWith(user);
     }
 }

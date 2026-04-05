@@ -827,6 +827,30 @@ export class Calendar {
         this.db.delete(schema.sharedCalendars).where(eq(schema.sharedCalendars.id, id)).run();
     }
 
+    private insertSharedCalendar(
+        ownerUserId: string,
+        calendarId: string,
+        calendarName: string,
+        permission: CalendarShare['permission'],
+    ): void {
+        const ownCalendarCount = this.db.select({ count: count() }).from(schema.calendars).get()!.count;
+        const sharedCount = this.db.select({ count: count() }).from(schema.sharedCalendars).get()!.count;
+        const localColor =
+            EIGEN_ACCENT_COLORS_SHUFFLED[(ownCalendarCount + sharedCount) % EIGEN_ACCENT_COLORS_SHUFFLED.length].value;
+        this.db
+            .insert(schema.sharedCalendars)
+            .values({
+                id: uuidv4(),
+                ownerUserId,
+                calendarId,
+                calendarName,
+                calendarColor: localColor,
+                permission,
+                visible: true,
+            })
+            .run();
+    }
+
     public receiveShare(
         ownerUserId: string,
         calendarId: string,
@@ -857,23 +881,7 @@ export class Calendar {
                 .where(eq(schema.sharedCalendars.id, existing.id))
                 .run();
         } else {
-            const ownCalendarCount = this.db.select({ count: count() }).from(schema.calendars).get()!.count;
-            const sharedCount = this.db.select({ count: count() }).from(schema.sharedCalendars).get()!.count;
-            const localColor =
-                EIGEN_ACCENT_COLORS_SHUFFLED[(ownCalendarCount + sharedCount) % EIGEN_ACCENT_COLORS_SHUFFLED.length]
-                    .value;
-            this.db
-                .insert(schema.sharedCalendars)
-                .values({
-                    id: uuidv4(),
-                    ownerUserId,
-                    calendarId,
-                    calendarName,
-                    calendarColor: localColor,
-                    permission,
-                    visible: true,
-                })
-                .run();
+            this.insertSharedCalendar(ownerUserId, calendarId, calendarName, permission);
         }
 
         this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_SHARED, ownerUserId));
@@ -939,23 +947,7 @@ export class Calendar {
                     .run();
             }
         } else {
-            const ownCalendarCount = this.db.select({ count: count() }).from(schema.calendars).get()!.count;
-            const sharedCount = this.db.select({ count: count() }).from(schema.sharedCalendars).get()!.count;
-            const localColor =
-                EIGEN_ACCENT_COLORS_SHUFFLED[(ownCalendarCount + sharedCount) % EIGEN_ACCENT_COLORS_SHUFFLED.length]
-                    .value;
-            this.db
-                .insert(schema.sharedCalendars)
-                .values({
-                    id: uuidv4(),
-                    ownerUserId,
-                    calendarId,
-                    calendarName,
-                    calendarColor: localColor,
-                    permission,
-                    visible: true,
-                })
-                .run();
+            this.insertSharedCalendar(ownerUserId, calendarId, calendarName, permission);
         }
     }
 

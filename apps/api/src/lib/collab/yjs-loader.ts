@@ -3,9 +3,18 @@ import * as Y from 'yjs';
 import type { ManagedDatabase, SchemaType } from '../core/managed-database';
 import * as schema from './schema';
 
-export function loadYjsState(managedDb: ManagedDatabase<SchemaType>): Y.Doc {
+/**
+ * Loads Yjs state from the database into the given doc (or a new one if not
+ * provided).  Returns the doc and the number of incremental updates that were
+ * applied on top of the latest snapshot.
+ */
+export function loadYjsState(
+    managedDb: ManagedDatabase<SchemaType>,
+    doc?: Y.Doc,
+): { doc: Y.Doc; updatesApplied: number } {
     const db = managedDb.db;
-    const doc = new Y.Doc();
+    if (!doc) doc = new Y.Doc();
+    let updatesApplied = 0;
 
     db.transaction((tx) => {
         const snapshot = tx.select().from(schema.docSnapshots).orderBy(desc(schema.docSnapshots.id)).limit(1).get();
@@ -37,7 +46,9 @@ export function loadYjsState(managedDb: ManagedDatabase<SchemaType>): Y.Doc {
                 console.error(`[yjs-loader] Skipping corrupted update ${update.id}`);
             }
         }
+
+        updatesApplied = updates.length;
     });
 
-    return doc;
+    return { doc, updatesApplied };
 }

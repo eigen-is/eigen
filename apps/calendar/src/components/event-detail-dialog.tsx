@@ -26,8 +26,8 @@ import {
     X as XIcon,
 } from 'lucide-react';
 import { useState } from 'react';
-import { RRule } from 'rrule';
 import { AttendeeList } from './attendee-editor';
+import { truncateRRule } from './calendar-utils';
 import { EditEventDialog } from './edit-event-dialog';
 import { rruleToText } from './recurrence-picker';
 import type { RecurringAction } from './recurring-action-dialog';
@@ -85,17 +85,6 @@ function formatTimeRange(event: CalendarEventOccurrence): string {
         minute: '2-digit',
     });
     return `${startStr} · ${startTime} – ${endTime}`;
-}
-
-function truncateRRule(rruleStr: string, beforeDate: Date): string {
-    const options = RRule.parseString(rruleStr);
-    const until = new Date(beforeDate);
-    until.setUTCDate(until.getUTCDate() - 1);
-    until.setUTCHours(23, 59, 59, 0);
-    options.until = until;
-    delete options.count;
-    const result = new RRule(options).toString();
-    return result.replace(/^RRULE:/, '');
 }
 
 export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedCalendar }: EventDetailDialogProps) {

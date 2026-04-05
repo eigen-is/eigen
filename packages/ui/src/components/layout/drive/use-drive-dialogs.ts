@@ -11,13 +11,20 @@ export type DriveDialogsState = {
     upload: { open: boolean; files: File[] };
 };
 
+function useDialogState() {
+    const [open, setOpen] = useState(false);
+    const openDialog = useCallback(() => setOpen(true), []);
+    const closeDialog = useCallback(() => setOpen(false), []);
+    return { open, setOpen, openDialog, closeDialog };
+}
+
 export function useDriveDialogs() {
-    const [createFolderOpen, setCreateFolderOpen] = useState(false);
-    const [createDocOpen, setCreateDocOpen] = useState(false);
-    const [createStickiesOpen, setCreateStickiesOpen] = useState(false);
-    const [createChatOpen, setCreateChatOpen] = useState(false);
-    const [createSlidesOpen, setCreateSlidesOpen] = useState(false);
-    const [createSheetsOpen, setCreateSheetsOpen] = useState(false);
+    const createFolder = useDialogState();
+    const createDoc = useDialogState();
+    const createStickies = useDialogState();
+    const createChat = useDialogState();
+    const createSlides = useDialogState();
+    const createSheets = useDialogState();
 
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [deleteItems, setDeleteItems] = useState<DrivePath[]>([]);
@@ -30,24 +37,6 @@ export function useDriveDialogs() {
 
     const [uploadOpen, setUploadOpen] = useState(false);
     const [uploadFiles, setUploadFiles] = useState<File[]>([]);
-
-    const openCreateFolder = useCallback(() => setCreateFolderOpen(true), []);
-    const closeCreateFolder = useCallback(() => setCreateFolderOpen(false), []);
-
-    const openCreateDoc = useCallback(() => setCreateDocOpen(true), []);
-    const closeCreateDoc = useCallback(() => setCreateDocOpen(false), []);
-
-    const openCreateStickies = useCallback(() => setCreateStickiesOpen(true), []);
-    const closeCreateStickies = useCallback(() => setCreateStickiesOpen(false), []);
-
-    const openCreateChat = useCallback(() => setCreateChatOpen(true), []);
-    const closeCreateChat = useCallback(() => setCreateChatOpen(false), []);
-
-    const openCreateSlides = useCallback(() => setCreateSlidesOpen(true), []);
-    const closeCreateSlides = useCallback(() => setCreateSlidesOpen(false), []);
-
-    const openCreateSheets = useCallback(() => setCreateSheetsOpen(true), []);
-    const closeCreateSheets = useCallback(() => setCreateSheetsOpen(false), []);
 
     const openDelete = useCallback((items: DrivePath | DrivePath[]) => {
         setDeleteItems(Array.isArray(items) ? items : [items]);
@@ -86,42 +75,12 @@ export function useDriveDialogs() {
     }, []);
 
     return {
-        createFolder: {
-            open: createFolderOpen,
-            setOpen: setCreateFolderOpen,
-            openDialog: openCreateFolder,
-            closeDialog: closeCreateFolder,
-        },
-        createDoc: {
-            open: createDocOpen,
-            setOpen: setCreateDocOpen,
-            openDialog: openCreateDoc,
-            closeDialog: closeCreateDoc,
-        },
-        createStickies: {
-            open: createStickiesOpen,
-            setOpen: setCreateStickiesOpen,
-            openDialog: openCreateStickies,
-            closeDialog: closeCreateStickies,
-        },
-        createChat: {
-            open: createChatOpen,
-            setOpen: setCreateChatOpen,
-            openDialog: openCreateChat,
-            closeDialog: closeCreateChat,
-        },
-        createSlides: {
-            open: createSlidesOpen,
-            setOpen: setCreateSlidesOpen,
-            openDialog: openCreateSlides,
-            closeDialog: closeCreateSlides,
-        },
-        createSheets: {
-            open: createSheetsOpen,
-            setOpen: setCreateSheetsOpen,
-            openDialog: openCreateSheets,
-            closeDialog: closeCreateSheets,
-        },
+        createFolder,
+        createDoc,
+        createStickies,
+        createChat,
+        createSlides,
+        createSheets,
         delete: {
             open: deleteOpen,
             items: deleteItems,

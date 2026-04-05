@@ -8,6 +8,7 @@ import {
     writeEigenClipboard,
     writeEigenClipboardAsync,
 } from '@workspace/lib/clipboard';
+import { restoreYjsDoc } from '@workspace/lib/collab';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants/colors';
 import { MediaResolverProvider, useMediaResolver, useUploadFile } from '@workspace/lib/drive';
 import type { CommentEntry } from '@workspace/lib/types/chat';
@@ -18,7 +19,6 @@ import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { Column, ColumnLayout, EmptyState } from '@workspace/ui/index';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import * as Y from 'yjs';
 import { useActiveComments } from './hooks/use-active-comments';
 import { useDeck } from './hooks/use-deck';
 import { useSlideDnd } from './hooks/use-slide-dnd';
@@ -68,22 +68,6 @@ function buildClipboardItem(
             backgroundColor: obj.backgroundColor,
         },
     };
-}
-
-function jsonToYType(value: unknown): unknown {
-    if (Array.isArray(value)) {
-        const arr = new Y.Array();
-        arr.push(value.map(jsonToYType));
-        return arr;
-    }
-    if (value !== null && typeof value === 'object') {
-        const map = new Y.Map();
-        for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-            map.set(k, jsonToYType(v));
-        }
-        return map;
-    }
-    return value;
 }
 
 type SlideEditorProps = {
@@ -537,28 +521,7 @@ function SlideEditorInner({
     const handleRestore = useCallback(
         (state: Uint8Array) => {
             if (!yjsDoc) return;
-            const tempDoc = new Y.Doc();
-            Y.applyUpdate(tempDoc, state);
-
-            const allKeys = new Set([...yjsDoc.share.keys(), ...tempDoc.share.keys()]);
-
-            yjsDoc.transact(() => {
-                for (const key of allKeys) {
-                    const localType = yjsDoc.get(key);
-                    if (localType instanceof Y.Map) {
-                        const json = tempDoc.getMap(key).toJSON();
-                        for (const k of [...localType.keys()]) localType.delete(k);
-                        for (const [k, v] of Object.entries(json)) {
-                            localType.set(k, jsonToYType(v));
-                        }
-                    } else if (localType instanceof Y.Array) {
-                        const json = tempDoc.getArray(key).toJSON();
-                        localType.delete(0, localType.length);
-                        localType.push(json);
-                    }
-                }
-            });
-            tempDoc.destroy();
+            restoreYjsDoc(yjsDoc, state);
         },
         [yjsDoc],
     );
