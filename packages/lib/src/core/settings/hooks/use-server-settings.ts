@@ -14,7 +14,7 @@ export function useServerSettings() {
         queryKey: settingsKeys.server(),
         queryFn: async () => {
             const res = await settingsApi.server.get();
-            return (res.data || null) as ServerSettings | null;
+            return res.data || null;
         },
         staleTime: 5 * 60 * 1000,
     });
@@ -27,7 +27,7 @@ export function useUpdateServerSettings() {
         mutationFn: async (body: Partial<ServerSettings>) => {
             const res = await settingsApi.server.put(body);
             if (res.error) throw new AppError(res);
-            return res.data as ServerSettings;
+            return res.data;
         },
         onSuccess: () => {
             invalidateServerSettings(queryClient);

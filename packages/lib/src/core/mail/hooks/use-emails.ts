@@ -26,7 +26,7 @@ export function useEmails(mailboxPath: string) {
         queryKey: emailKeys.list(ownerId, mailboxPath),
         queryFn: async (): Promise<EmailSummary[]> => {
             const response = await mailApi({ ownerId }).mailbox({ mailboxPath: mailboxPath.toLowerCase() }).get();
-            return (response.data || []) as EmailSummary[];
+            return response.data || [];
         },
         staleTime: 1 * 60 * 1000,
         enabled: !!ownerId,

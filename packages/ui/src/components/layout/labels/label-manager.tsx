@@ -34,35 +34,23 @@ export function LabelManager({
     const handleSubmit = async (data: { name: string; color: string }) => {
         try {
             if (selectedLabel) {
-                // Edit existing label
-                await updateLabel({
-                    ...selectedLabel,
-                    name: data.name,
-                    color: data.color,
-                });
+                await updateLabel({ ...selectedLabel, name: data.name, color: data.color });
             } else {
-                // Add new label
-                await addLabel({
-                    name: data.name,
-                    color: data.color,
-                });
+                await addLabel({ name: data.name, color: data.color });
             }
             setDialogOpen(false);
-        } catch (error) {
-            console.error('Error submitting label:', error);
-            // Keep dialog open on error so user can try again
+        } catch {
+            // Mutation's onError handles the toast; keep dialog open for retry
         }
     };
 
     const handleDeleteLabel = async () => {
+        if (!selectedLabel) return;
         try {
-            if (selectedLabel) {
-                await deleteLabel(selectedLabel.id);
-                setDialogOpen(false);
-            }
-        } catch (error) {
-            console.error('Error deleting label:', error);
-            // Keep dialog open on error so user can try again
+            await deleteLabel(selectedLabel.id);
+            setDialogOpen(false);
+        } catch {
+            // Mutation's onError handles the toast; keep dialog open for retry
         }
     };
 

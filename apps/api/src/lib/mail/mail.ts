@@ -1,4 +1,4 @@
-import type { EmailDraft } from '@workspace/lib/types/mail';
+import type { Email, EmailDraft, EmailSummary } from '@workspace/lib/types/mail';
 import type { User } from 'better-auth/types';
 import { ApiError } from '../core/errors';
 import { getHome } from '../home';
@@ -14,7 +14,7 @@ export async function mailboxesList(user: User) {
     return await mail.mailboxesList();
 }
 
-export async function mailboxGet(user: User, mailbox: string) {
+export async function mailboxGet(user: User, mailbox: string): Promise<EmailSummary[]> {
     const mail = await getMailClient(user);
     return await mail.mailboxGet(mailbox);
 }
@@ -44,7 +44,7 @@ export async function messageGetFile(user: User, messageId: string) {
     return await mail.messageGetFile(messageId);
 }
 
-export async function messageGet(user: User, messageId: string) {
+export async function messageGet(user: User, messageId: string): Promise<Email> {
     const mail = await getMailClient(user);
     const message = await mail.messageGet(messageId);
     if (!message) {

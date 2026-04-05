@@ -25,7 +25,7 @@ export function useCollabDocumentInfo(ownerId: string, mountId: string, pathId: 
             }
 
             return (
-                (response.data as CollabDocumentInfo) || {
+                response.data || {
                     canRead: false,
                     canWrite: false,
                     path: null,

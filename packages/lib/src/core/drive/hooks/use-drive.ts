@@ -471,7 +471,7 @@ export function useTextPreview(ownerId: string, mountId: string, pathId: string,
         queryFn: async () => {
             const response = await driveApi({ ownerId })({ mountId }).file({ pathId })['text-preview'].get();
             if (response.error) throw new AppError(response);
-            return response.data as { body: string; mode: string } | null;
+            return response.data;
         },
         enabled: enabled && !!pathId && !!ownerId && !!mountId,
         staleTime: 1000 * 60 * 5,

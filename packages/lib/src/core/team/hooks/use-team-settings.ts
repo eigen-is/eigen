@@ -14,7 +14,7 @@ export function useTeamSettings(teamId: string) {
         queryKey: teamKeys.settings(teamId),
         queryFn: async () => {
             const res = await teamApi({ teamId }).settings.get();
-            return (res.data || {}) as TeamSettings;
+            return res.data || {};
         },
         staleTime: 5 * 60 * 1000,
         enabled: !!teamId,

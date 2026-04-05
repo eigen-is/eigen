@@ -2,7 +2,6 @@ import { type QueryClient, useMutation, useQueries, useQuery, useQueryClient } f
 import { calendarApi } from '@workspace/lib/api';
 import type {
     CalendarEventOccurrence,
-    CalendarItem,
     CreateEventInput,
     SharedCalendar,
     UpdateCalendarInput,
@@ -38,7 +37,7 @@ export function useCalendars(ownerId: string) {
         queryKey: calendarKeys.calendarList(ownerId),
         queryFn: async () => {
             const response = await calendarApi({ ownerId }).calendars.get();
-            return (response.data || []) as CalendarItem[];
+            return response.data || [];
         },
         staleTime: 5 * 60 * 1000,
         enabled: !!ownerId,
@@ -96,7 +95,7 @@ export function useEvents(ownerId: string, from: number, to: number, enabled = t
             const response = await calendarApi({ ownerId })
                 ['event-range']({ from: String(from) })({ to: String(to) })
                 .get();
-            return (response.data || []) as CalendarEventOccurrence[];
+            return response.data || [];
         },
         staleTime: 2 * 60 * 1000,
         enabled: !!ownerId && enabled && from > 0 && to > 0,
@@ -206,7 +205,7 @@ export function useSharedCalendars(ownerId: string) {
         queryKey: calendarKeys.sharedCalendars(ownerId),
         queryFn: async () => {
             const response = await calendarApi({ ownerId }).shared.get();
-            return (response.data || []) as SharedCalendar[];
+            return response.data || [];
         },
         staleTime: 5 * 60 * 1000,
         enabled: !!ownerId,

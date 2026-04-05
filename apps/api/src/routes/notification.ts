@@ -1,3 +1,4 @@
+import type { Notification } from '@workspace/lib/types/notification';
 import { Elysia, t } from 'elysia';
 import { requireSelf } from '../lib/core/access';
 import { getHome } from '../lib/home';
@@ -8,7 +9,7 @@ export const notificationRouter = new Elysia({ name: 'notification' })
 
     .get(
         '/notifications/:ownerId',
-        async ({ params, query, user }) => {
+        async ({ params, query, user }): Promise<Notification[]> => {
             requireSelf(params.ownerId, user.id);
             const home = await getHome(params.ownerId);
             const before = query.before ? new Date(query.before) : undefined;
@@ -25,7 +26,7 @@ export const notificationRouter = new Elysia({ name: 'notification' })
 
     .get(
         '/notifications/:ownerId/unread-count',
-        async ({ params, user }) => {
+        async ({ params, user }): Promise<{ count: number }> => {
             requireSelf(params.ownerId, user.id);
             const home = await getHome(params.ownerId);
             return { count: home.notifications.unreadCount() };

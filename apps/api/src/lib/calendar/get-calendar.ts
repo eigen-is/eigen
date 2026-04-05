@@ -1,5 +1,5 @@
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
-import type { CalendarShare } from '@workspace/lib/types/calendar';
+import type { CalendarShare, SharedCalendar } from '@workspace/lib/types/calendar';
 import type { User } from 'better-auth/types';
 import { ApiError } from '../core';
 import { getHome } from '../home';
@@ -54,7 +54,7 @@ export async function resolveCalendarForEvents(
     return { calendar: ownerHome.calendar, permission };
 }
 
-export async function syncTeamCalendars(user: User) {
+export async function syncTeamCalendars(user: User): Promise<SharedCalendar[]> {
     const home = await getHome(user.id);
     const cal = home.calendar;
     const memberships = await getMemberships(user.id);
