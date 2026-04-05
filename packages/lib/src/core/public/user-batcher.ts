@@ -1,12 +1,9 @@
 import { publicApi } from '@workspace/lib/api';
 import type { PublicUser } from '../../types/public';
 
-type PendingRequest = {
-    resolve: (user: PublicUser) => void;
-    reject: (error: Error) => void;
-};
+type PendingResolve = (user: PublicUser | null) => void;
 
-let pending = new Map<string, PendingRequest>();
+let pending = new Map<string, PendingResolve>();
 let scheduled = false;
 
 async function flushBatch() {
@@ -20,37 +17,34 @@ async function flushBatch() {
     // Single ID — use the existing GET endpoint (avoids POST for common case)
     if (ids.length === 1) {
         const id = ids[0];
-        const { resolve, reject } = batch.get(id)!;
+        const resolve = batch.get(id)!;
         try {
             const res = await publicApi.user({ emailOrId: id }).get();
-            if (res.data) resolve(res.data);
-            else reject(new Error('User not found'));
-        } catch (e) {
-            reject(e instanceof Error ? e : new Error(String(e)));
+            resolve(res.data ?? null);
+        } catch {
+            resolve(null);
         }
         return;
     }
 
-    // Multiple IDs — batch POST
+    // Multiple IDs — batch POST. Resolve null for not-found users so
+    // TanStack Query caches the miss instead of retrying.
     try {
         const res = await publicApi.users.post({ ids });
         const users = (res.data ?? {}) as Record<string, PublicUser>;
-        for (const [id, callbacks] of batch) {
-            const user = users[id];
-            if (user) callbacks.resolve(user);
-            else callbacks.reject(new Error('User not found'));
+        for (const [id, resolve] of batch) {
+            resolve(users[id] ?? null);
         }
-    } catch (e) {
-        const error = e instanceof Error ? e : new Error(String(e));
-        for (const callbacks of batch.values()) {
-            callbacks.reject(error);
+    } catch {
+        for (const resolve of batch.values()) {
+            resolve(null);
         }
     }
 }
 
-export function fetchPublicUser(emailOrId: string): Promise<PublicUser> {
-    return new Promise((resolve, reject) => {
-        pending.set(emailOrId, { resolve, reject });
+export function fetchPublicUser(emailOrId: string): Promise<PublicUser | null> {
+    return new Promise((resolve) => {
+        pending.set(emailOrId, resolve);
         if (!scheduled) {
             scheduled = true;
             queueMicrotask(flushBatch);
