@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { type QueryClient, useQuery } from '@tanstack/react-query';
 import { api } from '../../api';
 
 export const editorKeys = {
@@ -6,6 +6,10 @@ export const editorKeys = {
     content: (ownerId: string, mountId: string, pathId: string) =>
         [...editorKeys.all, 'content', ownerId, mountId, pathId] as const,
 };
+
+export function invalidateEditorContent(queryClient: QueryClient, ownerId: string, mountId: string, pathId: string) {
+    queryClient.invalidateQueries({ queryKey: editorKeys.content(ownerId, mountId, pathId) });
+}
 
 export function useFileContent(ownerId: string, mountId: string, pathId: string) {
     return useQuery({

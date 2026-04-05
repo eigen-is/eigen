@@ -1,6 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { authClient } from '@workspace/lib/auth';
+import { authClient, useDisable2FA, useInitialize2FA, useVerifyTotp } from '@workspace/lib/auth';
 import { Button } from '@workspace/ui/components/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
 import { Input } from '@workspace/ui/components/input';
@@ -8,7 +8,6 @@ import { Separator } from '@workspace/ui/components/separator';
 import { ShieldCheck } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { toast } from 'sonner';
 import { z } from 'zod';
 import { TwoFactorSetup } from '../components/space/fa2';
 
@@ -28,7 +27,10 @@ function TwoFaComponent() {
     const [setupStep, setSetupStep] = useState<'password' | 'qrcode' | 'verification' | 'recoverycodes'>('password');
     const [twoFactorEnabled, setTwoFactorEnabled] = useState<boolean | null>(null);
     const [showDisableForm, setShowDisableForm] = useState(false);
-    const [isDisabling, setIsDisabling] = useState(false);
+
+    const initialize2FA = useInitialize2FA();
+    const verifyTotp = useVerifyTotp();
+    const disable2FA = useDisable2FA();
 
     useEffect(() => {
         authClient
@@ -47,42 +49,18 @@ function TwoFaComponent() {
     });
 
     const handleInitialize2FA = async (password: string) => {
-        try {
-            const result = await authClient.twoFactor.enable({
-                password,
-            });
-
-            if (result.data) {
-                setTotpUri(result.data.totpURI);
-                setSecretKey(new URL(result.data.totpURI).searchParams.get('secret') || '');
-                setBackupCodes(result.data.backupCodes ?? []);
-                setSetupStep('qrcode');
-                toast.success('Two-factor authentication initialized. Please scan the QR code.');
-            } else {
-                toast.error(result.error?.message ?? 'Failed to initialize two-factor authentication');
-            }
-        } catch (error) {
-            console.error('Error initializing 2FA:', error);
-            toast.error('Failed to initialize two-factor authentication');
+        const data = await initialize2FA.mutateAsync(password);
+        if (data) {
+            setTotpUri(data.totpURI);
+            setSecretKey(new URL(data.totpURI).searchParams.get('secret') || '');
+            setBackupCodes(data.backupCodes ?? []);
+            setSetupStep('qrcode');
         }
     };
 
     const handleVerifyTotp = async (code: string): Promise<boolean> => {
-        try {
-            const result = await authClient.twoFactor.verifyTotp({ code });
-
-            if (result.data) {
-                toast.success('Two-factor authentication enabled');
-                return true;
-            } else {
-                toast.error(result.error?.message ?? 'Failed to verify verification code');
-                return false;
-            }
-        } catch (error) {
-            console.error('Error verifying TOTP:', error);
-            toast.error('Failed to verify verification code');
-            return false;
-        }
+        const data = await verifyTotp.mutateAsync(code);
+        return !!data;
     };
 
     const handleComplete = () => {
@@ -98,25 +76,10 @@ function TwoFaComponent() {
     };
 
     const handleDisable = async (values: z.infer<typeof disableSchema>) => {
-        try {
-            setIsDisabling(true);
-            const result = await authClient.twoFactor.disable({
-                password: values.password,
-            });
-            if (result.data) {
-                toast.success('Two-factor authentication disabled');
-                setTwoFactorEnabled(false);
-                setShowDisableForm(false);
-                disableForm.reset();
-            } else {
-                toast.error(result.error?.message ?? 'Failed to disable two-factor authentication');
-            }
-        } catch (error) {
-            console.error('Error disabling 2FA:', error);
-            toast.error('Failed to disable two-factor authentication');
-        } finally {
-            setIsDisabling(false);
-        }
+        await disable2FA.mutateAsync(values.password);
+        setTwoFactorEnabled(false);
+        setShowDisableForm(false);
+        disableForm.reset();
     };
 
     if (twoFactorEnabled === null) return null;
@@ -172,8 +135,8 @@ function TwoFaComponent() {
                                         >
                                             Cancel
                                         </Button>
-                                        <Button type="submit" variant="destructive" disabled={isDisabling}>
-                                            {isDisabling ? 'Disabling...' : 'Disable'}
+                                        <Button type="submit" variant="destructive" disabled={disable2FA.isPending}>
+                                            {disable2FA.isPending ? 'Disabling...' : 'Disable'}
                                         </Button>
                                     </div>
                                 </form>

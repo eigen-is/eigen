@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { getDriveDownloadUrl } from '@workspace/lib/api';
 import { useCheckWritePermission, useTextPreview } from '@workspace/lib/drive';
-import { editorKeys, useFileContent } from '@workspace/lib/editor';
+import { invalidateEditorContent, useFileContent } from '@workspace/lib/editor';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { ErrorState, LoadingState } from '@workspace/ui';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout';
@@ -29,7 +29,7 @@ export function NativeFileEditor({ path, onClose }: NativeFileEditorProps) {
     const { data: preview } = useTextPreview(path.ownerId, path.mountId, path.id, !editing);
 
     const handleReload = () => {
-        queryClient.invalidateQueries({ queryKey: editorKeys.content(path.ownerId, path.mountId, path.id) });
+        invalidateEditorContent(queryClient, path.ownerId, path.mountId, path.id);
         setReloadKey((k) => k + 1);
         setEditing(false);
     };
