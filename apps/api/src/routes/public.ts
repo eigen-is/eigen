@@ -1,8 +1,9 @@
+import type { PublicUser } from '@workspace/lib/types/public';
 import { Elysia, t } from 'elysia';
 import { getPublicConfig } from '../lib/config/server-config';
 import { getServerSettings } from '../lib/config/server-settings';
 import { setCacheHeaders } from '../lib/core/http';
-import { generateFallbackSvg, getAvatarByEmailOrId, getPublicInfo } from '../lib/space/public';
+import { generateFallbackSvg, getAvatarByEmailOrId, getBatchPublicInfo, getPublicInfo } from '../lib/space/public';
 import { waitlist } from '../lib/space/waitlist';
 
 export const publicRouter = new Elysia({ name: 'public' })
@@ -20,6 +21,9 @@ export const publicRouter = new Elysia({ name: 'public' })
         return await generateFallbackSvg(params.emailOrId);
     })
     .get('/p/user/:emailOrId', async ({ params }) => await getPublicInfo(params.emailOrId))
+    .post('/p/users', async ({ body }): Promise<Record<string, PublicUser>> => await getBatchPublicInfo(body.ids), {
+        body: t.Object({ ids: t.Array(t.String(), { maxItems: 100 }) }),
+    })
     .post(
         '/p/waitlist',
         async ({ body, set }) => {

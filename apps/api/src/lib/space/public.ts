@@ -34,6 +34,20 @@ export async function getPublicInfo(emailOrId: string): Promise<PublicUser> {
     throw new ApiError(404, 'User not found');
 }
 
+export async function getBatchPublicInfo(ids: string[]): Promise<Record<string, PublicUser>> {
+    const result: Record<string, PublicUser> = {};
+    await Promise.all(
+        ids.map(async (id) => {
+            try {
+                result[id] = await getPublicInfo(id);
+            } catch {
+                // Skip users that can't be resolved
+            }
+        }),
+    );
+    return result;
+}
+
 export async function getAvatarByEmailOrId(emailOrId: string): Promise<BunFile | null> {
     const user = await getUserByEmailOrId(emailOrId);
     if (!user?.image) return null;
