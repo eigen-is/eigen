@@ -129,3 +129,14 @@ export async function pullCalendars(ownerUserId: string): Promise<CalendarItem[]
     const home = await getHome(ownerUserId);
     return home.calendar.getCalendars();
 }
+
+export type TeamQuotaOverrides = {
+    mailAndContactsMaxMB?: number;
+    defaultMountMaxSizeMB?: number;
+};
+
+export async function pullTeamQuotaOverrides(teamOwnerId: string): Promise<TeamQuotaOverrides> {
+    const home = await getHome(teamOwnerId);
+    const settings = home.settings.get() as { memberOverrides?: TeamQuotaOverrides };
+    return settings.memberOverrides ?? {};
+}

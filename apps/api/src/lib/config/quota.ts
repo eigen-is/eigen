@@ -1,7 +1,6 @@
 import type { MountConfig } from '@workspace/lib/types';
 import { teamOwnerId } from '@workspace/lib/types';
-import { getHome } from '../home';
-import type { TeamHome } from '../home/team-home';
+import { pullTeamQuotaOverrides } from '../home/home-relay';
 import { getServerSettings } from './server-settings';
 
 export type ResolvedQuotas = {
@@ -16,13 +15,12 @@ export async function resolveUserQuotas(mountConfig: MountConfig, teamIds: strin
     const mountCandidates = [mountConfig.maxSizeMB ?? settings.quotas.defaultMountMaxSizeMB];
 
     for (const teamId of teamIds) {
-        const teamHome = (await getHome(teamOwnerId(teamId))) as TeamHome;
-        const ts = teamHome.settings.get();
-        if (ts.memberOverrides?.mailAndContactsMaxMB != null) {
-            mailCandidates.push(ts.memberOverrides.mailAndContactsMaxMB);
+        const overrides = await pullTeamQuotaOverrides(teamOwnerId(teamId));
+        if (overrides.mailAndContactsMaxMB != null) {
+            mailCandidates.push(overrides.mailAndContactsMaxMB);
         }
-        if (ts.memberOverrides?.defaultMountMaxSizeMB != null) {
-            mountCandidates.push(ts.memberOverrides.defaultMountMaxSizeMB);
+        if (overrides.defaultMountMaxSizeMB != null) {
+            mountCandidates.push(overrides.defaultMountMaxSizeMB);
         }
     }
 
