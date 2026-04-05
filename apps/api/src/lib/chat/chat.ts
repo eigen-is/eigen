@@ -172,7 +172,7 @@ export class ChatRoom {
                             },
                         });
                     } catch {
-                        /* user may not exist */
+                        // user may not exist
                     }
                 }
             }
