@@ -123,6 +123,7 @@ bun run check          # lint + typecheck + test
 | **Mailer**            | `apps/api/src/lib/core/mailer.ts`            | `sendMail(OutboundMail)` — sendmail transport, skips in dev, supports replyTo/attachments                  |
 | **Environment**       | `apps/api/src/lib/config/env.ts`             | `isProduction()` — checks `PRODUCTION=1` or `NODE_ENV=production`                                         |
 | **Singleton factory** | `apps/api/src/utils/singleton.ts`            | `createAsyncSingleton()` for Home/DB instances                                                             |
+| **Home relay**        | `apps/api/src/lib/home/home-relay.ts`        | Cross-home messaging via `sendToHome()`; reads via `pull*()`. See [SCALABILITY.md](docs/SCALABILITY.md)    |
 
 #### Drive Architecture
 
@@ -350,7 +351,7 @@ Detailed architecture docs in `docs/`:
 |-------------------------------------------------------------|------------------------------------------|
 | [TODO-CHAT-ACL.md](docs/TODO-CHAT-ACL.md)                   | Chat membership vs ACL design discussion |
 | [TODO-ENCRYPTION.md](docs/TODO-ENCRYPTION.md)               | E2E encryption design                    |
-| [TODO-SCALABILITY.md](docs/TODO-SCALABILITY.md)             | Multi-server scaling design              |
+| [SCALABILITY.md](docs/SCALABILITY.md)                       | Multi-server scaling: relay layer, sharding design |
 | [TODO-GUEST-ACCESS.md](docs/TODO-GUEST-ACCESS.md)           | Guest access, OTP auth, access requests  |
 | [TODO-FORTUNE-SHEETS.md](docs/TODO-FORTUNE-SHEETS.md)       | Fortune-sheet refactoring audit          |
 | [RESEARCH_AI.md](docs/PROPOSAL_AI.md)                       | Local/private AI integration research    |
