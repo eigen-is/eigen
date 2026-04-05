@@ -12,6 +12,9 @@ export async function reconcileSharesForNewUser(user: User): Promise<void> {
 
     for (const fromUserId of fromUserIds) {
         try {
+            const owner = await getUserById(fromUserId);
+            if (!owner) continue;
+
             const calShares = await pullCalendarShares(fromUserId, user.email, []);
             for (const result of calShares) {
                 targetHome.calendar.receiveShare(
@@ -43,11 +46,7 @@ export async function reconcileSharesForNewUser(user: User): Promise<void> {
                     status: event.status,
                     sequence: event.sequence,
                     data: {
-                        organizer: {
-                            userId: fromUserId,
-                            email: event.data?.organizer?.email ?? '',
-                            name: event.data?.organizer?.name,
-                        },
+                        organizer: { userId: fromUserId, email: owner.email, name: owner.name },
                         organizerEventId: event.id,
                         attendees: event.data?.attendees,
                     },
