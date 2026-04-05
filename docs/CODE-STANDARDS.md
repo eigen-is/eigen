@@ -32,6 +32,18 @@ Reference for code style, architecture patterns, and conventions used in the Eig
 
 Detailed docs: [Database](DATABASE.md) | [Storage](STORAGE.md) | [SSE](SSE.md) | [ACL](ACL.md) | [Layout](LAYOUT.md)
 
+### Cross-Home Relay
+
+All cross-home interactions (where one user's action touches another user's Home) must go through the
+home relay (`apps/api/src/lib/home/home-relay.ts`). Never call `getHome()` directly for cross-home
+access.
+
+- **Writes**: `sendToHome(targetUserId, { type: 'drive:acl-change', ... })` — typed `HomeMessage` union
+- **Reads**: `pullSharedPaths()`, `pullCalendarShares()`, etc. — individual typed functions
+- **Local home**: `getHome(user.id)` is fine for accessing the current request's own home
+
+See [SCALABILITY.md](SCALABILITY.md) for the full design and sharding story.
+
 ## Key Patterns
 
 ### Query Keys
