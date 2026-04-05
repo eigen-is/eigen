@@ -11,6 +11,7 @@ import * as schema from './schema';
 export function loadYjsState(
     managedDb: ManagedDatabase<SchemaType>,
     doc?: Y.Doc,
+    label?: string,
 ): { doc: Y.Doc; updatesApplied: number } {
     const db = managedDb.db;
     if (!doc) doc = new Y.Doc();
@@ -25,7 +26,7 @@ export function loadYjsState(
                 Y.applyUpdate(doc, snapshot.stateData as Uint8Array);
                 loadedSnapshot = true;
             } catch {
-                console.error('[yjs-loader] Skipping corrupted snapshot');
+                console.error(`[yjs-loader] Skipping corrupted snapshot${label ? ` for ${label}` : ''}`);
             }
         }
 
@@ -43,7 +44,7 @@ export function loadYjsState(
             try {
                 Y.applyUpdate(doc, update.updateData as Uint8Array);
             } catch {
-                console.error(`[yjs-loader] Skipping corrupted update ${update.id}`);
+                console.error(`[yjs-loader] Skipping corrupted update ${update.id}${label ? ` for ${label}` : ''}`);
             }
         }
 
