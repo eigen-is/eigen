@@ -1,6 +1,6 @@
 import { parseOwnerId } from '@workspace/lib/types';
 import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
-import { getHome } from '../home';
+import { sendToHome } from '../home/home-relay';
 import { addRegistryEntry } from '../share';
 import { getTeamMembers } from '../team';
 import { getUserByEmail } from '../user/';
@@ -69,8 +69,7 @@ export async function propagateACLChange(
 
     for (const id of ids) {
         try {
-            const home = await getHome(id);
-            await home.drive.receiveACLChange(path, newACL, actorEmail);
+            await sendToHome(id, { type: 'drive:acl-change', path, acl: newACL, actorEmail });
         } catch (error) {
             console.error('Failed to propagate ACL change:', error);
         }
