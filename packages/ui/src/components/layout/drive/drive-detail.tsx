@@ -110,7 +110,12 @@ export function DriveDetail({ path, onShareClick, onItemOpen }: DriveDetailProps
                 <h2 className="text-xl font-medium mb-2 flex items-center">
                     <span className="truncate overflow-hidden min-w-0 flex-1">{path.name}</span>
                     {onItemOpen && path && (path.type !== 'file' || isInlineEditable(path.mimeType, path.name)) && (
-                        <TooltipButton onClick={() => onItemOpen(path)} tooltipText="Open" icon={ArrowRight} />
+                        <TooltipButton
+                            onClick={() => onItemOpen(path)}
+                            tooltipText="Open"
+                            icon={ArrowRight}
+                            className="shrink-0 h-7 w-7"
+                        />
                     )}
                 </h2>
                 <Table className="text-sm text-muted-foreground mb-4">
