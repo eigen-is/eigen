@@ -1,5 +1,6 @@
 import type { User } from 'better-auth/types';
 import { getHome } from '../home';
+import { pullCalendarShares, pullPendingInvitations, pullSharedPaths } from '../home/home-relay';
 import { getMemberships, getUserById } from '../user';
 import { getEntriesForTarget, removeEntriesForTarget } from './registry';
 
@@ -11,10 +12,50 @@ export async function reconcileSharesForNewUser(user: User): Promise<void> {
 
     for (const fromUserId of fromUserIds) {
         try {
-            const ownerHome = await getHome(fromUserId);
-            await pullCalendarShares(ownerHome, targetHome, user.email, []);
-            await pullDriveShares(ownerHome, targetHome, user);
-            await pullPendingInvitations(ownerHome, targetHome, user.email);
+            const calShares = await pullCalendarShares(fromUserId, user.email, []);
+            for (const result of calShares) {
+                targetHome.calendar.receiveShare(
+                    fromUserId,
+                    result.calendarId,
+                    result.name,
+                    result.color,
+                    result.permission,
+                );
+            }
+
+            const sharedPaths = await pullSharedPaths(fromUserId, user);
+            for (const path of sharedPaths) {
+                await targetHome.drive.receiveACLChange(path, path.acl);
+            }
+
+            const invitations = await pullPendingInvitations(fromUserId, user.email);
+            for (const event of invitations) {
+                targetHome.calendar.receiveInvitation({
+                    uid: event.uid,
+                    title: event.title,
+                    description: event.description,
+                    location: event.location,
+                    startTime: event.startTime,
+                    endTime: event.endTime,
+                    allDay: event.allDay,
+                    rrule: event.rrule,
+                    timezone: event.timezone,
+                    status: event.status,
+                    sequence: event.sequence,
+                    data: {
+                        organizer: {
+                            userId: fromUserId,
+                            email: event.data?.organizer?.email ?? '',
+                            name: event.data?.organizer?.name,
+                        },
+                        organizerEventId: event.id,
+                        attendees: event.data?.attendees,
+                    },
+                    createByUserId: fromUserId,
+                    organizerEventId: event.id,
+                    organizerUserId: fromUserId,
+                });
+            }
         } catch (error) {
             console.error(`Failed to reconcile shares from ${fromUserId} for new user ${user.id}:`, error);
         }
@@ -36,73 +77,23 @@ export async function reconcileSharesForNewTeamMember(userId: string, teamId: st
 
     for (const fromUserId of fromUserIds) {
         try {
-            const ownerHome = await getHome(fromUserId);
-            await pullCalendarShares(ownerHome, targetHome, user.email, memberships.teamIds);
-            await pullDriveShares(ownerHome, targetHome, user);
+            const calShares = await pullCalendarShares(fromUserId, user.email, memberships.teamIds);
+            for (const result of calShares) {
+                targetHome.calendar.receiveShare(
+                    fromUserId,
+                    result.calendarId,
+                    result.name,
+                    result.color,
+                    result.permission,
+                );
+            }
+
+            const sharedPaths = await pullSharedPaths(fromUserId, user);
+            for (const path of sharedPaths) {
+                await targetHome.drive.receiveACLChange(path, path.acl);
+            }
         } catch (error) {
             console.error(`Failed to reconcile team shares from ${fromUserId} for user ${userId}:`, error);
         }
-    }
-
-    // Don't delete team entries — future members still need them
-}
-
-function pullCalendarShares(
-    ownerHome: Awaited<ReturnType<typeof getHome>>,
-    targetHome: Awaited<ReturnType<typeof getHome>>,
-    userEmail: string,
-    teamIds: string[],
-): void {
-    const results = ownerHome.calendar.getSharedWith(userEmail, teamIds);
-    for (const result of results) {
-        targetHome.calendar.receiveShare(
-            ownerHome.user.id,
-            result.calendarId,
-            result.name,
-            result.color,
-            result.permission,
-        );
-    }
-}
-
-function pullPendingInvitations(
-    ownerHome: Awaited<ReturnType<typeof getHome>>,
-    targetHome: Awaited<ReturnType<typeof getHome>>,
-    userEmail: string,
-): void {
-    const events = ownerHome.calendar.getEventsWithAttendee(userEmail);
-    for (const event of events) {
-        targetHome.calendar.receiveInvitation({
-            uid: event.uid,
-            title: event.title,
-            description: event.description,
-            location: event.location,
-            startTime: event.startTime,
-            endTime: event.endTime,
-            allDay: event.allDay,
-            rrule: event.rrule,
-            timezone: event.timezone,
-            status: event.status,
-            sequence: event.sequence,
-            data: {
-                organizer: { userId: ownerHome.user.id, email: ownerHome.user.email, name: ownerHome.user.name },
-                organizerEventId: event.id,
-                attendees: event.data?.attendees,
-            },
-            createByUserId: ownerHome.user.id,
-            organizerEventId: event.id,
-            organizerUserId: ownerHome.user.id,
-        });
-    }
-}
-
-async function pullDriveShares(
-    ownerHome: Awaited<ReturnType<typeof getHome>>,
-    targetHome: Awaited<ReturnType<typeof getHome>>,
-    user: User,
-): Promise<void> {
-    const results = await ownerHome.drive.getSharedWith(user);
-    for (const path of results) {
-        await targetHome.drive.receiveACLChange(path, path.acl);
     }
 }

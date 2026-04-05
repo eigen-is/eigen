@@ -3,6 +3,7 @@ import type { CalendarShare, SharedCalendar } from '@workspace/lib/types/calenda
 import type { User } from 'better-auth/types';
 import { ApiError } from '../core';
 import { getHome } from '../home';
+import { pullCalendarPermission, pullCalendars } from '../home/home-relay';
 import { getMemberships } from '../user';
 import type { Calendar } from './calendar';
 
@@ -62,10 +63,10 @@ export async function syncTeamCalendars(user: User): Promise<SharedCalendar[]> {
     for (const teamId of memberships.teamIds) {
         const teamOwner = teamOwnerId(teamId);
         try {
-            const teamHome = await getHome(teamOwner);
-            const teamCal = teamHome.calendar;
-            for (const tc of teamCal.getCalendars()) {
-                const permission = teamCal.checkPermission(tc.id, user.email, memberships.teamIds) || 'read';
+            const teamCalendars = await pullCalendars(teamOwner);
+            for (const tc of teamCalendars) {
+                const permission =
+                    (await pullCalendarPermission(teamOwner, tc.id, user.email, memberships.teamIds)) || 'read';
                 cal.ensureSharedEntry(teamOwner, tc.id, tc.name, tc.color, permission);
             }
         } catch {
@@ -84,8 +85,12 @@ export async function syncTeamCalendars(user: User): Promise<SharedCalendar[]> {
         const parsed = parseOwnerId(sc.ownerUserId);
         if (parsed.type === 'team') continue;
         try {
-            const ownerHome = await getHome(sc.ownerUserId);
-            const resolved = ownerHome.calendar.checkPermission(sc.calendarId, user.email, memberships.teamIds);
+            const resolved = await pullCalendarPermission(
+                sc.ownerUserId,
+                sc.calendarId,
+                user.email,
+                memberships.teamIds,
+            );
             if (resolved && resolved !== sc.permission) {
                 cal.ensureSharedEntry(sc.ownerUserId, sc.calendarId, sc.calendarName, sc.calendarColor, resolved);
             }
