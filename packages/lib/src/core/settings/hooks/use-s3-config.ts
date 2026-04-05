@@ -14,7 +14,7 @@ export function useServerS3Config() {
         queryKey: s3ConfigKeys.all,
         queryFn: async () => {
             const res = await settingsApi.s3config.get();
-            return (res.data || null) as S3Config | null;
+            return res.data || null;
         },
         staleTime: 5 * 60 * 1000,
     });
@@ -27,7 +27,7 @@ export function useUpdateServerS3Config() {
         mutationFn: async (body: S3Config) => {
             const res = await settingsApi.s3config.put(body);
             if (res.error) throw new AppError(res);
-            return res.data as S3Config;
+            return res.data;
         },
         onSuccess: () => {
             invalidateServerS3Config(queryClient);

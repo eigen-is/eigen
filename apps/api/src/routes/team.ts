@@ -1,4 +1,5 @@
 import { teamOwnerId } from '@workspace/lib/types';
+import type { MountSettings, TeamSettings } from '@workspace/lib/types/settings';
 import { Elysia, t } from 'elysia';
 import { requireTeamAccess, requireTeamAdmin } from '../lib/core/access';
 import type { TeamHome } from '../lib/home';
@@ -14,7 +15,7 @@ export const teamRouter = new Elysia({ name: 'team' })
 
     .get(
         '/team/:teamId/settings',
-        async ({ params, user }) => {
+        async ({ params, user }): Promise<TeamSettings> => {
             await requireTeamAccess(user.id, params.teamId);
             const teamHome = await getTeamHome(params.teamId);
             return teamHome.settings.get();
@@ -24,7 +25,7 @@ export const teamRouter = new Elysia({ name: 'team' })
 
     .put(
         '/team/:teamId/settings',
-        async ({ params, body, user }) => {
+        async ({ params, body, user }): Promise<TeamSettings> => {
             await requireTeamAdmin(user.id, params.teamId);
             const teamHome = await getTeamHome(params.teamId);
             return await teamHome.settings.set({
@@ -53,7 +54,7 @@ export const teamRouter = new Elysia({ name: 'team' })
 
     .get(
         '/team/:teamId/mounts',
-        async ({ params, user }) => {
+        async ({ params, user }): Promise<Record<string, MountSettings>> => {
             await requireTeamAccess(user.id, params.teamId);
             const teamHome = await getTeamHome(params.teamId);
             return teamHome.settings.get().mounts ?? {};

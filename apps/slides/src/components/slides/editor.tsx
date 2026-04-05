@@ -292,16 +292,12 @@ function SlideEditorInner({
     const handleImageFile = useCallback(
         async (file: File) => {
             if (!activeSlideId || !mediaFolderId || !file.type.startsWith('image/')) return;
-            try {
-                const result = await uploadFile.mutateAsync({ parentId: mediaFolderId, file });
-                if (result) {
-                    addObject(activeSlideId, {
-                        ...DEFAULT_IMAGE_OBJECT,
-                        mediaName: result.name,
-                    } as Omit<SlideObject, 'id' | 'slideId'>);
-                }
-            } catch (e) {
-                console.error('Image upload failed:', e);
+            const result = await uploadFile.mutateAsync({ parentId: mediaFolderId, file }).catch(() => null);
+            if (result) {
+                addObject(activeSlideId, {
+                    ...DEFAULT_IMAGE_OBJECT,
+                    mediaName: result.name,
+                } as Omit<SlideObject, 'id' | 'slideId'>);
             }
         },
         [activeSlideId, mediaFolderId, uploadFile, addObject],
@@ -525,13 +521,8 @@ function SlideEditorInner({
     const handleBackgroundImageUpload = useCallback(
         async (file: File): Promise<string | null> => {
             if (!mediaFolderId || !file.type.startsWith('image/')) return null;
-            try {
-                const result = await uploadFile.mutateAsync({ parentId: mediaFolderId, file });
-                if (result) return result.name;
-            } catch (e) {
-                console.error('Background image upload failed:', e);
-            }
-            return null;
+            const result = await uploadFile.mutateAsync({ parentId: mediaFolderId, file }).catch(() => null);
+            return result?.name ?? null;
         },
         [mediaFolderId, uploadFile],
     );

@@ -19,7 +19,7 @@ export function useSpaceSettings() {
         queryKey: spaceKeys.settings(ownerId),
         queryFn: async () => {
             const res = await spaceApi({ ownerId }).settings.get();
-            return (res.data || {}) as UserSettings;
+            return res.data || {};
         },
         staleTime: 5 * 60 * 1000,
         enabled: !!ownerId,

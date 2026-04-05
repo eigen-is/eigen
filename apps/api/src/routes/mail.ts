@@ -1,3 +1,4 @@
+import type { EmailDraft } from '@workspace/lib/types/mail';
 import { Elysia, t } from 'elysia';
 import { contentDisposition, setCacheHeaders } from '../lib/core';
 import { requireLocalhost, requireSelf } from '../lib/core/access';
@@ -23,6 +24,32 @@ import {
     messageSetRead,
 } from '../lib/mail/mail';
 import { betterAuth } from './auth';
+
+const EmailAddressSchema = t.Object({
+    address: t.Optional(t.String()),
+    name: t.String(),
+    group: t.Optional(t.Array(t.Object({ address: t.Optional(t.String()), name: t.String() }))),
+});
+
+const AddressObjectSchema = t.Object({
+    value: t.Array(EmailAddressSchema),
+    html: t.String(),
+    text: t.String(),
+});
+
+const MailDraftSchema = t.Object({
+    id: t.Optional(t.String()),
+    subject: t.Optional(t.String()),
+    from: t.Optional(AddressObjectSchema),
+    to: t.Optional(AddressObjectSchema),
+    cc: t.Optional(AddressObjectSchema),
+    bcc: t.Optional(AddressObjectSchema),
+    text: t.Optional(t.String()),
+    html: t.Optional(t.Union([t.String(), t.Boolean({ const: false })])),
+    messageId: t.Optional(t.String()),
+    inReplyTo: t.Optional(t.String()),
+    references: t.Optional(t.Union([t.Array(t.String()), t.String()])),
+});
 
 export const mailRouter = new Elysia({ name: 'mail' })
     .use(betterAuth)
@@ -173,22 +200,22 @@ export const mailRouter = new Elysia({ name: 'mail' })
         '/mail/:ownerId/message/draft',
         async ({ params, body, user }) => {
             requireSelf(params.ownerId, user.id);
-            return await messageHandleDraft(user, body.mail);
+            return await messageHandleDraft(user, body.mail as EmailDraft);
         },
         {
             auth: true,
-            body: t.Object({ mail: t.Any() }),
+            body: t.Object({ mail: MailDraftSchema }),
         },
     )
     .post(
         '/mail/:ownerId/message/send',
         async ({ params, body, user }) => {
             requireSelf(params.ownerId, user.id);
-            return await messageSend(user, body.mail);
+            return await messageSend(user, body.mail as EmailDraft);
         },
         {
             auth: true,
-            body: t.Object({ mail: t.Any() }),
+            body: t.Object({ mail: MailDraftSchema }),
         },
     )
     .put(

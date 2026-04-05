@@ -1,3 +1,4 @@
+import type { UserSettings } from '@workspace/lib/types/settings';
 import { Elysia, t } from 'elysia';
 import { requireSelf } from '../lib/core/access';
 import type { UserHome } from '../lib/home';
@@ -10,7 +11,7 @@ export const spaceRouter = new Elysia({ name: 'space' })
 
     .get(
         '/space/:ownerId/settings',
-        async ({ params, user }) => {
+        async ({ params, user }): Promise<UserSettings> => {
             requireSelf(params.ownerId, user.id);
             const home = (await getHome(user.id)) as UserHome;
             return home.settings.get();
@@ -20,7 +21,7 @@ export const spaceRouter = new Elysia({ name: 'space' })
 
     .put(
         '/space/:ownerId/settings',
-        async ({ params, body, user }) => {
+        async ({ params, body, user }): Promise<UserSettings> => {
             requireSelf(params.ownerId, user.id);
             const home = (await getHome(user.id)) as UserHome;
             return await home.settings.set(body);

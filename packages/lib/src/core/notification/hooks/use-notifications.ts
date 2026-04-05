@@ -19,7 +19,7 @@ export function useNotifications(ownerId: string, enabled: boolean = true) {
         queryKey: notificationKeys.list(ownerId),
         queryFn: async () => {
             const response = await notificationApi({ ownerId }).get({ query: { limit: 50 } });
-            return ((response.data ?? []) as Record<string, unknown>[]).map(parseNotification);
+            return (response.data ?? []).map(parseNotification);
         },
         enabled: !!ownerId && enabled,
     });
@@ -30,7 +30,7 @@ export function useUnreadNotificationCount(ownerId: string) {
         queryKey: notificationKeys.unreadCount(ownerId),
         queryFn: async () => {
             const response = await notificationApi({ ownerId })['unread-count'].get();
-            return (response.data as { count: number })?.count ?? 0;
+            return response.data?.count ?? 0;
         },
         enabled: !!ownerId,
     });

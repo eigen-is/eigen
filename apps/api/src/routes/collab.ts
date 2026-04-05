@@ -1,3 +1,4 @@
+import type { CollabDocumentInfo } from '@workspace/lib/types/collab';
 import type { User } from 'better-auth/types';
 import type { ServerWebSocket } from 'bun';
 import { Elysia, t } from 'elysia';
@@ -45,7 +46,7 @@ export const collabRouter = new Elysia({
 
     .get(
         '/collab/:ownerId/:mountId/:pathId/info',
-        async ({ params, user }) => {
+        async ({ params, user }): Promise<CollabDocumentInfo> => {
             const drive = await getSharedDrive(params.ownerId, user);
             const canRead = await drive.canRead(params.mountId, params.pathId, user);
             const canWrite = await drive.canWrite(params.mountId, params.pathId, user);
