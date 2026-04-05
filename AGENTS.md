@@ -53,6 +53,9 @@ bun run check          # lint + typecheck + test
 
 ### Critical Rules
 
+- **Read [CODE-STANDARDS.md](docs/CODE-STANDARDS.md) before writing code** — it defines architecture patterns, code
+  style, and constraints that are not repeated here. Violations (inline types, wrong comment style, bypassing the
+  home relay) waste review cycles
 - **No migrations or backward compatibility** — data is throwaway during dev. Prefer clean schemas
 - **Always run `bun run check`** (lint + typecheck + test) after changes. When multiple agents run in parallel,
   only the main agent should run check — concurrent runs cause deadlocks
