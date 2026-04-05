@@ -102,8 +102,8 @@ export type NewDraft = {
     to?: AddressObject;
     cc?: AddressObject;
     bcc?: AddressObject;
-    isDraft?: boolean;
-    mailbox?: string;
+    isDraft: boolean;
+    mailbox: string;
     messageId?: string;
     inReplyTo?: string;
     references?: string[] | string;

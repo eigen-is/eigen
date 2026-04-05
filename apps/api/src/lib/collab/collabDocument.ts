@@ -34,7 +34,7 @@ class DbProvider {
         this.doc = doc;
         this.docId = docId;
 
-        const { updatesApplied } = loadYjsState(managedDb, this.doc);
+        const { updatesApplied } = loadYjsState(managedDb, this.doc, docId);
         this.updatesSinceSnapshot = updatesApplied;
 
         this.updateHandler = (update: Uint8Array) => {

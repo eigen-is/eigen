@@ -129,41 +129,21 @@ own `ThemeProvider`. May deliver wrong theme to the toast renderer.
 
 ### Error Handling in App Components [MEDIUM]
 
-Several app components use `try/catch` + `toast.error()` / `console.error` instead of letting mutation
-hooks in `packages/lib` handle errors:
+Remaining app components that use `try/catch` + `toast.error()` directly (not via mutation hooks):
 
 | File | Issue |
 |------|-------|
-| `apps/stickies/.../use-board.ts` (47, 160) | `toast.error()` on card chat + board init |
-| `apps/slides/.../editor.tsx` (295, 526) | `console.error` wrapping `uploadFile.mutateAsync` |
-| `apps/mail/.../use-mail-actions.ts` (144, 159, 181) | `toast.error()` on reply/forward |
-| `apps/space/.../security.password.tsx` | `try/catch` + `toast.error()` |
-| `apps/space/.../security.2fa.tsx` (49-119) | 3 separate `try/catch` + `toast.error()` blocks |
-| `packages/ui/.../label-manager.tsx`, `label-dialog.tsx` | `console.error` in catch blocks |
+| `apps/mail/.../use-mail-actions.ts` (144, 159, 181) | `toast.error()` on reply/forward (precondition check, not mutation) |
+| `apps/space/.../security.password.tsx` | `try/catch` + `toast.error()` (direct authClient call) |
+| `apps/space/.../security.2fa.tsx` (49-119) | 3 separate `try/catch` + `toast.error()` blocks (direct authClient calls) |
 
-**Fix:** Move error handling to hooks in `packages/lib`, or remove redundant try/catch where the mutation's
-`onError: onMutationError` already covers it. Space security routes need auth client calls wrapped in
-proper hooks.
+**Fix:** Space security routes need auth client calls wrapped in proper hooks in `packages/lib/src/core/auth/hooks/`.
 
 ### Direct `useQueryClient` in App [LOW]
 
 `apps/drive/.../native-file-editor.tsx` imports `useQueryClient` directly to invalidate editor queries.
 
 **Fix:** Add `invalidateEditorContent()` to `packages/lib/src/core/editor/hooks/`.
-
-### Calendar Routes Ignore `:ownerId` [LOW]
-
-`apps/api/src/routes/calendar.ts` lines 238-257 — shared calendar routes declare `:ownerId` in path but
-never read/validate it. The handler always uses `user.id`.
-
-**Fix:** Add `requireSelf(params.ownerId, user.id)` to enforce the URL matches the caller.
-
-### Route Bypasses SharedDrive [LOW]
-
-`apps/api/src/routes/drive.ts` line 54 — `/drive/:ownerId/shared-with-me` calls `ownerHome.drive.getSharedWith()`
-directly instead of going through `getSharedDrive()`. Safe (self-filtering) but breaks convention.
-
-**Fix:** Add a SharedDrive wrapper or document as intentional exception.
 
 ### Docs Editor Not Using `ColumnLayout` [LOW]
 
@@ -176,39 +156,7 @@ of `ColumnLayout` + `Column` as documented in AGENTS.md.
 
 ## P2 — DRY Violations
 
-### Duplicated Yjs Utilities [MEDIUM]
-
-| Function | Locations | Lines |
-|----------|-----------|-------|
-| `jsonToYType()` | `stickies/board.tsx`, `slides/editor.tsx` | Identical implementation |
-| Yjs restore pattern | `stickies/board.tsx`, `slides/editor.tsx`, `sheets/use-sheet.ts` | Same temp-doc/apply/copy |
-| Yjs state loading | `collab/yjs-loader.ts`, `collab/collabDocument.ts` | Near-identical snapshot+update logic |
-
-**Fix:** Extract `jsonToYType()` and `restoreYjsDoc()` to `packages/lib/src/core/collab/`. Refactor
-`DbProvider.loadState()` to reuse `loadYjsState()` from `yjs-loader.ts`.
-
-### Duplicated Calendar Utilities [LOW]
-
-| Function | Locations |
-|----------|-----------|
-| `toLocalDateString()` | `create-event-dialog.tsx`, `edit-event-dialog.tsx` |
-| `truncateRRule()` | `edit-event-dialog.tsx`, `event-detail-dialog.tsx` |
-| `CalendarOption` type | `create-event-dialog.tsx`, `edit-event-dialog.tsx` |
-
-**Fix:** Extract to `@workspace/lib/calendar` or a local `utils.ts`.
-
-### Calendar `receiveShare` / `ensureSharedEntry` [LOW]
-
-`apps/api/src/lib/calendar/calendar.ts` lines 830-960 — ~20 lines of identical `localColor` computation +
-shared calendar row insertion.
-
-**Fix:** Extract `insertSharedCalendar()` private helper.
-
-### `use-drive-dialogs.ts` [LOW]
-
-6 identical `useState(false)` + open/close callback patterns for each dialog type.
-
-**Fix:** Generic `useDialogState<T>()` helper would cut the file from ~155 lines to ~50.
+No remaining P2 DRY items.
 
 ---
 
@@ -228,7 +176,7 @@ shared calendar row insertion.
 | `apps/slides/.../editor.tsx` | 691 | Canvas + many internal functions |
 | `apps/contacts/.../contact-edit.tsx` | 668 | Form + avatar upload + labels |
 | `apps/slides/.../slide-properties-panel.tsx` | 647 | Animation + styling + text |
-| `apps/admin/.../team-detail.tsx` | 550 | Inline AddMemberDialog, MountDialog, 20+ state vars |
+| `apps/admin/.../team-detail.tsx` | 429 | Extracted AddMemberDialog + MountDialog; still has 20+ state vars |
 | `packages/ui/.../chat-message-input.tsx` | 367 | 3 suggest systems in one file |
 
 **Fix:** Extract sub-components when touching these files.
@@ -275,13 +223,13 @@ Major rewrite needed; low ROI.
 | `t.Any()` in mail draft/send routes      | P2       | 1-2 hr   | Types    |
 | `sonner.tsx` uses `next-themes`          | P2       | 30 min   | Arch     |
 | Error handling in app components (6+)    | P2       | 2-3 hr   | Arch     |
-| Duplicated Yjs utilities (3 patterns)    | P2       | 2-3 hr   | DRY      |
+| ~~Duplicated Yjs utilities (3 patterns)~~| ~~P2~~   | Done     | DRY      |
 | List virtualization (Drive, email, chat) | P2       | 2-3 days | Frontend |
 | Font lazy-loading                        | P2       | 2-4 hr   | Bundle   |
 | Thumbnail retry                          | P2       | 1-2 hr   | Backend  |
 | Contacts.size() N+1                      | P2       | 30 min   | Backend  |
-| Duplicated calendar utilities            | P3       | 30 min   | DRY      |
-| Calendar routes ignore `:ownerId`        | P3       | 15 min   | Arch     |
+| ~~Duplicated calendar utilities~~        | ~~P3~~   | Done     | DRY      |
+| ~~Calendar routes ignore `:ownerId`~~    | ~~P3~~   | Done     | Arch     |
 | Large monolithic components (6 files)    | P3       | per-file | Quality  |
 | Console stripping in production          | P3       | 30 min   | Bundle   |
 | Image lazy loading                       | P3       | 2-3 hr   | Bundle   |
@@ -298,4 +246,15 @@ Major rewrite needed; low ROI.
 | Console call cleanup (fortune-sheet)     | Mostly done -- reduced from 400+ to ~17 |
 | `interface` -> `type` bulk conversion    | Mostly done -- reduced from 131 to ~20 (many in generated files) |
 | Code quality sweep (2025-04)             | Done -- dead code, comments, `"use client"`, colors, `.catch()`, ApiError |
+| Eden Treaty type safety                  | Done -- backend return types + ~20 cast removals from hooks |
+| `next-themes` → MutationObserver         | Done -- sonner.tsx uses local useTheme hook |
+| Yjs DRY (jsonToYType, restoreYjsDoc)     | Done -- shared in `packages/lib/core/collab/yjs-utils.ts` |
+| Calendar DRY (utils + insertSharedCal)   | Done -- `calendar-utils.ts` + private helper |
+| Drive dialogs DRY                        | Done -- `useDialogState()` helper (155→114 lines) |
+| SharedDrive getSharedWith wrapper        | Done -- route goes through SharedDrive, self-filtering |
+| Calendar requireSelf on shared routes    | Done -- 3 routes now validate ownerId |
+| NewDraft type                            | Done -- replaces unsafe `as EmailDraft` cast |
+| team-detail.tsx decomposition            | Done -- extracted AddMemberDialog + MountDialog (547→429 lines) |
+| Mail `t.Any()` → MailDraftSchema         | Done -- typed schema for draft/send routes |
+| Error handling (stickies, slides, labels) | Done -- removed redundant try/catch |
 | Recycle bin / soft delete                | Done -- trash with auto-purge, ACL propagation, frontend UI. See [SOFT-DELETE.md](SOFT-DELETE.md) |
