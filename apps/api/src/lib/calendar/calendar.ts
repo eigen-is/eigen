@@ -28,6 +28,38 @@ type UserIdentity = { id: string; email: string; name?: string | null };
 // Internal type extending the shared CalendarEvent with CalDAV-only storage fields
 export type CalendarEventRow = CalendarEvent & { eventCtag: number | null };
 
+export type ReceiveInvitationPayload = {
+    uid: string;
+    title: string;
+    description: string | null;
+    location: string | null;
+    startTime: number;
+    endTime: number;
+    allDay: boolean;
+    rrule: string | null;
+    timezone: string | null;
+    status: CalendarEvent['status'];
+    sequence: number;
+    data: EventData;
+    createByUserId: string;
+    organizerEventId: string;
+    organizerUserId: string;
+};
+
+export type InvitationUpdatePayload = {
+    title: string;
+    description: string | null;
+    location: string | null;
+    startTime: number;
+    endTime: number;
+    allDay: boolean;
+    rrule: string | null;
+    timezone?: string | null;
+    status: CalendarEvent['status'];
+    sequence: number;
+    attendees?: Attendee[];
+};
+
 function getCalendarDatabase(home: Home): Promise<ManagedDatabase<typeof schema>> {
     return home.getLocalDatabase(CALENDAR_DB_CONFIG, PATHS.CALENDAR.DB);
 }
@@ -1029,23 +1061,7 @@ export class Calendar {
         return row ? dbEventToCalendarEvent(row) : null;
     }
 
-    public receiveInvitation(payload: {
-        uid: string;
-        title: string;
-        description: string | null;
-        location: string | null;
-        startTime: number;
-        endTime: number;
-        allDay: boolean;
-        rrule: string | null;
-        timezone: string | null;
-        status: CalendarEvent['status'];
-        sequence: number;
-        data: EventData;
-        createByUserId: string;
-        organizerEventId: string;
-        organizerUserId: string;
-    }): string {
+    public receiveInvitation(payload: ReceiveInvitationPayload): string {
         const existing = this.findLinkedEvent(payload.organizerEventId, payload.organizerUserId);
         if (existing) return existing.id;
 
@@ -1092,26 +1108,17 @@ export class Calendar {
             .run();
 
         this.incrementCtag(defaultCal.id);
+        this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_RECEIVED, payload.organizerUserId));
+        this.home.notifications?.persist({
+            type: 'calendar-invite',
+            actorEmail: payload.data?.organizer?.email,
+            title: `New invitation: ${payload.title}`,
+            tag: `calendar-invite:${payload.organizerEventId}:${payload.startTime}`,
+        });
         return id;
     }
 
-    public receiveInvitationUpdate(
-        orgEventId: string,
-        orgUserId: string,
-        payload: {
-            title: string;
-            description: string | null;
-            location: string | null;
-            startTime: number;
-            endTime: number;
-            allDay: boolean;
-            rrule: string | null;
-            timezone?: string | null;
-            status: CalendarEvent['status'];
-            sequence: number;
-            attendees?: Attendee[];
-        },
-    ): void {
+    public receiveInvitationUpdate(orgEventId: string, orgUserId: string, payload: InvitationUpdatePayload): void {
         const linked = this.findLinkedEvent(orgEventId, orgUserId);
         if (!linked) return;
 
@@ -1159,6 +1166,13 @@ export class Calendar {
             .run();
 
         this.incrementCtag(linked.calendarId);
+        this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_UPDATED, orgUserId));
+        this.home.notifications?.persist({
+            type: 'calendar-invite-updated',
+            actorEmail: linked.data?.organizer?.email,
+            title: `Updated: ${payload.title}`,
+            tag: `calendar-invite:${orgEventId}:${payload.startTime}`,
+        });
     }
 
     public removeInvitation(orgEventId: string, orgUserId: string): void {
@@ -1167,6 +1181,13 @@ export class Calendar {
 
         this.db.delete(schema.events).where(eq(schema.events.id, linked.id)).run();
         this.incrementCtag(linked.calendarId);
+        this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_CANCELLED, orgUserId));
+        this.home.notifications?.persist({
+            type: 'calendar-invite-cancelled',
+            actorEmail: linked.data?.organizer?.email,
+            title: `Cancelled: ${linked.title}`,
+            tag: `calendar-invite:${orgEventId}:${linked.startTime}`,
+        });
     }
 
     public updateAttendeeStatus(eventId: string, email: string, status: Attendee['status']): void {

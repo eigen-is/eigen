@@ -8,7 +8,7 @@ import { NOTIFICATION_CENTER_DB_CONFIG } from './db-config';
 import * as schema from './schema';
 import { buildNotificationCreatedEvent } from './sse-events';
 
-type PersistInput = {
+export type PersistInput = {
     type: string;
     actorEmail?: string | null;
     title: string;
