@@ -4,7 +4,6 @@ import { useCreateChat } from '@workspace/lib/chat';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
 import { nanoid } from 'nanoid';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { toast } from 'sonner';
 import { WebsocketProvider } from 'y-websocket';
 import * as Y from 'yjs';
 import { normalizeBoard } from '../normalize-board';
@@ -37,16 +36,13 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
     const createCardChat = useCallback(async (): Promise<string | undefined> => {
         const folderId = chatFolderIdRef.current;
         if (!folderId) return undefined;
-        try {
-            const result = await createChatRef.current.mutateAsync({
+        const result = await createChatRef.current
+            .mutateAsync({
                 parentId: folderId,
                 fileName: `task-${nanoid(10)}`,
-            });
-            return result?.name;
-        } catch (_e) {
-            toast.error('Failed to create chat for card');
-            return undefined;
-        }
+            })
+            .catch(() => undefined);
+        return result?.name;
     }, []);
 
     const initializeDefaultBoard = useCallback(
@@ -156,9 +152,7 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
                 initialized = true;
                 normalizeBoard(doc);
                 if (columnsMap.size === 0) {
-                    initializeDefaultBoard(doc, user?.email || 'user@localhost').catch((_e) =>
-                        toast.error('Failed to initialize board'),
-                    );
+                    initializeDefaultBoard(doc, user?.email || 'user@localhost').catch(console.error);
                 }
             }
         });

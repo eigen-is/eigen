@@ -1,4 +1,4 @@
-import type { FreeBusyBlock } from '@workspace/lib/types/calendar';
+import type { CalendarEventOccurrence, CalendarItem, FreeBusyBlock } from '@workspace/lib/types/calendar';
 import { Elysia, t } from 'elysia';
 import { resolveCalendar, resolveCalendarForEvents, syncTeamCalendars } from '../lib/calendar/get-calendar';
 import { ApiError } from '../lib/core';
@@ -85,7 +85,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
     // --- Calendars ---
     .get(
         '/calendar/:ownerId/calendars',
-        async ({ params, user }) => {
+        async ({ params, user }): Promise<CalendarItem[]> => {
             const cal = await resolveCalendar(user, params.ownerId);
             return cal.getCalendars();
         },
@@ -123,7 +123,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
     // --- Events ---
     .get(
         '/calendar/:ownerId/event-range/:from/:to',
-        async ({ params, user }) => {
+        async ({ params, user }): Promise<CalendarEventOccurrence[]> => {
             const cal = await resolveCalendar(user, params.ownerId);
             return cal.getEventsInRange(params.from, params.to);
         },

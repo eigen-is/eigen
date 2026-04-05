@@ -1,3 +1,4 @@
+import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { eq, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
@@ -64,7 +65,7 @@ export class CommentIndex {
             .where(eq(commentSchema.comments.chatName, chatName));
     }
 
-    async list() {
+    async list(): Promise<CommentEntry[]> {
         const comments = await this.db
             .select()
             .from(commentSchema.comments)

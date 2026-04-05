@@ -1,3 +1,5 @@
+import type { S3Config } from '@workspace/lib/types';
+import type { ServerSettings } from '@workspace/lib/types/settings';
 import { Elysia, t } from 'elysia';
 import { getS3Config, updateServerConfig } from '../lib/config/server-config';
 import { getServerSettings, updateServerSettings } from '../lib/config/server-settings';
@@ -13,7 +15,7 @@ export const settingsRouter = new Elysia({ name: 'settings' })
 
     .get(
         '/settings/server',
-        async ({ user }) => {
+        async ({ user }): Promise<ServerSettings> => {
             await requireAdmin(user.id);
             return getServerSettings();
         },
@@ -22,7 +24,7 @@ export const settingsRouter = new Elysia({ name: 'settings' })
 
     .put(
         '/settings/server',
-        async ({ body, user }) => {
+        async ({ body, user }): Promise<ServerSettings> => {
             await requireAdmin(user.id);
             if (body.defaults?.mount?.storageType === 's3') {
                 const s3 = getS3Config();
@@ -78,7 +80,7 @@ export const settingsRouter = new Elysia({ name: 'settings' })
 
     .get(
         '/settings/s3config',
-        async ({ user }) => {
+        async ({ user }): Promise<S3Config | null> => {
             await requireAdmin(user.id);
             return getS3Config() ?? null;
         },
@@ -87,7 +89,7 @@ export const settingsRouter = new Elysia({ name: 'settings' })
 
     .put(
         '/settings/s3config',
-        async ({ body, user }) => {
+        async ({ body, user }): Promise<S3Config | null> => {
             await requireAdmin(user.id);
             const s3Config = toS3Config(body);
             const s3Result = await checkS3Connection(s3Config);

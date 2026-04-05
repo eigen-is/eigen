@@ -1,3 +1,4 @@
+import type { ChatMessage } from '@workspace/lib/types/chat';
 import { Elysia, t } from 'elysia';
 import { ApiError } from '../lib/core/errors';
 import { getSharedDrive } from '../lib/drive';
@@ -10,7 +11,7 @@ export const chatRouter = new Elysia({ name: 'chat' })
 
     .get(
         '/chat/:ownerId/:mountId/:chatId/messages',
-        async ({ params, query, user }) => {
+        async ({ params, query, user }): Promise<ChatMessage[]> => {
             const drive = await getSharedDrive(params.ownerId, user);
             const chat = await drive.getChat(params.mountId, params.chatId);
             const limit = Math.min(Math.max(1, query.limit ? parseInt(query.limit, 10) : 50), 200);

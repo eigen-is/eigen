@@ -1,7 +1,6 @@
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { teamApi } from '@workspace/lib/api';
 import type { S3Config } from '@workspace/lib/types';
-import type { MountSettings } from '@workspace/lib/types/settings';
 import { AppError, onMutationError } from '../../api-error';
 import { teamKeys } from './use-team-settings';
 
@@ -14,7 +13,7 @@ export function useTeamMounts(teamId: string) {
         queryKey: teamMountKeys.all(teamId),
         queryFn: async () => {
             const res = await teamApi({ teamId }).mounts.get();
-            return (res.data || {}) as Record<string, MountSettings>;
+            return res.data || {};
         },
         staleTime: 5 * 60 * 1000,
         enabled: !!teamId,

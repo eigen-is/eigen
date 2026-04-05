@@ -80,14 +80,13 @@ export function LabelDialog({
         }
     }, [selectedLabel, form, open]);
 
-    // Handle form submission
     const handleSubmit = async (data: LabelFormValues) => {
+        setIsLoading(true);
         try {
-            setIsLoading(true);
             await onSubmit(data);
             form.reset();
-        } catch (error) {
-            console.error('Error submitting form:', error);
+        } catch {
+            // Mutation's onError handles the toast; keep dialog open for retry
         } finally {
             setTimeout(() => setIsLoading(false), 350);
         }

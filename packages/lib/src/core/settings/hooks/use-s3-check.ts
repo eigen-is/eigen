@@ -8,7 +8,7 @@ export function useCheckS3Connection() {
         mutationFn: async (input: S3Config): Promise<{ ok: boolean; message: string }> => {
             const res = await settingsApi.s3check.post(input);
             if (res.error) return { ok: false, message: String(res.error) };
-            return res.data as { ok: boolean; message: string };
+            return res.data;
         },
         onError: onMutationError,
     });

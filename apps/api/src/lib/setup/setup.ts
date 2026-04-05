@@ -212,7 +212,7 @@ export type SetupResult = {
     user?: { id: string; email: string; name: string };
 };
 
-export async function getSetupStatus() {
+export async function getSetupStatus(): Promise<{ setupRequired: boolean; domain?: string }> {
     const setupRequired = isSetupRequired();
 
     if (!setupRequired) {
