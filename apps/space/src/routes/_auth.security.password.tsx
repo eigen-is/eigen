@@ -1,6 +1,5 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { authClient } from '@workspace/lib/auth';
-import { toast } from 'sonner';
+import { useChangePassword } from '@workspace/lib/auth';
 import { ChangePassword } from '../components/space/change-password';
 
 export const Route = createFileRoute('/_auth/security/password')({
@@ -9,18 +8,15 @@ export const Route = createFileRoute('/_auth/security/password')({
 
 function PasswordComponent() {
     const navigate = useNavigate();
+    const changePassword = useChangePassword();
+
     const handlePasswordChange = async (data: {
         currentPassword: string;
         newPassword: string;
         revokeOtherSessions: boolean;
     }) => {
-        const result = await authClient.changePassword(data);
-        if (result.data) {
-            toast.success('Password changed successfully');
-            await navigate({ to: '/' });
-        } else {
-            toast.error(result.error?.message ?? 'Failed to change password');
-        }
+        await changePassword.mutateAsync(data);
+        await navigate({ to: '/' });
     };
 
     return (

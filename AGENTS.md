@@ -63,6 +63,12 @@ bun run check          # lint + typecheck + test
   `packages/lib/src/core/[domain]/hooks/`
 - **Never use `as any`** — fix the type at the source (route schema, response type) instead of casting in hooks.
   Eden Treaty provides end-to-end safety; `as any` silently breaks it
+- **No `as Type` casts on Eden Treaty responses** — if `response.data` doesn't have the right type, add an
+  explicit return type annotation to the backend route handler or domain method using the shared type from
+  `packages/lib/src/types/`. Eden Treaty infers types from the handler return type automatically. Don't paper
+  over mismatches with `as` casts
+- **Backend errors use `ApiError`** — always `throw new ApiError(status, message)` from
+  `apps/api/src/lib/core/errors.ts`, never `throw new Error()`
 - **Think about every `await`**. A bare async call returns a truthy Promise — dangerous in conditionals
   (`if (!asyncFn())` is always false). But not every async call needs `await`: fire-and-forget is fine for background
   work that shouldn't block the response (e.g., thumbnail generation, preview caching), and `return asyncFn()` is
@@ -72,13 +78,19 @@ bun run check          # lint + typecheck + test
 - **Sanitize user-provided paths and filenames** — validate against `..`, `/`, and control characters before using in
   file system paths or HTTP headers (e.g., `Content-Disposition`). Never interpolate raw user input into headers
 - **Use theme tokens, not hardcoded colors** — use `text-muted-foreground`, `bg-muted`, `border` etc. instead of
-  `text-gray-500`, `bg-blue-50`. Hardcoded colors break dark mode
-- **Mutation error/success handling lives in hooks, not in apps** — every `useMutation` in
+  `text-gray-500`, `bg-blue-50`. Hardcoded colors break dark mode. For interactive selection UI (resize handles,
+  bounding boxes, selection rings), use the `selection-handle` token (e.g., `border-selection-handle`,
+  `ring-selection-handle`)
+- **All error/success handling lives in hooks, not in apps** — every `useMutation` in
   `packages/lib/src/core/[domain]/hooks/` must have an `onError` callback using `onMutationError` from `api-error.ts`.
   Add `onSuccess` toasts only for fire-and-forget operations where the UI doesn't visually reflect the result (e.g.,
-  "Email sent", "Settings saved"). Apps should never add their own `try/catch` + `toast.error()` around mutations.
-  Apps only need `try/catch` when they must do extra work on failure (e.g., reset UI state), and in that case they
-  must NOT show a toast. See [NOTIFICATIONS.md](docs/NOTIFICATIONS.md)
+  "Email sent", "Settings saved"). This applies to non-mutation async calls too (e.g., `authClient` calls for
+  password/2FA) — wrap them in hooks with proper error handling. Apps should never add their own `try/catch` +
+  `toast.error()`. Apps only need `try/catch` when they must do extra work on failure (e.g., reset UI state), and
+  in that case they must NOT show a toast. See [NOTIFICATIONS.md](docs/NOTIFICATIONS.md)
+- **Export invalidation functions next to query keys** — every hook file that defines query keys should export
+  `invalidateFoo(queryClient, ...)` functions. Apps use these instead of importing `useQueryClient` +
+  `queryClient.invalidateQueries()` directly
 - **Check existing shared components before building new ones** — `packages/ui/src/components/layout/` has reusable
   components for common patterns: `TooltipButton` (icon+tooltip), `DeleteDialog` (confirmation), `EmptyState`,
   `LoadingState`, `ErrorState`, `SearchBar`, `ConfirmDialog`, etc. See [LAYOUT.md](docs/LAYOUT.md) for the full list
@@ -140,6 +152,7 @@ Route (thin handler)  →  SharedDrive (ACL proxy)  →  Drive (business logic) 
 | **Shared types**   | `packages/lib/src/types/[domain].ts`                  | Used by both FE and BE                                     |
 | **Validation**     | `packages/lib/src/validation/`                        | Shared FE/BE validation                                    |
 | **Colors**         | `packages/lib/src/constants/colors.ts`                | `EIGEN_COLORS`, `EIGEN_ACCENT_COLORS`                      |
+| **Yjs utilities**  | `packages/lib/src/core/collab/yjs-utils.ts`           | `jsonToYType`, `restoreYjsDoc` — shared across collab apps |
 | **App shell**      | `packages/ui/src/components/layout/app/app-shell.tsx` | Wraps every app (Topbar + sidebar + content)               |
 | **Provider stack** | `packages/ui/src/components/layout/app/eigen-app.tsx` | Auth → SSE → Upload → Preview → Toaster                    |
 | **Layout**         | `packages/ui/src/components/layout/app/column-layout.tsx` | `ColumnLayout` + `Column` with responsive mobile switching |
