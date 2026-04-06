@@ -20,7 +20,7 @@ export async function resolveCalendar(user: User, ownerId: string) {
             throw new ApiError(403, 'Not a member of this team');
         }
     }
-    const home = await getHome(parsed.type === 'team' ? ownerId : user.id);
+    const home = await getHome(parsed.type === 'team' ? ownerId : user.id); // ownerId-routed (team) or own home (user)
     return home.calendar;
 }
 
@@ -36,27 +36,27 @@ export async function resolveCalendarForEvents(
         if (!memberships.teamIds.includes(parsed.id)) {
             throw new ApiError(403, 'Not a member of this team');
         }
-        const home = await getHome(ownerId);
+        const home = await getHome(ownerId); // ownerId-routed: team home
         const permission = home.calendar.checkPermission(calendarId, user.email, memberships.teamIds);
         return { calendar: home.calendar, permission: permission || 'read' };
     }
 
     if (ownerId === user.id) {
-        const home = await getHome(user.id);
+        const home = await getHome(user.id); // own home
         return { calendar: home.calendar, permission: 'write' };
     }
 
-    const ownerHome = await getHome(ownerId);
     const memberships = await getMemberships(user.id);
-    const permission = ownerHome.calendar.checkPermission(calendarId, user.email, memberships.teamIds);
+    const permission = await pullCalendarPermission(ownerId, calendarId, user.email, memberships.teamIds);
     if (!permission) {
         throw new ApiError(403, 'No access to this calendar');
     }
+    const ownerHome = await getHome(ownerId); // ownerId-routed: need calendar instance for caller
     return { calendar: ownerHome.calendar, permission };
 }
 
 export async function syncTeamCalendars(user: User): Promise<SharedCalendar[]> {
-    const home = await getHome(user.id);
+    const home = await getHome(user.id); // own home; cross-home reads use relay pull*() below
     const cal = home.calendar;
     const memberships = await getMemberships(user.id);
 

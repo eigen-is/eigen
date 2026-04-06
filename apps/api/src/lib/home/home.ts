@@ -171,7 +171,7 @@ export class Home {
 
                     // Re-acquire Home if it was recreated externally
                     try {
-                        const freshHome = await getHome(this.user.id);
+                        const freshHome = await getHome(this.user.id); // own home: re-acquire after recreation
                         if (freshHome !== currentHome) {
                             console.log(`[SSE] Home recreated for ${this.user.id}, re-subscribing`);
                             try {
