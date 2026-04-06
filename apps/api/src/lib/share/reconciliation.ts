@@ -1,6 +1,6 @@
 import type { User } from 'better-auth/types';
 import { getHome } from '../home';
-import { pullCalendarShares, pullPendingInvitations, pullSharedPaths } from '../home/home-relay';
+import { pullCalendarShares, pullPendingInvitations, pullSharedPaths, sendToHome } from '../home/home-relay';
 import { getMemberships, getUserById } from '../user';
 import { getEntriesForTarget, removeEntriesForTarget } from './registry';
 
@@ -8,7 +8,7 @@ export async function reconcileSharesForNewUser(user: User): Promise<void> {
     const fromUserIds = await getEntriesForTarget(user.email);
     if (fromUserIds.length === 0) return;
 
-    const targetHome = await getHome(user.id);
+    const targetHome = await getHome(user.id); // own home: called during new user's signup
 
     for (const fromUserId of fromUserIds) {
         try {
@@ -72,24 +72,24 @@ export async function reconcileSharesForNewTeamMember(userId: string, teamId: st
     if (!user) return;
 
     const memberships = await getMemberships(userId);
-    const targetHome = await getHome(userId);
 
     for (const fromUserId of fromUserIds) {
         try {
             const calShares = await pullCalendarShares(fromUserId, user.email, memberships.teamIds);
             for (const result of calShares) {
-                targetHome.calendar.receiveShare(
-                    fromUserId,
-                    result.calendarId,
-                    result.name,
-                    result.color,
-                    result.permission,
-                );
+                await sendToHome(userId, {
+                    type: 'calendar:share',
+                    ownerId: fromUserId,
+                    calendarId: result.calendarId,
+                    name: result.name,
+                    color: result.color,
+                    permission: result.permission,
+                });
             }
 
             const sharedPaths = await pullSharedPaths(fromUserId, user);
             for (const path of sharedPaths) {
-                await targetHome.drive.receiveACLChange(path, path.acl);
+                await sendToHome(userId, { type: 'drive:acl-change', path, acl: path.acl });
             }
         } catch (error) {
             console.error(`Failed to reconcile team shares from ${fromUserId} for user ${userId}:`, error);

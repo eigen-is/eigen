@@ -5,7 +5,7 @@ import type Drive from './drive';
 import SharedDrive from './sharedDrive';
 
 export async function getDrive(user: User): Promise<Drive> {
-    const home = await getHome(user.id);
+    const home = await getHome(user.id); // own home
     return home.drive;
 }
 
@@ -15,7 +15,7 @@ export async function getSharedDrive(ownerId: string, user: User): Promise<Drive
     }
 
     if (ownerId !== user.id) {
-        const home = await getHome(ownerId);
+        const home = await getHome(ownerId); // ownerId-routed: request targets this home
         return new SharedDrive(home, user);
     } else {
         return getDrive(user);

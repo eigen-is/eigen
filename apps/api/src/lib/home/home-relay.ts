@@ -13,6 +13,7 @@ import type { Attendee, CalendarEvent, CalendarItem, CalendarShare } from '@work
 import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import type { User } from 'better-auth/types';
+import type { BunFile } from 'bun';
 import type { InvitationUpdatePayload, ReceiveInvitationPayload } from '../calendar/calendar';
 import type { PersistInput } from '../notification-center/notification-center';
 import { atHome, getHome } from './get-home';
@@ -134,6 +135,16 @@ export type TeamQuotaOverrides = {
     mailAndContactsMaxMB?: number;
     defaultMountMaxSizeMB?: number;
 };
+
+// TODO: avatars are stored per-home but served publicly — consider moving to shared/global storage
+export async function pullAvatarFile(userId: string, filename: string): Promise<BunFile | null> {
+    const home = await getHome(userId);
+    const file = home.fs.file(`eigen.contacts/avatars/${filename}`);
+    if (await file.exists()) {
+        return file;
+    }
+    return null;
+}
 
 export async function pullTeamQuotaOverrides(teamOwnerId: string): Promise<TeamQuotaOverrides> {
     const home = await getHome(teamOwnerId);

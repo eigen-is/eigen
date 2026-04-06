@@ -4,6 +4,7 @@ import { resolveCalendar, resolveCalendarForEvents, syncTeamCalendars } from '..
 import { ApiError } from '../lib/core';
 import { requireSelf } from '../lib/core/access';
 import { getHome } from '../lib/home';
+import { pullCalendarShares } from '../lib/home/home-relay';
 import { getMemberships } from '../lib/user';
 import { betterAuth } from './auth';
 
@@ -192,7 +193,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
     .put(
         '/calendar/:ownerId/calendars/:calId/events/:id/rsvp',
         async ({ params, body, user }) => {
-            if (params.ownerId !== user.id) throw new ApiError(403, 'Forbidden');
+            requireSelf(params.ownerId, user.id);
             const home = await getHome(user.id);
             home.calendar.rsvp(params.id, user, body);
             return { success: true };
@@ -225,9 +226,8 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
     .get(
         '/calendar/:ownerId/shared-with-me',
         async ({ params, user }) => {
-            const ownerHome = await getHome(params.ownerId);
             const memberships = await getMemberships(user.id);
-            return ownerHome.calendar.getSharedWith(user.email, memberships.teamIds);
+            return pullCalendarShares(params.ownerId, user.email, memberships.teamIds);
         },
         { auth: true },
     )
