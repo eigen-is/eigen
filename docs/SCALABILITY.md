@@ -106,6 +106,21 @@ Pull functions follow the same pattern — check shard locality, call locally or
 | SSE connections    | Per-server                     | Each user connects to their home's server    |
 | Team membership    | Auth DB queries                | Shared auth DB handles this                  |
 
+### TODO: Enforce Home Locality via Elysia Derive
+
+Currently, lib functions call `getHome(ownerId)` themselves. This works but relies on code discipline
+to avoid cross-home access. A safer pattern: derive `home` from `params.ownerId` in route middleware
+and pass it down explicitly.
+
+```typescript
+.derive(async ({ params }) => ({ home: await getHome(params.ownerId) }))
+```
+
+Lib functions would receive `Home` as a parameter instead of importing `getHome`. This eliminates
+convenience wrappers like `getDrive(user)`, `resolveCalendar(user, ownerId)` — routes just use
+`home.drive`, `home.calendar` directly. Combined with a lint rule that restricts `getHome` imports
+to routes and `home-relay.ts`, this makes wrong code impossible rather than just flagged.
+
 ### Open Design Questions
 
 - **Message delivery guarantees**: Should `sendToHome` be fire-and-forget, at-least-once (queued), or
