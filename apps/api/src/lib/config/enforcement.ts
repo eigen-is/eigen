@@ -10,7 +10,7 @@ async function resolveQuotas(
     userId: string,
     mountId: string,
 ): Promise<{ home: Home; quotas: ResolvedQuotas }> {
-    const home = await getHome(ownerId);
+    const home = await getHome(ownerId); // ownerId-routed: called from drive upload routes
     const mountConfig = home.drive.getMountConfig(mountId);
     const { teamIds } = await getMemberships(userId);
     const quotas = await resolveUserQuotas(mountConfig, teamIds);

@@ -5,6 +5,7 @@ import { contentDisposition, setCacheHeaders } from '../lib/core/http';
 import { getSharedDrive } from '../lib/drive';
 import { exportDocument } from '../lib/export/export-document';
 import { getHome } from '../lib/home';
+import { sendToHome } from '../lib/home/home-relay';
 import { getScreenPreview, getTextPreview } from '../lib/preview/preview-cache';
 import { getThumbnail } from '../lib/shared/thumbnails';
 import { betterAuth } from './auth';
@@ -384,17 +385,20 @@ export const driveRouter = new Elysia({ name: 'drive' })
     .post(
         '/drive/:ownerId/:mountId/path/:pathId/request-access',
         async ({ params, user, body }) => {
-            const home = await getHome(params.ownerId);
+            const home = await getHome(params.ownerId); // ownerId-routed: request targets this home
             const path = await home.drive.getPath(params.mountId, params.pathId);
 
             if (path && !path.trashedAt) {
                 const requesterName = user.name || user.email;
-                home.notifications?.persist({
-                    type: 'access-request',
-                    tag: `access-request:${params.ownerId}:${params.mountId}:${params.pathId}:${user.email}`,
-                    title: `${requesterName} requested access to "${path.name}"`,
-                    body: body.message || null,
-                    actorEmail: user.email,
+                await sendToHome(params.ownerId, {
+                    type: 'notification',
+                    notification: {
+                        type: 'access-request',
+                        tag: `access-request:${params.ownerId}:${params.mountId}:${params.pathId}:${user.email}`,
+                        title: `${requesterName} requested access to "${path.name}"`,
+                        body: body.message || null,
+                        actorEmail: user.email,
+                    },
                 });
             }
 

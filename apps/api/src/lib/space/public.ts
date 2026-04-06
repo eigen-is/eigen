@@ -4,7 +4,7 @@ import { validateEmailAddress } from '@workspace/lib/validation';
 import type { User } from 'better-auth/types';
 import type { BunFile } from 'bun';
 import { ApiError } from '../core';
-import { getHome } from '../home';
+import { pullAvatarFile } from '../home/home-relay';
 import { getTeam } from '../team';
 import { getUserByEmail, getUserById } from '../user/';
 
@@ -55,12 +55,7 @@ export async function getAvatarByEmailOrId(emailOrId: string): Promise<BunFile |
     const filename = user.image.split('/').pop();
     if (!filename) return null;
 
-    const home = await getHome(user.id);
-    const file = home.fs.file(`eigen.contacts/avatars/${filename}`);
-    if (await file.exists()) {
-        return file;
-    }
-    return null;
+    return pullAvatarFile(user.id, filename);
 }
 
 export async function generateFallbackSvg(emailOrId: string): Promise<string> {
