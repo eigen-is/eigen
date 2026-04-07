@@ -1,5 +1,6 @@
 import { getTextPreviewMode, type TextPreviewMode } from '@workspace/lib/constants';
 import DOMPurify from 'isomorphic-dompurify';
+import { escapeHtml } from '../export/media';
 
 const LANGUAGE_MAP: Record<string, string> = {
     '.js': 'javascript',
@@ -55,10 +56,6 @@ const LANGUAGE_MAP: Record<string, string> = {
     '.conf': 'ini',
     '.cfg': 'ini',
 };
-
-function escapeHtml(text: string): string {
-    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
 
 function getLanguageFromFileName(fileName: string): string | undefined {
     const ext = fileName.slice(fileName.lastIndexOf('.')).toLowerCase();
