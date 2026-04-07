@@ -43,7 +43,8 @@
     "./constants": "./src/constants/index.ts",
     "./constants/*": "./src/constants/*",
     "./validation": "./src/validation/index.ts",
-    "./docs/eigendoc": "./src/docs/eigendoc/index.ts"
+    "./docs/eigendoc": "./src/docs/eigendoc/index.ts",
+    "./slides": "./src/slides/index.ts"
   },
   "peerDependencies": {
     "@tiptap/core": "^3.21.0",

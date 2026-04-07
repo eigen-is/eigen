@@ -7,6 +7,7 @@ import {
     type SlideItem,
     type SlideObject,
 } from '@workspace/lib/slides';
+import { escapeHtml } from '../doc/render';
 
 export type SizeUnit = (px: number, axis: 'x' | 'y') => string;
 export type ImgSrcResolver = (mediaName: string) => string | null;
@@ -23,15 +24,6 @@ export function fixedSizeUnit(pageWidth: number, pageHeight: number): SizeUnit {
         const dim = axis === 'x' ? pageWidth : pageHeight;
         return `${(px / base) * dim}px`;
     };
-}
-
-function escapeHtml(text: string): string {
-    return text
-        .replace(/&/g, '&amp;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
 }
 
 export function renderSlideObjectHtml(obj: SlideObject, sizeUnit: SizeUnit, resolveImgSrc: ImgSrcResolver): string {

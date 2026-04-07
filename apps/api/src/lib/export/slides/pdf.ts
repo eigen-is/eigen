@@ -1,7 +1,8 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Mount } from '../../mount';
-import type { ExportResult } from '../doc/render';
+import { type ExportResult, escapeHtml } from '../doc/render';
 import { getFontCSS } from '../fonts';
+import { readFileAsDataUri } from '../media';
 import { htmlToPdf } from '../weasyprint';
 import { loadSlidesContent } from './content';
 import { fixedSizeUnit, type ImgSrcResolver, renderSlideHtml, stripSlidesExtension } from './render';
@@ -50,34 +51,17 @@ export async function exportSlidesToPdf(mount: Mount, drivePath: DrivePath): Pro
 }
 
 function wrapInPdfDocument(title: string, slidesHtml: string): string {
-    const escapedTitle = title
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>${escapedTitle}</title>
+    <title>${escapeHtml(title)}</title>
     <style>${getFontCSS()}${PDF_CSS}</style>
 </head>
 <body>
     ${slidesHtml}
 </body>
 </html>`;
-}
-
-async function readFileAsDataUri(mount: Mount, pathId: string, mimeType: string): Promise<string | null> {
-    try {
-        const file = await mount.readFile(pathId);
-        if (!file) return null;
-        const buffer = Buffer.from(await file.arrayBuffer());
-        return `data:${mimeType};base64,${buffer.toString('base64')}`;
-    } catch {
-        return null;
-    }
 }
 
 const PDF_CSS = `
