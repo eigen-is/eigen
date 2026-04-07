@@ -39,7 +39,7 @@ describe('Team Calendar Share (push to existing members)', () => {
         teamId = team.id;
 
         // Enable calendar for the team (disabled by default)
-        await authedRequest(ctx.alice.user.sessionToken, `/team/${teamId}/settings`, {
+        await authedRequest(ctx.alice.user.sessionToken, `/team/team_${teamId}/settings`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ calendar: { enabled: true } }),
@@ -196,7 +196,7 @@ describe('Team Calendar Share (push to existing members)', () => {
 
     test('disabled team calendar is removed from shared list', async () => {
         // Disable the team calendar (Alice is org admin)
-        const settingsRes = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamId}/settings`, {
+        const settingsRes = await authedRequest(ctx.alice.user.sessionToken, `/team/team_${teamId}/settings`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ calendar: { enabled: false } }),
@@ -211,7 +211,7 @@ describe('Team Calendar Share (push to existing members)', () => {
         expect(teamCal).toBeUndefined();
 
         // Re-enable
-        await authedRequest(ctx.alice.user.sessionToken, `/team/${teamId}/settings`, {
+        await authedRequest(ctx.alice.user.sessionToken, `/team/team_${teamId}/settings`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ calendar: { enabled: true } }),
@@ -233,7 +233,7 @@ describe('Team Calendar Share (push to existing members)', () => {
         });
         const team3 = await assertJson<{ id: string }>(team3Res);
 
-        const res = await authedRequest(ctx.charlie.user.sessionToken, `/team/${team3.id}/settings`);
+        const res = await authedRequest(ctx.charlie.user.sessionToken, `/team/team_${team3.id}/settings`);
         expect(res.status).toBe(403);
     });
 
@@ -296,7 +296,7 @@ describe('Regression: Team calendar permission enforcement', () => {
         permTeamId = team.id;
 
         // Enable calendar for the team (disabled by default)
-        await authedRequest(ctx.alice.user.sessionToken, `/team/${permTeamId}/settings`, {
+        await authedRequest(ctx.alice.user.sessionToken, `/team/team_${permTeamId}/settings`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ calendar: { enabled: true } }),
