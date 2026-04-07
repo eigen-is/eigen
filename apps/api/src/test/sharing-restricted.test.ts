@@ -412,7 +412,7 @@ describe('Sharing Restricted', () => {
             }
 
             // Create team mount
-            await authedRequest(ctx.alice.user.sessionToken, `/team/team_${teamId}/mount`, {
+            await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwner}/mount`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name: 'Reshare Team Drive', storageType: 'local', maxSizeMB: 500 }),
