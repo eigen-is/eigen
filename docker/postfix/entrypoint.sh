@@ -4,6 +4,11 @@ set -e
 echo "=== Eigen Postfix Container ==="
 echo "Domain: ${DOMAIN}"
 
+# --- DNS: Postfix's internal resolver queries nameservers directly, bypassing
+# glibc (getent/nss). Docker's embedded DNS at 127.0.0.11 doesn't handle these
+# raw queries reliably. Use real resolvers, keep Docker's for container names. ---
+printf 'nameserver 1.1.1.1\nnameserver 8.8.8.8\nnameserver 127.0.0.11\n' > /etc/resolv.conf
+
 # --- Config templating ---
 # Only substitute $DOMAIN — leave Postfix's own variables ($mydomain, ${recipient}) alone
 envsubst '$DOMAIN' < /etc/postfix/main.cf.template > /etc/postfix/main.cf
