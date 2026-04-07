@@ -64,7 +64,7 @@ Domain              ${DOMAIN}
 Selector            eigen
 KeyFile             /data/dkim/eigen.private
 Canonicalization    relaxed/simple
-UserID              root
+UserID              opendkim
 EOF
 
 # --- Start services ---
