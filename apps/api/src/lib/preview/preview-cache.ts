@@ -85,7 +85,7 @@ export async function getTextPreview(
     drivePath: DrivePath,
     baseUrl?: string,
 ): Promise<TextPreviewResult | null> {
-    if (drivePath.type === 'doc') return getCollabPreviewData(mount, drivePath, baseUrl);
+    if (drivePath.type === 'doc' || drivePath.type === 'slides') return getCollabPreviewData(mount, drivePath, baseUrl);
     return getTextPreviewData(mount, drivePath);
 }
 

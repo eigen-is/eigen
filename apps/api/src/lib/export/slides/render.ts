@@ -96,16 +96,19 @@ export function renderSlideHtml(
     objects: SlideObject[],
     sizeUnit: SizeUnit,
     resolveImgSrc: ImgSrcResolver,
-    options?: { fillPage?: boolean },
+    options?: { fillPage?: boolean; pageWidthPx?: number; pageHeightPx?: number },
 ): string {
     const fillPage = options?.fillPage ?? false;
-    const containerStyles: string[] = [
-        'position:relative',
-        'width:100%',
-        fillPage ? 'height:100%' : 'aspect-ratio:16/9',
-        'overflow:hidden',
-        'container-type:size',
-    ];
+    const containerStyles: string[] = ['position:relative', 'overflow:hidden'];
+
+    if (fillPage && options?.pageWidthPx && options?.pageHeightPx) {
+        // PDF mode: explicit pixel dimensions (WeasyPrint doesn't support container queries or % height)
+        containerStyles.push(`width:${options.pageWidthPx}px`, `height:${options.pageHeightPx}px`);
+    } else if (fillPage) {
+        containerStyles.push('width:100%', 'height:100%', 'container-type:size');
+    } else {
+        containerStyles.push('width:100%', 'aspect-ratio:16/9', 'container-type:size');
+    }
 
     if (slide.backgroundColor) containerStyles.push(`background-color:${slide.backgroundColor}`);
 
