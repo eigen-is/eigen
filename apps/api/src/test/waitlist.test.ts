@@ -64,9 +64,7 @@ describe('Waitlist', () => {
                 body: JSON.stringify({ email: 'not-an-email', notes: '' }),
             }),
         );
-        expect(res.status).toBe(200);
-        const ok = await res.json();
-        expect(ok).toBe(false);
+        expect(res.status).toBe(400);
     });
 
     test('submit fails when waitlist is disabled', async () => {
