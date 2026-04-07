@@ -20,14 +20,14 @@ Unbound (DNS resolver), Postfix (email), Dovecot (IMAP).
      | static  |  | proxy   | |  MTA  | |  IMAP   |
      |  files  |  | /eigen/*| |       | |         |
      +----+----+  +----+----+ +---+---+ +----+----+
-          |            |          |           |
-          |       +----v----+    |           |
-          |       |  Eigen  |<---+           |
-          |       |   API   |                |
-          |       |  :8000  |                |
-          |       +----+----+                |
-          |            |                     |
-          +------------+---------------------+
+          |            |          |  |        |
+          |       +----v----+    | |        |
+          |       |  Eigen  |<---+ |        |
+          |       |   API   |      |        |
+          |       |  :8000  |  +---v-----+  |
+          |       +----+----+  | Unbound |  |
+          |            |       |  (DNS)  |  |
+          +------------+-------+---------+--+
                        |
                 +------v------+
                 |  ./data/    |  (bind mount)
@@ -75,7 +75,7 @@ All changes are backward-compatible: without the new env vars, behavior is ident
 ```
 /                                    # Repo root
 +-- Caddyfile                        # Reverse proxy config
-+-- docker-compose.yml               # Production: Caddy + API + Postfix + Dovecot
++-- docker-compose.yml               # Production: Caddy + API + Unbound + Postfix + Dovecot
 +-- docker-compose.dev.yml           # Dev overrides: localhost + mailpit
 +-- .env.example                     # Template for .env.production
 +-- docker/

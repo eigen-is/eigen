@@ -51,9 +51,10 @@ bun --filter '@apps/api' buildfordocker
 docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.production up -d
 ```
 
-This starts 5 containers:
+This starts 6 containers:
 - **caddy** — Reverse proxy at `https://eigen.local` (self-signed cert)
 - **eigen-api** — Backend API
+- **unbound** — Recursive DNS resolver for Postfix
 - **postfix** — SMTP server (submission on ports 587/465 for external clients)
 - **dovecot** — IMAP server for testing mail clients
 - **mailpit** — Catches outbound email from the Eigen web UI (port 8025)
@@ -223,13 +224,14 @@ Browser (https://eigen.local)
 │ :80/:443 │     │   :8000   │     │  :993   │
 └──────────┘     └───────────┘     └─────────┘
                        │                 │
-                  ┌────▼────┐      ┌─────▼─────┐
-                  │ Mailpit │      │  Postfix   │
-                  │  :8025  │      │ :25/465/587│
-                  └─────────┘      └────────────┘
+                  ┌────▼────┐      ┌─────▼─────┐    ┌─────────┐
+                  │ Mailpit │      │  Postfix   │◀───│ Unbound │
+                  │  :8025  │      │ :25/465/587│    │  (DNS)  │
+                  └─────────┘      └────────────┘    └─────────┘
 
 Caddy:     HTTPS termination, static files, API proxy
 Eigen API: All business logic, data storage
+Unbound:   Recursive DNS resolver for Postfix
 Postfix:   SMTP (inbound on 25, submission on 465/587 via Dovecot SASL)
 Dovecot:   IMAP server (reads same Maildir as API, auth via API)
 Mailpit:   Catches outbound email from web UI (dev only)
