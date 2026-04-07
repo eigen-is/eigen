@@ -57,6 +57,7 @@ function yMapToObject(yMap: Y.Map<unknown>): Record<string, unknown> {
 export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
     const [deck, setDeck] = useState<DeckData>({ slides: {}, objects: {}, slideOrder: [] });
     const [activeSlideId, setActiveSlideId] = useState<string | null>(null);
+    const [isSynced, setIsSynced] = useState(false);
 
     const docRef = useRef<Y.Doc | null>(null);
     const providerRef = useRef<WebsocketProvider | null>(null);
@@ -146,13 +147,15 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         slideOrderArray.observe(updateReactState);
         updateReactState();
 
-        wsProvider.on('sync', (isSynced: boolean) => {
-            if (isSynced && slidesMap.size === 0) {
+        wsProvider.on('sync', (synced: boolean) => {
+            setIsSynced(synced);
+            if (synced && slidesMap.size === 0) {
                 initializeDefaultDeck(doc);
             }
         });
 
         return () => {
+            setIsSynced(false);
             providerRef.current?.disconnect();
             docRef.current?.destroy();
         };
@@ -510,6 +513,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
 
     return {
         deck,
+        isSynced,
         activeSlideId,
         setActiveSlideId,
         addSlide,

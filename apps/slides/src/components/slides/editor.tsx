@@ -17,7 +17,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { CommentPanel, CommentThread, CreateCommentDialog, NoteCardContextMenu, NoteCardDialog } from '@workspace/ui';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
-import { Column, ColumnLayout, EmptyState } from '@workspace/ui/index';
+import { Column, ColumnLayout, EmptyState, LoadingState } from '@workspace/ui/index';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useActiveComments } from './hooks/use-active-comments';
 import { useDeck } from './hooks/use-deck';
@@ -116,6 +116,7 @@ function SlideEditorInner({
 }: SlideEditorProps) {
     const {
         deck,
+        isSynced,
         activeSlideId,
         setActiveSlideId,
         addSlide,
@@ -557,6 +558,8 @@ function SlideEditorInner({
     const backgroundImageUrl = activeSlide?.backgroundMediaName
         ? resolveMediaUrl(activeSlide.backgroundMediaName)
         : null;
+
+    if (!isSynced) return <LoadingState />;
 
     if (isPresenting && activeSlide) {
         const bgUrl = activeSlide.backgroundMediaName ? resolveMediaUrl(activeSlide.backgroundMediaName) : null;
