@@ -15,7 +15,7 @@ describe('Waitlist', () => {
         await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ onboarding: { waitlist: { enabled: true, notifyEmail: '' } } }),
+            body: JSON.stringify({ onboarding: { waitlist: { enabled: true } } }),
         });
     });
 

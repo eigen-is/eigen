@@ -23,7 +23,6 @@ const settingsStore = new JsonStore<ServerSettings>(serverFs, 'settings.json', {
     onboarding: {
         waitlist: {
             enabled: false,
-            notifyEmail: '',
         },
         autoAddOwnerContact: false,
         welcomeMail: {
