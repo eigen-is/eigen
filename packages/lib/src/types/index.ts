@@ -13,3 +13,4 @@ export * from './owner';
 export * from './public';
 export * from './settings';
 export * from './sse';
+export * from './waitlist';

@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SignupRouteImport } from './routes/signup'
 import { Route as Login2faRouteImport } from './routes/login-2fa'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthRouteImport } from './routes/_auth'
@@ -19,6 +20,11 @@ import { Route as AuthDataRouteImport } from './routes/_auth.data'
 import { Route as AuthSecurityPasswordRouteImport } from './routes/_auth.security.password'
 import { Route as AuthSecurity2faRouteImport } from './routes/_auth.security.2fa'
 
+const SignupRoute = SignupRouteImport.update({
+  id: '/signup',
+  path: '/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const Login2faRoute = Login2faRouteImport.update({
   id: '/login-2fa',
   path: '/login-2fa',
@@ -68,6 +74,7 @@ export interface FileRoutesByFullPath {
   '/': typeof AuthIndexRoute
   '/login': typeof LoginRoute
   '/login-2fa': typeof Login2faRoute
+  '/signup': typeof SignupRoute
   '/data': typeof AuthDataRoute
   '/services': typeof AuthServicesRoute
   '/user': typeof AuthUserRoute
@@ -77,6 +84,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/login-2fa': typeof Login2faRoute
+  '/signup': typeof SignupRoute
   '/data': typeof AuthDataRoute
   '/services': typeof AuthServicesRoute
   '/user': typeof AuthUserRoute
@@ -89,6 +97,7 @@ export interface FileRoutesById {
   '/_auth': typeof AuthRouteWithChildren
   '/login': typeof LoginRoute
   '/login-2fa': typeof Login2faRoute
+  '/signup': typeof SignupRoute
   '/_auth/data': typeof AuthDataRoute
   '/_auth/services': typeof AuthServicesRoute
   '/_auth/user': typeof AuthUserRoute
@@ -102,6 +111,7 @@ export interface FileRouteTypes {
     | '/'
     | '/login'
     | '/login-2fa'
+    | '/signup'
     | '/data'
     | '/services'
     | '/user'
@@ -111,6 +121,7 @@ export interface FileRouteTypes {
   to:
     | '/login'
     | '/login-2fa'
+    | '/signup'
     | '/data'
     | '/services'
     | '/user'
@@ -122,6 +133,7 @@ export interface FileRouteTypes {
     | '/_auth'
     | '/login'
     | '/login-2fa'
+    | '/signup'
     | '/_auth/data'
     | '/_auth/services'
     | '/_auth/user'
@@ -134,10 +146,18 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRouteWithChildren
   LoginRoute: typeof LoginRoute
   Login2faRoute: typeof Login2faRoute
+  SignupRoute: typeof SignupRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/signup': {
+      id: '/signup'
+      path: '/signup'
+      fullPath: '/signup'
+      preLoaderRoute: typeof SignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login-2fa': {
       id: '/login-2fa'
       path: '/login-2fa'
@@ -228,6 +248,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRouteWithChildren,
   LoginRoute: LoginRoute,
   Login2faRoute: Login2faRoute,
+  SignupRoute: SignupRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
