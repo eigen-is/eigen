@@ -6,7 +6,6 @@ import { getServerDataPath } from '../config/paths';
 import { getPublicConfig } from '../config/server-config';
 import { getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core/errors';
-import { sendMail } from '../core/mailer';
 import { ManagedDatabase } from '../core/managed-database';
 import { WAITLIST_DB_CONFIG } from './db-config';
 import * as schema from './schema';
@@ -23,26 +22,6 @@ async function db() {
     return managedDb.db;
 }
 
-function escapeHtml(text: string) {
-    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-function sendNotificationEmail(email: string, notes: string) {
-    const settings = getServerSettings();
-    const notifyEmail = settings.onboarding.waitlist.notifyEmail;
-    if (!notifyEmail) return;
-
-    const time = new Date().toISOString();
-    const safeEmail = escapeHtml(email);
-    const safeNotes = escapeHtml(notes);
-    sendMail({
-        to: [{ name: '', address: notifyEmail }],
-        subject: 'New Eigen Waitlist Signup',
-        text: `New waitlist signup:\n\nEmail: <${email}>\nNotes: ${notes}\n\nTime: ${time}`,
-        html: `<h2>New Waitlist Signup</h2><p><strong>Email:</strong> ${safeEmail}</p><p><strong>Notes:</strong> ${safeNotes}</p><p><strong>Time:</strong> ${time}</p>`,
-    }).catch(() => {});
-}
-
 export async function submitWaitlist(email: string, notes: string): Promise<boolean> {
     email = email.trim().toLowerCase();
     if (!validateEmailAddress(email)) return false;
@@ -56,7 +35,6 @@ export async function submitWaitlist(email: string, notes: string): Promise<bool
                 .update(schema.waitlist)
                 .set({ notes, status: 'pending', updatedAt: new Date() })
                 .where(eq(schema.waitlist.id, existing.id));
-            sendNotificationEmail(email, notes);
             return true;
         }
         return false;
@@ -70,7 +48,6 @@ export async function submitWaitlist(email: string, notes: string): Promise<bool
         createdAt: new Date(),
         updatedAt: new Date(),
     });
-    sendNotificationEmail(email, notes);
     return true;
 }
 

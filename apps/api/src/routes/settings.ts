@@ -61,7 +61,6 @@ export const settingsRouter = new Elysia({ name: 'settings' })
                         waitlist: t.Optional(
                             t.Object({
                                 enabled: t.Optional(t.Boolean()),
-                                notifyEmail: t.Optional(t.String()),
                             }),
                         ),
                         autoAddOwnerContact: t.Optional(t.Boolean()),

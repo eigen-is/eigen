@@ -41,7 +41,6 @@ export type ServerSettings = {
     onboarding: {
         waitlist: {
             enabled: boolean;
-            notifyEmail: string;
         };
         autoAddOwnerContact: boolean;
         welcomeMail: {

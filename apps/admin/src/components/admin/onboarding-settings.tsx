@@ -28,7 +28,7 @@ export function OnboardingSettingsPage() {
     }
 
     const onboarding = settings.onboarding ?? {
-        waitlist: { enabled: false, notifyEmail: '' },
+        waitlist: { enabled: false },
         autoAddOwnerContact: false,
         welcomeMail: { enabled: true, body: '' },
     };
@@ -69,8 +69,7 @@ export function OnboardingSettingsPage() {
             <div className="space-y-4">
                 <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Waitlist</h3>
                 <p className="text-sm text-muted-foreground">
-                    When enabled, the landing page shows a "Join Waitlist" form. Submissions are sent to the configured
-                    email address.
+                    When enabled, the landing page shows a "Join Waitlist" form.
                 </p>
 
                 <div className="flex items-center gap-3">
@@ -80,18 +79,6 @@ export function OnboardingSettingsPage() {
                     />
                     <Label>Enable waitlist</Label>
                 </div>
-
-                {current.waitlist.enabled && (
-                    <div className="space-y-1.5">
-                        <Label>Notification email</Label>
-                        <Input
-                            type="email"
-                            placeholder="admin@example.com"
-                            value={current.waitlist.notifyEmail}
-                            onChange={(e) => update({ waitlist: { notifyEmail: e.target.value } })}
-                        />
-                    </div>
-                )}
             </div>
 
             {current.waitlist.enabled && (
