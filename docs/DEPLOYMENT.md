@@ -154,9 +154,9 @@ password flow as IMAP and CalDAV.
 - [ ] **Cert export fragility** — the export script depends on Caddy's internal cert path
   (`/data/caddy/certificates/acme-v02.api.letsencrypt.org-directory/`). Pin Caddy version or use
   `acme.sh` as an alternative cert source
-- [ ] **Dovecot UID** — checkpassword sets `userdb_uid=1000` but Dovecot's `prefetch` driver ignores
-  it (falls back to UID 100). Works because `first_valid_uid=1` allows it and Docker Desktop maps
-  file ownership transparently. On Linux, this needs testing with real UID matching
+- [x] **Dovecot UID** — `checkpassword-reply` injects process UID (100/dovecot) into userdb fields,
+  ignoring exported `userdb_uid`. Fixed with `override_fields = uid=1000 gid=1000` on the prefetch
+  userdb, plus `service imap { user = vmail }` as a belt-and-suspenders measure
 - [ ] **Backup WAL safety** — `scripts/backup.sh` does a simple tar. For guaranteed consistency,
   implement `/internal/checkpoint` endpoint that runs `PRAGMA wal_checkpoint(TRUNCATE)` on all open
   databases before backup
