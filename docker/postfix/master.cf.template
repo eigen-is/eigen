@@ -39,7 +39,7 @@ proxymap  unix  -       -       n       -       -       proxymap
 proxywrite unix -       -       n       -       1       proxymap
 smtp      unix  -       -       y       -       -       smtp
 relay     unix  -       -       y       -       -       smtp
-        -o syslog_name=postfix/$2
+        -o syslog_name=postfix/relay
 error     unix  -       -       y       -       -       error
 retry     unix  -       -       y       -       -       error
 discard   unix  -       -       y       -       -       discard

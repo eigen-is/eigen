@@ -4,9 +4,6 @@ set -e
 echo "=== Eigen Postfix Container ==="
 echo "Domain: ${DOMAIN}"
 
-# --- DNS: use real resolvers so Postfix can do MX/AAAA lookups ---
-echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8" > /etc/resolv.conf
-
 # --- Config templating ---
 # Only substitute $DOMAIN — leave Postfix's own variables ($mydomain, ${recipient}) alone
 envsubst '$DOMAIN' < /etc/postfix/main.cf.template > /etc/postfix/main.cf
@@ -44,7 +41,6 @@ mkdir -p /data/dkim
 if [ ! -f "/data/dkim/eigen.private" ]; then
     echo "Generating DKIM key for ${DOMAIN}..."
     opendkim-genkey -b 2048 -d "${DOMAIN}" -s eigen -D /data/dkim/
-    chown opendkim:opendkim /data/dkim/eigen.private /data/dkim/eigen.txt
     echo ""
     echo "============================================"
     echo "=== Add this DNS TXT record for DKIM:    ==="
@@ -54,8 +50,8 @@ if [ ! -f "/data/dkim/eigen.private" ]; then
     echo ""
 fi
 
-# Ensure correct ownership (files may have been created by another container)
-chown opendkim:opendkim /data/dkim/eigen.private 2>/dev/null || true
+# Ensure correct ownership for OpenDKIM
+chown opendkim:opendkim /data/dkim /data/dkim/eigen.private /data/dkim/eigen.txt 2>/dev/null || true
 
 # OpenDKIM config
 cat > /etc/opendkim.conf <<EOF
@@ -75,7 +71,7 @@ echo "Starting OpenDKIM..."
 if opendkim -x /etc/opendkim.conf; then
     echo "OpenDKIM started."
 else
-    echo "WARNING: OpenDKIM failed to start (DKIM signing disabled). Common on macOS Docker due to file ownership."
+    echo "WARNING: OpenDKIM failed to start (DKIM signing disabled)."
     # Remove DKIM milter from Postfix config so it doesn't try to connect
     sed -i '/milter/d' /etc/postfix/main.cf
 fi
