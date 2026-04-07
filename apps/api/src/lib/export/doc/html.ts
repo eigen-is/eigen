@@ -1,31 +1,12 @@
-import * as fs from 'node:fs';
 import { renderToHTMLString } from '@tiptap/static-renderer/pm/html-string';
 import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import DOMPurify from 'isomorphic-dompurify';
 import { common, createLowlight } from 'lowlight';
-// Font paths resolved at build time — copied to outdir by the bundler
-import fontExcalifont from '../../../../../../packages/ui/src/assets/fonts/excalifont/Excalifont-Regular.woff2' with {
-    type: 'file',
-};
-import fontInterRegular from '../../../../../../packages/ui/src/assets/fonts/inter/Inter-Variable.woff2' with {
-    type: 'file',
-};
-import fontInterItalic from '../../../../../../packages/ui/src/assets/fonts/inter/Inter-Variable-Italic.woff2' with {
-    type: 'file',
-};
-import fontMonoRegular from '../../../../../../packages/ui/src/assets/fonts/jetbrains-mono/JetBrainsMono-Variable.woff2' with {
-    type: 'file',
-};
-import fontSerifRegular from '../../../../../../packages/ui/src/assets/fonts/source-serif/SourceSerif4-Variable.woff2' with {
-    type: 'file',
-};
-import fontSerifItalic from '../../../../../../packages/ui/src/assets/fonts/source-serif/SourceSerif4-Variable-Italic.woff2' with {
-    type: 'file',
-};
 // CSS embedded as string at build time by Bun's bundler — no runtime file resolution needed
 import eigenProseCSSRaw from '../../../../../../packages/ui/src/styles/eigen-prose.css' with { type: 'text' };
 import type { Mount } from '../../mount';
+import { getFontCSS } from '../fonts';
 import { loadEigendocContent } from './content';
 import {
     type ExportResult,
@@ -43,13 +24,9 @@ export type { ExportResult };
 
 // Lazy-initialized cached assets
 let _proseCSS: string | undefined;
-let _fontCSS: string | undefined;
 
 function getProseCSS() {
     return (_proseCSS ??= flattenEigenProseCSS(eigenProseCSSRaw as string));
-}
-function getFontCSS() {
-    return (_fontCSS ??= buildFontFaceCSS());
 }
 
 export async function exportEigendocToHtml(mount: Mount, drivePath: DrivePath): Promise<ExportResult> {
@@ -197,38 +174,6 @@ function flattenNestedBlock(parentSelector: string, body: string): string {
     }
 
     return results.join('\n');
-}
-
-// ── Font embedding ──────────────────────────────────────────────────────────
-
-const FONT_FILES = [
-    { family: 'Inter', path: fontInterRegular, weight: '100 900', style: 'normal' },
-    { family: 'Inter', path: fontInterItalic, weight: '100 900', style: 'italic' },
-    { family: 'Source Serif 4', path: fontSerifRegular, weight: '200 900', style: 'normal' },
-    { family: 'Source Serif 4', path: fontSerifItalic, weight: '200 900', style: 'italic' },
-    { family: 'JetBrains Mono', path: fontMonoRegular, weight: '100 800', style: 'normal' },
-    { family: 'Excalifont', path: fontExcalifont, weight: '400', style: 'normal' },
-] as const;
-
-function buildFontFaceCSS(): string {
-    return FONT_FILES.map((font) => {
-        try {
-            const buf = fs.readFileSync(font.path);
-            const dataUri = `data:font/woff2;base64,${buf.toString('base64')}`;
-            return `@font-face {
-    font-family: "${font.family}";
-    src: url("${dataUri}") format("woff2");
-    font-weight: ${font.weight};
-    font-style: ${font.style};
-    font-display: swap;
-}`;
-        } catch {
-            console.warn(`[export/html] Failed to read font: ${font.path}`);
-            return '';
-        }
-    })
-        .filter(Boolean)
-        .join('\n');
 }
 
 const PRINT_EXTRAS = `
