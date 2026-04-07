@@ -48,6 +48,10 @@ export type ServerSettings = {
             enabled: boolean;
             body: string;
         };
+        inviteEmail: {
+            subject: string;
+            body: string;
+        };
     };
 };
 

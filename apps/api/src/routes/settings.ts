@@ -71,6 +71,12 @@ export const settingsRouter = new Elysia({ name: 'settings' })
                                 body: t.Optional(t.String()),
                             }),
                         ),
+                        inviteEmail: t.Optional(
+                            t.Object({
+                                subject: t.Optional(t.String()),
+                                body: t.Optional(t.String()),
+                            }),
+                        ),
                     }),
                 ),
             }),
