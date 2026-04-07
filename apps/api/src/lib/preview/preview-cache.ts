@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { DRIVE_MIME_DOC } from '@workspace/lib/types/drive';
+import { DRIVE_MIME_DOC, DRIVE_MIME_SLIDES } from '@workspace/lib/types/drive';
 import type { Mount } from '../mount';
 import { generateImagePreview } from '../shared/thumbnails';
 import { generateEigendocPreview } from './eigendoc-preview';
@@ -141,6 +141,26 @@ async function getCollabPreviewData(
             return result;
         } catch (err) {
             console.error(`[preview] Failed to generate eigendoc preview for ${drivePath.id}:`, err);
+            return null;
+        }
+    }
+
+    if (mime === DRIVE_MIME_SLIDES) {
+        const cacheFile = path.join(mount.previewsDir, getTextCacheKey(drivePath.id, drivePath.updatedAt));
+
+        if (fs.existsSync(cacheFile)) {
+            return JSON.parse(await Bun.file(cacheFile).text()) as TextPreviewResult;
+        }
+
+        try {
+            const { generateEigenslidesPreview } = await import('./eigenslides-preview');
+            const body = await generateEigenslidesPreview(mount, drivePath, baseUrl);
+            if (!body) return null;
+            const result: TextPreviewResult = { body, mode: 'eigenslides' };
+            await Bun.write(cacheFile, JSON.stringify(result));
+            return result;
+        } catch (err) {
+            console.error(`[preview] Failed to generate eigenslides preview for ${drivePath.id}:`, err);
             return null;
         }
     }
