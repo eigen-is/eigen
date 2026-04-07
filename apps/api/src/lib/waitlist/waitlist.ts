@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { WaitlistEntry } from '@workspace/lib/types/waitlist';
-import { validateEmailAddress } from '@workspace/lib/validation';
+import { validateEmailAddress, validateUsername } from '@workspace/lib/validation';
 import { and, eq } from 'drizzle-orm';
 import { getServerDataPath } from '../config/paths';
 import { getPublicConfig } from '../config/server-config';
@@ -161,6 +161,46 @@ export async function claimInviteToken(token: string): Promise<boolean> {
 export async function setRegisteredUser(email: string, userId: string) {
     const d = await db();
     await d.update(schema.waitlist).set({ userId }).where(eq(schema.waitlist.email, email));
+}
+
+export async function registerFromInvite(
+    token: string,
+    name: string,
+    username: string,
+    password: string,
+): Promise<Response> {
+    const entry = await validateInviteToken(token);
+    if (!entry) throw new ApiError(400, 'Invalid or expired invite link');
+
+    const usernameErr = validateUsername(username.toLowerCase());
+    if (usernameErr) throw new ApiError(400, usernameErr);
+
+    const config = getPublicConfig();
+    const email = `${username.toLowerCase()}@${config?.domain ?? 'localhost'}`;
+
+    // Create user first — if it fails (e.g., username taken), the token stays valid
+    const { auth } = await import('../auth/auth');
+    let userId: string;
+    try {
+        const created = await auth.api.createUser({
+            body: { name, email, password, role: 'user' },
+        });
+        if (!created?.user) throw new ApiError(400, 'Failed to create account');
+        userId = created.user.id;
+    } catch (err) {
+        if (err instanceof ApiError) throw err;
+        const msg = err instanceof Error ? err.message : 'Failed to create account';
+        throw new ApiError(400, msg.includes('already') ? 'Username is already taken' : msg);
+    }
+
+    // Claim token atomically — if it fails, user exists but can log in normally
+    const claimed = await claimInviteToken(token);
+    if (!claimed) throw new ApiError(409, 'Invite has already been used');
+
+    setRegisteredUser(entry.email, userId).catch(() => {});
+
+    // Sign in and return response with session cookie
+    return auth.api.signInEmail({ body: { email, password }, asResponse: true });
 }
 
 export async function removeWaitlistEntry(id: string) {
