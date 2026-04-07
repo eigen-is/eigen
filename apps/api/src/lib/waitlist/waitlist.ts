@@ -1,6 +1,6 @@
+import { randomUUID } from 'node:crypto';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import { eq } from 'drizzle-orm';
-import { nanoid } from 'nanoid';
 import { getServerDataPath } from '../config/paths';
 import { ManagedDatabase } from '../core/managed-database';
 import { WAITLIST_DB_CONFIG } from './db-config';
@@ -41,7 +41,7 @@ class WaitlistService {
         }
 
         await this.db.insert(schema.waitlist).values({
-            id: nanoid(),
+            id: randomUUID(),
             email,
             notes,
             status: 'pending',
@@ -66,7 +66,7 @@ class WaitlistService {
         const entry = await this.get(id);
         if (!entry || (entry.status !== 'pending' && entry.status !== 'rejected')) return null;
 
-        const inviteToken = nanoid(32);
+        const inviteToken = randomUUID();
         const inviteExpiresAt = new Date(Date.now() + INVITE_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
 
         await this.db
@@ -98,7 +98,7 @@ class WaitlistService {
         const entry = await this.get(id);
         if (!entry || entry.status !== 'invited') return null;
 
-        const inviteToken = nanoid(32);
+        const inviteToken = randomUUID();
         const inviteExpiresAt = new Date(Date.now() + INVITE_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
 
         await this.db
