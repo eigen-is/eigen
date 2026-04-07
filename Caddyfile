@@ -41,27 +41,11 @@
 
     # Email autodiscovery — Apple Mail + Thunderbird autoconfig
     handle /.well-known/autoconfig/mail/config-v1.1.xml {
+        root * /etc/caddy
+        rewrite * /autoconfig.xml
+        templates
         header Content-Type "application/xml"
-        respond `<?xml version="1.0" encoding="UTF-8"?>
-<clientConfig version="1.1">
-  <emailProvider id="{$DOMAIN}">
-    <domain>{$DOMAIN}</domain>
-    <incomingServer type="imap">
-      <hostname>{$DOMAIN}</hostname>
-      <port>993</port>
-      <socketType>SSL</socketType>
-      <authentication>password-cleartext</authentication>
-      <username>%EMAILADDRESS%</username>
-    </incomingServer>
-    <outgoingServer type="smtp">
-      <hostname>{$DOMAIN}</hostname>
-      <port>587</port>
-      <socketType>STARTTLS</socketType>
-      <authentication>password-cleartext</authentication>
-      <username>%EMAILADDRESS%</username>
-    </outgoingServer>
-  </emailProvider>
-</clientConfig>` 200
+        file_server
     }
 
     # CalDAV discovery — Apple Calendar sends PROPFIND/OPTIONS to the root URL

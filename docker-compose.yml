@@ -8,6 +8,7 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./docker/caddy/export-certs.sh:/usr/local/bin/export-certs.sh:ro
+      - ./docker/caddy/autoconfig.xml:/etc/caddy/autoconfig.xml:ro
       - ./dist:/www:ro
       - ./caddy-data:/data
       - ./data/certs:/shared-certs
