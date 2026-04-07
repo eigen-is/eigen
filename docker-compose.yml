@@ -55,6 +55,9 @@ services:
       - "25:25"
       - "465:465"
       - "587:587"
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     volumes:
       - ./data/dkim:/data/dkim
       - ./data/certs:/certs:ro

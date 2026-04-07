@@ -33,6 +33,7 @@ export function createTransport(): Mail {
             host: process.env['SMTP_HOST'],
             port: Number(process.env['SMTP_PORT'] || 25),
             secure: false,
+            tls: { rejectUnauthorized: false },
         });
     }
     return nodemailer.createTransport({
