@@ -30,6 +30,7 @@ export const teamApi = api.team;
 export const notificationApi = api.notifications;
 export const settingsApi = api.settings;
 export const setupApi = api.setup;
+export const waitlistApi = api.waitlist;
 
 export const SPACE_APP_URL = import.meta.env.VITE_APP_SPACE_URL as string;
 export const MAIL_APP_URL = import.meta.env.VITE_APP_MAIL_URL as string;
