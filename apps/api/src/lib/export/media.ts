@@ -2,6 +2,15 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Mount } from '../mount';
 import type { MediaFile } from './doc/content';
 
+export function escapeHtml(text: string): string {
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
 export async function readFileAsDataUri(mount: Mount, pathId: string, mimeType: string): Promise<string | null> {
     try {
         const file = await mount.readFile(pathId);

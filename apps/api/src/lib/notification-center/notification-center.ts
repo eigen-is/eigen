@@ -6,7 +6,7 @@ import type { ManagedDatabase } from '../core';
 import type { Home } from '../home';
 import { NOTIFICATION_CENTER_DB_CONFIG } from './db-config';
 import * as schema from './schema';
-import { buildNotificationCreatedEvent } from './sse-events';
+import { buildNotificationChangedEvent, buildNotificationCreatedEvent } from './sse-events';
 
 export type PersistInput = {
     type: string;
@@ -111,13 +111,16 @@ export class NotificationCenter {
 
     markRead(id: string): void {
         this.db.update(schema.notifications).set({ read: true }).where(eq(schema.notifications.id, id)).run();
+        this.home.broadcast(buildNotificationChangedEvent());
     }
 
     markAllRead(): void {
         this.db.update(schema.notifications).set({ read: true }).where(eq(schema.notifications.read, false)).run();
+        this.home.broadcast(buildNotificationChangedEvent());
     }
 
     dismiss(id: string): void {
         this.db.delete(schema.notifications).where(eq(schema.notifications.id, id)).run();
+        this.home.broadcast(buildNotificationChangedEvent());
     }
 }
