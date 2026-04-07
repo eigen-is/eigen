@@ -193,9 +193,7 @@ function WaitlistDetailToolbar({
             {entry.status === 'rejected' && (
                 <TooltipButton icon={Check} tooltipText="Re-accept & Invite" onClick={onAccept} disabled={isPending} />
             )}
-            {entry.status !== 'registered' && (
-                <TooltipButton icon={Trash2} tooltipText="Delete" onClick={onDelete} disabled={isPending} />
-            )}
+            <TooltipButton icon={Trash2} tooltipText="Delete" onClick={onDelete} disabled={isPending} />
         </div>
     );
 }
