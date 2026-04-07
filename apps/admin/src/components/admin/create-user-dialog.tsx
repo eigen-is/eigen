@@ -1,5 +1,6 @@
 import { useCreateUser } from '@workspace/lib/admin';
 import { usePublicConfig } from '@workspace/lib/public';
+import { validateUsername } from '@workspace/lib/validation';
 import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Field, FieldContent, FieldGroup, FieldLabel } from '@workspace/ui/components/field';
@@ -19,12 +20,20 @@ export function CreateUserDialog({ open, onOpenChange }: CreateUserDialogProps) 
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [role, setRole] = useState<'user' | 'admin'>('user');
+    const [usernameError, setUsernameError] = useState('');
     const { data: config } = usePublicConfig();
     const createUser = useCreateUser(config?.orgId);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        const email = `${username.toLowerCase().split('@')[0]}@${config?.domain ?? 'eigen.is'}`;
+        const normalized = username.toLowerCase().split('@')[0];
+        const validationError = validateUsername(normalized);
+        if (validationError) {
+            setUsernameError(validationError);
+            return;
+        }
+        setUsernameError('');
+        const email = `${normalized}@${config?.domain ?? 'eigen.is'}`;
         if (!name || !username || !password) return;
 
         await createUser.mutateAsync({ name, email, password, role });
@@ -33,6 +42,7 @@ export function CreateUserDialog({ open, onOpenChange }: CreateUserDialogProps) 
         setUsername('');
         setPassword('');
         setRole('user');
+        setUsernameError('');
     };
 
     return (
@@ -64,6 +74,7 @@ export function CreateUserDialog({ open, onOpenChange }: CreateUserDialogProps) 
                                         <InputGroupText>@{config?.domain ?? 'eigen.is'}</InputGroupText>
                                     </InputGroupAddon>
                                 </InputGroup>
+                                {usernameError && <p className="text-sm text-destructive">{usernameError}</p>}
                             </FieldContent>
                         </Field>
 
