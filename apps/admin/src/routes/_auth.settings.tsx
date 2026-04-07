@@ -10,7 +10,9 @@ function SettingsRoute() {
     return (
         <ColumnLayout>
             <Column id="detail" width="flex">
-                <ServerSettingsPage />
+                <div className="h-full overflow-y-auto">
+                    <ServerSettingsPage />
+                </div>
             </Column>
         </ColumnLayout>
     );
