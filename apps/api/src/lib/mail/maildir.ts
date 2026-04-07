@@ -323,9 +323,9 @@ export default class Maildir {
                     if (parsed) {
                         applyFlagsFromFilename(parsed, fileName);
                         parsed.filename = fileName;
-                        this.db.addEmail(parsed as EmailSummary);
+                        const isNew = this.db.addEmail(parsed as EmailSummary);
                         this.emit(SSEventType.MAIL_RECEIVED, { messageId: id, mailbox });
-                        if (parsed.fromShort) {
+                        if (isNew && parsed.fromShort) {
                             const fromEmail = parsed.from?.value?.[0]?.address ?? null;
                             this.home.notifications?.persist({
                                 type: 'mail',
