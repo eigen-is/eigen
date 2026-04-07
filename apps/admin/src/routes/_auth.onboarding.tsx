@@ -10,7 +10,9 @@ function OnboardingRoute() {
     return (
         <ColumnLayout>
             <Column id="detail" width="flex">
-                <OnboardingSettingsPage />
+                <div className="h-full overflow-y-auto">
+                    <OnboardingSettingsPage />
+                </div>
             </Column>
         </ColumnLayout>
     );
