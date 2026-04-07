@@ -7,7 +7,7 @@ import { getServerSettings } from '../lib/config/server-settings';
 import { ApiError } from '../lib/core/errors';
 import { setCacheHeaders } from '../lib/core/http';
 import { generateFallbackSvg, getAvatarByEmailOrId, getBatchPublicInfo, getPublicInfo } from '../lib/space/public';
-import { claimInviteToken, submitWaitlist, validateInviteToken } from '../lib/waitlist/waitlist';
+import { claimInviteToken, setRegisteredUser, submitWaitlist, validateInviteToken } from '../lib/waitlist/waitlist';
 
 export const publicRouter = new Elysia({ name: 'public' })
     .get('/p/avatar/:emailOrId', async ({ params, set }) => {
@@ -58,6 +58,11 @@ export const publicRouter = new Elysia({ name: 'public' })
             const usernameError = validateUsername(body.username.toLowerCase());
             if (usernameError) throw new ApiError(400, usernameError);
 
+            // Claim token first to prevent races — if two requests arrive simultaneously,
+            // only one succeeds here. User creation happens only after the claim.
+            const claimed = await claimInviteToken(params.token);
+            if (!claimed) throw new ApiError(409, 'Invite has already been used');
+
             const config = getPublicConfig();
             const email = `${body.username.toLowerCase()}@${config?.domain ?? 'localhost'}`;
 
@@ -66,8 +71,7 @@ export const publicRouter = new Elysia({ name: 'public' })
             });
             if (!created?.user) throw new ApiError(400, 'Failed to create account');
 
-            const claimed = await claimInviteToken(params.token, created.user.id);
-            if (!claimed) throw new ApiError(409, 'Invite has already been used');
+            setRegisteredUser(entry.email, created.user.id).catch(() => {});
 
             const session = await auth.api.signInEmail({
                 body: { email, password: body.password },

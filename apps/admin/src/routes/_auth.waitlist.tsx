@@ -49,13 +49,13 @@ function WaitlistRoute() {
     const resend = useResendWaitlistInvite(ownerId);
     const remove = useDeleteWaitlistEntry(ownerId);
 
-    const filtered = (entries as WaitlistEntry[]).filter(
+    const filtered = entries.filter(
         (e) =>
             !searchQuery ||
             e.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
             e.notes.toLowerCase().includes(searchQuery.toLowerCase()),
     );
-    const selected = (entries as WaitlistEntry[]).find((e) => e.id === entryId);
+    const selected = entries.find((e) => e.id === entryId);
 
     const handleTabChange = (value: string) => {
         navigate({ to: '/waitlist', search: { tab: value } });

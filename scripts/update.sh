@@ -11,11 +11,18 @@ set -a && source .env.production && set +a
 echo "Installing dependencies..."
 bun install
 
-echo "Building frontend..."
-bun run build:prod
+echo "Building frontend (sequential)..."
+bun run --sequential --filter './apps/*' build
+
+echo "Building API bundle..."
+bun --filter '@apps/api' buildfordocker
+
+echo "Setting data directory permissions..."
+mkdir -p data
+chown -R 1000:1000 data
 
 echo "Rebuilding containers..."
-docker compose up -d --build
+docker compose --env-file .env.production up -d --build
 
 echo "Done. Status:"
-docker compose ps
+docker compose --env-file .env.production ps
