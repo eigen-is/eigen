@@ -42,6 +42,12 @@ waitlist:
 
 **DB config** (`apps/api/src/lib/waitlist/db-config.ts`): version 1, single migration creates the table.
 
+## Email Normalization
+
+All email addresses are normalized to lowercase + trimmed before any operation: `submit()`,
+`getByToken()`, and the register endpoint. This matches the existing pattern in the old
+`waitlist()` function.
+
 ## Domain Class
 
 **File**: `apps/api/src/lib/waitlist/waitlist.ts`
@@ -50,7 +56,7 @@ Singleton instance, opened at server startup (alongside server settings).
 
 | Method                        | Purpose                                                      |
 |-------------------------------|--------------------------------------------------------------|
-| `submit(email, notes)`        | Insert or update if email exists with status pending/rejected (dedup) |
+| `submit(email, notes)`        | Normalize email, insert or update if exists with status pending/rejected (dedup) |
 | `list(status?)`               | Get entries, optionally filtered by status                   |
 | `get(id)`                     | Get single entry by id                                       |
 | `accept(id)`                  | Generate invite token (nanoid), set status `invited`, set `invitedAt` + `inviteExpiresAt` (7 days), return entry |
@@ -70,6 +76,7 @@ route now calls `submit()` on the domain class and still sends the admin notific
 ### Admin routes (`apps/api/src/routes/waitlist.ts`)
 
 All require auth + admin role. Follow `:ownerId` convention (admin's own userId).
+**All admin routes return 403 if `waitlist.enabled` is false in server settings.**
 
 | Method   | Path                                      | Purpose                              |
 |----------|-------------------------------------------|--------------------------------------|
@@ -101,16 +108,42 @@ via `sendMail()`.
 
 Always returns 200 — the signup page uses `valid` to decide what to render.
 
+### Reserved Usernames
+
+The register endpoint (and the existing create-user-dialog) must reject reserved usernames.
+Validation lives in `packages/lib/src/validation/username.ts` (new file) so both frontend and
+backend share it.
+
+**Reserved list** (`RESERVED_USERNAMES`):
+
+| Category           | Usernames                                                    |
+|--------------------|--------------------------------------------------------------|
+| System/admin       | `admin`, `administrator`, `root`, `superuser`, `sysadmin`    |
+| Email standards    | `postmaster`, `webmaster`, `hostmaster`, `mailer-daemon`, `noreply`, `no-reply` |
+| Support            | `support`, `help`, `info`, `contact`, `abuse`, `security`    |
+| Protocols/infra    | `www`, `ftp`, `mail`, `smtp`, `imap`, `pop`, `caldav`, `carddav` |
+| Brand              | `eigen`                                                      |
+| Generic            | `system`, `daemon`, `nobody`, `test`, `demo`, `guest`, `user`, `api` |
+
+Validation: `validateUsername(username)` returns `true` if valid. Checks:
+- Not in reserved list (case-insensitive)
+- Only lowercase alphanumeric + dots + hyphens (no leading/trailing dot/hyphen)
+- Length 2-30 characters
+
+The create-user-dialog in the admin app should also use this validation (currently it doesn't
+validate usernames at all).
+
 ### Register endpoint flow
 
 1. Validate token (exists, not expired, status is `invited`)
-2. Construct email as `username@domain` (same as create-user-dialog)
-3. Create user via `auth.api.createUser({ name, email, password, role: 'user' })`
+2. Validate username (not reserved, valid format)
+3. Construct email as `username@domain` (same as create-user-dialog)
+4. Create user via `auth.api.createUser({ name, email, password, role: 'user' })`
    — triggers `authAddUserToDefaultOrg` + `reconcileSharesForNewUser` automatically
-4. Mark waitlist entry as `registered` with the new userId
-5. Sign the user in via `auth.api.signInEmail({ body: { email, password } })` which creates a
+5. Mark waitlist entry as `registered` with the new userId
+6. Sign the user in via `auth.api.signInEmail({ body: { email, password } })` which creates a
    session and returns `Set-Cookie` headers
-6. Forward the session headers in the response — user is immediately logged in
+7. Forward the session headers in the response — user is immediately logged in
 
 ## Server Settings
 
@@ -213,6 +246,7 @@ Public page, no auth required. URL: `/space/signup?token=abc123`
 
 | File                                                          | Action | Purpose                              |
 |---------------------------------------------------------------|--------|--------------------------------------|
+| `packages/lib/src/validation/username.ts`                     | Create | Reserved usernames + validation      |
 | `apps/api/src/lib/waitlist/schema.ts`                         | Create | Drizzle schema                       |
 | `apps/api/src/lib/waitlist/db-config.ts`                      | Create | ManagedDatabase config               |
 | `apps/api/src/lib/waitlist/waitlist.ts`                       | Create | Domain class (singleton)             |
