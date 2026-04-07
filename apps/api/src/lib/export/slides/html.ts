@@ -1,10 +1,11 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Mount } from '../../mount';
-import { type ExportResult, escapeHtml } from '../doc/render';
+import { escapeHtml } from '../doc/render';
+import type { ExportResult } from '../export-document';
 import { getFontCSS } from '../fonts';
-import { readFileAsDataUri } from '../media';
+import { buildDataUriMap } from '../media';
 import { loadSlidesContent } from './content';
-import { type ImgSrcResolver, renderSlideHtml, responsiveSizeUnit, stripSlidesExtension } from './render';
+import { type ImgSrcResolver, renderDeckHtml, responsiveSizeUnit, stripSlidesExtension } from './render';
 
 export async function exportSlidesToHtml(mount: Mount, drivePath: DrivePath): Promise<ExportResult> {
     const html = await generateSlidesExportHtml(mount, drivePath);
@@ -20,24 +21,9 @@ async function generateSlidesExportHtml(mount: Mount, drivePath: DrivePath): Pro
     if (!content) return wrapInDocument(stripSlidesExtension(drivePath.name), '');
 
     const { deck, mediaByName } = content;
-
-    const entries = await Promise.all(
-        [...mediaByName].map(
-            async ([name, file]) => [name, await readFileAsDataUri(mount, file.pathId, file.mimeType)] as const,
-        ),
-    );
-    const dataUriMap = new Map(entries.filter((e): e is [string, string] => e[1] !== null));
+    const dataUriMap = await buildDataUriMap(mount, mediaByName);
     const resolveImgSrc: ImgSrcResolver = (mediaName) => dataUriMap.get(mediaName) ?? null;
-
-    const slidesHtml = deck.slideOrder
-        .map((slideId) => {
-            const slide = deck.slides[slideId];
-            if (!slide) return '';
-            const objects = slide.objectIds.map((id) => deck.objects[id]).filter(Boolean);
-            return renderSlideHtml(slide, objects, responsiveSizeUnit, resolveImgSrc);
-        })
-        .filter(Boolean)
-        .join('\n');
+    const slidesHtml = renderDeckHtml(deck, responsiveSizeUnit, resolveImgSrc);
 
     return wrapInDocument(stripSlidesExtension(drivePath.name), slidesHtml);
 }

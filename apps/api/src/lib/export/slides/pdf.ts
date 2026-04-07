@@ -1,11 +1,12 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Mount } from '../../mount';
-import { type ExportResult, escapeHtml } from '../doc/render';
+import { escapeHtml } from '../doc/render';
+import type { ExportResult } from '../export-document';
 import { getFontCSS } from '../fonts';
-import { readFileAsDataUri } from '../media';
+import { buildDataUriMap } from '../media';
 import { htmlToPdf } from '../weasyprint';
 import { loadSlidesContent } from './content';
-import { fixedSizeUnit, type ImgSrcResolver, renderSlideHtml, stripSlidesExtension } from './render';
+import { fixedSizeUnit, type ImgSrcResolver, renderDeckHtml, stripSlidesExtension } from './render';
 
 // 16:9 landscape page: 254mm x 142.875mm ~ 960 x 540 px at 96dpi
 const PAGE_WIDTH_PX = 960;
@@ -21,30 +22,14 @@ export async function exportSlidesToPdf(mount: Mount, drivePath: DrivePath): Pro
     }
 
     const { deck, mediaByName } = content;
-
-    const entries = await Promise.all(
-        [...mediaByName].map(
-            async ([name, file]) => [name, await readFileAsDataUri(mount, file.pathId, file.mimeType)] as const,
-        ),
-    );
-    const dataUriMap = new Map(entries.filter((e): e is [string, string] => e[1] !== null));
+    const dataUriMap = await buildDataUriMap(mount, mediaByName);
     const resolveImgSrc: ImgSrcResolver = (mediaName) => dataUriMap.get(mediaName) ?? null;
-
     const sizeUnit = fixedSizeUnit(PAGE_WIDTH_PX, PAGE_HEIGHT_PX);
-
-    const slidesHtml = deck.slideOrder
-        .map((slideId) => {
-            const slide = deck.slides[slideId];
-            if (!slide) return '';
-            const objects = slide.objectIds.map((id) => deck.objects[id]).filter(Boolean);
-            return renderSlideHtml(slide, objects, sizeUnit, resolveImgSrc, {
-                fillPage: true,
-                pageWidthPx: PAGE_WIDTH_PX,
-                pageHeightPx: PAGE_HEIGHT_PX,
-            });
-        })
-        .filter(Boolean)
-        .join('\n');
+    const slidesHtml = renderDeckHtml(deck, sizeUnit, resolveImgSrc, {
+        fillPage: true,
+        pageWidthPx: PAGE_WIDTH_PX,
+        pageHeightPx: PAGE_HEIGHT_PX,
+    });
 
     const html = wrapInPdfDocument(title, slidesHtml);
     return { data: await htmlToPdf(html), contentType: 'application/pdf', fileName: `${title}.pdf` };

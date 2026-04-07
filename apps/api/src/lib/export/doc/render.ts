@@ -1,9 +1,3 @@
-export type ExportResult = {
-    data: Buffer;
-    contentType: string;
-    fileName: string;
-};
-
 export function stripEigendocExtension(name: string): string {
     return name.replace(/\.eigendoc$/, '');
 }
