@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import type { WaitlistEntry } from '@workspace/lib/types/waitlist';
 import { validateEmailAddress } from '@workspace/lib/validation';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { getServerDataPath } from '../config/paths';
 import { getPublicConfig } from '../config/server-config';
 import { getServerSettings } from '../config/server-settings';
@@ -22,8 +23,8 @@ async function db() {
     return managedDb.db;
 }
 
-function sanitizeHtml(text: string) {
-    return text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+function escapeHtml(text: string) {
+    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function sendNotificationEmail(email: string, notes: string) {
@@ -32,11 +33,13 @@ function sendNotificationEmail(email: string, notes: string) {
     if (!notifyEmail) return;
 
     const time = new Date().toISOString();
+    const safeEmail = escapeHtml(email);
+    const safeNotes = escapeHtml(notes);
     sendMail({
         to: [{ name: '', address: notifyEmail }],
         subject: 'New Eigen Waitlist Signup',
         text: `New waitlist signup:\n\nEmail: <${email}>\nNotes: ${notes}\n\nTime: ${time}`,
-        html: `<h2>New Waitlist Signup</h2><p><strong>Email:</strong> ${email}</p><p><strong>Notes:</strong> ${notes}</p><p><strong>Time:</strong> ${time}</p>`,
+        html: `<h2>New Waitlist Signup</h2><p><strong>Email:</strong> ${safeEmail}</p><p><strong>Notes:</strong> ${safeNotes}</p><p><strong>Time:</strong> ${time}</p>`,
     }).catch(() => {});
 }
 
@@ -44,9 +47,7 @@ export async function submitWaitlist(email: string, notes: string): Promise<bool
     email = email.trim().toLowerCase();
     if (!validateEmailAddress(email)) return false;
 
-    notes = sanitizeHtml(notes);
     const d = await db();
-
     const existing = await d.select().from(schema.waitlist).where(eq(schema.waitlist.email, email)).get();
 
     if (existing) {
@@ -73,7 +74,7 @@ export async function submitWaitlist(email: string, notes: string): Promise<bool
     return true;
 }
 
-export async function listWaitlist(status?: string) {
+export async function listWaitlist(status?: string): Promise<WaitlistEntry[]> {
     const d = await db();
     if (status) {
         return d.select().from(schema.waitlist).where(eq(schema.waitlist.status, status)).all();
@@ -139,16 +140,27 @@ export async function validateInviteToken(token: string) {
     return entry;
 }
 
-export async function claimInviteToken(token: string, userId: string): Promise<boolean> {
+export async function claimInviteToken(token: string): Promise<boolean> {
+    // Validate first, then atomically clear the token.
+    // The UNIQUE constraint on inviteToken + setting it to null prevents races:
+    // if two requests validate concurrently, only one finds a non-null token to clear.
     const entry = await validateInviteToken(token);
     if (!entry) return false;
 
     const d = await db();
     await d
         .update(schema.waitlist)
-        .set({ status: 'registered', userId, inviteToken: null, registeredAt: new Date(), updatedAt: new Date() })
-        .where(eq(schema.waitlist.id, entry.id));
-    return true;
+        .set({ status: 'registered', inviteToken: null, registeredAt: new Date(), updatedAt: new Date() })
+        .where(and(eq(schema.waitlist.id, entry.id), eq(schema.waitlist.inviteToken, token)));
+
+    // Verify the update actually matched (token wasn't already claimed)
+    const updated = await d.select().from(schema.waitlist).where(eq(schema.waitlist.id, entry.id)).get();
+    return updated?.status === 'registered' && updated?.inviteToken === null;
+}
+
+export async function setRegisteredUser(email: string, userId: string) {
+    const d = await db();
+    await d.update(schema.waitlist).set({ userId }).where(eq(schema.waitlist.email, email));
 }
 
 export async function removeWaitlistEntry(id: string) {
