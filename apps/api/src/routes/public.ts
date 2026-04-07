@@ -7,7 +7,7 @@ import { getServerSettings } from '../lib/config/server-settings';
 import { ApiError } from '../lib/core/errors';
 import { setCacheHeaders } from '../lib/core/http';
 import { generateFallbackSvg, getAvatarByEmailOrId, getBatchPublicInfo, getPublicInfo } from '../lib/space/public';
-import { waitlistService } from '../lib/waitlist/waitlist';
+import { claimInviteToken, submitWaitlist, validateInviteToken } from '../lib/waitlist/waitlist';
 
 export const publicRouter = new Elysia({ name: 'public' })
     .get('/p/avatar/:emailOrId', async ({ params, set }) => {
@@ -34,7 +34,7 @@ export const publicRouter = new Elysia({ name: 'public' })
             if (!settings.onboarding.waitlist.enabled) {
                 throw new ApiError(403, 'Waitlist is not enabled');
             }
-            return waitlistService.submit(body.email, body.notes);
+            return submitWaitlist(body.email, body.notes);
         },
         {
             body: t.Object({
@@ -44,7 +44,7 @@ export const publicRouter = new Elysia({ name: 'public' })
         },
     )
     .get('/p/invite/:token', async ({ params }) => {
-        const entry = await waitlistService.validateToken(params.token);
+        const entry = await validateInviteToken(params.token);
         if (!entry) return { valid: false };
         const config = getPublicConfig();
         return { valid: true, email: entry.email, orgName: config?.orgName ?? '', domain: config?.domain ?? '' };
@@ -52,7 +52,7 @@ export const publicRouter = new Elysia({ name: 'public' })
     .post(
         '/p/invite/:token/register',
         async ({ params, body, set }) => {
-            const entry = await waitlistService.validateToken(params.token);
+            const entry = await validateInviteToken(params.token);
             if (!entry) throw new ApiError(400, 'Invalid or expired invite link');
 
             const usernameError = validateUsername(body.username.toLowerCase());
@@ -66,7 +66,7 @@ export const publicRouter = new Elysia({ name: 'public' })
             });
             if (!created?.user) throw new ApiError(400, 'Failed to create account');
 
-            const claimed = await waitlistService.claimToken(params.token, created.user.id);
+            const claimed = await claimInviteToken(params.token, created.user.id);
             if (!claimed) throw new ApiError(409, 'Invite has already been used');
 
             const session = await auth.api.signInEmail({

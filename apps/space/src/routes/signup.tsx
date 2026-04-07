@@ -56,14 +56,13 @@ function SignupPage() {
             return;
         }
 
-        const result = await register.mutateAsync({
+        await register.mutateAsync({
             name,
             username: username.toLowerCase(),
             password,
         });
-        if (result && typeof result === 'object' && 'success' in result) {
-            window.location.href = '/space/';
-        }
+        // Full page reload to pick up the new session cookie
+        window.location.href = '/';
     };
 
     return (
