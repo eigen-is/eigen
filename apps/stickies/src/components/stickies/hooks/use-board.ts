@@ -18,6 +18,7 @@ const WELCOME_CARD = {
 
 export const useBoard = (ownerId: string, mountId: string, pathId: string, chatFolderId: string | null) => {
     const [board, setBoard] = useState<BoardData>({ tasks: {}, columns: {}, columnOrder: [] });
+    const [isSynced, setIsSynced] = useState(false);
     const [selectedColumnId, setSelectedColumnId] = useState<string | null>(null);
     const [isAddCardDialogOpen, setIsAddCardDialogOpen] = useState(false);
     const [isAddColumnDialogOpen, setIsAddColumnDialogOpen] = useState(false);
@@ -147,8 +148,9 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         updateReactState();
 
         let initialized = false;
-        wsProvider.on('sync', (isSynced: boolean) => {
-            if (isSynced && !initialized) {
+        wsProvider.on('sync', (synced: boolean) => {
+            setIsSynced(synced);
+            if (synced && !initialized) {
                 initialized = true;
                 normalizeBoard(doc);
                 if (columnsMap.size === 0) {
@@ -158,6 +160,7 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         });
 
         return () => {
+            setIsSynced(false);
             if (providerRef.current) providerRef.current.disconnect();
             if (docRef.current) docRef.current.destroy();
         };
@@ -218,6 +221,7 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
 
     return {
         board,
+        isSynced,
         selectedColumnId,
         isAddCardDialogOpen,
         setIsAddCardDialogOpen,

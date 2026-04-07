@@ -6,7 +6,7 @@ import { restoreYjsDoc } from '@workspace/lib/collab';
 import { MediaResolverProvider } from '@workspace/lib/drive';
 import { useIsMobile } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { NoteCard, NoteCardContextMenu } from '@workspace/ui';
+import { LoadingState, NoteCard, NoteCardContextMenu } from '@workspace/ui';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
 import { useCallback, useMemo, useState } from 'react';
@@ -40,6 +40,7 @@ export function StickiesBoard({ ownerId, path, canWrite, chatFolderId, onAccessD
         handleAddCardClick,
         handleAddCard,
         handleAddColumn,
+        isSynced,
         yjsDoc,
         undoManager,
     } = useBoard(ownerId, path.mountId, path.id, chatFolderId);
@@ -191,6 +192,8 @@ export function StickiesBoard({ ownerId, path, canWrite, chatFolderId, onAccessD
 
         return null;
     };
+
+    if (!isSynced) return <LoadingState />;
 
     return (
         <MediaResolverProvider
