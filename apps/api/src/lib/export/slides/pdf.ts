@@ -36,7 +36,11 @@ export async function exportSlidesToPdf(mount: Mount, drivePath: DrivePath): Pro
             const slide = deck.slides[slideId];
             if (!slide) return '';
             const objects = slide.objectIds.map((id) => deck.objects[id]).filter(Boolean);
-            return renderSlideHtml(slide, objects, sizeUnit, resolveImgSrc, { fillPage: true });
+            return renderSlideHtml(slide, objects, sizeUnit, resolveImgSrc, {
+                fillPage: true,
+                pageWidthPx: PAGE_WIDTH_PX,
+                pageHeightPx: PAGE_HEIGHT_PX,
+            });
         })
         .filter(Boolean)
         .join('\n');
@@ -92,8 +96,6 @@ body {
 }
 
 .slide {
-    width: 100%;
-    height: 100%;
     page-break-after: always;
 }
 
