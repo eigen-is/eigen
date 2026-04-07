@@ -26,6 +26,12 @@ milter_protocol = 6
 smtpd_milters = inet:localhost:8891
 non_smtpd_milters = inet:localhost:8891
 
+# DNS — Docker's embedded resolver (127.0.0.11) doesn't always work for
+# Postfix's internal resolver. Use system resolv.conf instead.
+smtp_dns_resolver_options = res_dnsrch
+smtp_host_lookup = dns, native
+lmtp_host_lookup = dns, native
+
 # Logging to stdout (Docker)
 maillog_file = /dev/stdout
 
