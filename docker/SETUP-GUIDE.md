@@ -103,19 +103,28 @@ The frontend apps (mail, drive, docs, etc.) need to be compiled with your domain
 curl -fsSL https://bun.sh/install | bash
 source ~/.bashrc
 
+# Ensure bunx is available system-wide
+ln -sf ~/.bun/bin/bunx /usr/local/bin/bunx
+ln -sf ~/.bun/bin/bun /usr/local/bin/bun
+
 # Install dependencies and build
 bun install
 set -a && source .env.production && set +a
-bun run build:prod
+bun run --sequential --filter './apps/*' build
+bun --filter '@apps/api' buildfordocker
 ```
 
-This compiles 13 frontend apps into the `dist/` directory. Takes 1-2 minutes.
+This compiles 13 frontend apps into the `dist/` directory. The `--sequential` flag builds one app
+at a time to avoid running out of memory on small servers (2-4GB RAM).
 
 > **Note:** You only need Bun for building the frontend. Docker handles everything at runtime.
 
 ## Step 5: Start Eigen
 
 ```bash
+# Ensure data directory is writable by the API container (runs as UID 1000)
+mkdir -p data && chown -R 1000:1000 data
+
 docker compose --env-file .env.production up -d
 ```
 
@@ -204,7 +213,9 @@ cd /opt/eigen
 ./scripts/update.sh
 ```
 
-This pulls the latest code, rebuilds the frontend, and restarts the containers. Takes about 2 minutes. Active connections (SSE, WebSocket) will briefly reconnect.
+This pulls the latest code, installs dependencies, builds the frontend sequentially, sets data
+directory permissions, and restarts the containers. Active connections (SSE, WebSocket) will
+briefly reconnect.
 
 ## Backups
 
