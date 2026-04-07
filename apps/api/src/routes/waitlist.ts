@@ -1,38 +1,17 @@
 import { Elysia, t } from 'elysia';
-import { getPublicConfig } from '../lib/config/server-config';
-import { getServerSettings } from '../lib/config/server-settings';
 import { requireAdmin } from '../lib/core/access';
 import { ApiError } from '../lib/core/errors';
 import { sendMail } from '../lib/core/mailer';
-import { waitlistService } from '../lib/waitlist/waitlist';
+import {
+    acceptWaitlistEntry,
+    buildInviteEmail,
+    listWaitlist,
+    rejectWaitlistEntry,
+    removeWaitlistEntry,
+    requireWaitlistEnabled,
+    resendWaitlistInvite,
+} from '../lib/waitlist/waitlist';
 import { betterAuth } from './auth';
-
-function requireWaitlistEnabled() {
-    const settings = getServerSettings();
-    if (!settings.onboarding.waitlist.enabled) {
-        throw new ApiError(403, 'Waitlist is not enabled');
-    }
-}
-
-function buildInviteEmail(entry: { email: string; inviteToken: string | null }) {
-    const settings = getServerSettings();
-    const config = getPublicConfig();
-    const template = settings.onboarding.inviteEmail;
-    const inviteLink = `https://${config?.domain ?? 'localhost'}/space/signup?token=${entry.inviteToken}`;
-
-    const replacePlaceholders = (text: string) =>
-        text
-            .replace(/\{email\}/g, entry.email)
-            .replace(/\{orgName\}/g, config?.orgName ?? 'Eigen')
-            .replace(/\{domain\}/g, config?.domain ?? 'localhost')
-            .replace(/\{inviteLink\}/g, inviteLink);
-
-    return {
-        to: [{ name: '', address: entry.email }],
-        subject: replacePlaceholders(template.subject),
-        text: replacePlaceholders(template.body),
-    };
-}
 
 export const waitlistRouter = new Elysia({ name: 'waitlist' })
     .use(betterAuth)
@@ -42,12 +21,9 @@ export const waitlistRouter = new Elysia({ name: 'waitlist' })
         async ({ user, query }) => {
             await requireAdmin(user.id);
             requireWaitlistEnabled();
-            return waitlistService.list(query.status || undefined);
+            return listWaitlist(query.status || undefined);
         },
-        {
-            auth: true,
-            query: t.Object({ status: t.Optional(t.String()) }),
-        },
+        { auth: true, query: t.Object({ status: t.Optional(t.String()) }) },
     )
 
     .put(
@@ -55,7 +31,7 @@ export const waitlistRouter = new Elysia({ name: 'waitlist' })
         async ({ user, params }): Promise<{ email: string; inviteToken: string }> => {
             await requireAdmin(user.id);
             requireWaitlistEnabled();
-            const entry = await waitlistService.accept(params.id);
+            const entry = await acceptWaitlistEntry(params.id);
             if (!entry) throw new ApiError(400, 'Entry cannot be accepted');
             sendMail(buildInviteEmail(entry)).catch(() => {});
             return { email: entry.email, inviteToken: entry.inviteToken };
@@ -68,7 +44,7 @@ export const waitlistRouter = new Elysia({ name: 'waitlist' })
         async ({ user, params }) => {
             await requireAdmin(user.id);
             requireWaitlistEnabled();
-            const ok = await waitlistService.reject(params.id);
+            const ok = await rejectWaitlistEntry(params.id);
             if (!ok) throw new ApiError(400, 'Entry cannot be rejected');
             return { success: true };
         },
@@ -80,7 +56,7 @@ export const waitlistRouter = new Elysia({ name: 'waitlist' })
         async ({ user, params }): Promise<{ email: string; inviteToken: string }> => {
             await requireAdmin(user.id);
             requireWaitlistEnabled();
-            const entry = await waitlistService.resendInvite(params.id);
+            const entry = await resendWaitlistInvite(params.id);
             if (!entry) throw new ApiError(400, 'Entry is not in invited state');
             sendMail(buildInviteEmail(entry)).catch(() => {});
             return { email: entry.email, inviteToken: entry.inviteToken };
@@ -93,7 +69,7 @@ export const waitlistRouter = new Elysia({ name: 'waitlist' })
         async ({ user, params }) => {
             await requireAdmin(user.id);
             requireWaitlistEnabled();
-            await waitlistService.remove(params.id);
+            await removeWaitlistEntry(params.id);
             return { success: true };
         },
         { auth: true },
