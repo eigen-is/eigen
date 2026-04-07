@@ -48,6 +48,22 @@ services:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
 
+  unbound:
+    image: mvance/unbound:latest
+    restart: unless-stopped
+    networks:
+      eigen:
+        ipv4_address: 172.20.0.254
+    healthcheck:
+      test: ["CMD", "drill", "@127.0.0.1", "cloudflare.com"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
   postfix:
     build:
       context: docker/postfix
@@ -55,6 +71,7 @@ services:
       - "25:25"
       - "465:465"
       - "587:587"
+    dns: [172.20.0.254]
     volumes:
       - ./data/dkim:/data/dkim
       - ./data/certs:/certs:ro
@@ -70,6 +87,8 @@ services:
         condition: service_healthy
       dovecot:
         condition: service_started
+      unbound:
+        condition: service_healthy
     restart: unless-stopped
     networks: [eigen]
     logging:
@@ -101,3 +120,6 @@ volumes:
 networks:
   eigen:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
