@@ -2,6 +2,7 @@ import { createRootRouteWithContext, Outlet, useLocation } from '@tanstack/react
 import { useAddTeamMember, useMembers, useSetupStatus, useTeams } from '@workspace/lib/admin';
 import { type AuthContextType, useAuth } from '@workspace/lib/auth';
 import { usePublicConfig } from '@workspace/lib/public';
+import { useServerSettings } from '@workspace/lib/settings';
 import { LoadingState } from '@workspace/ui';
 import { AppShell } from '@workspace/ui/components/layout/app/app-shell.tsx';
 import { AdminSidebar } from '../components/admin/admin-sidebar.tsx';
@@ -42,8 +43,10 @@ function AuthenticatedAdmin() {
     const addMember = useAddTeamMember(config?.orgId);
     const location = useLocation();
 
+    const { data: serverSettings } = useServerSettings();
     const currentMember = members.find((m) => m.userId === user?.id);
     const isOwner = currentMember?.role === 'owner';
+    const waitlistEnabled = serverSettings?.onboarding?.waitlist?.enabled ?? false;
 
     const isTeamDetailSelected = location.pathname === '/teams' && location.search.teamId;
 
@@ -65,6 +68,7 @@ function AuthenticatedAdmin() {
                     onClose={onClose}
                     teams={teams}
                     isOwner={isOwner}
+                    waitlistEnabled={waitlistEnabled}
                     onAddMembersToTeam={handleAddMembersToTeam}
                 />
             )}
