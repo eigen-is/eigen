@@ -11,14 +11,8 @@ mynetworks = 127.0.0.0/8 172.16.0.0/12
 virtual_mailbox_domains = $DOMAIN
 virtual_transport = eigen
 
-# IPv4 only — avoids AAAA lookup issues in Docker environments.
+# IPv4 only — simplifies DNS resolution in Docker environments.
 inet_protocols = ipv4
-
-# Use glibc resolver (getaddrinfo) instead of Postfix's internal DNS resolver.
-# Postfix's raw DNS queries fail through Docker's DNS proxy. glibc works reliably
-# because Docker intercepts at the socket level. Unbound backs Docker's DNS proxy.
-smtp_host_lookup = native
-lmtp_host_lookup = native
 
 # TLS (inbound — certs from Caddy via shared volume)
 smtpd_tls_cert_file = /certs/cert.pem
