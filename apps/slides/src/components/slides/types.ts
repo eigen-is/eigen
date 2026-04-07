@@ -1,68 +1,14 @@
-type BaseObject = {
-    id: string;
-    slideId: string;
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-    rotation: number;
-    borderColor: string;
-    borderWidth: number;
-    borderRadius: number;
-    commentChatNames: string[];
-};
+import type { ImageObject, TextObject } from '@workspace/lib/slides';
 
-export type TextObject = BaseObject & {
-    type: 'text';
-    text: string;
-    fontFamily: string;
-    fontSize: number;
-    fontWeight: 'normal' | 'bold';
-    fontStyle: 'normal' | 'italic';
-    textDecoration: 'none' | 'underline' | 'line-through';
-    textAlign: 'left' | 'center' | 'right' | 'justify';
-    verticalAlign: 'top' | 'center' | 'bottom';
-    color: string;
-    letterSpacing: number;
-    lineHeight: number;
-    highlightColor: string;
-    backgroundColor: string;
-};
-
-export type ImageObject = BaseObject & {
-    type: 'image';
-    mediaName: string;
-    objectFit: 'contain' | 'cover' | 'fill';
-};
-
-export type SlideObject = TextObject | ImageObject;
-
-export type SlideItem = {
-    id: string;
-    objectIds: string[];
-    backgroundColor: string;
-    backgroundMediaName: string;
-};
-
-export type DeckData = {
-    slides: Record<string, SlideItem>;
-    objects: Record<string, SlideObject>;
-    slideOrder: string[];
-};
-
-export const SLIDE_ASPECT_RATIO = 16 / 9;
-export const SLIDE_BASE_WIDTH = 1920;
-export const SLIDE_BASE_HEIGHT = 1080;
-
-export function pxToPercent(val: number, axis: 'x' | 'y'): number {
-    return (val / (axis === 'x' ? SLIDE_BASE_WIDTH : SLIDE_BASE_HEIGHT)) * 100;
-}
-
-export function percentToPx(val: number, axis: 'x' | 'y'): number {
-    return (val / 100) * (axis === 'x' ? SLIDE_BASE_WIDTH : SLIDE_BASE_HEIGHT);
-}
-
-export const BORDER_RADIUS_ROUND = 9999;
+export type { DeckData, ImageObject, SlideItem, SlideObject, TextObject } from '@workspace/lib/slides';
+export {
+    BORDER_RADIUS_ROUND,
+    percentToPx,
+    pxToPercent,
+    SLIDE_ASPECT_RATIO,
+    SLIDE_BASE_HEIGHT,
+    SLIDE_BASE_WIDTH,
+} from '@workspace/lib/slides';
 
 const DEFAULT_BORDER = {
     borderColor: '',
