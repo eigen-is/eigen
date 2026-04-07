@@ -1,9 +1,8 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Mount } from '../../mount';
-import { escapeHtml } from '../doc/render';
 import type { ExportResult } from '../export-document';
 import { getFontCSS } from '../fonts';
-import { buildDataUriMap } from '../media';
+import { buildDataUriMap, escapeHtml } from '../media';
 import { htmlToPdf } from '../weasyprint';
 import { loadSlidesContent } from './content';
 import { fixedSizeUnit, type ImgSrcResolver, renderDeckHtml, stripSlidesExtension } from './render';

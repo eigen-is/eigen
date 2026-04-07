@@ -48,6 +48,7 @@ export const SSEventType = {
     TEAM_SETTINGS_UPDATED: 'team:settings-updated',
     // Notification events
     NOTIFICATION_CREATED: 'notification:created',
+    NOTIFICATION_CHANGED: 'notification:changed',
     // Contact events
     CONTACT_CREATED: 'contacts:contact-created',
     CONTACT_UPDATED: 'contacts:contact-updated',
@@ -96,6 +97,10 @@ type SSEventNotificationCreated = {
     body?: string;
 };
 
+type SSEventNotificationChanged = {
+    type: typeof SSEventType.NOTIFICATION_CHANGED;
+};
+
 type SSEventSpace = {
     type: typeof SSEventType.SPACE_SETTINGS_UPDATED;
 };
@@ -114,6 +119,7 @@ export type SSEvent =
     | SSEventContact
     | SSEventLabel
     | SSEventNotificationCreated
+    | SSEventNotificationChanged
     | SSEventSpace
     | SSEventTeam;
 
@@ -124,6 +130,7 @@ export type {
     SSEventDrive,
     SSEventLabel,
     SSEventMail,
+    SSEventNotificationChanged,
     SSEventNotificationCreated,
     SSEventSpace,
     SSEventTeam,

@@ -13,6 +13,10 @@ export function handleNotificationSSEvent(event: SSEvent, queryClient: QueryClie
             toast(event.title, event.body ? { description: event.body } : undefined);
             return true;
 
+        case SSEventType.NOTIFICATION_CHANGED:
+            invalidateNotifications(queryClient, userId);
+            return true;
+
         default:
             return false;
     }

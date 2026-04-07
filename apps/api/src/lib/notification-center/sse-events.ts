@@ -8,3 +8,7 @@ export function buildNotificationCreatedEvent(title: string, body?: string | nul
         ...(body != null && { body }),
     } as SSEvent;
 }
+
+export function buildNotificationChangedEvent(): SSEvent {
+    return { type: SSEventType.NOTIFICATION_CHANGED } as SSEvent;
+}

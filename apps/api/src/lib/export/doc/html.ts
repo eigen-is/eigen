@@ -8,15 +8,9 @@ import eigenProseCSSRaw from '../../../../../../packages/ui/src/styles/eigen-pro
 import type { Mount } from '../../mount';
 import type { ExportResult } from '../export-document';
 import { getFontCSS } from '../fonts';
-import { buildDataUriMap } from '../media';
+import { buildDataUriMap, escapeHtml } from '../media';
 import { loadEigendocContent } from './content';
-import {
-    escapeHtml,
-    renderCodeBlockNode,
-    renderFigureNode,
-    renderTaskItemNode,
-    stripEigendocExtension,
-} from './render';
+import { renderCodeBlockNode, renderFigureNode, renderTaskItemNode, stripEigendocExtension } from './render';
 
 const lowlight = createLowlight(common);
 const extensions = getDocExtensions({ lowlight });
