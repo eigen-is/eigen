@@ -24,7 +24,7 @@
     "test": "bun --filter '*' test",
     "test:api": "bun --filter '@apps/api' test",
     "test:fortune-sheet": "bun --filter '@workspace/fortune-sheet' test",
-    "check": "bun run lint && bun run typecheck && bun run test"
+    "check": "bun run lint && bun run typecheck && bun scripts/check-home-imports.ts && bun run test"
   },
   "workspaces": [
     "packages/*",
