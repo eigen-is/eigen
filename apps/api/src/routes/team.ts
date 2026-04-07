@@ -1,4 +1,4 @@
-import { teamOwnerId } from '@workspace/lib/types';
+import { parseOwnerId } from '@workspace/lib/types';
 import type { MountSettings, TeamSettings } from '@workspace/lib/types/settings';
 import { Elysia, t } from 'elysia';
 import { requireTeamAccess, requireTeamAdmin } from '../lib/core/access';
@@ -6,29 +6,30 @@ import type { TeamHome } from '../lib/home';
 import { getHome } from '../lib/home';
 import { betterAuth } from './auth';
 
-async function getTeamHome(teamId: string): Promise<TeamHome> {
-    return (await getHome(teamOwnerId(teamId))) as TeamHome;
+function teamId(ownerId: string): string {
+    const parsed = parseOwnerId(ownerId);
+    return parsed.id;
 }
 
 export const teamRouter = new Elysia({ name: 'team' })
     .use(betterAuth)
 
     .get(
-        '/team/:teamId/settings',
+        '/team/:ownerId/settings',
         async ({ params, user }): Promise<TeamSettings> => {
-            await requireTeamAccess(user.id, params.teamId);
-            const teamHome = await getTeamHome(params.teamId);
-            return teamHome.settings.get();
+            await requireTeamAccess(user.id, teamId(params.ownerId));
+            const home = (await getHome(params.ownerId)) as TeamHome;
+            return home.settings.get();
         },
         { auth: true },
     )
 
     .put(
-        '/team/:teamId/settings',
+        '/team/:ownerId/settings',
         async ({ params, body, user }): Promise<TeamSettings> => {
-            await requireTeamAdmin(user.id, params.teamId);
-            const teamHome = await getTeamHome(params.teamId);
-            return await teamHome.settings.set({
+            await requireTeamAdmin(user.id, teamId(params.ownerId));
+            const home = (await getHome(params.ownerId)) as TeamHome;
+            return await home.settings.set({
                 ...body,
                 memberOverrides: body.memberOverrides
                     ? {
@@ -53,21 +54,21 @@ export const teamRouter = new Elysia({ name: 'team' })
     )
 
     .get(
-        '/team/:teamId/mounts',
+        '/team/:ownerId/mounts',
         async ({ params, user }): Promise<Record<string, MountSettings>> => {
-            await requireTeamAccess(user.id, params.teamId);
-            const teamHome = await getTeamHome(params.teamId);
-            return teamHome.settings.get().mounts ?? {};
+            await requireTeamAccess(user.id, teamId(params.ownerId));
+            const home = (await getHome(params.ownerId)) as TeamHome;
+            return home.settings.get().mounts ?? {};
         },
         { auth: true },
     )
 
     .post(
-        '/team/:teamId/mount',
+        '/team/:ownerId/mount',
         async ({ params, body, user }) => {
-            await requireTeamAdmin(user.id, params.teamId);
-            const teamHome = await getTeamHome(params.teamId);
-            return teamHome.addMount(body);
+            await requireTeamAdmin(user.id, teamId(params.ownerId));
+            const home = (await getHome(params.ownerId)) as TeamHome;
+            return home.addMount(body);
         },
         {
             body: t.Object({
@@ -90,11 +91,11 @@ export const teamRouter = new Elysia({ name: 'team' })
     )
 
     .put(
-        '/team/:teamId/mount/:mountId',
+        '/team/:ownerId/mount/:mountId',
         async ({ params, body, user }) => {
-            await requireTeamAdmin(user.id, params.teamId);
-            const teamHome = await getTeamHome(params.teamId);
-            return teamHome.updateMount(params.mountId, body);
+            await requireTeamAdmin(user.id, teamId(params.ownerId));
+            const home = (await getHome(params.ownerId)) as TeamHome;
+            return home.updateMount(params.mountId, body);
         },
         {
             body: t.Object({

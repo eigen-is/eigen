@@ -1,5 +1,6 @@
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { teamApi } from '@workspace/lib/api';
+import { teamOwnerId } from '@workspace/lib/types';
 import type { TeamSettings } from '@workspace/lib/types/settings';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
@@ -13,7 +14,7 @@ export function useTeamSettings(teamId: string) {
     return useQuery({
         queryKey: teamKeys.settings(teamId),
         queryFn: async () => {
-            const res = await teamApi({ teamId }).settings.get();
+            const res = await teamApi({ ownerId: teamOwnerId(teamId) }).settings.get();
             return res.data || {};
         },
         staleTime: 5 * 60 * 1000,
@@ -26,7 +27,7 @@ export function useUpdateTeamSettings(teamId: string) {
 
     return useMutation({
         mutationFn: async (body: TeamSettings) => {
-            const res = await teamApi({ teamId }).settings.put(body);
+            const res = await teamApi({ ownerId: teamOwnerId(teamId) }).settings.put(body);
             if (res.error) throw new AppError(res);
             return res.data;
         },
