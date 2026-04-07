@@ -15,6 +15,13 @@ virtual_transport = eigen
 # which breaks outbound relay and inbound sender domain validation.
 inet_protocols = ipv4
 
+# DNS: use native (glibc) lookups instead of Postfix's internal resolver.
+# Docker's embedded DNS (127.0.0.11) works with glibc but not with Postfix's
+# raw DNS queries. Since we use a relay host, MX lookups aren't needed.
+smtp_dns_support_level = disabled
+smtp_host_lookup = native
+lmtp_host_lookup = native
+
 # TLS (inbound — certs from Caddy via shared volume)
 smtpd_tls_cert_file = /certs/cert.pem
 smtpd_tls_key_file = /certs/key.pem
