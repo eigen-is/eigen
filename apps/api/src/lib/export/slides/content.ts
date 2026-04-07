@@ -1,0 +1,95 @@
+import type { DeckData, SlideObject } from '@workspace/lib/slides';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import type * as Y from 'yjs';
+import { COLLAB_DB_CONFIG } from '../../collab/db-config';
+import { loadYjsState } from '../../collab/yjs-loader';
+import type { Mount } from '../../mount';
+import type { MediaFile } from '../doc/content';
+
+export type SlidesContent = {
+    deck: DeckData;
+    mediaByName: Map<string, MediaFile>;
+};
+
+const OBJECT_FIELDS = [
+    'id',
+    'slideId',
+    'type',
+    'x',
+    'y',
+    'w',
+    'h',
+    'rotation',
+    'borderColor',
+    'borderWidth',
+    'borderRadius',
+    'text',
+    'fontFamily',
+    'fontSize',
+    'fontWeight',
+    'fontStyle',
+    'textDecoration',
+    'textAlign',
+    'verticalAlign',
+    'color',
+    'letterSpacing',
+    'lineHeight',
+    'highlightColor',
+    'backgroundColor',
+    'mediaName',
+    'objectFit',
+    'commentChatNames',
+] as const;
+
+function yMapToSlideObject(yMap: Y.Map<unknown>): SlideObject {
+    const obj: Record<string, unknown> = {};
+    for (const field of OBJECT_FIELDS) {
+        const val = yMap.get(field);
+        if (val !== undefined) obj[field] = val;
+    }
+    const raw = obj['commentChatNames'];
+    if (raw && typeof (raw as Y.Array<string>).toArray === 'function') {
+        obj['commentChatNames'] = (raw as Y.Array<string>).toArray();
+    } else if (!Array.isArray(raw)) {
+        obj['commentChatNames'] = [];
+    }
+    return obj as SlideObject;
+}
+
+export async function loadSlidesContent(mount: Mount, drivePath: DrivePath): Promise<SlidesContent | null> {
+    const dataDbPath = await mount.getChildByName(drivePath.id, 'data.db');
+    if (!dataDbPath) return null;
+
+    const managedDb = await mount.openDatabase(COLLAB_DB_CONFIG, dataDbPath.id);
+    const { doc: ydoc } = loadYjsState(managedDb);
+
+    const slidesMap = ydoc.getMap('slides');
+    const objectsMap = ydoc.getMap('objects');
+    const slideOrderArray = ydoc.getArray('slideOrder');
+
+    const deck: DeckData = { slides: {}, objects: {}, slideOrder: slideOrderArray.toArray() as string[] };
+
+    for (const [slideId, slideMapValue] of slidesMap) {
+        const slideMap = slideMapValue as Y.Map<unknown>;
+        const objIdsArray = slideMap.get('objectIds') as Y.Array<string>;
+        const objIds = objIdsArray ? (objIdsArray.toArray() as string[]) : [];
+        deck.slides[slideId] = {
+            id: slideId,
+            objectIds: objIds,
+            backgroundColor: (slideMap.get('backgroundColor') as string) || '#ffffff',
+            backgroundMediaName: (slideMap.get('backgroundMediaName') as string) || '',
+        };
+    }
+
+    for (const [objId, objMapValue] of objectsMap) {
+        deck.objects[objId] = yMapToSlideObject(objMapValue as Y.Map<unknown>);
+    }
+
+    const mediaFolder = await mount.getChildByName(drivePath.id, 'media');
+    const mediaChildren = mediaFolder ? await mount.listFolder(mediaFolder.id) : [];
+    const mediaByName = new Map(
+        mediaChildren.map((f) => [f.name, { pathId: f.id, name: f.name, mimeType: f.mimeType }]),
+    );
+
+    return { deck, mediaByName };
+}
