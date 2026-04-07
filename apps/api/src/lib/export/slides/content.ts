@@ -4,11 +4,10 @@ import type * as Y from 'yjs';
 import { COLLAB_DB_CONFIG } from '../../collab/db-config';
 import { loadYjsState } from '../../collab/yjs-loader';
 import type { Mount } from '../../mount';
-import type { MediaFile } from '../doc/content';
 
 export type SlidesContent = {
     deck: DeckData;
-    mediaByName: Map<string, MediaFile>;
+    mediaByName: Map<string, DrivePath>;
 };
 
 const OBJECT_FIELDS = [
@@ -87,9 +86,7 @@ export async function loadSlidesContent(mount: Mount, drivePath: DrivePath): Pro
 
     const mediaFolder = await mount.getChildByName(drivePath.id, 'media');
     const mediaChildren = mediaFolder ? await mount.listFolder(mediaFolder.id) : [];
-    const mediaByName = new Map(
-        mediaChildren.map((f) => [f.name, { pathId: f.id, name: f.name, mimeType: f.mimeType }]),
-    );
+    const mediaByName = new Map(mediaChildren.map((f) => [f.name, f]));
 
     return { deck, mediaByName };
 }

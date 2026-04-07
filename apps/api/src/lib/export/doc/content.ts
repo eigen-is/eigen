@@ -5,15 +5,9 @@ import { COLLAB_DB_CONFIG } from '../../collab/db-config';
 import { loadYjsState } from '../../collab/yjs-loader';
 import type { Mount } from '../../mount';
 
-export type MediaFile = {
-    pathId: string;
-    name: string;
-    mimeType: string;
-};
-
 export type EigendocContent = {
     pmJson: JSONContent;
-    mediaByName: Map<string, MediaFile>;
+    mediaByName: Map<string, DrivePath>;
 };
 
 export async function loadEigendocContent(mount: Mount, drivePath: DrivePath): Promise<EigendocContent | null> {
@@ -29,9 +23,7 @@ export async function loadEigendocContent(mount: Mount, drivePath: DrivePath): P
     // Build media name -> file lookup
     const mediaFolder = await mount.getChildByName(drivePath.id, 'media');
     const mediaChildren = mediaFolder ? await mount.listFolder(mediaFolder.id) : [];
-    const mediaByName = new Map(
-        mediaChildren.map((f) => [f.name, { pathId: f.id, name: f.name, mimeType: f.mimeType }]),
-    );
+    const mediaByName = new Map(mediaChildren.map((f) => [f.name, f]));
 
     return { pmJson, mediaByName };
 }
