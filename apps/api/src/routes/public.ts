@@ -58,14 +58,11 @@ export const publicRouter = new Elysia({ name: 'public' })
             const usernameError = validateUsername(body.username.toLowerCase());
             if (usernameError) throw new ApiError(400, usernameError);
 
-            // Claim token first to prevent races — if two requests arrive simultaneously,
-            // only one succeeds here. User creation happens only after the claim.
-            const claimed = await claimInviteToken(params.token);
-            if (!claimed) throw new ApiError(409, 'Invite has already been used');
-
             const config = getPublicConfig();
             const email = `${body.username.toLowerCase()}@${config?.domain ?? 'localhost'}`;
 
+            // Create user first — if it fails (e.g., username taken), the token stays valid
+            // so the user can retry with a different username.
             let created: { user?: { id: string } } | undefined;
             try {
                 created = await auth.api.createUser({
@@ -76,6 +73,11 @@ export const publicRouter = new Elysia({ name: 'public' })
                 throw new ApiError(400, msg.includes('already') ? 'Username is already taken' : msg);
             }
             if (!created?.user) throw new ApiError(400, 'Failed to create account');
+
+            // Claim token atomically — prevents race where two requests both create users.
+            // If claim fails, the user account exists but that's harmless (they can log in).
+            const claimed = await claimInviteToken(params.token);
+            if (!claimed) throw new ApiError(409, 'Invite has already been used');
 
             setRegisteredUser(entry.email, created.user.id).catch(() => {});
 
