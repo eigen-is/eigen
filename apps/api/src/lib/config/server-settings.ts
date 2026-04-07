@@ -30,6 +30,10 @@ const settingsStore = new JsonStore<ServerSettings>(serverFs, 'settings.json', {
             enabled: true,
             body: 'Welcome to {orgName}, {name}!\n\nA personal workspace in the cloud. Simple and secure. You control your data.',
         },
+        inviteEmail: {
+            subject: "You're invited to {orgName}",
+            body: "Hi!\n\nYou've been invited to join {orgName} at {domain}.\n\nClick the link below to create your account:\n{inviteLink}\n\nThis link expires in 7 days.",
+        },
     },
 });
 
