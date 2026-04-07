@@ -80,12 +80,8 @@ export async function getScreenPreview(mount: Mount, drivePath: DrivePath, embed
     return null;
 }
 
-export async function getTextPreview(
-    mount: Mount,
-    drivePath: DrivePath,
-    baseUrl?: string,
-): Promise<TextPreviewResult | null> {
-    if (drivePath.type === 'doc' || drivePath.type === 'slides') return getCollabPreviewData(mount, drivePath, baseUrl);
+export async function getTextPreview(mount: Mount, drivePath: DrivePath): Promise<TextPreviewResult | null> {
+    if (drivePath.type === 'doc' || drivePath.type === 'slides') return getCollabPreviewData(mount, drivePath);
     return getTextPreviewData(mount, drivePath);
 }
 
@@ -143,17 +139,11 @@ async function getOrCachePreview(
     }
 }
 
-async function getCollabPreviewData(
-    mount: Mount,
-    drivePath: DrivePath,
-    baseUrl?: string,
-): Promise<TextPreviewResult | null> {
+async function getCollabPreviewData(mount: Mount, drivePath: DrivePath): Promise<TextPreviewResult | null> {
     const mime = drivePath.mimeType || '';
 
     if (mime === DRIVE_MIME_DOC) {
-        return getOrCachePreview(mount, drivePath, 'eigendoc', () =>
-            generateEigendocPreview(mount, drivePath, baseUrl),
-        );
+        return getOrCachePreview(mount, drivePath, 'eigendoc', () => generateEigendocPreview(mount, drivePath));
     }
 
     if (mime === DRIVE_MIME_SLIDES) {
@@ -161,7 +151,7 @@ async function getCollabPreviewData(
             // Dynamic import: eigenslides-preview imports tiptap-adjacent code that references DOM
             // globals at module level. --splitting keeps it in a separate chunk loaded on demand.
             const { generateEigenslidesPreview } = await import('./eigenslides-preview');
-            return generateEigenslidesPreview(mount, drivePath, baseUrl);
+            return generateEigenslidesPreview(mount, drivePath);
         });
     }
 

@@ -197,10 +197,10 @@ export const driveRouter = new Elysia({ name: 'drive' })
     )
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/text-preview',
-        async ({ params, user, set, request }) => {
+        async ({ params, user, set }) => {
             const drive = await getSharedDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
-            const result = await getTextPreview(mount, path, new URL(request.url).origin);
+            const result = await getTextPreview(mount, path);
             if (!result) throw new ApiError(404, 'No preview available');
             setCacheHeaders(set, 60);
             return result;
