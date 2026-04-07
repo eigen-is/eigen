@@ -4,8 +4,8 @@ import { Elysia, t } from 'elysia';
 import { auth } from '../lib/auth/auth';
 import { getPublicConfig } from '../lib/config/server-config';
 import { getServerSettings } from '../lib/config/server-settings';
+import { ApiError } from '../lib/core/errors';
 import { setCacheHeaders } from '../lib/core/http';
-import { sendMail } from '../lib/core/mailer';
 import { generateFallbackSvg, getAvatarByEmailOrId, getBatchPublicInfo, getPublicInfo } from '../lib/space/public';
 import { waitlistService } from '../lib/waitlist/waitlist';
 
@@ -29,75 +29,55 @@ export const publicRouter = new Elysia({ name: 'public' })
     })
     .post(
         '/p/waitlist',
-        async ({ body, set }) => {
+        async ({ body }) => {
             const settings = getServerSettings();
             if (!settings.onboarding.waitlist.enabled) {
-                set.status = 403;
-                return { error: 'Waitlist is not enabled' };
+                throw new ApiError(403, 'Waitlist is not enabled');
             }
-            const ok = await waitlistService.submit(body.email, body.notes);
-            if (ok && settings.onboarding.waitlist.notifyEmail) {
-                const email = body.email.trim().toLowerCase();
-                const time = new Date().toISOString();
-                sendMail({
-                    to: [{ name: '', address: settings.onboarding.waitlist.notifyEmail }],
-                    subject: 'New Eigen Waitlist Signup',
-                    text: `New waitlist signup:\n\nEmail: <${email}>\nNotes: ${body.notes}\n\nTime: ${time}`,
-                    html: `<h2>New Waitlist Signup</h2><p><strong>Email:</strong> ${email}</p><p><strong>Notes:</strong> ${body.notes}</p><p><strong>Time:</strong> ${time}</p>`,
-                }).catch(() => {});
-            }
-            return ok;
+            return waitlistService.submit(body.email, body.notes);
         },
-        { body: t.Object({ email: t.String(), notes: t.String() }) },
+        {
+            body: t.Object({
+                email: t.String({ maxLength: 320 }),
+                notes: t.String({ maxLength: 1000 }),
+            }),
+        },
     )
     .get('/p/invite/:token', async ({ params }) => {
         const entry = await waitlistService.validateToken(params.token);
         if (!entry) return { valid: false };
-        const config = await getPublicConfig();
+        const config = getPublicConfig();
         return { valid: true, email: entry.email, orgName: config?.orgName ?? '', domain: config?.domain ?? '' };
     })
     .post(
         '/p/invite/:token/register',
         async ({ params, body, set }) => {
             const entry = await waitlistService.validateToken(params.token);
-            if (!entry) {
-                set.status = 400;
-                return { error: 'Invalid or expired invite link' };
-            }
+            if (!entry) throw new ApiError(400, 'Invalid or expired invite link');
 
             const usernameError = validateUsername(body.username.toLowerCase());
-            if (usernameError) {
-                set.status = 400;
-                return { error: usernameError };
-            }
+            if (usernameError) throw new ApiError(400, usernameError);
 
-            const config = await getPublicConfig();
+            const config = getPublicConfig();
             const email = `${body.username.toLowerCase()}@${config?.domain ?? 'localhost'}`;
 
-            try {
-                const created = await auth.api.createUser({
-                    body: { name: body.name, email, password: body.password, role: 'user' },
-                });
-                if (!created?.user) {
-                    set.status = 400;
-                    return { error: 'Failed to create account' };
-                }
-                await waitlistService.markRegistered(params.token, created.user.id);
+            const created = await auth.api.createUser({
+                body: { name: body.name, email, password: body.password, role: 'user' },
+            });
+            if (!created?.user) throw new ApiError(400, 'Failed to create account');
 
-                const session = await auth.api.signInEmail({
-                    body: { email, password: body.password },
-                    asResponse: true,
-                });
-                const setCookie = session.headers.get('set-cookie');
-                if (setCookie) {
-                    set.headers['set-cookie'] = setCookie;
-                }
-                return { success: true };
-            } catch (err) {
-                const message = err instanceof Error ? err.message : 'Failed to create account';
-                set.status = 400;
-                return { error: message };
+            const claimed = await waitlistService.claimToken(params.token, created.user.id);
+            if (!claimed) throw new ApiError(409, 'Invite has already been used');
+
+            const session = await auth.api.signInEmail({
+                body: { email, password: body.password },
+                asResponse: true,
+            });
+            const setCookie = session.headers.get('set-cookie');
+            if (setCookie) {
+                set.headers['set-cookie'] = setCookie;
             }
+            return { success: true };
         },
         {
             body: t.Object({
