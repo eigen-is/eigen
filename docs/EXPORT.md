@@ -134,3 +134,29 @@ Export submenu for eigendoc files, driven by `onExport` callback.
 - **Task lists**: custom `taskItem` nodeMapping preserves checked/unchecked state
 - **Export during active collab**: loads last persisted state (may lag a few seconds)
 - **DOMPurify + data URIs**: `ADD_DATA_URI_TAGS: ['img']` preserves base64 image sources
+
+## Slides Export
+
+Eigenslides (`.eigenslides`) support HTML and PDF export via the same route:
+
+```
+GET /drive/:ownerId/:mountId/file/:pathId/export/:format
+```
+
+| Format | Pipeline |
+|--------|----------|
+| `html` | Standalone HTML with container queries (`cqh`/`cqw`) for responsive font sizing |
+| `pdf`  | HTML with fixed `px` values → WeasyPrint (254mm × 142.875mm landscape pages) |
+
+Both formats embed WOFF2 fonts (via shared `export/fonts.ts`) and base64 images. The `SizeUnit` abstraction
+in `render.ts` lets the same render functions produce either responsive or fixed-size output.
+
+### File Structure
+
+```
+apps/api/src/lib/export/slides/
+  content.ts     # Yjs → DeckData + media map
+  render.ts      # Slide/object → HTML strings (SizeUnit abstraction)
+  html.ts        # Standalone HTML export
+  pdf.ts         # PDF via WeasyPrint
+```

@@ -29,11 +29,12 @@ Everything in `mount.previewsDir` (`tmpDir/previews/`). Cache key: `{pathId}-{up
 `text-preview.ts` returns `{ body: string, mode: TextPreviewMode }`. Modes (defined in
 `packages/lib/src/constants/preview.ts`):
 
-| Mode        | Rendering                                       |
-|-------------|-------------------------------------------------|
-| `markdown`  | `markdown-it` → HTML, sanitized with DOMPurify |
-| `code`      | `lowlight` syntax highlighting → HTML spans     |
-| `plaintext` | `<pre>` wrapped, HTML-escaped                   |
+| Mode           | Rendering                                       |
+|----------------|-------------------------------------------------|
+| `markdown`     | `markdown-it` → HTML, sanitized with DOMPurify |
+| `code`         | `lowlight` syntax highlighting → HTML spans     |
+| `plaintext`    | `<pre>` wrapped, HTML-escaped                   |
+| `eigenslides`  | Server-side HTML: positioned divs with container query sizing |
 
 Body is consumed via `useTextPreview()` hook (TanStack Query, 5min staleTime) and rendered with
 `dangerouslySetInnerHTML` inside a `.eigen-prose` container. No iframe, no shadow DOM.
@@ -103,6 +104,7 @@ Heavy editors (Tiptap for markdown, CodeMirror for code) are lazy-loaded only wh
 | `packages/lib/src/core/drive/hooks/use-drive.ts`                          | `useTextPreview()` hook                          |
 | `packages/lib/src/core/drive/media-resolver.tsx`                          | Uses `getDrivePreviewUrl` for editor images      |
 | `apps/drive/src/components/editor/native-file-editor.tsx`                 | Inline editor with text preview in read-only     |
+| `apps/api/src/lib/preview/eigenslides-preview.ts`                         | Slides Yjs → positioned HTML divs                |
 
 ## Future
 
@@ -130,7 +132,7 @@ Heavy editors (Tiptap for markdown, CodeMirror for code) are lazy-loaded only wh
 | Type | Server approach | Prerequisite |
 |------|----------------|--------------|
 | eigendoc | Load Y.Doc (same as `DbProvider.loadState()`), `yDocToProsemirrorJSON()`, `generateHTML(json, serverExtensions)`, cache as HTML | `packages/lib/src/core/docs/server-extensions.ts` from import/export Phase 2; `y-prosemirror` in API |
-| eigenslides | Load slides JSON, render each slide as styled HTML div | None |
+| eigenslides | Load slides JSON, render each slide as styled HTML div | **Done** |
 | eigensheets | Load sheet JSON, render as HTML table | None |
 | eigenstickies | Load stickies JSON, render simplified kanban columns as HTML | None |
 

@@ -68,3 +68,26 @@ apps/slides/src/components/slides/
 ```
 
 Shared: `packages/ui/src/components/layout/media/image-resize-handles.tsx` (used by docs + slides)
+
+## Export & Preview
+
+HTML and PDF export available from the File menu in the slides editor and from the Drive context menu.
+
+- **HTML**: Standalone document with embedded fonts and base64 images. Uses CSS container queries for
+  responsive font sizing. Slides displayed as cards with spacing; print mode uses page breaks.
+- **PDF**: 16:9 landscape pages (254mm × 142.875mm) via WeasyPrint. Fixed pixel font sizes computed for
+  the page dimensions (WeasyPrint doesn't support container queries).
+
+**Quick preview** in Drive's file preview overlay renders all slides scrollable with spacing between them.
+Server-side rendering reuses the same `renderSlideHtml` function as export, with embed URLs instead of
+base64 data URIs for images.
+
+### Files
+
+| File | Purpose |
+|------|---------|
+| `apps/api/src/lib/export/slides/content.ts` | Yjs → DeckData + media map |
+| `apps/api/src/lib/export/slides/render.ts` | Slide/object → HTML (SizeUnit abstraction) |
+| `apps/api/src/lib/export/slides/html.ts` | Standalone HTML export |
+| `apps/api/src/lib/export/slides/pdf.ts` | PDF via WeasyPrint |
+| `apps/api/src/lib/preview/eigenslides-preview.ts` | Quick preview HTML body |
