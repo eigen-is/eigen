@@ -1,6 +1,6 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Mount } from '../mount';
-import type { MediaFile } from './doc/content';
+import { getScreenPreview } from '../preview/preview-cache';
 
 export function escapeHtml(text: string): string {
     return text
@@ -11,30 +11,23 @@ export function escapeHtml(text: string): string {
         .replace(/>/g, '&gt;');
 }
 
-export async function readFileAsDataUri(mount: Mount, pathId: string, mimeType: string): Promise<string | null> {
-    try {
-        const file = await mount.readFile(pathId);
-        if (!file) return null;
-        const buffer = Buffer.from(await file.arrayBuffer());
-        return `data:${mimeType};base64,${buffer.toString('base64')}`;
-    } catch {
-        return null;
-    }
-}
-
-export async function buildDataUriMap(mount: Mount, mediaByName: Map<string, MediaFile>): Promise<Map<string, string>> {
-    const entries = await Promise.all(
-        [...mediaByName].map(
-            async ([name, file]) => [name, await readFileAsDataUri(mount, file.pathId, file.mimeType)] as const,
-        ),
+export async function buildDataUriMap(mount: Mount, mediaByName: Map<string, DrivePath>): Promise<Map<string, string>> {
+    const map = new Map<string, string>();
+    await Promise.all(
+        [...mediaByName].map(async ([name, file]) => {
+            const result = await getScreenPreview(mount, file, '');
+            if (result?.type === 'image') {
+                map.set(name, `data:${result.contentType};base64,${result.data.toString('base64')}`);
+            }
+        }),
     );
-    return new Map(entries.filter((e): e is [string, string] => e[1] !== null));
+    return map;
 }
 
 // Public-facing API URL for client-rendered preview HTML. VITE_API_HOST includes reverse
 // proxy prefixes (e.g. /eigen), API_URL is the internal URL without prefix.
 const PUBLIC_API_URL = process.env['VITE_API_HOST'] || process.env['API_URL'] || 'http://localhost:8000';
 
-export function buildPreviewUrl(drivePath: DrivePath, file: MediaFile): string {
-    return `${PUBLIC_API_URL}/drive/${drivePath.ownerId}/${drivePath.mountId}/file/${file.pathId}/preview`;
+export function buildPreviewUrl(drivePath: DrivePath, file: DrivePath): string {
+    return `${PUBLIC_API_URL}/drive/${drivePath.ownerId}/${drivePath.mountId}/file/${file.id}/preview`;
 }
