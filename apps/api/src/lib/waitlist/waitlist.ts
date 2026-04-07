@@ -24,7 +24,7 @@ async function db() {
 
 export async function submitWaitlist(email: string, notes: string): Promise<boolean> {
     email = email.trim().toLowerCase();
-    if (!validateEmailAddress(email)) return false;
+    if (!validateEmailAddress(email)) throw new ApiError(400, 'Invalid email address');
 
     const d = await db();
     const existing = await d.select().from(schema.waitlist).where(eq(schema.waitlist.email, email)).get();
@@ -37,7 +37,8 @@ export async function submitWaitlist(email: string, notes: string): Promise<bool
                 .where(eq(schema.waitlist.id, existing.id));
             return true;
         }
-        return false;
+        if (existing.status === 'invited') throw new ApiError(409, 'You have already been invited');
+        throw new ApiError(409, 'This email is already registered');
     }
 
     await d.insert(schema.waitlist).values({
