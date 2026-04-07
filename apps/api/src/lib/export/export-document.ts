@@ -5,9 +5,14 @@ import type { Mount } from '../mount';
 import { exportEigendocToDocx } from './doc/docx';
 import { exportEigendocToHtml } from './doc/html';
 import { exportEigendocToPdf } from './doc/pdf';
-import type { ExportResult } from './doc/render';
 import { exportSlidesToHtml } from './slides/html';
 import { exportSlidesToPdf } from './slides/pdf';
+
+export type ExportResult = {
+    data: Buffer;
+    contentType: string;
+    fileName: string;
+};
 
 export async function exportDocument(mount: Mount, path: DrivePath, format: string): Promise<ExportResult> {
     if (path.mimeType === DRIVE_MIME_DOC) {
