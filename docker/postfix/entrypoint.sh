@@ -4,6 +4,9 @@ set -e
 echo "=== Eigen Postfix Container ==="
 echo "Domain: ${DOMAIN}"
 
+# --- DNS: use real resolvers so Postfix can do MX/AAAA lookups ---
+echo -e "nameserver 1.1.1.1\nnameserver 8.8.8.8" > /etc/resolv.conf
+
 # --- Config templating ---
 # Only substitute $DOMAIN — leave Postfix's own variables ($mydomain, ${recipient}) alone
 envsubst '$DOMAIN' < /etc/postfix/main.cf.template > /etc/postfix/main.cf
