@@ -13,6 +13,7 @@ type OnboardingDraft = {
     waitlist?: Partial<ServerSettings['onboarding']['waitlist']>;
     autoAddOwnerContact?: boolean;
     welcomeMail?: Partial<ServerSettings['onboarding']['welcomeMail']>;
+    inviteEmail?: Partial<ServerSettings['onboarding']['inviteEmail']>;
 };
 
 export function OnboardingSettingsPage() {
@@ -36,6 +37,7 @@ export function OnboardingSettingsPage() {
         waitlist: { ...onboarding.waitlist, ...draft.waitlist },
         autoAddOwnerContact: draft.autoAddOwnerContact ?? onboarding.autoAddOwnerContact,
         welcomeMail: { ...onboarding.welcomeMail, ...draft.welcomeMail },
+        inviteEmail: { ...onboarding.inviteEmail, ...draft.inviteEmail },
     };
 
     const update = (patch: OnboardingDraft) => {
@@ -45,6 +47,7 @@ export function OnboardingSettingsPage() {
             ...patch,
             waitlist: patch.waitlist ? { ...prev.waitlist, ...patch.waitlist } : prev.waitlist,
             welcomeMail: patch.welcomeMail ? { ...prev.welcomeMail, ...patch.welcomeMail } : prev.welcomeMail,
+            inviteEmail: patch.inviteEmail ? { ...prev.inviteEmail, ...patch.inviteEmail } : prev.inviteEmail,
         }));
     };
 
@@ -90,6 +93,33 @@ export function OnboardingSettingsPage() {
                     </div>
                 )}
             </div>
+
+            {current.waitlist.enabled && (
+                <div className="space-y-4">
+                    <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Invite Email</h3>
+                    <p className="text-sm text-muted-foreground">
+                        Email sent to waitlist members when their application is accepted.
+                    </p>
+                    <div className="space-y-1.5">
+                        <Label>Subject</Label>
+                        <Input
+                            value={current.inviteEmail.subject}
+                            onChange={(e) => update({ inviteEmail: { subject: e.target.value } })}
+                        />
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label>Body</Label>
+                        <Textarea
+                            rows={6}
+                            value={current.inviteEmail.body}
+                            onChange={(e) => update({ inviteEmail: { body: e.target.value } })}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                            Available placeholders: {'{email}'}, {'{orgName}'}, {'{domain}'}, {'{inviteLink}'}
+                        </p>
+                    </div>
+                </div>
+            )}
 
             <Separator />
 
