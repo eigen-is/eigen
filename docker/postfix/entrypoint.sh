@@ -58,7 +58,7 @@ cat > /etc/opendkim.conf <<EOF
 Syslog              yes
 LogWhy              yes
 Mode                sv
-Socket              inet:8891@localhost
+Socket              inet:8891@127.0.0.1
 Domain              ${DOMAIN}
 Selector            eigen
 KeyFile             /data/dkim/eigen.private
