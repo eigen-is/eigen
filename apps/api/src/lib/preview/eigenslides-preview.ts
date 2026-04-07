@@ -1,6 +1,6 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import DOMPurify from 'isomorphic-dompurify';
-import { buildEmbedUrl } from '../export/media';
+import { buildPreviewUrl } from '../export/media';
 import { loadSlidesContent } from '../export/slides/content';
 import { renderDeckHtml, responsiveSizeUnit } from '../export/slides/render';
 import type { Mount } from '../mount';
@@ -13,7 +13,7 @@ export async function generateEigenslidesPreview(mount: Mount, drivePath: DriveP
 
     const resolveImgSrc = (mediaName: string): string | null => {
         const file = mediaByName.get(mediaName);
-        return file ? buildEmbedUrl(drivePath, file) : null;
+        return file ? buildPreviewUrl(drivePath, file) : null;
     };
 
     const slidesHtml = renderDeckHtml(deck, responsiveSizeUnit, resolveImgSrc);
