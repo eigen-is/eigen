@@ -11,7 +11,7 @@ import type { Mount } from '../mount';
 const lowlight = createLowlight(common);
 const extensions = getDocExtensions({ lowlight });
 
-export async function generateEigendocPreview(mount: Mount, drivePath: DrivePath, baseUrl = ''): Promise<string> {
+export async function generateEigendocPreview(mount: Mount, drivePath: DrivePath): Promise<string> {
     const content = await loadEigendocContent(mount, drivePath);
     if (!content) return '';
 
@@ -30,7 +30,7 @@ export async function generateEigendocPreview(mount: Mount, drivePath: DrivePath
                         (mediaName, src) => {
                             if (mediaName) {
                                 const file = mediaByName.get(mediaName);
-                                return file ? buildEmbedUrl(baseUrl, drivePath, file) : null;
+                                return file ? buildEmbedUrl(drivePath, file) : null;
                             }
                             return src;
                         },
