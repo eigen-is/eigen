@@ -1069,6 +1069,6 @@ export function createMountConfig(id: string, settings: MountSettings): MountCon
         storageType: settings.storageType,
         isDefault: id === 'default',
         maxSizeMB: settings.maxSizeMB,
-        s3Config: settings.s3Config,
+        s3Config: settings.s3Config ?? (settings.storageType === 's3' ? getS3Config() : undefined),
     };
 }
