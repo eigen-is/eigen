@@ -21,7 +21,7 @@ export default class MailDB {
         this.db = this.managedDb.db;
     }
 
-    addEmail(email: EmailSummary) {
+    addEmail(email: EmailSummary): boolean {
         const date = email.date instanceof Date ? email.date : email.date ? new Date(email.date) : new Date();
 
         const record = {
@@ -46,9 +46,10 @@ export default class MailDB {
         if (existing) {
             const { id, ...rest } = record;
             this.db.update(schema.emails).set(rest).where(eq(schema.emails.id, email.id)).run();
-        } else {
-            this.db.insert(schema.emails).values(record).run();
+            return false;
         }
+        this.db.insert(schema.emails).values(record).run();
+        return true;
     }
 
     size() {
