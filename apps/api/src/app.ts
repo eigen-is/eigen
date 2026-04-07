@@ -6,6 +6,7 @@ import { rateLimit } from 'elysia-rate-limit';
 import { trustedOrigins } from './lib/auth/auth';
 import { caldavRouter } from './lib/caldav/caldav-router';
 import { ApiError } from './lib/core/errors';
+import { waitlistService } from './lib/waitlist/waitlist';
 import { betterAuth } from './routes/auth';
 import { calendarRouter } from './routes/calendar';
 import { chatRouter } from './routes/chat';
@@ -30,6 +31,8 @@ const DAV_CAPABILITY_HEADERS = {
     DAV: '1, 2, 3, calendar-access',
     Allow: 'OPTIONS, GET, PUT, DELETE, PROPFIND, PROPPATCH, REPORT, MKCALENDAR',
 };
+
+await waitlistService.open();
 
 export const app = new Elysia()
     .use(serverTiming())
