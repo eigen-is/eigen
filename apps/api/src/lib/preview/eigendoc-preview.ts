@@ -5,6 +5,7 @@ import DOMPurify from 'isomorphic-dompurify';
 import { common, createLowlight } from 'lowlight';
 import { loadEigendocContent } from '../export/doc/content';
 import { renderCodeBlockNode, renderFigureNode, renderTaskItemNode } from '../export/doc/render';
+import { buildEmbedUrl } from '../export/media';
 import type { Mount } from '../mount';
 
 const lowlight = createLowlight(common);
@@ -29,9 +30,7 @@ export async function generateEigendocPreview(mount: Mount, drivePath: DrivePath
                         (mediaName, src) => {
                             if (mediaName) {
                                 const file = mediaByName.get(mediaName);
-                                if (file)
-                                    return `${baseUrl}/drive/${drivePath.ownerId}/${drivePath.mountId}/file/${file.pathId}/embed/${encodeURIComponent(file.name)}`;
-                                return null;
+                                return file ? buildEmbedUrl(baseUrl, drivePath, file) : null;
                             }
                             return src;
                         },

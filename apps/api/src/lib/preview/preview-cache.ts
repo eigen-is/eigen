@@ -119,6 +119,30 @@ async function getTextPreviewData(mount: Mount, drivePath: DrivePath): Promise<T
     return result;
 }
 
+async function getOrCachePreview(
+    mount: Mount,
+    drivePath: DrivePath,
+    mode: TextPreviewResult['mode'],
+    generate: () => Promise<string>,
+): Promise<TextPreviewResult | null> {
+    const cacheFile = path.join(mount.previewsDir, getTextCacheKey(drivePath.id, drivePath.updatedAt));
+
+    if (fs.existsSync(cacheFile)) {
+        return JSON.parse(await Bun.file(cacheFile).text()) as TextPreviewResult;
+    }
+
+    try {
+        const body = await generate();
+        if (!body) return null;
+        const result: TextPreviewResult = { body, mode };
+        await Bun.write(cacheFile, JSON.stringify(result));
+        return result;
+    } catch (err) {
+        console.error(`[preview] Failed to generate ${mode} preview for ${drivePath.id}:`, err);
+        return null;
+    }
+}
+
 async function getCollabPreviewData(
     mount: Mount,
     drivePath: DrivePath,
@@ -127,42 +151,18 @@ async function getCollabPreviewData(
     const mime = drivePath.mimeType || '';
 
     if (mime === DRIVE_MIME_DOC) {
-        const cacheFile = path.join(mount.previewsDir, getTextCacheKey(drivePath.id, drivePath.updatedAt));
-
-        if (fs.existsSync(cacheFile)) {
-            return JSON.parse(await Bun.file(cacheFile).text()) as TextPreviewResult;
-        }
-
-        try {
-            const body = await generateEigendocPreview(mount, drivePath, baseUrl);
-            if (!body) return null;
-            const result: TextPreviewResult = { body, mode: 'eigendoc' };
-            await Bun.write(cacheFile, JSON.stringify(result));
-            return result;
-        } catch (err) {
-            console.error(`[preview] Failed to generate eigendoc preview for ${drivePath.id}:`, err);
-            return null;
-        }
+        return getOrCachePreview(mount, drivePath, 'eigendoc', () =>
+            generateEigendocPreview(mount, drivePath, baseUrl),
+        );
     }
 
     if (mime === DRIVE_MIME_SLIDES) {
-        const cacheFile = path.join(mount.previewsDir, getTextCacheKey(drivePath.id, drivePath.updatedAt));
-
-        if (fs.existsSync(cacheFile)) {
-            return JSON.parse(await Bun.file(cacheFile).text()) as TextPreviewResult;
-        }
-
-        try {
+        return getOrCachePreview(mount, drivePath, 'eigenslides', async () => {
+            // Dynamic import: eigenslides-preview imports tiptap-adjacent code that references DOM
+            // globals at module level. --splitting keeps it in a separate chunk loaded on demand.
             const { generateEigenslidesPreview } = await import('./eigenslides-preview');
-            const body = await generateEigenslidesPreview(mount, drivePath, baseUrl);
-            if (!body) return null;
-            const result: TextPreviewResult = { body, mode: 'eigenslides' };
-            await Bun.write(cacheFile, JSON.stringify(result));
-            return result;
-        } catch (err) {
-            console.error(`[preview] Failed to generate eigenslides preview for ${drivePath.id}:`, err);
-            return null;
-        }
+            return generateEigenslidesPreview(mount, drivePath, baseUrl);
+        });
     }
 
     return null;

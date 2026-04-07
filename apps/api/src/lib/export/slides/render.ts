@@ -1,6 +1,7 @@
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import {
     BORDER_RADIUS_ROUND,
+    type DeckData,
     pxToPercent,
     SLIDE_BASE_HEIGHT,
     SLIDE_BASE_WIDTH,
@@ -118,6 +119,23 @@ export function renderSlideHtml(
     const objectsHtml = objects.map((obj) => renderSlideObjectHtml(obj, sizeUnit, resolveImgSrc)).join('\n');
 
     return `<div class="slide" style="${containerStyles.join(';')}">\n${objectsHtml}\n</div>`;
+}
+
+export function renderDeckHtml(
+    deck: DeckData,
+    sizeUnit: SizeUnit,
+    resolveImgSrc: ImgSrcResolver,
+    slideOptions?: { fillPage?: boolean; pageWidthPx?: number; pageHeightPx?: number },
+): string {
+    return deck.slideOrder
+        .map((slideId) => {
+            const slide = deck.slides[slideId];
+            if (!slide) return '';
+            const objects = slide.objectIds.map((id) => deck.objects[id]).filter(Boolean);
+            return renderSlideHtml(slide, objects, sizeUnit, resolveImgSrc, slideOptions);
+        })
+        .filter(Boolean)
+        .join('\n');
 }
 
 export function stripSlidesExtension(name: string): string {

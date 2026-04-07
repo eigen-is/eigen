@@ -6,11 +6,11 @@ import { common, createLowlight } from 'lowlight';
 // CSS embedded as string at build time by Bun's bundler — no runtime file resolution needed
 import eigenProseCSSRaw from '../../../../../../packages/ui/src/styles/eigen-prose.css' with { type: 'text' };
 import type { Mount } from '../../mount';
+import type { ExportResult } from '../export-document';
 import { getFontCSS } from '../fonts';
-import { readFileAsDataUri } from '../media';
+import { buildDataUriMap } from '../media';
 import { loadEigendocContent } from './content';
 import {
-    type ExportResult,
     escapeHtml,
     renderCodeBlockNode,
     renderFigureNode,
@@ -20,8 +20,6 @@ import {
 
 const lowlight = createLowlight(common);
 const extensions = getDocExtensions({ lowlight });
-
-export type { ExportResult };
 
 // Lazy-initialized cached assets
 let _proseCSS: string | undefined;
@@ -44,13 +42,7 @@ export async function generateExportHtml(mount: Mount, drivePath: DrivePath): Pr
     if (!content) return wrapInDocument(drivePath.name, '');
 
     const { pmJson, mediaByName } = content;
-
-    const entries = await Promise.all(
-        [...mediaByName].map(
-            async ([name, file]) => [name, await readFileAsDataUri(mount, file.pathId, file.mimeType)] as const,
-        ),
-    );
-    const dataUriMap = new Map(entries.filter((e): e is [string, string] => e[1] !== null));
+    const dataUriMap = await buildDataUriMap(mount, mediaByName);
 
     const bodyHtml = renderToHTMLString({
         content: pmJson,
