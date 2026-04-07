@@ -31,6 +31,8 @@ export async function buildDataUriMap(mount: Mount, mediaByName: Map<string, Med
     return new Map(entries.filter((e): e is [string, string] => e[1] !== null));
 }
 
-export function buildEmbedUrl(baseUrl: string, drivePath: DrivePath, file: MediaFile): string {
-    return `${baseUrl}/drive/${drivePath.ownerId}/${drivePath.mountId}/file/${file.pathId}/embed/${encodeURIComponent(file.name)}`;
+const API_URL = process.env['API_URL'] || 'http://localhost:8000';
+
+export function buildEmbedUrl(drivePath: DrivePath, file: MediaFile): string {
+    return `${API_URL}/drive/${drivePath.ownerId}/${drivePath.mountId}/file/${file.pathId}/embed/${encodeURIComponent(file.name)}`;
 }
