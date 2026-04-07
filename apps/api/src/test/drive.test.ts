@@ -2725,7 +2725,7 @@ describe('Drive', () => {
                 body: JSON.stringify({ teamId, userId: ctx.alice.user.id }),
             });
 
-            await authedRequest(ctx.alice.user.sessionToken, `/team/${teamId}/mount`, {
+            await authedRequest(ctx.alice.user.sessionToken, `/team/team_${teamId}/mount`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name: 'Slides Sheets Drive', storageType: 'local', maxSizeMB: 500 }),
