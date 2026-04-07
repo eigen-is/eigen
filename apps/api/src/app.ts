@@ -24,6 +24,7 @@ import { setupRouter } from './routes/setup';
 import { spaceRouter } from './routes/space';
 import { sseRouter } from './routes/sse';
 import { teamRouter } from './routes/team';
+import { waitlistRouter } from './routes/waitlist';
 
 const SLOW_REQUEST_MS = 200;
 
@@ -83,6 +84,7 @@ export const app = new Elysia()
     .use(calendarRouter)
     .use(teamRouter)
     .use(settingsRouter)
+    .use(waitlistRouter)
     .use(spaceRouter)
     .use(publicRouter)
     .use(driveRouter)
