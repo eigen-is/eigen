@@ -73,6 +73,7 @@ function WaitlistRoute() {
     const handleDelete = () => {
         if (!selected) return;
         remove.mutate(selected.id);
+        setShowDelete(false);
         handleBack();
     };
 
