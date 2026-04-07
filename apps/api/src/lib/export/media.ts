@@ -31,8 +31,10 @@ export async function buildDataUriMap(mount: Mount, mediaByName: Map<string, Med
     return new Map(entries.filter((e): e is [string, string] => e[1] !== null));
 }
 
-const API_URL = process.env['API_URL'] || 'http://localhost:8000';
+// Public-facing API URL for client-rendered preview HTML. VITE_API_HOST includes reverse
+// proxy prefixes (e.g. /eigen), API_URL is the internal URL without prefix.
+const PUBLIC_API_URL = process.env['VITE_API_HOST'] || process.env['API_URL'] || 'http://localhost:8000';
 
-export function buildEmbedUrl(drivePath: DrivePath, file: MediaFile): string {
-    return `${API_URL}/drive/${drivePath.ownerId}/${drivePath.mountId}/file/${file.pathId}/embed/${encodeURIComponent(file.name)}`;
+export function buildPreviewUrl(drivePath: DrivePath, file: MediaFile): string {
+    return `${PUBLIC_API_URL}/drive/${drivePath.ownerId}/${drivePath.mountId}/file/${file.pathId}/preview`;
 }
