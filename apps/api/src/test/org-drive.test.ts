@@ -17,7 +17,7 @@ import {
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 
 async function addTeamMount(sessionToken: string, teamId: string, name = 'Team Drive') {
-    return authedRequest(sessionToken, `/team/team_${teamId}/mount`, {
+    return authedRequest(sessionToken, `/team/${teamOwnerId(teamId)}/mount`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, storageType: 'local', maxSizeMB: 500 }),
