@@ -180,9 +180,9 @@ function TextPreviewContent({ path }: { path: DrivePath }) {
                     <div className="eigen-prose tiptap" dangerouslySetInnerHTML={{ __html: data.body }} />
                 </div>
             ) : data.mode === 'eigenslides' ? (
-                <div className="p-8 flex flex-col items-center gap-4 bg-muted/50 min-h-full">
+                <div className="p-8 bg-muted/50 min-h-full">
                     <div
-                        className="w-full max-w-[960px] [&>.slide]:w-full [&>.slide]:rounded [&>.slide]:shadow-md"
+                        className="w-full max-w-[960px] mx-auto flex flex-col gap-4 [&>.slide]:w-full [&>.slide]:rounded [&>.slide]:shadow-md"
                         dangerouslySetInnerHTML={{ __html: data.body }}
                     />
                 </div>

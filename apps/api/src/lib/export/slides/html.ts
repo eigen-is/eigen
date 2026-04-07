@@ -1,7 +1,8 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Mount } from '../../mount';
-import type { ExportResult } from '../doc/render';
+import { type ExportResult, escapeHtml } from '../doc/render';
 import { getFontCSS } from '../fonts';
+import { readFileAsDataUri } from '../media';
 import { loadSlidesContent } from './content';
 import { type ImgSrcResolver, renderSlideHtml, responsiveSizeUnit, stripSlidesExtension } from './render';
 
@@ -16,7 +17,7 @@ export async function exportSlidesToHtml(mount: Mount, drivePath: DrivePath): Pr
 
 async function generateSlidesExportHtml(mount: Mount, drivePath: DrivePath): Promise<string> {
     const content = await loadSlidesContent(mount, drivePath);
-    if (!content) return wrapInDocument(drivePath.name, '');
+    if (!content) return wrapInDocument(stripSlidesExtension(drivePath.name), '');
 
     const { deck, mediaByName } = content;
 
@@ -38,21 +39,15 @@ async function generateSlidesExportHtml(mount: Mount, drivePath: DrivePath): Pro
         .filter(Boolean)
         .join('\n');
 
-    return wrapInDocument(drivePath.name, slidesHtml);
+    return wrapInDocument(stripSlidesExtension(drivePath.name), slidesHtml);
 }
 
 function wrapInDocument(title: string, slidesHtml: string): string {
-    const escapedTitle = title
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>${escapedTitle}</title>
+    <title>${escapeHtml(title)}</title>
     <style>${getFontCSS()}${SLIDES_CSS}</style>
 </head>
 <body>
@@ -61,17 +56,6 @@ function wrapInDocument(title: string, slidesHtml: string): string {
     </div>
 </body>
 </html>`;
-}
-
-async function readFileAsDataUri(mount: Mount, pathId: string, mimeType: string): Promise<string | null> {
-    try {
-        const file = await mount.readFile(pathId);
-        if (!file) return null;
-        const buffer = Buffer.from(await file.arrayBuffer());
-        return `data:${mimeType};base64,${buffer.toString('base64')}`;
-    } catch {
-        return null;
-    }
 }
 
 const SLIDES_CSS = `
