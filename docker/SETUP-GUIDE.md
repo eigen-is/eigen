@@ -128,9 +128,10 @@ mkdir -p data && chown -R 1000:1000 data
 docker compose --env-file .env.production up -d
 ```
 
-This starts four containers:
+This starts five containers:
 - **caddy** — Reverse proxy with automatic HTTPS certificates
 - **eigen-api** — The Eigen backend (handles all your data)
+- **unbound** — Recursive DNS resolver (Postfix needs a real resolver, not Docker's DNS proxy)
 - **postfix** — Email server (receives incoming mail, sends via relay)
 - **dovecot** — IMAP server (lets mail clients read your inbox)
 
@@ -156,7 +157,7 @@ After setup, you're redirected to the login page. Sign in and you're ready to go
 After Postfix starts for the first time, it generates a DKIM key. Check the logs:
 
 ```bash
-docker compose --env-file .env.production logs postfix | grep "DNS TXT"
+docker compose --env-file .env.production logs postfix | grep "DKIM"
 ```
 
 Now add these DNS records:
