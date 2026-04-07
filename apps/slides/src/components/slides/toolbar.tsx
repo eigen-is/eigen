@@ -1,4 +1,5 @@
 import { formatForDisplay } from '@tanstack/react-hotkeys';
+import { useExportDocument } from '@workspace/lib/drive';
 import { useMediaQuery } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Toolbar as SharedToolbar, TooltipButton } from '@workspace/ui';
@@ -38,6 +39,8 @@ export function Toolbar({
     commentPanelOpen,
     unresolvedCommentCount,
 }: ToolbarProps) {
+    const { exportDocument } = useExportDocument();
+    const handleExport = (format: string) => exportDocument(path.ownerId, path.mountId, path.id, format);
     const [canUndo, setCanUndo] = useState(false);
     const [canRedo, setCanRedo] = useState(false);
     const isMobile = useMediaQuery('(max-width: 1200px)');
@@ -71,6 +74,8 @@ export function Toolbar({
                     canWrite={canWrite}
                     onAccessDialogOpen={onAccessDialogOpen}
                     onRestore={onRestore}
+                    onExport={handleExport}
+                    exportFormats={['pdf', 'html']}
                     createLabel="New slides"
                     CreateDialog={DriveCreateSlides}
                 />

@@ -320,27 +320,31 @@ export function DriveTable({
                         Download
                     </DropdownMenuItem>
                 )}
-                {isSingleSelect && contextMenu.item?.type === 'doc' && onExport && (
-                    <DropdownMenuSub>
-                        <DropdownMenuSubTrigger>
-                            <FileDown className="h-4 w-4 mr-2" />
-                            Export
-                        </DropdownMenuSubTrigger>
-                        <DropdownMenuSubContent>
-                            {(['docx', 'pdf', 'html'] as const).map((format) => (
-                                <DropdownMenuItem
-                                    key={format}
-                                    onClick={() => {
-                                        onExport(contextMenu.item!, format);
-                                        contextMenu.close();
-                                    }}
-                                >
-                                    Export as {format.toUpperCase()}
-                                </DropdownMenuItem>
-                            ))}
-                        </DropdownMenuSubContent>
-                    </DropdownMenuSub>
-                )}
+                {isSingleSelect &&
+                    (contextMenu.item?.type === 'doc' || contextMenu.item?.type === 'slides') &&
+                    onExport && (
+                        <DropdownMenuSub>
+                            <DropdownMenuSubTrigger>
+                                <FileDown className="h-4 w-4 mr-2" />
+                                Export
+                            </DropdownMenuSubTrigger>
+                            <DropdownMenuSubContent>
+                                {(contextMenu.item?.type === 'doc' ? ['docx', 'pdf', 'html'] : ['pdf', 'html']).map(
+                                    (format) => (
+                                        <DropdownMenuItem
+                                            key={format}
+                                            onClick={() => {
+                                                onExport(contextMenu.item!, format);
+                                                contextMenu.close();
+                                            }}
+                                        >
+                                            Export as {format.toUpperCase()}
+                                        </DropdownMenuItem>
+                                    ),
+                                )}
+                            </DropdownMenuSubContent>
+                        </DropdownMenuSub>
+                    )}
 
                 {isSingleSelect && onShareClick && (
                     <DropdownMenuItem
