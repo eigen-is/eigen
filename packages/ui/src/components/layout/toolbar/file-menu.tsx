@@ -29,6 +29,7 @@ type FileMenuProps = {
     onAccessDialogOpen: () => void;
     onRestore?: (state: Uint8Array) => void;
     onExport?: (format: string) => void;
+    exportFormats?: string[];
     createLabel: string;
     CreateDialog: ComponentType<{ path: DrivePath; open: boolean; onOpenChange: (open: boolean) => void }>;
     children?: ReactNode;
@@ -40,6 +41,7 @@ export function FileMenu({
     onAccessDialogOpen,
     onRestore,
     onExport,
+    exportFormats,
     createLabel,
     CreateDialog,
     children,
@@ -93,9 +95,11 @@ export function FileMenu({
                                 <Download className="h-4 w-4 mr-2" /> Export
                             </DropdownMenuSubTrigger>
                             <DropdownMenuSubContent>
-                                <DropdownMenuItem onClick={() => onExport('docx')}>Export as DOCX</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => onExport('pdf')}>Export as PDF</DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => onExport('html')}>Export as HTML</DropdownMenuItem>
+                                {(exportFormats ?? ['docx', 'pdf', 'html']).map((format) => (
+                                    <DropdownMenuItem key={format} onClick={() => onExport(format)}>
+                                        Export as {format.toUpperCase()}
+                                    </DropdownMenuItem>
+                                ))}
                             </DropdownMenuSubContent>
                         </DropdownMenuSub>
                     )}
