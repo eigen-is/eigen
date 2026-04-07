@@ -39,9 +39,10 @@ cd /path/to/eigen
 ### 3. Build the frontend
 
 ```bash
-set -a && source .env.production && set +a
 bun install
-bun run build:prod
+set -a && source .env.production && set +a
+bun run --sequential --filter './apps/*' build
+bun --filter '@apps/api' buildfordocker
 ```
 
 ### 4. Start the stack

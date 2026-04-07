@@ -95,7 +95,7 @@ All changes are backward-compatible: without the new env vars, behavior is ident
 |   +-- LOCAL-TESTING.md             # Local Docker testing guide
 +-- scripts/
 |   +-- generate-env.sh              # Generate .env.production from DOMAIN
-|   +-- update.sh                    # Pull + build + restart
+|   +-- update.sh                    # Pull + sequential build + restart
 |   +-- backup.sh                    # Backup data directory
 ```
 
@@ -159,8 +159,7 @@ password flow as IMAP and CalDAV.
 - [ ] **Backup WAL safety** — `scripts/backup.sh` does a simple tar. For guaranteed consistency,
   implement `/internal/checkpoint` endpoint that runs `PRAGMA wal_checkpoint(TRUNCATE)` on all open
   databases before backup
-- [ ] **`VITE_APP_*_URL` in build** — the update script sources `.env.production` before building,
-  but this is easy to forget. Consider a build wrapper that does this automatically
+- [x] **`VITE_APP_*_URL` in build** — `update.sh` sources `.env.production` before building
 
 ## Alternatives Considered
 
