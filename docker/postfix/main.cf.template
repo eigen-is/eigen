@@ -11,16 +11,8 @@ mynetworks = 127.0.0.0/8 172.16.0.0/12
 virtual_mailbox_domains = $DOMAIN
 virtual_transport = eigen
 
-# IPv4 only — Docker's DNS proxy doesn't reliably handle AAAA lookups,
-# which breaks outbound relay and inbound sender domain validation.
+# IPv4 only — avoids AAAA lookup issues in Docker environments.
 inet_protocols = ipv4
-
-# DNS: use native (glibc) lookups instead of Postfix's internal resolver.
-# Docker's embedded DNS (127.0.0.11) works with glibc but not with Postfix's
-# raw DNS queries. Since we use a relay host, MX lookups aren't needed.
-smtp_dns_support_level = disabled
-smtp_host_lookup = native
-lmtp_host_lookup = native
 
 # TLS (inbound — certs from Caddy via shared volume)
 smtpd_tls_cert_file = /certs/cert.pem

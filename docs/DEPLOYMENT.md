@@ -1,7 +1,7 @@
 # Eigen Deployment
 
-Docker-based deployment for Eigen. Four containers: Caddy (reverse proxy + HTTPS), Eigen API (Bun),
-Postfix (email), Dovecot (IMAP).
+Docker-based deployment for Eigen. Five containers: Caddy (reverse proxy + HTTPS), Eigen API (Bun),
+Unbound (DNS resolver), Postfix (email), Dovecot (IMAP).
 
 **Guides:**
 - [VPS Setup Guide](../docker/SETUP-GUIDE.md) — step-by-step server deployment
@@ -49,6 +49,7 @@ Postfix (email), Dovecot (IMAP).
 | **Eigen API in Docker** | Done | Bun container with healthcheck, bind-mount data |
 | **`TRUSTED_NETWORKS`** | Done | `requireLocalhost` accepts Docker bridge IPs via env var |
 | **SMTP transport** | Done | `mailer.ts` uses SMTP when `SMTP_HOST` is set, sendmail fallback |
+| **Unbound container** | Done | Recursive DNS resolver for Postfix (Docker's DNS proxy is unreliable for raw DNS queries) |
 | **Postfix container** | Done | Receives mail (port 25), sends via relay, DKIM signing |
 | **Dovecot container** | Done | IMAP on port 993, checkpassword auth via API |
 | **Internal auth endpoint** | Done | `POST /internal/auth/verify` — verifies app password or primary password |
