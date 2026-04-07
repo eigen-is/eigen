@@ -10,13 +10,14 @@ import { useAuth } from '@workspace/lib/auth';
 import type { WaitlistEntry } from '@workspace/lib/types/waitlist';
 import { EmptyState, LoadingState } from '@workspace/ui';
 import { Badge } from '@workspace/ui/components/badge';
-import { Button } from '@workspace/ui/components/button';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
 import { SearchBar } from '@workspace/ui/components/layout/search-bar/search-bar';
+import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
 import { Separator } from '@workspace/ui/components/separator';
 import { Tabs, TabsList, TabsTrigger } from '@workspace/ui/components/tabs';
 import { formatDistanceToNow } from 'date-fns';
+import { Check, RefreshCw, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 
 type WaitlistSearch = {
@@ -41,6 +42,7 @@ function WaitlistRoute() {
     const activeTab = tab ?? 'pending';
     const navigate = useNavigate();
     const [searchQuery, setSearchQuery] = useState('');
+    const [showDelete, setShowDelete] = useState(false);
 
     const { data: entries = [], isLoading } = useWaitlistEntries(ownerId, activeTab);
 
@@ -56,6 +58,7 @@ function WaitlistRoute() {
             e.notes.toLowerCase().includes(searchQuery.toLowerCase()),
     );
     const selected = entries.find((e) => e.id === entryId);
+    const isPending = accept.isPending || reject.isPending || resend.isPending || remove.isPending;
 
     const handleTabChange = (value: string) => {
         navigate({ to: '/waitlist', search: { tab: value } });
@@ -63,6 +66,14 @@ function WaitlistRoute() {
 
     const handleRowClick = (id: string) => {
         navigate({ to: '/waitlist', search: { tab: activeTab, entryId: id } });
+    };
+
+    const handleBack = () => navigate({ to: '/waitlist', search: { tab: activeTab } });
+
+    const handleDelete = () => {
+        if (!selected) return;
+        remove.mutate(selected.id);
+        handleBack();
     };
 
     if (isLoading) return <LoadingState />;
@@ -73,9 +84,20 @@ function WaitlistRoute() {
         </div>
     );
 
+    const detailToolbar = selected ? (
+        <WaitlistDetailToolbar
+            entry={selected}
+            onAccept={() => accept.mutate(selected.id)}
+            onReject={() => reject.mutate(selected.id)}
+            onResend={() => resend.mutate(selected.id)}
+            onDelete={() => setShowDelete(true)}
+            isPending={isPending}
+        />
+    ) : null;
+
     return (
         <ColumnLayout mobileColumn={entryId ? 'detail' : 'list'}>
-            <Column id="list" width="350px" toolbar={listToolbar}>
+            <Column id="list" width="400px" toolbar={listToolbar}>
                 <div className="flex h-full flex-col border-r overflow-y-auto">
                     <div className="p-2">
                         <Tabs value={activeTab} onValueChange={handleTabChange}>
@@ -114,28 +136,26 @@ function WaitlistRoute() {
                     )}
                 </div>
             </Column>
-            <Column id="detail" width="flex" onBack={() => navigate({ to: '/waitlist', search: { tab: activeTab } })}>
+            <Column id="detail" width="flex" onBack={handleBack} toolbar={detailToolbar}>
                 {selected ? (
-                    <WaitlistDetail
-                        entry={selected}
-                        onAccept={() => accept.mutate(selected.id)}
-                        onReject={() => reject.mutate(selected.id)}
-                        onResend={() => resend.mutate(selected.id)}
-                        onDelete={() => {
-                            remove.mutate(selected.id);
-                            navigate({ to: '/waitlist', search: { tab: activeTab } });
-                        }}
-                        isPending={accept.isPending || reject.isPending || resend.isPending || remove.isPending}
-                    />
+                    <WaitlistDetail entry={selected} />
                 ) : (
                     <EmptyState message="Select an entry to view details" />
                 )}
             </Column>
+
+            <DeleteDialog
+                open={showDelete}
+                onOpenChange={setShowDelete}
+                title="Delete Waitlist Entry"
+                description={`Permanently delete the waitlist entry for ${selected?.email}?`}
+                onDelete={handleDelete}
+            />
         </ColumnLayout>
     );
 }
 
-function WaitlistDetail({
+function WaitlistDetailToolbar({
     entry,
     onAccept,
     onReject,
@@ -150,8 +170,36 @@ function WaitlistDetail({
     onDelete: () => void;
     isPending: boolean;
 }) {
-    const [showDelete, setShowDelete] = useState(false);
+    return (
+        <div className="flex items-center gap-1 ml-auto">
+            {entry.status === 'pending' && (
+                <>
+                    <TooltipButton icon={Check} tooltipText="Accept & Invite" onClick={onAccept} disabled={isPending} />
+                    <TooltipButton icon={X} tooltipText="Reject" onClick={onReject} disabled={isPending} />
+                </>
+            )}
+            {entry.status === 'invited' && (
+                <>
+                    <TooltipButton
+                        icon={RefreshCw}
+                        tooltipText="Resend Invite"
+                        onClick={onResend}
+                        disabled={isPending}
+                    />
+                    <TooltipButton icon={X} tooltipText="Reject" onClick={onReject} disabled={isPending} />
+                </>
+            )}
+            {entry.status === 'rejected' && (
+                <TooltipButton icon={Check} tooltipText="Re-accept & Invite" onClick={onAccept} disabled={isPending} />
+            )}
+            {entry.status !== 'registered' && (
+                <TooltipButton icon={Trash2} tooltipText="Delete" onClick={onDelete} disabled={isPending} />
+            )}
+        </div>
+    );
+}
 
+function WaitlistDetail({ entry }: { entry: WaitlistEntry }) {
     const statusVariant =
         entry.status === 'pending'
             ? 'secondary'
@@ -177,6 +225,8 @@ function WaitlistDetail({
                 </div>
             )}
 
+            <Separator />
+
             <div className="text-sm text-muted-foreground space-y-1">
                 <p>Submitted: {new Date(entry.createdAt).toLocaleString()}</p>
                 {entry.invitedAt && <p>Invited: {new Date(entry.invitedAt).toLocaleString()}</p>}
@@ -193,49 +243,6 @@ function WaitlistDetail({
                 {entry.registeredAt && <p>Registered: {new Date(entry.registeredAt).toLocaleString()}</p>}
                 {entry.userId && <p>User ID: {entry.userId}</p>}
             </div>
-
-            <Separator />
-
-            <div className="flex gap-2">
-                {entry.status === 'pending' && (
-                    <>
-                        <Button onClick={onAccept} disabled={isPending}>
-                            Accept & Invite
-                        </Button>
-                        <Button variant="outline" onClick={onReject} disabled={isPending}>
-                            Reject
-                        </Button>
-                    </>
-                )}
-                {entry.status === 'invited' && (
-                    <>
-                        <Button onClick={onResend} disabled={isPending}>
-                            Resend Invite
-                        </Button>
-                        <Button variant="outline" onClick={onReject} disabled={isPending}>
-                            Reject
-                        </Button>
-                    </>
-                )}
-                {entry.status === 'rejected' && (
-                    <Button onClick={onAccept} disabled={isPending}>
-                        Re-accept & Invite
-                    </Button>
-                )}
-                {entry.status !== 'registered' && (
-                    <Button variant="destructive" onClick={() => setShowDelete(true)} disabled={isPending}>
-                        Delete
-                    </Button>
-                )}
-            </div>
-
-            <DeleteDialog
-                open={showDelete}
-                onOpenChange={setShowDelete}
-                title="Delete Waitlist Entry"
-                description={`Permanently delete the waitlist entry for ${entry.email}?`}
-                onDelete={onDelete}
-            />
         </div>
     );
 }
