@@ -66,9 +66,15 @@ export const publicRouter = new Elysia({ name: 'public' })
             const config = getPublicConfig();
             const email = `${body.username.toLowerCase()}@${config?.domain ?? 'localhost'}`;
 
-            const created = await auth.api.createUser({
-                body: { name: body.name, email, password: body.password, role: 'user' },
-            });
+            let created: { user?: { id: string } } | undefined;
+            try {
+                created = await auth.api.createUser({
+                    body: { name: body.name, email, password: body.password, role: 'user' },
+                });
+            } catch (err) {
+                const msg = err instanceof Error ? err.message : 'Failed to create account';
+                throw new ApiError(400, msg.includes('already') ? 'Username is already taken' : msg);
+            }
             if (!created?.user) throw new ApiError(400, 'Failed to create account');
 
             setRegisteredUser(entry.email, created.user.id).catch(() => {});
