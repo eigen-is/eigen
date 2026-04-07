@@ -4,6 +4,7 @@ import { useMediaQuery } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Toolbar as SharedToolbar, TooltipButton } from '@workspace/ui';
 import { DriveCreateSlides } from '@workspace/ui/components/layout/drive/drive-create-slides';
+import { ExportProgressDialog } from '@workspace/ui/components/layout/drive/export-progress-dialog';
 import { DocumentModeButton } from '@workspace/ui/components/layout/toolbar/document-mode-button';
 import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
 import { ImagePlus, MessageSquare, Play, Plus, Redo, Type, Undo, UserRoundPlus } from 'lucide-react';
@@ -39,7 +40,7 @@ export function Toolbar({
     commentPanelOpen,
     unresolvedCommentCount,
 }: ToolbarProps) {
-    const { exportDocument } = useExportDocument();
+    const { exportDocument, isExporting } = useExportDocument();
     const handleExport = (format: string) => exportDocument(path.ownerId, path.mountId, path.id, format);
     const [canUndo, setCanUndo] = useState(false);
     const [canRedo, setCanRedo] = useState(false);
@@ -67,68 +68,71 @@ export function Toolbar({
     }, [undoManager, canWrite]);
 
     return (
-        <SharedToolbar>
-            <div className="flex items-center">
-                <FileMenu
-                    path={path}
-                    canWrite={canWrite}
-                    onAccessDialogOpen={onAccessDialogOpen}
-                    onRestore={onRestore}
-                    onExport={handleExport}
-                    exportFormats={['pdf', 'html']}
-                    createLabel="New slides"
-                    CreateDialog={DriveCreateSlides}
-                />
+        <>
+            <SharedToolbar>
+                <div className="flex items-center">
+                    <FileMenu
+                        path={path}
+                        canWrite={canWrite}
+                        onAccessDialogOpen={onAccessDialogOpen}
+                        onRestore={onRestore}
+                        onExport={handleExport}
+                        exportFormats={['pdf', 'html']}
+                        createLabel="New slides"
+                        CreateDialog={DriveCreateSlides}
+                    />
 
-                {canWrite && !isMobile && (
-                    <>
-                        <TooltipButton
-                            icon={Undo}
-                            tooltipText={`Undo (${formatForDisplay('Mod+Z')})`}
-                            onClick={() => undoManager?.undo?.()}
-                            disabled={!canUndo}
-                        />
-                        <TooltipButton
-                            icon={Redo}
-                            tooltipText={`Redo (${formatForDisplay('Mod+Y')})`}
-                            onClick={() => undoManager?.redo?.()}
-                            disabled={!canRedo}
-                        />
-                    </>
-                )}
-            </div>
-            <div className="flex items-center">
-                {canWrite && !isMobile && (
-                    <>
-                        <TooltipButton icon={Plus} tooltipText="Add slide" onClick={onAddSlide} />
-                        <TooltipButton icon={Type} tooltipText="Add text" onClick={onAddText} />
-                        <TooltipButton icon={ImagePlus} tooltipText="Add image" onClick={onAddImage} />
-                    </>
-                )}
-                <TooltipButton icon={Play} tooltipText="Present" onClick={onPresent} />
-            </div>
-            <div className="flex items-center">
-                {onToggleCommentPanel && (
-                    <div className="relative">
-                        <TooltipButton
-                            icon={MessageSquare}
-                            tooltipText="Comments"
-                            onClick={onToggleCommentPanel}
-                            active={commentPanelOpen}
-                        />
-                        {(unresolvedCommentCount ?? 0) > 0 && (
-                            <span className="absolute -top-1 -right-1 h-4 min-w-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center pointer-events-none px-1">
-                                {unresolvedCommentCount}
-                            </span>
-                        )}
-                    </div>
-                )}
-                {canWrite ? (
-                    <TooltipButton icon={UserRoundPlus} tooltipText="Share" onClick={onAccessDialogOpen} />
-                ) : (
-                    <DocumentModeButton canWrite={canWrite} />
-                )}
-            </div>
-        </SharedToolbar>
+                    {canWrite && !isMobile && (
+                        <>
+                            <TooltipButton
+                                icon={Undo}
+                                tooltipText={`Undo (${formatForDisplay('Mod+Z')})`}
+                                onClick={() => undoManager?.undo?.()}
+                                disabled={!canUndo}
+                            />
+                            <TooltipButton
+                                icon={Redo}
+                                tooltipText={`Redo (${formatForDisplay('Mod+Y')})`}
+                                onClick={() => undoManager?.redo?.()}
+                                disabled={!canRedo}
+                            />
+                        </>
+                    )}
+                </div>
+                <div className="flex items-center">
+                    {canWrite && !isMobile && (
+                        <>
+                            <TooltipButton icon={Plus} tooltipText="Add slide" onClick={onAddSlide} />
+                            <TooltipButton icon={Type} tooltipText="Add text" onClick={onAddText} />
+                            <TooltipButton icon={ImagePlus} tooltipText="Add image" onClick={onAddImage} />
+                        </>
+                    )}
+                    <TooltipButton icon={Play} tooltipText="Present" onClick={onPresent} />
+                </div>
+                <div className="flex items-center">
+                    {onToggleCommentPanel && (
+                        <div className="relative">
+                            <TooltipButton
+                                icon={MessageSquare}
+                                tooltipText="Comments"
+                                onClick={onToggleCommentPanel}
+                                active={commentPanelOpen}
+                            />
+                            {(unresolvedCommentCount ?? 0) > 0 && (
+                                <span className="absolute -top-1 -right-1 h-4 min-w-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center pointer-events-none px-1">
+                                    {unresolvedCommentCount}
+                                </span>
+                            )}
+                        </div>
+                    )}
+                    {canWrite ? (
+                        <TooltipButton icon={UserRoundPlus} tooltipText="Share" onClick={onAccessDialogOpen} />
+                    ) : (
+                        <DocumentModeButton canWrite={canWrite} />
+                    )}
+                </div>
+            </SharedToolbar>
+            <ExportProgressDialog open={isExporting} />
+        </>
     );
 }

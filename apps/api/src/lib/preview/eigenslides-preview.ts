@@ -24,7 +24,7 @@ export async function generateEigenslidesPreview(mount: Mount, drivePath: DriveP
             return renderSlideHtml(slide, objects, responsiveSizeUnit, resolveImgSrc);
         })
         .filter(Boolean)
-        .join('<div style="height:1rem"></div>');
+        .join('\n');
 
     return DOMPurify.sanitize(slidesHtml, { FORCE_BODY: true });
 }

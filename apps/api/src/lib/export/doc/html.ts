@@ -7,6 +7,7 @@ import { common, createLowlight } from 'lowlight';
 import eigenProseCSSRaw from '../../../../../../packages/ui/src/styles/eigen-prose.css' with { type: 'text' };
 import type { Mount } from '../../mount';
 import { getFontCSS } from '../fonts';
+import { readFileAsDataUri } from '../media';
 import { loadEigendocContent } from './content';
 import {
     type ExportResult,
@@ -86,17 +87,6 @@ function wrapInDocument(title: string, bodyHtml: string): string {
     </div>
 </body>
 </html>`;
-}
-
-async function readFileAsDataUri(mount: Mount, pathId: string, mimeType: string): Promise<string | null> {
-    try {
-        const file = await mount.readFile(pathId);
-        if (!file) return null;
-        const buffer = Buffer.from(await file.arrayBuffer());
-        return `data:${mimeType};base64,${buffer.toString('base64')}`;
-    } catch {
-        return null;
-    }
 }
 
 // ── CSS flattening ──────────────────────────────────────────────────────────
