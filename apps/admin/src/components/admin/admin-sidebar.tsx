@@ -12,7 +12,7 @@ import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
 import { UserAvatar } from '@workspace/ui/components/layout/user-avatar';
 import { Separator } from '@workspace/ui/components/separator';
-import { ClipboardList, Plus, Settings, Users, UsersRound } from 'lucide-react';
+import { ClipboardList, Plus, Settings, UserPlus, Users, UsersRound } from 'lucide-react';
 import { useState } from 'react';
 
 type AdminSidebarProps = {
@@ -21,6 +21,7 @@ type AdminSidebarProps = {
     isMobile?: boolean;
     teams?: OrgTeam[];
     isOwner?: boolean;
+    waitlistEnabled?: boolean;
     onAddMembersToTeam?: (memberIds: string[], teamId: string) => void;
 };
 
@@ -30,6 +31,7 @@ export function AdminSidebar({
     isMobile = false,
     teams = [],
     isOwner = false,
+    waitlistEnabled = false,
     onAddMembersToTeam,
 }: AdminSidebarProps) {
     const { data: config } = usePublicConfig();
@@ -66,6 +68,14 @@ export function AdminSidebar({
                                 condensed={condensed}
                             />
                         </>
+                    )}
+                    {isOwner && waitlistEnabled && (
+                        <SidebarItem
+                            icon={<UserPlus className="h-4 w-4" />}
+                            label="Waitlist"
+                            to="/waitlist"
+                            condensed={condensed}
+                        />
                     )}
                     <SidebarItem
                         icon={<Users className="h-4 w-4" />}
