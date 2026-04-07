@@ -14,6 +14,12 @@ virtual_transport = eigen
 # IPv4 only — avoids AAAA lookup issues in Docker environments.
 inet_protocols = ipv4
 
+# Use glibc resolver (getaddrinfo) instead of Postfix's internal DNS resolver.
+# Postfix's raw DNS queries fail through Docker's DNS proxy. glibc works reliably
+# because Docker intercepts at the socket level. Unbound backs Docker's DNS proxy.
+smtp_host_lookup = native
+lmtp_host_lookup = native
+
 # TLS (inbound — certs from Caddy via shared volume)
 smtpd_tls_cert_file = /certs/cert.pem
 smtpd_tls_key_file = /certs/key.pem
@@ -28,8 +34,8 @@ message_size_limit = 26214400
 # DKIM milter
 milter_default_action = accept
 milter_protocol = 6
-smtpd_milters = inet:localhost:8891
-non_smtpd_milters = inet:localhost:8891
+smtpd_milters = inet:127.0.0.1:8891
+non_smtpd_milters = inet:127.0.0.1:8891
 
 # Logging to stdout (Docker)
 maillog_file = /dev/stdout
