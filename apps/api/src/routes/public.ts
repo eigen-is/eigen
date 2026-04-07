@@ -84,13 +84,13 @@ export const publicRouter = new Elysia({ name: 'public' })
                 }
                 await waitlistService.markRegistered(params.token, created.user.id);
 
-                const session = await auth.api.signInEmail({ body: { email, password: body.password } });
-                if (session?.headers) {
-                    for (const [key, value] of session.headers.entries()) {
-                        if (key.toLowerCase() === 'set-cookie') {
-                            set.headers['set-cookie'] = value;
-                        }
-                    }
+                const session = await auth.api.signInEmail({
+                    body: { email, password: body.password },
+                    asResponse: true,
+                });
+                const setCookie = session.headers.get('set-cookie');
+                if (setCookie) {
+                    set.headers['set-cookie'] = setCookie;
                 }
                 return { success: true };
             } catch (err) {
