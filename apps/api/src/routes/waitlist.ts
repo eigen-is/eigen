@@ -52,13 +52,13 @@ export const waitlistRouter = new Elysia({ name: 'waitlist' })
 
     .put(
         '/waitlist/:ownerId/entries/:id/accept',
-        async ({ user, params }) => {
+        async ({ user, params }): Promise<{ email: string; inviteToken: string }> => {
             await requireAdmin(user.id);
             requireWaitlistEnabled();
             const entry = await waitlistService.accept(params.id);
             if (!entry) throw new ApiError(400, 'Entry cannot be accepted');
             sendMail(buildInviteEmail(entry)).catch(() => {});
-            return entry;
+            return { email: entry.email, inviteToken: entry.inviteToken };
         },
         { auth: true },
     )
@@ -77,13 +77,13 @@ export const waitlistRouter = new Elysia({ name: 'waitlist' })
 
     .put(
         '/waitlist/:ownerId/entries/:id/resend',
-        async ({ user, params }) => {
+        async ({ user, params }): Promise<{ email: string; inviteToken: string }> => {
             await requireAdmin(user.id);
             requireWaitlistEnabled();
             const entry = await waitlistService.resendInvite(params.id);
             if (!entry) throw new ApiError(400, 'Entry is not in invited state');
             sendMail(buildInviteEmail(entry)).catch(() => {});
-            return entry;
+            return { email: entry.email, inviteToken: entry.inviteToken };
         },
         { auth: true },
     )

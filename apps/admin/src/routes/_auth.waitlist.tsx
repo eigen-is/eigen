@@ -7,6 +7,7 @@ import {
     useWaitlistEntries,
 } from '@workspace/lib/admin';
 import { useAuth } from '@workspace/lib/auth';
+import type { WaitlistEntry } from '@workspace/lib/types/waitlist';
 import { EmptyState, LoadingState } from '@workspace/ui';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
@@ -32,18 +33,6 @@ export const Route = createFileRoute('/_auth/waitlist')({
 });
 
 const TABS = ['pending', 'invited', 'registered', 'rejected'] as const;
-
-type WaitlistEntry = {
-    id: string;
-    email: string;
-    notes: string;
-    status: string;
-    createdAt: string | Date;
-    invitedAt?: string | Date | null;
-    registeredAt?: string | Date | null;
-    inviteExpiresAt?: string | Date | null;
-    userId?: string | null;
-};
 
 function WaitlistRoute() {
     const { user } = useAuth();
@@ -229,14 +218,14 @@ function WaitlistDetail({
                     </>
                 )}
                 {entry.status === 'rejected' && (
-                    <>
-                        <Button onClick={onAccept} disabled={isPending}>
-                            Re-accept & Invite
-                        </Button>
-                        <Button variant="destructive" onClick={() => setShowDelete(true)} disabled={isPending}>
-                            Delete
-                        </Button>
-                    </>
+                    <Button onClick={onAccept} disabled={isPending}>
+                        Re-accept & Invite
+                    </Button>
+                )}
+                {entry.status !== 'registered' && (
+                    <Button variant="destructive" onClick={() => setShowDelete(true)} disabled={isPending}>
+                        Delete
+                    </Button>
                 )}
             </div>
 

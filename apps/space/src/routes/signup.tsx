@@ -15,13 +15,13 @@ import { z } from 'zod';
 export const Route = createFileRoute('/signup')({
     component: SignupPage,
     validateSearch: z.object({
-        token: z.string().optional().catch(''),
+        token: z.string().optional().catch(undefined),
     }),
 });
 
 function SignupPage() {
     const { token } = Route.useSearch();
-    const { data: invite, isLoading, isError } = useValidateInviteToken(token || undefined);
+    const { data: invite, isLoading, isError } = useValidateInviteToken(token);
     const register = useInviteRegister(token ?? '');
 
     const [name, setName] = useState('');
@@ -56,18 +56,13 @@ function SignupPage() {
             return;
         }
 
-        try {
-            const result = await register.mutateAsync({
-                name,
-                username: username.toLowerCase(),
-                password,
-            });
-            if (result && typeof result === 'object' && 'success' in result) {
-                window.location.href = '/space/';
-            }
-        } catch (err) {
-            const message = err instanceof Error ? err.message : 'Failed to create account';
-            setError(message);
+        const result = await register.mutateAsync({
+            name,
+            username: username.toLowerCase(),
+            password,
+        });
+        if (result && typeof result === 'object' && 'success' in result) {
+            window.location.href = '/space/';
         }
     };
 

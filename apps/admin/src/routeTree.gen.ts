@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthRouteImport } from './routes/_auth'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthWaitlistRouteImport } from './routes/_auth.waitlist'
 import { Route as AuthTeamsRouteImport } from './routes/_auth.teams'
 import { Route as AuthSettingsRouteImport } from './routes/_auth.settings'
 import { Route as AuthOnboardingRouteImport } from './routes/_auth.onboarding'
@@ -30,6 +31,11 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AuthWaitlistRoute = AuthWaitlistRouteImport.update({
+  id: '/waitlist',
+  path: '/waitlist',
+  getParentRoute: () => AuthRoute,
 } as any)
 const AuthTeamsRoute = AuthTeamsRouteImport.update({
   id: '/teams',
@@ -59,6 +65,7 @@ export interface FileRoutesByFullPath {
   '/onboarding': typeof AuthOnboardingRoute
   '/settings': typeof AuthSettingsRoute
   '/teams': typeof AuthTeamsRoute
+  '/waitlist': typeof AuthWaitlistRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -67,6 +74,7 @@ export interface FileRoutesByTo {
   '/onboarding': typeof AuthOnboardingRoute
   '/settings': typeof AuthSettingsRoute
   '/teams': typeof AuthTeamsRoute
+  '/waitlist': typeof AuthWaitlistRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -77,6 +85,7 @@ export interface FileRoutesById {
   '/_auth/onboarding': typeof AuthOnboardingRoute
   '/_auth/settings': typeof AuthSettingsRoute
   '/_auth/teams': typeof AuthTeamsRoute
+  '/_auth/waitlist': typeof AuthWaitlistRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -87,8 +96,16 @@ export interface FileRouteTypes {
     | '/onboarding'
     | '/settings'
     | '/teams'
+    | '/waitlist'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/members' | '/onboarding' | '/settings' | '/teams'
+  to:
+    | '/'
+    | '/login'
+    | '/members'
+    | '/onboarding'
+    | '/settings'
+    | '/teams'
+    | '/waitlist'
   id:
     | '__root__'
     | '/'
@@ -98,6 +115,7 @@ export interface FileRouteTypes {
     | '/_auth/onboarding'
     | '/_auth/settings'
     | '/_auth/teams'
+    | '/_auth/waitlist'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -128,6 +146,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_auth/waitlist': {
+      id: '/_auth/waitlist'
+      path: '/waitlist'
+      fullPath: '/waitlist'
+      preLoaderRoute: typeof AuthWaitlistRouteImport
+      parentRoute: typeof AuthRoute
     }
     '/_auth/teams': {
       id: '/_auth/teams'
@@ -165,6 +190,7 @@ interface AuthRouteChildren {
   AuthOnboardingRoute: typeof AuthOnboardingRoute
   AuthSettingsRoute: typeof AuthSettingsRoute
   AuthTeamsRoute: typeof AuthTeamsRoute
+  AuthWaitlistRoute: typeof AuthWaitlistRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
@@ -172,6 +198,7 @@ const AuthRouteChildren: AuthRouteChildren = {
   AuthOnboardingRoute: AuthOnboardingRoute,
   AuthSettingsRoute: AuthSettingsRoute,
   AuthTeamsRoute: AuthTeamsRoute,
+  AuthWaitlistRoute: AuthWaitlistRoute,
 }
 
 const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
