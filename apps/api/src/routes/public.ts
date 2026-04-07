@@ -1,13 +1,11 @@
 import type { PublicUser } from '@workspace/lib/types/public';
-import { validateUsername } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
-import { auth } from '../lib/auth/auth';
 import { getPublicConfig } from '../lib/config/server-config';
 import { getServerSettings } from '../lib/config/server-settings';
 import { ApiError } from '../lib/core/errors';
 import { setCacheHeaders } from '../lib/core/http';
 import { generateFallbackSvg, getAvatarByEmailOrId, getBatchPublicInfo, getPublicInfo } from '../lib/space/public';
-import { claimInviteToken, setRegisteredUser, submitWaitlist, validateInviteToken } from '../lib/waitlist/waitlist';
+import { registerFromInvite, submitWaitlist, validateInviteToken } from '../lib/waitlist/waitlist';
 
 export const publicRouter = new Elysia({ name: 'public' })
     .get('/p/avatar/:emailOrId', async ({ params, set }) => {
@@ -52,43 +50,9 @@ export const publicRouter = new Elysia({ name: 'public' })
     .post(
         '/p/invite/:token/register',
         async ({ params, body, set }) => {
-            const entry = await validateInviteToken(params.token);
-            if (!entry) throw new ApiError(400, 'Invalid or expired invite link');
-
-            const usernameError = validateUsername(body.username.toLowerCase());
-            if (usernameError) throw new ApiError(400, usernameError);
-
-            const config = getPublicConfig();
-            const email = `${body.username.toLowerCase()}@${config?.domain ?? 'localhost'}`;
-
-            // Create user first — if it fails (e.g., username taken), the token stays valid
-            // so the user can retry with a different username.
-            let created: { user?: { id: string } } | undefined;
-            try {
-                created = await auth.api.createUser({
-                    body: { name: body.name, email, password: body.password, role: 'user' },
-                });
-            } catch (err) {
-                const msg = err instanceof Error ? err.message : 'Failed to create account';
-                throw new ApiError(400, msg.includes('already') ? 'Username is already taken' : msg);
-            }
-            if (!created?.user) throw new ApiError(400, 'Failed to create account');
-
-            // Claim token atomically — prevents race where two requests both create users.
-            // If claim fails, the user account exists but that's harmless (they can log in).
-            const claimed = await claimInviteToken(params.token);
-            if (!claimed) throw new ApiError(409, 'Invite has already been used');
-
-            setRegisteredUser(entry.email, created.user.id).catch(() => {});
-
-            const session = await auth.api.signInEmail({
-                body: { email, password: body.password },
-                asResponse: true,
-            });
+            const session = await registerFromInvite(params.token, body.name, body.username, body.password);
             const setCookie = session.headers.get('set-cookie');
-            if (setCookie) {
-                set.headers['set-cookie'] = setCookie;
-            }
+            if (setCookie) set.headers['set-cookie'] = setCookie;
             return { success: true };
         },
         {
