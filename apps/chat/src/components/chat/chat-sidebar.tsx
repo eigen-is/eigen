@@ -34,19 +34,23 @@ function ChatItem({
     teamId?: string;
     hasUnread?: boolean;
 }) {
+    const baseIcon = teamId ? (
+        <UserAvatar email={teamOwnerId(teamId)} className="h-4 w-4" />
+    ) : (
+        <MessageSquare className="h-4 w-4" />
+    );
+
     return (
         <SidebarItem
             icon={
-                teamId ? (
-                    <UserAvatar email={teamOwnerId(teamId)} className="h-4 w-4" />
-                ) : (
-                    <MessageSquare className="h-4 w-4" />
-                )
+                <div className="relative">
+                    {baseIcon}
+                    {hasUnread && <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-destructive" />}
+                </div>
             }
             label={(chat.name || 'Unnamed chat').replace(/\.eigenchat$/, '')}
             to={`/${chat.ownerId}/${chat.mountId}/${chat.id}`}
             condensed={condensed}
-            className={hasUnread ? 'font-bold text-foreground' : undefined}
         />
     );
 }

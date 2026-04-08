@@ -261,7 +261,7 @@ export function DriveTable({
                                                     : {}),
                                             })}
                                             {unreadPathIds?.has(item.id) && (
-                                                <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-primary" />
+                                                <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-destructive" />
                                             )}
                                         </div>
                                         <span className="truncate max-w-[calc(100%-1.5rem)]">
