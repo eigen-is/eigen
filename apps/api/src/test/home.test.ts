@@ -93,8 +93,10 @@ describe('home: my-teams', () => {
         const team = teams.find((t) => t.id === teamId);
         expect(team).toBeDefined();
         expect(team.name).toBe('Test Team');
-        expect(team.members).toContain(ctx.alice.user.id);
-        expect(team.members).toContain(ctx.bob.user.id);
+        const memberEmails = team.members.map((m: { email: string }) => m.email);
+        expect(memberEmails).toContain(ctx.alice.user.email);
+        expect(memberEmails).toContain(ctx.bob.user.email);
+        expect(team.members[0]).toHaveProperty('name');
         expect(Array.isArray(team.mounts)).toBe(true);
         expect(Array.isArray(team.calendars)).toBe(true);
     });
