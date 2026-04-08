@@ -9,11 +9,10 @@ type TeamMemberListProps = {
     members: TeamMember[];
     activeMemberEmail?: string;
     searchQuery: string;
-    sortBy: 'firstName' | 'lastName';
     onRowClick: (email: string) => void;
 };
 
-export function TeamMemberList({ members, activeMemberEmail, searchQuery, sortBy, onRowClick }: TeamMemberListProps) {
+export function TeamMemberList({ members, activeMemberEmail, searchQuery, onRowClick }: TeamMemberListProps) {
     const filtered = useMemo(() => {
         let result = [...members].sort((a, b) => a.name.localeCompare(b.name));
         if (searchQuery) {
