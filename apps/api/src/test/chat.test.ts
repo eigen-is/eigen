@@ -1153,6 +1153,7 @@ describe('Chat', () => {
             const bobNotifications = (await bobRes.json()) as Notification[];
             const bobWhisperNotif = bobNotifications.find((n) => !n.read && n.body === 'Whisper for Bob');
             expect(bobWhisperNotif).toBeDefined();
+            expect(bobWhisperNotif!.type).toBe('chat-message');
 
             // Charlie should NOT get a notification for the whisper
             const charlieRes = await authedRequest(
