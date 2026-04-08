@@ -51,7 +51,7 @@ export const homeRouter = new Elysia({ name: 'home' })
                     return {
                         id: teamId,
                         name: team?.name ?? teamId,
-                        members: members.map((m) => m.user.id),
+                        members: members.map((m) => ({ email: m.user.email, name: m.user.name })),
                         mounts,
                         calendars,
                     };
