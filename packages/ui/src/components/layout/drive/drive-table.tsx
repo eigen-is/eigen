@@ -48,6 +48,7 @@ export type DriveTableProps = {
     allowDelete?: boolean;
     ancestorBreadcrumb?: DrivePath[];
     showParentRow?: boolean;
+    unreadPathIds?: Set<string>;
 };
 
 export function DriveTable({
@@ -68,6 +69,7 @@ export function DriveTable({
     allowDelete = false,
     ancestorBreadcrumb,
     showParentRow,
+    unreadPathIds,
 }: DriveTableProps) {
     const tableRef = useRef<HTMLTableElement>(null);
     const [hasFocus, setHasFocus] = useState(false);
@@ -249,14 +251,19 @@ export function DriveTable({
                             >
                                 <TableCell>
                                     <div className="flex items-center max-w-full overflow-hidden">
-                                        {getFileIcon?.(item.mimeType, item.type, {
-                                            className: 'h-4 w-4 mr-2 text-muted-foreground flex-shrink-0',
-                                            ...(isFolderType(item.type)
-                                                ? {
-                                                      fill: 'var(--app-drive-light-color)',
-                                                  }
-                                                : {}),
-                                        })}
+                                        <div className="relative mr-2 flex-shrink-0">
+                                            {getFileIcon?.(item.mimeType, item.type, {
+                                                className: 'h-4 w-4 text-muted-foreground',
+                                                ...(isFolderType(item.type)
+                                                    ? {
+                                                          fill: 'var(--app-drive-light-color)',
+                                                      }
+                                                    : {}),
+                                            })}
+                                            {unreadPathIds?.has(item.id) && (
+                                                <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-primary" />
+                                            )}
+                                        </div>
                                         <span className="truncate max-w-[calc(100%-1.5rem)]">
                                             {stripEigenExtension(item.name)}
                                         </span>
