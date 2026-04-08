@@ -1,6 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
+import { invalidateMyTeams } from '../home';
 import { invalidateTeamSettings } from './hooks/use-team-settings';
 
 export function handleTeamSSEvent(event: SSEvent, queryClient: QueryClient): boolean {
@@ -9,6 +10,7 @@ export function handleTeamSSEvent(event: SSEvent, queryClient: QueryClient): boo
     switch (event.type) {
         case SSEventType.TEAM_SETTINGS_UPDATED:
             invalidateTeamSettings(queryClient, event.teamId);
+            invalidateMyTeams(queryClient, '');
             return true;
 
         default:
