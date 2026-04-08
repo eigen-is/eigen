@@ -1,7 +1,6 @@
 import { useNavigate } from '@tanstack/react-router';
-import { useTeams } from '@workspace/lib/admin';
 import { useChats, useCreateChat } from '@workspace/lib/chat';
-import { usePublicConfig } from '@workspace/lib/public';
+import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { EigenLoader } from '@workspace/ui';
@@ -59,8 +58,7 @@ export function ChatSidebar({
     const createChatMutation = useCreateChat(ownerId, mountId);
     const navigate = useNavigate();
 
-    const { data: config } = usePublicConfig();
-    const { data: teams } = useTeams(config?.orgId);
+    const { data: myTeams } = useMyTeams();
 
     const handleCreateChat = async (fileName: string) => {
         if (!rootPath) return;
@@ -107,11 +105,11 @@ export function ChatSidebar({
                 </SidebarSection>
             )}
 
-            {teams && teams.length > 0 && (
+            {myTeams && myTeams.length > 0 && (
                 <>
                     <Separator />
                     <SidebarSection condensed={condensed} title={condensed ? undefined : 'Team Chats'}>
-                        {teams.map((team) => (
+                        {myTeams.map((team) => (
                             <TeamChatItems key={team.id} teamId={team.id} condensed={condensed} />
                         ))}
                     </SidebarSection>
