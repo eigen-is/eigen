@@ -2,7 +2,7 @@ import { formatForDisplay } from '@tanstack/react-hotkeys';
 import { useExportDocument } from '@workspace/lib/drive';
 import { useMediaQuery } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { Toolbar as SharedToolbar, TooltipButton } from '@workspace/ui';
+import { CountBadge, Toolbar as SharedToolbar, TooltipButton } from '@workspace/ui';
 import { DriveCreateSlides } from '@workspace/ui/components/layout/drive/drive-create-slides';
 import { ExportProgressDialog } from '@workspace/ui/components/layout/drive/export-progress-dialog';
 import { DocumentModeButton } from '@workspace/ui/components/layout/toolbar/document-mode-button';
@@ -118,11 +118,7 @@ export function Toolbar({
                                 onClick={onToggleCommentPanel}
                                 active={commentPanelOpen}
                             />
-                            {(unresolvedCommentCount ?? 0) > 0 && (
-                                <span className="absolute -top-1 -right-1 h-4 min-w-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center pointer-events-none px-1">
-                                    {unresolvedCommentCount}
-                                </span>
-                            )}
+                            <CountBadge count={unresolvedCommentCount ?? 0} />
                         </div>
                     )}
                     {canWrite ? (
