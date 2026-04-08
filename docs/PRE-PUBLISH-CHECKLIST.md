@@ -10,8 +10,6 @@ _Nothing remaining._
 
 ## Nice to fix
 
-- [ ] **`index.php` — hardcodes `eigen.is`** — `apps/index/index.php` handles OpenGraph meta for the marketing site. Not useful for self-hosters. Either remove from the repo or document it as production-only.
-
 - [ ] **`.github/` setup** — only a CI workflow exists. Consider adding issue templates, a PR template, and `CODEOWNERS`.
 
 - [ ] **`.claude/` skills tracked in git** — `settings.json` and the `skills/` directory are committed. This is fine, but may surprise contributors. Add a brief note in the README or `CONTRIBUTING.md` explaining what it is.
@@ -23,6 +21,7 @@ _Nothing remaining._
 | Item | Notes |
 |------|-------|
 | Login page fallback domain | Falls back to `window.location.hostname`; submit disabled while config loads |
+| `index.php` / `.htaccess` removed | Static HTML generated per blog route at build time; Caddyfile updated |
 | LICENSE file | MIT license added |
 | `.claude/settings.local.json` | Removed from tracking, gitignored |
 | `.env` with dev config | Renamed to `.env.development`, `.env` gitignored |
