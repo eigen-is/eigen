@@ -1,6 +1,14 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { getServerConfig } from '../lib/config/server-config';
-import { assertJson, authedRequest, getTestContext, type TestContext } from './setup';
+import { assertJson, authedRequest, findOrFail, getTestContext, type TestContext } from './setup';
+
+type MyTeam = {
+    id: string;
+    name: string;
+    members: { email: string; name: string }[];
+    mounts: { id: string; name: string }[];
+    calendars: { id: string; name: string; color: string }[];
+};
 
 describe('Home', () => {
     let ctx: TestContext;
@@ -70,7 +78,7 @@ describe('home: my-teams', () => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: 'Test Team', organizationId: orgId }),
         });
-        const teamData = (await teamRes.json()) as { id: string };
+        const teamData = await assertJson<{ id: string }>(teamRes);
         teamId = teamData.id;
 
         // Add alice and bob to team
@@ -88,12 +96,11 @@ describe('home: my-teams', () => {
 
     test('returns teams with members for authenticated user', async () => {
         const res = await authedRequest(ctx.alice.user.sessionToken, `/home/${ctx.alice.user.id}/my-teams`);
-        const teams = await assertJson<any[]>(res);
+        const teams = await assertJson<MyTeam[]>(res);
 
-        const team = teams.find((t) => t.id === teamId);
-        expect(team).toBeDefined();
+        const team = findOrFail(teams, (t) => t.id === teamId, 'Test team not found');
         expect(team.name).toBe('Test Team');
-        const memberEmails = team.members.map((m: { email: string }) => m.email);
+        const memberEmails = team.members.map((m) => m.email);
         expect(memberEmails).toContain(ctx.alice.user.email);
         expect(memberEmails).toContain(ctx.bob.user.email);
         expect(team.members[0]).toHaveProperty('name');
@@ -103,7 +110,7 @@ describe('home: my-teams', () => {
 
     test('does not return teams for non-member', async () => {
         const res = await authedRequest(ctx.charlie.user.sessionToken, `/home/${ctx.charlie.user.id}/my-teams`);
-        const teams = await assertJson<any[]>(res);
+        const teams = await assertJson<MyTeam[]>(res);
         const team = teams.find((t) => t.id === teamId);
         expect(team).toBeUndefined();
     });
