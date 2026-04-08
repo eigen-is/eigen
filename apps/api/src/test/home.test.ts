@@ -1,8 +1,9 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { authedRequest, getTestContext } from './setup';
+import { getServerConfig } from '../lib/config/server-config';
+import { assertJson, authedRequest, getTestContext, type TestContext } from './setup';
 
 describe('Home', () => {
-    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+    let ctx: TestContext;
 
     beforeAll(async () => {
         ctx = await getTestContext();
@@ -45,5 +46,68 @@ describe('Home', () => {
         const res = await authedRequest(ctx.alice.user.sessionToken, `/home/${ctx.alice.user.id}/zip`);
 
         expect(res.status).toBe(404);
+    });
+});
+
+describe('home: my-teams', () => {
+    let ctx: TestContext;
+    let teamId: string;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        const orgId = getServerConfig()!.orgId;
+
+        // Set active org
+        await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/set-active', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ organizationId: orgId }),
+        });
+
+        // Create a team
+        const teamRes = await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/create-team', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: 'Test Team', organizationId: orgId }),
+        });
+        const teamData = (await teamRes.json()) as { id: string };
+        teamId = teamData.id;
+
+        // Add alice and bob to team
+        await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/add-team-member', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ teamId, userId: ctx.alice.user.id }),
+        });
+        await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/add-team-member', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ teamId, userId: ctx.bob.user.id }),
+        });
+    });
+
+    test('returns teams with members for authenticated user', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/home/${ctx.alice.user.id}/my-teams`);
+        const teams = await assertJson<any[]>(res);
+
+        const team = teams.find((t) => t.id === teamId);
+        expect(team).toBeDefined();
+        expect(team.name).toBe('Test Team');
+        expect(team.members).toContain(ctx.alice.user.id);
+        expect(team.members).toContain(ctx.bob.user.id);
+        expect(Array.isArray(team.mounts)).toBe(true);
+        expect(Array.isArray(team.calendars)).toBe(true);
+    });
+
+    test('does not return teams for non-member', async () => {
+        const res = await authedRequest(ctx.charlie.user.sessionToken, `/home/${ctx.charlie.user.id}/my-teams`);
+        const teams = await assertJson<any[]>(res);
+        const team = teams.find((t) => t.id === teamId);
+        expect(team).toBeUndefined();
+    });
+
+    test('rejects request for another user', async () => {
+        const res = await authedRequest(ctx.bob.user.sessionToken, `/home/${ctx.alice.user.id}/my-teams`);
+        expect(res.status).toBe(403);
     });
 });
