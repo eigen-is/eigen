@@ -107,6 +107,8 @@ DELETE /notifications/:ownerId/:id                 Dismiss
 | Incoming mail          | `Maildir` sync                           | `mail`                      | `mail:{messageId}`                                  |
 | Chat @mention          | `ChatRoom.postMessage()`                 | `mention-chat`              | `mention:{ownerId}:{mountId}:{chatId}:{email}`      |
 | Comment @mention       | `ChatRoom.postMessage()` (embedded chat) | `mention-comment`           | `mention:{ownerId}:{mountId}:{containerId}:{email}` |
+| Chat activity          | `ChatRoom.postMessage()` (regular msg)   | `chat-message`              | `chat-message:{ownerId}:{mountId}:{chatId}`         |
+| Comment activity       | `ChatRoom.postMessage()` (embedded chat) | `comment-reply`             | `comment-reply:{ownerId}:{mountId}:{containerId}`   |
 | Access request         | `POST .../request-access` route          | `access-request`            | `access-request:{ownerId}:{mountId}:{pathId}:{email}` |
 
 `actorEmail` is set on all sources — the sharer, organizer, mail sender, mention author, or access requester.

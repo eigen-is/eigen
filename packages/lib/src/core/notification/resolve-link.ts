@@ -5,7 +5,8 @@ import type { Notification } from '@workspace/lib/types/notification';
 
 function parseDriveTag(tag: string): { ownerId: string; mountId: string; pathId: string } | null {
     const [prefix, ownerId, mountId, pathId] = tag.split(':');
-    if (!['share', 'mention'].includes(prefix) || !ownerId || !mountId || !pathId) return null;
+    if (!['share', 'mention', 'chat-message', 'comment-reply'].includes(prefix) || !ownerId || !mountId || !pathId)
+        return null;
     return { ownerId, mountId, pathId };
 }
 
@@ -65,6 +66,8 @@ export function isClickableNotification(type: string): boolean {
         'share',
         'mention-chat',
         'mention-comment',
+        'chat-message',
+        'comment-reply',
         'calendar-share',
         'calendar-unshare',
         'calendar-invite',
@@ -83,6 +86,8 @@ export async function resolveNotificationLink(notification: Notification): Promi
         case 'share':
         case 'mention-chat':
         case 'mention-comment':
+        case 'chat-message':
+        case 'comment-reply':
             return resolveDriveLink(tag);
 
         case 'calendar-invite':
