@@ -130,7 +130,9 @@ Export submenu for eigendoc files, driven by `onExport` callback.
 - **WeasyPrint not installed**: return 501 with install instructions
 - **Corrupt Yjs state**: `loadYjsState()` handles this with try/catch
 - **Large docs with many images**: images loaded in parallel via `Promise.all`
-- **Code blocks without language**: `lowlight.highlightAuto()` auto-detects the language
+- **Code blocks without language**: `lowlight.highlightAuto()` auto-detects the language. Don't remove this
+  thinking it's unnecessary — users rarely set a language on code blocks, so auto-detection provides all
+  syntax highlighting in practice
 - **Task lists**: custom `taskItem` nodeMapping preserves checked/unchecked state
 - **Export during active collab**: loads last persisted state (may lag a few seconds)
 - **DOMPurify + data URIs**: `ADD_DATA_URI_TAGS: ['img']` preserves base64 image sources
