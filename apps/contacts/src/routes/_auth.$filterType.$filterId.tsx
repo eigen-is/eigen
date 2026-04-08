@@ -9,8 +9,8 @@ import { LabelFilterHeader } from '@workspace/ui/components/layout/labels/label-
 import { useEffect, useState } from 'react';
 import { ContactDetail, ContactDetailToolbar } from '../components/contacts/contact-detail';
 import { ContactsList, ContactsListToolbar } from '../components/contacts/contacts-list';
-import { TeamMemberDetail } from '../components/contacts/team-member-detail';
-import { TeamMemberList, TeamMemberListToolbar } from '../components/contacts/team-member-list';
+import { TeamMemberDetail, TeamMemberDetailToolbar } from '../components/contacts/team-member-detail';
+import { TeamMemberList } from '../components/contacts/team-member-list';
 
 export type ContactsSearchParams = {
     contactId?: string;
@@ -70,6 +70,7 @@ function ContactsRoute() {
     const contact = contactsLoading ? undefined : contacts.find((c) => c.id === contactId);
 
     useEffect(() => {
+        if (filterType === 'team') return;
         if (!contactsLoading && contactId && !contact) {
             navigate({
                 to: Route.fullPath,
@@ -103,20 +104,18 @@ function ContactsRoute() {
 
         return (
             <ColumnLayout mobileColumn={contactId ? 'detail' : 'list'}>
-                <Column
-                    id="list"
-                    width="350px"
-                    toolbar={<TeamMemberListToolbar teamName={activeTeam?.name || 'Team'} />}
-                >
+                <Column id="list" width="350px" toolbar={listToolbar}>
                     <div className="flex h-full flex-col border-r overflow-y-auto">
                         <TeamMemberList
                             members={activeTeam?.members || []}
                             activeMemberEmail={contactId}
+                            searchQuery={searchQuery}
+                            sortBy={sortBy}
                             onRowClick={handleRowClick}
                         />
                     </div>
                 </Column>
-                <Column id="detail" width="flex" onBack={handleBackToList} toolbar={undefined}>
+                <Column id="detail" width="flex" onBack={handleBackToList} toolbar={<TeamMemberDetailToolbar />}>
                     {activeMember ? (
                         <TeamMemberDetail member={activeMember} />
                     ) : (
