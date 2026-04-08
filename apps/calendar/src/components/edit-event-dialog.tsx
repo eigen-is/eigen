@@ -8,6 +8,7 @@ import {
     useSharedCalendars,
     useUpdateEvent,
 } from '@workspace/lib/calendar';
+import { useMyTeams } from '@workspace/lib/home';
 import type {
     Attendee,
     CalendarEventOccurrence,
@@ -26,7 +27,7 @@ import { AlignLeft, Calendar, Clock, MapPin, UsersRound } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { AttendeeEditor, AttendeeList } from './attendee-editor';
 import type { CalendarOption } from './calendar-utils';
-import { toLocalDateString, truncateRRule } from './calendar-utils';
+import { resolveCalendarName, toLocalDateString, truncateRRule } from './calendar-utils';
 import { RecurrencePicker } from './recurrence-picker';
 import type { RecurringAction } from './recurring-action-dialog';
 import { RecurringActionDialog } from './recurring-action-dialog';
@@ -61,6 +62,7 @@ export function EditEventDialog({
 
     const { data: fetchedCalendars = [] } = useCalendars(ownerId);
     const { data: fetchedSharedCalendars = [] } = useSharedCalendars(ownerId);
+    const { data: myTeams } = useMyTeams();
     const calendars = calendarsProp || fetchedCalendars;
     const sharedCalendars = sharedCalendarsProp || fetchedSharedCalendars;
 
@@ -70,14 +72,14 @@ export function EditEventDialog({
             if (sc.permission === 'write') {
                 options.push({
                     id: sc.calendarId,
-                    name: sc.calendarName,
+                    name: resolveCalendarName(sc, myTeams),
                     color: sc.color || sc.calendarColor,
                     ownerId: sc.ownerUserId,
                 });
             }
         }
         return options;
-    }, [calendars, sharedCalendars, ownerId]);
+    }, [calendars, sharedCalendars, ownerId, myTeams]);
 
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');

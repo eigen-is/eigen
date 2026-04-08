@@ -1,5 +1,6 @@
 import { useAuth } from '@workspace/lib/auth';
 import { useCalendars, useCreateEvent, useSharedCalendars } from '@workspace/lib/calendar';
+import { useMyTeams } from '@workspace/lib/home';
 import type { Attendee } from '@workspace/lib/types/calendar';
 import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
@@ -12,7 +13,7 @@ import { AlignLeft, Calendar, Clock, MapPin, UsersRound } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { AttendeeEditor } from './attendee-editor';
 import type { CalendarOption } from './calendar-utils';
-import { toLocalDateString } from './calendar-utils';
+import { resolveCalendarName, toLocalDateString } from './calendar-utils';
 import { RecurrencePicker } from './recurrence-picker';
 import { addMinutes, roundToNext15Minutes, TimeSelect, timeToMinutes } from './time-select';
 
@@ -32,6 +33,7 @@ export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCale
     const ownerId = user?.id || '';
     const { data: calendars = [] } = useCalendars(ownerId);
     const { data: sharedCalendars = [] } = useSharedCalendars(ownerId);
+    const { data: myTeams } = useMyTeams();
 
     const calendarOptions = useMemo(() => {
         const options: CalendarOption[] = calendars.map((c) => ({ id: c.id, name: c.name, color: c.color, ownerId }));
@@ -39,14 +41,14 @@ export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCale
             if (sc.permission === 'write') {
                 options.push({
                     id: sc.calendarId,
-                    name: sc.calendarName,
+                    name: resolveCalendarName(sc, myTeams),
                     color: sc.color || sc.calendarColor,
                     ownerId: sc.ownerUserId,
                 });
             }
         }
         return options;
-    }, [calendars, sharedCalendars, ownerId]);
+    }, [calendars, sharedCalendars, ownerId, myTeams]);
 
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
