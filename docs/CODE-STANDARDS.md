@@ -128,27 +128,26 @@ return item; // or: throw new ApiError(404, 'Not found')
 const MAX_RETRIES = 3;
 ```
 
-### Reinventing existing utilities
+### Reinventing existing code
 
-BAD — re-implementing what already exists:
+BAD — redefining types and reimplementing utilities that already exist in shared packages:
 ```typescript
-import clsx from 'clsx';
-const classes = clsx('px-4', isActive && 'bg-blue-500');
+// Redefining a type that exists in packages/lib/src/types/chat.ts
+type ChatMessage = { id: string; content: string; userId: string; createdAt: number };
 
+// Reimplementing date formatting instead of using @workspace/lib/date
 const formatted = new Date(timestamp).toLocaleDateString('en-US', { ... });
 
-type ChatMessage = { id: string; content: string; userId: string; createdAt: number };
+// Using clsx directly instead of the project's cn() wrapper (which adds tailwind-merge)
+import clsx from 'clsx';
+const classes = clsx('px-4', isActive && 'bg-blue-500');
 ```
 
-GOOD — use shared utilities and types:
+GOOD — import from shared packages:
 ```typescript
-import { cn } from '@workspace/ui/lib/utils';
-const classes = cn('px-4', isActive && 'bg-blue-500');
-
-import { formatDate } from '@workspace/lib/date';
-const formatted = formatDate(timestamp);
-
 import type { ChatMessage } from '@workspace/lib/types/chat';
+import { formatDate } from '@workspace/lib/date';
+import { cn } from '@workspace/ui/lib/utils';
 ```
 
 ## Typing
@@ -167,10 +166,10 @@ Elysia route handler return type → Eden Treaty infers response type → hook e
 - **Shared types live in `packages/lib/src/types/[domain].ts`** — never redefine a type that already exists
   there. Import it. If the type doesn't exist yet, add it to the shared package so both FE and BE use it
 - **`type` over `interface`** — except when methods are needed
-- **Prefer type inference** — don't annotate variables when TypeScript can infer the type. Write
-  `const path = await drive.getPath(...)` not `const path: DrivePath = await drive.getPath(...)`
-- **Explicit return types on public methods and hooks** — this is what makes Eden Treaty's type flow work.
-  Backend route handlers and domain methods should declare their return type using the shared type
+- **Infer locally, annotate publicly** — don't annotate variables when TypeScript can infer
+  (`const path = await drive.getPath(...)` not `const path: DrivePath = ...`). But always add explicit
+  return types on backend route handlers, domain methods, and hooks — this is what powers Eden Treaty's
+  end-to-end type flow
 - **`import type` for type-only imports** — separate from value imports:
   `import type { DrivePath } from '@workspace/lib/types/drive'`
 - **Drizzle `.$inferSelect` for DB row types** — use `typeof schema.messages.$inferSelect` for database
