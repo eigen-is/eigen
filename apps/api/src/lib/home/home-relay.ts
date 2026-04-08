@@ -151,3 +151,12 @@ export async function pullTeamQuotaOverrides(teamOwnerId: string): Promise<TeamQ
     const settings = home.settings.get() as { memberOverrides?: TeamQuotaOverrides };
     return settings.memberOverrides ?? {};
 }
+
+export async function pullTeamMounts(teamOwnerId: string): Promise<{ id: string; name: string }[]> {
+    const home = await getHome(teamOwnerId);
+    const mounts =
+        (home.settings.get() as { mounts?: Record<string, { enabled: boolean; name?: string }> }).mounts ?? {};
+    return Object.entries(mounts)
+        .filter(([, m]) => m.enabled)
+        .map(([id, m]) => ({ id, name: m.name || id }));
+}
