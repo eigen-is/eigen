@@ -7,7 +7,7 @@ import { getTeam, getTeamMembers } from '../lib/team';
 import { getMemberships } from '../lib/user';
 import { betterAuth } from './auth';
 
-// Home routes are personal-only (storage size, data export)
+// Home routes are personal-only (storage size, team context)
 export const homeRouter = new Elysia({ name: 'home' })
     .use(betterAuth)
 

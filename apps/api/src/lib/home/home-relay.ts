@@ -11,6 +11,7 @@
 
 import type { Attendee, CalendarEvent, CalendarItem, CalendarShare } from '@workspace/lib/types/calendar';
 import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
+import type { TeamSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import type { User } from 'better-auth/types';
 import type { BunFile } from 'bun';
@@ -154,8 +155,8 @@ export async function pullTeamQuotaOverrides(teamOwnerId: string): Promise<TeamQ
 
 export async function pullTeamMounts(teamOwnerId: string): Promise<{ id: string; name: string }[]> {
     const home = await getHome(teamOwnerId);
-    const mounts =
-        (home.settings.get() as { mounts?: Record<string, { enabled: boolean; name?: string }> }).mounts ?? {};
+    const settings = home.settings.get() as TeamSettings;
+    const mounts = settings.mounts ?? {};
     return Object.entries(mounts)
         .filter(([, m]) => m.enabled)
         .map(([id, m]) => ({ id, name: m.name || id }));

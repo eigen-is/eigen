@@ -52,7 +52,7 @@ export function useCreateTeam(organizationId?: string) {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: adminKeys.teams(organizationId ?? '') });
-            invalidateMyTeams(queryClient, '');
+            invalidateMyTeams(queryClient);
         },
         onError: onMutationError,
     });
@@ -71,7 +71,7 @@ export function useRemoveTeam(organizationId?: string) {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: adminKeys.teams(organizationId ?? '') });
-            invalidateMyTeams(queryClient, '');
+            invalidateMyTeams(queryClient);
         },
         onError: onMutationError,
     });
@@ -90,7 +90,7 @@ export function useAddTeamMember(organizationId?: string) {
         },
         onSuccess: (_data, variables) => {
             queryClient.invalidateQueries({ queryKey: adminKeys.teamMembers(organizationId ?? '', variables.teamId) });
-            invalidateMyTeams(queryClient, '');
+            invalidateMyTeams(queryClient);
         },
         onError: onMutationError,
     });
@@ -109,7 +109,7 @@ export function useRemoveTeamMember(organizationId?: string) {
         },
         onSuccess: (_data, variables) => {
             queryClient.invalidateQueries({ queryKey: adminKeys.teamMembers(organizationId ?? '', variables.teamId) });
-            invalidateMyTeams(queryClient, '');
+            invalidateMyTeams(queryClient);
         },
         onError: onMutationError,
     });
@@ -128,6 +128,7 @@ export function useUpdateTeam(organizationId?: string) {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: adminKeys.teams(organizationId ?? '') });
+            invalidateMyTeams(queryClient);
         },
         onError: onMutationError,
     });
