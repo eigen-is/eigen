@@ -7,6 +7,7 @@ import {
     useRsvp,
     useUpdateEvent,
 } from '@workspace/lib/calendar';
+import { useMyTeams } from '@workspace/lib/home';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
@@ -27,7 +28,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { AttendeeList } from './attendee-editor';
-import { truncateRRule } from './calendar-utils';
+import { resolveCalendarName, truncateRRule } from './calendar-utils';
 import { EditEventDialog } from './edit-event-dialog';
 import { rruleToText } from './recurrence-picker';
 import type { RecurringAction } from './recurring-action-dialog';
@@ -101,13 +102,14 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
     const createEvent = useCreateEvent(eventOwnerId);
     const updateEvent = useUpdateEvent(eventOwnerId);
     const rsvp = useRsvp(user?.id || '');
+    const { data: myTeams } = useMyTeams();
 
     if (!event) return null;
 
     const isRecurring = !!event.rrule;
     const isException = !!event.parentEventId;
     const isPartOfSeries = isRecurring || isException;
-    const calendarName = calendar?.name || sharedCalendar?.calendarName || null;
+    const calendarName = calendar?.name || (sharedCalendar ? resolveCalendarName(sharedCalendar, myTeams) : null);
     const isShared = !!sharedCalendar;
     const canEdit = !isShared || sharedCalendar?.permission === 'write';
     const isLinkedEvent = !!event.data?.organizer;

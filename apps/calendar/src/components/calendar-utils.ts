@@ -1,3 +1,5 @@
+import { parseOwnerId } from '@workspace/lib/types';
+import type { SharedCalendar } from '@workspace/lib/types/calendar';
 import { RRule } from 'rrule';
 
 export type CalendarOption = {
@@ -6,6 +8,14 @@ export type CalendarOption = {
     color: string;
     ownerId: string;
 };
+
+export function resolveCalendarName(sc: SharedCalendar, teams?: { id: string; name: string }[]): string {
+    const parsed = parseOwnerId(sc.ownerUserId);
+    if (parsed.type === 'team') {
+        return teams?.find((t) => t.id === parsed.id)?.name || sc.calendarName;
+    }
+    return sc.calendarName;
+}
 
 export function toLocalDateString(date: Date): string {
     const y = date.getFullYear();
