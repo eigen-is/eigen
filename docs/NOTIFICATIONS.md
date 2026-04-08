@@ -56,6 +56,8 @@ See [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md) for the full architecture.
 | Incoming mail          | `New email` + sender/subject          | `Maildir` sync             |
 | Chat @mention          | `You were mentioned in "chat"`        | `ChatRoom.postMessage()`   |
 | Comment @mention       | `You were mentioned in "doc"`         | `ChatRoom.postMessage()`   |
+| Chat activity          | `New message in "chat"`               | `ChatRoom.postMessage()`   |
+| Comment activity       | `New message in "doc"`                | `ChatRoom.postMessage()`   |
 
 ### What does NOT create notifications
 
@@ -63,7 +65,7 @@ See [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md) for the full architecture.
 - Your own contact/label changes — single-user domain
 - Your own calendar event changes — calendar view updates via cache invalidation
 - Settings changes from yourself — the hook's `onSuccess` toast confirms it
-- Shared drive file activity from collaborators — too spammy
+- Shared drive file edits from collaborators — too spammy (chat messages DO notify participants)
 - Mail operations you initiated (delete, move, flag) — UI reflects these immediately
 
 ## Related Files
