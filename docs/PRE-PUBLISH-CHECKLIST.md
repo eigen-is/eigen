@@ -1,36 +1,34 @@
 # Pre-Publish Checklist
 
-Everything that should be reviewed/fixed before making the Eigen repo public.
+Things still to do before making the Eigen repo public.
 
 ---
 
-## Completed
+## Must do
 
-| # | Item | Status |
-|---|------|--------|
-| 1 | **LICENSE file** — MIT license added | Done |
-| 2 | **`.claude/settings.local.json` tracked** — removed from git, added to `.gitignore` | Done |
-| 3 | **`.env` tracked with dev config** — renamed to `.env.development`, `.env` gitignored | Done |
-| 4 | **`.env.eigen` tracked** — removed from tracking, gitignored | Done |
-| 5 | **Hardcoded `reinder@infi.nl`** in waitlist — now reads from server settings | Done |
-| 6 | **CalDAV/IMAP auth accepted any password** — real verification via `verifyProtocolAuth()` with app password + primary password fallback. Tests in `protocol-auth.test.ts` | Done |
-| 7 | **Dutch comment + hardcoded "Reinder" contact** — auto-add logic removed, replaced with configurable owner contact | Done |
-| 8 | **Welcome email hardcoded as "From: Reinder Nijhoff"** — sender uses orgName from config, nyan.gif removed | Done |
+_Nothing remaining._
 
-## Remaining
+## Nice to fix
 
-### Should verify before publishing
+- [ ] **`index.php` — hardcodes `eigen.is`** — `apps/index/index.php` handles OpenGraph meta for the marketing site. Not useful for self-hosters. Either remove from the repo or document it as production-only.
 
-- [ ] **Git history contains `.env.backup` and `.env.dev.local`** — committed and later deleted. Verify they
-  never contained secrets. If they did, use `git filter-repo` or BFG Repo Cleaner to scrub history
+- [ ] **`.github/` setup** — only a CI workflow exists. Consider adding issue templates, a PR template, and `CODEOWNERS`.
 
-### Nice to fix
+- [ ] **`.claude/` skills tracked in git** — `settings.json` and the `skills/` directory are committed. This is fine, but may surprise contributors. Add a brief note in the README or `CONTRIBUTING.md` explaining what it is.
 
-- [ ] **`.github/` setup** — CI workflow exists (`.github/workflows/check.yml`), but no issue templates, PR
-  templates, CODEOWNERS, or FUNDING.yml
-- [ ] **Login page fallback domain** — falls back to `eigen.is` when no config is loaded
-  (`packages/ui/src/components/layout/pages/loginpage.tsx`). Use `localhost` or `example.com` instead
-- [ ] **`index.php` for eigen.is SSR** — PHP file handles OpenGraph meta tags for production. Not useful for
-  self-hosters. Either remove or document as production-only
-- [ ] **`.claude/` directory** — project-level `settings.json` is fine, but the skills directory might
-  surprise contributors. Consider gitignoring if unwanted in public repo
+---
+
+## Done
+
+| Item | Notes |
+|------|-------|
+| Login page fallback domain | Falls back to `window.location.hostname`; submit disabled while config loads |
+| LICENSE file | MIT license added |
+| `.claude/settings.local.json` | Removed from tracking, gitignored |
+| `.env` with dev config | Renamed to `.env.development`, `.env` gitignored |
+| `.env.eigen` | Removed from tracking, gitignored |
+| Hardcoded `reinder@infi.nl` in waitlist | Now reads from server settings |
+| CalDAV/IMAP accepted any password | Real verification via `verifyProtocolAuth()` |
+| Dutch comment + hardcoded "Reinder" contact | Auto-add logic removed, configurable owner contact |
+| Welcome email "From: Reinder Nijhoff" | Sender uses `orgName` from config |
+| `.env.backup` / `.env.dev.local` in git history | Verified: only localhost dev URLs, no secrets |
