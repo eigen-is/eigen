@@ -409,7 +409,9 @@ export default class Drive {
         if (path.type !== DRIVE_TYPE_FILE) throw new ApiError(404, 'File not found');
         const file = await mount.readFile(pathId);
         if (!file) throw new ApiError(404, 'File not found');
-        return new Response(file, {
+        // S3File doesn't support ResponseInit options — stream it instead
+        const body: BodyInit = 'bucket' in file ? file.stream() : file;
+        return new Response(body, {
             headers: {
                 'Content-Type': path.mimeType || 'application/octet-stream',
                 'Content-Disposition': contentDisposition(disposition, path.details?.originalName || path.name),
