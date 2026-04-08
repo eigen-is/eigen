@@ -1,51 +1,65 @@
-import { copyFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+
+type BlogPostMeta = {
+    title: string;
+    summary: string;
+    date: string;
+};
+
+const DEFAULT_DESCRIPTION =
+    'Eigen is your minimal, secure workspace in the cloud. Simple and secure. You control your data.';
+const BASE_URL = 'https://eigen.is';
+
+function escapeHtml(str: string): string {
+    return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Replace OG/meta tag values in the base HTML template for a specific route.
+// The template is the Vite-generated index.html with hashed asset paths.
+function withPageMeta(html: string, title: string, description: string, url: string, type: string): string {
+    const t = escapeHtml(title);
+    const d = escapeHtml(description);
+    const u = escapeHtml(url);
+    return html
+        .replace('<title>eigen</title>', `<title>${t}</title>`)
+        .replace('property="og:title" content="eigen"', `property="og:title" content="${t}"`)
+        .replaceAll(`content="${DEFAULT_DESCRIPTION}"`, `content="${d}"`)
+        .replace('content="website"', `content="${type}"`)
+        .replace(`content="${BASE_URL}"`, `content="${u}"`);
+}
 
 function postBuild() {
     const distDir = join(process.cwd(), '../../dist/index');
-
-    if (!existsSync(distDir)) {
-        console.error('Error: dist directory does not exist. Run build first.');
-        process.exit(1);
-    }
-
-    // Read the generated index.html to extract script and link tags
-    const indexHtmlPath = join(distDir, 'index.html');
-    const indexHtmlContent = readFileSync(indexHtmlPath, 'utf-8');
-
-    // Extract script tags and link tags (for CSS)
-    const scriptMatch = indexHtmlContent.match(/<script[^>]*src="([^"]+)"[^>]*><\/script>/);
-    const linkMatches = indexHtmlContent.matchAll(/<link[^>]*rel="stylesheet"[^>]*href="([^"]+)"[^>]*>/g);
-
-    const scriptSrc = scriptMatch ? scriptMatch[1] : '/src/main.tsx';
-    const cssLinks = Array.from(linkMatches)
-        .map((match) => match[0])
-        .join('\n    ');
-
-    // Read the PHP template
-    const indexPhpTemplate = readFileSync(join(process.cwd(), 'index.php'), 'utf-8');
-
-    // Replace the script src and add CSS links
-    let indexPhpContent = indexPhpTemplate.replace(
-        '<script src="/src/main.tsx" type="module"></script>',
-        `<script src="${scriptSrc}" type="module"></script>`,
+    const baseHtml = readFileSync(join(distDir, 'index.html'), 'utf-8');
+    const blogMeta: Record<string, BlogPostMeta> = JSON.parse(
+        readFileSync(join(process.cwd(), 'public', 'blog-meta.json'), 'utf-8'),
     );
 
-    // Add CSS links before </head>
-    if (cssLinks) {
-        indexPhpContent = indexPhpContent.replace('</head>', `    ${cssLinks}\n</head>`);
+    const blogDir = join(distDir, 'blog');
+    mkdirSync(blogDir, { recursive: true });
+
+    writeFileSync(
+        join(blogDir, 'index.html'),
+        withPageMeta(
+            baseHtml,
+            'Blog - eigen',
+            'Read about the development of eigen, a minimal and secure workspace in the cloud where you control your own data.',
+            `${BASE_URL}/blog`,
+            'website',
+        ),
+    );
+    console.log('Generated blog/index.html');
+
+    for (const [id, post] of Object.entries(blogMeta)) {
+        const postDir = join(blogDir, id);
+        mkdirSync(postDir, { recursive: true });
+        writeFileSync(
+            join(postDir, 'index.html'),
+            withPageMeta(baseHtml, `${post.title} - eigen blog`, post.summary, `${BASE_URL}/blog/${id}`, 'article'),
+        );
+        console.log(`Generated blog/${id}/index.html`);
     }
-
-    // Write the updated index.php
-    const indexPhpDest = join(distDir, 'index.php');
-    writeFileSync(indexPhpDest, indexPhpContent);
-    console.log('Generated index.php with correct asset paths');
-
-    // Copy .htaccess
-    const htaccessSrc = join(process.cwd(), '.htaccess');
-    const htaccessDest = join(distDir, '.htaccess');
-    copyFileSync(htaccessSrc, htaccessDest);
-    console.log('Copied .htaccess to dist/');
 
     console.log('Post-build completed successfully!');
 }
