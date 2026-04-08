@@ -110,7 +110,6 @@ function ContactsRoute() {
                             members={activeTeam?.members || []}
                             activeMemberEmail={contactId}
                             searchQuery={searchQuery}
-                            sortBy={sortBy}
                             onRowClick={handleRowClick}
                         />
                     </div>
