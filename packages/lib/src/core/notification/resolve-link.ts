@@ -1,5 +1,6 @@
 import { driveApi, getCalendarAppUrl, getDocumentUrl, getDriveAppUrl, getMailAppUrl } from '@workspace/lib/api';
 import { getMonthRange } from '@workspace/lib/calendar';
+import { isContainerType } from '@workspace/lib/types/drive';
 import type { Notification } from '@workspace/lib/types/notification';
 
 function parseDriveTag(tag: string): { ownerId: string; mountId: string; pathId: string } | null {
@@ -31,10 +32,17 @@ async function resolveDriveLink(tag: string): Promise<string> {
         .get();
     if (response.error || !response.data) return getDriveAppUrl();
 
-    return (
-        getDocumentUrl(response.data) ||
-        getDriveAppUrl(`fs/${response.data.ownerId}/${response.data.mountId}/${response.data.id}`)
-    );
+    const path = response.data;
+    const docUrl = getDocumentUrl(path);
+    if (docUrl) return docUrl;
+
+    // Folders and other containers open directly in the filesystem view
+    if (isContainerType(path.type)) {
+        return getDriveAppUrl(`fs/${path.ownerId}/${path.mountId}/${path.id}`);
+    }
+
+    // Regular files (images, PDFs, etc.) open in shared-with-me with the file pre-selected
+    return getDriveAppUrl(`shared/with-me?pid=${path.id}&uid=${path.ownerId}&mid=${path.mountId}`);
 }
 
 async function resolveAccessRequestLink(tag: string): Promise<string | null> {
