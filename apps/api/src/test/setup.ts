@@ -46,7 +46,7 @@ type TestUser = {
     sessionToken: string;
 };
 
-type TestContext = {
+export type TestContext = {
     alice: { user: TestUser; api: ReturnType<typeof treaty<App>> };
     bob: { user: TestUser; api: ReturnType<typeof treaty<App>> };
     charlie: { user: TestUser; api: ReturnType<typeof treaty<App>> };
