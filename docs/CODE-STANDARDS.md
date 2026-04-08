@@ -1,6 +1,7 @@
 # Code Standards
 
-Reference for code style, architecture patterns, and conventions used in the Eigen codebase.
+Reference for code style and conventions. For architecture, file locations, and project structure, see
+[AGENTS.md](../AGENTS.md).
 
 ## Code Philosophy
 
@@ -9,121 +10,12 @@ be obvious at a glance. When in doubt, look at what already exists in the same d
 
 - **Flat and direct** — no service layers, no repository patterns, no dependency injection. Routes call domain
   classes directly. Domain classes query the database directly with Drizzle
-- **Functions > abstractions** — a 100-line method that handles a complete workflow is better than 5 small
-  methods that you have to trace through. Don't extract helpers for one-time logic
+- **Don't extract single-use helpers** — a method that handles a complete workflow inline is better than
+  several small methods you have to trace through. Only extract when logic is reused
 - **Trust the type system** — no defensive null checks on typed data, no fallback defaults for required fields.
   Validate at system boundaries (user input, external APIs), trust internal code everywhere else
 - **Consistency over originality** — new code must look like the code next to it. Same patterns, same naming,
   same structure. Don't invent new patterns when existing ones work
-
-## Code Style
-
-- **English everywhere** — code, comments, docs, commit messages
-- **`type` over `interface`** — except when methods are needed
-- **No JSDoc** — code should be self-documenting. Comments only where logic isn't obvious
-- **No `as any`** — fix the type at the source. Eden Treaty gives end-to-end safety; casting breaks it
-- **No `as Type` on Eden Treaty responses** — add explicit return types to backend methods instead of casting
-  `response.data` in hooks. Types flow from backend → Eden Treaty → frontend automatically
-- **Backend errors use `ApiError`** — `throw new ApiError(status, message)`, never `throw new Error()`
-- **Theme tokens, not colors** — use `text-muted-foreground`, `bg-muted`, not `text-gray-500`, `bg-blue-50`.
-  Use `selection-handle` token for selection UI (resize handles, bounding boxes)
-- **Imports** — use `@workspace/lib/[domain]` and `@workspace/ui/components/...`, avoid deep relative paths
-- **Comments explain WHY, never WHAT** — `// Walk parentId chain to find outermost container` is good.
-  `// Set the variable to true` is noise. Most code needs zero comments
-
-## Architecture
-
-| Layer         | Location                                         | Pattern                                                    |
-|---------------|--------------------------------------------------|------------------------------------------------------------|
-| API routes    | `apps/api/src/routes/[domain].ts`                | Elysia router, `{auth: true}` for protected                |
-| Domain logic  | `apps/api/src/lib/[domain]/[domain].ts`          | Class owned by Home singleton                              |
-| DB schemas    | `apps/api/src/lib/[domain]/schema.ts`            | Drizzle ORM + `db-config.ts` for migrations                |
-| Shared types  | `packages/lib/src/types/[domain].ts`             | Shared between frontend and backend                        |
-| Data hooks    | `packages/lib/src/core/[domain]/hooks/`          | TanStack Query — **never** use `useQuery` directly in apps |
-| SSE handlers  | `packages/lib/src/core/[domain]/sse-handlers.ts` | Invalidate query cache on server events                    |
-| SSE builders  | `apps/api/src/lib/[domain]/sse-events.ts`        | Build SSEvent payloads on the backend                      |
-| Frontend apps | `apps/[name]/src/routes/`                        | TanStack Router, file-based                                |
-| Shared UI     | `packages/ui/src/components/`                    | shadcn/ui components and layout system                     |
-| Validation    | `packages/lib/src/validation/`                   | Shared frontend/backend validation                         |
-
-Detailed docs: [Database](DATABASE.md) | [Storage](STORAGE.md) | [SSE](SSE.md) | [ACL](ACL.md) | [Layout](LAYOUT.md)
-
-### Cross-Home Relay
-
-All cross-home interactions (where one user's action touches another user's Home) must go through the
-home relay (`apps/api/src/lib/home/home-relay.ts`). Never call `getHome()` directly for cross-home
-access.
-
-- **Writes**: `sendToHome(targetUserId, { type: 'drive:acl-change', ... })` — typed `HomeMessage` union
-- **Reads**: `pullSharedPaths()`, `pullCalendarShares()`, etc. — individual typed functions
-- **Local home**: `getHome(user.id)` is fine for accessing the current request's own home
-
-See [SCALABILITY.md](SCALABILITY.md) for the full design and sharding story.
-
-## Key Patterns
-
-### Query Keys
-
-Every domain defines hierarchical query keys for TanStack Query. Export invalidation functions alongside hooks
-so SSE handlers and mutation callbacks can reuse them.
-
-```typescript
-export const driveKeys = {
-    all: ['drive'] as const,
-    folders: () => [...driveKeys.all, 'folder'] as const,
-    folder: (pathId: string) => [...driveKeys.folders(), pathId] as const,
-};
-```
-
-### API Client (Eden Treaty)
-
-Types flow directly from Elysia route definitions — no manual type sync needed.
-
-```typescript
-import { driveApi } from '@workspace/lib/api';
-const response = await driveApi({ ownerId })({ mountId }).folder({ pathId }).get();
-```
-
-### Error Handling
-
-All error/success handling belongs in hooks (`packages/lib/src/core/[domain]/hooks/`), not in app
-components. This applies to mutations, direct API calls (e.g., `authClient`), and any async operation
-that can fail. Every `useMutation` must have an `onError` callback using `onMutationError` from
-`api-error.ts`. Apps should never add their own `try/catch` + `toast.error()`.
-
-See [NOTIFICATIONS.md](NOTIFICATIONS.md) for the full pattern.
-
-### Invalidation Functions
-
-Export `invalidateFoo(queryClient, ...)` functions from hook files, next to the query key definitions.
-Apps use these instead of importing `useQueryClient` and calling `invalidateQueries()` directly.
-
-### Eigen File Types
-
-| Type     | MIME                        | Extension        | Storage                       |
-|----------|-----------------------------|------------------|-------------------------------|
-| Document | `application/eigendoc`      | `.eigendoc`      | Dir with `data.db` (Yjs)      |
-| Stickies | `application/eigenstickies` | `.eigenstickies` | Dir with `data.db` (Yjs)      |
-| Chat     | `application/eigenchat`     | `.eigenchat`     | Dir with `data.db` + `media/` |
-| Slides   | `application/eigenslides`   | `.eigenslides`   | Dir with `data.db` (Yjs)      |
-| Sheets   | `application/eigensheets`   | `.eigensheets`   | Dir with `data.db` (Yjs)      |
-
-URL parameters use hyphens (`application-eigendoc`), database stores slashes.
-
-## Public API
-
-Unauthenticated endpoints under `/p/`:
-
-| Endpoint                    | Returns                                          |
-|-----------------------------|--------------------------------------------------|
-| `GET /p/avatar/:emailOrId`  | Avatar image (cached 24h) or generated SVG       |
-| `GET /p/user/:emailOrId`    | `{ name, email, avatar }`                        |
-| `GET /p/config`             | Public server config (org name, registration)     |
-| `POST /p/waitlist`          | Waitlist signup                                   |
-
-Avatar component: `UserAvatar` (`packages/ui/.../user-avatar.tsx`), backed by `useResolvedUser`.
-
-Route: `apps/api/src/routes/public.ts`
 
 ## Common LLM Mistakes
 
@@ -236,17 +128,134 @@ return item; // or: throw new ApiError(404, 'Not found')
 const MAX_RETRIES = 3;
 ```
 
+### Reinventing existing utilities
+
+BAD — re-implementing what already exists:
+```typescript
+import clsx from 'clsx';
+const classes = clsx('px-4', isActive && 'bg-blue-500');
+
+const formatted = new Date(timestamp).toLocaleDateString('en-US', { ... });
+
+type ChatMessage = { id: string; content: string; userId: string; createdAt: number };
+```
+
+GOOD — use shared utilities and types:
+```typescript
+import { cn } from '@workspace/ui/lib/utils';
+const classes = cn('px-4', isActive && 'bg-blue-500');
+
+import { formatDate } from '@workspace/lib/date';
+const formatted = formatDate(timestamp);
+
+import type { ChatMessage } from '@workspace/lib/types/chat';
+```
+
+## Typing
+
+Types flow end-to-end from backend to frontend. Don't break the chain.
+
+```
+Elysia route handler return type → Eden Treaty infers response type → hook exposes typed data → component consumes
+```
+
+- **No `as any`** — fix the type at the source (route handler return type, schema definition), not by
+  casting in hooks. Eden Treaty gives end-to-end safety; `as any` silently breaks it
+- **No `as Type` on Eden Treaty responses** — if `response.data` has the wrong type, add an explicit return
+  type to the backend route handler or domain method using the shared type from `packages/lib/src/types/`.
+  Don't paper over mismatches with `as` casts in hooks
+- **Shared types live in `packages/lib/src/types/[domain].ts`** — never redefine a type that already exists
+  there. Import it. If the type doesn't exist yet, add it to the shared package so both FE and BE use it
+- **`type` over `interface`** — except when methods are needed
+- **Prefer type inference** — don't annotate variables when TypeScript can infer the type. Write
+  `const path = await drive.getPath(...)` not `const path: DrivePath = await drive.getPath(...)`
+- **Explicit return types on public methods and hooks** — this is what makes Eden Treaty's type flow work.
+  Backend route handlers and domain methods should declare their return type using the shared type
+- **`import type` for type-only imports** — separate from value imports:
+  `import type { DrivePath } from '@workspace/lib/types/drive'`
+- **Drizzle `.$inferSelect` for DB row types** — use `typeof schema.messages.$inferSelect` for database
+  row shapes, don't manually redefine column types
+
+## Code Style
+
+- **English everywhere** — code, comments, docs, commit messages
+- **No JSDoc** — code should be self-documenting. Comments only where logic isn't obvious
+- **Comments explain WHY, never WHAT** — `// Walk parentId chain to find outermost container` is good.
+  `// Set the variable to true` is noise. Most code needs zero comments
+- **Backend errors use `ApiError`** — `throw new ApiError(status, message)` for user-facing HTTP errors,
+  never `throw new Error()`. Exception: internal invariants (db not open, missing config) may use
+  `throw new Error()` since an HTTP status code wouldn't be semantically correct
+- **Theme tokens, not colors** — use `text-muted-foreground`, `bg-muted`, not `text-gray-500`, `bg-blue-50`.
+  Use `selection-handle` token for selection UI (resize handles, bounding boxes)
+- **Use `cn()` for class merging** — import from `@workspace/ui/lib/utils`, never use raw `clsx`/`twMerge`
+  or string concatenation for conditional Tailwind classes
+
+### Imports
+
+Use workspace aliases, not deep relative paths:
+
+| Alias                             | Points to                                   | Example                                  |
+|-----------------------------------|---------------------------------------------|------------------------------------------|
+| `@workspace/lib/[domain]`        | Hooks + exports for a domain                | `@workspace/lib/drive`                   |
+| `@workspace/lib/types/[domain]`  | Shared types                                | `@workspace/lib/types/calendar`          |
+| `@workspace/lib/api`             | Eden Treaty API client factories            | `@workspace/lib/api`                     |
+| `@workspace/lib/date`            | Date formatting (`formatDate`, `formatTime`, `formatTimeAgo`) | `@workspace/lib/date` |
+| `@workspace/lib/validation`      | Shared FE/BE validation schemas             | `@workspace/lib/validation`              |
+| `@workspace/ui/components/...`   | UI components (no top-level alias)          | `@workspace/ui/components/ui/button`     |
+| `@workspace/ui/lib/utils`        | `cn()` utility                              | `@workspace/ui/lib/utils`               |
+
+## Key Patterns
+
+### Query Keys
+
+Every domain defines hierarchical query keys. Keys must always include `ownerId` — without it, switching
+between personal and team contexts serves stale cached data. Export invalidation functions alongside hooks.
+
+```typescript
+export const driveKeys = {
+    all: ['drive'] as const,
+    owner: (ownerId: string) => [...driveKeys.all, ownerId] as const,
+    folders: (ownerId: string) => [...driveKeys.owner(ownerId), 'folder'] as const,
+    folder: (ownerId: string, mountId: string, pathId: string) =>
+        [...driveKeys.folders(ownerId), mountId, pathId] as const,
+};
+```
+
+Every `useQuery` hook must have: `queryKey` using the domain keys, `queryFn` with error checking,
+`enabled` guard (`!!ownerId && !!mountId`), and explicit `staleTime`.
+
+### API Client (Eden Treaty)
+
+Types flow directly from Elysia route definitions — no manual type sync needed.
+
+```typescript
+import { driveApi } from '@workspace/lib/api';
+const response = await driveApi({ ownerId })({ mountId }).folder({ pathId }).get();
+```
+
+### Error Handling
+
+All error/success handling belongs in hooks (`packages/lib/src/core/[domain]/hooks/`), not in app
+components. Every `useMutation` must have an `onError` callback using `onMutationError` from
+`api-error.ts`. Apps should never add their own `try/catch` + `toast.error()`.
+
+See [NOTIFICATIONS.md](NOTIFICATIONS.md) for the full pattern.
+
+### Invalidation Functions
+
+Export `invalidateFoo(queryClient, ...)` functions from hook files, next to the query key definitions.
+Apps use these instead of importing `useQueryClient` and calling `invalidateQueries()` directly.
+
 ## Self-Review Checklist
 
 Before declaring any task complete, review every changed file against this list:
 
-- [ ] Read the diff — does each change follow the patterns in the **surrounding code**?
-- [ ] Did you read 2-3 existing files in the same directory before writing new code?
-- [ ] Are hooks in `packages/lib/src/core/[domain]/hooks/`, not in app components?
-- [ ] Are there any unnecessary abstractions, helpers, wrappers, or indirection?
-- [ ] Could any of your new code be simpler or more direct?
-- [ ] Are you using theme tokens, not hardcoded colors?
-- [ ] Does the new code match the naming conventions of its neighbors?
-- [ ] Did you avoid adding try-catch, null checks, or fallbacks for cases that can't happen?
-- [ ] Are comments explaining WHY (not WHAT), and only where the logic isn't obvious?
-- [ ] Would a reviewer see this and think "this looks like it was always here"?
+- Did you read 2-3 existing files in the same directory before writing new code?
+- Are hooks in `packages/lib/src/core/[domain]/hooks/`, not in app components?
+- Are there any unnecessary abstractions, helpers, wrappers, or indirection?
+- Did you check `packages/ui/src/components/` and `packages/lib/src/` for existing utilities/components
+  before writing new ones? (`cn()`, `formatDate`, `TooltipButton`, `DeleteDialog`, etc.)
+- Are you using theme tokens, not hardcoded colors?
+- Did you avoid adding try-catch, null checks, or fallbacks for cases that can't happen?
+- Do new `useQuery` hooks have `enabled` guards and `staleTime`?
+- Does the new code match the patterns and naming of its neighbors?
