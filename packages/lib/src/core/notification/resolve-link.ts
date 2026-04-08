@@ -3,11 +3,24 @@ import { getMonthRange } from '@workspace/lib/calendar';
 import { isContainerType } from '@workspace/lib/types/drive';
 import type { Notification } from '@workspace/lib/types/notification';
 
-function parseDriveTag(tag: string): { ownerId: string; mountId: string; pathId: string } | null {
-    const [prefix, ownerId, mountId, pathId] = tag.split(':');
-    if (!['share', 'mention', 'chat-message', 'comment-reply'].includes(prefix) || !ownerId || !mountId || !pathId)
+function parseDriveTag(
+    tag: string,
+    hasChatName = false,
+): { ownerId: string; mountId: string; pathId: string; chatName?: string } | null {
+    const parts = tag.split(':');
+    if (
+        !['share', 'mention', 'chat-message', 'comment-reply'].includes(parts[0]) ||
+        !parts[1] ||
+        !parts[2] ||
+        !parts[3]
+    )
         return null;
-    return { ownerId, mountId, pathId };
+    return {
+        ownerId: parts[1],
+        mountId: parts[2],
+        pathId: parts[3],
+        chatName: hasChatName && parts[4] ? parts[4] : undefined,
+    };
 }
 
 function parseAccessRequestTag(
@@ -24,8 +37,8 @@ function parseCalendarInviteTag(tag: string): { eventId: string; startTime: numb
     return { eventId: parts[1], startTime: parts[2] ? Number(parts[2]) || 0 : 0 };
 }
 
-async function resolveDriveLink(tag: string): Promise<string> {
-    const parsed = parseDriveTag(tag);
+async function resolveDriveLink(tag: string, hasChatName = false): Promise<string> {
+    const parsed = parseDriveTag(tag, hasChatName);
     if (!parsed) return getDriveAppUrl();
 
     const response = await driveApi({ ownerId: parsed.ownerId })({ mountId: parsed.mountId })
@@ -35,7 +48,10 @@ async function resolveDriveLink(tag: string): Promise<string> {
 
     const path = response.data;
     const docUrl = getDocumentUrl(path);
-    if (docUrl) return docUrl;
+    if (docUrl) {
+        if (parsed.chatName) return `${docUrl}?chat=${encodeURIComponent(parsed.chatName)}`;
+        return docUrl;
+    }
 
     // Folders and other containers open directly in the filesystem view
     if (isContainerType(path.type)) {
@@ -83,11 +99,13 @@ export async function resolveNotificationLink(notification: Notification): Promi
     if (!tag) return null;
 
     switch (type) {
+        case 'mention-comment':
+        case 'comment-reply':
+            return resolveDriveLink(tag, true);
+
         case 'share':
         case 'mention-chat':
-        case 'mention-comment':
         case 'chat-message':
-        case 'comment-reply':
             return resolveDriveLink(tag);
 
         case 'calendar-invite':
