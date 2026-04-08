@@ -1,9 +1,9 @@
 import { useMemo } from 'react';
 import { parseOwnerId } from '../../../types';
 import type { DrivePath } from '../../../types/drive';
-import { useTeams } from '../../admin';
 import { useAuth } from '../../auth';
-import { usePublicConfig, usePublicUser } from '../../public';
+import { useMyTeams } from '../../home';
+import { usePublicUser } from '../../public';
 import { useBreadcrumb } from '../index';
 
 export type DirectAccessItem = {
@@ -142,16 +142,15 @@ export function useDriveAccess(
 
 export function useIsEffectiveOwner(ownerId: string): boolean {
     const { user } = useAuth();
-    const { data: config } = usePublicConfig();
-    const { data: teams } = useTeams(config?.orgId);
+    const { data: myTeams } = useMyTeams();
 
     return useMemo(() => {
         if (!user) return false;
         if (ownerId === user.id) return true;
         const parsed = parseOwnerId(ownerId);
-        if (parsed.type === 'team' && teams) {
-            return teams.some((t) => t.id === parsed.id);
+        if (parsed.type === 'team' && myTeams) {
+            return myTeams.some((t) => t.id === parsed.id);
         }
         return false;
-    }, [user, ownerId, teams]);
+    }, [user, ownerId, myTeams]);
 }

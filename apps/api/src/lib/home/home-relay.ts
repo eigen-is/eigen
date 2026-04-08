@@ -149,7 +149,7 @@ export async function pullAvatarFile(userId: string, filename: string): Promise<
 
 export async function pullTeamQuotaOverrides(teamOwnerId: string): Promise<TeamQuotaOverrides> {
     const home = await getHome(teamOwnerId);
-    const settings = home.settings.get() as { memberOverrides?: TeamQuotaOverrides };
+    const settings = home.settings.get() as TeamSettings;
     return settings.memberOverrides ?? {};
 }
 

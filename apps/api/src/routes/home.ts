@@ -32,21 +32,15 @@ export const homeRouter = new Elysia({ name: 'home' })
 
             return Promise.all(
                 teamIds.map(async (teamId) => {
-                    const team = await getTeam(teamId);
-                    const members = await getTeamMembers(teamId);
                     const teamOwner = teamOwnerId(teamId);
-                    const mounts = await pullTeamMounts(teamOwner);
-
-                    let calendars: { id: string; name: string; color: string }[] = [];
-                    try {
-                        calendars = (await pullCalendars(teamOwner)).map((c) => ({
-                            id: c.id,
-                            name: c.name,
-                            color: c.color,
-                        }));
-                    } catch {
-                        // Team calendar may be disabled
-                    }
+                    const [team, members, mounts, calendars] = await Promise.all([
+                        getTeam(teamId),
+                        getTeamMembers(teamId),
+                        pullTeamMounts(teamOwner),
+                        pullCalendars(teamOwner)
+                            .then((cals) => cals.map((c) => ({ id: c.id, name: c.name, color: c.color })))
+                            .catch(() => []),
+                    ]);
 
                     return {
                         id: teamId,
