@@ -36,7 +36,7 @@ export const homeRouter = new Elysia({ name: 'home' })
                     const [team, members, mounts, calendars] = await Promise.all([
                         getTeam(teamId),
                         getTeamMembers(teamId),
-                        pullTeamMounts(teamOwner),
+                        pullTeamMounts(teamOwner).catch(() => []),
                         pullCalendars(teamOwner)
                             .then((cals) => cals.map((c) => ({ id: c.id, name: c.name, color: c.color })))
                             .catch(() => []),
