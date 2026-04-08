@@ -73,8 +73,9 @@ bun run check          # lint + typecheck + test
   explicit return type annotation to the backend route handler or domain method using the shared type from
   `packages/lib/src/types/`. Eden Treaty infers types from the handler return type automatically. Don't paper
   over mismatches with `as` casts
-- **Backend errors use `ApiError`** — always `throw new ApiError(status, message)` from
-  `apps/api/src/lib/core/errors.ts`, never `throw new Error()`
+- **Backend errors use `ApiError`** — `throw new ApiError(status, message)` from
+  `apps/api/src/lib/core/errors.ts` for user-facing HTTP errors. Use `throw new Error()` only for internal
+  invariants (db not open, missing config) where an HTTP status code wouldn't be semantically correct
 - **Think about every `await`**. A bare async call returns a truthy Promise — dangerous in conditionals
   (`if (!asyncFn())` is always false). But not every async call needs `await`: fire-and-forget is fine for background
   work that shouldn't block the response (e.g., thumbnail generation, preview caching), and `return asyncFn()` is
@@ -101,8 +102,7 @@ bun run check          # lint + typecheck + test
   components for common patterns: `TooltipButton` (icon+tooltip), `DeleteDialog` (confirmation), `EmptyState`,
   `LoadingState`, `ErrorState`, `SearchBar`, `ConfirmDialog`, etc. See [LAYOUT.md](docs/LAYOUT.md) for the full list
 - **Keep it simple** — no unnecessary abstractions, wrapper functions, service layers, or indirection. This codebase
-  is intentionally flat and direct: routes call domain classes, domain classes query the DB. A 100-line method that
-  handles a complete workflow is better than 5 small methods you have to trace through. Don't extract helpers for
+  is intentionally flat and direct: routes call domain classes, domain classes query the DB. Don't extract helpers for
   one-time logic. Don't add generics, configuration objects, or factory patterns unless the existing code already
   uses them in that area. See the "Common LLM Mistakes" section in CODE-STANDARDS.md
 - **Fix broken windows** — when you encounter pre-existing errors, warnings, or code smells while working on a task,
@@ -234,18 +234,9 @@ Full component list: [LAYOUT.md](docs/LAYOUT.md)
 
 ### Query Keys Pattern
 
-```typescript
-export const driveKeys = {
-    all: ['drive'] as const,
-    owner: (ownerId: string) => [...driveKeys.all, ownerId] as const,
-    folders: (ownerId: string) => [...driveKeys.owner(ownerId), 'folder'] as const,
-    folder: (ownerId: string, id: string) => [...driveKeys.folders(ownerId), id] as const,
-};
-```
-
-**Query keys must always include `ownerId`** — see Common Pitfalls below.
-
-Export invalidation functions for use in SSE handlers + mutation `onSuccess`.
+See [CODE-STANDARDS.md](docs/CODE-STANDARDS.md) for the canonical `driveKeys` example. **Query keys must
+always include `ownerId`** — see Common Pitfalls below. Export invalidation functions for use in SSE
+handlers + mutation `onSuccess`.
 
 ### Common Pitfalls
 
@@ -322,50 +313,3 @@ Tests are in `apps/api/src/test/`. Run with `bun run test` or `bun test apps/api
 **Unit tests** (`mount.test.ts`, `storage.test.ts`, etc.) create isolated instances with temp directories.
 
 See [TESTING.md](docs/TESTING.md) for full patterns.
-
-## Documentation Index
-
-Detailed architecture docs in `docs/`:
-
-| Doc                                                           | Topic                                                                        |
-|---------------------------------------------------------------|------------------------------------------------------------------------------|
-| [CONTRIBUTING.md](docs/CONTRIBUTING.md)                       | Code style, patterns, development workflow, public API, hotkeys              |
-| [DATABASE.md](docs/DATABASE.md)                               | SQLite databases, ManagedDatabase, migrations                                |
-| [STORAGE.md](docs/STORAGE.md)                                 | Storage backends, mount system, Home singleton                               |
-| [SERVER-SETTINGS.md](docs/SERVER-SETTINGS.md)                 | ServerSettings, JsonStore, admin API, settings UI                            |
-| [QUOTA.md](docs/QUOTA.md)                                     | Quota model, resolution, enforcement functions                               |
-| [SSE.md](docs/SSE.md)                                         | Real-time events, adding SSE to new domains                                  |
-| [ACL.md](docs/ACL.md)                                         | ACL inheritance, share propagation, chat invite bubbling, reshare prevention |
-| [ORGANISATIONS-AND-TEAMS.md](docs/ORGANISATIONS-AND-TEAMS.md) | Org/team model, team drives, prefixed owner IDs, Admin app                   |
-| [LAYOUT.md](docs/LAYOUT.md)                                   | AppShell, ColumnLayout, shared components, Drive UI, list patterns           |
-| [CHAT.md](docs/CHAT.md)                                       | Chat rooms, slash commands, embedded chats                                   |
-| [COMMENTS.md](docs/COMMENTS.md)                               | Comment system: index, panel, decorations, shared NoteCard components        |
-| [CALENDAR.md](docs/CALENDAR.md)                               | Calendar, RRULE, sharing, team calendars                                     |
-| [STICKIES.md](docs/STICKIES.md)                               | Kanban board, Yjs data model                                                 |
-| [SLIDES.md](docs/SLIDES.md)                                   | Presentation editor, percentage coordinates                                  |
-| [SHEETS.md](docs/SHEETS.md)                                   | Spreadsheet, op-based Yjs sync                                               |
-| [CLIPBOARD.md](docs/CLIPBOARD.md)                             | Inter-app copy-paste                                                         |
-| [MEDIA-REFERENCES.md](docs/MEDIA-REFERENCES.md)               | Name-based media/chat references in eigendocs                                |
-| [INLINE-EDITING.md](docs/INLINE-EDITING.md)                   | Inline text file editing in Drive                                            |
-| [PREVIEWS.md](docs/PREVIEWS.md)                               | File preview system, text/image/video previews                               |
-| [NOTIFICATIONS.md](docs/NOTIFICATIONS.md)                     | Error/success toasts, SSE notification pattern                               |
-| [NOTIFICATION-CENTER.md](docs/NOTIFICATION-CENTER.md)         | Notification center: persistent bell, per-user DB                            |
-| [TESTING.md](docs/TESTING.md)                                 | Test setup, patterns, test files                                             |
-| [IMAP.md](docs/IMAP.md)                                       | Maildir storage, Dovecot deployment, IMAP auth                               |
-| [DEPLOYMENT.md](docs/DEPLOYMENT.md)                           | Docker deployment: Caddy, Postfix, Dovecot, auth, remaining work            |
-| [TYPOGRAPHY.md](docs/TYPOGRAPHY.md)                           | Self-hosted font system, FontPicker                                          |
-| [SOFT-DELETE.md](docs/SOFT-DELETE.md)                         | Trash / recycle bin — soft delete, restore, auto-purge                       |
-
-| [Code Reviews](codereviews/OVERVIEW.md)                         | Full-stack code review findings + fix priorities |
-
-### Future/Planning Docs
-
-| Doc                                                         | Topic                                    |
-|-------------------------------------------------------------|------------------------------------------|
-| [TODO-CHAT-ACL.md](docs/TODO-CHAT-ACL.md)                   | Chat membership vs ACL design discussion |
-| [TODO-ENCRYPTION.md](docs/TODO-ENCRYPTION.md)               | E2E encryption design                    |
-| [SCALABILITY.md](docs/SCALABILITY.md)                       | Multi-server scaling: relay layer, sharding design |
-| [TODO-GUEST-ACCESS.md](docs/TODO-GUEST-ACCESS.md)           | Guest access, OTP auth, access requests  |
-| [TODO-CONTACTS.md](docs/TODO-CONTACTS.md)                   | Contacts app improvements, team member merge, sidebar |
-| [TODO-FORTUNE-SHEETS.md](docs/TODO-FORTUNE-SHEETS.md)       | Fortune-sheet refactoring audit          |
-| [RESEARCH_AI.md](docs/PROPOSAL_AI.md)                       | Local/private AI integration research    |
