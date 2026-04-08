@@ -27,7 +27,7 @@ export function LoginPage() {
     const { login, isAuthenticated } = useAuth();
     const router = useRouter();
     const { appName } = useApp();
-    const { data: config } = usePublicConfig();
+    const { data: config, isPending: isConfigPending } = usePublicConfig();
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
@@ -45,7 +45,7 @@ export function LoginPage() {
         setIsLoading(true);
         setError('');
 
-        values.email = `${values.email.toLowerCase().split('@')[0]}@${config?.domain ?? 'eigen.is'}`;
+        values.email = `${values.email.toLowerCase().split('@')[0]}@${config?.domain ?? window.location.hostname}`;
 
         try {
             const { success, error } = await login(values.email, values.password);
@@ -99,7 +99,9 @@ export function LoginPage() {
                                             <InputGroup>
                                                 <InputGroupInput placeholder="username" autoFocus {...field} />
                                                 <InputGroupAddon align="inline-end">
-                                                    <InputGroupText>@{config?.domain ?? 'eigen.is'}</InputGroupText>
+                                                    <InputGroupText>
+                                                        @{config?.domain ?? window.location.hostname}
+                                                    </InputGroupText>
                                                 </InputGroupAddon>
                                             </InputGroup>
                                         </FormControl>
@@ -122,7 +124,7 @@ export function LoginPage() {
                                 )}
                             />
 
-                            <Button type="submit" className="w-full" disabled={isLoading}>
+                            <Button type="submit" className="w-full" disabled={isLoading || isConfigPending}>
                                 {isLoading ? 'Signing in...' : 'Sign in'}
                             </Button>
                         </form>
