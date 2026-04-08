@@ -1,5 +1,8 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo } from 'react';
-import { useMarkNotificationRead, useNotifications } from '../../notification/hooks/use-notifications';
+import type { Notification } from '../../../types/notification';
+import { notificationApi } from '../../api';
+import { notificationKeys, useNotifications } from '../../notification/hooks/use-notifications';
 
 // Notification tag formats — pathId is always at index 3:
 // chat-message / comment-reply: {type}:{ownerId}:{mountId}:{pathId}
@@ -26,19 +29,33 @@ export function useUnreadChatIds(userId: string): Set<string> {
 }
 
 export function useMarkChatRead(userId: string) {
-    const { data: notifications = [] } = useNotifications(userId);
-    const markRead = useMarkNotificationRead(userId);
+    const queryClient = useQueryClient();
 
     return useCallback(
         (chatId: string) => {
-            for (const n of notifications) {
-                if (n.read || !n.tag) continue;
-                if (!CHAT_NOTIFICATION_TYPES.includes(n.type)) continue;
-                if (getPathIdFromTag(n.tag) === chatId) {
-                    markRead.mutate(n.id);
-                }
+            const notifications = queryClient.getQueryData<Notification[]>(notificationKeys.list(userId)) ?? [];
+            const toMark = notifications.filter(
+                (n) =>
+                    !n.read && n.tag && CHAT_NOTIFICATION_TYPES.includes(n.type) && getPathIdFromTag(n.tag) === chatId,
+            );
+            if (toMark.length === 0) return;
+
+            // Optimistically mark as read in cache — prevents loops and flicker
+            queryClient.setQueryData<Notification[]>(
+                notificationKeys.list(userId),
+                (old) => old?.map((n) => (toMark.some((m) => m.id === n.id) ? { ...n, read: true } : n)) ?? [],
+            );
+            queryClient.setQueryData<number>(notificationKeys.unreadCount(userId), (old) =>
+                Math.max(0, (old ?? 0) - toMark.length),
+            );
+
+            // Fire PATCHes directly — no TanStack mutation, no double-invalidation
+            for (const n of toMark) {
+                notificationApi({ ownerId: userId })({ id: n.id })
+                    .read.patch()
+                    .catch(() => queryClient.invalidateQueries({ queryKey: notificationKeys.owner(userId) }));
             }
         },
-        [notifications, markRead],
+        [userId, queryClient],
     );
 }
