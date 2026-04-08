@@ -182,6 +182,7 @@ type DriveListProps = CreateCallbacks & {
     onMove?: (item: DrivePath, targetItemId: string) => void;
     onQuickLook?: (path: DrivePath) => void;
     sortFn?: (a: DrivePath, b: DrivePath) => number;
+    unreadPathIds?: Set<string>;
 };
 
 export function DriveList({
@@ -213,6 +214,7 @@ export function DriveList({
     onMove,
     onQuickLook,
     sortFn,
+    unreadPathIds,
 }: DriveListProps) {
     const { data: breadcrumbPaths } = useBreadcrumb(ownerId, mountId, pathId);
     const [isDragging, setIsDragging] = useState(false);
@@ -340,6 +342,7 @@ export function DriveList({
                 showParentRow={(breadcrumbPaths?.length ?? 0) > 1}
                 onQuickLook={onQuickLook}
                 sortFn={sortFn}
+                unreadPathIds={unreadPathIds}
             />
 
             {items.length === 0 && !currentPath?.parentId && <EmptyState />}

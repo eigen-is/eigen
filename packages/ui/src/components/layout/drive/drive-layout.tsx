@@ -48,6 +48,7 @@ export type DriveLayoutProps = {
     onQuickLook?: (path: DrivePath, sortedSiblings: DrivePath[]) => void;
     sortFn?: (a: DrivePath, b: DrivePath) => number;
     pid?: string;
+    unreadPathIds?: Set<string>;
 };
 
 export function DriveLayout({
@@ -78,6 +79,7 @@ export function DriveLayout({
     sortFn = defaultDriveSort,
     pid = undefined,
     showBreadcrumb = false,
+    unreadPathIds,
 }: DriveLayoutProps) {
     const { isMobile } = useLayout();
     const dialogs = useDriveDialogs();
@@ -182,6 +184,7 @@ export function DriveLayout({
         onMove: allowMove ? handleMovePath : undefined,
         onQuickLook: onQuickLook ? wrappedQuickLook : undefined,
         sortFn,
+        unreadPathIds,
     };
 
     const listToolbar = (

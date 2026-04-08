@@ -1,5 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { openDocument } from '@workspace/lib/api';
+import { useAuth } from '@workspace/lib/auth';
+import { useUnreadChatIds } from '@workspace/lib/chat';
 import { AppError } from '@workspace/lib/core/api-error';
 import { useFolderContent, usePathInfo } from '@workspace/lib/drive';
 import {
@@ -35,6 +37,8 @@ function DriveRoute() {
     const { isMobile } = useLayout();
     const { rootPath } = useContext(DriveContext);
     const { openPreview, updatePreview, isPreviewOpen } = usePreview();
+    const { user } = useAuth();
+    const unreadChatIds = useUnreadChatIds(user?.id ?? '');
 
     // If pathId is "root", navigate to the actual root folder ID when available
     useEffect(() => {
@@ -174,6 +178,7 @@ function DriveRoute() {
                 onQuickLook={onQuickLook}
                 showBreadcrumb={true}
                 pid={pid}
+                unreadPathIds={unreadChatIds}
             />
             {shareTargetPath && (
                 <DriveAccessDialog
