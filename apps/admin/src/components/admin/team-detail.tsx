@@ -110,7 +110,7 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
         return share?.permission || 'read';
     }, [defaultCal, teamTarget]);
 
-    const teamMemberUserIds = new Set(teamMembers.map((m: { userId: string }) => m.userId));
+    const teamMemberUserIds = new Set(teamMembers.map((m) => m.userId));
     const availableMembers = allMembers.filter((m) => !teamMemberUserIds.has(m.userId));
 
     const defaultMountStorageType = serverSettings
@@ -397,18 +397,13 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
                     <p className="text-sm text-muted-foreground py-4 text-center">No members in this team yet.</p>
                 ) : (
                     <div className="divide-y">
-                        {teamMembers
-                            .map((tm: { userId: string }) => ({
-                                tm,
-                                member: allMembers.find((m) => m.userId === tm.userId),
-                            }))
-                            .sort((a, b) => (a.member?.name ?? '').localeCompare(b.member?.name ?? ''))
-                            .map(({ tm, member }) => (
+                        {[...teamMembers]
+                            .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''))
+                            .map((tm) => (
                                 <div key={tm.userId} className="flex items-center gap-3 py-2">
                                     <UserItem
-                                        name={member?.name ?? 'Unknown'}
-                                        email={member?.email ?? ''}
-                                        imageUrl={member?.image ?? undefined}
+                                        name={tm.name ?? 'Unknown'}
+                                        email={tm.email ?? ''}
                                         className="flex-1 min-w-0"
                                     />
                                     <Button
