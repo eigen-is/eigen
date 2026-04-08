@@ -1,7 +1,6 @@
-import { useTeams } from '@workspace/lib/admin';
 import { useAuth } from '@workspace/lib/auth';
 import { useCalendars, useSharedCalendars, useUpdateCalendar, useUpdateSharedCalendar } from '@workspace/lib/calendar';
-import { usePublicConfig } from '@workspace/lib/public';
+import { useMyTeams } from '@workspace/lib/home';
 import { parseOwnerId } from '@workspace/lib/types';
 import type { CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { EigenLoader, StorageUsage, TooltipButton } from '@workspace/ui';
@@ -85,8 +84,7 @@ export function CalendarSidebar({ condensed = false, isMobile = false, onClose }
     const ownerId = user?.id || '';
     const { data: calendars = [], isLoading: calendarsLoading } = useCalendars(ownerId);
     const { data: sharedCalendars = [], isLoading: sharedLoading } = useSharedCalendars(ownerId);
-    const { data: config } = usePublicConfig();
-    const { data: teams } = useTeams(config?.orgId);
+    const { data: myTeams } = useMyTeams();
     const updateCalendar = useUpdateCalendar(ownerId);
     const updateSharedCalendar = useUpdateSharedCalendar(ownerId);
 
@@ -114,7 +112,7 @@ export function CalendarSidebar({ condensed = false, isMobile = false, onClose }
 
     const getTeamName = (ownerUserId: string) => {
         const parsed = parseOwnerId(ownerUserId);
-        return teams?.find((t) => t.id === parsed.id)?.name || ownerUserId;
+        return myTeams?.find((t) => t.id === parsed.id)?.name || ownerUserId;
     };
 
     const handleEditCalendar = (cal: CalendarItem) => {
