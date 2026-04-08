@@ -1,9 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { teamApi } from '@workspace/lib/api';
+import { teamOwnerId } from '@workspace/lib/types';
 import type { OrgTeam } from '@workspace/lib/types/admin';
 import { onMutationError } from '../../api-error';
 import { authClient } from '../../auth/hooks/use-auth-client';
 import { invalidateMyTeams } from '../../home';
 import { adminKeys } from './keys';
+
+// Admin-only hooks for team management (org settings UI).
+// For listing the current user's teams and members in normal app contexts,
+// use useMyTeams() from '@workspace/lib/home' instead.
 
 export function useTeams(organizationId?: string) {
     return useQuery({
@@ -29,10 +35,8 @@ export function useTeamMembers(organizationId?: string, teamId?: string) {
     return useQuery({
         queryKey: adminKeys.teamMembers(organizationId ?? '', teamId ?? ''),
         queryFn: async () => {
-            const { data } = await authClient.organization.listTeamMembers({
-                query: { teamId: teamId! },
-            });
-            return data ?? [];
+            const response = await teamApi({ ownerId: teamOwnerId(teamId!) }).members.get();
+            return response.data ?? [];
         },
         enabled: !!teamId,
         staleTime: 1000 * 60 * 2,
