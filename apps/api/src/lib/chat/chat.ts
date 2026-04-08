@@ -173,7 +173,9 @@ export class ChatRoom {
                                 actorEmail: authorEmail,
                                 title: `You were mentioned in "${displayName}"`,
                                 body,
-                                tag: `mention:${targetPath.ownerId}:${targetPath.mountId}:${targetPath.id}:${email}`,
+                                tag: this.containerPath
+                                    ? `mention:${targetPath.ownerId}:${targetPath.mountId}:${targetPath.id}:${this.path.name}:${email}`
+                                    : `mention:${targetPath.ownerId}:${targetPath.mountId}:${targetPath.id}:${email}`,
                             },
                         });
                     } catch {
@@ -184,7 +186,9 @@ export class ChatRoom {
 
             // Activity notifications: whispers → recipient only, messages/emotes → previous participants + owner
             const activityType = this.containerPath ? 'comment-reply' : 'chat-message';
-            const activityTag = `${activityType}:${targetPath.ownerId}:${targetPath.mountId}:${targetPath.id}`;
+            const activityTag = this.containerPath
+                ? `${activityType}:${targetPath.ownerId}:${targetPath.mountId}:${targetPath.id}:${this.path.name}`
+                : `${activityType}:${targetPath.ownerId}:${targetPath.mountId}:${targetPath.id}`;
             const notifyActivity = async (userId: string) => {
                 try {
                     await sendToHome(userId, {
