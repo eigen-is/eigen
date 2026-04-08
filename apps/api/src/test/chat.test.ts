@@ -106,7 +106,7 @@ describe('Chat', () => {
             // expect(generalChat.type).toBe('chat');
 
             // const chatInternals = await driveGet<DrivePath[]>(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-            //     `folder/${generalChat.id}`);
+            //     `folder/${embeddedChat.id}`);
             // const dataDb = chatInternals.find((item: DrivePath) => item.name === 'data.db');
             // expect(dataDb).toBeDefined();
         });
@@ -1186,6 +1186,72 @@ describe('Chat', () => {
             const chatMessage = unread.find((n) => n.type === 'chat-message');
             expect(mention).toBeDefined();
             expect(chatMessage).toBeUndefined();
+        });
+
+        test('embedded chat uses comment-reply notification type', async () => {
+            // Create a doc (which has an embedded chat)
+            const doc = await drivePost<DrivePath>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${aliceRootId}/doc`,
+                { fileName: 'Comment Notify Doc' },
+            );
+            const docContents = await driveGet<DrivePath[]>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${doc.id}`,
+            );
+            const chatFolder = findOrFail(docContents, (item: DrivePath) => item.name === 'chat');
+            const embeddedChat = await drivePost<DrivePath>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${chatFolder.id}/chat`,
+                { fileName: 'General' },
+            );
+
+            // Share doc with Bob
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${doc.id}/acl`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ acl: [{ id: ctx.bob.user.email, read: true, write: true }] }),
+                },
+            );
+
+            // Alice posts in the embedded chat
+            await chatPost<ChatMessage>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `${embeddedChat.id}/messages`,
+                { content: 'First comment' },
+            );
+
+            // Clear Bob's notifications
+            await authedRequest(ctx.bob.user.sessionToken, `/notifications/${ctx.bob.user.id}/mark-all-read`, {
+                method: 'POST',
+            });
+
+            // Bob posts in the embedded chat — Alice should get comment-reply
+            await chatPost<ChatMessage>(
+                ctx.bob.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `${embeddedChat.id}/messages`,
+                { content: 'Reply comment' },
+            );
+
+            const res = await authedRequest(ctx.alice.user.sessionToken, `/notifications/${ctx.alice.user.id}`);
+            const notifications = (await res.json()) as Notification[];
+            const commentNotif = notifications.find((n) => !n.read && n.type === 'comment-reply');
+            expect(commentNotif).toBeDefined();
+            expect(commentNotif!.title).toContain('Comment Notify Doc');
+            expect(commentNotif!.body).toBe('Reply comment');
         });
     });
 });
