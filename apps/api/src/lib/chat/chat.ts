@@ -145,18 +145,21 @@ export class ChatRoom {
             });
         }
 
-        // Notify mentioned users (only those with read access)
-        const mentionedEmailSet = new Set<string>();
-        if (type !== 'whisper') {
-            const mentionedEmails = extractMentionedEmails(content);
-            if (mentionedEmails.length > 0) {
-                const members = await this.drive.getEffectiveMembers(this.path.mountId, this.path.id);
-                const memberEmails = new Set(members.map((m) => m.email.toLowerCase()));
-                const displayName = stripEigenExtension(this.containerPath?.name ?? this.path.name);
-                const notificationType = this.containerPath ? 'mention-comment' : 'mention-chat';
-                const targetPath = this.containerPath ?? this.path;
+        // Notifications: mentions + activity
+        if (type !== 'system') {
+            const displayName = stripEigenExtension(this.containerPath?.name ?? this.path.name);
+            const targetPath = this.containerPath ?? this.path;
+            const body = content.length > 100 ? `${content.slice(0, 100)}...` : content;
+            const memberEmails = new Set(
+                (await this.drive.getEffectiveMembers(this.path.mountId, this.path.id)).map((m) =>
+                    m.email.toLowerCase(),
+                ),
+            );
 
-                for (const email of mentionedEmails) {
+            // Mention notifications (non-whisper only)
+            const mentionedEmailSet = new Set<string>();
+            if (type !== 'whisper') {
+                for (const email of extractMentionedEmails(content)) {
                     if (email === authorEmail.toLowerCase()) continue;
                     if (!memberEmails.has(email)) continue;
                     mentionedEmailSet.add(email);
@@ -166,10 +169,10 @@ export class ChatRoom {
                         await sendToHome(mentionedUser.id, {
                             type: 'notification',
                             notification: {
-                                type: notificationType,
+                                type: this.containerPath ? 'mention-comment' : 'mention-chat',
                                 actorEmail: authorEmail,
                                 title: `You were mentioned in "${displayName}"`,
-                                body: content.length > 100 ? `${content.slice(0, 100)}...` : content,
+                                body,
                                 tag: `mention:${targetPath.ownerId}:${targetPath.mountId}:${targetPath.id}:${email}`,
                             },
                         });
@@ -178,28 +181,27 @@ export class ChatRoom {
                     }
                 }
             }
-        }
 
-        // Notify previous participants about new activity
-        if (type === 'whisper' && whisperTo) {
-            if (whisperTo !== authorEmail) {
-                const members = await this.drive.getEffectiveMembers(this.path.mountId, this.path.id);
-                const memberEmails = new Set(members.map((m) => m.email.toLowerCase()));
-                if (memberEmails.has(whisperTo.toLowerCase())) {
+            // Activity notifications: whispers → recipient only, messages/emotes → previous participants + owner
+            const activityType = this.containerPath ? 'comment-reply' : 'chat-message';
+            const activityTag = `${activityType}:${targetPath.ownerId}:${targetPath.mountId}:${targetPath.id}`;
+
+            if (type === 'whisper' && whisperTo) {
+                if (
+                    whisperTo.toLowerCase() !== authorEmail.toLowerCase() &&
+                    memberEmails.has(whisperTo.toLowerCase())
+                ) {
                     try {
                         const recipientUser = await getUserByEmail(whisperTo);
                         if (recipientUser) {
-                            const displayName = stripEigenExtension(this.containerPath?.name ?? this.path.name);
-                            const notificationType = this.containerPath ? 'comment-reply' : 'chat-message';
-                            const targetPath = this.containerPath ?? this.path;
                             await sendToHome(recipientUser.id, {
                                 type: 'notification',
                                 notification: {
-                                    type: notificationType,
+                                    type: activityType,
                                     actorEmail: authorEmail,
                                     title: `New message in "${displayName}"`,
-                                    body: content.length > 100 ? `${content.slice(0, 100)}...` : content,
-                                    tag: `${notificationType}:${targetPath.ownerId}:${targetPath.mountId}:${targetPath.id}`,
+                                    body,
+                                    tag: activityTag,
                                 },
                             });
                         }
@@ -207,49 +209,35 @@ export class ChatRoom {
                         // user may not exist
                     }
                 }
-            }
-        } else if (type === 'message' || type === 'emote') {
-            const participants = new Map<string, { id: string; email: string }>();
+            } else if (type === 'message' || type === 'emote') {
+                const participants = new Map<string, string>();
+                const rows = await this.db
+                    .selectDistinct({ authorId: schema.messages.authorId, authorEmail: schema.messages.authorEmail })
+                    .from(schema.messages)
+                    .where(isNull(schema.messages.deletedAt))
+                    .all();
+                for (const row of rows) {
+                    participants.set(row.authorEmail.toLowerCase(), row.authorId);
+                }
+                participants.set(this.home.user.email.toLowerCase(), this.home.user.id);
+                participants.delete(authorEmail.toLowerCase());
 
-            const rows = await this.db
-                .selectDistinct({ authorId: schema.messages.authorId, authorEmail: schema.messages.authorEmail })
-                .from(schema.messages)
-                .where(isNull(schema.messages.deletedAt))
-                .all();
-            for (const row of rows) {
-                participants.set(row.authorEmail.toLowerCase(), { id: row.authorId, email: row.authorEmail });
-            }
-
-            const ownerEmail = this.home.user.email.toLowerCase();
-            if (!participants.has(ownerEmail)) {
-                participants.set(ownerEmail, { id: this.home.user.id, email: this.home.user.email });
-            }
-
-            participants.delete(authorEmail.toLowerCase());
-
-            if (participants.size > 0) {
-                const members = await this.drive.getEffectiveMembers(this.path.mountId, this.path.id);
-                const memberEmails = new Set(members.map((m) => m.email.toLowerCase()));
-                const displayName = stripEigenExtension(this.containerPath?.name ?? this.path.name);
-                const notificationType = this.containerPath ? 'comment-reply' : 'chat-message';
-                const targetPath = this.containerPath ?? this.path;
-
-                for (const [email, participant] of participants) {
+                for (const [email, userId] of participants) {
                     if (mentionedEmailSet.has(email)) continue;
                     if (!memberEmails.has(email)) continue;
                     try {
-                        await sendToHome(participant.id, {
+                        await sendToHome(userId, {
                             type: 'notification',
                             notification: {
-                                type: notificationType,
+                                type: activityType,
                                 actorEmail: authorEmail,
                                 title: `New message in "${displayName}"`,
-                                body: content.length > 100 ? `${content.slice(0, 100)}...` : content,
-                                tag: `${notificationType}:${targetPath.ownerId}:${targetPath.mountId}:${targetPath.id}`,
+                                body,
+                                tag: activityTag,
                             },
                         });
                     } catch {
-                        // user may not exist
+                        // user home may not exist
                     }
                 }
             }
