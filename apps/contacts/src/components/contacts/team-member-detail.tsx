@@ -5,7 +5,7 @@ import { Mail } from 'lucide-react';
 type TeamMember = { email: string; name: string };
 
 export function TeamMemberDetailToolbar() {
-    return <Toolbar />;
+    return <Toolbar>{null}</Toolbar>;
 }
 
 type TeamMemberDetailProps = {
