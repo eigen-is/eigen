@@ -71,10 +71,10 @@
     import app space
     import app admin
 
-    # Landing page (fallback)
+    # Landing page (fallback) — blog routes get per-route index.html with correct OG tags
     handle {
         root * /www/index
-        try_files {path} /index.html
+        try_files {path} {path}/index.html /index.html
         file_server
     }
 }
