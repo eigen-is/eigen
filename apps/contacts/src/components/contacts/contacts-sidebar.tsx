@@ -1,15 +1,15 @@
 import { Link } from '@tanstack/react-router';
 import { useLabels } from '@workspace/lib/contacts';
 import { useMyTeams } from '@workspace/lib/home';
+import { teamOwnerId } from '@workspace/lib/types';
 import type { Label } from '@workspace/lib/types/label';
-import { EigenLoader, StorageUsage } from '@workspace/ui';
+import { EigenLoader, SidebarItem, StorageUsage, UserAvatar } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { LabelManager } from '@workspace/ui/components/layout/labels/label-manager';
 import { SidebarHeader } from '@workspace/ui/components/layout/sidebar/sidebar-header';
-import { SidebarItem } from '@workspace/ui/components/layout/sidebar/sidebar-item';
 import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import { Separator } from '@workspace/ui/components/separator';
-import { UserRoundPlus, Users, UsersRound } from 'lucide-react';
+import { UserRoundPlus, UsersRound } from 'lucide-react';
 
 type ContactsSidebarProps = {
     condensed?: boolean;
@@ -51,6 +51,16 @@ export function ContactsSidebar({ condensed = false, onClose, isMobile = false, 
                         params={{ filterType: 'book', filterId: 'all' }}
                         condensed={condensed}
                     />
+                    {myTeams.map((team) => (
+                        <SidebarItem
+                            key={team.id}
+                            icon={<UserAvatar email={teamOwnerId(team.id)} className="h-4 w-4" />}
+                            label={team.name}
+                            to="/$filterType/$filterId"
+                            params={{ filterType: 'team', filterId: team.id }}
+                            condensed={condensed}
+                        />
+                    ))}
                 </SidebarSection>
 
                 <Separator />
@@ -72,24 +82,6 @@ export function ContactsSidebar({ condensed = false, onClose, isMobile = false, 
                         dropAcceptTypes={onAssignLabel ? ['contact'] : undefined}
                         onItemDrop={onAssignLabel}
                     />
-                )}
-
-                {myTeams.length > 0 && (
-                    <>
-                        <Separator />
-                        <SidebarSection title={condensed ? undefined : 'Teams'} condensed={condensed}>
-                            {myTeams.map((team) => (
-                                <SidebarItem
-                                    key={team.id}
-                                    icon={<Users className="h-4 w-4" />}
-                                    label={team.name}
-                                    to="/$filterType/$filterId"
-                                    params={{ filterType: 'team', filterId: team.id }}
-                                    condensed={condensed}
-                                />
-                            ))}
-                        </SidebarSection>
-                    </>
                 )}
             </div>
 
