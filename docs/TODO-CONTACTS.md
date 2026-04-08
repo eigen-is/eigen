@@ -23,11 +23,13 @@ When a team member also exists as a personal contact (matched by email):
 - Team-only entries show a lean card with "Add to contacts" option
 - Personal-only entries show as they do today
 
-## "All Contacts" as Universal Suggestion Source
+## Autosuggest (implemented)
 
-Every autosuggest in the app should use the same merged list: `deduplicate(myTeamMembers + myPersonalContacts)`,
-keyed by email. This is implemented as `useAllContacts()` in `packages/lib/src/core/contacts/hooks/`. See the
-autosuggest implementation for details.
+`useContactSuggestions` in `packages/ui/src/components/layout/contacts/use-contact-suggestions.ts` already
+merges team members (from `useMyTeams()`) with personal contacts, deduplicated by email. Team members appear
+first. An `excludeEmails` prop filters out the current user and already-added entries in share dialogs.
+
+The contacts app sidebar restructure (above) would use `useMyTeams()` directly for per-team member lists.
 
 ## Future: Federation
 
