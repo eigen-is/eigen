@@ -77,7 +77,7 @@ Access control enforced by `getSharedDrive()` (ACL checks). Write routes additio
 ## ACL
 
 Inherited from Drive. `read` = view messages. `write` = post messages. `owner` = manage ACL.
-See [TODO-CHAT-ACL.md](TODO-CHAT-ACL.md) for design discussion.
+Chat membership is coupled to Drive ACLs by design: if you can see a folder, you're in its chat.
 
 Chat invites (`/invite` command or `POST .../invite`) bubble ACL to the outermost container document via
 `findContainerPath()`. See [ACL.md](ACL.md) for details on invite propagation and `getEffectiveMembers`.
