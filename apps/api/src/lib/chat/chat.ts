@@ -185,29 +185,30 @@ export class ChatRoom {
             // Activity notifications: whispers → recipient only, messages/emotes → previous participants + owner
             const activityType = this.containerPath ? 'comment-reply' : 'chat-message';
             const activityTag = `${activityType}:${targetPath.ownerId}:${targetPath.mountId}:${targetPath.id}`;
+            const notifyActivity = async (userId: string) => {
+                try {
+                    await sendToHome(userId, {
+                        type: 'notification',
+                        notification: {
+                            type: activityType,
+                            actorEmail: authorEmail,
+                            title: `New message in "${displayName}"`,
+                            body,
+                            tag: activityTag,
+                        },
+                    });
+                } catch {
+                    // user home may not exist
+                }
+            };
 
             if (type === 'whisper' && whisperTo) {
                 if (
                     whisperTo.toLowerCase() !== authorEmail.toLowerCase() &&
                     memberEmails.has(whisperTo.toLowerCase())
                 ) {
-                    try {
-                        const recipientUser = await getUserByEmail(whisperTo);
-                        if (recipientUser) {
-                            await sendToHome(recipientUser.id, {
-                                type: 'notification',
-                                notification: {
-                                    type: activityType,
-                                    actorEmail: authorEmail,
-                                    title: `New message in "${displayName}"`,
-                                    body,
-                                    tag: activityTag,
-                                },
-                            });
-                        }
-                    } catch {
-                        // user may not exist
-                    }
+                    const recipientUser = await getUserByEmail(whisperTo);
+                    if (recipientUser) await notifyActivity(recipientUser.id);
                 }
             } else if (type === 'message' || type === 'emote') {
                 const participants = new Map<string, string>();
@@ -225,20 +226,7 @@ export class ChatRoom {
                 for (const [email, userId] of participants) {
                     if (mentionedEmailSet.has(email)) continue;
                     if (!memberEmails.has(email)) continue;
-                    try {
-                        await sendToHome(userId, {
-                            type: 'notification',
-                            notification: {
-                                type: activityType,
-                                actorEmail: authorEmail,
-                                title: `New message in "${displayName}"`,
-                                body,
-                                tag: activityTag,
-                            },
-                        });
-                    } catch {
-                        // user home may not exist
-                    }
+                    await notifyActivity(userId);
                 }
             }
         }
