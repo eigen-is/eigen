@@ -66,7 +66,7 @@ export async function syncTeamCalendars(user: User): Promise<SharedCalendar[]> {
             const teamCalendars = await pullCalendars(teamOwner);
             for (const tc of teamCalendars) {
                 const permission =
-                    (await pullCalendarPermission(teamOwner, tc.id, user.email, memberships.teamIds)) || 'write';
+                    (await pullCalendarPermission(teamOwner, tc.id, user.email, memberships.teamIds)) || 'read';
                 cal.ensureSharedEntry(teamOwner, tc.id, tc.name, tc.color, permission);
             }
         } catch {
