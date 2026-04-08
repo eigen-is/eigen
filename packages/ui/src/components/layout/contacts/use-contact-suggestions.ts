@@ -1,8 +1,7 @@
 import { useContacts } from '@workspace/lib/contacts';
 import { useMyTeams } from '@workspace/lib/home';
-import { fetchPublicUser, usePublicConfig } from '@workspace/lib/public';
-import type { PublicUser } from '@workspace/lib/types/public';
-import { useEffect, useMemo, useState } from 'react';
+import { usePublicConfig } from '@workspace/lib/public';
+import { useMemo } from 'react';
 import type { ContactSuggestion } from './types';
 
 export function useContactSuggestions(query: string, onlyEigenIsMails: boolean = false) {
@@ -11,37 +10,17 @@ export function useContactSuggestions(query: string, onlyEigenIsMails: boolean =
     const { data: config } = usePublicConfig();
     const domain = config?.domain ?? 'eigen.is';
 
-    // Collect all unique member IDs across teams
-    const memberIds = useMemo(() => {
-        if (!myTeams) return [];
-        const ids = new Set<string>();
+    // Collect all unique team members across teams, deduped by email
+    const teamMembers = useMemo(() => {
+        if (!myTeams) return new Map<string, { email: string; name: string }>();
+        const members = new Map<string, { email: string; name: string }>();
         for (const team of myTeams) {
-            for (const id of team.members) {
-                ids.add(id);
+            for (const member of team.members) {
+                members.set(member.email.toLowerCase(), member);
             }
         }
-        return [...ids];
+        return members;
     }, [myTeams]);
-
-    // Batch-resolve member IDs to PublicUser via the auto-batching fetcher
-    const [resolvedMembers, setResolvedMembers] = useState<Map<string, PublicUser>>(new Map());
-
-    useEffect(() => {
-        if (memberIds.length === 0) return;
-
-        let cancelled = false;
-        Promise.all(memberIds.map(async (id) => [id, await fetchPublicUser(id)] as const)).then((results) => {
-            if (cancelled) return;
-            const map = new Map<string, PublicUser>();
-            for (const [id, user] of results) {
-                if (user) map.set(id, user);
-            }
-            setResolvedMembers(map);
-        });
-        return () => {
-            cancelled = true;
-        };
-    }, [memberIds]);
 
     const lowerQuery = query.toLowerCase().split(',').pop()?.trim() || '';
 
@@ -51,22 +30,19 @@ export function useContactSuggestions(query: string, onlyEigenIsMails: boolean =
         const results: ContactSuggestion[] = [];
         const seenEmails = new Set<string>();
 
-        // Team members first (higher priority)
-        for (const [id, user] of resolvedMembers) {
-            if (!user.email) continue;
-            const email = user.email.toLowerCase();
-            const name = (user.name || '').toLowerCase();
+        // Team members first (higher priority) — filter by name or email
+        for (const [emailKey, member] of teamMembers) {
+            const name = (member.name || '').toLowerCase();
+            if (!name.includes(lowerQuery) && !emailKey.includes(lowerQuery)) continue;
+            if (onlyEigenIsMails && !emailKey.endsWith(`@${domain}`)) continue;
+            if (query.includes(member.email)) continue;
 
-            if (!name.includes(lowerQuery) && !email.includes(lowerQuery)) continue;
-            if (onlyEigenIsMails && !email.endsWith(`@${domain}`)) continue;
-            if (query.includes(user.email)) continue;
-
-            seenEmails.add(email);
+            seenEmails.add(emailKey);
             results.push({
-                id,
-                displayName: user.name || user.email,
-                email: user.email,
-                allEmails: [user.email],
+                id: member.email,
+                displayName: member.name || member.email,
+                email: member.email,
+                allEmails: [member.email],
             });
         }
 
@@ -97,7 +73,7 @@ export function useContactSuggestions(query: string, onlyEigenIsMails: boolean =
         }
 
         return results;
-    }, [contacts, resolvedMembers, lowerQuery, onlyEigenIsMails, query, domain]);
+    }, [contacts, teamMembers, lowerQuery, onlyEigenIsMails, query, domain]);
 
     return {
         suggestions,
