@@ -58,6 +58,9 @@ bun run check          # lint + typecheck + test
   any task complete
 - **Read existing code before writing new code** — read 2-3 existing files in the same directory. Match their style,
   structure, naming, and patterns exactly. New code must look like it was always there
+- **Read relevant docs before planning or coding** — check `docs/` for architecture docs on the domain you're
+  touching (e.g., `docs/COMMENTS.md` before adding comment features, `docs/EXPORT.md` before changing export).
+  Don't assume you know the conventions — verify them
 - **No migrations or backward compatibility** — data is throwaway during dev. Prefer clean schemas
 - **Always run `bun run check`** after changes (lint + typecheck + test). When multiple agents run in parallel,
   only the main agent should run check — concurrent runs cause deadlocks
@@ -227,6 +230,10 @@ These patterns have caused bugs across multiple domains:
   that owns the resource. For personal data it equals `user.id`; for team data it's `team_{teamId}`. This consistent
   prefix enables future load-balancer sharding by ownerId (all requests for one Home on the same server). Routes must
   validate that the caller has access to the specified ownerId (owns it or is a team member)
+- **Never call `getHome()` for another user's data** — all cross-home interactions (where one user's action
+  touches another user's Home) must go through the relay in `home-relay.ts`: `sendToHome()` for push,
+  `pull*()` for reads. `getHome()` is fine for the current request's own home. This is the sharding seam —
+  only `home-relay.ts` changes when homes move to different servers. See [SCALABILITY.md](docs/SCALABILITY.md)
 - **Use `ColumnLayout` + `Column` with `toolbar` prop for page layout** — don't put the toolbar inside the page
   content. The `Column` component renders the toolbar in a fixed-height bar. See Page Layout Pattern above
 - **Use existing shared components** — check `packages/ui/src/components/layout/` before building custom UI.
