@@ -40,14 +40,12 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
 
     const chatName = chatPath?.name?.replace('.eigenchat', '') || 'Chat';
 
-    const unreadChatIds = useUnreadChatIds(user?.id ?? '');
     const markChatRead = useMarkChatRead(user?.id ?? '');
+    const hasUnread = useUnreadChatIds(user?.id ?? '').has(chatId);
 
     useEffect(() => {
-        if (chatId && !messagesQuery.isLoading && unreadChatIds.has(chatId)) {
-            markChatRead(chatId);
-        }
-    }, [chatId, messagesQuery.isLoading, unreadChatIds, markChatRead]);
+        if (hasUnread) markChatRead(chatId);
+    }, [chatId, hasUnread, markChatRead]);
 
     const { data: effectiveMembers } = useEffectiveMembers(ownerId, mountId, chatId);
     const roomMembers: RoomMember[] = useMemo(() => {
