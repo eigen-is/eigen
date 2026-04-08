@@ -1,20 +1,35 @@
 # Contacts App Improvements
 
-> **TLDR**: The contacts app currently only shows personal contacts. Future work: show team members alongside
-> personal contacts, merge/deduplicate by email, and restructure the sidebar to reflect this.
+> **TLDR**: The contacts app shows personal contacts and team members. Team members appear as read-only entries
+> in the sidebar. Autosuggest merges both sources. Future work: merge/deduplicate team members with personal
+> contacts, "Add to contacts" for team-only entries.
 
-## Contacts App Sidebar Restructure
-
-Current sidebar shows only labels. Proposed structure:
+## Sidebar (implemented)
 
 | Section | What it shows |
 |---------|--------------|
-| **All contacts** (default) | Deduplicated team members + personal contacts |
-| **Own contacts** | Only personal contacts you've created |
-| *Team A, Team B, ...* | Members of each team you belong to |
-| Labels (existing) | Personal contacts filtered by label |
+| **My Contacts** (default) | Personal contacts you've created |
+| *Team A, Team B, ...* | Members of each team you belong to (read-only) |
+| Labels | Personal contacts filtered by label |
 
-## Merge Logic
+Team items use `UserAvatar` with `teamOwnerId(team.id)` for the icon, matching the Drive sidebar pattern.
+Data comes from `useMyTeams()` — no new API needed.
+
+## Team Member Views (implemented)
+
+- **List**: Uses the same alphabetical grouping and `eigen-list-item` row styling as contacts. Supports search
+  via the shared toolbar. No drag-drop, no label assignment, no multi-select.
+- **Detail**: Read-only view with avatar, name, email. No edit/delete/label actions. Uses the same layout as
+  `ContactDetail` but simplified.
+- **Routing**: `filterType="team"`, `filterId={teamId}` extends the existing `filterType/filterId` pattern.
+
+## Autosuggest (implemented)
+
+`useContactSuggestions` in `packages/ui/src/components/layout/contacts/use-contact-suggestions.ts` merges
+team members (from `useMyTeams()`) with personal contacts, deduplicated by email. Team members appear first.
+An `excludeEmails` prop filters out the current user and already-added entries in share dialogs.
+
+## Future: Merge/Deduplicate
 
 When a team member also exists as a personal contact (matched by email):
 
@@ -22,14 +37,6 @@ When a team member also exists as a personal contact (matched by email):
 - **Extra fields** (phone, notes, labels, birthday): personal contact data enriches the entry
 - Team-only entries show a lean card with "Add to contacts" option
 - Personal-only entries show as they do today
-
-## Autosuggest (implemented)
-
-`useContactSuggestions` in `packages/ui/src/components/layout/contacts/use-contact-suggestions.ts` already
-merges team members (from `useMyTeams()`) with personal contacts, deduplicated by email. Team members appear
-first. An `excludeEmails` prop filters out the current user and already-added entries in share dialogs.
-
-The contacts app sidebar restructure (above) would use `useMyTeams()` directly for per-team member lists.
 
 ## Future: Federation
 
