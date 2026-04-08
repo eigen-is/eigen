@@ -177,7 +177,7 @@ export class ChatRoom {
                             },
                         });
                     } catch {
-                        // user may not exist
+                        // user or home may not exist
                     }
                 }
             }

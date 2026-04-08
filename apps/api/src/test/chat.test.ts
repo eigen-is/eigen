@@ -98,17 +98,6 @@ describe('Chat', () => {
             );
             const chatFolder = findOrFail(contents, (item: DrivePath) => item.name === 'chat');
             expect(chatFolder.type).toBe('folder');
-
-            // const chatContents = await driveGet<DrivePath[]>(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-            //     `folder/${chatFolder.id}`);
-            // const generalChat = chatContents.find((item: DrivePath) => item.name === 'General.eigenchat');
-            // expect(generalChat).toBeDefined();
-            // expect(generalChat.type).toBe('chat');
-
-            // const chatInternals = await driveGet<DrivePath[]>(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-            //     `folder/${embeddedChat.id}`);
-            // const dataDb = chatInternals.find((item: DrivePath) => item.name === 'data.db');
-            // expect(dataDb).toBeDefined();
         });
     });
 
