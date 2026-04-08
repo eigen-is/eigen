@@ -1,5 +1,4 @@
-import { useTeams } from '@workspace/lib/admin';
-import { usePublicConfig } from '@workspace/lib/public';
+import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { CalendarShare } from '@workspace/lib/types/calendar';
 import { validateEmailAddress } from '@workspace/lib/validation';
@@ -27,8 +26,7 @@ export function CalendarShareEditor({ shares, onChange }: CalendarShareEditorPro
     const inputRef = useRef<HTMLInputElement>(null);
     const currentShares = shares || [];
 
-    const { data: config } = usePublicConfig();
-    const { data: teams } = useTeams(config?.orgId);
+    const { data: myTeams } = useMyTeams();
 
     const addShare = useCallback(
         (targetId: string, permission: CalendarShare['permission'] = 'read') => {
@@ -153,7 +151,7 @@ export function CalendarShareEditor({ shares, onChange }: CalendarShareEditorPro
                 </div>
             )}
 
-            {teams && teams.length > 0 && (
+            {myTeams && myTeams.length > 0 && (
                 <>
                     <Separator />
                     <DropdownMenu>
@@ -164,7 +162,7 @@ export function CalendarShareEditor({ shares, onChange }: CalendarShareEditorPro
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="start">
-                            {teams.map((team) => (
+                            {myTeams.map((team) => (
                                 <DropdownMenuItem
                                     key={team.id}
                                     onClick={() => handleAddTeam(team.id)}
