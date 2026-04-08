@@ -5,7 +5,7 @@ import { EIGEN_FONTS, getFontFamily } from '@workspace/lib/constants/fonts';
 import { useExportDocument } from '@workspace/lib/drive';
 import { useMediaQuery } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { Toolbar, TooltipButton } from '@workspace/ui';
+import { CountBadge, Toolbar, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import {
@@ -689,11 +689,7 @@ export const EditorToolbar = ({
                             onClick={onToggleCommentPanel}
                             active={commentPanelOpen}
                         />
-                        {(unresolvedCommentCount ?? 0) > 0 && (
-                            <span className="absolute -top-1 -right-1 h-4 min-w-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center pointer-events-none px-1">
-                                {unresolvedCommentCount}
-                            </span>
-                        )}
+                        <CountBadge count={unresolvedCommentCount ?? 0} />
                     </div>
                 )}
                 {canWrite ? (

@@ -14,6 +14,7 @@ import { Bell, Check, X } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '../../button';
 import { Popover, PopoverContent, PopoverTrigger } from '../../popover';
+import { CountBadge } from '../count-badge';
 import { UserAvatar } from '../user-avatar';
 
 type NotificationItemProps = {
@@ -88,11 +89,7 @@ export function NotificationBell() {
                     className="relative h-8 w-8 text-white hover:bg-primary/20 hover:text-white"
                 >
                     <Bell className="h-4 w-4" />
-                    {count > 0 && (
-                        <span className="absolute -top-0.5 -right-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-medium text-destructive-foreground">
-                            {count > 99 ? '99+' : count}
-                        </span>
-                    )}
+                    <CountBadge count={count} />
                 </Button>
             </PopoverTrigger>
             <PopoverContent className="w-80 p-0" align="end">

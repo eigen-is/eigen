@@ -1,5 +1,5 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { TooltipButton } from '@workspace/ui';
+import { CountBadge, TooltipButton } from '@workspace/ui';
 import { DriveCreateSheets } from '@workspace/ui/components/layout/drive/drive-create-sheets';
 import { DocumentModeButton } from '@workspace/ui/components/layout/toolbar/document-mode-button';
 import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
@@ -50,11 +50,7 @@ export function ToolbarRightItems({
                         onClick={onToggleCommentPanel}
                         active={commentPanelOpen}
                     />
-                    {(unresolvedCommentCount ?? 0) > 0 && (
-                        <span className="absolute -top-1 -right-1 h-4 min-w-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center pointer-events-none px-1">
-                            {unresolvedCommentCount}
-                        </span>
-                    )}
+                    <CountBadge count={unresolvedCommentCount ?? 0} />
                 </div>
             )}
             {canWrite ? (
