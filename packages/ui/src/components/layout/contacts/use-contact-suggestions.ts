@@ -4,7 +4,7 @@ import { usePublicConfig } from '@workspace/lib/public';
 import { useMemo } from 'react';
 import type { ContactSuggestion } from './types';
 
-export function useContactSuggestions(query: string, onlyEigenIsMails: boolean = false) {
+export function useContactSuggestions(query: string, onlyEigenIsMails: boolean = false, excludeEmails: string[] = []) {
     const { data: contacts, isLoading: contactsLoading } = useContacts();
     const { data: myTeams } = useMyTeams();
     const { data: config } = usePublicConfig();
@@ -23,6 +23,7 @@ export function useContactSuggestions(query: string, onlyEigenIsMails: boolean =
     }, [myTeams]);
 
     const lowerQuery = query.toLowerCase().split(',').pop()?.trim() || '';
+    const excludeSet = useMemo(() => new Set(excludeEmails.map((e) => e.toLowerCase())), [excludeEmails]);
 
     const suggestions = useMemo(() => {
         if (!lowerQuery || lowerQuery.length < 2) return [];
@@ -32,6 +33,7 @@ export function useContactSuggestions(query: string, onlyEigenIsMails: boolean =
 
         // Team members first (higher priority) — filter by name or email
         for (const [emailKey, member] of teamMembers) {
+            if (excludeSet.has(emailKey)) continue;
             const name = (member.name || '').toLowerCase();
             if (!name.includes(lowerQuery) && !emailKey.includes(lowerQuery)) continue;
             if (onlyEigenIsMails && !emailKey.endsWith(`@${domain}`)) continue;
@@ -59,6 +61,7 @@ export function useContactSuggestions(query: string, onlyEigenIsMails: boolean =
                 const eigenIsMail = contact.email.find((e) => e.endsWith(`@${domain}`));
                 if (eigenIsMail && !emailMatch) bestEmail = eigenIsMail;
                 if (onlyEigenIsMails && !bestEmail.endsWith(`@${domain}`)) continue;
+                if (excludeSet.has(bestEmail.toLowerCase())) continue;
                 if (query.includes(bestEmail)) continue;
                 if (seenEmails.has(bestEmail.toLowerCase())) continue;
 
@@ -73,7 +76,7 @@ export function useContactSuggestions(query: string, onlyEigenIsMails: boolean =
         }
 
         return results;
-    }, [contacts, teamMembers, lowerQuery, onlyEigenIsMails, query, domain]);
+    }, [contacts, teamMembers, lowerQuery, onlyEigenIsMails, excludeSet, query, domain]);
 
     return {
         suggestions,

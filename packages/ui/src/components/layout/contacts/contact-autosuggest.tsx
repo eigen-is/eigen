@@ -10,6 +10,7 @@ export function ContactAutosuggest({
     onChange,
     appendMode = false,
     onlyEigenIsMails = false,
+    excludeEmails,
     maxSuggestions = 5,
     className = '',
     suggestionsClassName = '',
@@ -32,7 +33,7 @@ export function ContactAutosuggest({
     const [internalValue, setInternalValue] = useState(initialValue);
     const inputValue = controlledValue !== undefined ? controlledValue : internalValue;
 
-    const { suggestions, isLoading } = useContactSuggestions(inputValue, onlyEigenIsMails);
+    const { suggestions, isLoading } = useContactSuggestions(inputValue, onlyEigenIsMails, excludeEmails);
 
     const displayedSuggestions = suggestions.slice(0, maxSuggestions);
 
@@ -63,6 +64,7 @@ export function ContactAutosuggest({
         (e: React.ChangeEvent<HTMLInputElement>) => {
             const newValue = e.target.value;
             setInternalValue(newValue);
+            setIsOpen(true);
             onChange?.(newValue);
         },
         [onChange],
