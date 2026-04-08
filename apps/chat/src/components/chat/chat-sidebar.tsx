@@ -1,5 +1,6 @@
 import { useNavigate } from '@tanstack/react-router';
-import { useChats, useCreateChat } from '@workspace/lib/chat';
+import { useAuth } from '@workspace/lib/auth';
+import { useChats, useCreateChat, useUnreadChatIds } from '@workspace/lib/chat';
 import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -22,7 +23,17 @@ type ChatSidebarProps = {
     rootPath: DrivePath | null;
 };
 
-function ChatItem({ chat, condensed, teamId }: { chat: DrivePath; condensed: boolean; teamId?: string }) {
+function ChatItem({
+    chat,
+    condensed,
+    teamId,
+    hasUnread,
+}: {
+    chat: DrivePath;
+    condensed: boolean;
+    teamId?: string;
+    hasUnread?: boolean;
+}) {
     return (
         <SidebarItem
             icon={
@@ -35,17 +46,32 @@ function ChatItem({ chat, condensed, teamId }: { chat: DrivePath; condensed: boo
             label={(chat.name || 'Unnamed chat').replace(/\.eigenchat$/, '')}
             to={`/${chat.ownerId}/${chat.mountId}/${chat.id}`}
             condensed={condensed}
+            className={hasUnread ? 'font-bold text-foreground' : undefined}
         />
     );
 }
 
-function TeamChatItems({ teamId, condensed }: { teamId: string; condensed: boolean }) {
+function TeamChatItems({
+    teamId,
+    condensed,
+    unreadChatIds,
+}: {
+    teamId: string;
+    condensed: boolean;
+    unreadChatIds: Set<string>;
+}) {
     const { data: chats } = useChats(teamOwnerId(teamId));
     if (!chats || chats.length === 0) return null;
     return (
         <>
             {chats.map((chat) => (
-                <ChatItem key={chat.id} chat={chat} condensed={condensed} teamId={teamId} />
+                <ChatItem
+                    key={chat.id}
+                    chat={chat}
+                    condensed={condensed}
+                    teamId={teamId}
+                    hasUnread={unreadChatIds.has(chat.id)}
+                />
             ))}
         </>
     );
@@ -59,6 +85,8 @@ export function ChatSidebar({
     mountId,
     rootPath,
 }: ChatSidebarProps) {
+    const { user } = useAuth();
+    const unreadChatIds = useUnreadChatIds(user?.id ?? '');
     const { data: chats, isLoading } = useChats(ownerId);
     const [createChatOpen, setCreateChatOpen] = useState(false);
     const createChatMutation = useCreateChat(ownerId, mountId);
@@ -106,7 +134,14 @@ export function ChatSidebar({
                     {chats.length === 0 ? (
                         <div className="px-3 py-2 text-xs text-muted-foreground">No chats yet</div>
                     ) : (
-                        chats.map((chat) => <ChatItem key={chat.id} chat={chat} condensed={condensed} />)
+                        chats.map((chat) => (
+                            <ChatItem
+                                key={chat.id}
+                                chat={chat}
+                                condensed={condensed}
+                                hasUnread={unreadChatIds.has(chat.id)}
+                            />
+                        ))
                     )}
                 </SidebarSection>
             )}
@@ -116,7 +151,12 @@ export function ChatSidebar({
                     <Separator />
                     <SidebarSection condensed={condensed} title={condensed ? undefined : 'Team Chats'}>
                         {myTeams.map((team) => (
-                            <TeamChatItems key={team.id} teamId={team.id} condensed={condensed} />
+                            <TeamChatItems
+                                key={team.id}
+                                teamId={team.id}
+                                condensed={condensed}
+                                unreadChatIds={unreadChatIds}
+                            />
                         ))}
                     </SidebarSection>
                 </>
