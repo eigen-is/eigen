@@ -38,7 +38,7 @@ export async function resolveCalendarForEvents(
         }
         const home = await getHome(ownerId); // ownerId-routed: team home
         const permission = home.calendar.checkPermission(calendarId, user.email, memberships.teamIds);
-        return { calendar: home.calendar, permission: permission || 'read' };
+        return { calendar: home.calendar, permission: permission || 'write' };
     }
 
     if (ownerId === user.id) {
@@ -66,7 +66,7 @@ export async function syncTeamCalendars(user: User): Promise<SharedCalendar[]> {
             const teamCalendars = await pullCalendars(teamOwner);
             for (const tc of teamCalendars) {
                 const permission =
-                    (await pullCalendarPermission(teamOwner, tc.id, user.email, memberships.teamIds)) || 'read';
+                    (await pullCalendarPermission(teamOwner, tc.id, user.email, memberships.teamIds)) || 'write';
                 cal.ensureSharedEntry(teamOwner, tc.id, tc.name, tc.color, permission);
             }
         } catch {
