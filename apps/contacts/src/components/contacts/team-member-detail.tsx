@@ -1,7 +1,11 @@
 import { getMailComposeUrl } from '@workspace/lib/api';
-import { UserAvatar } from '@workspace/ui';
+import { Toolbar, UserAvatar } from '@workspace/ui';
 import { Mail } from 'lucide-react';
 import type { TeamMember } from './team-member-list';
+
+export function TeamMemberDetailToolbar() {
+    return <Toolbar>{null}</Toolbar>;
+}
 
 type TeamMemberDetailProps = {
     member: TeamMember;
