@@ -4,6 +4,7 @@ import { Elysia, t } from 'elysia';
 import { requireTeamAccess, requireTeamAdmin } from '../lib/core/access';
 import type { TeamHome } from '../lib/home';
 import { getHome } from '../lib/home';
+import { getTeamMembers } from '../lib/team';
 import { betterAuth } from './auth';
 
 function teamId(ownerId: string): string {
@@ -13,6 +14,16 @@ function teamId(ownerId: string): string {
 
 export const teamRouter = new Elysia({ name: 'team' })
     .use(betterAuth)
+
+    .get(
+        '/team/:ownerId/members',
+        async ({ params, user }) => {
+            await requireTeamAccess(user.id, teamId(params.ownerId));
+            const members = await getTeamMembers(teamId(params.ownerId));
+            return members.map((m) => ({ userId: m.user.id, email: m.user.email, name: m.user.name }));
+        },
+        { auth: true },
+    )
 
     .get(
         '/team/:ownerId/settings',
