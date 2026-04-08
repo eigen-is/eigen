@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChatMessage, RoomMember } from '../../../types/chat';
 import { validateEmailTarget } from '../../../validation';
 import { useAuth } from '../../auth';
@@ -11,6 +11,7 @@ import {
 } from '../../drive';
 import { COMMANDS_HELP, getLocalCommand, isUnknownCommand } from '../commands';
 import { useDeleteMessage, useEditMessage, useInviteToChat, useMessages, usePostMessage } from './use-chat';
+import { useMarkChatRead } from './use-chat-unread';
 
 let localIdCounter = 0;
 
@@ -38,6 +39,14 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
     const lastWhisperFromRef = useRef<string | null>(null);
 
     const chatName = chatPath?.name?.replace('.eigenchat', '') || 'Chat';
+
+    const markChatRead = useMarkChatRead(user?.id ?? '');
+
+    useEffect(() => {
+        if (chatId && messages.length > 0 && !messagesQuery.isLoading) {
+            markChatRead(chatId);
+        }
+    }, [chatId, messages.length, messagesQuery.isLoading]);
 
     const { data: effectiveMembers } = useEffectiveMembers(ownerId, mountId, chatId);
     const roomMembers: RoomMember[] = useMemo(() => {
