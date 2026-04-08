@@ -356,5 +356,6 @@ Detailed architecture docs in `docs/`:
 | [TODO-ENCRYPTION.md](docs/TODO-ENCRYPTION.md)               | E2E encryption design                    |
 | [SCALABILITY.md](docs/SCALABILITY.md)                       | Multi-server scaling: relay layer, sharding design |
 | [TODO-GUEST-ACCESS.md](docs/TODO-GUEST-ACCESS.md)           | Guest access, OTP auth, access requests  |
+| [TODO-CONTACTS.md](docs/TODO-CONTACTS.md)                   | Contacts app improvements, team member merge, sidebar |
 | [TODO-FORTUNE-SHEETS.md](docs/TODO-FORTUNE-SHEETS.md)       | Fortune-sheet refactoring audit          |
 | [RESEARCH_AI.md](docs/PROPOSAL_AI.md)                       | Local/private AI integration research    |
