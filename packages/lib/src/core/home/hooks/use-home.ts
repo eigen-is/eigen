@@ -8,6 +8,7 @@ export const homeKeys = {
     all: ['home'] as const,
     owner: (ownerId: string) => [...homeKeys.all, ownerId] as const,
     size: (ownerId: string) => [...homeKeys.owner(ownerId), 'size'] as const,
+    myTeams: (ownerId: string) => [...homeKeys.owner(ownerId), 'my-teams'] as const,
 };
 
 // Hook to fetch home storage size information
@@ -39,4 +40,23 @@ export function invalidateHomeSize(queryClient: QueryClient, ownerId: string): v
             queryClient.invalidateQueries({ queryKey: homeKeys.size(ownerId) });
         }, 5000),
     );
+}
+
+export function useMyTeams() {
+    const { user } = useAuth();
+    const ownerId = user?.id || '';
+
+    return useQuery({
+        queryKey: homeKeys.myTeams(ownerId),
+        queryFn: async () => {
+            const response = await homeApi({ ownerId })['my-teams'].get();
+            return response.data || [];
+        },
+        staleTime: 2 * 60 * 1000,
+        enabled: !!ownerId,
+    });
+}
+
+export function invalidateMyTeams(queryClient: QueryClient, ownerId: string): void {
+    queryClient.invalidateQueries({ queryKey: homeKeys.myTeams(ownerId) });
 }
