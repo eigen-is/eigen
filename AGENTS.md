@@ -353,7 +353,6 @@ Detailed architecture docs in `docs/`:
 | [TESTING.md](docs/TESTING.md)                                 | Test setup, patterns, test files                                             |
 | [IMAP.md](docs/IMAP.md)                                       | Maildir storage, Dovecot deployment, IMAP auth                               |
 | [DEPLOYMENT.md](docs/DEPLOYMENT.md)                           | Docker deployment: Caddy, Postfix, Dovecot, auth, remaining work            |
-| [PRE-PUBLISH-CHECKLIST.md](docs/PRE-PUBLISH-CHECKLIST.md)     | Pre-publish review items and status                                          |
 | [TYPOGRAPHY.md](docs/TYPOGRAPHY.md)                           | Self-hosted font system, FontPicker                                          |
 | [SOFT-DELETE.md](docs/SOFT-DELETE.md)                         | Trash / recycle bin — soft delete, restore, auto-purge                       |
 
