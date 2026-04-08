@@ -223,6 +223,7 @@ const TiptapEditor = ({
 
     const handleCommentClick = useCallback((chatName: string) => {
         setViewCommentChatName(chatName);
+        setCommentPanelOpen(true);
     }, []);
 
     const editor = useEditor(

@@ -57,6 +57,9 @@ export function useMyTeams() {
     });
 }
 
-export function invalidateMyTeams(queryClient: QueryClient, ownerId: string): void {
-    queryClient.invalidateQueries({ queryKey: homeKeys.myTeams(ownerId) });
+export function invalidateMyTeams(queryClient: QueryClient): void {
+    queryClient.invalidateQueries({
+        queryKey: homeKeys.all,
+        predicate: (query) => query.queryKey.includes('my-teams'),
+    });
 }

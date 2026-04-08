@@ -10,7 +10,7 @@ export function handleTeamSSEvent(event: SSEvent, queryClient: QueryClient): boo
     switch (event.type) {
         case SSEventType.TEAM_SETTINGS_UPDATED:
             invalidateTeamSettings(queryClient, event.teamId);
-            invalidateMyTeams(queryClient, '');
+            invalidateMyTeams(queryClient);
             return true;
 
         default:
