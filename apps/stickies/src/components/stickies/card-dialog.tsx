@@ -1,5 +1,7 @@
 import { useChatRoom } from '@workspace/lib/chat';
+import { formatDate } from '@workspace/lib/date';
 import { useMediaResolver } from '@workspace/lib/drive';
+import { useResolvedUser } from '@workspace/lib/public';
 import { ChatMessageInput, ChatMessageList, NoteCardDialog } from '@workspace/ui';
 import { useState } from 'react';
 import type * as Y from 'yjs';
@@ -42,6 +44,11 @@ function CardChatInner({ ownerId, mountId, chatId }: { ownerId: string; mountId:
     );
 }
 
+function useCardMeta(creator: string, createdAt: number) {
+    const { displayName } = useResolvedUser({ email: creator });
+    return `Created by ${displayName || creator} on ${formatDate(createdAt)}`;
+}
+
 type CardDialogProps = {
     isOpen: boolean;
     onClose: () => void;
@@ -54,6 +61,7 @@ type CardDialogProps = {
 
 export function CardDialog({ isOpen, onClose, card, canWrite = true, yjsDoc, ownerId, mountId }: CardDialogProps) {
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const meta = useCardMeta(card?.creator || '', card?.createdAt || 0);
 
     if (!card) return null;
 
@@ -64,6 +72,7 @@ export function CardDialog({ isOpen, onClose, card, canWrite = true, yjsDoc, own
                 onOpenChange={(open) => !open && onClose()}
                 title={card.title}
                 description={card.description}
+                meta={card.creator ? meta : undefined}
                 canWrite={canWrite}
                 onEdit={() => setIsSettingsOpen(true)}
             >
