@@ -9,8 +9,11 @@ If you're curious about how this started, I wrote about it here:
 
 ## Current state
 
-The basics work. You can send email, edit documents together, manage files, sync calendars with Thunderbird.
-But it's early. Rough edges everywhere, missing features, architecture decisions that could still go either
+A lot has happened since that first blog post. Mail, Drive, Docs, Sheets, Slides, Stickies, Calendar, Contacts,
+Chat, and an Admin panel are all working. Real-time collaboration, CalDAV sync, file sharing, document export,
+passkey login. It's a real thing now.
+
+But it's still early. Rough edges everywhere, missing features, architecture decisions that could still go either
 way. If you like working on something where your input actually matters, this is that kind of project.
 
 I move fast on the codebase; things change week to week. A few things to keep in mind:
@@ -29,29 +32,31 @@ doesn't work.
 
 ### Adopt an app or area
 
-Eigen has 12 apps and a lot of infrastructure underneath. I can't give everything equal attention. If
+Eigen has 13 apps and a lot of infrastructure underneath. I can't give everything equal attention. If
 something here interests you, I'd love to hand you the keys. Maintain it, improve it, triage bugs.
 
 Every app needs work:
 
 - **Mail**: threading, search, filters, attachment handling
 - **Drive**: bulk operations, drag-and-drop improvements
-- **Docs**: export quality, tables, import from DOCX/Markdown
+- **Docs**: import from DOCX/Markdown, more export polish
 - **Sheets**: import, export, the forked fortune-sheet engine cleanup
-- **Slides**: import, export to PDF/PPTX, more object types
+- **Slides**: import, export to PPTX, more object types
 - **Stickies**: labels, filters, archiving, assigning cards to people
 - **Calendar**: recurring event edge cases, CalDAV compliance
-- **Contacts**: import, export (vCard), CardDAV support
-- **Chat**: better integration, unread indicators, notifications
-- **Admin**: settings UI, team management, dashboards
+- **Contacts**: import, export (vCard), CardDAV support, merge/deduplicate
+- **Chat**: threads, search, richer formatting
+- **Admin**: dashboards, usage stats, bulk user management
+- **Space**: account settings, profile improvements
 
 And cross-cutting concerns:
 
+- **Search**: unified search across all apps (there's a detailed proposal in `docs/`)
 - **IMAP/Dovecot**: edge cases, flag sync, mailbox management
 - **CalDAV**: client compatibility (Apple Calendar, DAVx5, etc.)
 - **Mobile/responsive**: works on desktop, needs love on smaller screens
 - **Accessibility**: keyboard nav, screen readers, ARIA
-- **Performance**: profiling, optimizations, offloading heavy work to off-thread workers
+- **Performance**: profiling, optimizations, offloading heavy work to workers
 - **Security**: audits, penetration testing, hardening
 - **Copy/paste**: from external sources into Docs/Sheets/Slides, and between apps
 - **Testing**: more coverage, CI pipeline
@@ -139,7 +144,7 @@ bun run check          # lint + typecheck + test (run this before submitting a P
 
 ## Finding your way around
 
-It's a monorepo: one API server in `apps/api/`, a dozen frontend apps in `apps/*/`, and shared code in
+It's a monorepo: one API server in `apps/api/`, frontend apps in `apps/*/`, and shared code in
 `packages/lib/` (types, hooks, API client) and `packages/ui/` (components).
 
 Start here:
