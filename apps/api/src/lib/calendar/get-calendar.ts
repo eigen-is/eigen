@@ -38,7 +38,7 @@ export async function resolveCalendarForEvents(
         }
         const home = await getHome(ownerId); // ownerId-routed: team home
         const permission = home.calendar.checkPermission(calendarId, user.email, memberships.teamIds);
-        return { calendar: home.calendar, permission: permission || 'write' };
+        return { calendar: home.calendar, permission: permission || 'read' };
     }
 
     if (ownerId === user.id) {
