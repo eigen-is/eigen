@@ -3,7 +3,7 @@ import { useChats, useCreateChat } from '@workspace/lib/chat';
 import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { EigenLoader } from '@workspace/ui';
+import { EigenLoader, UserAvatar } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { DriveCreateItemDialog } from '@workspace/ui/components/layout/drive/drive-create-folder-item';
 import { SidebarHeader } from '@workspace/ui/components/layout/sidebar/sidebar-header';
@@ -22,10 +22,16 @@ type ChatSidebarProps = {
     rootPath: DrivePath | null;
 };
 
-function ChatItem({ chat, condensed }: { chat: DrivePath; condensed: boolean }) {
+function ChatItem({ chat, condensed, teamId }: { chat: DrivePath; condensed: boolean; teamId?: string }) {
     return (
         <SidebarItem
-            icon={<MessageSquare className="h-4 w-4" />}
+            icon={
+                teamId ? (
+                    <UserAvatar email={teamOwnerId(teamId)} className="h-4 w-4" />
+                ) : (
+                    <MessageSquare className="h-4 w-4" />
+                )
+            }
             label={(chat.name || 'Unnamed chat').replace(/\.eigenchat$/, '')}
             to={`/${chat.ownerId}/${chat.mountId}/${chat.id}`}
             condensed={condensed}
@@ -39,7 +45,7 @@ function TeamChatItems({ teamId, condensed }: { teamId: string; condensed: boole
     return (
         <>
             {chats.map((chat) => (
-                <ChatItem key={chat.id} chat={chat} condensed={condensed} />
+                <ChatItem key={chat.id} chat={chat} condensed={condensed} teamId={teamId} />
             ))}
         </>
     );
