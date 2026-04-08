@@ -3,7 +3,7 @@ import type { ChatMessage } from '@workspace/lib/types/chat';
 import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import { type SSEvent, SSEventType } from '@workspace/lib/types/sse';
 import { validateEmailAddress } from '@workspace/lib/validation';
-import { desc, eq, lt } from 'drizzle-orm';
+import { desc, eq, isNull, lt } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { ApiError } from '../core/errors';
 import type { ManagedDatabase } from '../core/managed-database';
@@ -146,6 +146,7 @@ export class ChatRoom {
         }
 
         // Notify mentioned users (only those with read access)
+        const mentionedEmailSet = new Set<string>();
         if (type !== 'whisper') {
             const mentionedEmails = extractMentionedEmails(content);
             if (mentionedEmails.length > 0) {
@@ -158,6 +159,7 @@ export class ChatRoom {
                 for (const email of mentionedEmails) {
                     if (email === authorEmail.toLowerCase()) continue;
                     if (!memberEmails.has(email)) continue;
+                    mentionedEmailSet.add(email);
                     try {
                         const mentionedUser = await getUserByEmail(email);
                         if (!mentionedUser) continue;
@@ -169,6 +171,81 @@ export class ChatRoom {
                                 title: `You were mentioned in "${displayName}"`,
                                 body: content.length > 100 ? `${content.slice(0, 100)}...` : content,
                                 tag: `mention:${targetPath.ownerId}:${targetPath.mountId}:${targetPath.id}:${email}`,
+                            },
+                        });
+                    } catch {
+                        // user may not exist
+                    }
+                }
+            }
+        }
+
+        // Notify previous participants about new activity
+        if (type === 'whisper' && whisperTo) {
+            if (whisperTo !== authorEmail) {
+                const members = await this.drive.getEffectiveMembers(this.path.mountId, this.path.id);
+                const memberEmails = new Set(members.map((m) => m.email.toLowerCase()));
+                if (memberEmails.has(whisperTo.toLowerCase())) {
+                    try {
+                        const recipientUser = await getUserByEmail(whisperTo);
+                        if (recipientUser) {
+                            const displayName = stripEigenExtension(this.containerPath?.name ?? this.path.name);
+                            const notificationType = this.containerPath ? 'comment-reply' : 'chat-message';
+                            const targetPath = this.containerPath ?? this.path;
+                            await sendToHome(recipientUser.id, {
+                                type: 'notification',
+                                notification: {
+                                    type: notificationType,
+                                    actorEmail: authorEmail,
+                                    title: `New message in "${displayName}"`,
+                                    body: content.length > 100 ? `${content.slice(0, 100)}...` : content,
+                                    tag: `${notificationType}:${targetPath.ownerId}:${targetPath.mountId}:${targetPath.id}`,
+                                },
+                            });
+                        }
+                    } catch {
+                        // user may not exist
+                    }
+                }
+            }
+        } else if (type === 'message' || type === 'emote') {
+            const participants = new Map<string, { id: string; email: string }>();
+
+            const rows = await this.db
+                .selectDistinct({ authorId: schema.messages.authorId, authorEmail: schema.messages.authorEmail })
+                .from(schema.messages)
+                .where(isNull(schema.messages.deletedAt))
+                .all();
+            for (const row of rows) {
+                participants.set(row.authorEmail.toLowerCase(), { id: row.authorId, email: row.authorEmail });
+            }
+
+            const ownerEmail = this.home.user.email.toLowerCase();
+            if (!participants.has(ownerEmail)) {
+                participants.set(ownerEmail, { id: this.home.user.id, email: this.home.user.email });
+            }
+
+            participants.delete(authorEmail.toLowerCase());
+
+            if (participants.size > 0) {
+                const members = await this.drive.getEffectiveMembers(this.path.mountId, this.path.id);
+                const memberEmails = new Set(members.map((m) => m.email.toLowerCase()));
+                const displayName = stripEigenExtension(this.containerPath?.name ?? this.path.name);
+                const notificationType = this.containerPath ? 'comment-reply' : 'chat-message';
+                const targetPath = this.containerPath ?? this.path;
+
+                for (const [email, participant] of participants) {
+                    if (mentionedEmailSet.has(email)) continue;
+                    if (!memberEmails.has(email)) continue;
+                    try {
+                        await sendToHome(participant.id, {
+                            type: 'notification',
+                            notification: {
+                                type: notificationType,
+                                actorEmail: authorEmail,
+                                title: `New message in "${displayName}"`,
+                                body: content.length > 100 ? `${content.slice(0, 100)}...` : content,
+                                tag: `${notificationType}:${targetPath.ownerId}:${targetPath.mountId}:${targetPath.id}`,
                             },
                         });
                     } catch {
