@@ -1,12 +1,9 @@
 import { useMatch, useNavigate } from '@tanstack/react-router';
-import { useTeams } from '@workspace/lib/admin';
 import { useAuth } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, useListTrash, usePathInfo, useRootFolder } from '@workspace/lib/drive';
-import { usePublicConfig } from '@workspace/lib/public';
-import { useTeamMounts } from '@workspace/lib/team';
+import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import type { MountSettings } from '@workspace/lib/types/settings';
 import { SidebarItem, StorageUsage, UserAvatar } from '@workspace/ui';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
@@ -75,30 +72,6 @@ function TeamMountItem({
     );
 }
 
-function TeamDriveItems({ teamId, icon, condensed }: { teamId: string; icon: React.ReactNode; condensed: boolean }) {
-    const ownerId = teamOwnerId(teamId);
-    const { data: mounts } = useTeamMounts(teamId);
-
-    const enabledMounts = mounts ? Object.entries(mounts).filter(([, m]: [string, MountSettings]) => m.enabled) : [];
-
-    if (enabledMounts.length === 0) return null;
-
-    return (
-        <>
-            {enabledMounts.map(([id, mount]) => (
-                <TeamMountItem
-                    key={id}
-                    ownerId={ownerId}
-                    mountId={id}
-                    label={mount.name || id}
-                    icon={icon}
-                    condensed={condensed}
-                />
-            ))}
-        </>
-    );
-}
-
 export function DriveSidebar({ condensed = false, onClose, isMobile = false, rootPath }: DriveSidebarProps) {
     const auth = useAuth();
     const currentUserId = auth.user?.id || '';
@@ -137,9 +110,8 @@ export function DriveSidebar({ condensed = false, onClose, isMobile = false, roo
     // Determine which path to use for operations (current or root)
     const targetPath = currentPath || rootPath;
 
-    // Fetch org data for shared drives section
-    const { data: config } = usePublicConfig();
-    const { data: teams } = useTeams(config?.orgId);
+    // Fetch teams with their mounts for shared drives section
+    const { data: myTeams } = useMyTeams();
 
     // Handle file input change
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -284,18 +256,22 @@ export function DriveSidebar({ condensed = false, onClose, isMobile = false, roo
                 </SidebarItem>
             </SidebarSection>
 
-            {config && teams && teams.length > 0 && (
+            {myTeams && myTeams.some((t) => t.mounts.length > 0) && (
                 <>
                     <Separator />
                     <SidebarSection condensed={condensed} title={condensed ? undefined : 'Shared Drives'}>
-                        {teams.map((team) => (
-                            <TeamDriveItems
-                                key={team.id}
-                                teamId={team.id}
-                                icon={<UserAvatar email={teamOwnerId(team.id)} className="h-4 w-4" />}
-                                condensed={condensed}
-                            />
-                        ))}
+                        {myTeams.flatMap((team) =>
+                            team.mounts.map((mount) => (
+                                <TeamMountItem
+                                    key={`${team.id}-${mount.id}`}
+                                    ownerId={teamOwnerId(team.id)}
+                                    mountId={mount.id}
+                                    label={mount.name}
+                                    icon={<UserAvatar email={teamOwnerId(team.id)} className="h-4 w-4" />}
+                                    condensed={condensed}
+                                />
+                            )),
+                        )}
                     </SidebarSection>
                 </>
             )}
