@@ -1,3 +1,4 @@
+import { useAuth } from '@workspace/lib/auth';
 import { type DirectAccessItem, useDriveAccess, useIsEffectiveOwner } from '@workspace/lib/drive';
 import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
@@ -17,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@workspace/ui/components/separator';
 import { cn } from '@workspace/ui/lib/utils';
 import { Lock, Plus, Unlock, Users } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ContactAutosuggest } from '../contacts/contact-autosuggest';
 import type { ContactSuggestion } from '../contacts/types';
 import { UserItem } from '../user-item';
@@ -45,6 +46,13 @@ export function DriveAccessListEdit({ path, onSave, onCancel, className, prefill
     const { data: myTeams } = useMyTeams();
 
     const isEffectiveOwner = useIsEffectiveOwner(path.ownerId);
+    const { user } = useAuth();
+
+    const excludeEmails = useMemo(() => {
+        const emails = [...directList, ...inheritedList].map((item) => item.id);
+        if (user?.email) emails.push(user.email);
+        return emails;
+    }, [directList, inheritedList, user?.email]);
 
     useEffect(() => {
         setDirectListOverride(undefined);
@@ -213,6 +221,7 @@ export function DriveAccessListEdit({ path, onSave, onCancel, className, prefill
                             value={newContactInput}
                             onChange={handleContactSelected}
                             onlyEigenIsMails={false}
+                            excludeEmails={excludeEmails}
                             placeholder="Enter email addresses"
                             inputRef={inputRef}
                             onSubmit={handleAddContactClick}

@@ -6,6 +6,7 @@ export type ContactAutosuggestProps = {
     onChange?: (value: string) => void;
     appendMode?: boolean;
     onlyEigenIsMails?: boolean;
+    excludeEmails?: string[];
     maxSuggestions?: number;
     className?: string;
     suggestionsClassName?: string;

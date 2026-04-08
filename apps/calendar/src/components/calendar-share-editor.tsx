@@ -1,3 +1,4 @@
+import { useAuth } from '@workspace/lib/auth';
 import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { CalendarShare } from '@workspace/lib/types/calendar';
@@ -14,7 +15,7 @@ import { UserItem } from '@workspace/ui/components/layout/user-item';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Separator } from '@workspace/ui/components/separator';
 import { Plus, Users } from 'lucide-react';
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
 type CalendarShareEditorProps = {
     shares: CalendarShare[] | null;
@@ -27,6 +28,13 @@ export function CalendarShareEditor({ shares, onChange }: CalendarShareEditorPro
     const currentShares = shares || [];
 
     const { data: myTeams } = useMyTeams();
+    const { user } = useAuth();
+
+    const excludeEmails = useMemo(() => {
+        const emails = currentShares.map((s) => s.targetId);
+        if (user?.email) emails.push(user.email);
+        return emails;
+    }, [currentShares, user?.email]);
 
     const addShare = useCallback(
         (targetId: string, permission: CalendarShare['permission'] = 'read') => {
@@ -110,6 +118,7 @@ export function CalendarShareEditor({ shares, onChange }: CalendarShareEditorPro
                         value={newContactInput}
                         onChange={handleContactSelected}
                         onlyEigenIsMails={false}
+                        excludeEmails={excludeEmails}
                         placeholder="Enter email addresses"
                         inputRef={inputRef}
                         onSubmit={handleAddContactClick}
