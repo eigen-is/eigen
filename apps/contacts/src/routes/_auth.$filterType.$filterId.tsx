@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useContacts, useDeleteContact, useLabels, useUpdateContact } from '@workspace/lib/contacts';
+import { useMyTeams } from '@workspace/lib/home';
 import type { Contact } from '@workspace/lib/types/contact';
 import { EmptyState, LoadingState } from '@workspace/ui';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
@@ -8,6 +9,8 @@ import { LabelFilterHeader } from '@workspace/ui/components/layout/labels/label-
 import { useEffect, useState } from 'react';
 import { ContactDetail, ContactDetailToolbar } from '../components/contacts/contact-detail';
 import { ContactsList, ContactsListToolbar } from '../components/contacts/contacts-list';
+import { TeamMemberDetail, TeamMemberDetailToolbar } from '../components/contacts/team-member-detail';
+import { TeamMemberList, TeamMemberListToolbar } from '../components/contacts/team-member-list';
 
 export type ContactsSearchParams = {
     contactId?: string;
@@ -31,6 +34,7 @@ function ContactsRoute() {
 
     const { data: contacts = [], isLoading: contactsLoading } = useContacts();
     const { data: labels = [] } = useLabels();
+    const { data: myTeams = [] } = useMyTeams();
     const deleteMutation = useDeleteContact();
     const updateContactMutation = useUpdateContact();
 
@@ -92,6 +96,41 @@ function ContactsRoute() {
             onDeleteClick={() => setDeleteTargets([contact])}
         />
     ) : null;
+
+    if (filterType === 'team') {
+        const activeTeam = myTeams.find((t) => t.id === filterId);
+        const activeMember = activeTeam?.members.find((m) => m.email === contactId);
+
+        return (
+            <ColumnLayout mobileColumn={contactId ? 'detail' : 'list'}>
+                <Column
+                    id="list"
+                    width="350px"
+                    toolbar={<TeamMemberListToolbar teamName={activeTeam?.name || 'Team'} />}
+                >
+                    <div className="flex h-full flex-col border-r overflow-y-auto">
+                        <TeamMemberList
+                            members={activeTeam?.members || []}
+                            activeMemberEmail={contactId}
+                            onRowClick={handleRowClick}
+                        />
+                    </div>
+                </Column>
+                <Column
+                    id="detail"
+                    width="flex"
+                    onBack={handleBackToList}
+                    toolbar={activeMember ? <TeamMemberDetailToolbar /> : undefined}
+                >
+                    {activeMember ? (
+                        <TeamMemberDetail member={activeMember} />
+                    ) : (
+                        <EmptyState message="Select a member to view details" />
+                    )}
+                </Column>
+            </ColumnLayout>
+        );
+    }
 
     if (contactsLoading) {
         return <LoadingState />;
