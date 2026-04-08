@@ -1,6 +1,5 @@
-import { useTeams } from '@workspace/lib/admin';
 import { type DirectAccessItem, useDriveAccess, useIsEffectiveOwner } from '@workspace/lib/drive';
-import { usePublicConfig } from '@workspace/lib/public';
+import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DriveACL, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
 import { validateEmailAddress } from '@workspace/lib/validation';
@@ -43,9 +42,7 @@ export function DriveAccessListEdit({ path, onSave, onCancel, className, prefill
     const [visibility, setVisibility] = useState<DriveVisibility>(path.visibility ?? 'private');
     const [sharingRestricted, setSharingRestricted] = useState(path.sharingRestricted ?? false);
 
-    // Fetch org and teams for the team sharing picker
-    const { data: config } = usePublicConfig();
-    const { data: teams } = useTeams(config?.orgId);
+    const { data: myTeams } = useMyTeams();
 
     const isEffectiveOwner = useIsEffectiveOwner(path.ownerId);
 
@@ -335,7 +332,7 @@ export function DriveAccessListEdit({ path, onSave, onCancel, className, prefill
             <Separator />
 
             <DialogFooter>
-                {teams && teams.length > 0 && (
+                {myTeams && myTeams.length > 0 && (
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button variant="outline" className="mr-auto gap-2">
@@ -344,7 +341,7 @@ export function DriveAccessListEdit({ path, onSave, onCancel, className, prefill
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="start">
-                            {teams.map((team) => (
+                            {myTeams.map((team) => (
                                 <DropdownMenuItem
                                     key={team.id}
                                     onClick={() => handleAddTeam(team.id)}
