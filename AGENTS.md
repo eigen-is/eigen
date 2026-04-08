@@ -53,65 +53,35 @@ bun run check          # lint + typecheck + test
 
 ### Critical Rules
 
-- **Read [CODE-STANDARDS.md](docs/CODE-STANDARDS.md) before writing code** — it defines architecture patterns, code
-  style, constraints, and a **self-review checklist** that must be followed before declaring any task complete.
-  Violations waste review cycles
-- **Read existing code before writing new code** — before creating or modifying any file, read 2-3 existing files in
-  the same directory. Match their style, structure, naming, and patterns exactly. The codebase already has consistent
-  patterns for hooks, routes, schemas, components, and SSE handlers — new code must look like it was always there
+- **Read [CODE-STANDARDS.md](docs/CODE-STANDARDS.md) before writing code** — defines typing rules, code style,
+  common LLM mistakes with BAD/GOOD examples, and the **self-review checklist**. Must be followed before declaring
+  any task complete
+- **Read existing code before writing new code** — read 2-3 existing files in the same directory. Match their style,
+  structure, naming, and patterns exactly. New code must look like it was always there
 - **No migrations or backward compatibility** — data is throwaway during dev. Prefer clean schemas
-- **Always run `bun run check`** (lint + typecheck + test) after changes. When multiple agents run in parallel,
+- **Always run `bun run check`** after changes (lint + typecheck + test). When multiple agents run in parallel,
   only the main agent should run check — concurrent runs cause deadlocks
-- **English everywhere** — code, comments, docs
-- **No JSDoc** — code should be self-documenting, minimal comments
-- **`type` over `interface`** — except when methods are needed
-- **Never use `useQuery`/`useMutation` directly in apps** — all data hooks live in
-  `packages/lib/src/core/[domain]/hooks/`
-- **Never use `as any`** — fix the type at the source (route schema, response type) instead of casting in hooks.
-  Eden Treaty provides end-to-end safety; `as any` silently breaks it
-- **No `as Type` casts on Eden Treaty responses** — if `response.data` doesn't have the right type, add an
-  explicit return type annotation to the backend route handler or domain method using the shared type from
-  `packages/lib/src/types/`. Eden Treaty infers types from the handler return type automatically. Don't paper
-  over mismatches with `as` casts
-- **Backend errors use `ApiError`** — `throw new ApiError(status, message)` from
-  `apps/api/src/lib/core/errors.ts` for user-facing HTTP errors. Use `throw new Error()` only for internal
-  invariants (db not open, missing config) where an HTTP status code wouldn't be semantically correct
-- **Think about every `await`**. A bare async call returns a truthy Promise — dangerous in conditionals
-  (`if (!asyncFn())` is always false). But not every async call needs `await`: fire-and-forget is fine for background
-  work that shouldn't block the response (e.g., thumbnail generation, preview caching), and `return asyncFn()` is
-  fine when the caller handles the promise. The rule: `await` when you need the result or need errors to propagate
-  here; skip `await` when blocking would hurt response time and the work can fail silently. Fire-and-forget calls
-  must always have a `.catch()` to avoid unhandled rejections
-- **Sanitize user-provided paths and filenames** — validate against `..`, `/`, and control characters before using in
-  file system paths or HTTP headers (e.g., `Content-Disposition`). Never interpolate raw user input into headers
-- **Use theme tokens, not hardcoded colors** — use `text-muted-foreground`, `bg-muted`, `border` etc. instead of
-  `text-gray-500`, `bg-blue-50`. Hardcoded colors break dark mode. For interactive selection UI (resize handles,
-  bounding boxes, selection rings), use the `selection-handle` token (e.g., `border-selection-handle`,
-  `ring-selection-handle`)
-- **All error/success handling lives in hooks, not in apps** — every `useMutation` in
-  `packages/lib/src/core/[domain]/hooks/` must have an `onError` callback using `onMutationError` from `api-error.ts`.
-  Add `onSuccess` toasts only for fire-and-forget operations where the UI doesn't visually reflect the result (e.g.,
-  "Email sent", "Settings saved"). This applies to non-mutation async calls too (e.g., `authClient` calls for
-  password/2FA) — wrap them in hooks with proper error handling. Apps should never add their own `try/catch` +
-  `toast.error()`. Apps only need `try/catch` when they must do extra work on failure (e.g., reset UI state), and
-  in that case they must NOT show a toast. See [NOTIFICATIONS.md](docs/NOTIFICATIONS.md)
-- **Export invalidation functions next to query keys** — every hook file that defines query keys should export
-  `invalidateFoo(queryClient, ...)` functions. Apps use these instead of importing `useQueryClient` +
-  `queryClient.invalidateQueries()` directly
-- **Check existing shared components before building new ones** — `packages/ui/src/components/layout/` has reusable
-  components for common patterns: `TooltipButton` (icon+tooltip), `DeleteDialog` (confirmation), `EmptyState`,
-  `LoadingState`, `ErrorState`, `SearchBar`, `ConfirmDialog`, etc. See [LAYOUT.md](docs/LAYOUT.md) for the full list
-- **Keep it simple** — no unnecessary abstractions, wrapper functions, service layers, or indirection. This codebase
-  is intentionally flat and direct: routes call domain classes, domain classes query the DB. Don't extract helpers for
-  one-time logic. Don't add generics, configuration objects, or factory patterns unless the existing code already
-  uses them in that area. See the "Common LLM Mistakes" section in CODE-STANDARDS.md
-- **Fix broken windows** — when you encounter pre-existing errors, warnings, or code smells while working on a task,
-  fix them if the fix is straightforward. Leave code in a better state than you found it
-- **Self-review before declaring done** — before reporting a task as complete, review the diff of every file you
-  changed against the self-review checklist in CODE-STANDARDS.md. Check that new code matches the patterns of
-  surrounding code, not just that it compiles and works
-- **Keep docs up to date** — when a task is fully completed, update relevant docs in `docs/` and this file if the
-  change affects architecture patterns, file locations, or critical rules
+- **Code goes in the right layer** — hooks/mutations in `packages/lib/src/core/[domain]/hooks/`, shared types in
+  `packages/lib/src/types/`, shared UI in `packages/ui/`, app-specific code in `apps/`. Rule of thumb: if two or
+  more apps need it, it belongs in `packages/`. Never put `useQuery`, `useMutation`, error toasts, or `try/catch` +
+  `toast.error()` in app components — all error handling lives in hooks using `onMutationError`.
+  See [NOTIFICATIONS.md](docs/NOTIFICATIONS.md)
+- **Don't break the type chain** — types flow from Elysia route handlers → Eden Treaty → hooks → components
+  automatically. No `as any`, no `as Type` casts. Fix types at the source (add return type annotations to backend
+  handlers using shared types from `packages/lib/src/types/`). See CODE-STANDARDS.md § Typing
+- **Backend errors use `ApiError`** — `throw new ApiError(status, message)` for HTTP errors.
+  `throw new Error()` only for internal invariants (db not open, missing config)
+- **Think about every `await`** — a bare async call returns a truthy Promise (dangerous in conditionals: `if
+  (!asyncFn())` is always false). Fire-and-forget must have `.catch()`. Skip `await` when blocking would hurt
+  response time and failure is acceptable
+- **Sanitize user-provided paths** — validate against `..`, `/`, and control characters before filesystem or
+  header use. Never interpolate raw user input into HTTP headers
+- **Check existing code before writing new** — shared components in `packages/ui/src/components/layout/`
+  (`TooltipButton`, `DeleteDialog`, `EmptyState`, etc.), utilities in `packages/lib/` (`cn()`, `formatDate`,
+  shared types). Don't reinvent them. See [LAYOUT.md](docs/LAYOUT.md)
+- **Fix broken windows** — fix pre-existing issues if the fix is straightforward
+- **Self-review before declaring done** — review your diff against the checklist in CODE-STANDARDS.md
+- **Keep docs up to date** — update `docs/` and this file when changes affect architecture
 
 ## Architecture Patterns
 
@@ -278,27 +248,10 @@ Notifications: `home.notifications.persist({...})` → writes to DB + broadcasts
 | Slides   | `application/eigenslides`   | `.eigenslides`   | Dir with `data.db` (Yjs)      |
 | Sheets   | `application/eigensheets`   | `.eigensheets`   | Dir with `data.db` (Yjs)      |
 
-### Data Layout
-
-```
-data/home/{userId}/
-├── mounts/default/       # Drive (metadata.db + data/ + thumbs/ + data/.trash/)
-│   └── shared.db         # Shared-with-me paths
-├── eigen.mail/           # mail.db + Maildir/
-├── eigen.contacts/       # contacts.db + avatars/
-└── eigen.calendar/       # calendar.db
-```
-
-Teams: `data/team/{teamId}/` (Drive + Calendar only)
-
 ### Owner ID Prefixes
 
-| Type | Format          | Example         |
-|------|-----------------|-----------------|
-| User | Raw UUID        | `a1b2c3d4-...`  |
-| Team | `team_{teamId}` | `team_x9y8z7w6` |
-
-Resolution: `parseOwnerId()` in `packages/lib/src/types/owner.ts`
+User = raw UUID (`a1b2c3d4-...`), Team = `team_{teamId}`. Resolution: `parseOwnerId()` in
+`packages/lib/src/types/owner.ts`. Data layout: see [STORAGE.md](docs/STORAGE.md).
 
 ## Testing
 
