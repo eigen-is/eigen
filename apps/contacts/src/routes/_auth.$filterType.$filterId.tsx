@@ -9,7 +9,7 @@ import { LabelFilterHeader } from '@workspace/ui/components/layout/labels/label-
 import { useEffect, useState } from 'react';
 import { ContactDetail, ContactDetailToolbar } from '../components/contacts/contact-detail';
 import { ContactsList, ContactsListToolbar } from '../components/contacts/contacts-list';
-import { TeamMemberDetail, TeamMemberDetailToolbar } from '../components/contacts/team-member-detail';
+import { TeamMemberDetail } from '../components/contacts/team-member-detail';
 import { TeamMemberList, TeamMemberListToolbar } from '../components/contacts/team-member-list';
 
 export type ContactsSearchParams = {
@@ -116,12 +116,7 @@ function ContactsRoute() {
                         />
                     </div>
                 </Column>
-                <Column
-                    id="detail"
-                    width="flex"
-                    onBack={handleBackToList}
-                    toolbar={activeMember ? <TeamMemberDetailToolbar /> : undefined}
-                >
+                <Column id="detail" width="flex" onBack={handleBackToList} toolbar={undefined}>
                     {activeMember ? (
                         <TeamMemberDetail member={activeMember} />
                     ) : (

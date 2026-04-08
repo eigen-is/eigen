@@ -1,10 +1,9 @@
-import { EmptyState } from '@workspace/ui';
+import { EmptyState, Toolbar } from '@workspace/ui';
 import { UserItem } from '@workspace/ui/components/layout/user-item';
-import { Toolbar } from '@workspace/ui/index';
 import { cn } from '@workspace/ui/lib/utils';
 import { useMemo } from 'react';
 
-type TeamMember = { email: string; name: string };
+export type TeamMember = { email: string; name: string };
 
 type TeamMemberListToolbarProps = {
     teamName: string;
