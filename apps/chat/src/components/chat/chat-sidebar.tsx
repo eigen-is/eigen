@@ -4,7 +4,7 @@ import { useChats, useCreateChat, useUnreadChatIds } from '@workspace/lib/chat';
 import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { EigenLoader, UserAvatar } from '@workspace/ui';
+import { EigenLoader, UnreadDot, UserAvatar } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { DriveCreateItemDialog } from '@workspace/ui/components/layout/drive/drive-create-folder-item';
 import { SidebarHeader } from '@workspace/ui/components/layout/sidebar/sidebar-header';
@@ -23,17 +23,14 @@ type ChatSidebarProps = {
     rootPath: DrivePath | null;
 };
 
-function ChatItem({
-    chat,
-    condensed,
-    teamId,
-    hasUnread,
-}: {
+type ChatItemProps = {
     chat: DrivePath;
     condensed: boolean;
     teamId?: string;
     hasUnread?: boolean;
-}) {
+};
+
+function ChatItem({ chat, condensed, teamId, hasUnread }: ChatItemProps) {
     const baseIcon = teamId ? (
         <UserAvatar email={teamOwnerId(teamId)} className="h-4 w-4" />
     ) : (
@@ -45,7 +42,7 @@ function ChatItem({
             icon={
                 <div className="relative">
                     {baseIcon}
-                    {hasUnread && <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-destructive" />}
+                    {hasUnread && <UnreadDot />}
                 </div>
             }
             label={(chat.name || 'Unnamed chat').replace(/\.eigenchat$/, '')}
@@ -55,15 +52,13 @@ function ChatItem({
     );
 }
 
-function TeamChatItems({
-    teamId,
-    condensed,
-    unreadChatIds,
-}: {
+type TeamChatItemsProps = {
     teamId: string;
     condensed: boolean;
     unreadChatIds: Set<string>;
-}) {
+};
+
+function TeamChatItems({ teamId, condensed, unreadChatIds }: TeamChatItemsProps) {
     const { data: chats } = useChats(teamOwnerId(teamId));
     if (!chats || chats.length === 0) return null;
     return (

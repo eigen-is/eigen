@@ -22,6 +22,7 @@ import { useKeyboardListNavigation } from '../../../hooks/use-keyboard-list-navi
 import { useListDrag } from '../../../hooks/use-list-drag';
 import { useListSelection } from '../../../hooks/use-list-selection';
 import { ContextMenuAnchor, useContextMenu } from '../context-menu';
+import { UnreadDot } from '../unread-dot';
 import { DriveShareSummary } from './drive-share-summary';
 
 export function defaultDriveSort(a: DrivePath, b: DrivePath): number {
@@ -250,7 +251,7 @@ export function DriveTable({
                                 }}
                             >
                                 <TableCell>
-                                    <div className="flex items-center max-w-full overflow-hidden">
+                                    <div className="flex items-center max-w-full">
                                         <div className="relative mr-2 flex-shrink-0">
                                             {getFileIcon?.(item.mimeType, item.type, {
                                                 className: 'h-4 w-4 text-muted-foreground',
@@ -260,9 +261,7 @@ export function DriveTable({
                                                       }
                                                     : {}),
                                             })}
-                                            {unreadPathIds?.has(item.id) && (
-                                                <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-destructive" />
-                                            )}
+                                            {unreadPathIds?.has(item.id) && <UnreadDot />}
                                         </div>
                                         <span className="truncate max-w-[calc(100%-1.5rem)]">
                                             {stripEigenExtension(item.name)}
