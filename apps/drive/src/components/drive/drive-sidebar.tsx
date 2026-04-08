@@ -256,7 +256,7 @@ export function DriveSidebar({ condensed = false, onClose, isMobile = false, roo
                 </SidebarItem>
             </SidebarSection>
 
-            {myTeams && myTeams.some((t) => t.mounts.length > 0) && (
+            {myTeams?.some((t) => t.mounts.length > 0) && (
                 <>
                     <Separator />
                     <SidebarSection condensed={condensed} title={condensed ? undefined : 'Shared Drives'}>

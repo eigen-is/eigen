@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import type { Notification } from '../../../types/notification';
 import { notificationApi } from '../../api';
 import { notificationKeys, useNotifications } from '../../notification/hooks/use-notifications';
@@ -28,6 +28,25 @@ export function useUnreadChatIds(userId: string): Set<string> {
     }, [notifications]);
 }
 
+/** Auto-mark a single chat's notifications as read when the chat is being viewed. */
+export function useAutoMarkChatRead(userId: string, chatId: string) {
+    const { data: notifications = [] } = useNotifications(userId);
+    const markChatRead = useMarkChatRead(userId);
+
+    const hasUnread = useMemo(
+        () =>
+            notifications.some(
+                (n) =>
+                    !n.read && n.tag && CHAT_NOTIFICATION_TYPES.includes(n.type) && getPathIdFromTag(n.tag) === chatId,
+            ),
+        [notifications, chatId],
+    );
+
+    useEffect(() => {
+        if (hasUnread) markChatRead(chatId);
+    }, [chatId, hasUnread, markChatRead]);
+}
+
 export function useMarkChatRead(userId: string) {
     const queryClient = useQueryClient();
 
@@ -41,9 +60,10 @@ export function useMarkChatRead(userId: string) {
             if (toMark.length === 0) return;
 
             // Optimistically mark as read in cache — prevents loops and flicker
+            const toMarkIds = new Set(toMark.map((m) => m.id));
             queryClient.setQueryData<Notification[]>(
                 notificationKeys.list(userId),
-                (old) => old?.map((n) => (toMark.some((m) => m.id === n.id) ? { ...n, read: true } : n)) ?? [],
+                (old) => old?.map((n) => (toMarkIds.has(n.id) ? { ...n, read: true } : n)) ?? [],
             );
             queryClient.setQueryData<number>(notificationKeys.unreadCount(userId), (old) =>
                 Math.max(0, (old ?? 0) - toMark.length),

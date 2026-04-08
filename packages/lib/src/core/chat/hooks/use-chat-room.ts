@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import type { ChatMessage, RoomMember } from '../../../types/chat';
 import { validateEmailTarget } from '../../../validation';
 import { useAuth } from '../../auth';
@@ -11,7 +11,7 @@ import {
 } from '../../drive';
 import { COMMANDS_HELP, getLocalCommand, isUnknownCommand } from '../commands';
 import { useDeleteMessage, useEditMessage, useInviteToChat, useMessages, usePostMessage } from './use-chat';
-import { useMarkChatRead, useUnreadChatIds } from './use-chat-unread';
+import { useAutoMarkChatRead } from './use-chat-unread';
 
 let localIdCounter = 0;
 
@@ -40,12 +40,7 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
 
     const chatName = chatPath?.name?.replace('.eigenchat', '') || 'Chat';
 
-    const markChatRead = useMarkChatRead(user?.id ?? '');
-    const hasUnread = useUnreadChatIds(user?.id ?? '').has(chatId);
-
-    useEffect(() => {
-        if (hasUnread) markChatRead(chatId);
-    }, [chatId, hasUnread, markChatRead]);
+    useAutoMarkChatRead(user?.id ?? '', chatId);
 
     const { data: effectiveMembers } = useEffectiveMembers(ownerId, mountId, chatId);
     const roomMembers: RoomMember[] = useMemo(() => {
