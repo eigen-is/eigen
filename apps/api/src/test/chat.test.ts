@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { ChatMessage, DrivePath } from '@workspace/lib/types';
 import { DRIVE_MIME_CHAT } from '@workspace/lib/types';
+import type { Notification } from '@workspace/lib/types/notification';
 import { authedRequest, chatGet, chatPost, driveGet, drivePost, findOrFail, getTestContext } from './setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
@@ -1052,6 +1053,138 @@ describe('Chat', () => {
             );
             const deleted = contents.find((item: DrivePath) => item.id === chat.id);
             expect(deleted).toBeUndefined();
+        });
+    });
+
+    describe('Activity Notifications', () => {
+        let chatId: string;
+
+        beforeAll(async () => {
+            const chat = await drivePost<DrivePath>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${aliceRootId}/chat`,
+                { fileName: 'Notification Chat' },
+            );
+            chatId = chat.id;
+
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${chatId}/acl`,
+                {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        acl: [
+                            { id: ctx.bob.user.email, read: true, write: true },
+                            { id: ctx.charlie.user.email, read: true, write: true },
+                        ],
+                    }),
+                },
+            );
+
+            // Clear any existing notifications
+            await authedRequest(ctx.bob.user.sessionToken, `/notifications/${ctx.bob.user.id}/mark-all-read`, {
+                method: 'POST',
+            });
+            await authedRequest(ctx.charlie.user.sessionToken, `/notifications/${ctx.charlie.user.id}/mark-all-read`, {
+                method: 'POST',
+            });
+        });
+
+        test('posting a message notifies previous participants', async () => {
+            // Alice posts first message
+            await chatPost<ChatMessage>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `${chatId}/messages`,
+                { content: 'Hello from Alice' },
+            );
+
+            // Bob posts second message — Alice (owner + previous author) should be notified
+            await chatPost<ChatMessage>(
+                ctx.bob.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `${chatId}/messages`,
+                { content: 'Hello from Bob' },
+            );
+
+            const res = await authedRequest(ctx.alice.user.sessionToken, `/notifications/${ctx.alice.user.id}`);
+            const notifications = (await res.json()) as Notification[];
+            const chatNotification = notifications.find(
+                (n) => n.type === 'chat-message' && n.title.includes('Notification Chat'),
+            );
+            expect(chatNotification).toBeDefined();
+            expect(chatNotification!.actorEmail).toBe(ctx.bob.user.email);
+            expect(chatNotification!.body).toBe('Hello from Bob');
+        });
+
+        test('author does not receive own notification', async () => {
+            const res = await authedRequest(ctx.bob.user.sessionToken, `/notifications/${ctx.bob.user.id}`);
+            const notifications = (await res.json()) as Notification[];
+            const selfNotification = notifications.find(
+                (n) => n.type === 'chat-message' && n.actorEmail === ctx.bob.user.email,
+            );
+            expect(selfNotification).toBeUndefined();
+        });
+
+        test('whisper notifies only the recipient', async () => {
+            // Clear notifications
+            await authedRequest(ctx.bob.user.sessionToken, `/notifications/${ctx.bob.user.id}/mark-all-read`, {
+                method: 'POST',
+            });
+            await authedRequest(ctx.charlie.user.sessionToken, `/notifications/${ctx.charlie.user.id}/mark-all-read`, {
+                method: 'POST',
+            });
+
+            await chatPost<ChatMessage>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `${chatId}/messages`,
+                { content: 'Whisper for Bob', type: 'whisper', whisperTo: ctx.bob.user.email },
+            );
+
+            // Bob should get a notification
+            const bobRes = await authedRequest(ctx.bob.user.sessionToken, `/notifications/${ctx.bob.user.id}`);
+            const bobNotifications = (await bobRes.json()) as Notification[];
+            const bobWhisperNotif = bobNotifications.find((n) => !n.read && n.body === 'Whisper for Bob');
+            expect(bobWhisperNotif).toBeDefined();
+
+            // Charlie should NOT get a notification for the whisper
+            const charlieRes = await authedRequest(
+                ctx.charlie.user.sessionToken,
+                `/notifications/${ctx.charlie.user.id}`,
+            );
+            const charlieNotifications = (await charlieRes.json()) as Notification[];
+            const charlieWhisperNotif = charlieNotifications.find((n) => !n.read && n.body === 'Whisper for Bob');
+            expect(charlieWhisperNotif).toBeUndefined();
+        });
+
+        test('mentioned user gets mention notification but not chat-message', async () => {
+            // Clear notifications
+            await authedRequest(ctx.bob.user.sessionToken, `/notifications/${ctx.bob.user.id}/mark-all-read`, {
+                method: 'POST',
+            });
+
+            await chatPost<ChatMessage>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `${chatId}/messages`,
+                { content: `Hey @${ctx.bob.user.email} check this out` },
+            );
+
+            const res = await authedRequest(ctx.bob.user.sessionToken, `/notifications/${ctx.bob.user.id}`);
+            const notifications = (await res.json()) as Notification[];
+            const unread = notifications.filter((n) => !n.read);
+            const mention = unread.find((n) => n.type === 'mention-chat');
+            const chatMessage = unread.find((n) => n.type === 'chat-message');
+            expect(mention).toBeDefined();
+            expect(chatMessage).toBeUndefined();
         });
     });
 });
