@@ -5,8 +5,13 @@
 | Phase | Status | Notes |
 |-------|--------|-------|
 | Phase 1: Quick Preview | Done | `eigendoc-preview.ts`, shared extensions, yjs-loader |
-| Phase 2: Export | Planned | DOCX, PPTX, XLSX, PDF |
+| Phase 2: Export | Partially done | Eigendoc + Slides implemented. See [EXPORT.md](EXPORT.md) for current design |
 | Phase 3: Import | Planned | DOCX, PPTX, XLSX |
+
+> **Note:** The export sections below (Phase 2) reflect the original proposal. The implementation diverged in
+> several ways — GET instead of POST, HTML-based DOCX via `@turbodocx/html-to-docx` instead of `prosemirror-docx`,
+> WeasyPrint instead of Puppeteer for PDF. See [EXPORT.md](EXPORT.md) for the authoritative export documentation.
+> The import sections (Phase 3) remain the current planning reference.
 
 ## Route Design
 
