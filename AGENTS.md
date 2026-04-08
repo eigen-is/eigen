@@ -54,8 +54,11 @@ bun run check          # lint + typecheck + test
 ### Critical Rules
 
 - **Read [CODE-STANDARDS.md](docs/CODE-STANDARDS.md) before writing code** — it defines architecture patterns, code
-  style, and constraints that are not repeated here. Violations (inline types, wrong comment style, bypassing the
-  home relay) waste review cycles
+  style, constraints, and a **self-review checklist** that must be followed before declaring any task complete.
+  Violations waste review cycles
+- **Read existing code before writing new code** — before creating or modifying any file, read 2-3 existing files in
+  the same directory. Match their style, structure, naming, and patterns exactly. The codebase already has consistent
+  patterns for hooks, routes, schemas, components, and SSE handlers — new code must look like it was always there
 - **No migrations or backward compatibility** — data is throwaway during dev. Prefer clean schemas
 - **Always run `bun run check`** (lint + typecheck + test) after changes. When multiple agents run in parallel,
   only the main agent should run check — concurrent runs cause deadlocks
@@ -97,8 +100,16 @@ bun run check          # lint + typecheck + test
 - **Check existing shared components before building new ones** — `packages/ui/src/components/layout/` has reusable
   components for common patterns: `TooltipButton` (icon+tooltip), `DeleteDialog` (confirmation), `EmptyState`,
   `LoadingState`, `ErrorState`, `SearchBar`, `ConfirmDialog`, etc. See [LAYOUT.md](docs/LAYOUT.md) for the full list
+- **Keep it simple** — no unnecessary abstractions, wrapper functions, service layers, or indirection. This codebase
+  is intentionally flat and direct: routes call domain classes, domain classes query the DB. A 100-line method that
+  handles a complete workflow is better than 5 small methods you have to trace through. Don't extract helpers for
+  one-time logic. Don't add generics, configuration objects, or factory patterns unless the existing code already
+  uses them in that area. See the "Common LLM Mistakes" section in CODE-STANDARDS.md
 - **Fix broken windows** — when you encounter pre-existing errors, warnings, or code smells while working on a task,
   fix them if the fix is straightforward. Leave code in a better state than you found it
+- **Self-review before declaring done** — before reporting a task as complete, review the diff of every file you
+  changed against the self-review checklist in CODE-STANDARDS.md. Check that new code matches the patterns of
+  surrounding code, not just that it compiles and works
 - **Keep docs up to date** — when a task is fully completed, update relevant docs in `docs/` and this file if the
   change affects architecture patterns, file locations, or critical rules
 
