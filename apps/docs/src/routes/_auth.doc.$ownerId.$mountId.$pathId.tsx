@@ -8,10 +8,14 @@ import { CollaborativeEditor } from '../components/docs/editor';
 
 export const Route = createFileRoute('/_auth/doc/$ownerId/$mountId/$pathId')({
     component: CollaborativeTextEditor,
+    validateSearch: (search: Record<string, unknown>) => ({
+        chat: typeof search.chat === 'string' ? search.chat : undefined,
+    }),
 });
 
 function CollaborativeTextEditor() {
     const { ownerId, mountId, pathId } = Route.useParams();
+    const { chat } = Route.useSearch();
     const { data: docInfo, isLoading } = useCollabDocumentInfo(ownerId, mountId, pathId);
     const { setDocumentTitle } = useLayout();
     const [accessDialogOpen, setAccessDialogOpen] = useState(false);
@@ -51,6 +55,7 @@ function CollaborativeTextEditor() {
                     mediaFolderId={mediaFolderId}
                     chatFolderId={chatFolderId}
                     onAccessDialogOpen={handleAccessDialogOpen}
+                    initialChatName={chat}
                 />
             </div>
             <DriveAccessDialog open={accessDialogOpen} onOpenChange={setAccessDialogOpen} path={docInfo.path} />
