@@ -77,6 +77,7 @@ type SlideEditorProps = {
     mediaFolderId: string | null;
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
+    initialChatName?: string;
 };
 
 export function SlideEditor({
@@ -86,6 +87,7 @@ export function SlideEditor({
     mediaFolderId,
     chatFolderId,
     onAccessDialogOpen,
+    initialChatName,
 }: SlideEditorProps) {
     return (
         <MediaResolverProvider
@@ -101,6 +103,7 @@ export function SlideEditor({
                 mediaFolderId={mediaFolderId}
                 chatFolderId={chatFolderId}
                 onAccessDialogOpen={onAccessDialogOpen}
+                initialChatName={initialChatName}
             />
         </MediaResolverProvider>
     );
@@ -113,6 +116,7 @@ function SlideEditorInner({
     mediaFolderId,
     chatFolderId,
     onAccessDialogOpen,
+    initialChatName,
 }: SlideEditorProps) {
     const {
         deck,
@@ -153,7 +157,7 @@ function SlideEditorInner({
     const [commentDialogOpen, setCommentDialogOpen] = useState(false);
     const [commentSelectedText, setCommentSelectedText] = useState('');
     const [commentObjectId, setCommentObjectId] = useState<string | null>(null);
-    const [viewCommentChatName, setViewCommentChatName] = useState<string | null>(null);
+    const [viewCommentChatName, setViewCommentChatName] = useState<string | null>(initialChatName ?? null);
 
     const activeComments = useActiveComments(deck);
     const { data: allComments = [] } = useComments(ownerId, path.mountId, path.id);
