@@ -8,10 +8,14 @@ import { SheetEditor } from '../components/sheets/editor';
 
 export const Route = createFileRoute('/_auth/sheet/$ownerId/$mountId/$pathId')({
     component: SheetView,
+    validateSearch: (search: Record<string, unknown>) => ({
+        chat: typeof search.chat === 'string' ? search.chat : undefined,
+    }),
 });
 
 function SheetView() {
     const { ownerId, mountId, pathId } = Route.useParams();
+    const { chat } = Route.useSearch();
     const { data: docInfo, isLoading } = useCollabDocumentInfo(ownerId, mountId, pathId);
     const { setDocumentTitle } = useLayout();
     const [accessDialogOpen, setAccessDialogOpen] = useState(false);
@@ -49,6 +53,7 @@ function SheetView() {
                 canWrite={canWrite}
                 chatFolderId={chatFolderId}
                 onAccessDialogOpen={handleAccessDialogOpen}
+                initialChatName={chat}
             />
             <DriveAccessDialog path={path} open={accessDialogOpen} onOpenChange={setAccessDialogOpen} />
         </>
