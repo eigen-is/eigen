@@ -12,16 +12,17 @@ export function handleNotificationSSEvent(event: SSEvent, queryClient: QueryClie
         case SSEventType.NOTIFICATION_CREATED: {
             invalidateNotifications(queryClient, userId);
             const options: Parameters<typeof toast>[1] = event.body ? { description: event.body } : {};
-            if (event.notificationType && event.tag && isClickableNotification(event.notificationType)) {
+            const notificationType = event.notificationType;
+            const tag = event.tag;
+            if (notificationType && tag && isClickableNotification(notificationType)) {
                 options.action = {
                     label: 'View',
                     onClick: () => {
-                        resolveNotificationLink({
-                            type: event.notificationType!,
-                            tag: event.tag!,
-                        } as Parameters<typeof resolveNotificationLink>[0]).then((url) => {
-                            if (url) window.location.href = url;
-                        });
+                        resolveNotificationLink({ type: notificationType, tag })
+                            .then((url) => {
+                                if (url) window.location.href = url;
+                            })
+                            .catch(() => {});
                     },
                 };
             }
