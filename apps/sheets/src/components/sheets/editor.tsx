@@ -25,6 +25,7 @@ type SheetEditorProps = {
     canWrite: boolean;
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
+    initialChatName?: string;
 };
 
 const TOOLBAR_ITEMS = [
@@ -60,7 +61,14 @@ const TOOLBAR_ITEMS = [
     'search',
 ];
 
-export function SheetEditor({ ownerId, path, canWrite, chatFolderId, onAccessDialogOpen }: SheetEditorProps) {
+export function SheetEditor({
+    ownerId,
+    path,
+    canWrite,
+    chatFolderId,
+    onAccessDialogOpen,
+    initialChatName,
+}: SheetEditorProps) {
     const workbookRef = useRef<WorkbookInstance>(null);
 
     const { initialData, synced, handleOp, onDataChange, handleRestore } = useSheet(
@@ -75,7 +83,7 @@ export function SheetEditor({ ownerId, path, canWrite, chatFolderId, onAccessDia
     const [commentDialogOpen, setCommentDialogOpen] = useState(false);
     const [commentSelectedText, setCommentSelectedText] = useState('');
     const [commentCellRef, setCommentCellRef] = useState<{ r: number; c: number } | null>(null);
-    const [viewCommentChatName, setViewCommentChatName] = useState<string | null>(null);
+    const [viewCommentChatName, setViewCommentChatName] = useState<string | null>(initialChatName ?? null);
     const [flowdata, setFlowdata] = useState<(import('@workspace/fortune-sheet').Cell | null)[][] | undefined>();
     const activeComments = useActiveComments(flowdata);
     const { data: allComments = [] } = useComments(ownerId, path.mountId, path.id);
