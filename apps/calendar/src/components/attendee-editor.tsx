@@ -6,6 +6,7 @@ import { ContactAutosuggest } from '@workspace/ui/components/layout/contacts/con
 import { UserItem } from '@workspace/ui/components/layout/user-item';
 import { Check, CircleDashed, HelpCircle, Plus, X as XIcon } from 'lucide-react';
 import { useCallback, useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 type AttendeeEditorProps = {
     attendees: Attendee[];
@@ -35,7 +36,10 @@ export function AttendeeEditor({ attendees, onChange, currentUserEmail }: Attend
         (email: string, name?: string) => {
             const normalized = email.toLowerCase();
             if (attendees.some((a) => a.email.toLowerCase() === normalized)) return;
-            if (currentUserEmail && normalized === currentUserEmail.toLowerCase()) return;
+            if (currentUserEmail && normalized === currentUserEmail.toLowerCase()) {
+                toast.info('You cannot invite yourself');
+                return;
+            }
             onChange([...attendees, { email: normalized, name, status: 'pending', role: 'required' }]);
         },
         [attendees, onChange, currentUserEmail],

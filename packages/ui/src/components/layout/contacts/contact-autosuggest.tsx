@@ -103,7 +103,8 @@ export function ContactAutosuggest({
     );
 
     const handleKeyDownSubmit = (event: React.KeyboardEvent<HTMLInputElement>) => {
-        if (event.key === 'Enter' && onSubmit) {
+        if (event.key === 'Enter' && onSubmit && !event.defaultPrevented) {
+            event.preventDefault();
             onSubmit(inputValue);
         }
     };
