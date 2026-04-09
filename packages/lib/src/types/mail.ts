@@ -37,6 +37,7 @@ export type Attachment = {
     contentId?: string | undefined;
     cid?: string | undefined;
     related: boolean;
+    calendarMethod?: 'REQUEST' | 'REPLY' | 'CANCEL';
 };
 
 export type ParsedMail = {
