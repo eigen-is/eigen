@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import type { CalendarEvent, CalendarEventOccurrence } from '@workspace/lib/types/calendar';
+import type { CalendarEvent, CalendarEventOccurrence, CalendarItem } from '@workspace/lib/types/calendar';
 import { parseIcs } from '../lib/caldav/ical-parse';
 import { eventsToIcs, serializeEventForImip } from '../lib/caldav/ical-serialize';
 import { composeCancelEmail, composeInviteEmail, composeRsvpReply, composeUpdateEmail } from '../lib/calendar/imip';
@@ -305,5 +305,81 @@ describe('iMIP Inbound Processing (integration)', () => {
         const events = await assertJson<CalendarEventOccurrence[]>(eventsRes);
         const match = events.find((e) => e.uid === 'external-invite-uid-1@external.com');
         expect(match).toBeUndefined();
+    });
+});
+
+describe('iMIP Outbound via Invite Propagation (integration)', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+    let aliceCalendarId: string;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars`);
+        const calendars = await assertJson<CalendarItem[]>(res);
+        aliceCalendarId = findOrFail(calendars, (c) => c.isDefault).id;
+    });
+
+    test('creating event with external attendee does not error', async () => {
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: 'iMIP External Test',
+                    startTime: Math.floor(Date.now() / 1000) + 86400,
+                    endTime: Math.floor(Date.now() / 1000) + 86400 + 3600,
+                    allDay: false,
+                    data: {
+                        attendees: [
+                            {
+                                email: 'external-person@gmail.com',
+                                name: 'External Person',
+                                status: 'pending',
+                                role: 'required',
+                            },
+                        ],
+                    },
+                }),
+            },
+        );
+        const event = await assertJson<CalendarEvent>(res);
+        expect(event.data?.attendees).toHaveLength(1);
+    });
+
+    test('deleting event with external attendee does not error', async () => {
+        const createRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: 'iMIP Cancel Test',
+                    startTime: Math.floor(Date.now() / 1000) + 86400 * 2,
+                    endTime: Math.floor(Date.now() / 1000) + 86400 * 2 + 3600,
+                    allDay: false,
+                    data: {
+                        attendees: [
+                            {
+                                email: 'cancel-test@gmail.com',
+                                name: 'Cancel Person',
+                                status: 'pending',
+                                role: 'required',
+                            },
+                        ],
+                    },
+                }),
+            },
+        );
+        const event = await assertJson<CalendarEvent>(createRes);
+
+        const delRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${event.id}`,
+            { method: 'DELETE' },
+        );
+        expect(delRes.status).toBe(200);
     });
 });
