@@ -60,12 +60,14 @@ export const CollaborativeEditor = ({
     mediaFolderId,
     chatFolderId,
     onAccessDialogOpen,
+    initialChatName,
 }: {
     path: DrivePath;
     access: { canRead: boolean; canWrite: boolean };
     mediaFolderId: string | null;
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
+    initialChatName?: string;
 }) => {
     const [connected, setConnected] = useState(false);
     const [provider, setProvider] = useState<WebsocketProvider>();
@@ -107,6 +109,7 @@ export const CollaborativeEditor = ({
                 mediaFolderId={mediaFolderId}
                 chatFolderId={chatFolderId}
                 onAccessDialogOpen={onAccessDialogOpen}
+                initialChatName={initialChatName}
             />
         </MediaResolverProvider>
     );
@@ -170,6 +173,7 @@ const TiptapEditor = ({
     mediaFolderId,
     chatFolderId,
     onAccessDialogOpen,
+    initialChatName,
 }: {
     yDoc: Y.Doc;
     provider: WebsocketProvider;
@@ -178,13 +182,14 @@ const TiptapEditor = ({
     mediaFolderId: string | null;
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
+    initialChatName?: string;
 }) => {
     const auth = useAuth();
     const uploadFile = useUploadFile(path.ownerId, path.mountId);
     const { resolveMediaPath } = useMediaResolver();
     const [commentDialogOpen, setCommentDialogOpen] = useState(false);
     const [commentSelectedText, setCommentSelectedText] = useState('');
-    const [viewCommentChatName, setViewCommentChatName] = useState<string | null>(null);
+    const [viewCommentChatName, setViewCommentChatName] = useState<string | null>(initialChatName ?? null);
     const [canvasScale, setCanvasScale] = useState(1);
     const [docHeight, setDocHeight] = useState(0);
     const needsScale = canvasScale < 1;
