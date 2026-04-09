@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableRow } from '@workspace/ui/components/
 import { printDocument } from '@workspace/ui/lib/printElement';
 import { AlertTriangle, Archive, Forward, MoreVertical, Paperclip, Reply, ReplyAll, Trash2 } from 'lucide-react';
 import { useEffect, useRef } from 'react';
+import { CalendarInviteWidget } from './calendar-invite-widget';
 import { EmailContextMenu } from './email-context-menu';
 
 type EmailDetailToolbarProps = {
@@ -305,44 +306,59 @@ export function EmailDetail({ email, toggleMailRead }: EmailDetailProps) {
                         )}
                     </div>
 
-                    {/* Attachments */}
-                    {email.attachments && email.attachments.length > 0 && (
+                    {/* Calendar invite widgets */}
+                    {email.attachments?.map(
+                        (attachment: Attachment, index: number) =>
+                            attachment.contentType.startsWith('text/calendar') && (
+                                <CalendarInviteWidget
+                                    key={index}
+                                    attachment={attachment}
+                                    emailId={email.id}
+                                    attachmentIndex={index}
+                                />
+                            ),
+                    )}
+
+                    {/* Attachments (excluding calendar invites shown above) */}
+                    {email.attachments?.some((a) => !a.contentType.startsWith('text/calendar')) && (
                         <div className="mt-6 pt-6 border-t">
                             <h3 className="font-medium mb-3 flex items-center gap-2">
                                 <Paperclip className="h-4 w-4" />
-                                Attachments ({email.attachments.length})
+                                Attachments (
+                                {email.attachments.filter((a) => !a.contentType.startsWith('text/calendar')).length})
                             </h3>
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                {email.attachments.map((attachment: Attachment, index: number) => (
-                                    <div
-                                        key={index}
-                                        className="flex items-center p-3 border rounded-md hover:bg-muted/50 cursor-pointer select-none"
-                                        onClick={() => {
-                                            const fileName = attachment.filename || `Attachment ${index + 1}`;
-                                            if (!user) return;
-                                            const downloadUrl = getMailAttachmentUrl(
-                                                user.id,
-                                                email.id,
-                                                index,
-                                                fileName,
-                                            );
+                                {email.attachments.map((attachment: Attachment, index: number) =>
+                                    attachment.contentType.startsWith('text/calendar') ? null : (
+                                        <div
+                                            key={index}
+                                            className="flex items-center p-3 border rounded-md hover:bg-muted/50 cursor-pointer select-none"
+                                            onClick={() => {
+                                                const fileName = attachment.filename || `Attachment ${index + 1}`;
+                                                if (!user) return;
+                                                const downloadUrl = getMailAttachmentUrl(
+                                                    user.id,
+                                                    email.id,
+                                                    index,
+                                                    fileName,
+                                                );
 
-                                            // Create a temporary anchor element to trigger the download
-                                            const a = document.createElement('a');
-                                            a.href = downloadUrl;
-                                            a.download = fileName;
-                                            document.body.appendChild(a);
-                                            a.click();
-                                            document.body.removeChild(a);
-                                        }}
-                                    >
-                                        <Paperclip className="h-4 w-4 mr-2 text-muted-foreground" />
-                                        <span className="text-sm truncate">
-                                            {attachment.filename || `Attachment ${index + 1}`}
-                                        </span>
-                                    </div>
-                                ))}
+                                                const a = document.createElement('a');
+                                                a.href = downloadUrl;
+                                                a.download = fileName;
+                                                document.body.appendChild(a);
+                                                a.click();
+                                                document.body.removeChild(a);
+                                            }}
+                                        >
+                                            <Paperclip className="h-4 w-4 mr-2 text-muted-foreground" />
+                                            <span className="text-sm truncate">
+                                                {attachment.filename || `Attachment ${index + 1}`}
+                                            </span>
+                                        </div>
+                                    ),
+                                )}
                             </div>
                         </div>
                     )}
