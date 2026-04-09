@@ -27,9 +27,17 @@ type StickiesBoardProps = {
     canWrite: boolean;
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
+    initialChatName?: string;
 };
 
-export function StickiesBoard({ ownerId, path, canWrite, chatFolderId, onAccessDialogOpen }: StickiesBoardProps) {
+export function StickiesBoard({
+    ownerId,
+    path,
+    canWrite,
+    chatFolderId,
+    onAccessDialogOpen,
+    initialChatName,
+}: StickiesBoardProps) {
     const {
         board,
         selectedColumnId,
@@ -264,6 +272,7 @@ export function StickiesBoard({ ownerId, path, canWrite, chatFolderId, onAccessD
                                                 yjsDoc={yjsDoc}
                                                 ownerId={ownerId}
                                                 mountId={path.mountId}
+                                                initialChatName={initialChatName}
                                             />
                                         );
                                     })}

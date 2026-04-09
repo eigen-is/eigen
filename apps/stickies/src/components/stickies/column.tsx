@@ -18,6 +18,7 @@ type ColumnProps = {
     yjsDoc: Y.Doc | null;
     ownerId: string;
     mountId: string;
+    initialChatName?: string;
 };
 
 export function Column({
@@ -32,6 +33,7 @@ export function Column({
     yjsDoc,
     ownerId,
     mountId,
+    initialChatName,
 }: ColumnProps) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
         id: column.id,
@@ -99,6 +101,7 @@ export function Column({
                                     ownerId={ownerId}
                                     mountId={mountId}
                                     onContextMenu={onCardContextMenu}
+                                    autoOpen={card.chatName === initialChatName}
                                 />
                             ))}
                         </SortableContext>
