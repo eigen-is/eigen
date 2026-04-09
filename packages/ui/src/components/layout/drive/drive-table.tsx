@@ -361,7 +361,7 @@ export function DriveTable({
                         className="flex items-center"
                     >
                         <UserRoundPlus className="h-4 w-4 mr-2" />
-                        Edit access
+                        Share
                     </DropdownMenuItem>
                 )}
                 {isSingleSelect && onRename && (

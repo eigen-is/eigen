@@ -44,7 +44,7 @@ export function DriveShareSummary({
                                     <Unlock className="h-3 w-3 text-primary" />
                                 </span>
                             </TooltipTrigger>
-                            <TooltipContent>Anyone with the link can access</TooltipContent>
+                            <TooltipContent>Any authenticated user with the link</TooltipContent>
                         </Tooltip>
                     )}
                     {allEntries.slice(0, isPublic ? 3 : 4).map((access: DriveAccessItem, index: number) => (

@@ -23,7 +23,7 @@ export function DriveAccessList({ path, className, onShareClick }: DriveAccessLi
             <div className="flex items-center justify-between h-12 border-t border-b shrink-0">
                 <h3 className="text-base font-medium">People with access</h3>
                 {onShareClick && (
-                    <TooltipButton icon={UserRoundPlus} tooltipText="Edit Access" onClick={() => onShareClick(path)} />
+                    <TooltipButton icon={UserRoundPlus} tooltipText="Share" onClick={() => onShareClick(path)} />
                 )}
             </div>
 
@@ -46,9 +46,7 @@ export function DriveAccessList({ path, className, onShareClick }: DriveAccessLi
                         </AvatarIcon>
                         <div>
                             <p className="text-sm font-medium">Restricted</p>
-                            <p className="text-xs text-muted-foreground">
-                                Only people with access can open with the link
-                            </p>
+                            <p className="text-xs text-muted-foreground">Only people with access</p>
                         </div>
                     </div>
                 ) : (
@@ -60,8 +58,8 @@ export function DriveAccessList({ path, className, onShareClick }: DriveAccessLi
                             <p className="text-sm font-medium">Unrestricted</p>
                             <p className="text-xs text-muted-foreground">
                                 {path.visibility === 'public-write'
-                                    ? 'Anyone with the link can edit'
-                                    : 'Anyone with the link can view'}
+                                    ? 'Any authenticated user with the link can edit'
+                                    : 'Any authenticated user with the link can view'}
                             </p>
                         </div>
                     </div>
