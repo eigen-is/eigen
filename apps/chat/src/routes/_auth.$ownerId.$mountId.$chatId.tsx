@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { useChatRoom } from '@workspace/lib/chat';
 import { useCheckReadPermission } from '@workspace/lib/drive';
 import type { ChatMessage } from '@workspace/lib/types/chat';
+import { parseOwnerId } from '@workspace/lib/types/owner';
 import {
     ChatMessageInput,
     ChatMessageList,
@@ -9,6 +10,7 @@ import {
     RequestAccessView,
     Toolbar,
     TooltipButton,
+    UserAvatar,
 } from '@workspace/ui';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
@@ -51,16 +53,21 @@ function ChatView() {
         endEditing();
     };
 
+    const isTeam = parseOwnerId(ownerId).type === 'team';
+
     const toolbar = (
         <Toolbar>
-            {chat.chatPath && (
-                <DriveShareSummary
-                    path={chat.chatPath}
-                    onClick={() => setAccessDialogOpen(true)}
-                    showIconOnHover={false}
-                />
-            )}
-            <span className="font-semibold text-sm truncate">{chat.chatName}</span>
+            {chat.chatPath &&
+                (isTeam ? (
+                    <UserAvatar email={ownerId} size="sm" tooltip />
+                ) : (
+                    <DriveShareSummary
+                        path={chat.chatPath}
+                        onClick={() => setAccessDialogOpen(true)}
+                        showIconOnHover={false}
+                    />
+                ))}
+            {chat.chatPath && <span className="font-semibold text-sm truncate">{chat.chatName}</span>}
             <div className="flex items-center gap-1">
                 <TooltipButton
                     icon={Pencil}
