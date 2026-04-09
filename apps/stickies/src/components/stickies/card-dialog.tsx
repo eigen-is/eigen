@@ -1,8 +1,6 @@
 import { useChatRoom } from '@workspace/lib/chat';
-import { formatDate } from '@workspace/lib/date';
 import { useMediaResolver } from '@workspace/lib/drive';
-import { useResolvedUser } from '@workspace/lib/public';
-import { ChatMessageInput, ChatMessageList, NoteCardDialog } from '@workspace/ui';
+import { ChatMessageInput, ChatMessageList, NoteCardDialog, useCreatedByMeta } from '@workspace/ui';
 import { useState } from 'react';
 import type * as Y from 'yjs';
 import { CardSettingsDialog } from './card-settings-dialog';
@@ -44,11 +42,6 @@ function CardChatInner({ ownerId, mountId, chatId }: { ownerId: string; mountId:
     );
 }
 
-function useCardMeta(creator: string, createdAt: number) {
-    const { displayName } = useResolvedUser({ email: creator });
-    return `Created by ${displayName || creator} on ${formatDate(createdAt)}`;
-}
-
 type CardDialogProps = {
     isOpen: boolean;
     onClose: () => void;
@@ -61,7 +54,7 @@ type CardDialogProps = {
 
 export function CardDialog({ isOpen, onClose, card, canWrite = true, yjsDoc, ownerId, mountId }: CardDialogProps) {
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-    const meta = useCardMeta(card?.creator || '', card?.createdAt || 0);
+    const meta = useCreatedByMeta(card?.creator || undefined, card?.createdAt || 0);
 
     if (!card) return null;
 
@@ -73,6 +66,7 @@ export function CardDialog({ isOpen, onClose, card, canWrite = true, yjsDoc, own
                 title={card.title}
                 description={card.description}
                 meta={card.creator ? meta : undefined}
+                color={card.color}
                 canWrite={canWrite}
                 onEdit={() => setIsSettingsOpen(true)}
             >

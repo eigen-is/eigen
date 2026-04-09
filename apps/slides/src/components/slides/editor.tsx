@@ -14,7 +14,7 @@ import { MediaResolverProvider, useMediaResolver, useUploadFile } from '@workspa
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { CommentPanel, CommentThread, CreateCommentDialog, NoteCardContextMenu, NoteCardDialog } from '@workspace/ui';
+import { CommentDialog, CommentPanel, CreateCommentDialog, NoteCardContextMenu } from '@workspace/ui';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { Column, ColumnLayout, EmptyState, LoadingState } from '@workspace/ui/index';
@@ -764,20 +764,14 @@ function SlideEditorInner({
             )}
 
             {viewCommentChatName && viewCommentEntry && (
-                <NoteCardDialog
-                    open
-                    onOpenChange={(open) => {
-                        if (!open) setViewCommentChatName(null);
-                    }}
+                <CommentDialog
+                    comment={viewCommentEntry}
                     title={activeComments.anchorTexts.get(viewCommentChatName) || viewCommentChatName}
-                    description={
-                        viewCommentEntry.lastAuthorEmail
-                            ? `Comment by ${viewCommentEntry.lastAuthorEmail.split('@')[0]}`
-                            : undefined
-                    }
-                >
-                    <CommentThread ownerId={ownerId} mountId={path.mountId} chatName={viewCommentChatName} />
-                </NoteCardDialog>
+                    ownerId={ownerId}
+                    mountId={path.mountId}
+                    onClose={() => setViewCommentChatName(null)}
+                    onResolve={(chatName, status) => resolveComment.mutate({ chatName, status })}
+                />
             )}
 
             <ContextMenuAnchor contextMenu={commentContextMenu}>

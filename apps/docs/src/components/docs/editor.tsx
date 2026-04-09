@@ -18,12 +18,11 @@ import type { EigenClipboardData, EigenClipboardImageItem } from '@workspace/lib
 import type { DrivePath } from '@workspace/lib/types/drive';
 import {
     Column,
+    CommentDialog,
     CommentPanel,
-    CommentThread,
     CreateCommentDialog,
     LoadingState,
     NoteCardContextMenu,
-    NoteCardDialog,
 } from '@workspace/ui';
 import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
@@ -639,20 +638,14 @@ const TiptapEditor = ({
             )}
 
             {viewCommentChatName && viewCommentEntry && (
-                <NoteCardDialog
-                    open
-                    onOpenChange={(open) => {
-                        if (!open) setViewCommentChatName(null);
-                    }}
+                <CommentDialog
+                    comment={viewCommentEntry}
                     title={activeComments.anchorTexts.get(viewCommentChatName) || viewCommentChatName}
-                    description={
-                        viewCommentEntry.lastAuthorEmail
-                            ? `Comment by ${viewCommentEntry.lastAuthorEmail.split('@')[0]}`
-                            : undefined
-                    }
-                >
-                    <CommentThread ownerId={path.ownerId} mountId={path.mountId} chatName={viewCommentChatName} />
-                </NoteCardDialog>
+                    ownerId={path.ownerId}
+                    mountId={path.mountId}
+                    onClose={() => setViewCommentChatName(null)}
+                    onResolve={(chatName, status) => resolveComment.mutate({ chatName, status })}
+                />
             )}
 
             <ContextMenuAnchor contextMenu={commentContextMenu}>

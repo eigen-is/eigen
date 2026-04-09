@@ -5,14 +5,7 @@ import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants/colors';
 import { MediaResolverProvider } from '@workspace/lib/drive';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import {
-    CommentPanel,
-    CommentThread,
-    CreateCommentDialog,
-    LoadingState,
-    NoteCardContextMenu,
-    NoteCardDialog,
-} from '@workspace/ui';
+import { CommentDialog, CommentPanel, CreateCommentDialog, LoadingState, NoteCardContextMenu } from '@workspace/ui';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { columnToLetter, useActiveComments } from './hooks/use-active-comments';
@@ -261,20 +254,14 @@ export function SheetEditor({
             )}
 
             {viewCommentChatName && viewCommentEntry && (
-                <NoteCardDialog
-                    open
-                    onOpenChange={(open) => {
-                        if (!open) setViewCommentChatName(null);
-                    }}
+                <CommentDialog
+                    comment={viewCommentEntry}
                     title={activeComments.anchorTexts.get(viewCommentChatName) || viewCommentChatName}
-                    description={
-                        viewCommentEntry.lastAuthorEmail
-                            ? `Comment by ${viewCommentEntry.lastAuthorEmail.split('@')[0]}`
-                            : undefined
-                    }
-                >
-                    <CommentThread ownerId={ownerId} mountId={path.mountId} chatName={viewCommentChatName} />
-                </NoteCardDialog>
+                    ownerId={ownerId}
+                    mountId={path.mountId}
+                    onClose={() => setViewCommentChatName(null)}
+                    onResolve={(chatName, status) => resolveComment.mutate({ chatName, status })}
+                />
             )}
 
             <ContextMenuAnchor contextMenu={commentContextMenu}>
