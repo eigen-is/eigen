@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../dialog';
 import { Separator } from '../../separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../tooltip';
+import { LinkedText } from '../linked-text';
 
 function IconAction({ icon: Icon, tooltip, onClick }: { icon?: LucideIcon; tooltip?: string; onClick?: () => void }) {
     if (!Icon || !tooltip || !onClick) return null;
@@ -62,7 +63,7 @@ export function NoteCardDialog({
 
                     {description && (
                         <div className="px-4 py-3 text-sm text-foreground">
-                            <p className="whitespace-pre-line">{description}</p>
+                            <LinkedText text={description} />
                         </div>
                     )}
 
