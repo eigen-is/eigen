@@ -157,3 +157,44 @@ describe('Mail Parser', () => {
         });
     });
 });
+
+const CALENDAR_EMAIL = [
+    'From: organizer@example.com',
+    'To: attendee@example.com',
+    'Subject: Invitation: Meeting',
+    'MIME-Version: 1.0',
+    'Content-Type: multipart/mixed; boundary="cal-boundary"',
+    '',
+    '--cal-boundary',
+    'Content-Type: text/plain',
+    '',
+    'You are invited to a meeting.',
+    '--cal-boundary',
+    'Content-Type: text/calendar; method=REQUEST; charset=utf-8',
+    'Content-Disposition: attachment; filename="invite.ics"',
+    '',
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'METHOD:REQUEST',
+    'BEGIN:VEVENT',
+    'UID:test@example.com',
+    'SUMMARY:Meeting',
+    'DTSTART:20260415T100000Z',
+    'DTEND:20260415T110000Z',
+    'END:VEVENT',
+    'END:VCALENDAR',
+    '--cal-boundary--',
+].join('\r\n');
+
+test('parses calendarMethod from text/calendar attachment', async () => {
+    const mail = await simpleParser(CALENDAR_EMAIL);
+
+    const calAtt = mail.attachments.find((a) => a.contentType.startsWith('text/calendar'));
+    expect(calAtt).toBeDefined();
+    expect(calAtt!.calendarMethod).toBe('REQUEST');
+});
+
+test('non-calendar attachments have no calendarMethod', async () => {
+    const mail = await simpleParser(MULTIPART_EMAIL);
+    expect(mail.attachments[0].calendarMethod).toBeUndefined();
+});

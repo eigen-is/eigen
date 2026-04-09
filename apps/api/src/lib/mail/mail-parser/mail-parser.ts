@@ -86,6 +86,7 @@ export type AttachmentCommon = {
     contentId?: string;
     cid?: string;
     related?: boolean;
+    calendarMethod?: 'REQUEST' | 'REPLY' | 'CANCEL';
 };
 
 export type Attachment = AttachmentCommon & {
@@ -221,6 +222,7 @@ type InternalAttachment = {
     checksum: string;
     size: number;
     release: (() => void) | null;
+    calendarMethod?: 'REQUEST' | 'REPLY' | 'CANCEL';
 };
 
 type BoundaryEntry = {
@@ -1112,6 +1114,18 @@ class MailParser extends Transform {
                     }
 
                     attachment.headers = node.headers;
+
+                    if (contentType.startsWith('text/calendar')) {
+                        const ct = node.headers.get('content-type') as StructuredHeader | undefined;
+                        const method = ct?.params?.['method'];
+                        if (method) {
+                            const m = method.toUpperCase();
+                            if (m === 'REQUEST' || m === 'REPLY' || m === 'CANCEL') {
+                                attachment.calendarMethod = m;
+                            }
+                        }
+                    }
+
                     this.push(attachment);
                     this.attachmentList.push(attachment);
                 } else if (node.disposition === 'inline') {
