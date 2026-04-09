@@ -30,7 +30,7 @@ function HomeComponent() {
                             return (
                                 <Card key={app.name} className="overflow-hidden hover:shadow-md transition-shadow">
                                     <CardContent className="p-0">
-                                        <a href={app.href || '#'} className="block p-3 md:p-6">
+                                        <a href={app.href || '#'} className="block p-3 md:p-4">
                                             <div className="flex items-center gap-2 md:gap-3">
                                                 <div className="p-2 rounded-md" style={{ color: app.color }}>
                                                     <Icon className="w-5 h-5 md:w-6 md:h-6" />
