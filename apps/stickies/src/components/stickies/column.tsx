@@ -101,7 +101,7 @@ export function Column({
                                     ownerId={ownerId}
                                     mountId={mountId}
                                     onContextMenu={onCardContextMenu}
-                                    autoOpen={card.chatName === initialChatName}
+                                    autoOpen={initialChatName !== undefined && card.chatName === initialChatName}
                                 />
                             ))}
                         </SortableContext>
