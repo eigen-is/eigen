@@ -8,10 +8,14 @@ import { StickiesBoard } from '../components/stickies/board';
 
 export const Route = createFileRoute('/_auth/board/$ownerId/$mountId/$pathId')({
     component: StickiesRoute,
+    validateSearch: (search: Record<string, unknown>) => ({
+        chat: typeof search.chat === 'string' ? search.chat : undefined,
+    }),
 });
 
 function StickiesRoute() {
     const { ownerId, mountId, pathId } = Route.useParams();
+    const { chat } = Route.useSearch();
     const { data: docInfo, isLoading } = useCollabDocumentInfo(ownerId, mountId, pathId);
     const { setDocumentTitle } = useLayout();
     const [accessDialogOpen, setAccessDialogOpen] = useState(false);
@@ -43,6 +47,7 @@ function StickiesRoute() {
                 canWrite={docInfo.canWrite}
                 chatFolderId={chatFolderId}
                 onAccessDialogOpen={handleAccessDialogOpen}
+                initialChatName={chat}
             />
             <DriveAccessDialog open={accessDialogOpen} onOpenChange={setAccessDialogOpen} path={docInfo.path} />
         </>

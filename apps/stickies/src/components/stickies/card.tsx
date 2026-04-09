@@ -1,7 +1,7 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { NoteCard } from '@workspace/ui';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type * as Y from 'yjs';
 import { CardDialog } from './card-dialog';
 import type { CardItem } from './types';
@@ -19,10 +19,19 @@ type CardProps = {
     ownerId: string;
     mountId: string;
     onContextMenu?: (e: React.MouseEvent, card: CardItem) => void;
+    autoOpen?: boolean;
 };
 
-export function StickyCard({ card, canWrite = true, yjsDoc, ownerId, mountId, onContextMenu }: CardProps) {
+export function StickyCard({ card, canWrite = true, yjsDoc, ownerId, mountId, onContextMenu, autoOpen }: CardProps) {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
+    const autoOpened = useRef(false);
+
+    useEffect(() => {
+        if (autoOpen && !autoOpened.current) {
+            autoOpened.current = true;
+            setIsDialogOpen(true);
+        }
+    }, [autoOpen]);
 
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
         id: card.id,
