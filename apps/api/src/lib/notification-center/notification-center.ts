@@ -82,7 +82,7 @@ export class NotificationCenter {
             })
             .run();
 
-        this.home.broadcast(buildNotificationCreatedEvent(input.title, input.body));
+        this.home.broadcast(buildNotificationCreatedEvent(input.title, input.body, input.type, input.tag));
         return row;
     }
 
