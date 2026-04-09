@@ -6,6 +6,7 @@ import { usePublicUser } from '@workspace/lib/public';
 import type { ChatMessage } from '@workspace/lib/types/chat';
 import type { Contact } from '@workspace/lib/types/contact';
 import { EMAIL_FIND_REGEX } from '@workspace/lib/validation';
+import { URL_REGEX } from '@workspace/ui/components/layout/linked-text';
 import { UserItem } from '@workspace/ui/components/layout/user-item';
 import { Check, Paperclip, Pencil, Trash2, X } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
@@ -102,8 +103,6 @@ function InlineEmail({ email }: { email: string }) {
         </HoverCard>
     );
 }
-
-const URL_REGEX = /https?:\/\/[^\s<>'")\]]+[^\s<>'")\].,;:!?]/g;
 
 type RichToken = { index: number; end: number; type: 'email' | 'url'; value: string };
 
