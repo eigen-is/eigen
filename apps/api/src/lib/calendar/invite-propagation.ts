@@ -1,9 +1,11 @@
 import type { Attendee, CalendarEvent } from '@workspace/lib/types/calendar';
 import { SSEventType } from '@workspace/lib/types/sse';
+import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
 import { sendToHome } from '../home/home-relay';
 import { addRegistryEntry } from '../share';
 import { getUserByEmail } from '../user/';
+import { composeCancelEmail, composeInviteEmail, composeUpdateEmail } from './imip';
 import { buildCalendarEvent } from './sse-events';
 
 type InviteUser = { id: string; email: string; name?: string | null };
@@ -30,6 +32,10 @@ export async function propagateInvitation(
             const targetUser = await getUserByEmail(attendee.email);
             if (!targetUser) {
                 await addRegistryEntry(organizerHome.user.id, attendee.email);
+                // Send iMIP invite email to external attendee
+                const organizer = { userId: user.id, email: user.email, name: user.name ?? undefined };
+                const mail = composeInviteEmail(event, organizer, [attendee]);
+                sendMail(mail).catch((err) => console.error('Failed to send iMIP invite:', err));
                 continue;
             }
             await sendToHome(targetUser.id, {
@@ -65,7 +71,12 @@ export async function propagateInvitation(
         if (attendee.email.toLowerCase() === organizerEmail) continue;
         try {
             const targetUser = await getUserByEmail(attendee.email);
-            if (!targetUser) continue;
+            if (!targetUser) {
+                const organizer = { userId: user.id, email: user.email, name: user.name ?? undefined };
+                const mail = composeCancelEmail(event, organizer, [attendee]);
+                sendMail(mail).catch((err) => console.error('Failed to send iMIP cancel:', err));
+                continue;
+            }
             await sendToHome(targetUser.id, {
                 type: 'calendar:invitation-removal',
                 orgEventId: event.id,
@@ -80,7 +91,12 @@ export async function propagateInvitation(
         if (attendee.email.toLowerCase() === organizerEmail) continue;
         try {
             const targetUser = await getUserByEmail(attendee.email);
-            if (!targetUser) continue;
+            if (!targetUser) {
+                const organizer = { userId: user.id, email: user.email, name: user.name ?? undefined };
+                const mail = composeUpdateEmail(event, organizer, [attendee]);
+                sendMail(mail).catch((err) => console.error('Failed to send iMIP update:', err));
+                continue;
+            }
             await sendToHome(targetUser.id, {
                 type: 'calendar:invitation-update',
                 orgEventId: event.id,
@@ -130,7 +146,16 @@ export async function propagateCancellation(organizerHome: Home, event: Calendar
     for (const attendee of attendees) {
         try {
             const targetUser = await getUserByEmail(attendee.email);
-            if (!targetUser) continue;
+            if (!targetUser) {
+                const organizer = {
+                    userId: organizerHome.user.id,
+                    email: event.data?.organizer?.email ?? '',
+                    name: event.data?.organizer?.name,
+                };
+                const mail = composeCancelEmail(event, organizer, [attendee]);
+                sendMail(mail).catch((err) => console.error('Failed to send iMIP cancel:', err));
+                continue;
+            }
             await sendToHome(targetUser.id, {
                 type: 'calendar:invitation-removal',
                 orgEventId: event.id,
