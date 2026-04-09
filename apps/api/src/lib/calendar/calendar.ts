@@ -16,8 +16,10 @@ import { RRule } from 'rrule';
 import { v4 as uuidv4 } from 'uuid';
 import { ApiError, PATHS } from '../core';
 import type { ManagedDatabase } from '../core/';
+import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
 import { CALENDAR_DB_CONFIG } from './db-config';
+import { composeRsvpReply } from './imip';
 import { propagateCancellation, propagateDecline, propagateInvitation, propagateRsvp } from './invite-propagation';
 import * as schema from './schema';
 import { notifySharedCalendarUsers, propagateCalendarShare } from './share-propagation';
@@ -702,9 +704,13 @@ export class Calendar {
 
         if (user && existing.data?.organizer) {
             // Attendee deleting linked copy = decline
-            propagateDecline(existing.data.organizer.userId, existing.data.organizerEventId!, user.email).catch(
-                console.error,
-            );
+            const orgUserId = existing.data.organizer.userId;
+            if (orgUserId.startsWith('external_')) {
+                const mail = composeRsvpReply(existing, user.email, user.name ?? user.email, 'declined');
+                sendMail(mail).catch(console.error);
+            } else {
+                propagateDecline(orgUserId, existing.data.organizerEventId!, user.email).catch(console.error);
+            }
         } else if (existing.data?.attendees?.length) {
             // Organizer deleting = cancel for all attendees
             propagateCancellation(this.home, existing).catch(console.error);
@@ -1349,27 +1355,57 @@ export class Calendar {
         const scope = input.scope || 'all';
         const organizerUserId = event.data.organizer.userId;
         const organizerEventId = event.data.organizerEventId!;
+        const isExternalOrganizer = organizerUserId.startsWith('external_');
+
+        const sendRsvpReply = (status: Attendee['status']) => {
+            const mail = composeRsvpReply(event, user.email, user.name ?? user.email, status);
+            sendMail(mail).catch(console.error);
+        };
 
         if (scope === 'this' && input.recurrenceDate) {
             if (input.remove) {
                 this.removeOccurrence(eventId, input.recurrenceDate);
-                propagateRsvp(organizerUserId, organizerEventId, user.email, 'declined', input.recurrenceDate).catch(
-                    console.error,
-                );
+                if (isExternalOrganizer) {
+                    sendRsvpReply('declined');
+                } else {
+                    propagateRsvp(
+                        organizerUserId,
+                        organizerEventId,
+                        user.email,
+                        'declined',
+                        input.recurrenceDate,
+                    ).catch(console.error);
+                }
             } else {
                 this.rsvpForOccurrence(eventId, user.email, input.status, input.recurrenceDate);
-                propagateRsvp(organizerUserId, organizerEventId, user.email, input.status, input.recurrenceDate).catch(
-                    console.error,
-                );
+                if (isExternalOrganizer) {
+                    sendRsvpReply(input.status);
+                } else {
+                    propagateRsvp(
+                        organizerUserId,
+                        organizerEventId,
+                        user.email,
+                        input.status,
+                        input.recurrenceDate,
+                    ).catch(console.error);
+                }
             }
         } else if (scope === 'this-and-following' && input.remove && input.recurrenceDate) {
             this.removeThisAndFuture(eventId, input.recurrenceDate);
-            propagateRsvp(organizerUserId, organizerEventId, user.email, 'declined').catch(console.error);
+            if (isExternalOrganizer) {
+                sendRsvpReply('declined');
+            } else {
+                propagateRsvp(organizerUserId, organizerEventId, user.email, 'declined').catch(console.error);
+            }
         } else if (input.remove) {
             this.deleteEvent(eventId, user);
         } else {
             this.updateAttendeeStatus(eventId, user.email, input.status);
-            propagateRsvp(organizerUserId, organizerEventId, user.email, input.status).catch(console.error);
+            if (isExternalOrganizer) {
+                sendRsvpReply(input.status);
+            } else {
+                propagateRsvp(organizerUserId, organizerEventId, user.email, input.status).catch(console.error);
+            }
         }
     }
 
