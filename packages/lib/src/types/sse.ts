@@ -95,6 +95,8 @@ type SSEventNotificationCreated = {
     type: typeof SSEventType.NOTIFICATION_CREATED;
     title: string;
     body?: string;
+    notificationType?: string;
+    tag?: string;
 };
 
 type SSEventNotificationChanged = {
