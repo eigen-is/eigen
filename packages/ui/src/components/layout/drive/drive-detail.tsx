@@ -66,7 +66,7 @@ export function DriveDetailToolbar({
                         )}
                         <DropdownMenuItem onClick={() => onShareClick?.(path)} className="flex items-center">
                             <UserRoundPlus className="h-4 w-4 mr-2" />
-                            Edit access
+                            Share
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => onRename?.(path)} className="flex items-center">
                             <Pencil className="h-4 w-4 mr-2" />

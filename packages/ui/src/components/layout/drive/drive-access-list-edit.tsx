@@ -299,8 +299,8 @@ export function DriveAccessListEdit({ path, onSave, onCancel, className, prefill
                             </p>
                             <p className="text-xs text-muted-foreground">
                                 {visibility !== 'private'
-                                    ? 'Anyone with the link can access'
-                                    : 'Only admin with access can open with the link'}
+                                    ? 'Any authenticated user with the link'
+                                    : 'Only people with access'}
                             </p>
                         </div>
                     </div>
