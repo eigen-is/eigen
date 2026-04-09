@@ -1,8 +1,10 @@
+import { getDocumentUrl, getDriveAppUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { type DirectAccessItem, useDriveAccess, useIsEffectiveOwner } from '@workspace/lib/drive';
 import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DriveACL, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
+import { isContainerType } from '@workspace/lib/types/drive';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import { AvatarIcon } from '@workspace/ui/components/avatar';
 import { Button } from '@workspace/ui/components/button';
@@ -17,10 +19,12 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Separator } from '@workspace/ui/components/separator';
 import { cn } from '@workspace/ui/lib/utils';
-import { Lock, Plus, Unlock, Users } from 'lucide-react';
+import { Link, Lock, Plus, Unlock, Users } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import { ContactAutosuggest } from '../contacts/contact-autosuggest';
 import type { ContactSuggestion } from '../contacts/types';
+import { TooltipButton } from '../toolbar/tooltip-button';
 import { UserItem } from '../user-item';
 
 export type DriveAccessListEditProps = {
@@ -30,6 +34,13 @@ export type DriveAccessListEditProps = {
     className?: string;
     prefillEmail?: string;
 };
+
+function getShareUrl(path: DrivePath): string {
+    const docUrl = getDocumentUrl(path);
+    if (docUrl) return docUrl;
+    if (isContainerType(path.type)) return getDriveAppUrl(`fs/${path.ownerId}/${path.mountId}/${path.id}`);
+    return getDriveAppUrl(`shared/with-me?pid=${path.id}&uid=${path.ownerId}&mid=${path.mountId}`);
+}
 
 export function DriveAccessListEdit({ path, onSave, onCancel, className, prefillEmail }: DriveAccessListEditProps) {
     const [pendingChanges, setPendingChanges] = useState(false);
@@ -341,6 +352,16 @@ export function DriveAccessListEdit({ path, onSave, onCancel, className, prefill
             <Separator className="my-4 shrink-0" />
 
             <DialogFooter className="shrink-0">
+                <TooltipButton
+                    icon={Link}
+                    tooltipText="Copy link"
+                    variant="outline"
+                    className={cn(!myTeams?.length && 'mr-auto')}
+                    onClick={() => {
+                        navigator.clipboard.writeText(getShareUrl(path));
+                        toast.success('Link copied to clipboard');
+                    }}
+                />
                 {myTeams && myTeams.length > 0 && (
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
