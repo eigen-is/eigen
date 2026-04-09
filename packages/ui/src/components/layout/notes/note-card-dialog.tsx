@@ -67,7 +67,7 @@ export function NoteCardDialog({
                     )}
 
                     {(meta || (canWrite && onEdit) || onAction) && (
-                        <div className="flex items-center px-4 pb-2">
+                        <div className={`flex items-center px-4 pb-2 ${!description ? 'pt-2' : ''}`}>
                             {meta && <p className="flex-1 text-xs text-muted-foreground">{meta}</p>}
                             {canWrite && onEdit && <IconAction icon={Pencil} tooltip="Edit" onClick={onEdit} />}
                             <IconAction icon={actionIcon} tooltip={actionTooltip} onClick={onAction} />
