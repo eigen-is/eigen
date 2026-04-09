@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { WaitlistEntry } from '@workspace/lib/types/waitlist';
 import { validateEmailAddress, validateUsername } from '@workspace/lib/validation';
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { getServerDataPath } from '../config/paths';
 import { getPublicConfig } from '../config/server-config';
 import { getServerSettings } from '../config/server-settings';
@@ -55,9 +55,14 @@ export async function submitWaitlist(email: string, notes: string): Promise<bool
 export async function listWaitlist(status?: string): Promise<WaitlistEntry[]> {
     const d = await db();
     if (status) {
-        return d.select().from(schema.waitlist).where(eq(schema.waitlist.status, status)).all();
+        return d
+            .select()
+            .from(schema.waitlist)
+            .where(eq(schema.waitlist.status, status))
+            .orderBy(desc(schema.waitlist.createdAt))
+            .all();
     }
-    return d.select().from(schema.waitlist).all();
+    return d.select().from(schema.waitlist).orderBy(desc(schema.waitlist.createdAt)).all();
 }
 
 export async function getWaitlistEntry(id: string) {
