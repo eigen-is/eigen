@@ -435,6 +435,11 @@ export class Calendar {
         return calendarEvent;
     }
 
+    public getEventsByUid(uid: string): CalendarEvent[] {
+        const rows = this.db.select().from(schema.events).where(eq(schema.events.uid, uid)).all();
+        return rows.map(dbEventToCalendarEvent);
+    }
+
     private getEventById(id: string): CalendarEventRow | null {
         const row = this.db.select().from(schema.events).where(eq(schema.events.id, id)).get();
         return row ? dbEventToCalendarEventRow(row) : null;

@@ -1,6 +1,10 @@
 import type { Attendee, CalendarEvent, EventData } from '@workspace/lib/types/calendar';
+import { parseIcs } from '../caldav/ical-parse';
 import { serializeEventForImip } from '../caldav/ical-serialize';
 import type { OutboundMail } from '../core/mailer';
+import type { Home } from '../home';
+import type { ParsedMail } from '../mail/mail-parser';
+import type { ReceiveInvitationPayload } from './calendar';
 
 type Organizer = NonNullable<EventData['organizer']>;
 
@@ -86,4 +90,82 @@ export function composeRsvpReply(
         text: `${attendeeName} has ${STATUS_LABELS[status].toLowerCase()} the invitation: ${event.title}`,
         attachments: [{ filename: 'invite.ics', content: ics, contentType: 'text/calendar; method=REPLY' }],
     };
+}
+
+export function extractCalendarAttachment(mail: ParsedMail): { ics: string; method?: string } | null {
+    const attachment = mail.attachments.find((a) => a.contentType.startsWith('text/calendar'));
+    if (!attachment) return null;
+
+    const content = attachment.content;
+    const ics = typeof content === 'string' ? content : Buffer.from(content as Buffer).toString('utf-8');
+
+    // Extract method from Content-Type header parameter (e.g. "text/calendar; method=REQUEST")
+    const methodMatch = attachment.contentType.match(/method=(\w+)/i);
+    const method = methodMatch ? methodMatch[1].toUpperCase() : undefined;
+
+    return { ics, method };
+}
+
+export function processInboundImip(home: Home, mail: ParsedMail): void {
+    const calAttachment = extractCalendarAttachment(mail);
+    if (!calAttachment) return;
+
+    const { events, method: parsedMethod } = parseIcs(calAttachment.ics);
+    const method = parsedMethod ?? calAttachment.method;
+    if (!method || events.length === 0) return;
+
+    const calendar = home.calendar;
+
+    for (const parsed of events) {
+        if (method === 'REQUEST') {
+            const existing = calendar.getEventsByUid(parsed.uid);
+            const linked = existing.find((e) => e.data?.organizer);
+
+            if (linked) {
+                calendar.receiveInvitationUpdate(linked.data!.organizerEventId!, linked.data!.organizer!.userId, {
+                    title: parsed.title,
+                    description: parsed.description,
+                    location: parsed.location,
+                    startTime: parsed.startTime,
+                    endTime: parsed.endTime,
+                    allDay: parsed.allDay,
+                    rrule: parsed.rrule,
+                    timezone: parsed.timezone,
+                    status: parsed.status,
+                    sequence: parsed.sequence,
+                    attendees: parsed.data?.attendees,
+                });
+            } else {
+                const organizerEmail = parsed.data?.organizer?.email ?? '';
+                const payload: ReceiveInvitationPayload = {
+                    uid: parsed.uid,
+                    title: parsed.title,
+                    description: parsed.description,
+                    location: parsed.location,
+                    startTime: parsed.startTime,
+                    endTime: parsed.endTime,
+                    allDay: parsed.allDay,
+                    rrule: parsed.rrule,
+                    timezone: parsed.timezone,
+                    status: parsed.status,
+                    sequence: parsed.sequence,
+                    data: parsed.data ?? {},
+                    createByUserId: `external_${organizerEmail}`,
+                    organizerEventId: parsed.uid,
+                    organizerUserId: `external_${organizerEmail}`,
+                };
+                calendar.receiveInvitation(payload);
+            }
+        } else if (method === 'CANCEL') {
+            const organizerEmail = parsed.data?.organizer?.email ?? '';
+            calendar.removeInvitation(parsed.uid, `external_${organizerEmail}`);
+        } else if (method === 'REPLY') {
+            const existing = calendar.getEventsByUid(parsed.uid);
+            if (existing.length > 0 && parsed.data?.attendees) {
+                for (const attendee of parsed.data.attendees) {
+                    calendar.updateAttendeeStatus(existing[0].id, attendee.email, attendee.status);
+                }
+            }
+        }
+    }
 }
