@@ -8,10 +8,14 @@ import { SlideEditor } from '../components/slides/editor';
 
 export const Route = createFileRoute('/_auth/slide/$ownerId/$mountId/$pathId')({
     component: SlideView,
+    validateSearch: (search: Record<string, unknown>) => ({
+        chat: typeof search.chat === 'string' ? search.chat : undefined,
+    }),
 });
 
 function SlideView() {
     const { ownerId, mountId, pathId } = Route.useParams();
+    const { chat } = Route.useSearch();
     const { data: docInfo, isLoading } = useCollabDocumentInfo(ownerId, mountId, pathId);
     const { setDocumentTitle } = useLayout();
     const [accessDialogOpen, setAccessDialogOpen] = useState(false);
@@ -51,6 +55,7 @@ function SlideView() {
                 mediaFolderId={mediaFolderId}
                 chatFolderId={chatFolderId}
                 onAccessDialogOpen={handleAccessDialogOpen}
+                initialChatName={chat}
             />
             <DriveAccessDialog path={path} open={accessDialogOpen} onOpenChange={setAccessDialogOpen} />
         </>
