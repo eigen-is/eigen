@@ -236,6 +236,45 @@ All hooks in `packages/lib/src/core/calendar/hooks/use-calendar.ts`:
 **Query keys**: `calendarKeys` with `ownerId`-scoped hierarchy — `all > owner(ownerId) > calendars/events/shared`.
 SSE handler in `packages/lib/src/core/calendar/sse-handlers.ts` routes events to invalidation functions.
 
+## iMIP (Email-Based Calendar Invitations)
+
+iMIP enables calendar invitations between Eigen users and external parties via email (RFC 6047). It is layered on top of the existing invitation system — external attendees receive emails instead of in-app linked events.
+
+### Outbound flow (Eigen → external)
+
+- **Create event with external attendees**: `invite-propagation.ts` detects attendees with no Eigen account and calls `composeInviteEmail()` → `sendMail()`. Sends `METHOD:REQUEST`.
+- **Update event**: same path calls `composeUpdateEmail()` → updated `METHOD:REQUEST`.
+- **Cancel event**: `composeCancelEmail()` → `METHOD:CANCEL`.
+- **Attendee RSVP**: when an Eigen user RSVPs to an externally-organized event, `calendar.ts` calls `composeRsvpReply()` → `METHOD:REPLY`. Triggered both from `rsvp()` and from `deleteEvent()` (delete = decline).
+
+### Inbound flow (external → Eigen)
+
+- **Mail delivery hook**: `apps/api/src/lib/mail/mail.ts` — after `mailboxDeliver`, checks for `text/calendar` attachments (fire-and-forget with `.catch()`). If found, calls `processInboundImip(home, parsedMail)`.
+- **`METHOD:REQUEST`**: creates a linked event in the recipient's calendar via `calendar.receiveInvitation()`. If a linked event with the same `uid` already exists, updates it via `calendar.receiveInvitationUpdate()`.
+- **`METHOD:CANCEL`**: removes the linked event via `calendar.removeInvitation()`.
+- **`METHOD:REPLY`**: updates attendee status on the organizer's event via `calendar.updateAttendeeStatus()`.
+
+### `external_` prefix convention
+
+External organizers have no Eigen user ID. `organizerUserId` is set to `external_{organizerEmail}` (e.g. `external_alice@example.com`). Mirrors the `team_{teamId}` convention used for team owner IDs. Code uses `organizerUserId.startsWith('external_')` to route RSVP replies via email instead of in-app propagation.
+
+### `imip.ts` module
+
+`apps/api/src/lib/calendar/imip.ts` — pure functions, no DB access:
+
+| Function                  | Purpose                                                     |
+|---------------------------|-------------------------------------------------------------|
+| `composeInviteEmail()`    | Build `OutboundMail` for `METHOD:REQUEST` (new invite)      |
+| `composeUpdateEmail()`    | Build `OutboundMail` for `METHOD:REQUEST` (update)          |
+| `composeCancelEmail()`    | Build `OutboundMail` for `METHOD:CANCEL`                    |
+| `composeRsvpReply()`      | Build `OutboundMail` for `METHOD:REPLY` (attendee response) |
+| `extractCalendarAttachment()` | Find `text/calendar` attachment in a parsed mail        |
+| `processInboundImip()`    | Dispatch inbound iMIP methods to calendar operations        |
+
+### Mail UI widget
+
+`apps/mail/src/components/mail/calendar-invite-widget.tsx` — rendered inline in `email-detail.tsx` for any attachment with `contentType.startsWith('text/calendar')`. Regular file attachments with `text/calendar` content type are excluded from the normal attachment list and shown as the widget instead.
+
 ## Files
 
 | File                                             | Purpose                   |
@@ -245,7 +284,8 @@ SSE handler in `packages/lib/src/core/calendar/sse-handlers.ts` routes events to
 | `apps/api/src/lib/calendar/schema.ts`            | Drizzle schema            |
 | `apps/api/src/lib/calendar/db-config.ts`         | DB config + migrations    |
 | `apps/api/src/lib/calendar/share-propagation.ts`  | Push shares to recipients |
-| `apps/api/src/lib/calendar/invite-propagation.ts` | Push invites to attendees |
+| `apps/api/src/lib/calendar/invite-propagation.ts` | Push invites to attendees (internal + iMIP outbound) |
+| `apps/api/src/lib/calendar/imip.ts`              | iMIP email composers + inbound dispatcher |
 | `apps/api/src/lib/calendar/sse-events.ts`         | SSE builders              |
 | `apps/api/src/routes/calendar.ts`                 | API routes (thin)         |
 | `packages/lib/src/types/calendar.ts`             | Shared types              |
