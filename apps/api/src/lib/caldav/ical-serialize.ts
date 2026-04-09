@@ -156,9 +156,15 @@ function buildVEvent(event: CalendarEvent): string[] {
     return lines;
 }
 
-function wrapInVCalendar(eventLines: string[]): string {
-    const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Eigen//CalDAV//EN', ...eventLines, 'END:VCALENDAR'];
+function wrapInVCalendar(eventLines: string[], method?: 'REQUEST' | 'REPLY' | 'CANCEL'): string {
+    const header = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Eigen//CalDAV//EN'];
+    if (method) header.push(`METHOD:${method}`);
+    const lines = [...header, ...eventLines, 'END:VCALENDAR'];
     return `${lines.join('\r\n')}\r\n`;
+}
+
+export function serializeEventForImip(event: CalendarEvent, method: 'REQUEST' | 'REPLY' | 'CANCEL'): string {
+    return wrapInVCalendar(buildVEvent(event), method);
 }
 
 export function eventsToIcs(events: CalendarEvent[]): string {
