@@ -260,6 +260,10 @@ Notifications: `home.notifications.persist({...})` → writes to DB + broadcasts
 User = raw UUID (`a1b2c3d4-...`), Team = `team_{teamId}`. Resolution: `parseOwnerId()` in
 `packages/lib/src/types/owner.ts`. Data layout: see [STORAGE.md](docs/STORAGE.md).
 
+For iMIP (external calendar invitations), external organizers have no Eigen user ID — `organizerUserId`
+is set to `external_{email}` (e.g. `external_alice@example.com`). Same prefix convention, same
+`startsWith('external_')` detection idiom. See [CALENDAR.md](docs/CALENDAR.md#imip-email-based-calendar-invitations).
+
 ## Testing
 
 Tests are in `apps/api/src/test/`. Run with `bun run test` or `bun test apps/api/src/test/[file].test.ts`.
