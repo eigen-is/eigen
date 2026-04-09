@@ -11,6 +11,10 @@
     }
 }
 
+www.{$DOMAIN} {
+    redir https://{$DOMAIN}{uri} 308
+}
+
 {$DOMAIN} {
     encode gzip zstd
 
