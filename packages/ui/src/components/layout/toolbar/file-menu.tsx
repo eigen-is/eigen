@@ -105,7 +105,7 @@ export function FileMenu({
                     )}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={onAccessDialogOpen}>
-                        <UserRoundPlus className="h-4 w-4 mr-2" /> Edit access
+                        <UserRoundPlus className="h-4 w-4 mr-2" /> Share
                     </DropdownMenuItem>
                     {canWrite && (
                         <DropdownMenuItem onClick={() => setEmailOpen(true)}>

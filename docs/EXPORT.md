@@ -109,7 +109,7 @@ extraction from Content-Disposition, and error handling via `onMutationError`.
 
 Export submenu rendered via `onExport` prop, positioned after Rename:
 ```
-New document > Open > Rename > Export > [separator] > Edit access > ... > Print > Delete
+New document > Open > Rename > Export > [separator] > Share > ... > Print > Delete
 ```
 
 ### Drive Context Menu (`packages/ui/src/components/layout/drive/drive-table.tsx`)
