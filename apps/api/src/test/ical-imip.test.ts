@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { CalendarEvent } from '@workspace/lib/types/calendar';
 import { parseIcs } from '../lib/caldav/ical-parse';
 import { eventsToIcs, serializeEventForImip } from '../lib/caldav/ical-serialize';
+import { composeCancelEmail, composeInviteEmail, composeRsvpReply, composeUpdateEmail } from '../lib/calendar/imip';
 
 const MOCK_EVENT: CalendarEvent = {
     id: 'evt-1',
@@ -142,5 +143,49 @@ describe('iMIP Parsing', () => {
         const result = parseIcs(ics);
         expect(result.method).toBeUndefined();
         expect(result.events).toHaveLength(1);
+    });
+});
+
+describe('iMIP Outbound Email Composition', () => {
+    const organizer = { userId: 'alice-id', email: 'alice@eigen.example', name: 'Alice' };
+    const attendee = { email: 'bob@external.com', name: 'Bob', status: 'pending' as const, role: 'required' as const };
+
+    test('composeInviteEmail creates proper OutboundMail', () => {
+        const mail = composeInviteEmail(MOCK_EVENT, organizer, [attendee]);
+        expect(mail.from?.address).toBe('alice@eigen.example');
+        expect(mail.from?.name).toBe('Alice');
+        expect(mail.to[0].address).toBe('bob@external.com');
+        expect(mail.subject).toBe('Invitation: Team Standup');
+        expect(mail.text).toContain('Team Standup');
+        expect(mail.text).toContain('Room 42');
+        expect(mail.attachments).toHaveLength(1);
+        expect(mail.attachments![0].contentType).toBe('text/calendar; method=REQUEST');
+        expect(mail.attachments![0].filename).toBe('invite.ics');
+        expect(mail.attachments![0].content).toContain('METHOD:REQUEST');
+        expect(mail.attachments![0].content).toContain('ATTENDEE');
+    });
+
+    test('composeUpdateEmail uses correct subject and method', () => {
+        const updatedEvent = { ...MOCK_EVENT, sequence: 1 };
+        const mail = composeUpdateEmail(updatedEvent, organizer, [attendee]);
+        expect(mail.subject).toBe('Updated invitation: Team Standup');
+        expect(mail.attachments![0].contentType).toBe('text/calendar; method=REQUEST');
+        expect(mail.attachments![0].content).toContain('SEQUENCE:1');
+    });
+
+    test('composeCancelEmail uses METHOD:CANCEL', () => {
+        const mail = composeCancelEmail(MOCK_EVENT, organizer, [attendee]);
+        expect(mail.subject).toBe('Cancelled: Team Standup');
+        expect(mail.attachments![0].contentType).toBe('text/calendar; method=CANCEL');
+        expect(mail.attachments![0].content).toContain('METHOD:CANCEL');
+    });
+
+    test('composeRsvpReply uses METHOD:REPLY with correct PARTSTAT', () => {
+        const mail = composeRsvpReply(MOCK_EVENT, 'bob@external.com', 'Bob', 'accepted');
+        expect(mail.to[0].address).toBe('alice@eigen.example');
+        expect(mail.subject).toContain('Accepted');
+        expect(mail.attachments![0].contentType).toBe('text/calendar; method=REPLY');
+        expect(mail.attachments![0].content).toContain('METHOD:REPLY');
+        expect(mail.attachments![0].content).toContain('ACCEPTED');
     });
 });
