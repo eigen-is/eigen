@@ -57,7 +57,7 @@ const apps = [
         color: 'var(--app-docs-color)',
         href: getDocsAppUrl(),
         icon: FileText,
-        description: 'Open your documents',
+        description: 'Write and edit documents',
     },
     {
         name: 'Sheets',
@@ -78,7 +78,7 @@ const apps = [
         color: 'var(--app-stickies-color)',
         href: getStickiesAppUrl(),
         icon: StickyNote,
-        description: 'Map out your ideas',
+        description: 'Organize your tasks and ideas',
     },
     {
         name: 'Chat',
