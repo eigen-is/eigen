@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { CalendarEvent } from '@workspace/lib/types/calendar';
+import { parseIcs } from '../lib/caldav/ical-parse';
 import { eventsToIcs, serializeEventForImip } from '../lib/caldav/ical-serialize';
 
 const MOCK_EVENT: CalendarEvent = {
@@ -53,5 +54,93 @@ describe('iMIP Serialization', () => {
         const ics = eventsToIcs([MOCK_EVENT]);
         expect(ics).not.toContain('METHOD:');
         expect(ics).toContain('BEGIN:VCALENDAR');
+    });
+});
+
+describe('iMIP Parsing', () => {
+    test('parseIcs extracts METHOD:REQUEST', () => {
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'METHOD:REQUEST',
+            'PRODID:-//Test//Test//EN',
+            'BEGIN:VEVENT',
+            'UID:test-uid-1@external',
+            'SUMMARY:External Meeting',
+            'DTSTART:20260415T100000Z',
+            'DTEND:20260415T110000Z',
+            'SEQUENCE:0',
+            'STATUS:CONFIRMED',
+            'ORGANIZER;CN="External Bob":mailto:bob@external.com',
+            'ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;CN="Alice":mailto:alice@eigen.example',
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        const result = parseIcs(ics);
+        expect(result.method).toBe('REQUEST');
+        expect(result.events).toHaveLength(1);
+        expect(result.events[0].uid).toBe('test-uid-1@external');
+        expect(result.events[0].data?.organizer?.email).toBe('bob@external.com');
+        expect(result.events[0].data?.attendees).toHaveLength(1);
+    });
+
+    test('parseIcs extracts METHOD:REPLY', () => {
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'METHOD:REPLY',
+            'BEGIN:VEVENT',
+            'UID:uid-123@eigen',
+            'SUMMARY:Team Standup',
+            'DTSTART:20260415T100000Z',
+            'DTEND:20260415T110000Z',
+            'ATTENDEE;PARTSTAT=ACCEPTED;CN="Bob":mailto:bob@external.com',
+            'ORGANIZER;CN="Alice":mailto:alice@eigen.example',
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        const result = parseIcs(ics);
+        expect(result.method).toBe('REPLY');
+        expect(result.events[0].data?.attendees?.[0].status).toBe('accepted');
+    });
+
+    test('parseIcs extracts METHOD:CANCEL', () => {
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'METHOD:CANCEL',
+            'BEGIN:VEVENT',
+            'UID:uid-123@eigen',
+            'SUMMARY:Team Standup',
+            'DTSTART:20260415T100000Z',
+            'DTEND:20260415T110000Z',
+            'STATUS:CANCELLED',
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        const result = parseIcs(ics);
+        expect(result.method).toBe('CANCEL');
+        expect(result.events[0].status).toBe('cancelled');
+    });
+
+    test('parseIcs returns undefined method when not present', () => {
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'BEGIN:VEVENT',
+            'UID:uid-no-method',
+            'SUMMARY:No Method',
+            'DTSTART:20260415T100000Z',
+            'DTEND:20260415T110000Z',
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        const result = parseIcs(ics);
+        expect(result.method).toBeUndefined();
+        expect(result.events).toHaveLength(1);
     });
 });

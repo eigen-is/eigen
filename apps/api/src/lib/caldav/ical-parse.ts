@@ -17,9 +17,22 @@ export type ParsedEvent = {
     data: EventData | null;
 };
 
-export function parseIcs(icsText: string): ParsedEvent[] {
+export type IcsParseResult = {
+    method?: 'REQUEST' | 'REPLY' | 'CANCEL';
+    events: ParsedEvent[];
+};
+
+export function parseIcs(icsText: string): IcsParseResult {
     const jcal = ICAL.parse(icsText);
     const comp = new ICAL.Component(jcal);
+
+    const methodRaw = comp.getFirstPropertyValue('method');
+    const methodStr = typeof methodRaw === 'string' ? methodRaw.toUpperCase() : undefined;
+    const method =
+        methodStr && ['REQUEST', 'REPLY', 'CANCEL'].includes(methodStr)
+            ? (methodStr as 'REQUEST' | 'REPLY' | 'CANCEL')
+            : undefined;
+
     const vevents = comp.getAllSubcomponents('vevent');
 
     const results: ParsedEvent[] = [];
@@ -207,5 +220,5 @@ export function parseIcs(icsText: string): ParsedEvent[] {
         }
     }
 
-    return results;
+    return { method, events: results };
 }

@@ -1,5 +1,6 @@
 import type { CalendarEvent } from '@workspace/lib/types/calendar';
 import type { Calendar, CalendarEventRow } from '../calendar/calendar';
+import type { ParsedEvent } from './ical-parse';
 import { parseIcs } from './ical-parse';
 import { eventsToIcs } from './ical-serialize';
 
@@ -41,18 +42,18 @@ export async function handlePut(
         }
     }
 
-    let parsed: ReturnType<typeof parseIcs>;
+    let events: ReturnType<typeof parseIcs>['events'];
     try {
-        parsed = parseIcs(body);
+        ({ events } = parseIcs(body));
     } catch {
         return new Response('Bad Request: invalid iCalendar data', { status: 400 });
     }
-    if (!parsed.length) {
+    if (!events.length) {
         return new Response('Bad Request: no VEVENT found', { status: 400 });
     }
 
     // Find the master event (no recurrenceDate)
-    const masterParsed = parsed.find((e) => !e.recurrenceDate) || parsed[0];
+    const masterParsed = events.find((e) => !e.recurrenceDate) || events[0];
 
     if (existingEvent) {
         // Update existing event
@@ -71,7 +72,7 @@ export async function handlePut(
         });
 
         const updatedEvent = calendar.getEventByUri(calendarId, uri)!;
-        syncExceptionEvents(calendar, calendarId, updatedEvent, parsed, userId);
+        syncExceptionEvents(calendar, calendarId, updatedEvent, events, userId);
 
         return new Response(null, {
             status: 204,
@@ -97,7 +98,7 @@ export async function handlePut(
         uri,
     });
 
-    syncExceptionEvents(calendar, calendarId, newEvent, parsed, userId);
+    syncExceptionEvents(calendar, calendarId, newEvent, events, userId);
 
     return new Response(null, {
         status: 201,
@@ -130,10 +131,10 @@ function syncExceptionEvents(
     calendar: Calendar,
     calendarId: string,
     masterEvent: CalendarEvent,
-    parsed: ReturnType<typeof parseIcs>,
+    events: ParsedEvent[],
     userId: string,
 ) {
-    const exceptionParsed = parsed.filter((e) => e.recurrenceDate);
+    const exceptionParsed = events.filter((e) => e.recurrenceDate);
     if (!exceptionParsed.length) return;
 
     const existingExceptions = calendar.getRawEvents(calendarId).filter((e) => e.parentEventId === masterEvent.id);
