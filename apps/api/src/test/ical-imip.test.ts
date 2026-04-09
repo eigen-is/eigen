@@ -383,3 +383,80 @@ describe('iMIP Outbound via Invite Propagation (integration)', () => {
         expect(delRes.status).toBe(200);
     });
 });
+
+describe('iMIP RSVP Reply to External Organizer', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+    });
+
+    test('RSVPing to externally-organized event does not error', async () => {
+        // Deliver an external invite to Alice
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'METHOD:REQUEST',
+            'BEGIN:VEVENT',
+            'UID:external-rsvp-test@external.com',
+            'SUMMARY:External RSVP Test',
+            'DTSTART:20260425T140000Z',
+            'DTEND:20260425T150000Z',
+            'SEQUENCE:0',
+            'STATUS:CONFIRMED',
+            'ORGANIZER;CN="Ext Organizer":mailto:ext-org@external.com',
+            `ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:${ctx.alice.user.email}`,
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        const email = [
+            'From: ext-org@external.com',
+            `To: ${ctx.alice.user.email}`,
+            'Subject: External RSVP Test',
+            'MIME-Version: 1.0',
+            'Content-Type: multipart/mixed; boundary="rsvp-boundary"',
+            '',
+            '--rsvp-boundary',
+            'Content-Type: text/plain',
+            '',
+            'Invite.',
+            '--rsvp-boundary',
+            'Content-Type: text/calendar; method=REQUEST; charset=utf-8',
+            'Content-Disposition: attachment; filename="invite.ics"',
+            '',
+            ics,
+            '--rsvp-boundary--',
+        ].join('\r\n');
+
+        await authedRequest(ctx.alice.user.sessionToken, `/mail/deliver/${ctx.alice.user.email}`, {
+            method: 'POST',
+            body: new TextEncoder().encode(email).buffer,
+        });
+
+        // Find the event in Alice's calendar
+        const from = Math.floor(new Date('2026-04-24').getTime() / 1000);
+        const to = Math.floor(new Date('2026-04-26').getTime() / 1000);
+        const eventsRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${ctx.alice.user.id}/event-range/${from}/${to}`,
+        );
+        const events = await assertJson<CalendarEventOccurrence[]>(eventsRes);
+        const externalEvent = findOrFail(events, (e) => e.uid === 'external-rsvp-test@external.com');
+
+        // RSVP accept
+        const calRes = await authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars`);
+        const calId = findOrFail(await assertJson<CalendarItem[]>(calRes), (c) => c.isDefault).id;
+
+        const rsvpRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${ctx.alice.user.id}/calendars/${calId}/events/${externalEvent.id}/rsvp`,
+            {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'accepted' }),
+            },
+        );
+        expect(rsvpRes.status).toBe(200);
+    });
+});
