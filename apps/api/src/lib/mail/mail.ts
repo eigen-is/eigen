@@ -1,8 +1,10 @@
 import type { Email, EmailDraft, EmailSummary } from '@workspace/lib/types/mail';
 import type { User } from 'better-auth/types';
+import { processInboundImip } from '../calendar/imip';
 import { ApiError } from '../core/errors';
 import { getHome } from '../home';
 import { getUserByEmail } from '../user/';
+import { simpleParser } from './mail-parser';
 
 async function getMailClient(user: User) {
     const home = await getHome(user.id);
@@ -36,7 +38,21 @@ export async function mailboxDeliver(to: string, file: ArrayBuffer) {
     }
     const mail = await getMailClient(user);
     const message = new TextDecoder().decode(new Uint8Array(file));
-    return await mail.mailboxDeliver(message);
+    const result = await mail.mailboxDeliver(message);
+
+    // Fire-and-forget: detect and process iMIP calendar attachments
+    try {
+        const parsed = await simpleParser(message);
+        const hasCalendar = parsed.attachments.some((a) => a.contentType.startsWith('text/calendar'));
+        if (hasCalendar) {
+            const home = await getHome(user.id);
+            processInboundImip(home, parsed);
+        }
+    } catch (error) {
+        console.error('iMIP processing failed:', error);
+    }
+
+    return result;
 }
 
 export async function messageGetFile(user: User, messageId: string) {

@@ -1,8 +1,9 @@
-import { describe, expect, test } from 'bun:test';
-import type { CalendarEvent } from '@workspace/lib/types/calendar';
+import { beforeAll, describe, expect, test } from 'bun:test';
+import type { CalendarEvent, CalendarEventOccurrence } from '@workspace/lib/types/calendar';
 import { parseIcs } from '../lib/caldav/ical-parse';
 import { eventsToIcs, serializeEventForImip } from '../lib/caldav/ical-serialize';
 import { composeCancelEmail, composeInviteEmail, composeRsvpReply, composeUpdateEmail } from '../lib/calendar/imip';
+import { assertJson, authedRequest, findOrFail, getTestContext } from './setup';
 
 const MOCK_EVENT: CalendarEvent = {
     id: 'evt-1',
@@ -187,5 +188,122 @@ describe('iMIP Outbound Email Composition', () => {
         expect(mail.attachments![0].contentType).toBe('text/calendar; method=REPLY');
         expect(mail.attachments![0].content).toContain('METHOD:REPLY');
         expect(mail.attachments![0].content).toContain('ACCEPTED');
+    });
+});
+
+describe('iMIP Inbound Processing (integration)', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+    });
+
+    test('delivering email with METHOD:REQUEST creates calendar event', async () => {
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'METHOD:REQUEST',
+            'PRODID:-//External//Calendar//EN',
+            'BEGIN:VEVENT',
+            'UID:external-invite-uid-1@external.com',
+            'SUMMARY:External Lunch',
+            'DTSTART:20260420T120000Z',
+            'DTEND:20260420T130000Z',
+            'SEQUENCE:0',
+            'STATUS:CONFIRMED',
+            'ORGANIZER;CN="External Org":mailto:organizer@external.com',
+            `ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;CN="Alice":mailto:${ctx.alice.user.email}`,
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        const email = [
+            'From: organizer@external.com',
+            `To: ${ctx.alice.user.email}`,
+            'Subject: Invitation: External Lunch',
+            'MIME-Version: 1.0',
+            'Content-Type: multipart/mixed; boundary="imip-boundary"',
+            '',
+            '--imip-boundary',
+            'Content-Type: text/plain',
+            '',
+            'You have been invited to External Lunch.',
+            '--imip-boundary',
+            'Content-Type: text/calendar; method=REQUEST; charset=utf-8',
+            'Content-Disposition: attachment; filename="invite.ics"',
+            '',
+            ics,
+            '--imip-boundary--',
+        ].join('\r\n');
+
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/mail/deliver/${ctx.alice.user.email}`, {
+            method: 'POST',
+            body: new TextEncoder().encode(email).buffer,
+        });
+        expect(res.status).toBe(200);
+
+        const from = Math.floor(new Date('2026-04-19').getTime() / 1000);
+        const to = Math.floor(new Date('2026-04-21').getTime() / 1000);
+        const eventsRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${ctx.alice.user.id}/event-range/${from}/${to}`,
+        );
+        const events = await assertJson<CalendarEventOccurrence[]>(eventsRes);
+        const externalEvent = findOrFail(events, (e) => e.title === 'External Lunch');
+        expect(externalEvent.uid).toBe('external-invite-uid-1@external.com');
+        expect(externalEvent.data?.organizer?.email).toBe('organizer@external.com');
+    });
+
+    test('delivering email with METHOD:CANCEL removes calendar event', async () => {
+        const ics = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'METHOD:CANCEL',
+            'BEGIN:VEVENT',
+            'UID:external-invite-uid-1@external.com',
+            'SUMMARY:External Lunch',
+            'DTSTART:20260420T120000Z',
+            'DTEND:20260420T130000Z',
+            'STATUS:CANCELLED',
+            'SEQUENCE:1',
+            'ORGANIZER;CN="External Org":mailto:organizer@external.com',
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        const email = [
+            'From: organizer@external.com',
+            `To: ${ctx.alice.user.email}`,
+            'Subject: Cancelled: External Lunch',
+            'MIME-Version: 1.0',
+            'Content-Type: multipart/mixed; boundary="cancel-boundary"',
+            '',
+            '--cancel-boundary',
+            'Content-Type: text/plain',
+            '',
+            'The event External Lunch has been cancelled.',
+            '--cancel-boundary',
+            'Content-Type: text/calendar; method=CANCEL; charset=utf-8',
+            'Content-Disposition: attachment; filename="cancel.ics"',
+            '',
+            ics,
+            '--cancel-boundary--',
+        ].join('\r\n');
+
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/mail/deliver/${ctx.alice.user.email}`, {
+            method: 'POST',
+            body: new TextEncoder().encode(email).buffer,
+        });
+        expect(res.status).toBe(200);
+
+        const from = Math.floor(new Date('2026-04-19').getTime() / 1000);
+        const to = Math.floor(new Date('2026-04-21').getTime() / 1000);
+        const eventsRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${ctx.alice.user.id}/event-range/${from}/${to}`,
+        );
+        const events = await assertJson<CalendarEventOccurrence[]>(eventsRes);
+        const match = events.find((e) => e.uid === 'external-invite-uid-1@external.com');
+        expect(match).toBeUndefined();
     });
 });
