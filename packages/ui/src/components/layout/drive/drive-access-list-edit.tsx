@@ -212,8 +212,8 @@ export function DriveAccessListEdit({ path, onSave, onCancel, className, prefill
     }, [directList, visibility, sharingRestricted, isEffectiveOwner, onSave]);
 
     return (
-        <div className={cn('space-y-4', className)}>
-            <div>
+        <div className={cn('flex flex-col min-h-0', className)}>
+            <div className="shrink-0">
                 <div className="flex mt-2">
                     <div className="flex-1 relative">
                         <ContactAutosuggest
@@ -239,9 +239,9 @@ export function DriveAccessListEdit({ path, onSave, onCancel, className, prefill
                 </div>
             </div>
 
-            <Separator />
+            <Separator className="my-4 shrink-0" />
 
-            <div className="space-y-2">
+            <div className="space-y-2 overflow-y-auto min-h-0">
                 <h4 className="text-base font-medium">People with access</h4>
 
                 {directList.map((access: DirectAccessItem) => {
@@ -281,9 +281,9 @@ export function DriveAccessListEdit({ path, onSave, onCancel, className, prefill
                 })}
             </div>
 
-            <Separator />
+            <Separator className="my-4 shrink-0" />
 
-            <div>
+            <div className="shrink-0">
                 <h4 className="text-sm font-medium mb-2">General access</h4>
                 <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center">
@@ -338,9 +338,9 @@ export function DriveAccessListEdit({ path, onSave, onCancel, className, prefill
                 )}
             </div>
 
-            <Separator />
+            <Separator className="my-4 shrink-0" />
 
-            <DialogFooter>
+            <DialogFooter className="shrink-0">
                 {myTeams && myTeams.length > 0 && (
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>

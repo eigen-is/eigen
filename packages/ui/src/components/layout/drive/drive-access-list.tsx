@@ -19,15 +19,15 @@ export function DriveAccessList({ path, className, onShareClick }: DriveAccessLi
     const isPublic = path.visibility !== 'private';
 
     return (
-        <div className={cn('space-y-4', className)}>
-            <div className="flex items-center justify-between h-12 border-t border-b">
+        <div className={cn('flex flex-col min-h-0', className)}>
+            <div className="flex items-center justify-between h-12 border-t border-b shrink-0">
                 <h3 className="text-base font-medium">People with access</h3>
                 {onShareClick && (
                     <TooltipButton icon={UserRoundPlus} tooltipText="Edit Access" onClick={() => onShareClick(path)} />
                 )}
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-2 py-4 overflow-y-auto min-h-0">
                 {allEntries.map((access) => (
                     <UserItem
                         key={access.id}
@@ -36,8 +36,8 @@ export function DriveAccessList({ path, className, onShareClick }: DriveAccessLi
                     />
                 ))}
             </div>
-            <Separator />
-            <div>
+            <Separator className="shrink-0" />
+            <div className="shrink-0 pt-4">
                 <h4 className="text-sm font-medium mb-2">General access</h4>
                 {!isPublic ? (
                     <div className="flex items-center">

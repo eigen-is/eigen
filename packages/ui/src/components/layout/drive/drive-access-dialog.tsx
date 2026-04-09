@@ -35,7 +35,7 @@ export function DriveAccessDialog({ open, onOpenChange, path, prefillEmail }: Dr
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent size="lg" className="overflow-y-scroll">
+            <DialogContent size="lg" className="max-h-[80vh] flex flex-col overflow-hidden">
                 <DialogHeader>
                     <div className="sm:max-w-[600px]">
                         <DialogTitle className="truncate overflow-visible" title={path.name}>
@@ -45,8 +45,10 @@ export function DriveAccessDialog({ open, onOpenChange, path, prefillEmail }: Dr
                 </DialogHeader>
 
                 {readOnly ? (
-                    <div className="space-y-3">
-                        <p className="text-sm text-muted-foreground">Sharing is restricted by the owner.</p>
+                    <div className="flex flex-col min-h-0">
+                        <p className="text-sm text-muted-foreground shrink-0 mb-3">
+                            Sharing is restricted by the owner.
+                        </p>
                         <DriveAccessList path={path} />
                     </div>
                 ) : (
