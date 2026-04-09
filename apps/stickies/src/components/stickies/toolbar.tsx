@@ -16,6 +16,7 @@ import { isLightColor } from '@workspace/ui/components/layout/media/color-picker
 import { DocumentModeButton } from '@workspace/ui/components/layout/toolbar/document-mode-button';
 import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
 import { Separator } from '@workspace/ui/components/separator';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
 import { Check, Plus, Redo, Undo, UserRoundPlus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type * as Y from 'yjs';
@@ -121,22 +122,28 @@ export function Toolbar({
                 {EIGEN_STICKIES_COLORS[0].map((c) => {
                     const active = colorFilter.has(c.value);
                     return (
-                        <button
-                            key={c.value}
-                            className={`h-4 w-4 rounded-full border border-border/50 transition-transform hover:scale-125 flex items-center justify-center ${active ? 'ring-2 ring-ring ring-offset-1' : ''}`}
-                            style={{ backgroundColor: c.value }}
-                            title={c.label}
-                            onClick={() => {
-                                const next = new Set(colorFilter);
-                                if (active) next.delete(c.value);
-                                else next.add(c.value);
-                                onColorFilterChange(next);
-                            }}
-                        >
-                            {active && (
-                                <Check className="h-2 w-2" style={{ color: isLightColor(c.value) ? '#000' : '#fff' }} />
-                            )}
-                        </button>
+                        <Tooltip key={c.value}>
+                            <TooltipTrigger asChild>
+                                <button
+                                    className={`h-4 w-4 rounded-full border border-border/50 transition-transform hover:scale-125 flex items-center justify-center ${active ? 'ring-2 ring-ring ring-offset-1' : ''}`}
+                                    style={{ backgroundColor: c.value }}
+                                    onClick={() => {
+                                        const next = new Set(colorFilter);
+                                        if (active) next.delete(c.value);
+                                        else next.add(c.value);
+                                        onColorFilterChange(next);
+                                    }}
+                                >
+                                    {active && (
+                                        <Check
+                                            className="h-2 w-2"
+                                            style={{ color: isLightColor(c.value) ? '#000' : '#fff' }}
+                                        />
+                                    )}
+                                </button>
+                            </TooltipTrigger>
+                            <TooltipContent>Filter by {c.label.replace(/-\d+$/, '')}</TooltipContent>
+                        </Tooltip>
                     );
                 })}
                 {colorFilter.size > 0 && (
