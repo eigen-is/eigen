@@ -384,6 +384,100 @@ describe('iMIP Outbound via Invite Propagation (integration)', () => {
     });
 });
 
+describe('iMIP METHOD:REPLY inbound (integration)', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+    let aliceCalendarId: string;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/calendar/${ctx.alice.user.id}/calendars`);
+        const calendars = await assertJson<CalendarItem[]>(res);
+        aliceCalendarId = findOrFail(calendars, (c) => c.isDefault).id;
+    });
+
+    test('incoming REPLY email updates attendee status on organizer event', async () => {
+        // Step 1: Alice creates event with external attendee
+        const createRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: 'Reply Flow Test',
+                    startTime: Math.floor(Date.now() / 1000) + 86400 * 5,
+                    endTime: Math.floor(Date.now() / 1000) + 86400 * 5 + 3600,
+                    allDay: false,
+                    data: {
+                        attendees: [
+                            {
+                                email: 'reply-tester@external.com',
+                                name: 'Reply Tester',
+                                status: 'pending',
+                                role: 'required',
+                            },
+                        ],
+                    },
+                }),
+            },
+        );
+        const event = await assertJson<CalendarEvent>(createRes);
+        expect(event.data?.attendees?.[0].status).toBe('pending');
+
+        // Step 2: External attendee sends METHOD:REPLY accepting
+        const replyIcs = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'METHOD:REPLY',
+            'BEGIN:VEVENT',
+            `UID:${event.uid}`,
+            'SUMMARY:Reply Flow Test',
+            'DTSTART:20260415T100000Z',
+            'DTEND:20260415T110000Z',
+            'ATTENDEE;PARTSTAT=ACCEPTED;CN="Reply Tester":mailto:reply-tester@external.com',
+            `ORGANIZER;CN="Alice":mailto:${ctx.alice.user.email}`,
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n');
+
+        const replyEmail = [
+            'From: reply-tester@external.com',
+            `To: ${ctx.alice.user.email}`,
+            'Subject: Accepted: Reply Flow Test',
+            'MIME-Version: 1.0',
+            'Content-Type: multipart/mixed; boundary="reply-boundary"',
+            '',
+            '--reply-boundary',
+            'Content-Type: text/plain',
+            '',
+            'Reply Tester has accepted.',
+            '--reply-boundary',
+            'Content-Type: text/calendar; method=REPLY; charset=utf-8',
+            'Content-Disposition: attachment; filename="invite.ics"',
+            '',
+            replyIcs,
+            '--reply-boundary--',
+        ].join('\r\n');
+
+        const deliverRes = await authedRequest(ctx.alice.user.sessionToken, `/mail/deliver/${ctx.alice.user.email}`, {
+            method: 'POST',
+            body: new TextEncoder().encode(replyEmail).buffer,
+        });
+        expect(deliverRes.status).toBe(200);
+
+        // Step 3: Check Alice's event now shows attendee as accepted
+        const from = Math.floor(Date.now() / 1000);
+        const to = Math.floor(Date.now() / 1000) + 86400 * 7;
+        const eventsRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/calendar/${ctx.alice.user.id}/event-range/${from}/${to}`,
+        );
+        const events = await assertJson<CalendarEventOccurrence[]>(eventsRes);
+        const updatedEvent = findOrFail(events, (e) => e.title === 'Reply Flow Test');
+        expect(updatedEvent.data?.attendees?.[0].status).toBe('accepted');
+    });
+});
+
 describe('iMIP RSVP Reply to External Organizer', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
 
