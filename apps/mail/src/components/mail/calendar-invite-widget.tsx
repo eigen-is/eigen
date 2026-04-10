@@ -1,5 +1,6 @@
 import { getCalendarAppUrl, getMailAttachmentUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
+import { getMonthRange } from '@workspace/lib/calendar';
 import { formatDateTime } from '@workspace/lib/date';
 import type { Attachment } from '@workspace/lib/types/mail';
 import { Button } from '@workspace/ui/components/button';
@@ -43,12 +44,8 @@ function parseIcsField(ics: string, field: string): string {
 
 function formatIcsDate(raw: string): string {
     if (!raw) return '';
-    // ICS dates: 20250409T120000Z or 20250409T120000
-    const match = raw.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/);
-    if (!match) return raw;
-    const [, y, mo, d, h, mi, s] = match;
-    const iso = `${y}-${mo}-${d}T${h}:${mi}:${s}${raw.endsWith('Z') ? 'Z' : ''}`;
-    return formatDateTime(new Date(iso));
+    const date = icsDateToDate(raw);
+    return date ? formatDateTime(date) : raw;
 }
 
 function parseIcs(ics: string): IcsEventSummary {
@@ -63,30 +60,20 @@ function parseIcs(ics: string): IcsEventSummary {
 }
 
 function buildCalendarLink(event: IcsEventSummary): string {
-    if (!event.dtstart) return getCalendarAppUrl();
+    if (!event.dtstart || !event.uid) return getCalendarAppUrl();
 
-    // Parse ICS date to compute month range for the calendar view
-    const match = event.dtstart.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/);
-    if (!match) return getCalendarAppUrl();
+    const date = icsDateToDate(event.dtstart);
+    if (!date) return getCalendarAppUrl();
 
+    const { from, to } = getMonthRange(date);
+    return getCalendarAppUrl(`view/month/${from}/${to}?eventId=${encodeURIComponent(event.uid)}`);
+}
+
+function icsDateToDate(raw: string): Date | null {
+    const match = raw.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/);
+    if (!match) return null;
     const [, y, mo, d, h, mi, s] = match;
-    const date = new Date(`${y}-${mo}-${d}T${h}:${mi}:${s}${event.dtstart.endsWith('Z') ? 'Z' : ''}`);
-    const firstOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
-    const lastOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0);
-
-    // Extend to cover full weeks (Monday start)
-    const startDay = firstOfMonth.getDay();
-    const startDate = new Date(firstOfMonth);
-    startDate.setDate(startDate.getDate() - ((startDay + 6) % 7));
-    const endDate = new Date(lastOfMonth);
-    const endDay = lastOfMonth.getDay();
-    if (endDay !== 0) endDate.setDate(endDate.getDate() + (7 - endDay));
-
-    const from = Math.floor(startDate.getTime() / 1000);
-    const to = Math.floor(endDate.getTime() / 1000) + 86400;
-
-    const eventId = encodeURIComponent(event.uid);
-    return getCalendarAppUrl(`view/month/${from}/${to}?eventId=${eventId}`);
+    return new Date(`${y}-${mo}-${d}T${h}:${mi}:${s}${raw.endsWith('Z') ? 'Z' : ''}`);
 }
 
 type CalendarInviteWidgetProps = {
