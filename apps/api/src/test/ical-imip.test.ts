@@ -35,21 +35,23 @@ const MOCK_EVENT: CalendarEvent = {
 describe('iMIP Serialization', () => {
     test('serializeEventForImip includes METHOD:REQUEST and RSVP=TRUE', () => {
         const ics = serializeEventForImip(MOCK_EVENT, 'REQUEST');
-        expect(ics).toContain('METHOD:REQUEST');
-        expect(ics).toContain('BEGIN:VEVENT');
-        expect(ics).toContain('SUMMARY:Team Standup');
-        expect(ics).toContain('RSVP=TRUE');
-        expect(ics).toContain('ORGANIZER');
+        // Unfold RFC 5545 line folding before checking content
+        const unfolded = ics.replace(/\r\n[ \t]/g, '');
+        expect(unfolded).toContain('METHOD:REQUEST');
+        expect(unfolded).toContain('SUMMARY:Team Standup');
+        expect(unfolded).toContain('RSVP=TRUE');
+        expect(unfolded).toContain('CUTYPE=INDIVIDUAL');
+        expect(unfolded).toContain('ORGANIZER');
     });
 
     test('serializeEventForImip with METHOD:CANCEL omits RSVP', () => {
-        const ics = serializeEventForImip(MOCK_EVENT, 'CANCEL');
+        const ics = serializeEventForImip(MOCK_EVENT, 'CANCEL').replace(/\r\n[ \t]/g, '');
         expect(ics).toContain('METHOD:CANCEL');
         expect(ics).not.toContain('RSVP=TRUE');
     });
 
     test('serializeEventForImip with METHOD:REPLY omits RSVP', () => {
-        const ics = serializeEventForImip(MOCK_EVENT, 'REPLY');
+        const ics = serializeEventForImip(MOCK_EVENT, 'REPLY').replace(/\r\n[ \t]/g, '');
         expect(ics).toContain('METHOD:REPLY');
         expect(ics).not.toContain('RSVP=TRUE');
     });

@@ -76,10 +76,19 @@ export async function sendMail(message: OutboundMail): Promise<boolean> {
         }));
     }
     if (message.icalEvent) {
-        mailOptions.icalEvent = {
-            method: message.icalEvent.method,
-            content: message.icalEvent.content,
-        };
+        // Build iMIP MIME: text/calendar in multipart/alternative + application/ics attachment.
+        // Use raw alternative with base64 to avoid quoted-printable mangling iCal = signs.
+        const icsBuffer = Buffer.from(message.icalEvent.content, 'utf-8');
+        const icsBase64 = icsBuffer.toString('base64');
+        mailOptions.alternatives = [
+            {
+                raw: `Content-Type: text/calendar; charset=utf-8; method=${message.icalEvent.method}\r\nContent-Transfer-Encoding: base64\r\n\r\n${icsBase64}`,
+            },
+        ];
+        mailOptions.attachments = [
+            ...(mailOptions.attachments ?? []),
+            { filename: 'invite.ics', content: icsBuffer, contentType: 'application/ics' },
+        ];
     }
 
     try {
