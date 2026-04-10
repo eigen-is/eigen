@@ -15,6 +15,11 @@ export type OutboundAttachment = {
     contentType?: string;
 };
 
+export type OutboundICalEvent = {
+    method: string;
+    content: string;
+};
+
 export type OutboundMail = {
     from?: OutboundAddress;
     replyTo?: OutboundAddress;
@@ -25,6 +30,7 @@ export type OutboundMail = {
     text: string;
     html?: string;
     attachments?: OutboundAttachment[];
+    icalEvent?: OutboundICalEvent;
 };
 
 export function createTransport(): Mail {
@@ -68,6 +74,12 @@ export async function sendMail(message: OutboundMail): Promise<boolean> {
             content: a.content,
             contentType: a.contentType,
         }));
+    }
+    if (message.icalEvent) {
+        mailOptions.icalEvent = {
+            method: message.icalEvent.method,
+            content: message.icalEvent.content,
+        };
     }
 
     try {
