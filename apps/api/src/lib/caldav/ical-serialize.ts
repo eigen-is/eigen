@@ -5,6 +5,12 @@ function escapeICalText(s: string): string {
     return s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n').replace(/\r/g, '');
 }
 
+// Escape a value for use inside a double-quoted PARAM-VALUE (e.g. CN="...").
+// Double quotes would break out of the parameter; CRLF could inject properties.
+function escapeICalParamValue(s: string): string {
+    return s.replace(/"/g, "'").replace(/[\r\n]/g, '');
+}
+
 // RFC 5545 §3.1 — fold lines longer than 75 octets with CRLF + single space
 function foldLine(line: string): string {
     const bytes = new TextEncoder().encode(line);
@@ -85,7 +91,7 @@ function buildVEvent(event: CalendarEvent, options?: { rsvp?: boolean }): string
     const prop = (line: string) => lines.push(foldLine(line));
 
     prop('BEGIN:VEVENT');
-    prop(`UID:${event.uid}`);
+    prop(`UID:${escapeICalText(event.uid)}`);
     prop(`SUMMARY:${escapeICalText(event.title)}`);
 
     // DTSTART / DTEND
@@ -131,18 +137,18 @@ function buildVEvent(event: CalendarEvent, options?: { rsvp?: boolean }): string
     // ORGANIZER
     const organizer = event.data?.organizer;
     if (organizer) {
-        const cn = organizer.name ? `;CN="${escapeICalText(organizer.name)}"` : '';
+        const cn = organizer.name ? `;CN="${escapeICalParamValue(organizer.name)}"` : '';
         prop(`ORGANIZER${cn}:mailto:${organizer.email}`);
     }
 
     // ATTENDEE lines — for iMIP, include the organizer as ACCEPTED attendee (RFC 5546)
     const attendees = event.data?.attendees ?? [];
     if (options?.rsvp && organizer && !attendees.some((a) => a.email === organizer.email)) {
-        const cn = organizer.name ? `;CN="${escapeICalText(organizer.name)}"` : '';
+        const cn = organizer.name ? `;CN="${escapeICalParamValue(organizer.name)}"` : '';
         prop(`ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED${cn}:mailto:${organizer.email}`);
     }
     for (const attendee of attendees) {
-        const cn = attendee.name ? `;CN="${escapeICalText(attendee.name)}"` : '';
+        const cn = attendee.name ? `;CN="${escapeICalParamValue(attendee.name)}"` : '';
         const rsvp = options?.rsvp ? ';RSVP=TRUE' : '';
         prop(
             `ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=${mapAttendeeRole(attendee.role)};PARTSTAT=${mapAttendeeStatus(attendee.status)}${rsvp}${cn}:mailto:${attendee.email}`,

@@ -40,7 +40,9 @@ export function MonthView({
     const didAutoOpen = useRef(false);
     useEffect(() => {
         if (!initialEventId || events.length === 0 || didAutoOpen.current) return;
-        const match = events.find((e) => e.id === initialEventId || e.data?.organizerEventId === initialEventId);
+        const match = events.find(
+            (e) => e.id === initialEventId || e.uid === initialEventId || e.data?.organizerEventId === initialEventId,
+        );
         if (match) {
             didAutoOpen.current = true;
             setSelectedEvent(match);
