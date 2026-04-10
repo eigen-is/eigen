@@ -48,7 +48,9 @@ function formatIcsDate(raw: string): string {
     return date ? formatDateTime(date) : raw;
 }
 
-function parseIcs(ics: string): IcsEventSummary {
+function parseIcs(rawIcs: string): IcsEventSummary {
+    // Unfold RFC 5545 line folding (CRLF + space/tab) before parsing
+    const ics = rawIcs.replace(/\r?\n[ \t]/g, '');
     return {
         uid: parseIcsField(ics, 'UID'),
         summary: parseIcsField(ics, 'SUMMARY'),

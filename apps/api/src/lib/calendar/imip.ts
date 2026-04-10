@@ -1,4 +1,10 @@
-import type { Attendee, CalendarEvent, EventData } from '@workspace/lib/types/calendar';
+import {
+    type Attendee,
+    type CalendarEvent,
+    type EventData,
+    IMIP_METHODS,
+    type ImipMethod,
+} from '@workspace/lib/types/calendar';
 import type { Attachment } from '@workspace/lib/types/mail';
 import { externalOwnerId } from '@workspace/lib/types/owner';
 import { parseIcs } from '../caldav/ical-parse';
@@ -93,9 +99,6 @@ export function composeRsvpReply(
     };
 }
 
-const IMIP_METHODS = ['REQUEST', 'REPLY', 'CANCEL'] as const;
-type ImipMethod = (typeof IMIP_METHODS)[number];
-
 export function extractCalendarAttachment(mail: {
     attachments: Attachment[];
 }): { ics: string; method?: ImipMethod } | null {
@@ -127,7 +130,7 @@ export function processInboundImip(home: Home, mail: { attachments: Attachment[]
     for (const parsed of events) {
         if (method === 'REQUEST') {
             const existing = calendar.getEventsByUid(parsed.uid);
-            const linked = existing.find((e) => e.data?.organizer);
+            const linked = existing.find((e) => e.data?.organizer && e.data?.organizerEventId);
 
             if (linked) {
                 calendar.receiveInvitationUpdate(linked.data!.organizerEventId!, linked.data!.organizer!.userId, {
@@ -171,13 +174,15 @@ export function processInboundImip(home: Home, mail: { attachments: Attachment[]
                 calendar.receiveInvitation(payload);
             }
         } else if (method === 'CANCEL') {
-            const organizerEmail = parsed.data?.organizer?.email ?? '';
+            const organizerEmail = parsed.data?.organizer?.email;
+            if (!organizerEmail) continue;
             calendar.removeInvitation(parsed.uid, externalOwnerId(organizerEmail));
         } else if (method === 'REPLY') {
-            const existing = calendar.getEventsByUid(parsed.uid);
-            if (existing.length > 0 && parsed.data?.attendees) {
+            // Find the organizer's own event (not a linked copy) by UID
+            const ownerEvent = calendar.getEventsByUid(parsed.uid).find((e) => !e.data?.organizer);
+            if (ownerEvent && parsed.data?.attendees) {
                 for (const attendee of parsed.data.attendees) {
-                    calendar.updateAttendeeStatus(existing[0].id, attendee.email, attendee.status);
+                    calendar.updateAttendeeStatus(ownerEvent.id, attendee.email, attendee.status);
                 }
             }
         }
