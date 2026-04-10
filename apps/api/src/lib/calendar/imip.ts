@@ -147,7 +147,8 @@ export function processInboundImip(home: Home, mail: { attachments: Attachment[]
                     attendees: parsed.data?.attendees,
                 });
             } else {
-                const organizerEmail = parsed.data?.organizer?.email ?? '';
+                const organizerEmail = parsed.data?.organizer?.email;
+                if (!organizerEmail) continue;
                 const payload: ReceiveInvitationPayload = {
                     uid: parsed.uid,
                     title: parsed.title,
