@@ -32,6 +32,10 @@ function buildEventSummary(event: CalendarEvent): string {
     return lines.join('\n');
 }
 
+function withOrganizer(event: CalendarEvent, organizer: Organizer): CalendarEvent {
+    return { ...event, data: { ...event.data, organizer } };
+}
+
 function icalEvent(event: CalendarEvent, method: 'REQUEST' | 'REPLY' | 'CANCEL'): OutboundICalEvent {
     return { method, content: serializeEventForImip(event, method) };
 }
@@ -42,7 +46,7 @@ export function composeInviteEmail(event: CalendarEvent, organizer: Organizer, a
         to: attendees.map((a) => ({ name: a.name ?? '', address: a.email })),
         subject: `Invitation: ${event.title}`,
         text: buildEventSummary(event),
-        icalEvent: icalEvent(event, 'REQUEST'),
+        icalEvent: icalEvent(withOrganizer(event, organizer), 'REQUEST'),
     };
 }
 
@@ -52,7 +56,7 @@ export function composeUpdateEmail(event: CalendarEvent, organizer: Organizer, a
         to: attendees.map((a) => ({ name: a.name ?? '', address: a.email })),
         subject: `Updated invitation: ${event.title}`,
         text: buildEventSummary(event),
-        icalEvent: icalEvent(event, 'REQUEST'),
+        icalEvent: icalEvent(withOrganizer(event, organizer), 'REQUEST'),
     };
 }
 
@@ -62,7 +66,7 @@ export function composeCancelEmail(event: CalendarEvent, organizer: Organizer, a
         to: attendees.map((a) => ({ name: a.name ?? '', address: a.email })),
         subject: `Cancelled: ${event.title}`,
         text: `This event has been cancelled:\n\n${buildEventSummary(event)}`,
-        icalEvent: icalEvent(event, 'CANCEL'),
+        icalEvent: icalEvent(withOrganizer(event, organizer), 'CANCEL'),
     };
 }
 
