@@ -128,20 +128,25 @@ function buildVEvent(event: CalendarEvent, options?: { rsvp?: boolean }): string
         }
     }
 
-    // ATTENDEE lines
-    for (const attendee of event.data?.attendees ?? []) {
-        const cn = attendee.name ? `;CN="${escapeICalText(attendee.name)}"` : '';
-        const rsvp = options?.rsvp ? ';RSVP=TRUE' : '';
-        prop(
-            `ATTENDEE;ROLE=${mapAttendeeRole(attendee.role)};PARTSTAT=${mapAttendeeStatus(attendee.status)}${rsvp}${cn}:mailto:${attendee.email}`,
-        );
-    }
-
     // ORGANIZER
     const organizer = event.data?.organizer;
     if (organizer) {
         const cn = organizer.name ? `;CN="${escapeICalText(organizer.name)}"` : '';
         prop(`ORGANIZER${cn}:mailto:${organizer.email}`);
+    }
+
+    // ATTENDEE lines — for iMIP, include the organizer as ACCEPTED attendee (RFC 5546)
+    const attendees = event.data?.attendees ?? [];
+    if (options?.rsvp && organizer && !attendees.some((a) => a.email === organizer.email)) {
+        const cn = organizer.name ? `;CN="${escapeICalText(organizer.name)}"` : '';
+        prop(`ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=REQ-PARTICIPANT;PARTSTAT=ACCEPTED${cn}:mailto:${organizer.email}`);
+    }
+    for (const attendee of attendees) {
+        const cn = attendee.name ? `;CN="${escapeICalText(attendee.name)}"` : '';
+        const rsvp = options?.rsvp ? ';RSVP=TRUE' : '';
+        prop(
+            `ATTENDEE;CUTYPE=INDIVIDUAL;ROLE=${mapAttendeeRole(attendee.role)};PARTSTAT=${mapAttendeeStatus(attendee.status)}${rsvp}${cn}:mailto:${attendee.email}`,
+        );
     }
 
     // VALARM blocks
