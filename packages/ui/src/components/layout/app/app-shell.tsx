@@ -52,7 +52,7 @@ export function AppShell({
                 isTablet,
             }}
         >
-            <div className="flex flex-col min-h-dvh relative">
+            <div className="flex flex-col h-full">
                 <Topbar rootRoute={rootRoute} />
                 <div className="flex flex-1 w-full overflow-hidden">
                     {sidebar && !sidebarHidden && <SidebarContainer sidebar={sidebar} />}
