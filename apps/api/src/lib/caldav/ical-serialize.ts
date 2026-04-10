@@ -79,7 +79,7 @@ function mapAttendeeStatus(status: Attendee['status']): string {
     }
 }
 
-function buildVEvent(event: CalendarEvent): string[] {
+function buildVEvent(event: CalendarEvent, options?: { rsvp?: boolean }): string[] {
     const lines: string[] = [];
 
     const prop = (line: string) => lines.push(foldLine(line));
@@ -131,8 +131,9 @@ function buildVEvent(event: CalendarEvent): string[] {
     // ATTENDEE lines
     for (const attendee of event.data?.attendees ?? []) {
         const cn = attendee.name ? `;CN="${escapeICalText(attendee.name)}"` : '';
+        const rsvp = options?.rsvp ? ';RSVP=TRUE' : '';
         prop(
-            `ATTENDEE;ROLE=${mapAttendeeRole(attendee.role)};PARTSTAT=${mapAttendeeStatus(attendee.status)}${cn}:mailto:${attendee.email}`,
+            `ATTENDEE;ROLE=${mapAttendeeRole(attendee.role)};PARTSTAT=${mapAttendeeStatus(attendee.status)}${rsvp}${cn}:mailto:${attendee.email}`,
         );
     }
 
@@ -164,7 +165,7 @@ function wrapInVCalendar(eventLines: string[], method?: 'REQUEST' | 'REPLY' | 'C
 }
 
 export function serializeEventForImip(event: CalendarEvent, method: 'REQUEST' | 'REPLY' | 'CANCEL'): string {
-    return wrapInVCalendar(buildVEvent(event), method);
+    return wrapInVCalendar(buildVEvent(event, { rsvp: method === 'REQUEST' }), method);
 }
 
 export function eventsToIcs(events: CalendarEvent[]): string {
