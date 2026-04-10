@@ -1,6 +1,5 @@
-import { driveApi, getCalendarAppUrl, getDocumentUrl, getDriveAppUrl, getMailAppUrl } from '@workspace/lib/api';
+import { driveApi, getCalendarAppUrl, getDriveAppUrl, getDriveItemUrl, getMailAppUrl } from '@workspace/lib/api';
 import { getMonthRange } from '@workspace/lib/calendar';
-import { isContainerType } from '@workspace/lib/types/drive';
 import type { Notification } from '@workspace/lib/types/notification';
 
 function parseDriveTag(
@@ -47,15 +46,10 @@ async function resolveDriveLink(tag: string, hasChatName = false): Promise<strin
     if (response.error || !response.data) return getDriveAppUrl();
 
     const path = response.data;
-    const docUrl = getDocumentUrl(path);
-    if (docUrl) {
-        if (parsed.chatName) return `${docUrl}?chat=${encodeURIComponent(parsed.chatName)}`;
-        return docUrl;
-    }
-
-    // Folders and other containers open directly in the filesystem view
-    if (isContainerType(path.type)) {
-        return getDriveAppUrl(`fs/${path.ownerId}/${path.mountId}/${path.id}`);
+    const itemUrl = getDriveItemUrl(path);
+    if (itemUrl) {
+        if (parsed.chatName) return `${itemUrl}?chat=${encodeURIComponent(parsed.chatName)}`;
+        return itemUrl;
     }
 
     // Regular files (images, PDFs, etc.) open in shared-with-me with the file pre-selected

@@ -1,5 +1,5 @@
 import { useNavigate } from '@tanstack/react-router';
-import { openDocument } from '@workspace/lib/api';
+import { getDriveItemUrl, openDocument } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, useMimeContent, usePathInfo } from '@workspace/lib/drive';
 import { type DrivePath, isDocumentType } from '@workspace/lib/types/drive';
@@ -67,6 +67,7 @@ export function EigenDocListView({ config, pid, mid }: EigenDocListViewProps) {
             allowCreateChat={false}
             allowCreateSlides={config.driveType === 'slides'}
             allowCreateSheets={config.driveType === 'sheets'}
+            getItemHref={getDriveItemUrl}
             showBreadcrumb={false}
             currentPath={rootPath}
         />

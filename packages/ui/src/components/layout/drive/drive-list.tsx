@@ -172,6 +172,7 @@ type DriveListProps = CreateCallbacks & {
     onShareClick?: (item: DrivePath) => void;
     onDownload?: (path: DrivePath) => void;
     onExport?: (item: DrivePath, format: string) => void;
+    getItemHref?: (item: DrivePath) => string | undefined;
     ownerId: string;
     mountId: string;
     pathId: string;
@@ -205,6 +206,7 @@ export function DriveList({
     onCreateSheets,
     onDownload,
     onExport,
+    getItemHref,
     ownerId,
     mountId,
     pathId,
@@ -332,6 +334,7 @@ export function DriveList({
                 onItemOpen={onRowActivate}
                 onShareClick={onShareClick}
                 getFileIcon={getFileIcon}
+                getItemHref={getItemHref}
                 onDownload={onDownload}
                 onExport={onExport}
                 onDelete={onDelete}

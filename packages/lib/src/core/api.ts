@@ -7,6 +7,8 @@ import {
     DRIVE_TYPE_SLIDES,
     DRIVE_TYPE_STICKIES,
     type DrivePath,
+    isFolderType,
+    isInlineEditable,
 } from '../types/drive';
 
 export const API_HOST = import.meta.env.VITE_API_HOST as string;
@@ -64,19 +66,19 @@ export const getSheetsAppUrl = (path?: string) => joinAppUrl(SHEETS_APP_URL, pat
 export const getCalendarAppUrl = (path?: string) => joinAppUrl(CALENDAR_APP_URL, path);
 export const getAdminAppUrl = (path?: string) => joinAppUrl(ADMIN_APP_URL, path);
 
-export const getChatRoomUrl = (ownerId: string, mountId: string, chatId: string) =>
+const getChatRoomUrl = (ownerId: string, mountId: string, chatId: string) =>
     getChatAppUrl(`${ownerId}/${mountId}/${chatId}`);
 
-export const getDocUrl = (ownerId: string, mountId: string, pathId: string) =>
+const getDocUrl = (ownerId: string, mountId: string, pathId: string) =>
     getDocsAppUrl(`doc/${ownerId}/${mountId}/${pathId}`);
 
-export const getStickiesBoardUrl = (ownerId: string, mountId: string, pathId: string) =>
+const getStickiesBoardUrl = (ownerId: string, mountId: string, pathId: string) =>
     getStickiesAppUrl(`board/${ownerId}/${mountId}/${pathId}`);
 
-export const getSlideUrl = (ownerId: string, mountId: string, pathId: string) =>
+const getSlideUrl = (ownerId: string, mountId: string, pathId: string) =>
     getSlidesAppUrl(`slide/${ownerId}/${mountId}/${pathId}`);
 
-export const getSheetUrl = (ownerId: string, mountId: string, pathId: string) =>
+const getSheetUrl = (ownerId: string, mountId: string, pathId: string) =>
     getSheetsAppUrl(`sheet/${ownerId}/${mountId}/${pathId}`);
 
 export const getMailComposeUrl = (address: string) =>
@@ -115,22 +117,13 @@ export const getCollabAccessUrl = (ownerId: string, mountId: string, pathId: str
 export const getCollabRevisionUrl = (ownerId: string, mountId: string, pathId: string, revisionId: number) =>
     `${API_HOST}/collab/${ownerId}/${mountId}/${pathId}/revisions/${revisionId}`;
 
-export function getDocumentUrl(path: DrivePath): string | false {
-    let url: string;
-    if (path.type === DRIVE_TYPE_DOC) {
-        url = getDocUrl(path.ownerId, path.mountId, path.id);
-    } else if (path.type === DRIVE_TYPE_STICKIES) {
-        url = getStickiesBoardUrl(path.ownerId, path.mountId, path.id);
-    } else if (path.type === DRIVE_TYPE_SHEETS) {
-        url = getSheetUrl(path.ownerId, path.mountId, path.id);
-    } else if (path.type === DRIVE_TYPE_SLIDES) {
-        url = getSlideUrl(path.ownerId, path.mountId, path.id);
-    } else if (path.type === DRIVE_TYPE_CHAT) {
-        url = getChatRoomUrl(path.ownerId, path.mountId, path.id);
-    } else {
-        return false;
-    }
-    return url;
+function getDocumentUrl(path: DrivePath): string | undefined {
+    if (path.type === DRIVE_TYPE_DOC) return getDocUrl(path.ownerId, path.mountId, path.id);
+    if (path.type === DRIVE_TYPE_STICKIES) return getStickiesBoardUrl(path.ownerId, path.mountId, path.id);
+    if (path.type === DRIVE_TYPE_SHEETS) return getSheetUrl(path.ownerId, path.mountId, path.id);
+    if (path.type === DRIVE_TYPE_SLIDES) return getSlideUrl(path.ownerId, path.mountId, path.id);
+    if (path.type === DRIVE_TYPE_CHAT) return getChatRoomUrl(path.ownerId, path.mountId, path.id);
+    return undefined;
 }
 
 export function openDocument(path: DrivePath, newTab: boolean = false) {
@@ -145,4 +138,16 @@ export function openDocument(path: DrivePath, newTab: boolean = false) {
         window.location.href = url;
     }
     return true;
+}
+
+export function getDriveItemUrl(path: DrivePath): string | undefined {
+    const docUrl = getDocumentUrl(path);
+    if (docUrl) return docUrl;
+    if (isFolderType(path.type)) {
+        return getDriveAppUrl(`fs/${path.ownerId}/${path.mountId}/${path.id}`);
+    }
+    if (isInlineEditable(path.mimeType, path.name)) {
+        return getInlineEditUrl(path.ownerId, path.mountId, path.id);
+    }
+    return undefined;
 }
