@@ -36,16 +36,15 @@ export async function mailboxDeliver(to: string, file: ArrayBuffer) {
     if (!user) {
         throw new ApiError(404, `Recipient '${to}' not found`);
     }
-    const mail = await getMailClient(user);
+    const home = await getHome(user.id);
     const message = new TextDecoder().decode(new Uint8Array(file));
-    const result = await mail.mailboxDeliver(message);
+    const result = await home.mail.mailboxDeliver(message);
 
-    // Fire-and-forget: detect and process iMIP calendar attachments
+    // Process iMIP calendar attachments (blocking so event exists before client queries)
     try {
         const parsed = await simpleParser(message);
         const hasCalendar = parsed.attachments.some((a) => a.contentType.startsWith('text/calendar'));
         if (hasCalendar) {
-            const home = await getHome(user.id);
             processInboundImip(home, parsed);
         }
     } catch (error) {

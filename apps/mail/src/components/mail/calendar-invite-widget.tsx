@@ -27,7 +27,7 @@ function parseIcsField(ics: string, field: string): string {
 
     // For fields with params like ORGANIZER;CN=Name:mailto:email, extract meaningful parts
     if (field === 'ORGANIZER') {
-        const cnMatch = value.match(/CN=([^;:]+)/);
+        const cnMatch = value.match(/CN="([^"]+)"/) || value.match(/CN=([^;:]+)/);
         const mailtoMatch = value.match(/mailto:(.+)/i);
         if (cnMatch && mailtoMatch) return `${cnMatch[1]} <${mailtoMatch[1]}>`;
         if (mailtoMatch) return mailtoMatch[1];
