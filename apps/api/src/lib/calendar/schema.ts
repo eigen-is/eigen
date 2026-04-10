@@ -52,7 +52,7 @@ export const events = sqliteTable(
         linkedEvent: index('idx_events_linked').on(table.organizerEventId, table.organizerUserId),
         uriCalendar: uniqueIndex('idx_events_uri_calendar').on(table.calendarId, table.uri),
         uidCalendar: index('idx_events_uid_calendar').on(table.calendarId, table.uid),
-        idx_events_uid: index('idx_events_uid').on(table.uid),
+        eventUid: index('idx_events_uid').on(table.uid),
     }),
 );
 

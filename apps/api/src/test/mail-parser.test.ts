@@ -190,8 +190,7 @@ test('parses calendarMethod from text/calendar attachment', async () => {
     const mail = await simpleParser(CALENDAR_EMAIL);
 
     const calAtt = mail.attachments.find((a) => a.contentType.startsWith('text/calendar'));
-    expect(calAtt).toBeDefined();
-    expect(calAtt!.calendarMethod).toBe('REQUEST');
+    expect(calAtt?.calendarMethod).toBe('REQUEST');
 });
 
 test('non-calendar attachments have no calendarMethod', async () => {

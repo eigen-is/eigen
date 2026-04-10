@@ -1,3 +1,6 @@
+export const IMIP_METHODS = ['REQUEST', 'REPLY', 'CANCEL'] as const;
+export type ImipMethod = (typeof IMIP_METHODS)[number];
+
 export type Reminder = {
     type: 'notification' | 'email';
     minutes: number;

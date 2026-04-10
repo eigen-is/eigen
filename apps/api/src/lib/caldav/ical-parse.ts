@@ -1,4 +1,4 @@
-import type { Attendee, EventData } from '@workspace/lib/types/calendar';
+import { type Attendee, type EventData, IMIP_METHODS, type ImipMethod } from '@workspace/lib/types/calendar';
 import ICAL from 'ical.js';
 
 export type ParsedEvent = {
@@ -18,20 +18,20 @@ export type ParsedEvent = {
 };
 
 export type IcsParseResult = {
-    method?: 'REQUEST' | 'REPLY' | 'CANCEL';
+    method?: ImipMethod;
     events: ParsedEvent[];
 };
+
+function parseImipMethod(raw: unknown): ImipMethod | undefined {
+    if (typeof raw !== 'string') return undefined;
+    const upper = raw.toUpperCase();
+    return IMIP_METHODS.includes(upper as ImipMethod) ? (upper as ImipMethod) : undefined;
+}
 
 export function parseIcs(icsText: string): IcsParseResult {
     const jcal = ICAL.parse(icsText);
     const comp = new ICAL.Component(jcal);
-
-    const methodRaw = comp.getFirstPropertyValue('method');
-    const methodStr = typeof methodRaw === 'string' ? methodRaw.toUpperCase() : undefined;
-    const method =
-        methodStr && ['REQUEST', 'REPLY', 'CANCEL'].includes(methodStr)
-            ? (methodStr as 'REQUEST' | 'REPLY' | 'CANCEL')
-            : undefined;
+    const method = parseImipMethod(comp.getFirstPropertyValue('method'));
 
     const vevents = comp.getAllSubcomponents('vevent');
 
