@@ -140,6 +140,11 @@ type AttendeeListProps = {
 };
 
 export function AttendeeList({ attendees, organizer }: AttendeeListProps) {
+    // Filter out the organizer from attendees to avoid showing them twice
+    const filteredAttendees = organizer
+        ? attendees.filter((a) => a.email.toLowerCase() !== organizer.email.toLowerCase())
+        : attendees;
+
     return (
         <div className="space-y-1">
             {organizer && (
@@ -150,7 +155,7 @@ export function AttendeeList({ attendees, organizer }: AttendeeListProps) {
                     </Badge>
                 </div>
             )}
-            {attendees.map((attendee) => {
+            {filteredAttendees.map((attendee) => {
                 const StatusIcon = statusIcon[attendee.status];
                 return (
                     <div key={attendee.email} className="flex items-center justify-between">
