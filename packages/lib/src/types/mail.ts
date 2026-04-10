@@ -1,3 +1,5 @@
+import type { ImipMethod } from './calendar';
+
 export type StructuredHeader = {
     value: string;
     params: { [key: string]: string };
@@ -37,7 +39,7 @@ export type Attachment = {
     contentId?: string | undefined;
     cid?: string | undefined;
     related: boolean;
-    calendarMethod?: 'REQUEST' | 'REPLY' | 'CANCEL';
+    calendarMethod?: ImipMethod;
 };
 
 export type ParsedMail = {
