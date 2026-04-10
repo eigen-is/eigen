@@ -62,3 +62,4 @@ next-env.d.ts
 /docs/superpowers
 .claude/settings.local.json
 .env.eigen
+/docs/superpowers/
