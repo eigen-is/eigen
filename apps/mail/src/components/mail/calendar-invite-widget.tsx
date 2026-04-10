@@ -63,12 +63,11 @@ function parseIcs(ics: string): IcsEventSummary {
 }
 
 function buildCalendarLink(event: IcsEventSummary): string {
-    const baseUrl = getCalendarAppUrl();
-    if (!event.dtstart) return baseUrl;
+    if (!event.dtstart) return getCalendarAppUrl();
 
     // Parse ICS date to compute month range for the calendar view
     const match = event.dtstart.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/);
-    if (!match) return baseUrl;
+    if (!match) return getCalendarAppUrl();
 
     const [, y, mo, d, h, mi, s] = match;
     const date = new Date(`${y}-${mo}-${d}T${h}:${mi}:${s}${event.dtstart.endsWith('Z') ? 'Z' : ''}`);
@@ -86,9 +85,8 @@ function buildCalendarLink(event: IcsEventSummary): string {
     const from = Math.floor(startDate.getTime() / 1000);
     const to = Math.floor(endDate.getTime() / 1000) + 86400;
 
-    // Use UID as eventId — the calendar matches on data.organizerEventId
     const eventId = encodeURIComponent(event.uid);
-    return `${baseUrl}view/month/${from}/${to}?eventId=${eventId}`;
+    return getCalendarAppUrl(`view/month/${from}/${to}?eventId=${eventId}`);
 }
 
 type CalendarInviteWidgetProps = {
