@@ -1,5 +1,5 @@
 import type { Attendee, CalendarEvent, EventData } from '@workspace/lib/types/calendar';
-import type { ParsedMail } from '@workspace/lib/types/mail';
+import type { Attachment } from '@workspace/lib/types/mail';
 import { parseIcs } from '../caldav/ical-parse';
 import { serializeEventForImip } from '../caldav/ical-serialize';
 import type { OutboundMail } from '../core/mailer';
@@ -95,7 +95,9 @@ export function composeRsvpReply(
 const IMIP_METHODS = ['REQUEST', 'REPLY', 'CANCEL'] as const;
 type ImipMethod = (typeof IMIP_METHODS)[number];
 
-export function extractCalendarAttachment(mail: ParsedMail): { ics: string; method?: ImipMethod } | null {
+export function extractCalendarAttachment(mail: {
+    attachments: Attachment[];
+}): { ics: string; method?: ImipMethod } | null {
     const attachment = mail.attachments.find((a) => a.contentType.startsWith('text/calendar'));
     if (!attachment) return null;
 
@@ -111,7 +113,7 @@ export function extractCalendarAttachment(mail: ParsedMail): { ics: string; meth
     return { ics, method };
 }
 
-export function processInboundImip(home: Home, mail: ParsedMail): void {
+export function processInboundImip(home: Home, mail: { attachments: Attachment[] }): void {
     const calAttachment = extractCalendarAttachment(mail);
     if (!calAttachment) return;
 
@@ -154,7 +156,7 @@ export function processInboundImip(home: Home, mail: ParsedMail): void {
                     timezone: parsed.timezone,
                     status: parsed.status,
                     sequence: parsed.sequence,
-                    data: parsed.data ?? {},
+                    data: { ...parsed.data, organizerEventId: parsed.uid },
                     createByUserId: `external_${organizerEmail}`,
                     organizerEventId: parsed.uid,
                     organizerUserId: `external_${organizerEmail}`,

@@ -1,4 +1,4 @@
-import type { EmailDraft, EmailSummary } from '@workspace/lib/types/mail';
+import type { Email, EmailDraft, EmailSummary } from '@workspace/lib/types/mail';
 import type { User } from 'better-auth/types';
 import { processInboundImip } from '../calendar/imip';
 import { ApiError } from '../core/errors';
