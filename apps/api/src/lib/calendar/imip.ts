@@ -1,9 +1,9 @@
 import type { Attendee, CalendarEvent, EventData } from '@workspace/lib/types/calendar';
+import type { ParsedMail } from '@workspace/lib/types/mail';
 import { parseIcs } from '../caldav/ical-parse';
 import { serializeEventForImip } from '../caldav/ical-serialize';
 import type { OutboundMail } from '../core/mailer';
 import type { Home } from '../home';
-import type { ParsedMail } from '../mail/mail-parser';
 import type { ReceiveInvitationPayload } from './calendar';
 
 type Organizer = NonNullable<EventData['organizer']>;
@@ -92,7 +92,10 @@ export function composeRsvpReply(
     };
 }
 
-export function extractCalendarAttachment(mail: ParsedMail): { ics: string; method?: string } | null {
+const IMIP_METHODS = ['REQUEST', 'REPLY', 'CANCEL'] as const;
+type ImipMethod = (typeof IMIP_METHODS)[number];
+
+export function extractCalendarAttachment(mail: ParsedMail): { ics: string; method?: ImipMethod } | null {
     const attachment = mail.attachments.find((a) => a.contentType.startsWith('text/calendar'));
     if (!attachment) return null;
 
@@ -102,7 +105,8 @@ export function extractCalendarAttachment(mail: ParsedMail): { ics: string; meth
 
     // Extract method from Content-Type header parameter (e.g. "text/calendar; method=REQUEST")
     const methodMatch = attachment.contentType.match(/method=(\w+)/i);
-    const method = methodMatch ? methodMatch[1].toUpperCase() : undefined;
+    const raw = methodMatch ? methodMatch[1].toUpperCase() : undefined;
+    const method = raw && IMIP_METHODS.includes(raw as ImipMethod) ? (raw as ImipMethod) : undefined;
 
     return { ics, method };
 }
