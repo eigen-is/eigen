@@ -1,5 +1,6 @@
 import type { Attendee, CalendarEvent, EventData } from '@workspace/lib/types/calendar';
 import type { Attachment } from '@workspace/lib/types/mail';
+import { externalOwnerId } from '@workspace/lib/types/owner';
 import { parseIcs } from '../caldav/ical-parse';
 import { serializeEventForImip } from '../caldav/ical-serialize';
 import type { OutboundMail } from '../core/mailer';
@@ -159,19 +160,19 @@ export function processInboundImip(home: Home, mail: { attachments: Attachment[]
                     data: {
                         ...parsed.data,
                         organizer: parsed.data?.organizer
-                            ? { ...parsed.data.organizer, userId: `external_${organizerEmail}` }
+                            ? { ...parsed.data.organizer, userId: externalOwnerId(organizerEmail) }
                             : undefined,
                         organizerEventId: parsed.uid,
                     },
-                    createByUserId: `external_${organizerEmail}`,
+                    createByUserId: externalOwnerId(organizerEmail),
                     organizerEventId: parsed.uid,
-                    organizerUserId: `external_${organizerEmail}`,
+                    organizerUserId: externalOwnerId(organizerEmail),
                 };
                 calendar.receiveInvitation(payload);
             }
         } else if (method === 'CANCEL') {
             const organizerEmail = parsed.data?.organizer?.email ?? '';
-            calendar.removeInvitation(parsed.uid, `external_${organizerEmail}`);
+            calendar.removeInvitation(parsed.uid, externalOwnerId(organizerEmail));
         } else if (method === 'REPLY') {
             const existing = calendar.getEventsByUid(parsed.uid);
             if (existing.length > 0 && parsed.data?.attendees) {

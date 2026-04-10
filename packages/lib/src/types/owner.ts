@@ -1,16 +1,20 @@
 import { validateEmailAddress } from '../validation';
 
-export type OwnerType = 'user' | 'team' | 'org';
+export type OwnerType = 'user' | 'team' | 'org' | 'external';
 
 export type ParsedOwnerId = { type: OwnerType; id: string };
 
 export function parseOwnerId(ownerId: string): ParsedOwnerId {
-    let id = ownerId,
-        type: OwnerType = 'user';
-
     if (validateEmailAddress(ownerId)) {
         return { type: 'user', id: ownerId.toLowerCase() };
     }
+
+    if (ownerId.startsWith('external_')) {
+        return { type: 'external', id: ownerId.slice(9) };
+    }
+
+    let id = ownerId;
+    let type: OwnerType = 'user';
 
     if (ownerId.startsWith('team_')) {
         id = ownerId.slice(5);
@@ -41,4 +45,12 @@ export function teamOwnerId(teamId: string): string {
 
 export function orgOwnerId(orgId: string): string {
     return `org_${orgId}`;
+}
+
+export function externalOwnerId(email: string): string {
+    return `external_${email}`;
+}
+
+export function isExternalOwnerId(ownerId: string): boolean {
+    return ownerId.startsWith('external_');
 }

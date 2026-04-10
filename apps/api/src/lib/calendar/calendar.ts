@@ -9,6 +9,7 @@ import type {
     EventData,
     SharedCalendar,
 } from '@workspace/lib/types/calendar';
+import { isExternalOwnerId } from '@workspace/lib/types/owner';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { and, count, eq, gt, gte, inArray, isNull, lte, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
@@ -705,7 +706,7 @@ export class Calendar {
         if (user && existing.data?.organizer) {
             // Attendee deleting linked copy = decline
             const orgUserId = existing.data.organizer.userId;
-            if (orgUserId.startsWith('external_')) {
+            if (isExternalOwnerId(orgUserId)) {
                 const mail = composeRsvpReply(existing, user.email, user.name ?? user.email, 'declined');
                 sendMail(mail).catch(console.error);
             } else {
@@ -1355,7 +1356,7 @@ export class Calendar {
         const scope = input.scope || 'all';
         const organizerUserId = event.data.organizer.userId;
         const organizerEventId = event.data.organizerEventId!;
-        const isExternalOrganizer = organizerUserId.startsWith('external_');
+        const isExternalOrganizer = isExternalOwnerId(organizerUserId);
 
         const sendRsvpReply = (status: Attendee['status']) => {
             const mail = composeRsvpReply(event, user.email, user.name ?? user.email, status);

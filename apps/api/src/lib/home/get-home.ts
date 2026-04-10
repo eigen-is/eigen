@@ -52,6 +52,8 @@ export async function getHome(ownerId: string): Promise<Home> {
                     });
                     break;
                 }
+                case 'external':
+                    throw new ApiError(400, 'Cannot get home for external owner');
                 case 'org': {
                     if (!(await getOrgExists(parsed.id))) {
                         throw new ApiError(404, 'Organization not found');
