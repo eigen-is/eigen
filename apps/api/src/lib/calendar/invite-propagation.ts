@@ -149,8 +149,8 @@ export async function propagateCancellation(organizerHome: Home, event: Calendar
             if (!targetUser) {
                 const organizer = {
                     userId: organizerHome.user.id,
-                    email: event.data?.organizer?.email ?? '',
-                    name: event.data?.organizer?.name,
+                    email: organizerHome.user.email,
+                    name: organizerHome.user.name ?? undefined,
                 };
                 const mail = composeCancelEmail(event, organizer, [attendee]);
                 sendMail(mail).catch((err) => console.error('Failed to send iMIP cancel:', err));
