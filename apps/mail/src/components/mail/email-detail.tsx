@@ -320,17 +320,20 @@ export function EmailDetail({ email, toggleMailRead }: EmailDetailProps) {
                     )}
 
                     {/* Attachments (excluding calendar invites shown above) */}
-                    {email.attachments?.some((a) => !a.contentType.startsWith('text/calendar')) && (
-                        <div className="mt-6 pt-6 border-t">
-                            <h3 className="font-medium mb-3 flex items-center gap-2">
-                                <Paperclip className="h-4 w-4" />
-                                Attachments (
-                                {email.attachments.filter((a) => !a.contentType.startsWith('text/calendar')).length})
-                            </h3>
+                    {(() => {
+                        const nonCalendarAttachments =
+                            email.attachments?.filter((a: Attachment) => !a.contentType.startsWith('text/calendar')) ??
+                            [];
+                        if (nonCalendarAttachments.length === 0) return null;
+                        return (
+                            <div className="mt-6 pt-6 border-t">
+                                <h3 className="font-medium mb-3 flex items-center gap-2">
+                                    <Paperclip className="h-4 w-4" />
+                                    Attachments ({nonCalendarAttachments.length})
+                                </h3>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                {email.attachments.map((attachment: Attachment, index: number) =>
-                                    attachment.contentType.startsWith('text/calendar') ? null : (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    {nonCalendarAttachments.map((attachment: Attachment, index: number) => (
                                         <div
                                             key={index}
                                             className="flex items-center p-3 border rounded-md hover:bg-muted/50 cursor-pointer select-none"
@@ -357,11 +360,11 @@ export function EmailDetail({ email, toggleMailRead }: EmailDetailProps) {
                                                 {attachment.filename || `Attachment ${index + 1}`}
                                             </span>
                                         </div>
-                                    ),
-                                )}
+                                    ))}
+                                </div>
                             </div>
-                        </div>
-                    )}
+                        );
+                    })()}
                 </div>
             </div>
         </div>

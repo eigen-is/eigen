@@ -3,6 +3,7 @@ import { useAuth } from '@workspace/lib/auth';
 import { formatDateTime } from '@workspace/lib/date';
 import type { Attachment } from '@workspace/lib/types/mail';
 import { Button } from '@workspace/ui/components/button';
+import { cn } from '@workspace/ui/lib/utils';
 import { Calendar, ExternalLink } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
@@ -87,16 +88,17 @@ export function CalendarInviteWidget({ attachment, emailId, attachmentIndex }: C
 
     return (
         <div
-            className={`flex items-start gap-3 rounded-lg border p-4 ${
-                isCancelled ? 'border-destructive/30 bg-destructive/5' : 'border-primary/30 bg-primary/5'
-            }`}
+            className={cn(
+                'flex items-start gap-3 rounded-lg border p-4',
+                isCancelled ? 'border-destructive/30 bg-destructive/5' : 'border-primary/30 bg-primary/5',
+            )}
         >
-            <Calendar className={`mt-0.5 h-5 w-5 shrink-0 ${isCancelled ? 'text-destructive' : 'text-primary'}`} />
+            <Calendar className={cn('mt-0.5 h-5 w-5 shrink-0', isCancelled ? 'text-destructive' : 'text-primary')} />
             <div className="flex-1 min-w-0 space-y-1">
                 {isCancelled && <p className="text-sm font-medium text-destructive">This event has been cancelled</p>}
                 {isReply && <p className="text-sm font-medium text-muted-foreground">Calendar RSVP response</p>}
                 {event.summary && (
-                    <p className={`text-sm font-semibold ${isCancelled ? 'line-through text-muted-foreground' : ''}`}>
+                    <p className={cn('text-sm font-semibold', isCancelled && 'line-through text-muted-foreground')}>
                         {event.summary}
                     </p>
                 )}

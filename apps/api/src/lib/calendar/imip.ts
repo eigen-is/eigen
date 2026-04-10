@@ -97,7 +97,8 @@ export function extractCalendarAttachment(mail: ParsedMail): { ics: string; meth
     if (!attachment) return null;
 
     const content = attachment.content;
-    const ics = typeof content === 'string' ? content : Buffer.from(content as Buffer).toString('utf-8');
+    const ics =
+        typeof content === 'string' ? content : content instanceof Buffer ? content.toString('utf-8') : String(content);
 
     // Extract method from Content-Type header parameter (e.g. "text/calendar; method=REQUEST")
     const methodMatch = attachment.contentType.match(/method=(\w+)/i);
