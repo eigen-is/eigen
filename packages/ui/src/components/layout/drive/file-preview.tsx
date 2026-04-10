@@ -1,8 +1,7 @@
 import { useHotkey } from '@tanstack/react-hotkeys';
-import { getDocumentUrl, getInlineEditUrl } from '@workspace/lib/api';
+import { getDriveItemUrl } from '@workspace/lib/api';
 import { useTextPreview } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { isDocumentType, isInlineEditable } from '@workspace/lib/types/drive';
 import { ChevronLeft, ChevronRight, Download, ExternalLink, Loader2, X } from 'lucide-react';
 import { useState } from 'react';
 import type { PreviewMode } from '../preview-provider/preview-provider';
@@ -55,11 +54,7 @@ export function FilePreview({
         { enabled: true },
     );
 
-    const openUrl = isDocumentType(path.type)
-        ? getDocumentUrl(path) || undefined
-        : isInlineEditable(path.mimeType, path.name)
-          ? getInlineEditUrl(path.ownerId, path.mountId, path.id)
-          : undefined;
+    const openUrl = getDriveItemUrl(path);
 
     return (
         <div className="fixed inset-0 z-[100] bg-black/80 flex flex-col animate-in fade-in" onClick={onClose}>

@@ -15,7 +15,17 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@workspace/ui/components/table';
 import { cn } from '@workspace/ui/lib/utils';
-import { ArrowRight, ChevronLeft, Download, Eye, FileDown, Pencil, Trash2, UserRoundPlus } from 'lucide-react';
+import {
+    ArrowRight,
+    ChevronLeft,
+    Download,
+    ExternalLink,
+    Eye,
+    FileDown,
+    Pencil,
+    Trash2,
+    UserRoundPlus,
+} from 'lucide-react';
 import type React from 'react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useKeyboardListNavigation } from '../../../hooks/use-keyboard-list-navigation';
@@ -38,6 +48,7 @@ export type DriveTableProps = {
     onItemClick?: (item: DrivePath) => void;
     onItemOpen?: (item: DrivePath) => void;
     getFileIcon?: (mimeType: string, type: string, props?: Record<string, unknown>) => React.ReactNode;
+    getItemHref?: (item: DrivePath) => string | undefined;
     onShareClick?: (item: DrivePath) => void;
     onDownload?: (item: DrivePath) => void;
     onDelete?: (items: DrivePath[]) => void;
@@ -59,6 +70,7 @@ export function DriveTable({
     onItemClick,
     onItemOpen,
     getFileIcon,
+    getItemHref,
     onShareClick,
     onDownload,
     onDelete,
@@ -156,6 +168,7 @@ export function DriveTable({
             : [contextMenu.item]
         : [];
     const isSingleSelect = contextItems.length === 1;
+    const contextMenuItemHref = isSingleSelect && contextMenu.item ? getItemHref?.(contextMenu.item) : undefined;
 
     const isValidFolderDrop = (targetItem: DrivePath) => {
         if (targetItem.type !== 'folder') return false;
@@ -211,6 +224,7 @@ export function DriveTable({
 
                     {sortedItems.map((item, index) => {
                         const adjustedIndex = hasParentItem ? index + 1 : index;
+                        const itemHref = getItemHref?.(item);
 
                         return (
                             <TableRow
@@ -263,9 +277,30 @@ export function DriveTable({
                                             })}
                                             {unreadPathIds?.has(item.id) && <UnreadDot />}
                                         </div>
-                                        <span className="truncate max-w-[calc(100%-1.5rem)]">
-                                            {stripEigenExtension(item.name)}
-                                        </span>
+                                        {itemHref ? (
+                                            <a
+                                                href={itemHref}
+                                                className="truncate max-w-[calc(100%-1.5rem)]"
+                                                draggable={false}
+                                                tabIndex={-1}
+                                                onClick={(e) => {
+                                                    if (e.metaKey || e.ctrlKey) {
+                                                        e.stopPropagation();
+                                                        return;
+                                                    }
+                                                    e.preventDefault();
+                                                }}
+                                                onAuxClick={(e) => {
+                                                    if (e.button === 1) e.stopPropagation();
+                                                }}
+                                            >
+                                                {stripEigenExtension(item.name)}
+                                            </a>
+                                        ) : (
+                                            <span className="truncate max-w-[calc(100%-1.5rem)]">
+                                                {stripEigenExtension(item.name)}
+                                            </span>
+                                        )}
                                     </div>
                                 </TableCell>
                                 <TableCell className="hidden sm:table-cell group">
@@ -302,6 +337,18 @@ export function DriveTable({
                             Open
                         </DropdownMenuItem>
                     )}
+                {isSingleSelect && contextMenuItemHref && (
+                    <DropdownMenuItem
+                        onClick={() => {
+                            window.open(contextMenuItemHref, '_blank');
+                            contextMenu.close();
+                        }}
+                        className="flex items-center"
+                    >
+                        <ExternalLink className="h-4 w-4 mr-2" />
+                        Open in new tab
+                    </DropdownMenuItem>
+                )}
                 {isSingleSelect && onQuickLook && contextMenu.item && !isFolderType(contextMenu.item.type) && (
                     <DropdownMenuItem
                         onClick={() => {

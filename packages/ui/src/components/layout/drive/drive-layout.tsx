@@ -46,6 +46,7 @@ export type DriveLayoutProps = {
     allowRename?: boolean;
     allowMove?: boolean;
     onQuickLook?: (path: DrivePath, sortedSiblings: DrivePath[]) => void;
+    getItemHref?: (item: DrivePath) => string | undefined;
     sortFn?: (a: DrivePath, b: DrivePath) => number;
     pid?: string;
     unreadPathIds?: Set<string>;
@@ -76,6 +77,7 @@ export function DriveLayout({
     allowRename = true,
     allowMove = true,
     onQuickLook,
+    getItemHref,
     sortFn = defaultDriveSort,
     pid = undefined,
     showBreadcrumb = false,
@@ -178,6 +180,7 @@ export function DriveLayout({
         showBreadcrumb,
         onDownload: handleDownloadPath,
         onExport: handleExportPath,
+        getItemHref,
         allowDelete,
         allowUpload,
         onRename: allowRename ? handleRenamePath : undefined,

@@ -1,4 +1,4 @@
-import { getDocUrl } from '@workspace/lib/api';
+import { getDriveItemUrl } from '@workspace/lib/api';
 import { useCreateDoc } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DriveCreateItemDialog } from './drive-create-folder-item';
@@ -27,16 +27,12 @@ export function DriveCreateDoc({ path, open, onOpenChange, onSave, onCancel, onA
         });
         onOpenChange(false);
 
-        // Call onAfterAction if provided
         if (onAfterAction) {
             onAfterAction('create', { name: fileName });
         }
 
-        // Open the document in a new window
-        if (newPath) {
-            const url = getDocUrl(path.ownerId, path.mountId, newPath.id);
-            window.open(url, '_blank');
-        }
+        const url = getDriveItemUrl(newPath);
+        if (url) window.open(url, '_blank');
 
         if (onSave) onSave(newPath?.id || '');
     };

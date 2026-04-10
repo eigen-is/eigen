@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { openDocument } from '@workspace/lib/api';
+import { getDriveItemUrl, openDocument } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { useUnreadChatIds } from '@workspace/lib/chat';
 import { AppError } from '@workspace/lib/core/api-error';
@@ -176,6 +176,7 @@ function DriveRoute() {
                 allowUpload={true}
                 allowMove={true}
                 onQuickLook={onQuickLook}
+                getItemHref={getDriveItemUrl}
                 showBreadcrumb={true}
                 pid={pid}
                 unreadPathIds={unreadChatIds}

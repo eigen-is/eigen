@@ -1,4 +1,4 @@
-import { getSheetUrl } from '@workspace/lib/api';
+import { getDriveItemUrl } from '@workspace/lib/api';
 import { useCreateSheets } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DriveCreateItemDialog } from './drive-create-folder-item';
@@ -38,10 +38,8 @@ export function DriveCreateSheets({
             onAfterAction('create', { name: fileName });
         }
 
-        if (newPath) {
-            const url = getSheetUrl(path.ownerId, path.mountId, newPath.id);
-            window.open(url, '_blank');
-        }
+        const url = getDriveItemUrl(newPath);
+        if (url) window.open(url, '_blank');
 
         if (onSave) onSave(newPath?.id || '');
     };

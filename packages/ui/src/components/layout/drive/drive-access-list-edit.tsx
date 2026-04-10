@@ -1,10 +1,9 @@
-import { getDocumentUrl, getDriveAppUrl } from '@workspace/lib/api';
+import { getDriveAppUrl, getDriveItemUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { type DirectAccessItem, useDriveAccess, useIsEffectiveOwner } from '@workspace/lib/drive';
 import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DriveACL, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
-import { isContainerType } from '@workspace/lib/types/drive';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import { AvatarIcon } from '@workspace/ui/components/avatar';
 import { Button } from '@workspace/ui/components/button';
@@ -36,10 +35,9 @@ export type DriveAccessListEditProps = {
 };
 
 function getShareUrl(path: DrivePath): string {
-    const docUrl = getDocumentUrl(path);
-    if (docUrl) return docUrl;
-    if (isContainerType(path.type)) return getDriveAppUrl(`fs/${path.ownerId}/${path.mountId}/${path.id}`);
-    return getDriveAppUrl(`shared/with-me?pid=${path.id}&uid=${path.ownerId}&mid=${path.mountId}`);
+    return (
+        getDriveItemUrl(path) ?? getDriveAppUrl(`shared/with-me?pid=${path.id}&uid=${path.ownerId}&mid=${path.mountId}`)
+    );
 }
 
 export function DriveAccessListEdit({ path, onSave, onCancel, className, prefillEmail }: DriveAccessListEditProps) {
