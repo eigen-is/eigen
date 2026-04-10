@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { openDocument } from '@workspace/lib/api';
+import { getDriveItemUrl, openDocument } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, useMimeContent, usePathInfo } from '@workspace/lib/drive';
 import {
@@ -104,6 +104,7 @@ function DriveRoute() {
             allowCreateStickies={false}
             showBreadcrumb={false}
             onQuickLook={onQuickLook}
+            getItemHref={getDriveItemUrl}
         />
     );
 }

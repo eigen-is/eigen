@@ -1,5 +1,5 @@
 import { useNavigate } from '@tanstack/react-router';
-import { openDocument } from '@workspace/lib/api';
+import { getDriveItemUrl, openDocument } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, usePathInfo, useSharedPaths } from '@workspace/lib/drive';
 import { type DrivePath, type DriveSearchParams, isDocumentType } from '@workspace/lib/types/drive';
@@ -75,6 +75,7 @@ export function EigenDocSharedView({ config, to, pid, uid, mid, onNavigate, onNa
             allowCreateChat={false}
             allowCreateSlides={config.driveType === 'slides'}
             allowCreateSheets={config.driveType === 'sheets'}
+            getItemHref={getDriveItemUrl}
             showBreadcrumb={false}
             currentPath={rootPath}
             allowRename={to === 'by-me'}

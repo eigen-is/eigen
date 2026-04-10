@@ -1,4 +1,4 @@
-import { getDocumentUrl } from '@workspace/lib/api';
+import { getDriveItemUrl } from '@workspace/lib/api';
 import { useEmailCollaborators } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
@@ -35,7 +35,7 @@ export function DriveEmailCollaborators({ path, open, onOpenChange }: DriveEmail
     }, [open, path.name]);
 
     const handleSend = () => {
-        const documentUrl = getDocumentUrl(path);
+        const documentUrl = getDriveItemUrl(path);
         if (!documentUrl) return;
 
         emailMutation.mutate(

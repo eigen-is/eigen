@@ -1,4 +1,4 @@
-import { getChatRoomUrl } from '@workspace/lib/api';
+import { getDriveItemUrl } from '@workspace/lib/api';
 import { useCreateChat } from '@workspace/lib/chat';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DriveCreateItemDialog } from './drive-create-folder-item';
@@ -31,10 +31,8 @@ export function DriveCreateChat({ path, open, onOpenChange, onSave, onCancel, on
             onAfterAction('create', { name: fileName });
         }
 
-        if (newPath) {
-            const url = getChatRoomUrl(path.ownerId, path.mountId, newPath.id);
-            window.open(url, '_blank');
-        }
+        const url = getDriveItemUrl(newPath);
+        if (url) window.open(url, '_blank');
 
         if (onSave) onSave(newPath?.id || '');
     };
