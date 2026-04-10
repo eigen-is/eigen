@@ -9,7 +9,7 @@ import type { Attachment } from '@workspace/lib/types/mail';
 import { externalOwnerId } from '@workspace/lib/types/owner';
 import { parseIcs } from '../caldav/ical-parse';
 import { serializeEventForImip } from '../caldav/ical-serialize';
-import type { OutboundMail } from '../core/mailer';
+import type { OutboundICalEvent, OutboundMail } from '../core/mailer';
 import type { Home } from '../home';
 import type { ReceiveInvitationPayload } from './calendar';
 
@@ -32,36 +32,37 @@ function buildEventSummary(event: CalendarEvent): string {
     return lines.join('\n');
 }
 
+function icalEvent(event: CalendarEvent, method: 'REQUEST' | 'REPLY' | 'CANCEL'): OutboundICalEvent {
+    return { method, content: serializeEventForImip(event, method) };
+}
+
 export function composeInviteEmail(event: CalendarEvent, organizer: Organizer, attendees: Attendee[]): OutboundMail {
-    const ics = serializeEventForImip(event, 'REQUEST');
     return {
         from: { name: organizer.name ?? '', address: organizer.email },
         to: attendees.map((a) => ({ name: a.name ?? '', address: a.email })),
         subject: `Invitation: ${event.title}`,
         text: buildEventSummary(event),
-        attachments: [{ filename: 'invite.ics', content: ics, contentType: 'text/calendar; method=REQUEST' }],
+        icalEvent: icalEvent(event, 'REQUEST'),
     };
 }
 
 export function composeUpdateEmail(event: CalendarEvent, organizer: Organizer, attendees: Attendee[]): OutboundMail {
-    const ics = serializeEventForImip(event, 'REQUEST');
     return {
         from: { name: organizer.name ?? '', address: organizer.email },
         to: attendees.map((a) => ({ name: a.name ?? '', address: a.email })),
         subject: `Updated invitation: ${event.title}`,
         text: buildEventSummary(event),
-        attachments: [{ filename: 'invite.ics', content: ics, contentType: 'text/calendar; method=REQUEST' }],
+        icalEvent: icalEvent(event, 'REQUEST'),
     };
 }
 
 export function composeCancelEmail(event: CalendarEvent, organizer: Organizer, attendees: Attendee[]): OutboundMail {
-    const ics = serializeEventForImip(event, 'CANCEL');
     return {
         from: { name: organizer.name ?? '', address: organizer.email },
         to: attendees.map((a) => ({ name: a.name ?? '', address: a.email })),
         subject: `Cancelled: ${event.title}`,
         text: `This event has been cancelled:\n\n${buildEventSummary(event)}`,
-        attachments: [{ filename: 'invite.ics', content: ics, contentType: 'text/calendar; method=CANCEL' }],
+        icalEvent: icalEvent(event, 'CANCEL'),
     };
 }
 
@@ -88,14 +89,13 @@ export function composeRsvpReply(
             attendees: [{ email: attendeeEmail, name: attendeeName, status, role: 'required' }],
         },
     };
-    const ics = serializeEventForImip(replyEvent, 'REPLY');
 
     return {
         from: { name: attendeeName, address: attendeeEmail },
         to: [{ name: event.data?.organizer?.name ?? '', address: organizerEmail }],
         subject: `${STATUS_LABELS[status]}: ${event.title}`,
         text: `${attendeeName} has ${STATUS_LABELS[status].toLowerCase()} the invitation: ${event.title}`,
-        attachments: [{ filename: 'invite.ics', content: ics, contentType: 'text/calendar; method=REPLY' }],
+        icalEvent: icalEvent(replyEvent, 'REPLY'),
     };
 }
 
