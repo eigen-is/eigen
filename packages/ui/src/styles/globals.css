@@ -185,7 +185,6 @@
 
     #app {
         height: 100dvh;
-        height: -webkit-fill-available;
         overscroll-behavior-y: none;
     }
 
