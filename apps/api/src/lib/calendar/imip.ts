@@ -136,8 +136,10 @@ export function processInboundImip(home: Home, mail: { attachments: Attachment[]
             const existing = calendar.getEventsByUid(parsed.uid);
             const linked = existing.find((e) => e.data?.organizer && e.data?.organizerEventId);
 
-            if (linked) {
-                calendar.receiveInvitationUpdate(linked.data!.organizerEventId!, linked.data!.organizer!.userId, {
+            const orgEventId = linked?.data?.organizerEventId;
+            const orgUserId = linked?.data?.organizer?.userId;
+            if (orgEventId && orgUserId) {
+                calendar.receiveInvitationUpdate(orgEventId, orgUserId, {
                     title: parsed.title,
                     description: parsed.description,
                     location: parsed.location,

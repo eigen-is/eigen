@@ -1,3 +1,4 @@
+import type { ImipMethod } from '@workspace/lib/types/calendar';
 import nodemailer from 'nodemailer';
 import type Mail from 'nodemailer/lib/mailer';
 import { isProduction } from '../config/env';
@@ -16,7 +17,7 @@ export type OutboundAttachment = {
 };
 
 export type OutboundICalEvent = {
-    method: string;
+    method: ImipMethod;
     content: string;
 };
 
