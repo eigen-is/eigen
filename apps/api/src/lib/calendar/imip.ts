@@ -156,7 +156,13 @@ export function processInboundImip(home: Home, mail: { attachments: Attachment[]
                     timezone: parsed.timezone,
                     status: parsed.status,
                     sequence: parsed.sequence,
-                    data: { ...parsed.data, organizerEventId: parsed.uid },
+                    data: {
+                        ...parsed.data,
+                        organizer: parsed.data?.organizer
+                            ? { ...parsed.data.organizer, userId: `external_${organizerEmail}` }
+                            : undefined,
+                        organizerEventId: parsed.uid,
+                    },
                     createByUserId: `external_${organizerEmail}`,
                     organizerEventId: parsed.uid,
                     organizerUserId: `external_${organizerEmail}`,
