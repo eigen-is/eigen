@@ -7,7 +7,8 @@ import { cn } from '@workspace/ui/lib/utils';
 import { Calendar, ExternalLink } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-type CalendarEvent = {
+type IcsEventSummary = {
+    uid: string;
     summary: string;
     dtstart: string;
     dtend: string;
@@ -50,14 +51,44 @@ function formatIcsDate(raw: string): string {
     return formatDateTime(new Date(iso));
 }
 
-function parseIcs(ics: string): CalendarEvent {
+function parseIcs(ics: string): IcsEventSummary {
     return {
+        uid: parseIcsField(ics, 'UID'),
         summary: parseIcsField(ics, 'SUMMARY'),
         dtstart: parseIcsField(ics, 'DTSTART'),
         dtend: parseIcsField(ics, 'DTEND'),
         location: parseIcsField(ics, 'LOCATION'),
         organizer: parseIcsField(ics, 'ORGANIZER'),
     };
+}
+
+function buildCalendarLink(event: IcsEventSummary): string {
+    const baseUrl = getCalendarAppUrl();
+    if (!event.dtstart) return baseUrl;
+
+    // Parse ICS date to compute month range for the calendar view
+    const match = event.dtstart.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})/);
+    if (!match) return baseUrl;
+
+    const [, y, mo, d, h, mi, s] = match;
+    const date = new Date(`${y}-${mo}-${d}T${h}:${mi}:${s}${event.dtstart.endsWith('Z') ? 'Z' : ''}`);
+    const firstOfMonth = new Date(date.getFullYear(), date.getMonth(), 1);
+    const lastOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+
+    // Extend to cover full weeks (Monday start)
+    const startDay = firstOfMonth.getDay();
+    const startDate = new Date(firstOfMonth);
+    startDate.setDate(startDate.getDate() - ((startDay + 6) % 7));
+    const endDate = new Date(lastOfMonth);
+    const endDay = lastOfMonth.getDay();
+    if (endDay !== 0) endDate.setDate(endDate.getDate() + (7 - endDay));
+
+    const from = Math.floor(startDate.getTime() / 1000);
+    const to = Math.floor(endDate.getTime() / 1000) + 86400;
+
+    // Use UID as eventId — the calendar matches on data.organizerEventId
+    const eventId = encodeURIComponent(event.uid);
+    return `${baseUrl}view/month/${from}/${to}?eventId=${eventId}`;
 }
 
 type CalendarInviteWidgetProps = {
@@ -68,7 +99,7 @@ type CalendarInviteWidgetProps = {
 
 export function CalendarInviteWidget({ attachment, emailId, attachmentIndex }: CalendarInviteWidgetProps) {
     const { user } = useAuth();
-    const [event, setEvent] = useState<CalendarEvent | null>(null);
+    const [event, setEvent] = useState<IcsEventSummary | null>(null);
 
     const method = attachment.calendarMethod ?? 'REQUEST';
 
@@ -112,7 +143,7 @@ export function CalendarInviteWidget({ attachment, emailId, attachmentIndex }: C
                 {event.organizer && <p className="text-xs text-muted-foreground">Organizer: {event.organizer}</p>}
             </div>
             <Button variant="outline" size="sm" className="shrink-0" asChild>
-                <a href={getCalendarAppUrl()} target="_blank" rel="noreferrer">
+                <a href={buildCalendarLink(event)} target="_blank" rel="noreferrer">
                     View in Calendar
                     <ExternalLink className="ml-1.5 h-3 w-3" />
                 </a>
