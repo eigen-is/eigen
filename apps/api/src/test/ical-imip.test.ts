@@ -33,23 +33,25 @@ const MOCK_EVENT: CalendarEvent = {
 };
 
 describe('iMIP Serialization', () => {
-    test('serializeEventForImip includes METHOD:REQUEST', () => {
+    test('serializeEventForImip includes METHOD:REQUEST and RSVP=TRUE', () => {
         const ics = serializeEventForImip(MOCK_EVENT, 'REQUEST');
         expect(ics).toContain('METHOD:REQUEST');
         expect(ics).toContain('BEGIN:VEVENT');
         expect(ics).toContain('SUMMARY:Team Standup');
-        expect(ics).toContain('ATTENDEE');
+        expect(ics).toContain('RSVP=TRUE');
         expect(ics).toContain('ORGANIZER');
     });
 
-    test('serializeEventForImip with METHOD:CANCEL', () => {
+    test('serializeEventForImip with METHOD:CANCEL omits RSVP', () => {
         const ics = serializeEventForImip(MOCK_EVENT, 'CANCEL');
         expect(ics).toContain('METHOD:CANCEL');
+        expect(ics).not.toContain('RSVP=TRUE');
     });
 
-    test('serializeEventForImip with METHOD:REPLY', () => {
+    test('serializeEventForImip with METHOD:REPLY omits RSVP', () => {
         const ics = serializeEventForImip(MOCK_EVENT, 'REPLY');
         expect(ics).toContain('METHOD:REPLY');
+        expect(ics).not.toContain('RSVP=TRUE');
     });
 
     test('eventsToIcs does NOT include METHOD (CalDAV compat)', () => {
