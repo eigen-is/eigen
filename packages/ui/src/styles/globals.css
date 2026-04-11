@@ -178,13 +178,9 @@
     }
 
     html,
-    body {
-        height: 100%;
-        overscroll-behavior-y: none;
-    }
-
+    body,
     #app {
-        height: 100dvh;
+        height: 100%;
         overscroll-behavior-y: none;
     }
 
