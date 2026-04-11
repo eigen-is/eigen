@@ -171,8 +171,12 @@
         @apply border-border outline-ring/50;
     }
 
+    html,
     body {
         @apply bg-background text-foreground;
+    }
+
+    body {
         font-family: var(--font-sans);
         touch-action: manipulation;
     }

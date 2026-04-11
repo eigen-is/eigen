@@ -52,13 +52,11 @@ export function AppShell({
                 isTablet,
             }}
         >
-            <div className="flex flex-col h-full">
+            <div className="flex flex-col h-dvh">
                 <Topbar rootRoute={rootRoute} />
                 <div className="flex flex-1 w-full overflow-hidden">
                     {sidebar && !sidebarHidden && <SidebarContainer sidebar={sidebar} />}
-                    <main className="flex-1 flex h-full overflow-hidden pb-[env(safe-area-inset-bottom)]">
-                        {children ?? <Outlet />}
-                    </main>
+                    <main className="flex-1 flex h-full overflow-hidden">{children ?? <Outlet />}</main>
                 </div>
             </div>
             <Suspense>
