@@ -188,15 +188,6 @@
         overscroll-behavior-y: none;
     }
 
-    @supports (-webkit-touch-callout: none) {
-        html {
-            height: -webkit-fill-available;
-        }
-        #app {
-            overflow: hidden;
-        }
-    }
-
     :root {
         --app-space-color: var(--color-teal-600);
         --app-mail-color: var(--color-red-600);
