@@ -1,6 +1,6 @@
 import { Outlet } from '@tanstack/react-router';
 import { useIsMobile, useIsTablet } from '@workspace/lib/media';
-import { lazy, type ReactNode, Suspense, useEffect, useState } from 'react';
+import { lazy, type ReactNode, Suspense, useState } from 'react';
 import { SidebarContainer, type SidebarProps } from '../sidebar/sidebar-container.tsx';
 import { LayoutContext } from './layout-context.tsx';
 import { Topbar } from './topbar.tsx';
@@ -34,13 +34,6 @@ export function AppShell({
     const isMobile = useIsMobile();
     const isTablet = useIsTablet();
 
-    useEffect(() => {
-        const update = () => document.documentElement.style.setProperty('--app-height', `${window.innerHeight}px`);
-        update();
-        addEventListener('resize', update);
-        return () => removeEventListener('resize', update);
-    }, []);
-
     const effectiveSidebarMode = sidebar && !sidebarHidden ? sidebarMode : 'none';
 
     return (
@@ -59,7 +52,7 @@ export function AppShell({
                 isTablet,
             }}
         >
-            <div className="flex flex-col h-[var(--app-height,100dvh)]">
+            <div className="flex flex-col h-dvh">
                 <Topbar rootRoute={rootRoute} />
                 <div className="flex flex-1 w-full overflow-hidden">
                     {sidebar && !sidebarHidden && <SidebarContainer sidebar={sidebar} />}
