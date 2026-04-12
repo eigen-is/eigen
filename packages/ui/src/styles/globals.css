@@ -189,9 +189,12 @@
     }
 
     @supports (-webkit-touch-callout: none) {
-        html {
+        #app {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
             height: -webkit-fill-available;
-            overflow: hidden;
         }
     }
 
