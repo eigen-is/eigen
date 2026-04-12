@@ -171,7 +171,7 @@ export function Topbar({ rootRoute }: TopbarProps) {
     const showBurger = isMobile && sidebarMode !== 'none';
 
     return (
-        <header className="bg-app shrink-0">
+        <header className="bg-app shrink-0 sticky top-0 z-40">
             <div className="flex h-12 items-center">
                 <div className="flex items-center px-4 shrink-0">
                     {showBurger && (
