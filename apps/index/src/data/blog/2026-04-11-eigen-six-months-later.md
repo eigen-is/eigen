@@ -74,4 +74,4 @@ developers right now. I'm looking for people who can help figure out the right h
 And just to be clear: I'm not attached to keeping ownership and I'm not looking for money. I want Eigen to exist and
 to work.
 
-[Bluesky](https://bsky.app/profile/reindernijhoff.bsky.social) · [LinkedIn](https://www.linkedin.com/in/reindernijhoff/)
+[Bluesky](https://bsky.app/profile/reindernijhoff.net) · [reindernijjhoff.net](https://reindernijhoff.net/)
