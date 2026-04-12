@@ -31,9 +31,9 @@ function Column({ id, width, toolbar, onBack, children, className }: ColumnProps
           : { width, flexShrink: 0 };
 
     return (
-        <div className={`flex flex-col md:h-full md:overflow-hidden ${className || ''}`} style={style}>
+        <div className={`h-full flex flex-col overflow-hidden ${className || ''}`} style={style}>
             {toolbar && (
-                <div className="h-12 flex items-center px-4 border-b shrink-0 border-r sticky top-12 z-30 bg-background md:static">
+                <div className="h-12 flex items-center px-4 border-b shrink-0 border-r">
                     {isMobile && onBack && (
                         <>
                             <Button variant="ghost" size="icon" className="h-8 w-8 mr-1" onClick={onBack}>
@@ -45,7 +45,7 @@ function Column({ id, width, toolbar, onBack, children, className }: ColumnProps
                     {toolbar}
                 </div>
             )}
-            <div className="flex-1 md:overflow-hidden">{children}</div>
+            <div className="flex-1 overflow-hidden">{children}</div>
         </div>
     );
 }
@@ -60,7 +60,7 @@ function ColumnLayout({ mobileColumn, children }: ColumnLayoutProps) {
 
     return (
         <ColumnContext.Provider value={{ mobileColumn: isMobile ? (mobileColumn ?? null) : null }}>
-            <div className="flex flex-1 md:h-full md:overflow-hidden">{children}</div>
+            <div className="flex flex-1 h-full overflow-hidden">{children}</div>
         </ColumnContext.Provider>
     );
 }
