@@ -31,7 +31,7 @@ Beyond new apps, a lot happened under the hood:
 - **Document export**: docs export to DOCX, PDF and HTML. Slides export to PDF and HTML.
 - **Teams**: shared drives, team calendars, and a share dialog that knows about your team members.
 - **Notifications**: unread indicators, deep linking to comments, activity badges.
-- **Scaling**: the relay layer provides the groundwork for multi-process scaling, but it's not fully implemented yet.
+- **Scaling**: groundwork for multi-process scaling, not fully implemented yet.
 
 The original architecture held up well. Per-user SQLite databases, file-based storage, Yjs for real-time collaboration.
 Nothing fundamental broke. The tricky parts turned out to be cross-user operations: sharing a drive item, sending a
@@ -66,7 +66,7 @@ directions:
 - **Find a home**: an organization, foundation or company that wants to adopt Eigen.
 - **Build a team**: find people who want to develop it further together.
 
-I have options. I'm looking for the right people to figure it out with.
+I have options. I'm looking for the right people to talk to.
 If you know someone who has experience growing open-source or public-interest tech projects, or works at a foundation,
 institution or company that might want to adopt something like Eigen: please put us in touch. I'm not looking for
 developers right now. I'm looking for people who can help figure out the right home for this project.
