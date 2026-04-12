@@ -51,7 +51,7 @@ A lot. Some of the bigger gaps:
 
 ## Try it
 
-I want to spend the coming weeks on testing and gathering feedback.
+Despite these gaps, the core engine is highly stable, and I need to stress-test it in the wild.
 
 **I'm looking for people who want to try Eigen.** Not a launch, not a beta. A few weeks of real use by real people,
 so I can find bugs, fix what's broken and figure out what to build next. If that sounds interesting, sign up at
