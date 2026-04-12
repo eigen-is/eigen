@@ -184,7 +184,14 @@
     html,
     body,
     #app {
+        height: 100%;
         overscroll-behavior-y: none;
+    }
+
+    @supports (-webkit-touch-callout: none) {
+        html {
+            height: -webkit-fill-available;
+        }
     }
 
     :root {
