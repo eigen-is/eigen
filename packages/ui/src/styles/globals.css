@@ -191,6 +191,7 @@
     @supports (-webkit-touch-callout: none) {
         html {
             height: -webkit-fill-available;
+            overflow: hidden;
         }
     }
 
