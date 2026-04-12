@@ -7,6 +7,7 @@ import { MediaResolverProvider } from '@workspace/lib/drive';
 import { useIsMobile } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { LoadingState, NoteCard, NoteCardContextMenu } from '@workspace/ui';
+import { ColumnLayout, Column as LayoutColumn } from '@workspace/ui/components/layout/app/column-layout';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
 import { useCallback, useMemo, useState } from 'react';
@@ -210,136 +211,144 @@ export function StickiesBoard({
             mediaFolderId={null}
             chatFolderId={chatFolderId}
         >
-            <div className="flex flex-col h-full w-full">
-                <Toolbar
-                    path={path}
-                    canWrite={canWrite}
-                    undoManager={undoManager}
-                    onAccessDialogOpen={onAccessDialogOpen}
-                    onRestore={handleRestore}
-                    onAddColumn={() => setIsAddColumnDialogOpen(true)}
-                    colorFilter={colorFilter}
-                    onColorFilterChange={setColorFilter}
-                />
-                <div className="flex-1 w-full flex overflow-hidden">
-                    <div
-                        className="overflow-x-auto overflow-y-hidden flex-1"
-                        style={
-                            board.columnOrder.length > 0
-                                ? {
-                                      padding: 0,
-                                      scrollSnapType: 'x mandatory',
-                                      scrollBehavior: 'smooth',
-                                  }
-                                : {
-                                      visibility: 'hidden',
-                                  }
-                        }
-                    >
-                        <DndContext
-                            sensors={canWrite ? sensors : []}
-                            onDragStart={handleDragStart}
-                            onDragEnd={handleDragEnd}
-                            autoScroll={{
-                                enabled: true,
-                                threshold: { x: 0.2, y: 0.2 },
-                                acceleration: 10,
-                                interval: 10,
-                                layoutShiftCompensation: false,
-                            }}
+            <ColumnLayout>
+                <LayoutColumn
+                    id="board"
+                    width="flex"
+                    toolbar={
+                        <Toolbar
+                            path={path}
+                            canWrite={canWrite}
+                            undoManager={undoManager}
+                            onAccessDialogOpen={onAccessDialogOpen}
+                            onRestore={handleRestore}
+                            onAddColumn={() => setIsAddColumnDialogOpen(true)}
+                            colorFilter={colorFilter}
+                            onColorFilterChange={setColorFilter}
+                        />
+                    }
+                >
+                    <div className="h-full w-full flex overflow-hidden">
+                        <div
+                            className="overflow-x-auto overflow-y-hidden flex-1"
+                            style={
+                                board.columnOrder.length > 0
+                                    ? {
+                                          padding: 0,
+                                          scrollSnapType: 'x mandatory',
+                                          scrollBehavior: 'smooth',
+                                      }
+                                    : {
+                                          visibility: 'hidden',
+                                      }
+                            }
                         >
-                            <div className={`flex gap-0 h-full bg-muted`}>
-                                <SortableContext items={board.columnOrder} strategy={horizontalListSortingStrategy}>
-                                    {board.columnOrder.map((columnId) => {
-                                        const column = board.columns[columnId];
-                                        const columnCards = column.taskIds
-                                            .map((taskId) => enrichCard(board.tasks[taskId]))
-                                            .filter(
-                                                (card) => colorFilter.size === 0 || colorFilter.has(card.color || ''),
+                            <DndContext
+                                sensors={canWrite ? sensors : []}
+                                onDragStart={handleDragStart}
+                                onDragEnd={handleDragEnd}
+                                autoScroll={{
+                                    enabled: true,
+                                    threshold: { x: 0.2, y: 0.2 },
+                                    acceleration: 10,
+                                    interval: 10,
+                                    layoutShiftCompensation: false,
+                                }}
+                            >
+                                <div className={`flex gap-0 h-full bg-muted`}>
+                                    <SortableContext items={board.columnOrder} strategy={horizontalListSortingStrategy}>
+                                        {board.columnOrder.map((columnId) => {
+                                            const column = board.columns[columnId];
+                                            const columnCards = column.taskIds
+                                                .map((taskId) => enrichCard(board.tasks[taskId]))
+                                                .filter(
+                                                    (card) =>
+                                                        colorFilter.size === 0 || colorFilter.has(card.color || ''),
+                                                );
+                                            return (
+                                                <Column
+                                                    key={column.id}
+                                                    column={column}
+                                                    cards={columnCards}
+                                                    canWrite={canWrite}
+                                                    onAddCard={handleAddCardClick}
+                                                    onEditColumn={handleEditColumn}
+                                                    onCardContextMenu={
+                                                        canWrite ? cardContextMenu.handleContextMenu : undefined
+                                                    }
+                                                    isMobile={isMobile}
+                                                    yjsDoc={yjsDoc}
+                                                    ownerId={ownerId}
+                                                    mountId={path.mountId}
+                                                    initialChatName={initialChatName}
+                                                />
                                             );
-                                        return (
-                                            <Column
-                                                key={column.id}
-                                                column={column}
-                                                cards={columnCards}
-                                                canWrite={canWrite}
-                                                onAddCard={handleAddCardClick}
-                                                onEditColumn={handleEditColumn}
-                                                onCardContextMenu={
-                                                    canWrite ? cardContextMenu.handleContextMenu : undefined
-                                                }
-                                                isMobile={isMobile}
-                                                yjsDoc={yjsDoc}
-                                                ownerId={ownerId}
-                                                mountId={path.mountId}
-                                                initialChatName={initialChatName}
-                                            />
-                                        );
-                                    })}
-                                </SortableContext>
-                            </div>
+                                        })}
+                                    </SortableContext>
+                                </div>
 
-                            <DragOverlay adjustScale={false}>{getActiveComponent()}</DragOverlay>
-                        </DndContext>
+                                <DragOverlay adjustScale={false}>{getActiveComponent()}</DragOverlay>
+                            </DndContext>
 
-                        <AddCardDialog
-                            isOpen={isAddCardDialogOpen}
-                            onClose={() => setIsAddCardDialogOpen(false)}
-                            onAddCard={handleAddCard}
-                            columnId={selectedColumnId}
-                        />
-
-                        <AddColumnDialog
-                            isOpen={isAddColumnDialogOpen}
-                            onClose={() => setIsAddColumnDialogOpen(false)}
-                            onAddColumn={handleAddColumn}
-                        />
-
-                        {editColumnId && (
-                            <ColumnSettingsDialog
-                                key={editColumnId}
-                                isOpen={isColumnSettingsOpen}
-                                onClose={() => setIsColumnSettingsOpen(false)}
-                                columnId={editColumnId}
-                                columnTitle={board.columns[editColumnId]?.title || ''}
-                                cardCount={board.columns[editColumnId]?.taskIds.length || 0}
-                                canWrite={canWrite}
-                                yjsDoc={yjsDoc}
+                            <AddCardDialog
+                                isOpen={isAddCardDialogOpen}
+                                onClose={() => setIsAddCardDialogOpen(false)}
+                                onAddCard={handleAddCard}
+                                columnId={selectedColumnId}
                             />
-                        )}
 
-                        <ContextMenuAnchor contextMenu={cardContextMenu}>
-                            <NoteCardContextMenu
-                                currentColor={cardContextMenu.item?.color}
-                                onEdit={handleCardContextEdit}
-                                onChangeColor={handleCardContextColor}
-                                onDelete={handleCardContextDelete}
+                            <AddColumnDialog
+                                isOpen={isAddColumnDialogOpen}
+                                onClose={() => setIsAddColumnDialogOpen(false)}
+                                onAddColumn={handleAddColumn}
                             />
-                        </ContextMenuAnchor>
 
-                        {editCardId && board.tasks[editCardId] && (
-                            <CardSettingsDialog
-                                key={editCardId}
-                                isOpen={!!editCardId}
-                                onClose={() => setEditCardId(null)}
-                                cardId={editCardId}
-                                cardTitle={board.tasks[editCardId].title}
-                                cardDescription={board.tasks[editCardId].description}
-                                cardColor={board.tasks[editCardId].color || ''}
-                                yjsDoc={yjsDoc}
+                            {editColumnId && (
+                                <ColumnSettingsDialog
+                                    key={editColumnId}
+                                    isOpen={isColumnSettingsOpen}
+                                    onClose={() => setIsColumnSettingsOpen(false)}
+                                    columnId={editColumnId}
+                                    columnTitle={board.columns[editColumnId]?.title || ''}
+                                    cardCount={board.columns[editColumnId]?.taskIds.length || 0}
+                                    canWrite={canWrite}
+                                    yjsDoc={yjsDoc}
+                                />
+                            )}
+
+                            <ContextMenuAnchor contextMenu={cardContextMenu}>
+                                <NoteCardContextMenu
+                                    currentColor={cardContextMenu.item?.color}
+                                    onEdit={handleCardContextEdit}
+                                    onChangeColor={handleCardContextColor}
+                                    onDelete={handleCardContextDelete}
+                                />
+                            </ContextMenuAnchor>
+
+                            {editCardId && board.tasks[editCardId] && (
+                                <CardSettingsDialog
+                                    key={editCardId}
+                                    isOpen={!!editCardId}
+                                    onClose={() => setEditCardId(null)}
+                                    cardId={editCardId}
+                                    cardTitle={board.tasks[editCardId].title}
+                                    cardDescription={board.tasks[editCardId].description}
+                                    cardColor={board.tasks[editCardId].color || ''}
+                                    yjsDoc={yjsDoc}
+                                />
+                            )}
+
+                            <DeleteDialog
+                                open={!!deleteCardId}
+                                onOpenChange={(open) => !open && setDeleteCardId(null)}
+                                title="Delete Card"
+                                description="This will permanently delete the card. This action cannot be undone."
+                                onDelete={handleDeleteCard}
                             />
-                        )}
-
-                        <DeleteDialog
-                            open={!!deleteCardId}
-                            onOpenChange={(open) => !open && setDeleteCardId(null)}
-                            title="Delete Card"
-                            description="This will permanently delete the card. This action cannot be undone."
-                            onDelete={handleDeleteCard}
-                        />
+                        </div>
                     </div>
-                </div>
-            </div>
+                </LayoutColumn>
+            </ColumnLayout>
         </MediaResolverProvider>
     );
 }
