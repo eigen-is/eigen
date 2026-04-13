@@ -32,11 +32,12 @@ function DriveRoot() {
 
 function AuthenticatedDriveRoot() {
     const { user } = useAuth();
+    const isGuest = user?.role === 'guest';
     const mountId = DEFAULT_MOUNT_ID;
-    const { data: root, isLoading, error } = useRootFolder(user!.id, mountId);
-    const rootPath = root || null;
+    const { data: root, isLoading, error } = useRootFolder(isGuest ? '' : user!.id, mountId);
+    const rootPath = isGuest ? null : root || null;
 
-    if (isLoading) {
+    if (!isGuest && isLoading) {
         return (
             <AppShell appName="drive" rootRoute={Route}>
                 <LoadingState />
@@ -44,7 +45,7 @@ function AuthenticatedDriveRoot() {
         );
     }
 
-    if (error) {
+    if (!isGuest && error) {
         return (
             <AppShell appName="drive" rootRoute={Route}>
                 <ErrorState message="Error loading drive content" detail={error.message} />
