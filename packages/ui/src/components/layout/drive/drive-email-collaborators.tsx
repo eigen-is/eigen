@@ -1,4 +1,4 @@
-import { getDriveAppUrl, getDriveItemUrl } from '@workspace/lib/api';
+import { getDriveShareUrl } from '@workspace/lib/api';
 import { useEmailCollaborators } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
@@ -35,9 +35,7 @@ export function DriveEmailCollaborators({ path, open, onOpenChange }: DriveEmail
     }, [open, path.name]);
 
     const handleSend = () => {
-        const documentUrl =
-            getDriveItemUrl(path) ??
-            getDriveAppUrl(`shared/with-me?pid=${path.id}&uid=${path.ownerId}&mid=${path.mountId}`);
+        const documentUrl = getDriveShareUrl(path);
 
         emailMutation.mutate(
             {
