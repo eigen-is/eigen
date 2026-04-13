@@ -46,6 +46,7 @@ export function ShadowContent({
         // Add some base styles to maintain readability
         const styleElement = document.createElement('style');
         styleElement.textContent = `
+      :host { color-scheme: light; }
       .shadow-content-container {
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         color: #333;
