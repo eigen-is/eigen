@@ -20,9 +20,10 @@ type EigenDocRootProps = {
 
 export function EigenDocRoot({ config, rootRoute, isFullScreen = false }: EigenDocRootProps) {
     const { user } = useAuth();
+    const isGuest = user?.role === 'guest';
     const mountId = DEFAULT_MOUNT_ID;
-    const { data: root } = useRootFolder(user?.id || '', mountId);
-    const rootPath = root || null;
+    const { data: root } = useRootFolder(isGuest ? '' : user?.id || '', mountId);
+    const rootPath = isGuest ? null : root || null;
 
     if (!user) {
         return (
