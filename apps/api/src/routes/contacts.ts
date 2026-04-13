@@ -1,7 +1,7 @@
 import { Elysia, t } from 'elysia';
 import { enforceAvatarUpload } from '../lib/config/enforcement';
 import { getContacts } from '../lib/contacts/contacts';
-import { requireSelf } from '../lib/core/access';
+import { requireNonGuest, requireSelf } from '../lib/core/access';
 import { ApiError } from '../lib/core/errors';
 import { setCacheHeaders } from '../lib/core/http';
 import { betterAuth } from './auth';
@@ -39,6 +39,9 @@ const LabelSchema = t.Object({
 // All contacts routes require ownerId === user.id (contacts are personal-only, no shared access)
 export const contactsRouter = new Elysia({ name: 'contacts' })
     .use(betterAuth)
+    .onBeforeHandle(({ user }) => {
+        if (user) requireNonGuest(user);
+    })
     .get(
         '/contacts/:ownerId/contacts',
         async ({ params, user }) => {

@@ -11,6 +11,7 @@ export type ProtocolUser = {
 export async function verifyProtocolAuth(email: string, password: string): Promise<ProtocolUser> {
     const user = await getUserByEmail(email);
     if (!user) throw new ApiError(401, 'Unauthorized');
+    if (user.role === 'guest') throw new ApiError(403, 'Guests cannot access CalDAV');
 
     // 1. Try app password (API key)
     const keyResult = await auth.api.verifyApiKey({ body: { key: password } });

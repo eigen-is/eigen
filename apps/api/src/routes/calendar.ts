@@ -2,7 +2,7 @@ import type { CalendarEventOccurrence, CalendarItem, FreeBusyBlock } from '@work
 import { Elysia, t } from 'elysia';
 import { resolveCalendar, resolveCalendarForEvents, syncTeamCalendars } from '../lib/calendar/get-calendar';
 import { ApiError } from '../lib/core';
-import { requireSelf } from '../lib/core/access';
+import { requireNonGuest, requireSelf } from '../lib/core/access';
 import { getHome } from '../lib/home';
 import { pullCalendarShares } from '../lib/home/home-relay';
 import { getMemberships } from '../lib/user';
@@ -83,6 +83,9 @@ const UpdateSharedCalendarSchema = t.Object({
 // ownership, team membership, or individual calendar shares.
 export const calendarRouter = new Elysia({ name: 'calendar' })
     .use(betterAuth)
+    .onBeforeHandle(({ user }) => {
+        if (user) requireNonGuest(user);
+    })
 
     // --- Calendars ---
     .get(
