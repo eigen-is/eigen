@@ -1,7 +1,7 @@
 import type { EmailDraft } from '@workspace/lib/types/mail';
 import { Elysia, t } from 'elysia';
 import { contentDisposition, setCacheHeaders } from '../lib/core';
-import { requireLocalhost, requireNonGuest, requireSelf } from '../lib/core/access';
+import { requireLocalhost, requireSelf } from '../lib/core/access';
 import {
     mailboxCreate,
     mailboxDeliver,
@@ -53,9 +53,6 @@ const MailDraftSchema = t.Object({
 
 export const mailRouter = new Elysia({ name: 'mail' })
     .use(betterAuth)
-    .onBeforeHandle(({ user }) => {
-        if (user) requireNonGuest(user);
-    })
     // Local delivery endpoint — called by Postfix (or compatible MTA) to deliver incoming mail.
     // No auth: Postfix connects from localhost and is trusted.
     .post(
@@ -76,7 +73,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
             requireSelf(params.ownerId, user.id);
             return await mailboxesList(user);
         },
-        { auth: true },
+        { auth: true, noGuest: true },
     )
     .get(
         '/mail/:ownerId/mailbox/:mailboxPath',
@@ -84,7 +81,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
             requireSelf(params.ownerId, user.id);
             return await mailboxGet(user, params.mailboxPath);
         },
-        { auth: true },
+        { auth: true, noGuest: true },
     )
     .post(
         '/mail/:ownerId/mailbox',
@@ -94,6 +91,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
         },
         {
             auth: true,
+            noGuest: true,
             body: t.Object({ mailbox: t.String() }),
         },
     )
@@ -103,7 +101,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
             requireSelf(params.ownerId, user.id);
             return await mailboxExists(user, params.mailboxPath);
         },
-        { auth: true },
+        { auth: true, noGuest: true },
     )
     .get(
         '/mail/:ownerId/message/:id',
@@ -111,7 +109,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
             requireSelf(params.ownerId, user.id);
             return await messageGet(user, params.id);
         },
-        { auth: true },
+        { auth: true, noGuest: true },
     )
     .get(
         '/mail/:ownerId/message/:id/download',
@@ -123,7 +121,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
             set.headers['Content-Disposition'] = contentDisposition('attachment', `${params.id}.eml`);
             return await messageGetFile(user, params.id);
         },
-        { auth: true },
+        { auth: true, noGuest: true },
     )
     .delete(
         '/mail/:ownerId/message/:id',
@@ -131,7 +129,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
             requireSelf(params.ownerId, user.id);
             return await messageDelete(user, params.id);
         },
-        { auth: true },
+        { auth: true, noGuest: true },
     )
     .put(
         '/mail/:ownerId/message/move',
@@ -141,6 +139,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
         },
         {
             auth: true,
+            noGuest: true,
             body: t.Object({ messageId: t.String(), targetMailbox: t.String() }),
         },
     )
@@ -152,6 +151,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
         },
         {
             auth: true,
+            noGuest: true,
             body: t.Object({ messageId: t.String() }),
         },
     )
@@ -163,6 +163,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
         },
         {
             auth: true,
+            noGuest: true,
             body: t.Object({ messageId: t.String() }),
         },
     )
@@ -174,6 +175,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
         },
         {
             auth: true,
+            noGuest: true,
             body: t.Object({ messageId: t.String() }),
         },
     )
@@ -185,6 +187,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
         },
         {
             auth: true,
+            noGuest: true,
             body: t.Object({ messageId: t.String() }),
         },
     )
@@ -196,6 +199,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
         },
         {
             auth: true,
+            noGuest: true,
             body: t.Object({ messageId: t.String(), targetMailbox: t.String() }),
         },
     )
@@ -207,6 +211,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
         },
         {
             auth: true,
+            noGuest: true,
             body: t.Object({ mail: MailDraftSchema }),
         },
     )
@@ -218,6 +223,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
         },
         {
             auth: true,
+            noGuest: true,
             body: t.Object({ mail: MailDraftSchema }),
         },
     )
@@ -229,6 +235,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
         },
         {
             auth: true,
+            noGuest: true,
             body: t.Object({ read: t.Boolean() }),
         },
     )
@@ -240,6 +247,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
         },
         {
             auth: true,
+            noGuest: true,
             body: t.Object({ flagged: t.Boolean() }),
         },
     )
@@ -253,5 +261,5 @@ export const mailRouter = new Elysia({ name: 'mail' })
             const attachment = await messageGetAttachment(user, params.id, Number(params.index));
             return attachment?.content ?? null;
         },
-        { auth: true },
+        { auth: true, noGuest: true },
     );

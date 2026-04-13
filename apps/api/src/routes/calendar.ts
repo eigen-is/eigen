@@ -2,7 +2,7 @@ import type { CalendarEventOccurrence, CalendarItem, FreeBusyBlock } from '@work
 import { Elysia, t } from 'elysia';
 import { resolveCalendar, resolveCalendarForEvents, syncTeamCalendars } from '../lib/calendar/get-calendar';
 import { ApiError } from '../lib/core';
-import { requireNonGuest, requireSelf } from '../lib/core/access';
+import { requireSelf } from '../lib/core/access';
 import { getHome } from '../lib/home';
 import { pullCalendarShares } from '../lib/home/home-relay';
 import { getMemberships } from '../lib/user';
@@ -83,9 +83,6 @@ const UpdateSharedCalendarSchema = t.Object({
 // ownership, team membership, or individual calendar shares.
 export const calendarRouter = new Elysia({ name: 'calendar' })
     .use(betterAuth)
-    .onBeforeHandle(({ user }) => {
-        if (user) requireNonGuest(user);
-    })
 
     // --- Calendars ---
     .get(
@@ -94,7 +91,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             const cal = await resolveCalendar(user, params.ownerId);
             return cal.getCalendars();
         },
-        { auth: true },
+        { auth: true, noGuest: true },
     )
 
     .post(
@@ -103,7 +100,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             const cal = await resolveCalendar(user, params.ownerId);
             return cal.createCalendar(body);
         },
-        { body: CreateCalendarSchema, auth: true },
+        { body: CreateCalendarSchema, auth: true, noGuest: true },
     )
 
     .put(
@@ -112,7 +109,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             const cal = await resolveCalendar(user, params.ownerId);
             return await cal.updateCalendar(params.calId, body);
         },
-        { body: UpdateCalendarSchema, auth: true },
+        { body: UpdateCalendarSchema, auth: true, noGuest: true },
     )
 
     .delete(
@@ -122,7 +119,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             await cal.deleteCalendar(params.calId);
             return { success: true };
         },
-        { auth: true },
+        { auth: true, noGuest: true },
     )
 
     // --- Events ---
@@ -135,6 +132,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
         {
             params: t.Object({ ownerId: t.String(), from: t.Numeric(), to: t.Numeric() }),
             auth: true,
+            noGuest: true,
         },
     )
 
@@ -158,6 +156,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
         {
             params: t.Object({ ownerId: t.String(), calId: t.String(), from: t.Numeric(), to: t.Numeric() }),
             auth: true,
+            noGuest: true,
         },
     )
 
@@ -168,7 +167,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             if (permission !== 'write') throw new ApiError(403, 'Write permission required');
             return calendar.createEvent(params.calId, { ...body, createByUserId: user.id }, user);
         },
-        { body: CreateEventSchema, auth: true },
+        { body: CreateEventSchema, auth: true, noGuest: true },
     )
 
     .put(
@@ -178,7 +177,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             if (permission !== 'write') throw new ApiError(403, 'Write permission required');
             return calendar.updateEvent(params.id, body, user);
         },
-        { body: UpdateEventSchema, auth: true },
+        { body: UpdateEventSchema, auth: true, noGuest: true },
     )
 
     .delete(
@@ -189,7 +188,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             calendar.deleteEvent(params.id, user);
             return { success: true };
         },
-        { auth: true },
+        { auth: true, noGuest: true },
     )
 
     // --- RSVP ---
@@ -209,6 +208,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
                 remove: t.Optional(t.Boolean()),
             }),
             auth: true,
+            noGuest: true,
         },
     )
 
@@ -220,7 +220,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             if (!calData) throw new ApiError(404, 'Calendar not found');
             return { ownerUserId: params.ownerId, shares: permission === 'write' ? calData.shares || [] : [] };
         },
-        { auth: true },
+        { auth: true, noGuest: true },
     )
 
     // Pull calendars that ownerId has shared with the calling user.
@@ -232,7 +232,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             const memberships = await getMemberships(user.id);
             return pullCalendarShares(params.ownerId, user.email, memberships.teamIds);
         },
-        { auth: true },
+        { auth: true, noGuest: true },
     )
 
     // --- Shared calendars ---
@@ -244,7 +244,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             requireSelf(params.ownerId, user.id);
             return syncTeamCalendars(user);
         },
-        { auth: true },
+        { auth: true, noGuest: true },
     )
 
     .put(
@@ -254,7 +254,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             const cal = await resolveCalendar(user, user.id);
             return cal.updateSharedCalendar(params.id, body);
         },
-        { body: UpdateSharedCalendarSchema, auth: true },
+        { body: UpdateSharedCalendarSchema, auth: true, noGuest: true },
     )
 
     .delete(
@@ -265,5 +265,5 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             cal.deleteSharedCalendar(params.id);
             return { success: true };
         },
-        { auth: true },
+        { auth: true, noGuest: true },
     );
