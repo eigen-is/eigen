@@ -55,6 +55,29 @@ export function ShadowContent({
         // Add content based on type
         if (contentType === 'html') {
             contentContainer.innerHTML = content;
+
+            // Strip email @media (prefers-color-scheme) rules that conflict with app theme.
+            // prefers-color-scheme checks the OS preference, not the app theme, so emails
+            // can apply dark-mode styles even when the app is in light mode (and vice versa).
+            const isDark = document.documentElement.classList.contains('dark');
+            const removeScheme = isDark ? 'light' : 'dark';
+            for (const style of contentContainer.querySelectorAll('style')) {
+                try {
+                    const sheet = style.sheet;
+                    if (!sheet) continue;
+                    for (let i = sheet.cssRules.length - 1; i >= 0; i--) {
+                        const rule = sheet.cssRules[i];
+                        if (
+                            rule instanceof CSSMediaRule &&
+                            rule.conditionText.includes(`prefers-color-scheme: ${removeScheme}`)
+                        ) {
+                            sheet.deleteRule(i);
+                        }
+                    }
+                } catch {
+                    // CORS or parsing errors on inline styles — safe to ignore
+                }
+            }
         } else {
             contentContainer.textContent = content;
             contentContainer.style.whiteSpace = 'pre-wrap';
