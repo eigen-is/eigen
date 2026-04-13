@@ -357,7 +357,6 @@ export function DriveLayout({
                     open={dialogs.share.open}
                     onOpenChange={dialogs.share.setOpen}
                     path={dialogs.share.item}
-                    canWrite={true}
                 />
             )}
 
@@ -365,7 +364,10 @@ export function DriveLayout({
                 <DriveEmailCollaborators
                     path={dialogs.email.item}
                     open={dialogs.email.open}
-                    onOpenChange={dialogs.email.setOpen}
+                    onOpenChange={(open) => {
+                        if (!open) dialogs.email.closeDialog();
+                        else dialogs.email.setOpen(open);
+                    }}
                 />
             )}
 

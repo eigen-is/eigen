@@ -58,12 +58,7 @@ function CollaborativeTextEditor() {
                     initialChatName={chat}
                 />
             </div>
-            <DriveAccessDialog
-                open={accessDialogOpen}
-                onOpenChange={setAccessDialogOpen}
-                path={docInfo.path}
-                canWrite={docInfo.canWrite}
-            />
+            <DriveAccessDialog open={accessDialogOpen} onOpenChange={setAccessDialogOpen} path={docInfo.path} />
         </>
     );
 }

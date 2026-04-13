@@ -578,7 +578,8 @@ export default class Drive {
         const domain = getDomain();
         try {
             const parsed = new URL(documentUrl);
-            if (parsed.hostname !== domain && !parsed.hostname.endsWith(`.${domain}`)) {
+            const host = parsed.hostname;
+            if (host !== domain && !host.endsWith(`.${domain}`) && host !== 'localhost') {
                 throw new ApiError(400, 'Invalid document URL');
             }
         } catch (e) {
