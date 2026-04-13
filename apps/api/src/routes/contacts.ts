@@ -1,7 +1,7 @@
 import { Elysia, t } from 'elysia';
 import { enforceAvatarUpload } from '../lib/config/enforcement';
 import { getContacts } from '../lib/contacts/contacts';
-import { requireNonGuest, requireSelf } from '../lib/core/access';
+import { requireSelf } from '../lib/core/access';
 import { ApiError } from '../lib/core/errors';
 import { setCacheHeaders } from '../lib/core/http';
 import { betterAuth } from './auth';
@@ -39,16 +39,13 @@ const LabelSchema = t.Object({
 // All contacts routes require ownerId === user.id (contacts are personal-only, no shared access)
 export const contactsRouter = new Elysia({ name: 'contacts' })
     .use(betterAuth)
-    .onBeforeHandle(({ user }) => {
-        if (user) requireNonGuest(user);
-    })
     .get(
         '/contacts/:ownerId/contacts',
         async ({ params, user }) => {
             requireSelf(params.ownerId, user.id);
             return await (await getContacts(user)).getContacts();
         },
-        { auth: true },
+        { auth: true, noGuest: true },
     )
     .get(
         '/contacts/:ownerId/contacts/:id',
@@ -56,7 +53,7 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
             requireSelf(params.ownerId, user.id);
             return await (await getContacts(user)).getContactById(params.id);
         },
-        { auth: true },
+        { auth: true, noGuest: true },
     )
     .post(
         '/contacts/:ownerId/contacts',
@@ -67,6 +64,7 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
         {
             body: ContactSchema,
             auth: true,
+            noGuest: true,
         },
     )
     .put(
@@ -78,6 +76,7 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
         {
             body: ContactSchema,
             auth: true,
+            noGuest: true,
         },
     )
     .delete(
@@ -86,7 +85,7 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
             requireSelf(params.ownerId, user.id);
             return await (await getContacts(user)).deleteContact(params.id);
         },
-        { auth: true },
+        { auth: true, noGuest: true },
     )
     .get(
         '/contacts/:ownerId/labels',
@@ -94,7 +93,7 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
             requireSelf(params.ownerId, user.id);
             return await (await getContacts(user)).getLabels();
         },
-        { auth: true },
+        { auth: true, noGuest: true },
     )
     .post(
         '/contacts/:ownerId/labels',
@@ -105,6 +104,7 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
         {
             body: LabelSchema,
             auth: true,
+            noGuest: true,
         },
     )
     .put(
@@ -116,6 +116,7 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
         {
             body: LabelSchema,
             auth: true,
+            noGuest: true,
         },
     )
     .delete(
@@ -124,7 +125,7 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
             requireSelf(params.ownerId, user.id);
             return await (await getContacts(user)).deleteLabel(params.id);
         },
-        { auth: true },
+        { auth: true, noGuest: true },
     )
     .post(
         '/contacts/:ownerId/avatar',
@@ -138,6 +139,7 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
                 file: t.File({ format: 'image/*' }),
             }),
             auth: true,
+            noGuest: true,
         },
     )
     .get(
@@ -150,7 +152,7 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
             set.headers['Content-Type'] = 'image/webp';
             return new Response(data);
         },
-        { auth: true },
+        { auth: true, noGuest: true },
     )
     .get(
         '/contacts/:ownerId/me',
@@ -158,5 +160,5 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
             requireSelf(params.ownerId, user.id);
             return await (await getContacts(user)).getMe();
         },
-        { auth: true },
+        { auth: true, noGuest: true },
     );
