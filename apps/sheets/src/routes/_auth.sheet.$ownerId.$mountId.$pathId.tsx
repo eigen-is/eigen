@@ -55,7 +55,12 @@ function SheetView() {
                 onAccessDialogOpen={handleAccessDialogOpen}
                 initialChatName={chat}
             />
-            <DriveAccessDialog path={path} open={accessDialogOpen} onOpenChange={setAccessDialogOpen} />
+            <DriveAccessDialog
+                path={path}
+                open={accessDialogOpen}
+                onOpenChange={setAccessDialogOpen}
+                canWrite={canWrite}
+            />
         </>
     );
 }
