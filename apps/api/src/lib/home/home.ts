@@ -76,6 +76,10 @@ export class Home {
         return this._notifications;
     }
 
+    get hasCalendar(): boolean {
+        return !!this._calendar;
+    }
+
     public async init(autoCreateDefaultMount: boolean = false) {
         if (this.initialized) {
             return this;
