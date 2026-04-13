@@ -137,7 +137,7 @@ export const guestAuthRouter = new Elysia({ name: 'guest-auth' })
                 await reconcileSharesForNewUser(guestUser);
             }
 
-            // Upsert credential account with current password so signInEmail always works
+            // Upsert credential account so better-auth's sign-in handler works
             const hashedPassword = await hashPassword(password);
             const existingAccount = db.select().from(account).where(eq(account.userId, guestUser.id)).get();
             if (existingAccount) {
@@ -159,27 +159,15 @@ export const guestAuthRouter = new Elysia({ name: 'guest-auth' })
                     .run();
             }
 
-            // Use better-auth's signInEmail to get a properly signed session cookie
-            const signIn = await auth.api.signInEmail({
-                body: { email, password },
-                returnHeaders: true,
-            });
-
-            // Forward better-auth's set-cookie header verbatim to preserve signing
-            const setCookieHeader = signIn.headers.get('set-cookie');
-            if (setCookieHeader) {
-                set.headers['set-cookie'] = setCookieHeader;
-            }
-
-            return {
-                success: true,
-                user: {
-                    id: guestUser.id,
-                    email: guestUser.email,
-                    name: guestUser.name,
-                    role: guestUser.role,
-                },
-            };
+            // Sign in through better-auth's full handler pipeline — this produces
+            // a Response with correctly signed session cookies, no manual forwarding.
+            return auth.handler(
+                new Request('http://localhost/auth/sign-in/email', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password }),
+                }),
+            );
         },
         { body: verifyBody },
     );
