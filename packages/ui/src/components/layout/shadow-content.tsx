@@ -56,27 +56,19 @@ export function ShadowContent({
         if (contentType === 'html') {
             contentContainer.innerHTML = content;
 
-            // Strip email @media (prefers-color-scheme) rules that conflict with app theme.
-            // prefers-color-scheme checks the OS preference, not the app theme, so emails
-            // can apply dark-mode styles even when the app is in light mode (and vice versa).
-            const isDark = document.documentElement.classList.contains('dark');
-            const removeScheme = isDark ? 'light' : 'dark';
+            // Strip all color properties from email HTML so Eigen's own
+            // theme colors apply. Emails embed colors for both light and
+            // dark schemes (via inline styles and @media prefers-color-scheme),
+            // which conflict with the app theme.
+            for (const el of contentContainer.querySelectorAll<HTMLElement>('[style]')) {
+                el.style.removeProperty('color');
+                el.style.removeProperty('background-color');
+            }
             for (const style of contentContainer.querySelectorAll('style')) {
-                try {
-                    const sheet = style.sheet;
-                    if (!sheet) continue;
-                    for (let i = sheet.cssRules.length - 1; i >= 0; i--) {
-                        const rule = sheet.cssRules[i];
-                        if (
-                            rule instanceof CSSMediaRule &&
-                            rule.conditionText.includes(`prefers-color-scheme: ${removeScheme}`)
-                        ) {
-                            sheet.deleteRule(i);
-                        }
-                    }
-                } catch {
-                    // CORS or parsing errors on inline styles — safe to ignore
-                }
+                if (!style.textContent) continue;
+                style.textContent = style.textContent
+                    .replace(/background-color\s*:\s*[^;}]+[;}]?/gi, '')
+                    .replace(/(?<![\w-])color\s*:\s*[^;}]+[;}]?/gi, '');
             }
         } else {
             contentContainer.textContent = content;
