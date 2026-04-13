@@ -37,6 +37,7 @@ export async function getHome(ownerId: string): Promise<Home> {
                 case 'user': {
                     const user = await getUserById(parsed.id);
                     if (!user) {
+                        console.error(`[getHome] User not found for id=${parsed.id}, ownerId=${ownerId}`);
                         throw new ApiError(404, 'User not found');
                     }
                     if (user.role === 'guest') {

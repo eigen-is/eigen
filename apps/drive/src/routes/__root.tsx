@@ -5,7 +5,7 @@ import type { DriveContextType } from '@workspace/lib/types/drive';
 import { ErrorState, LoadingState } from '@workspace/ui';
 import { AppShell } from '@workspace/ui/components/layout/app/app-shell.tsx';
 import { createContext } from 'react';
-import { DriveSidebar } from '../components/drive/drive-sidebar';
+import { DriveSidebar, GuestDriveSidebar } from '../components/drive/drive-sidebar';
 
 export const DriveContext = createContext<DriveContextType>({
     rootPath: null,
@@ -57,9 +57,13 @@ function AuthenticatedDriveRoot() {
         <AppShell
             appName="drive"
             rootRoute={Route}
-            sidebar={({ condensed, isMobile, onClose }) => (
-                <DriveSidebar condensed={condensed} isMobile={isMobile} onClose={onClose} rootPath={rootPath} />
-            )}
+            sidebar={({ condensed, isMobile, onClose }) =>
+                isGuest ? (
+                    <GuestDriveSidebar condensed={condensed} isMobile={isMobile} onClose={onClose} />
+                ) : (
+                    <DriveSidebar condensed={condensed} isMobile={isMobile} onClose={onClose} rootPath={rootPath} />
+                )
+            }
         >
             <DriveContext.Provider value={{ rootPath, mountId }}>
                 <Outlet />
