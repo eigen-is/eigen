@@ -1,4 +1,4 @@
-import { randomUUID } from 'crypto';
+import { randomUUID } from 'node:crypto';
 import { and, eq, like, lt } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';
 import { session, verification } from '../../auth-schema.ts';
