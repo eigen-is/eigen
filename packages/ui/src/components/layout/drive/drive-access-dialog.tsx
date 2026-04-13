@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@workspace/ui/
 import { DriveAccessList } from '@workspace/ui/components/layout/drive/drive-access-list';
 import { DriveAccessListEdit } from '@workspace/ui/components/layout/drive/drive-access-list-edit';
 import { DriveEmailCollaborators } from '@workspace/ui/components/layout/drive/drive-email-collaborators';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 export type DriveAccessDialogProps = {
     open: boolean;
@@ -18,6 +18,11 @@ export type DriveAccessDialogProps = {
 export function DriveAccessDialog({ open, onOpenChange, path, prefillEmail, canWrite }: DriveAccessDialogProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [emailPath, setEmailPath] = useState<DrivePath | null>(null);
+
+    useEffect(() => {
+        setEmailPath(null);
+    }, [path]);
+
     const { user } = useAuth();
     const updateACL = useUpdateACL(path?.ownerId || '', path?.mountId, user?.id);
     const isEffectiveOwner = useIsEffectiveOwner(path?.ownerId || '');
@@ -74,7 +79,7 @@ export function DriveAccessDialog({ open, onOpenChange, path, prefillEmail, canW
             {emailPath && (
                 <DriveEmailCollaborators
                     path={emailPath}
-                    open={!!emailPath}
+                    open={true}
                     onOpenChange={(open) => {
                         if (!open) setEmailPath(null);
                     }}
