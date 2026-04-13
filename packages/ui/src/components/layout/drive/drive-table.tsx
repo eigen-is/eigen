@@ -22,6 +22,7 @@ import {
     ExternalLink,
     Eye,
     FileDown,
+    Mail,
     Pencil,
     Trash2,
     UserRoundPlus,
@@ -56,6 +57,7 @@ export type DriveTableProps = {
     onMove?: (item: DrivePath, targetItemId: string) => void;
     onExport?: (item: DrivePath, format: string) => void;
     onQuickLook?: (item: DrivePath) => void;
+    onEmailCollaborators?: (item: DrivePath) => void;
     sortFn?: (a: DrivePath, b: DrivePath) => number;
     allowDelete?: boolean;
     ancestorBreadcrumb?: DrivePath[];
@@ -78,6 +80,7 @@ export function DriveTable({
     onMove,
     onExport,
     onQuickLook,
+    onEmailCollaborators,
     sortFn = defaultDriveSort,
     allowDelete = false,
     ancestorBreadcrumb,
@@ -409,6 +412,18 @@ export function DriveTable({
                     >
                         <UserRoundPlus className="h-4 w-4 mr-2" />
                         Share
+                    </DropdownMenuItem>
+                )}
+                {isSingleSelect && onEmailCollaborators && contextMenu.item && (
+                    <DropdownMenuItem
+                        onClick={() => {
+                            onEmailCollaborators(contextMenu.item!);
+                            contextMenu.close();
+                        }}
+                        className="flex items-center"
+                    >
+                        <Mail className="h-4 w-4 mr-2" />
+                        Email collaborators
                     </DropdownMenuItem>
                 )}
                 {isSingleSelect && onRename && (
