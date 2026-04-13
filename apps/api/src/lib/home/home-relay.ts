@@ -9,14 +9,17 @@
 // deployment, only this file changes: sendToHome() routes to the correct
 // server (or enqueues a message), and pull functions become remote API calls.
 
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import type { Attendee, CalendarEvent, CalendarItem, CalendarShare } from '@workspace/lib/types/calendar';
 import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
 import type { TeamSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import type { User } from 'better-auth/types';
-import type { BunFile } from 'bun';
 import type { InvitationUpdatePayload, ReceiveInvitationPayload } from '../calendar/calendar';
+import { getAvatarsDir } from '../config/paths';
 import type { PersistInput } from '../notification-center/notification-center';
+import { updateUser } from '../user/';
 import { atHome, getHome } from './get-home';
 
 export type HomeMessage =
@@ -137,14 +140,21 @@ export type TeamQuotaOverrides = {
     defaultMountMaxSizeMB?: number;
 };
 
-// TODO: avatars are stored per-home but served publicly — consider moving to shared/global storage
-export async function pullAvatarFile(userId: string, filename: string): Promise<BunFile | null> {
-    const home = await getHome(userId);
-    const file = home.fs.file(`eigen.contacts/avatars/${filename}`);
-    if (await file.exists()) {
-        return file;
+/**
+ * Home → server: sync public profile (name + avatar).
+ * Today this is a direct in-process call. In a sharded deployment,
+ * this becomes an RPC to the central server.
+ */
+export async function pushUserProfile(userId: string, name: string, avatarWebP: Buffer | null): Promise<void> {
+    const avatarPath = path.join(getAvatarsDir(), `${userId}.webp`);
+
+    if (avatarWebP) {
+        await Bun.write(avatarPath, avatarWebP);
+    } else if (fs.existsSync(avatarPath)) {
+        fs.unlinkSync(avatarPath);
     }
-    return null;
+
+    await updateUser({ id: userId } as User, name, avatarWebP ? `server/avatars/${userId}.webp` : '');
 }
 
 export async function pullTeamQuotaOverrides(teamOwnerId: string): Promise<TeamQuotaOverrides> {
