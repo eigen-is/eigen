@@ -24,6 +24,14 @@ export function getServerDataPath(filename?: string): string {
     return filename ? path.join(serverData, filename) : serverData;
 }
 
+export function getAvatarsDir(): string {
+    const avatarsDir = path.join(getDataRoot(), 'server', 'avatars');
+    if (!fs.existsSync(avatarsDir)) {
+        fs.mkdirSync(avatarsDir, { recursive: true });
+    }
+    return avatarsDir;
+}
+
 export function getUserHomePath(userId: string): string {
     return path.join(getDataRoot(), 'home', userId);
 }
