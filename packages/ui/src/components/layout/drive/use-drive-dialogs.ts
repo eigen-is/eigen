@@ -8,6 +8,7 @@ export type DriveDialogsState = {
     delete: { open: boolean; items: DrivePath[] };
     rename: { open: boolean; item: DrivePath | null };
     share: { open: boolean; item: DrivePath | null };
+    email: { open: boolean; item: DrivePath | null };
     upload: { open: boolean; files: File[] };
 };
 
@@ -34,6 +35,9 @@ export function useDriveDialogs() {
 
     const [shareOpen, setShareOpen] = useState(false);
     const [shareItem, setShareItem] = useState<DrivePath | null>(null);
+
+    const [emailOpen, setEmailOpen] = useState(false);
+    const [emailItem, setEmailItem] = useState<DrivePath | null>(null);
 
     const [uploadOpen, setUploadOpen] = useState(false);
     const [uploadFiles, setUploadFiles] = useState<File[]>([]);
@@ -63,6 +67,15 @@ export function useDriveDialogs() {
     const closeShare = useCallback(() => {
         setShareOpen(false);
         setShareItem(null);
+    }, []);
+
+    const openEmail = useCallback((item: DrivePath) => {
+        setEmailItem(item);
+        setEmailOpen(true);
+    }, []);
+    const closeEmail = useCallback(() => {
+        setEmailOpen(false);
+        setEmailItem(null);
     }, []);
 
     const openUpload = useCallback((files: File[] = []) => {
@@ -101,6 +114,13 @@ export function useDriveDialogs() {
             setOpen: setShareOpen,
             openDialog: openShare,
             closeDialog: closeShare,
+        },
+        email: {
+            open: emailOpen,
+            item: emailItem,
+            setOpen: setEmailOpen,
+            openDialog: openEmail,
+            closeDialog: closeEmail,
         },
         upload: {
             open: uploadOpen,
