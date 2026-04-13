@@ -13,9 +13,9 @@ export async function getUserById(id: string) {
     return (await db.select().from(user).where(eq(user.id, id)).get()) as User | null;
 }
 
-export async function updateUser(me: User, name: string, image: string) {
+export async function updateUser(userId: string, name: string, image: string) {
     const db = getAuthDrizzleDb();
-    return await db.update(user).set({ name, image }).where(eq(user.id, me.id));
+    return await db.update(user).set({ name, image }).where(eq(user.id, userId));
 }
 
 export type Memberships = {
