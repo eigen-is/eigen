@@ -57,6 +57,7 @@ export async function sendToHome(targetUserId: string, message: HomeMessage): Pr
             await home.drive.receiveACLChange(message.path, message.acl, message.actorEmail);
             break;
         case 'calendar:share':
+            if (!home.hasCalendar) break;
             if (message.permission) {
                 home.calendar.receiveShare(
                     message.ownerId,
@@ -71,15 +72,19 @@ export async function sendToHome(targetUserId: string, message: HomeMessage): Pr
             }
             break;
         case 'calendar:invitation':
+            if (!home.hasCalendar) break;
             home.calendar.receiveInvitation(message.payload);
             break;
         case 'calendar:invitation-update':
+            if (!home.hasCalendar) break;
             home.calendar.receiveInvitationUpdate(message.orgEventId, message.orgUserId, message.payload);
             break;
         case 'calendar:invitation-removal':
+            if (!home.hasCalendar) break;
             home.calendar.removeInvitation(message.orgEventId, message.orgUserId);
             break;
         case 'calendar:rsvp':
+            if (!home.hasCalendar) break;
             if (message.recurrenceDate) {
                 home.calendar.rsvpForOccurrence(
                     message.eventId,
