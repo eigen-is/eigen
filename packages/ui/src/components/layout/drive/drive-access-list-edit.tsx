@@ -18,7 +18,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Separator } from '@workspace/ui/components/separator';
 import { cn } from '@workspace/ui/lib/utils';
-import { Link, Lock, Plus, Unlock, Users } from 'lucide-react';
+import { Link, Lock, Mail, Plus, Unlock, Users } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ContactAutosuggest } from '../contacts/contact-autosuggest';
@@ -30,6 +30,7 @@ export type DriveAccessListEditProps = {
     path: DrivePath;
     onSave: (updatedAcl: DriveACL[], visibility: DriveVisibility, sharingRestricted?: boolean) => void;
     onCancel?: () => void;
+    onEmailClick?: () => void;
     className?: string;
     prefillEmail?: string;
 };
@@ -40,7 +41,14 @@ function getShareUrl(path: DrivePath): string {
     );
 }
 
-export function DriveAccessListEdit({ path, onSave, onCancel, className, prefillEmail }: DriveAccessListEditProps) {
+export function DriveAccessListEdit({
+    path,
+    onSave,
+    onCancel,
+    onEmailClick,
+    className,
+    prefillEmail,
+}: DriveAccessListEditProps) {
     const [pendingChanges, setPendingChanges] = useState(false);
     const [newContactInput, setNewContactInput] = useState('');
     const inputRef = useRef<HTMLInputElement>(null);
@@ -354,12 +362,22 @@ export function DriveAccessListEdit({ path, onSave, onCancel, className, prefill
                     icon={Link}
                     tooltipText="Copy link"
                     variant="outline"
-                    className={cn(!myTeams?.length && 'mr-auto')}
+                    className={cn(!onEmailClick && !myTeams?.length && 'mr-auto')}
                     onClick={() => {
                         navigator.clipboard.writeText(getShareUrl(path));
                         toast.success('Link copied to clipboard');
                     }}
                 />
+                {onEmailClick && (
+                    <TooltipButton
+                        icon={Mail}
+                        tooltipText={pendingChanges ? 'Save changes first' : 'Email collaborators'}
+                        variant="outline"
+                        disabled={pendingChanges}
+                        className={cn(!myTeams?.length && 'mr-auto')}
+                        onClick={onEmailClick}
+                    />
+                )}
                 {myTeams && myTeams.length > 0 && (
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
