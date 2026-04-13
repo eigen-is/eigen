@@ -84,7 +84,7 @@ export const guestAuthRouter = new Elysia({ name: 'guest-auth' })
     )
     .post(
         '/guest-auth/verify-otp',
-        async ({ body, set }) => {
+        async ({ body }) => {
             const email = body.email.toLowerCase().trim();
             const identifier = `guest-otp:${email}`;
             const db = getAuthDrizzleDb();
