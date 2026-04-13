@@ -31,6 +31,8 @@ Beyond new apps, a lot happened under the hood:
 - **Document export**: docs export to DOCX, PDF and HTML. Slides export to PDF and HTML.
 - **Teams**: shared drives, team calendars, and a share dialog that knows about your team members.
 - **Notifications**: unread indicators, deep linking to comments, activity badges.
+- **S3 storage mounts**: file storage can now be backed by S3-compatible services, so you can use external
+  object storage instead of (or alongside) local disk.
 - **Scaling**: groundwork for multi-process scaling, not fully implemented yet.
 
 The original architecture held up well. Per-user SQLite databases, file-based storage, Yjs for real-time collaboration.
@@ -74,4 +76,4 @@ developers right now. I'm looking for people who can help figure out the right h
 And just to be clear: I'm not attached to keeping ownership and I'm not looking for money. I want Eigen to exist and
 to work.
 
-[reinder@eigen.is](mailto:reinder@eigen.is) · [Bluesky](https://bsky.app/profile/reindernijhoff.net) · [reindernijjhoff.net](https://reindernijhoff.net/)
+[reinder@eigen.is](mailto:reinder@eigen.is) · [Bluesky](https://bsky.app/profile/reindernijhoff.net) · [reindernijhoff.net](https://reindernijhoff.net/)

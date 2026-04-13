@@ -3,6 +3,7 @@ import {locale, updateItem} from "../../core";
 import {WorkbookContext} from "../../context";
 import {useDialog} from "../../hooks/useDialog";
 import {ConditionRules} from "./ConditionRules";
+import {ManageRules} from "./ManageRules";
 import {
     DropdownMenuItem,
     DropdownMenuSeparator,
@@ -95,18 +96,19 @@ export function ConditionalFormat({
                             {conditionformat[name]}
                         </DropdownMenuSubTrigger>
                         <DropdownMenuSubContent>
-                            {["deleteSheetRule"].map((v) => (
-                                <DropdownMenuItem
-                                    key={v}
-                                    onClick={() => {
-                                        setContext((ctx) => {
-                                            updateItem(ctx, "delSheet");
-                                        });
-                                    }}
-                                >
-                                    {(conditionformat as any)[v]}
-                                </DropdownMenuItem>
-                            ))}
+                            <DropdownMenuItem
+                                onClick={() => {
+                                    setContext((ctx) => {
+                                        updateItem(ctx, "delSheet");
+                                    });
+                                }}
+                            >
+                                {conditionformat.deleteSheetRule}
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator/>
+                            <DropdownMenuItem onClick={() => showDialog(<ManageRules/>)}>
+                                {conditionformat.manageRules}
+                            </DropdownMenuItem>
                         </DropdownMenuSubContent>
                     </DropdownMenuSub>
                 );

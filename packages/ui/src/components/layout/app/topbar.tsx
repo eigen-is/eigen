@@ -5,7 +5,7 @@ import { apps } from '@workspace/lib/apps.ts';
 import { useAuth } from '@workspace/lib/auth/auth-context.tsx';
 import { useUnreadNotificationCount } from '@workspace/lib/notification';
 import { useSpaceSettings, useUpdateSpaceSettings } from '@workspace/lib/space';
-import { LogOut, Menu, Palette, Settings, Shield, UserRound } from 'lucide-react';
+import { LogOut, Menu, Palette, Settings, Shield, TriangleAlert, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '../../button.tsx';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../dialog.tsx';
@@ -168,6 +168,7 @@ export function Topbar({ rootRoute }: TopbarProps) {
         document.title = unreadCount > 0 ? `(${unreadCount}) ${base}` : base;
     }, [appName, documentTitle, unreadCount]);
 
+    const [testingDialogOpen, setTestingDialogOpen] = useState(false);
     const showBurger = isMobile && sidebarMode !== 'none';
 
     return (
@@ -195,6 +196,36 @@ export function Topbar({ rootRoute }: TopbarProps) {
                 </div>
 
                 <div className="flex items-center gap-1 px-4 shrink-0">
+                    <Button
+                        variant="ghost"
+                        className="relative h-8 w-8 rounded-full p-0"
+                        onClick={() => setTestingDialogOpen(true)}
+                    >
+                        <span className="flex items-center justify-center h-6 w-6 rounded-full bg-red-500 text-white">
+                            <TriangleAlert className="h-2 w-2" />
+                        </span>
+                    </Button>
+                    <Dialog open={testingDialogOpen} onOpenChange={setTestingDialogOpen}>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>Testing Phase</DialogTitle>
+                                <DialogDescription>
+                                    Not a launch, not a beta. Eigen is in a testing phase: a few weeks of real use by
+                                    real people to find bugs, fix what's broken and figure out what to build next.{' '}
+                                    <a
+                                        href="https://eigen.is/blog/eigen-six-months-later"
+                                        className="underline text-foreground"
+                                    >
+                                        Read more
+                                    </a>
+                                    .
+                                </DialogDescription>
+                            </DialogHeader>
+                            <DialogFooter>
+                                <Button onClick={() => setTestingDialogOpen(false)}>OK</Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
                     <NotificationBell />
                     <UserDropdown rootRoute={rootRoute} />
                 </div>

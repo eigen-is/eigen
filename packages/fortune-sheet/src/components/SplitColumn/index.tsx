@@ -64,7 +64,7 @@ export function SplitColumn() {
     }, [context, splitOperate]);
 
     return (
-        <div className="min-w-[500px] select-none [&_table]:border-collapse [&_td]:border [&_td]:border-[#333]">
+        <div className="select-none [&_table]:border-collapse [&_td]:border [&_td]:border-[#333]">
             <div className="text-base">{splitText.splitTextTitle}</div>
             <div className="mt-2.5">{splitText.splitDelimiters}</div>
             <div className="relative border border-[#dfdfdf] p-1.5 my-1.5" ref={splitSymbols}>

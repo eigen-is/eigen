@@ -121,7 +121,7 @@ export function FormulaSearch({
     }, [_onCancel, cellInput, setContext]);
 
     return (
-        <div className="flex flex-col min-h-0 flex-1 gap-4 min-w-[500px]">
+        <div className="flex flex-col min-h-0 flex-1 gap-4">
             <DialogHeader>
                 <DialogTitle>{formulaMore.selectFunctionTitle}</DialogTitle>
             </DialogHeader>

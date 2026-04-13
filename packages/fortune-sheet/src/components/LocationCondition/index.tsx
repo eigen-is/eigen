@@ -138,7 +138,7 @@ export function LocationCondition() {
     );
 
     return (
-        <div className="min-w-[500px]">
+        <div>
             <div className="text-base leading-[48px]">{findAndReplace.location}</div>
             <div className="border border-[#dfdfdf] p-2.5 text-sm">
                 {/* Constants */}
