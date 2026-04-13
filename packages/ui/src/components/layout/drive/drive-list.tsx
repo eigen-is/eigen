@@ -170,6 +170,7 @@ type DriveListProps = CreateCallbacks & {
     currentPath?: DrivePath | null;
     onDelete?: (paths: DrivePath[]) => void;
     onShareClick?: (item: DrivePath) => void;
+    onEmailCollaborators?: (item: DrivePath) => void;
     onDownload?: (path: DrivePath) => void;
     onExport?: (item: DrivePath, format: string) => void;
     getItemHref?: (item: DrivePath) => string | undefined;
@@ -199,6 +200,7 @@ export function DriveList({
     onDelete,
     currentPath,
     onShareClick,
+    onEmailCollaborators,
     onCreateDoc,
     onCreateStickies,
     onCreateChat,
@@ -333,6 +335,7 @@ export function DriveList({
                 onItemClick={handleRowClick}
                 onItemOpen={onRowActivate}
                 onShareClick={onShareClick}
+                onEmailCollaborators={onEmailCollaborators}
                 getFileIcon={getFileIcon}
                 getItemHref={getItemHref}
                 onDownload={onDownload}
