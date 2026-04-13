@@ -56,19 +56,18 @@ export function ShadowContent({
         if (contentType === 'html') {
             contentContainer.innerHTML = content;
 
-            // Strip all color properties from email HTML so Eigen's own
-            // theme colors apply. Emails embed colors for both light and
-            // dark schemes (via inline styles and @media prefers-color-scheme),
-            // which conflict with the app theme.
-            for (const el of contentContainer.querySelectorAll<HTMLElement>('[style]')) {
-                el.style.removeProperty('color');
-                el.style.removeProperty('background-color');
-            }
+            // Strip @media (prefers-color-scheme) blocks that conflict with the app theme.
+            // These media queries check the OS preference, not the app's theme, so they can
+            // apply e.g. light text on a light background when OS is dark but app is light.
+            const isDark = document.documentElement.classList.contains('dark');
+            const removeScheme = isDark ? 'light' : 'dark';
+            const mqRegex = new RegExp(
+                `@media\\s*\\([^)]*prefers-color-scheme:\\s*${removeScheme}[^)]*\\)\\s*\\{[^{}]*(?:\\{[^{}]*\\}[^{}]*)*\\}`,
+                'gi',
+            );
             for (const style of contentContainer.querySelectorAll('style')) {
                 if (!style.textContent) continue;
-                style.textContent = style.textContent
-                    .replace(/background-color\s*:\s*[^;}]+[;}]?/gi, '')
-                    .replace(/(?<![\w-])color\s*:\s*[^;}]+[;}]?/gi, '');
+                style.textContent = style.textContent.replace(mqRegex, '');
             }
         } else {
             contentContainer.textContent = content;
