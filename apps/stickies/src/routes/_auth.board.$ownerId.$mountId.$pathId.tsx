@@ -49,7 +49,12 @@ function StickiesRoute() {
                 onAccessDialogOpen={handleAccessDialogOpen}
                 initialChatName={chat}
             />
-            <DriveAccessDialog open={accessDialogOpen} onOpenChange={setAccessDialogOpen} path={docInfo.path} />
+            <DriveAccessDialog
+                open={accessDialogOpen}
+                onOpenChange={setAccessDialogOpen}
+                path={docInfo.path}
+                canWrite={docInfo.canWrite}
+            />
         </>
     );
 }
