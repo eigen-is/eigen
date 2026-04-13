@@ -362,7 +362,7 @@ export function DriveAccessListEdit({
                     icon={Link}
                     tooltipText="Copy link"
                     variant="outline"
-                    className={cn('h-8 w-8', !onEmailClick && !myTeams?.length && 'mr-auto')}
+                    className={cn(!onEmailClick && !myTeams?.length && 'mr-auto')}
                     onClick={() => {
                         navigator.clipboard.writeText(getShareUrl(path));
                         toast.success('Link copied to clipboard');
@@ -374,7 +374,7 @@ export function DriveAccessListEdit({
                         tooltipText={pendingChanges ? 'Save changes first' : 'Email collaborators'}
                         variant="outline"
                         disabled={pendingChanges}
-                        className={cn('h-8 w-8', !myTeams?.length && 'mr-auto')}
+                        className={cn(!myTeams?.length && 'mr-auto')}
                         onClick={onEmailClick}
                     />
                 )}

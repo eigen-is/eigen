@@ -24,7 +24,7 @@ export const TooltipButton = ({
     onClick,
     size = 'icon',
     variant = 'ghost',
-    className = 'h-8 w-8',
+    className,
     disabled = false,
     label = undefined,
     active = false,
@@ -40,7 +40,7 @@ export const TooltipButton = ({
                 <Button
                     variant={resolvedVariant}
                     size={size}
-                    className={cn('cursor-pointer', className)}
+                    className={cn('h-8 w-8 cursor-pointer', className)}
                     disabled={disabled}
                     type={type}
                     form={form}

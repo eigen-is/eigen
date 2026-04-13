@@ -1,5 +1,5 @@
 import { useAuth } from '@workspace/lib/auth';
-import { useIsEffectiveOwner, useUpdateACL } from '@workspace/lib/drive';
+import { useCheckWritePermission, useIsEffectiveOwner, useUpdateACL } from '@workspace/lib/drive';
 import type { DriveACL, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { DriveAccessList } from '@workspace/ui/components/layout/drive/drive-access-list';
@@ -12,10 +12,9 @@ export type DriveAccessDialogProps = {
     onOpenChange: (open: boolean) => void;
     path: DrivePath | null;
     prefillEmail?: string;
-    canWrite?: boolean;
 };
 
-export function DriveAccessDialog({ open, onOpenChange, path, prefillEmail, canWrite }: DriveAccessDialogProps) {
+export function DriveAccessDialog({ open, onOpenChange, path, prefillEmail }: DriveAccessDialogProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [emailPath, setEmailPath] = useState<DrivePath | null>(null);
 
@@ -26,6 +25,7 @@ export function DriveAccessDialog({ open, onOpenChange, path, prefillEmail, canW
     const { user } = useAuth();
     const updateACL = useUpdateACL(path?.ownerId || '', path?.mountId, user?.id);
     const isEffectiveOwner = useIsEffectiveOwner(path?.ownerId || '');
+    const { data: writePermission } = useCheckWritePermission(path?.ownerId || '', path?.mountId || '', path?.id);
 
     if (!path) {
         return null;
@@ -71,7 +71,7 @@ export function DriveAccessDialog({ open, onOpenChange, path, prefillEmail, canW
                             onSave={handleSave}
                             onCancel={!isSubmitting ? () => onOpenChange(false) : undefined}
                             prefillEmail={prefillEmail}
-                            onEmailClick={canWrite ? handleEmailClick : undefined}
+                            onEmailClick={writePermission?.canWrite ? handleEmailClick : undefined}
                         />
                     )}
                 </DialogContent>
