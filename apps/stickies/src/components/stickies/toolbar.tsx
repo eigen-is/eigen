@@ -15,6 +15,7 @@ import { DriveCreateStickies } from '@workspace/ui/components/layout/drive/drive
 import { isLightColor } from '@workspace/ui/components/layout/media/color-picker';
 import { DocumentModeButton } from '@workspace/ui/components/layout/toolbar/document-mode-button';
 import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
+import { Toolbar as ToolbarWrapper } from '@workspace/ui/components/layout/toolbar/toolbar';
 import { Separator } from '@workspace/ui/components/separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
 import { Check, Plus, Redo, Undo, UserRoundPlus } from 'lucide-react';
@@ -68,7 +69,7 @@ export function Toolbar({
     }, [undoManager, canWrite]);
 
     return (
-        <div className="bg-background h-12 flex items-center justify-between px-4 border-b no-print">
+        <ToolbarWrapper>
             <div className="flex items-center gap-1">
                 <FileMenu
                     path={path}
@@ -165,6 +166,6 @@ export function Toolbar({
                     <DocumentModeButton canWrite={canWrite} />
                 )}
             </div>
-        </div>
+        </ToolbarWrapper>
     );
 }
