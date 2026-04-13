@@ -45,6 +45,7 @@ function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
     const { data: settings } = useSpaceSettings();
     const updateSettings = useUpdateSpaceSettings();
     const isAdmin = useIsAdmin();
+    const isGuest = auth.user?.role === 'guest';
 
     const handleLogout = () => {
         auth.logout().then(() => {
@@ -93,18 +94,28 @@ function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
                         <UserItem name={auth.user?.name} email={auth.user?.email} className="p-0" />
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    {apps.map((app) => {
-                        const isActive = app.name.toLowerCase() === appName.toLowerCase();
-                        const Icon = app.icon;
-                        return (
-                            <DropdownMenuItem key={app.name} asChild className={isActive ? 'bg-muted font-medium' : ''}>
-                                <a href={app.href}>
-                                    <Icon />
-                                    {app.name}
-                                </a>
-                            </DropdownMenuItem>
-                        );
-                    })}
+                    {apps
+                        .filter(
+                            (app) =>
+                                !isGuest ||
+                                ['Drive', 'Docs', 'Stickies', 'Slides', 'Sheets', 'Chat'].includes(app.name),
+                        )
+                        .map((app) => {
+                            const isActive = app.name.toLowerCase() === appName.toLowerCase();
+                            const Icon = app.icon;
+                            return (
+                                <DropdownMenuItem
+                                    key={app.name}
+                                    asChild
+                                    className={isActive ? 'bg-muted font-medium' : ''}
+                                >
+                                    <a href={app.href}>
+                                        <Icon />
+                                        {app.name}
+                                    </a>
+                                </DropdownMenuItem>
+                            );
+                        })}
                     {isAdmin && (
                         <>
                             <DropdownMenuSeparator />
@@ -116,37 +127,41 @@ function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
                             </DropdownMenuItem>
                         </>
                     )}
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild>
-                        <a href={getSpaceProfileUrl()}>
-                            <UserRound />
-                            Profile
-                        </a>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                        <a href={getSpacePasswordUrl()}>
-                            <Settings />
-                            Settings
-                        </a>
-                    </DropdownMenuItem>
-                    <DropdownMenuSub>
-                        <DropdownMenuSubTrigger>
-                            <Palette />
-                            Theme
-                        </DropdownMenuSubTrigger>
-                        <DropdownMenuSubContent>
-                            <DropdownMenuRadioGroup
-                                value={settings?.theme ?? 'light'}
-                                onValueChange={(v) =>
-                                    updateSettings.mutate({ theme: v as 'light' | 'dark' | 'system' })
-                                }
-                            >
-                                <DropdownMenuRadioItem value="light">Light</DropdownMenuRadioItem>
-                                <DropdownMenuRadioItem value="dark">Dark</DropdownMenuRadioItem>
-                                <DropdownMenuRadioItem value="system">System</DropdownMenuRadioItem>
-                            </DropdownMenuRadioGroup>
-                        </DropdownMenuSubContent>
-                    </DropdownMenuSub>
+                    {!isGuest && (
+                        <>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem asChild>
+                                <a href={getSpaceProfileUrl()}>
+                                    <UserRound />
+                                    Profile
+                                </a>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                                <a href={getSpacePasswordUrl()}>
+                                    <Settings />
+                                    Settings
+                                </a>
+                            </DropdownMenuItem>
+                            <DropdownMenuSub>
+                                <DropdownMenuSubTrigger>
+                                    <Palette />
+                                    Theme
+                                </DropdownMenuSubTrigger>
+                                <DropdownMenuSubContent>
+                                    <DropdownMenuRadioGroup
+                                        value={settings?.theme ?? 'light'}
+                                        onValueChange={(v) =>
+                                            updateSettings.mutate({ theme: v as 'light' | 'dark' | 'system' })
+                                        }
+                                    >
+                                        <DropdownMenuRadioItem value="light">Light</DropdownMenuRadioItem>
+                                        <DropdownMenuRadioItem value="dark">Dark</DropdownMenuRadioItem>
+                                        <DropdownMenuRadioItem value="system">System</DropdownMenuRadioItem>
+                                    </DropdownMenuRadioGroup>
+                                </DropdownMenuSubContent>
+                            </DropdownMenuSub>
+                        </>
+                    )}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => setLogoutDialogOpen(true)}>
                         <LogOut />
