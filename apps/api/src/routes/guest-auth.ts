@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { hashPassword } from 'better-auth/crypto';
+import { generateRandomString, hashPassword } from 'better-auth/crypto';
 import { and, eq, like, lt } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';
 import { account, user as userTable, verification } from '../../auth-schema.ts';
@@ -115,7 +115,7 @@ export const guestAuthRouter = new Elysia({ name: 'guest-auth' })
             } else {
                 const localPart = email.split('@')[0] ?? email;
                 const now2 = new Date();
-                const newId = randomUUID();
+                const newId = generateRandomString(32);
                 // Insert user directly to bypass databaseHooks (guests must not be auto-added to org)
                 db.insert(userTable)
                     .values({
@@ -130,6 +130,7 @@ export const guestAuthRouter = new Elysia({ name: 'guest-auth' })
                     .run();
                 guestUser = await getUserByEmail(email);
                 if (!guestUser) throw new ApiError(500, 'Failed to create guest user');
+                console.log(`[guest-auth] Created guest user id=${guestUser.id} email=${email}`);
                 isNewUser = true;
             }
 
@@ -148,7 +149,7 @@ export const guestAuthRouter = new Elysia({ name: 'guest-auth' })
             } else {
                 db.insert(account)
                     .values({
-                        id: randomUUID(),
+                        id: generateRandomString(32),
                         accountId: guestUser.id,
                         providerId: 'credential',
                         userId: guestUser.id,

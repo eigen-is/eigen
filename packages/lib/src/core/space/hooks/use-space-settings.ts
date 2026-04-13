@@ -22,7 +22,7 @@ export function useSpaceSettings() {
             return res.data || {};
         },
         staleTime: 5 * 60 * 1000,
-        enabled: !!ownerId,
+        enabled: !!ownerId && user?.role !== 'guest',
     });
 }
 
