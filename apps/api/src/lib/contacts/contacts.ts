@@ -11,8 +11,9 @@ import type { ManagedDatabase } from '../core/';
 import { ApiError } from '../core/';
 import type { Home } from '../home';
 import { getHome } from '../home';
+import { pushUserProfile } from '../home/home-relay';
 import { generateImagePreview } from '../shared/thumbnails';
-import { getOrgOwner, updateUser } from '../user/';
+import { getOrgOwner } from '../user/';
 import { CONTACTS_DB_CONFIG } from './db-config';
 import * as schema from './schema';
 import { buildContactEvent, buildLabelEvent } from './sse-events';
@@ -163,7 +164,19 @@ export class Contacts {
 
     public async updateContact(id: string, contact: Omit<Contact, 'id'>) {
         if (await this.you(id)) {
-            await updateUser(this.home.user, `${contact.firstName} ${contact.lastName}`, contact.avatar || '');
+            const name = `${contact.firstName} ${contact.lastName}`;
+            let avatarBuffer: Buffer | null = null;
+
+            if (contact.avatar) {
+                const filename = contact.avatar.split('/').pop();
+                if (filename) {
+                    const data = await this.downloadAvatar(filename);
+                    if (data) avatarBuffer = Buffer.from(data);
+                }
+            }
+
+            await pushUserProfile(this.home.user.id, name, avatarBuffer);
+
             if (!contact.email.includes(this.home.user.email)) {
                 contact.email = [this.home.user.email, ...contact.email];
             }
