@@ -47,6 +47,12 @@ export function requireSelf(ownerId: string, userId: string): void {
     }
 }
 
+export function requireNonGuest(user: { role?: string | null }): void {
+    if (user.role === 'guest') {
+        throw new ApiError(403, 'Guests cannot access this resource');
+    }
+}
+
 export async function requireTeamAccess(userId: string, teamId: string): Promise<'admin' | 'member'> {
     const role = await getOrgRole(userId);
     if (role === 'admin' || role === 'owner') return 'admin';

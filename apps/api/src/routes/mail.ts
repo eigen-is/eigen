@@ -1,7 +1,7 @@
 import type { EmailDraft } from '@workspace/lib/types/mail';
 import { Elysia, t } from 'elysia';
 import { contentDisposition, setCacheHeaders } from '../lib/core';
-import { requireLocalhost, requireSelf } from '../lib/core/access';
+import { requireLocalhost, requireNonGuest, requireSelf } from '../lib/core/access';
 import {
     mailboxCreate,
     mailboxDeliver,
@@ -53,6 +53,9 @@ const MailDraftSchema = t.Object({
 
 export const mailRouter = new Elysia({ name: 'mail' })
     .use(betterAuth)
+    .onBeforeHandle(({ user }) => {
+        if (user) requireNonGuest(user);
+    })
     // Local delivery endpoint — called by Postfix (or compatible MTA) to deliver incoming mail.
     // No auth: Postfix connects from localhost and is trusted.
     .post(
