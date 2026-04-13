@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { DrivePath } from '@workspace/lib/types';
-import { auth } from '../lib/auth/auth';
+import { eq } from 'drizzle-orm';
+import { user as userSchema } from '../../auth-schema.ts';
+import { auth, getAuthDrizzleDb } from '../lib/auth/auth';
 import { updateServerConfig } from '../lib/config/server-config';
 import { assertJson, authedRequest, getTestContext } from './setup';
 
@@ -117,10 +119,12 @@ describe('Guest Auth', () => {
                     email,
                     password,
                     name: 'Test Guest',
-                    role: 'guest',
+                    role: 'user',
                 },
             });
             guestUserId = created.user.id;
+            // Set to 'guest' directly — admin plugin only allows 'user'/'admin' via API
+            getAuthDrizzleDb().update(userSchema).set({ role: 'guest' }).where(eq(userSchema.id, guestUserId)).run();
 
             // Sign in to get a properly signed session cookie
             const signIn = await auth.api.signInEmail({

@@ -64,7 +64,7 @@ export const auth = betterAuth({
         user: {
             create: {
                 after: async (user) => {
-                    if (user.role === 'guest') return;
+                    if (user['role'] === 'guest') return;
                     await authAddUserToDefaultOrg(user);
                     await reconcileSharesForNewUser(user);
                 },

@@ -1,7 +1,7 @@
 import { Elysia, t } from 'elysia';
 import { enforceAvatarUpload } from '../lib/config/enforcement';
 import { getContacts } from '../lib/contacts/contacts';
-import { requireSelf } from '../lib/core/access';
+import { requireNonGuest, requireSelf } from '../lib/core/access';
 import { ApiError } from '../lib/core/errors';
 import { setCacheHeaders } from '../lib/core/http';
 import { betterAuth } from './auth';
@@ -42,94 +42,100 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
     .get(
         '/contacts/:ownerId/contacts',
         async ({ params, user }) => {
+            requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             return await (await getContacts(user)).getContacts();
         },
-        { auth: true, noGuest: true },
+        { auth: true },
     )
     .get(
         '/contacts/:ownerId/contacts/:id',
         async ({ params, user }) => {
+            requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             return await (await getContacts(user)).getContactById(params.id);
         },
-        { auth: true, noGuest: true },
+        { auth: true },
     )
     .post(
         '/contacts/:ownerId/contacts',
         async ({ params, body, user }) => {
+            requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             return await (await getContacts(user)).addContact(body);
         },
         {
             body: ContactSchema,
             auth: true,
-            noGuest: true,
         },
     )
     .put(
         '/contacts/:ownerId/contacts/:id',
         async ({ params, body, user }) => {
+            requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             return await (await getContacts(user)).updateContact(params.id, body);
         },
         {
             body: ContactSchema,
             auth: true,
-            noGuest: true,
         },
     )
     .delete(
         '/contacts/:ownerId/contacts/:id',
         async ({ params, user }) => {
+            requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             return await (await getContacts(user)).deleteContact(params.id);
         },
-        { auth: true, noGuest: true },
+        { auth: true },
     )
     .get(
         '/contacts/:ownerId/labels',
         async ({ params, user }) => {
+            requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             return await (await getContacts(user)).getLabels();
         },
-        { auth: true, noGuest: true },
+        { auth: true },
     )
     .post(
         '/contacts/:ownerId/labels',
         async ({ params, body, user }) => {
+            requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             return await (await getContacts(user)).addLabel(body);
         },
         {
             body: LabelSchema,
             auth: true,
-            noGuest: true,
         },
     )
     .put(
         '/contacts/:ownerId/labels/:id',
         async ({ params, body, user }) => {
+            requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             return await (await getContacts(user)).updateLabel(params.id, body);
         },
         {
             body: LabelSchema,
             auth: true,
-            noGuest: true,
         },
     )
     .delete(
         '/contacts/:ownerId/labels/:id',
         async ({ params, user }) => {
+            requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             return await (await getContacts(user)).deleteLabel(params.id);
         },
-        { auth: true, noGuest: true },
+        { auth: true },
     )
     .post(
         '/contacts/:ownerId/avatar',
         async ({ params, body, user }) => {
+            requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             await enforceAvatarUpload(user.id, body.file.size);
             return await (await getContacts(user)).uploadAvatar(body.file);
@@ -139,12 +145,12 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
                 file: t.File({ format: 'image/*' }),
             }),
             auth: true,
-            noGuest: true,
         },
     )
     .get(
         '/contacts/:ownerId/avatar/:filename',
         async ({ params, user, set }) => {
+            requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             const data = await (await getContacts(user)).downloadAvatar(params.filename);
             if (!data) throw new ApiError(404, 'Avatar not found');
@@ -152,13 +158,14 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
             set.headers['Content-Type'] = 'image/webp';
             return new Response(data);
         },
-        { auth: true, noGuest: true },
+        { auth: true },
     )
     .get(
         '/contacts/:ownerId/me',
         async ({ params, user }) => {
+            requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             return await (await getContacts(user)).getMe();
         },
-        { auth: true, noGuest: true },
+        { auth: true },
     );

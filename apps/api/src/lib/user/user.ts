@@ -1,16 +1,17 @@
-import type { User } from 'better-auth/types';
 import { eq } from 'drizzle-orm';
 import { member, teamMember, user } from '../../../auth-schema.ts';
 import { getAuthDrizzleDb } from '../auth/auth.ts';
 
-export async function getUserByEmail(email: string) {
+export type DbUser = typeof user.$inferSelect;
+
+export async function getUserByEmail(email: string): Promise<DbUser | null> {
     const db = getAuthDrizzleDb();
-    return (await db.select().from(user).where(eq(user.email, email.toLowerCase())).get()) as User | null;
+    return (await db.select().from(user).where(eq(user.email, email.toLowerCase())).get()) ?? null;
 }
 
-export async function getUserById(id: string) {
+export async function getUserById(id: string): Promise<DbUser | null> {
     const db = getAuthDrizzleDb();
-    return (await db.select().from(user).where(eq(user.id, id)).get()) as User | null;
+    return (await db.select().from(user).where(eq(user.id, id)).get()) ?? null;
 }
 
 export async function updateUser(userId: string, name: string, image: string) {
@@ -41,7 +42,7 @@ export async function getOrgRole(userId: string): Promise<string | null> {
     return row?.role ?? null;
 }
 
-export async function getOrgOwner(): Promise<User | null> {
+export async function getOrgOwner(): Promise<DbUser | null> {
     const db = getAuthDrizzleDb();
     const ownerMember = await db.select({ userId: member.userId }).from(member).where(eq(member.role, 'owner')).get();
     if (!ownerMember) return null;

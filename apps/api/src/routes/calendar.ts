@@ -2,7 +2,7 @@ import type { CalendarEventOccurrence, CalendarItem, FreeBusyBlock } from '@work
 import { Elysia, t } from 'elysia';
 import { resolveCalendar, resolveCalendarForEvents, syncTeamCalendars } from '../lib/calendar/get-calendar';
 import { ApiError } from '../lib/core';
-import { requireSelf } from '../lib/core/access';
+import { requireNonGuest, requireSelf } from '../lib/core/access';
 import { getHome } from '../lib/home';
 import { pullCalendarShares } from '../lib/home/home-relay';
 import { getMemberships } from '../lib/user';
@@ -88,57 +88,62 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
     .get(
         '/calendar/:ownerId/calendars',
         async ({ params, user }): Promise<CalendarItem[]> => {
+            requireNonGuest(user);
             const cal = await resolveCalendar(user, params.ownerId);
             return cal.getCalendars();
         },
-        { auth: true, noGuest: true },
+        { auth: true },
     )
 
     .post(
         '/calendar/:ownerId/calendars',
         async ({ params, body, user }) => {
+            requireNonGuest(user);
             const cal = await resolveCalendar(user, params.ownerId);
             return cal.createCalendar(body);
         },
-        { body: CreateCalendarSchema, auth: true, noGuest: true },
+        { body: CreateCalendarSchema, auth: true },
     )
 
     .put(
         '/calendar/:ownerId/calendars/:calId',
         async ({ params, body, user }) => {
+            requireNonGuest(user);
             const cal = await resolveCalendar(user, params.ownerId);
             return await cal.updateCalendar(params.calId, body);
         },
-        { body: UpdateCalendarSchema, auth: true, noGuest: true },
+        { body: UpdateCalendarSchema, auth: true },
     )
 
     .delete(
         '/calendar/:ownerId/calendars/:calId',
         async ({ params, user }) => {
+            requireNonGuest(user);
             const cal = await resolveCalendar(user, params.ownerId);
             await cal.deleteCalendar(params.calId);
             return { success: true };
         },
-        { auth: true, noGuest: true },
+        { auth: true },
     )
 
     // --- Events ---
     .get(
         '/calendar/:ownerId/event-range/:from/:to',
         async ({ params, user }): Promise<CalendarEventOccurrence[]> => {
+            requireNonGuest(user);
             const cal = await resolveCalendar(user, params.ownerId);
             return cal.getEventsInRange(params.from, params.to);
         },
         {
             params: t.Object({ ownerId: t.String(), from: t.Numeric(), to: t.Numeric() }),
             auth: true,
-            noGuest: true,
         },
     )
 
     .get(
         '/calendar/:ownerId/calendars/:calId/event-range/:from/:to',
         async ({ params, user }) => {
+            requireNonGuest(user);
             const { calendar, permission } = await resolveCalendarForEvents(user, params.ownerId, params.calId);
             const events = calendar.getEventsInRange(params.from, params.to, params.calId);
             if (permission === 'free-busy') {
@@ -156,45 +161,48 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
         {
             params: t.Object({ ownerId: t.String(), calId: t.String(), from: t.Numeric(), to: t.Numeric() }),
             auth: true,
-            noGuest: true,
         },
     )
 
     .post(
         '/calendar/:ownerId/calendars/:calId/events',
         async ({ params, body, user }) => {
+            requireNonGuest(user);
             const { calendar, permission } = await resolveCalendarForEvents(user, params.ownerId, params.calId);
             if (permission !== 'write') throw new ApiError(403, 'Write permission required');
             return calendar.createEvent(params.calId, { ...body, createByUserId: user.id }, user);
         },
-        { body: CreateEventSchema, auth: true, noGuest: true },
+        { body: CreateEventSchema, auth: true },
     )
 
     .put(
         '/calendar/:ownerId/calendars/:calId/events/:id',
         async ({ params, body, user }) => {
+            requireNonGuest(user);
             const { calendar, permission } = await resolveCalendarForEvents(user, params.ownerId, params.calId);
             if (permission !== 'write') throw new ApiError(403, 'Write permission required');
             return calendar.updateEvent(params.id, body, user);
         },
-        { body: UpdateEventSchema, auth: true, noGuest: true },
+        { body: UpdateEventSchema, auth: true },
     )
 
     .delete(
         '/calendar/:ownerId/calendars/:calId/events/:id',
         async ({ params, user }) => {
+            requireNonGuest(user);
             const { calendar, permission } = await resolveCalendarForEvents(user, params.ownerId, params.calId);
             if (permission !== 'write') throw new ApiError(403, 'Write permission required');
             calendar.deleteEvent(params.id, user);
             return { success: true };
         },
-        { auth: true, noGuest: true },
+        { auth: true },
     )
 
     // --- RSVP ---
     .put(
         '/calendar/:ownerId/calendars/:calId/events/:id/rsvp',
         async ({ params, body, user }) => {
+            requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             const home = await getHome(user.id);
             home.calendar.rsvp(params.id, user, body);
@@ -208,19 +216,19 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
                 remove: t.Optional(t.Boolean()),
             }),
             auth: true,
-            noGuest: true,
         },
     )
 
     .get(
         '/calendar/:ownerId/calendars/:calId/access',
         async ({ params, user }) => {
+            requireNonGuest(user);
             const { calendar, permission } = await resolveCalendarForEvents(user, params.ownerId, params.calId);
             const calData = calendar.getCalendarById(params.calId);
             if (!calData) throw new ApiError(404, 'Calendar not found');
             return { ownerUserId: params.ownerId, shares: permission === 'write' ? calData.shares || [] : [] };
         },
-        { auth: true, noGuest: true },
+        { auth: true },
     )
 
     // Pull calendars that ownerId has shared with the calling user.
@@ -229,10 +237,11 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
     .get(
         '/calendar/:ownerId/shared-with-me',
         async ({ params, user }) => {
+            requireNonGuest(user);
             const memberships = await getMemberships(user.id);
             return pullCalendarShares(params.ownerId, user.email, memberships.teamIds);
         },
-        { auth: true, noGuest: true },
+        { auth: true },
     )
 
     // --- Shared calendars ---
@@ -241,29 +250,32 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
     .get(
         '/calendar/:ownerId/shared',
         async ({ params, user }) => {
+            requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             return syncTeamCalendars(user);
         },
-        { auth: true, noGuest: true },
+        { auth: true },
     )
 
     .put(
         '/calendar/:ownerId/shared/:id',
         async ({ params, body, user }) => {
+            requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             const cal = await resolveCalendar(user, user.id);
             return cal.updateSharedCalendar(params.id, body);
         },
-        { body: UpdateSharedCalendarSchema, auth: true, noGuest: true },
+        { body: UpdateSharedCalendarSchema, auth: true },
     )
 
     .delete(
         '/calendar/:ownerId/shared/:id',
         async ({ params, user }) => {
+            requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             const cal = await resolveCalendar(user, user.id);
             cal.deleteSharedCalendar(params.id);
             return { success: true };
         },
-        { auth: true, noGuest: true },
+        { auth: true },
     );
