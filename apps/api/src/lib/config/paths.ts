@@ -25,7 +25,7 @@ export function getServerDataPath(filename?: string): string {
 }
 
 export function getAvatarsDir(): string {
-    const avatarsDir = path.join(getDataRoot(), 'server', 'avatars');
+    const avatarsDir = path.join(getServerDataPath(), 'avatars');
     if (!fs.existsSync(avatarsDir)) {
         fs.mkdirSync(avatarsDir, { recursive: true });
     }

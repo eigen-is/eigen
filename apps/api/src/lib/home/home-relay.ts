@@ -9,7 +9,6 @@
 // deployment, only this file changes: sendToHome() routes to the correct
 // server (or enqueues a message), and pull functions become remote API calls.
 
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { Attendee, CalendarEvent, CalendarItem, CalendarShare } from '@workspace/lib/types/calendar';
 import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
@@ -146,8 +145,10 @@ export async function pushUserProfile(userId: string, name: string, avatarWebP: 
 
     if (avatarWebP) {
         await Bun.write(avatarPath, avatarWebP);
-    } else if (fs.existsSync(avatarPath)) {
-        fs.unlinkSync(avatarPath);
+    } else {
+        await Bun.file(avatarPath)
+            .delete()
+            .catch(() => {});
     }
 
     await updateUser(userId, name, avatarWebP ? `server/avatars/${userId}.webp` : '');

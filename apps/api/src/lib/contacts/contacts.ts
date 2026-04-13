@@ -168,11 +168,9 @@ export class Contacts {
             let avatarBuffer: Buffer | null = null;
 
             if (contact.avatar) {
-                const filename = contact.avatar.split('/').pop();
-                if (filename) {
-                    const data = await this.downloadAvatar(filename);
-                    if (data) avatarBuffer = Buffer.from(data);
-                }
+                const filename = contact.avatar.split('/').pop()!;
+                const data = await this.downloadAvatar(filename);
+                if (data) avatarBuffer = Buffer.from(data);
             }
 
             await pushUserProfile(this.home.user.id, name, avatarBuffer);

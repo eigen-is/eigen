@@ -23,9 +23,6 @@ export type Memberships = {
     teamIds: string[];
 };
 
-/**
- * Resolves a user's org and team memberships from the auth database.
- */
 export async function getMemberships(userId: string): Promise<Memberships> {
     const db = getAuthDrizzleDb();
 

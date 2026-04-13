@@ -220,13 +220,6 @@ published.
 - Read port from `PORT` env var (default 8000)
 - Log cluster mode and `CLUSTER_SELF` on startup
 
-### `pullAvatarFile` special case
-
-This is the only pull function returning binary data (`BunFile`). For remote calls, the internal
-endpoint streams the file as a `Response`. The relay side fetches it and wraps the bytes as a `File`
-object. This cast (`new File([arrayBuffer], filename) as unknown as BunFile`) may need adjustment
-at the call site (`apps/api/src/lib/space/public.ts`) — test during implementation.
-
 ## Docker Compose
 
 Create `docker-compose.cluster.yml` as an overlay:
