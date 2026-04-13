@@ -19,6 +19,23 @@ export function ShadowContent({
     const shadowHostRef = useRef<HTMLDivElement>(null);
     const shadowRootRef = useRef<ShadowRoot | null>(null);
 
+    // Sync shadow DOM color-scheme with the app theme (.dark class on <html>)
+    useEffect(() => {
+        const hostElement = shadowHostRef.current;
+        if (!hostElement) return;
+
+        const syncTheme = () => {
+            const isDark = document.documentElement.classList.contains('dark');
+            hostElement.style.colorScheme = isDark ? 'dark' : 'light';
+        };
+
+        syncTheme();
+
+        const observer = new MutationObserver(syncTheme);
+        observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+        return () => observer.disconnect();
+    }, []);
+
     useEffect(() => {
         const hostElement = shadowHostRef.current;
         if (!hostElement) return;
@@ -46,10 +63,9 @@ export function ShadowContent({
         // Add some base styles to maintain readability
         const styleElement = document.createElement('style');
         styleElement.textContent = `
-      :host { color-scheme: light; }
       .shadow-content-container {
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        color: #333;
+        color: light-dark(#333, #e8eaed);
         line-height: 1.5;
       }
       a { color: #2563eb; text-decoration: none; }
