@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { and, eq, like, lt } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';
-import { session, verification } from '../../auth-schema.ts';
-import { auth, getAuthDrizzleDb } from '../lib/auth/auth';
+import { session, user as userTable, verification } from '../../auth-schema.ts';
+import { getAuthDrizzleDb } from '../lib/auth/auth';
 import { ApiError } from '../lib/core/errors';
 import { sendMail } from '../lib/core/mailer';
 import { reconcileSharesForNewUser } from '../lib/share';
@@ -96,29 +96,36 @@ export const guestAuthRouter = new Elysia({ name: 'guest-auth' })
             // OTP consumed — delete it
             db.delete(verification).where(eq(verification.id, record.id)).run();
 
-            let existingUser = await getUserByEmail(email);
+            let guestUser = await getUserByEmail(email);
             let isNewUser = false;
 
-            if (existingUser) {
-                if (existingUser.role !== 'guest') {
+            if (guestUser) {
+                if (guestUser.role !== 'guest') {
                     throw new ApiError(400, 'Use password login');
                 }
             } else {
                 const localPart = email.split('@')[0] ?? email;
-                const created = await auth.api.createUser({
-                    body: {
+                const now2 = new Date();
+                const newId = randomUUID();
+                // Insert directly to bypass databaseHooks (guests must not be auto-added to org)
+                db.insert(userTable)
+                    .values({
+                        id: newId,
                         email,
-                        password: randomUUID(),
                         name: localPart,
+                        emailVerified: false,
                         role: 'guest',
-                    },
-                });
-                existingUser = created.user;
+                        createdAt: now2,
+                        updatedAt: now2,
+                    })
+                    .run();
+                guestUser = await getUserByEmail(email);
+                if (!guestUser) throw new ApiError(500, 'Failed to create guest user');
                 isNewUser = true;
             }
 
             if (isNewUser) {
-                await reconcileSharesForNewUser(existingUser);
+                await reconcileSharesForNewUser(guestUser);
             }
 
             // Create session directly — we don't know the guest's random password
@@ -130,7 +137,7 @@ export const guestAuthRouter = new Elysia({ name: 'guest-auth' })
                 .values({
                     id: randomUUID(),
                     token,
-                    userId: existingUser.id,
+                    userId: guestUser.id,
                     expiresAt,
                     createdAt: now,
                     updatedAt: now,
@@ -149,10 +156,10 @@ export const guestAuthRouter = new Elysia({ name: 'guest-auth' })
             return {
                 success: true,
                 user: {
-                    id: existingUser.id,
-                    email: existingUser.email,
-                    name: existingUser.name,
-                    role: existingUser.role,
+                    id: guestUser.id,
+                    email: guestUser.email,
+                    name: guestUser.name,
+                    role: guestUser.role,
                 },
             };
         },
