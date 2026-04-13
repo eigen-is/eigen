@@ -1,13 +1,21 @@
 import { randomUUID } from 'node:crypto';
+import { hashPassword } from 'better-auth/crypto';
 import { and, eq, like, lt } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';
-import { session, user as userTable, verification } from '../../auth-schema.ts';
-import { getAuthDrizzleDb } from '../lib/auth/auth';
+import { account, user as userTable, verification } from '../../auth-schema.ts';
+import { auth, getAuthDrizzleDb } from '../lib/auth/auth';
 import { ApiError } from '../lib/core/errors';
 import { sendMail } from '../lib/core/mailer';
 import { reconcileSharesForNewUser } from '../lib/share';
 import { getEntriesForTarget } from '../lib/share/registry';
 import { getUserByEmail } from '../lib/user/user';
+
+// Deterministic password for guest accounts — derived from server secret + email.
+// Guests never see this; they authenticate only via OTP. This exists solely so we
+// can call auth.api.signInEmail to get properly signed session cookies.
+function guestPassword(email: string): string {
+    return `guest:${email}:${auth.options.secret}`;
+}
 
 function generateOtp(): string {
     const bytes = new Uint8Array(4);
@@ -98,6 +106,7 @@ export const guestAuthRouter = new Elysia({ name: 'guest-auth' })
 
             let guestUser = await getUserByEmail(email);
             let isNewUser = false;
+            const password = guestPassword(email);
 
             if (guestUser) {
                 if (guestUser.role !== 'guest') {
@@ -107,13 +116,13 @@ export const guestAuthRouter = new Elysia({ name: 'guest-auth' })
                 const localPart = email.split('@')[0] ?? email;
                 const now2 = new Date();
                 const newId = randomUUID();
-                // Insert directly to bypass databaseHooks (guests must not be auto-added to org)
+                // Insert user directly to bypass databaseHooks (guests must not be auto-added to org)
                 db.insert(userTable)
                     .values({
                         id: newId,
                         email,
                         name: localPart,
-                        emailVerified: false,
+                        emailVerified: true,
                         role: 'guest',
                         createdAt: now2,
                         updatedAt: now2,
@@ -128,30 +137,45 @@ export const guestAuthRouter = new Elysia({ name: 'guest-auth' })
                 await reconcileSharesForNewUser(guestUser);
             }
 
-            // Create session directly — we don't know the guest's random password
-            const token = randomUUID();
-            const now = new Date();
-            const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+            // Upsert credential account with current password so signInEmail always works
+            const hashedPassword = await hashPassword(password);
+            const existingAccount = db.select().from(account).where(eq(account.userId, guestUser.id)).get();
+            if (existingAccount) {
+                db.update(account)
+                    .set({ password: hashedPassword, updatedAt: new Date() })
+                    .where(eq(account.id, existingAccount.id))
+                    .run();
+            } else {
+                db.insert(account)
+                    .values({
+                        id: randomUUID(),
+                        accountId: guestUser.id,
+                        providerId: 'credential',
+                        userId: guestUser.id,
+                        password: hashedPassword,
+                        createdAt: new Date(),
+                        updatedAt: new Date(),
+                    })
+                    .run();
+            }
 
-            db.insert(session)
-                .values({
-                    id: randomUUID(),
-                    token,
-                    userId: guestUser.id,
-                    expiresAt,
-                    createdAt: now,
-                    updatedAt: now,
-                })
-                .run();
-
-            cookie['better-auth.session_token'].set({
-                value: token,
-                httpOnly: true,
-                secure: false,
-                sameSite: 'lax',
-                path: '/',
-                expires: expiresAt,
+            // Use better-auth's signInEmail to get a properly signed session cookie
+            const signIn = await auth.api.signInEmail({
+                body: { email, password },
+                returnHeaders: true,
             });
+
+            // Forward better-auth's set-cookie headers to the client
+            const setCookie = signIn.headers.get('set-cookie');
+            if (setCookie) {
+                cookie['better-auth.session_token'].set({
+                    value: setCookie.match(/better-auth\.session_token=([^;]+)/)?.[1] ?? '',
+                    httpOnly: true,
+                    secure: false,
+                    sameSite: 'lax',
+                    path: '/',
+                });
+            }
 
             return {
                 success: true,
