@@ -13,6 +13,7 @@ import { DriveCreateSheets } from './drive-create-sheets';
 import { DriveCreateSlides } from './drive-create-slides';
 import { DriveCreateStickies } from './drive-create-stickies';
 import { DriveDetail, DriveDetailToolbar } from './drive-detail';
+import { DriveEmailCollaborators } from './drive-email-collaborators';
 import { DriveList, DriveListToolbar } from './drive-list';
 import { DriveRenameItem } from './drive-rename-item';
 import { defaultDriveSort } from './drive-table';
@@ -143,6 +144,12 @@ export function DriveLayout({
         }
     };
 
+    const handleEmailCollaborators = (path: DrivePath) => {
+        if (allowShare) {
+            dialogs.email.openDialog(path);
+        }
+    };
+
     const sortedContents = useMemo(() => [...folderContents].sort(sortFn), [folderContents, sortFn]);
 
     const wrappedQuickLook = useCallback(
@@ -168,6 +175,7 @@ export function DriveLayout({
         onUploadFiles: allowUpload ? handleUploadFiles : undefined,
         onDelete: allowDelete ? handleDeletePaths : undefined,
         onShareClick: allowShare ? handleShareClick : undefined,
+        onEmailCollaborators: allowShare ? handleEmailCollaborators : undefined,
         onCreateDoc: allowCreateDoc ? dialogs.createDoc.openDialog : undefined,
         onCreateStickies: allowCreateStickies ? dialogs.createStickies.openDialog : undefined,
         onCreateChat: allowCreateChat ? dialogs.createChat.openDialog : undefined,
@@ -349,6 +357,15 @@ export function DriveLayout({
                     open={dialogs.share.open}
                     onOpenChange={dialogs.share.setOpen}
                     path={dialogs.share.item}
+                    canWrite={true}
+                />
+            )}
+
+            {allowShare && dialogs.email.item && (
+                <DriveEmailCollaborators
+                    path={dialogs.email.item}
+                    open={dialogs.email.open}
+                    onOpenChange={dialogs.email.setOpen}
                 />
             )}
 
