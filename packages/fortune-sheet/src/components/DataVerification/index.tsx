@@ -224,7 +224,7 @@ export function DataVerification() {
     const selectClass = "h-8 w-full rounded-md border border-input bg-background px-3 text-sm";
 
     return (
-        <div className="min-w-[500px] flex flex-col gap-4 select-none">
+        <div className="flex flex-col gap-4 select-none">
             <DialogHeader>
                 <DialogTitle>{toolbar.dataVerification}</DialogTitle>
             </DialogHeader>
