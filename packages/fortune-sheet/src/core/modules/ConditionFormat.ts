@@ -277,14 +277,15 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                                 !_.isNil(cell) &&
                                 !_.isNil(cell.ct) &&
                                 cell.ct.t === "n" &&
-                                _.isNil(cell.v)
+                                !_.isNil(cell.v)
                             ) {
-                                if (_.isNil(max) || parseInt(`${cell.v}`, 10) > max) {
-                                    max = parseInt(`${cell.v}`, 10);
+                                const numVal = Number(cell.v);
+                                if (_.isNil(max) || numVal > max) {
+                                    max = numVal;
                                 }
 
-                                if (_.isNil(min) || parseInt(`${cell.v}`, 10) < min) {
-                                    min = parseInt(`${cell.v}`, 10);
+                                if (_.isNil(min) || numVal < min) {
+                                    min = numVal;
                                 }
                             }
                         }
@@ -320,11 +321,11 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                                         cell.ct.t === "n" &&
                                         !_.isNil(cell.v)
                                     ) {
-                                        if (parseInt(`${cell.v}`, 10) < 0) {
+                                        if (Number(cell.v) < 0) {
                                             // negative number
                                             const valueLen =
                                                 Math.round(
-                                                    (Math.abs(parseInt(`${cell.v}`, 10)) /
+                                                    (Math.abs(Number(cell.v)) /
                                                         Math.abs(min)) *
                                                     100
                                                 ) / 100;
@@ -348,10 +349,10 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                                             }
                                         }
 
-                                        if (parseInt(`${cell.v}`, 10) > 0) {
+                                        if (Number(cell.v) > 0) {
                                             // positive number
                                             const valueLen =
-                                                Math.round((parseInt(`${cell.v}`, 10) / max) * 100) /
+                                                Math.round((Number(cell.v) / max) * 100) /
                                                 100;
 
                                             if (`${r}_${c}` in computeMap) {
@@ -409,7 +410,7 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                                             valueLen = 1;
                                         } else {
                                             valueLen =
-                                                Math.round((parseInt(`${cell.v}`, 10) / max) * 100) /
+                                                Math.round((Number(cell.v) / max) * 100) /
                                                 100;
                                         }
 
@@ -461,15 +462,16 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                                 cell.ct.t === "n" &&
                                 !_.isNil(cell.v)
                             ) {
+                                const numVal = Number(cell.v);
                                 count += 1;
-                                sum += parseInt(`${cell.v}`, 10);
+                                sum += numVal;
 
-                                if (_.isNil(max) || parseInt(`${cell.v}`, 10) > max) {
-                                    max = parseInt(`${cell.v}`, 10);
+                                if (_.isNil(max) || numVal > max) {
+                                    max = numVal;
                                 }
 
-                                if (_.isNil(min) || parseInt(`${cell.v}`, 10) < min) {
-                                    min = parseInt(`${cell.v}`, 10);
+                                if (_.isNil(min) || numVal < min) {
+                                    min = numVal;
                                 }
                             }
                         }
@@ -503,7 +505,7 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                                         cell.ct.t === "n" &&
                                         !_.isNil(cell.v)
                                     ) {
-                                        if (parseInt(`${cell.v}`, 10) === min) {
+                                        if (Number(cell.v) === min) {
                                             if (`${r}_${c}` in computeMap) {
                                                 computeMap[`${r}_${c}`].cellColor = format.cellColor;
                                             } else {
@@ -512,8 +514,8 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                                                 };
                                             }
                                         } else if (
-                                            parseInt(`${cell.v}`, 10) > min &&
-                                            parseInt(`${cell.v}`, 10) < avg
+                                            Number(cell.v) > min &&
+                                            Number(cell.v) < avg
                                         ) {
                                             if (`${r}_${c}` in computeMap) {
                                                 computeMap[`${r}_${c}`].cellColor = getColorGradation(
@@ -521,7 +523,7 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                                                     format.textColor,
                                                     min,
                                                     avg,
-                                                    parseInt(`${cell.v}`, 10)
+                                                    Number(cell.v)
                                                 );
                                             } else {
                                                 computeMap[`${r}_${c}`] = {
@@ -530,19 +532,19 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                                                         format[1],
                                                         min,
                                                         avg,
-                                                        parseInt(`${cell.v}`, 10)
+                                                        Number(cell.v)
                                                     ),
                                                 };
                                             }
-                                        } else if (parseInt(`${cell.v}`, 10) === avg) {
+                                        } else if (Number(cell.v) === avg) {
                                             if (`${r}_${c}` in computeMap) {
                                                 computeMap[`${r}_${c}`].cellColor = format.cellColor;
                                             } else {
                                                 computeMap[`${r}_${c}`] = {cellColor: format[1]};
                                             }
                                         } else if (
-                                            parseInt(`${cell.v}`, 10) > avg &&
-                                            parseInt(`${cell.v}`, 10) < max
+                                            Number(cell.v) > avg &&
+                                            Number(cell.v) < max
                                         ) {
                                             if (`${r}_${c}` in computeMap) {
                                                 computeMap[`${r}_${c}`].cellColor = getColorGradation(
@@ -550,7 +552,7 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                                                     format[0],
                                                     avg,
                                                     max,
-                                                    parseInt(`${cell.v}`, 10)
+                                                    Number(cell.v)
                                                 );
                                             } else {
                                                 computeMap[`${r}_${c}`] = {
@@ -559,11 +561,11 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                                                         format[0],
                                                         avg,
                                                         max,
-                                                        parseInt(`${cell.v}`, 10)
+                                                        Number(cell.v)
                                                     ),
                                                 };
                                             }
-                                        } else if (parseInt(`${cell.v}`, 10) === max) {
+                                        } else if (Number(cell.v) === max) {
                                             if (`${r}_${c}` in computeMap) {
                                                 computeMap[`${r}_${c}`].cellColor = format.cellColor;
                                             } else {
@@ -599,15 +601,15 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                                         cell.ct.t === "n" &&
                                         !_.isNil(cell.v)
                                     ) {
-                                        if (parseInt(`${cell.v}`, 10) === min) {
+                                        if (Number(cell.v) === min) {
                                             if (`${r}_${c}` in computeMap) {
                                                 computeMap[`${r}_${c}`].cellColor = format.cellColor;
                                             } else {
                                                 computeMap[`${r}_${c}`] = {cellColor: format[1]};
                                             }
                                         } else if (
-                                            parseInt(`${cell.v}`, 10) > min &&
-                                            parseInt(`${cell.v}`, 10) < max
+                                            Number(cell.v) > min &&
+                                            Number(cell.v) < max
                                         ) {
                                             if (`${r}_${c}` in computeMap) {
                                                 computeMap[`${r}_${c}`].cellColor = getColorGradation(
@@ -615,7 +617,7 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                                                     format[0],
                                                     min,
                                                     max,
-                                                    parseInt(`${cell.v}`, 10)
+                                                    Number(cell.v)
                                                 );
                                             } else {
                                                 computeMap[`${r}_${c}`] = {
@@ -624,11 +626,11 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                                                         format[0],
                                                         min,
                                                         max,
-                                                        parseInt(`${cell.v}`, 10)
+                                                        Number(cell.v)
                                                     ),
                                                 };
                                             }
-                                        } else if (parseInt(`${cell.v}`, 10) === max) {
+                                        } else if (Number(cell.v) === max) {
                                             if (`${r}_${c}` in computeMap) {
                                                 computeMap[`${r}_${c}`].cellColor = format.textColor;
                                             } else {
@@ -1009,7 +1011,7 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                                         }
 
                                         // cell value
-                                        const cellVal = getCellValue(r, c, d);
+                                        const cellVal = Number(getCellValue(r, c, d));
                                         // matches condition
                                         if (cellVal > averageNum) {
                                             if (`${r}_${c}` in computeMap) {
@@ -1041,7 +1043,7 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                                         }
 
                                         // cell value
-                                        const cellVal = getCellValue(r, c, d);
+                                        const cellVal = Number(getCellValue(r, c, d));
                                         // matches condition
                                         if (cellVal < averageNum) {
                                             if (`${r}_${c}` in computeMap) {
