@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useChatRoom } from '@workspace/lib/chat';
-import { useCheckReadPermission, useCheckWritePermission } from '@workspace/lib/drive';
+import { useCheckReadPermission } from '@workspace/lib/drive';
 import type { ChatMessage } from '@workspace/lib/types/chat';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import {
@@ -25,7 +25,6 @@ function ChatView() {
     const chat = useChatRoom(ownerId, mountId, chatId);
 
     const { data: readPermission, isLoading: permLoading } = useCheckReadPermission(ownerId, mountId, chatId);
-    const { data: writePermission } = useCheckWritePermission(ownerId, mountId, chatId);
 
     const [accessDialogOpen, setAccessDialogOpen] = useState(false);
     const [renameDialogOpen, setRenameDialogOpen] = useState(false);
@@ -143,7 +142,6 @@ function ChatView() {
                 open={accessDialogOpen}
                 onOpenChange={setAccessDialogOpen}
                 path={chat.chatPath ?? null}
-                canWrite={writePermission?.canWrite ?? false}
             />
 
             <DriveRenameItem path={chat.chatPath ?? null} open={renameDialogOpen} onOpenChange={setRenameDialogOpen} />

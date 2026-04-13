@@ -5,6 +5,9 @@ export type DriveDialogsState = {
     createFolder: { open: boolean };
     createDoc: { open: boolean };
     createStickies: { open: boolean };
+    createChat: { open: boolean };
+    createSlides: { open: boolean };
+    createSheets: { open: boolean };
     delete: { open: boolean; items: DrivePath[] };
     rename: { open: boolean; item: DrivePath | null };
     share: { open: boolean; item: DrivePath | null };

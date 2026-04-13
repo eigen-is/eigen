@@ -414,18 +414,21 @@ export function DriveTable({
                         Share
                     </DropdownMenuItem>
                 )}
-                {isSingleSelect && onEmailCollaborators && contextMenu.item && (
-                    <DropdownMenuItem
-                        onClick={() => {
-                            onEmailCollaborators(contextMenu.item!);
-                            contextMenu.close();
-                        }}
-                        className="flex items-center"
-                    >
-                        <Mail className="h-4 w-4 mr-2" />
-                        Email collaborators
-                    </DropdownMenuItem>
-                )}
+                {isSingleSelect &&
+                    onEmailCollaborators &&
+                    contextMenu.item &&
+                    (contextMenu.item.acl?.length || contextMenu.item.visibility !== 'private') && (
+                        <DropdownMenuItem
+                            onClick={() => {
+                                onEmailCollaborators(contextMenu.item!);
+                                contextMenu.close();
+                            }}
+                            className="flex items-center"
+                        >
+                            <Mail className="h-4 w-4 mr-2" />
+                            Email collaborators
+                        </DropdownMenuItem>
+                    )}
                 {isSingleSelect && onRename && (
                     <DropdownMenuItem
                         onClick={() => {
@@ -441,7 +444,9 @@ export function DriveTable({
 
                 {allowDelete && contextItems.length > 0 && (
                     <>
-                        {isSingleSelect && (onDownload || onShareClick || onRename) && <DropdownMenuSeparator />}
+                        {isSingleSelect && (onDownload || onShareClick || onEmailCollaborators || onRename) && (
+                            <DropdownMenuSeparator />
+                        )}
                         <DropdownMenuItem
                             onClick={() => {
                                 onDelete?.(contextItems);

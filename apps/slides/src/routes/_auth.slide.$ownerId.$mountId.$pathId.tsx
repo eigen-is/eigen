@@ -57,12 +57,7 @@ function SlideView() {
                 onAccessDialogOpen={handleAccessDialogOpen}
                 initialChatName={chat}
             />
-            <DriveAccessDialog
-                path={path}
-                open={accessDialogOpen}
-                onOpenChange={setAccessDialogOpen}
-                canWrite={canWrite}
-            />
+            <DriveAccessDialog path={path} open={accessDialogOpen} onOpenChange={setAccessDialogOpen} />
         </>
     );
 }
