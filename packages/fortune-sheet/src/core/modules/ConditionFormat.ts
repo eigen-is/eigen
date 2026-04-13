@@ -910,7 +910,7 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                                     !_.isNil(d[r][c]!.ct) &&
                                     d[r][c]!.ct!.t === "n"
                                 ) {
-                                    dArr.push(getCellValue(r, c, d));
+                                    dArr.push(Number(getCellValue(r, c, d)));
                                 }
                             }
                         }
@@ -966,7 +966,7 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                                     }
 
                                     // cell value
-                                    const cellVal = getCellValue(r, c, d);
+                                    const cellVal = Number(getCellValue(r, c, d));
                                     // matches condition
                                     if (!_.isNil(cArr) && cArr.indexOf(cellVal) !== -1) {
                                         if (`${r}_${c}` in computeMap) {
