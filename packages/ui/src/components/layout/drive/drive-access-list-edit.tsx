@@ -1,4 +1,4 @@
-import { getDriveAppUrl, getDriveItemUrl } from '@workspace/lib/api';
+import { getDriveShareUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { type DirectAccessItem, useDriveAccess, useIsEffectiveOwner } from '@workspace/lib/drive';
 import { useMyTeams } from '@workspace/lib/home';
@@ -34,12 +34,6 @@ export type DriveAccessListEditProps = {
     className?: string;
     prefillEmail?: string;
 };
-
-function getShareUrl(path: DrivePath): string {
-    return (
-        getDriveItemUrl(path) ?? getDriveAppUrl(`shared/with-me?pid=${path.id}&uid=${path.ownerId}&mid=${path.mountId}`)
-    );
-}
 
 export function DriveAccessListEdit({
     path,
@@ -364,7 +358,7 @@ export function DriveAccessListEdit({
                     variant="outline"
                     className={cn(!onEmailClick && !myTeams?.length && 'mr-auto')}
                     onClick={() => {
-                        navigator.clipboard.writeText(getShareUrl(path));
+                        navigator.clipboard.writeText(getDriveShareUrl(path));
                         toast.success('Link copied to clipboard');
                     }}
                 />

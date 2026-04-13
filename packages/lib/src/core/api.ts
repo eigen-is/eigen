@@ -151,3 +151,9 @@ export function getDriveItemUrl(path: DrivePath): string | undefined {
     }
     return undefined;
 }
+
+export function getDriveShareUrl(path: DrivePath): string {
+    return (
+        getDriveItemUrl(path) ?? getDriveAppUrl(`shared/with-me?pid=${path.id}&uid=${path.ownerId}&mid=${path.mountId}`)
+    );
+}

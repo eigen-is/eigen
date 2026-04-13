@@ -29,6 +29,7 @@ import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { createAsyncSingleton } from '../../utils/singleton';
 import { ChatRoom } from '../chat';
 import CollabDocument from '../collab/collabDocument';
+import { isProduction } from '../config/env';
 import { getDomain } from '../config/server-config';
 import { ApiError, type DatabaseConfig, type ManagedDatabase, type SchemaType } from '../core';
 import { contentDisposition } from '../core/http';
@@ -579,7 +580,7 @@ export default class Drive {
         try {
             const parsed = new URL(documentUrl);
             const host = parsed.hostname;
-            if (host !== domain && !host.endsWith(`.${domain}`) && host !== 'localhost') {
+            if (host !== domain && !host.endsWith(`.${domain}`) && !(host === 'localhost' && !isProduction())) {
                 throw new ApiError(400, 'Invalid document URL');
             }
         } catch (e) {
