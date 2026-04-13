@@ -1,10 +1,11 @@
+import * as path from 'node:path';
 import { parseOwnerId } from '@workspace/lib/types';
 import type { PublicUser } from '@workspace/lib/types/public';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import type { User } from 'better-auth/types';
 import type { BunFile } from 'bun';
+import { getAvatarsDir } from '../config/paths';
 import { ApiError } from '../core';
-import { pullAvatarFile } from '../home/home-relay';
 import { getTeam } from '../team';
 import { getUserByEmail, getUserById } from '../user/';
 
@@ -49,13 +50,14 @@ export async function getBatchPublicInfo(ids: string[]): Promise<Record<string, 
 }
 
 export async function getAvatarByEmailOrId(emailOrId: string): Promise<BunFile | null> {
+    const parsed = parseOwnerId(emailOrId);
+    if (parsed.type === 'team') return null;
+
     const user = await getUserByEmailOrId(emailOrId);
-    if (!user?.image) return null;
+    if (!user) return null;
 
-    const filename = user.image.split('/').pop();
-    if (!filename) return null;
-
-    return pullAvatarFile(user.id, filename);
+    const file = Bun.file(path.join(getAvatarsDir(), `${user.id}.webp`));
+    return (await file.exists()) ? file : null;
 }
 
 export async function generateFallbackSvg(emailOrId: string): Promise<string> {
