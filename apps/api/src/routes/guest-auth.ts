@@ -84,7 +84,7 @@ export const guestAuthRouter = new Elysia({ name: 'guest-auth' })
     )
     .post(
         '/guest-auth/verify-otp',
-        async ({ body, cookie }) => {
+        async ({ body, set }) => {
             const email = body.email.toLowerCase().trim();
             const identifier = `guest-otp:${email}`;
             const db = getAuthDrizzleDb();
@@ -165,16 +165,10 @@ export const guestAuthRouter = new Elysia({ name: 'guest-auth' })
                 returnHeaders: true,
             });
 
-            // Forward better-auth's set-cookie headers to the client
-            const setCookie = signIn.headers.get('set-cookie');
-            if (setCookie) {
-                cookie['better-auth.session_token'].set({
-                    value: setCookie.match(/better-auth\.session_token=([^;]+)/)?.[1] ?? '',
-                    httpOnly: true,
-                    secure: false,
-                    sameSite: 'lax',
-                    path: '/',
-                });
+            // Forward better-auth's set-cookie header verbatim to preserve signing
+            const setCookieHeader = signIn.headers.get('set-cookie');
+            if (setCookieHeader) {
+                set.headers['set-cookie'] = setCookieHeader;
             }
 
             return {
