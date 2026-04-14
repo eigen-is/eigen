@@ -27,17 +27,34 @@ function DriveRoot() {
         );
     }
 
+    if (user.role === 'guest') return <GuestDriveRoot />;
+
     return <AuthenticatedDriveRoot />;
+}
+
+function GuestDriveRoot() {
+    return (
+        <AppShell
+            appName="drive"
+            rootRoute={Route}
+            sidebar={({ condensed, isMobile, onClose }) => (
+                <GuestDriveSidebar condensed={condensed} isMobile={isMobile} onClose={onClose} />
+            )}
+        >
+            <DriveContext.Provider value={{ rootPath: null, mountId: DEFAULT_MOUNT_ID }}>
+                <Outlet />
+            </DriveContext.Provider>
+        </AppShell>
+    );
 }
 
 function AuthenticatedDriveRoot() {
     const { user } = useAuth();
-    const isGuest = user?.role === 'guest';
     const mountId = DEFAULT_MOUNT_ID;
-    const { data: root, isLoading, error } = useRootFolder(isGuest ? '' : user!.id, mountId);
-    const rootPath = isGuest ? null : root || null;
+    const { data: root, isLoading, error } = useRootFolder(user!.id, mountId);
+    const rootPath = root || null;
 
-    if (!isGuest && isLoading) {
+    if (isLoading) {
         return (
             <AppShell appName="drive" rootRoute={Route}>
                 <LoadingState />
@@ -45,7 +62,7 @@ function AuthenticatedDriveRoot() {
         );
     }
 
-    if (!isGuest && error) {
+    if (error) {
         return (
             <AppShell appName="drive" rootRoute={Route}>
                 <ErrorState message="Error loading drive content" detail={error.message} />
@@ -57,13 +74,9 @@ function AuthenticatedDriveRoot() {
         <AppShell
             appName="drive"
             rootRoute={Route}
-            sidebar={({ condensed, isMobile, onClose }) =>
-                isGuest ? (
-                    <GuestDriveSidebar condensed={condensed} isMobile={isMobile} onClose={onClose} />
-                ) : (
-                    <DriveSidebar condensed={condensed} isMobile={isMobile} onClose={onClose} rootPath={rootPath} />
-                )
-            }
+            sidebar={({ condensed, isMobile, onClose }) => (
+                <DriveSidebar condensed={condensed} isMobile={isMobile} onClose={onClose} rootPath={rootPath} />
+            )}
         >
             <DriveContext.Provider value={{ rootPath, mountId }}>
                 <Outlet />
