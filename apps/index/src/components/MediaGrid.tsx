@@ -18,7 +18,7 @@ function MediaItem({ src, type, caption, thumbnail, poster }: MediaItemProps) {
     return (
         <>
             <div className="group cursor-pointer" onClick={() => setIsPreviewOpen(true)}>
-                <div className="relative overflow-hidden rounded-lg bg-muted aspect-video">
+                <div className="relative overflow-hidden rounded-lg bg-muted">
                     {type === 'image' && (
                         <img
                             src={thumbnailSrc}
