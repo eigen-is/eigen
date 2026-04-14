@@ -1,5 +1,6 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useAdminUsers, useDeleteUser } from '@workspace/lib/admin';
+import { adminKeys, useAdminUsers, useDeleteUser } from '@workspace/lib/admin';
 import { EmptyState, LoadingState } from '@workspace/ui';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
 import { useState } from 'react';
@@ -23,6 +24,7 @@ function OrphansRoute() {
     const { userId } = Route.useSearch();
     const navigate = useNavigate();
     const [searchQuery, setSearchQuery] = useState('');
+    const queryClient = useQueryClient();
     const { data: users = [], isLoading } = useAdminUsers('orphan');
     const deleteUser = useDeleteUser();
 
@@ -31,6 +33,7 @@ function OrphansRoute() {
     const handleDelete = async () => {
         if (!user) return;
         await deleteUser.mutateAsync(user.id);
+        queryClient.invalidateQueries({ queryKey: [...adminKeys.all, 'users'] });
         navigate({ to: '/orphans', search: {} });
     };
 

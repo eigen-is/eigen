@@ -1,7 +1,7 @@
 import type { S3Config } from '@workspace/lib/types';
 import type { AdminUser } from '@workspace/lib/types/admin';
 import type { ServerSettings } from '@workspace/lib/types/settings';
-import { eq, notInArray } from 'drizzle-orm';
+import { and, eq, ne, notInArray } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';
 import { member, user } from '../../auth-schema.ts';
 import { getAuthDrizzleDb } from '../lib/auth/auth';
@@ -118,7 +118,11 @@ export const settingsRouter = new Elysia({ name: 'settings' })
             const rows =
                 params.filter === 'guest'
                     ? db.select().from(user).where(eq(user.role, 'guest')).all()
-                    : db.select().from(user).where(notInArray(user.id, memberUserIds)).all();
+                    : db
+                          .select()
+                          .from(user)
+                          .where(and(notInArray(user.id, memberUserIds), ne(user.role, 'guest')))
+                          .all();
             return rows.map((r) => ({
                 id: r.id,
                 email: r.email,
