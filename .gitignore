@@ -59,7 +59,7 @@ next-env.d.ts
 /data/dkim/
 /backups/
 /.superpowers/
-/docs/superpowers
 .claude/settings.local.json
 .env.eigen
 /docs/superpowers/
+/data/guest/
