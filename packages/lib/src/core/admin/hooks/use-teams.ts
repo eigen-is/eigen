@@ -3,6 +3,7 @@ import { teamApi } from '@workspace/lib/api';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { OrgTeam } from '@workspace/lib/types/admin';
 import { onMutationError } from '../../api-error';
+import { useAuth } from '../../auth/auth-context';
 import { authClient } from '../../auth/hooks/use-auth-client';
 import { invalidateMyTeams } from '../../home';
 import { adminKeys } from './keys';
@@ -12,6 +13,7 @@ import { adminKeys } from './keys';
 // use useMyTeams() from '@workspace/lib/home' instead.
 
 export function useTeams(organizationId?: string) {
+    const { user } = useAuth();
     return useQuery({
         queryKey: adminKeys.teams(organizationId ?? ''),
         queryFn: async (): Promise<OrgTeam[]> => {
@@ -26,7 +28,7 @@ export function useTeams(organizationId?: string) {
                 updatedAt: t.updatedAt ? new Date(t.updatedAt) : undefined,
             }));
         },
-        enabled: !!organizationId,
+        enabled: !!organizationId && user?.role !== 'guest',
         staleTime: 1000 * 60 * 2,
     });
 }
