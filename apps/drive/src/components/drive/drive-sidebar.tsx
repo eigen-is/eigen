@@ -1,6 +1,6 @@
 import { useMatch, useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
-import { DEFAULT_MOUNT_ID, useListTrash, usePathInfo, useRootFolder } from '@workspace/lib/drive';
+import { DEFAULT_MOUNT_ID, useListTrash, usePathInfo } from '@workspace/lib/drive';
 import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -50,25 +50,21 @@ type DriveSidebarProps = {
 function TeamMountItem({
     ownerId,
     mountId,
+    rootPathId,
     label,
     icon,
     condensed,
 }: {
     ownerId: string;
     mountId: string;
+    rootPathId: string | null;
     label: string;
     icon: React.ReactNode;
     condensed: boolean;
 }) {
-    const { data: root } = useRootFolder(ownerId, mountId);
-    if (!root) return null;
+    if (!rootPathId) return null;
     return (
-        <SidebarItem
-            icon={icon}
-            to={`/fs/${root.ownerId}/${root.mountId}/${root.id}`}
-            label={label}
-            condensed={condensed}
-        />
+        <SidebarItem icon={icon} to={`/fs/${ownerId}/${mountId}/${rootPathId}`} label={label} condensed={condensed} />
     );
 }
 
@@ -286,6 +282,7 @@ export function DriveSidebar({ condensed = false, onClose, isMobile = false, roo
                                     key={`${team.id}-${mount.id}`}
                                     ownerId={teamOwnerId(team.id)}
                                     mountId={mount.id}
+                                    rootPathId={mount.rootPathId}
                                     label={mount.name}
                                     icon={<UserAvatar email={teamOwnerId(team.id)} className="h-4 w-4" />}
                                     condensed={condensed}

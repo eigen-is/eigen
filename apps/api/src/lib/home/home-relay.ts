@@ -165,11 +165,17 @@ export async function pullTeamQuotaOverrides(teamOwnerId: string): Promise<TeamQ
     return settings.memberOverrides ?? {};
 }
 
-export async function pullTeamMounts(teamOwnerId: string): Promise<{ id: string; name: string }[]> {
+export async function pullTeamMounts(
+    teamOwnerId: string,
+): Promise<{ id: string; name: string; rootPathId: string | null }[]> {
     const home = await getHome(teamOwnerId);
     const settings = home.settings.get() as TeamSettings;
     const mounts = settings.mounts ?? {};
-    return Object.entries(mounts)
-        .filter(([, m]) => m.enabled)
-        .map(([id, m]) => ({ id, name: m.name || id }));
+    const enabled = Object.entries(mounts).filter(([, m]) => m.enabled);
+    return Promise.all(
+        enabled.map(async ([id, m]) => {
+            const root = await home.drive.getRootFolder(id);
+            return { id, name: m.name || id, rootPathId: root?.id ?? null };
+        }),
+    );
 }
