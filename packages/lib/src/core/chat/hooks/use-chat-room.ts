@@ -2,13 +2,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import type { ChatMessage, RoomMember } from '../../../types/chat';
 import { validateEmailTarget } from '../../../validation';
 import { useAuth } from '../../auth';
-import {
-    useCheckWritePermission,
-    useEffectiveMembers,
-    useFolderContent,
-    usePathInfo,
-    useUploadFile,
-} from '../../drive';
+import { useCheckPermissions, useEffectiveMembers, useFolderContent, usePathInfo, useUploadFile } from '../../drive';
 import { COMMANDS_HELP, getLocalCommand, isUnknownCommand } from '../commands';
 import { useDeleteMessage, useEditMessage, useInviteToChat, useMessages, usePostMessage } from './use-chat';
 import { useAutoMarkChatRead } from './use-chat-unread';
@@ -31,8 +25,8 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
     const inviteToChat = useInviteToChat(ownerId, mountId, chatId);
     const deleteMessage = useDeleteMessage(ownerId, mountId, chatId);
     const editMessage = useEditMessage(ownerId, mountId, chatId);
-    const { data: writePermission } = useCheckWritePermission(ownerId, mountId, chatId);
-    const readOnly = writePermission ? !writePermission.canWrite : false;
+    const { data: permissions } = useCheckPermissions(ownerId, mountId, chatId);
+    const readOnly = permissions ? !permissions.canWrite : false;
     const { data: chatContents = [] } = useFolderContent(ownerId, mountId, chatId);
 
     const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);

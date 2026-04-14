@@ -95,12 +95,12 @@ describe('Cross-Domain Integration', () => {
                 },
             );
 
-            const driveReadRes = await authedRequest(
+            const drivePermRes = await authedRequest(
                 ctx.bob.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${chatId}/permissions/read`,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${chatId}/permissions`,
             );
-            const driveRead = await assertJson<{ canRead: boolean }>(driveReadRes);
-            expect(driveRead.canRead).toBe(true);
+            const drivePerm = await assertJson<{ canRead: boolean; canWrite: boolean }>(drivePermRes);
+            expect(drivePerm.canRead).toBe(true);
 
             const chatPostRes = await authedRequest(
                 ctx.bob.user.sessionToken,

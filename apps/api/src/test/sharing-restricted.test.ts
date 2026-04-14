@@ -309,12 +309,7 @@ describe('Sharing Restricted', () => {
         });
 
         test('Bob has inherited write on child', async () => {
-            const write = await driveGetPermission(
-                ctx.bob.user.sessionToken,
-                ctx.alice.user.id,
-                aliceMountId,
-                `path/${childId}/permissions/write`,
-            );
+            const write = await driveGetPermission(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId, childId);
             expect(write.canWrite).toBe(true);
         });
 

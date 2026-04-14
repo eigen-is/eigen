@@ -329,13 +329,13 @@ describe('Drive', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${sharedFolderId}/permissions/read`,
+                sharedFolderId,
             );
             const write = await driveGetPermission(
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${sharedFolderId}/permissions/write`,
+                sharedFolderId,
             );
             expect(read.canRead).toBe(false);
             expect(write.canWrite).toBe(false);
@@ -369,13 +369,13 @@ describe('Drive', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${sharedFolderId}/permissions/read`,
+                sharedFolderId,
             );
             const write = await driveGetPermission(
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${sharedFolderId}/permissions/write`,
+                sharedFolderId,
             );
             expect(read.canRead).toBe(true);
             expect(write.canWrite).toBe(false);
@@ -457,7 +457,7 @@ describe('Drive', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${sharedFolderId}/permissions/write`,
+                sharedFolderId,
             );
             expect(write.canWrite).toBe(true);
         });
@@ -504,7 +504,7 @@ describe('Drive', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${sharedFolderId}/permissions/write`,
+                sharedFolderId,
             );
             expect(write.canWrite).toBe(false);
         });
@@ -576,7 +576,7 @@ describe('Drive', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${sharedFolderId}/permissions/read`,
+                sharedFolderId,
             );
             expect(read.canRead).toBe(false);
         });
@@ -628,7 +628,7 @@ describe('Drive', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${inheritedChildFileId}/permissions/read`,
+                inheritedChildFileId,
             );
             expect(read.canRead).toBe(false);
         });
@@ -651,13 +651,13 @@ describe('Drive', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${inheritedChildFolderId}/permissions/read`,
+                inheritedChildFolderId,
             );
             const fileRead = await driveGetPermission(
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${inheritedChildFileId}/permissions/read`,
+                inheritedChildFileId,
             );
             expect(folderRead.canRead).toBe(true);
             expect(fileRead.canRead).toBe(true);
@@ -668,7 +668,7 @@ describe('Drive', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${inheritedChildFolderId}/permissions/write`,
+                inheritedChildFolderId,
             );
             expect(folderWrite.canWrite).toBe(false);
         });
@@ -711,7 +711,7 @@ describe('Drive', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${inheritedChildFileId}/permissions/read`,
+                inheritedChildFileId,
             );
             const contents = await driveGetList(
                 ctx.bob.user.sessionToken,
@@ -762,7 +762,7 @@ describe('Drive', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${childFolderId}/permissions/read`,
+                childFolderId,
             );
             expect(read.canRead).toBe(true);
         });
@@ -779,7 +779,7 @@ describe('Drive', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${childFolderId}/permissions/write`,
+                childFolderId,
             );
             expect(write.canWrite).toBe(true);
         });
@@ -793,13 +793,13 @@ describe('Drive', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${childFolderId}/permissions/read`,
+                childFolderId,
             );
             const write = await driveGetPermission(
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${childFolderId}/permissions/write`,
+                childFolderId,
             );
             expect(read.canRead).toBe(true);
             expect(write.canWrite).toBe(false);
@@ -825,7 +825,7 @@ describe('Drive', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${visibilityFolderId}/permissions/read`,
+                visibilityFolderId,
             );
             expect(read.canRead).toBe(false);
         });
@@ -843,13 +843,13 @@ describe('Drive', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${visibilityFolderId}/permissions/read`,
+                visibilityFolderId,
             );
             const write = await driveGetPermission(
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${visibilityFolderId}/permissions/write`,
+                visibilityFolderId,
             );
             expect(read.canRead).toBe(true);
             expect(write.canWrite).toBe(false);
@@ -868,7 +868,7 @@ describe('Drive', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${visibilityFolderId}/permissions/write`,
+                visibilityFolderId,
             );
             expect(write.canWrite).toBe(true);
         });
@@ -886,7 +886,7 @@ describe('Drive', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${visibilityFolderId}/permissions/read`,
+                visibilityFolderId,
             );
             expect(read.canRead).toBe(false);
         });
@@ -939,35 +939,30 @@ describe('Drive', () => {
                 acl: [{ id: BOB_EMAIL, read: true, write: true }],
             });
 
-            const readA = await driveGetPermission(
-                ctx.bob.user.sessionToken,
-                ctx.alice.user.id,
-                aliceMountId,
-                `path/${folderA}/permissions/read`,
-            );
+            const readA = await driveGetPermission(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId, folderA);
             const writeA = await driveGetPermission(
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderA}/permissions/write`,
+                folderA,
             );
             const writeB = await driveGetPermission(
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderB}/permissions/write`,
+                folderB,
             );
             const writeC = await driveGetPermission(
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderC}/permissions/write`,
+                folderC,
             );
             const writeFile = await driveGetPermission(
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${fileInC}/permissions/write`,
+                fileInC,
             );
 
             expect(readA.canRead).toBe(true);
@@ -982,29 +977,19 @@ describe('Drive', () => {
                 acl: [],
             });
 
-            const readA = await driveGetPermission(
-                ctx.bob.user.sessionToken,
-                ctx.alice.user.id,
-                aliceMountId,
-                `path/${folderA}/permissions/read`,
-            );
-            const readB = await driveGetPermission(
-                ctx.bob.user.sessionToken,
-                ctx.alice.user.id,
-                aliceMountId,
-                `path/${folderB}/permissions/read`,
-            );
+            const readA = await driveGetPermission(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId, folderA);
+            const readB = await driveGetPermission(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId, folderB);
             const writeB = await driveGetPermission(
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderB}/permissions/write`,
+                folderB,
             );
             const writeC = await driveGetPermission(
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderC}/permissions/write`,
+                folderC,
             );
 
             expect(readA.canRead).toBe(false);
@@ -1025,7 +1010,7 @@ describe('Drive', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderC}/permissions/write`,
+                folderC,
             );
             expect(writeC.canWrite).toBe(true);
         });
@@ -1035,7 +1020,7 @@ describe('Drive', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${fileInC}/permissions/write`,
+                fileInC,
             );
             expect(writeFile.canWrite).toBe(true);
         });
@@ -1045,29 +1030,24 @@ describe('Drive', () => {
                 acl: [],
             });
 
-            const readC = await driveGetPermission(
-                ctx.bob.user.sessionToken,
-                ctx.alice.user.id,
-                aliceMountId,
-                `path/${folderC}/permissions/read`,
-            );
+            const readC = await driveGetPermission(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId, folderC);
             const writeC = await driveGetPermission(
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderC}/permissions/write`,
+                folderC,
             );
             const readFile = await driveGetPermission(
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${fileInC}/permissions/read`,
+                fileInC,
             );
             const writeFile = await driveGetPermission(
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${fileInC}/permissions/write`,
+                fileInC,
             );
 
             expect(readC.canRead).toBe(true);
@@ -1084,23 +1064,13 @@ describe('Drive', () => {
                 acl: [],
             });
 
-            const readA = await driveGetPermission(
-                ctx.bob.user.sessionToken,
-                ctx.alice.user.id,
-                aliceMountId,
-                `path/${folderA}/permissions/read`,
-            );
-            const readC = await driveGetPermission(
-                ctx.bob.user.sessionToken,
-                ctx.alice.user.id,
-                aliceMountId,
-                `path/${folderC}/permissions/read`,
-            );
+            const readA = await driveGetPermission(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId, folderA);
+            const readC = await driveGetPermission(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId, folderC);
             const readFile = await driveGetPermission(
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${fileInC}/permissions/read`,
+                fileInC,
             );
 
             expect(readA.canRead).toBe(false);
@@ -1356,7 +1326,7 @@ describe('Drive', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${aliceRootId}/permissions/read`,
+                aliceRootId,
             );
             expect(data.canRead).toBe(true);
         });
@@ -1366,7 +1336,7 @@ describe('Drive', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${aliceRootId}/permissions/write`,
+                aliceRootId,
             );
             expect(data.canWrite).toBe(true);
         });
@@ -1436,29 +1406,24 @@ describe('Drive', () => {
                 acl: [{ id: BOB_EMAIL, read: true, write: true }],
             });
 
-            const readA = await driveGetPermission(
-                ctx.bob.user.sessionToken,
-                ctx.alice.user.id,
-                aliceMountId,
-                `path/${folderA}/permissions/read`,
-            );
+            const readA = await driveGetPermission(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId, folderA);
             const writeB = await driveGetPermission(
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderB}/permissions/write`,
+                folderB,
             );
             const writeD = await driveGetPermission(
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderD}/permissions/write`,
+                folderD,
             );
             const writeFile = await driveGetPermission(
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${deepFile}/permissions/write`,
+                deepFile,
             );
 
             expect(readA.canRead).toBe(true);
@@ -1489,13 +1454,13 @@ describe('Drive', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderC}/permissions/write`,
+                folderC,
             );
             const writeD = await driveGetPermission(
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderD}/permissions/write`,
+                folderD,
             );
             expect(writeC.canWrite).toBe(true);
             expect(writeD.canWrite).toBe(true);
@@ -1505,17 +1470,12 @@ describe('Drive', () => {
                 acl: [],
             });
 
-            const readD = await driveGetPermission(
-                ctx.bob.user.sessionToken,
-                ctx.alice.user.id,
-                aliceMountId,
-                `path/${folderD}/permissions/read`,
-            );
+            const readD = await driveGetPermission(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId, folderD);
             const writeDAfter = await driveGetPermission(
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderD}/permissions/write`,
+                folderD,
             );
             expect(readD.canRead).toBe(true); // Still inherits read from A
             expect(writeDAfter.canWrite).toBe(false); // Lost write from C
@@ -1539,13 +1499,13 @@ describe('Drive', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderD}/permissions/read`,
+                folderD,
             );
             const bobWriteD = await driveGetPermission(
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderD}/permissions/write`,
+                folderD,
             );
             expect(bobReadD.canRead).toBe(true);
             expect(bobWriteD.canWrite).toBe(false);
@@ -1555,13 +1515,13 @@ describe('Drive', () => {
                 ctx.charlie.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderD}/permissions/read`,
+                folderD,
             );
             const charlieWriteD = await driveGetPermission(
                 ctx.charlie.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderD}/permissions/write`,
+                folderD,
             );
             expect(charlieReadD.canRead).toBe(true);
             expect(charlieWriteD.canWrite).toBe(true);
@@ -1590,13 +1550,13 @@ describe('Drive', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderB}/permissions/write`,
+                folderB,
             );
             const writeC = await driveGetPermission(
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderC}/permissions/write`,
+                folderC,
             );
             expect(writeB.canWrite).toBe(true); // Additive: write from A + read from B = write
             expect(writeC.canWrite).toBe(true); // Inherits write from A
@@ -1616,13 +1576,13 @@ describe('Drive', () => {
                 ctx.charlie.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderB}/permissions/write`,
+                folderB,
             );
             const charlieWriteC = await driveGetPermission(
                 ctx.charlie.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderC}/permissions/write`,
+                folderC,
             );
             expect(charlieWriteB.canWrite).toBe(true); // Additive: read from A + write from B = write
             expect(charlieWriteC.canWrite).toBe(true); // Inherits write from B
@@ -1661,13 +1621,13 @@ describe('Drive', () => {
                 ctx.charlie.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${boundaryFolder}/permissions/read`,
+                boundaryFolder,
             );
             const write = await driveGetPermission(
                 ctx.charlie.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${boundaryFolder}/permissions/write`,
+                boundaryFolder,
             );
             expect(read.canRead).toBe(false);
             expect(write.canWrite).toBe(false);
@@ -1683,13 +1643,13 @@ describe('Drive', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${boundaryFolder}/permissions/read`,
+                boundaryFolder,
             );
             const aliceWrite = await driveGetPermission(
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${boundaryFolder}/permissions/write`,
+                boundaryFolder,
             );
             expect(aliceRead.canRead).toBe(true);
             expect(aliceWrite.canWrite).toBe(true);
@@ -1701,7 +1661,7 @@ describe('Drive', () => {
                 ctx.charlie.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${boundaryFolder}/permissions/write`,
+                boundaryFolder,
             );
             expect(charlieWrite.canWrite).toBe(false); // Confirm Charlie has no write access
 
@@ -1745,7 +1705,7 @@ describe('Drive', () => {
                 ctx.charlie.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${boundaryFolder}/permissions/write`,
+                boundaryFolder,
             );
             expect(charlieWrite.canWrite).toBe(false);
 
@@ -1772,7 +1732,7 @@ describe('Drive', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${boundaryFolder}/permissions/read`,
+                boundaryFolder,
             );
             expect(bobRead.canRead).toBe(false);
         });
@@ -1786,7 +1746,7 @@ describe('Drive', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${boundaryFolder}/permissions/read`,
+                boundaryFolder,
             );
             expect(bobRead.canRead).toBe(true);
         });
@@ -1833,13 +1793,13 @@ describe('Drive', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${visibilityFolder}/permissions/read`,
+                visibilityFolder,
             );
             const bobWrite = await driveGetPermission(
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${visibilityFolder}/permissions/write`,
+                visibilityFolder,
             );
             expect(bobRead.canRead).toBe(true); // Public-read allows read
             expect(bobWrite.canWrite).toBe(false); // No write permission
@@ -1861,13 +1821,13 @@ describe('Drive', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${visibilityFolder}/permissions/read`,
+                visibilityFolder,
             );
             const bobWrite = await driveGetPermission(
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${visibilityFolder}/permissions/write`,
+                visibilityFolder,
             );
             expect(bobRead.canRead).toBe(true);
             expect(bobWrite.canWrite).toBe(true);
@@ -1889,7 +1849,7 @@ describe('Drive', () => {
                 ctx.charlie.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${visibilitySub}/permissions/read`,
+                visibilitySub,
             );
             expect(charlieReadSub.canRead).toBe(true); // Inherits public-read
         });
@@ -1915,13 +1875,13 @@ describe('Drive', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${visibilityFolder}/permissions/read`,
+                visibilityFolder,
             );
             const bobReadChild = await driveGetPermission(
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${visibilitySub}/permissions/read`,
+                visibilitySub,
             );
             expect(bobReadParent.canRead).toBe(true); // Public-read
             expect(bobReadChild.canRead).toBe(true); // Additive model: child inherits parent's public visibility
@@ -1944,13 +1904,13 @@ describe('Drive', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${visibilityFolder}/permissions/read`,
+                visibilityFolder,
             );
             const bobWrite = await driveGetPermission(
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${visibilityFolder}/permissions/write`,
+                visibilityFolder,
             );
             expect(bobRead.canRead).toBe(true);
             expect(bobWrite.canWrite).toBe(true); // ACL grants write
@@ -1972,7 +1932,7 @@ describe('Drive', () => {
                 ctx.charlie.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${visibilityFolder}/permissions/read`,
+                visibilityFolder,
             );
             expect(charlieRead.canRead).toBe(true); // Public-read works regardless
         });
@@ -2049,13 +2009,13 @@ describe('Drive', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${aclFolder}/permissions/read`,
+                aclFolder,
             );
             const charlieRead = await driveGetPermission(
                 ctx.charlie.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${aclFolder}/permissions/read`,
+                aclFolder,
             );
             expect(bobRead.canRead).toBe(false);
             expect(charlieRead.canRead).toBe(true);
@@ -2106,7 +2066,7 @@ describe('Drive', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${aclSub}/permissions/read`,
+                aclSub,
             );
             expect(bobReadSub.canRead).toBe(true);
 
@@ -2120,7 +2080,7 @@ describe('Drive', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${aclSub}/permissions/read`,
+                aclSub,
             );
             expect(bobReadSubAfter.canRead).toBe(false);
         });
@@ -2287,23 +2247,18 @@ describe('Drive', () => {
                 acl: [{ id: BOB_EMAIL, read: true, write: true }],
             });
 
-            const readA = await driveGetPermission(
-                ctx.bob.user.sessionToken,
-                ctx.alice.user.id,
-                aliceMountId,
-                `path/${folderA}/permissions/read`,
-            );
+            const readA = await driveGetPermission(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId, folderA);
             const writeB = await driveGetPermission(
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderB}/permissions/write`,
+                folderB,
             );
             const writeC = await driveGetPermission(
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderC}/permissions/write`,
+                folderC,
             );
 
             expect(readA.canRead).toBe(true);
@@ -2332,19 +2287,19 @@ describe('Drive', () => {
                 ctx.charlie.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderA}/permissions/write`,
+                folderA,
             );
             const writeB = await driveGetPermission(
                 ctx.charlie.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderB}/permissions/write`,
+                folderB,
             );
             const writeC = await driveGetPermission(
                 ctx.charlie.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderC}/permissions/write`,
+                folderC,
             );
 
             expect(writeA.canWrite).toBe(true); // Direct write at A
@@ -2363,19 +2318,19 @@ describe('Drive', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderA}/permissions/read`,
+                folderA,
             );
             const bobWriteB = await driveGetPermission(
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderB}/permissions/write`,
+                folderB,
             );
             const bobReadC = await driveGetPermission(
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderC}/permissions/read`,
+                folderC,
             );
 
             expect(bobReadA.canRead).toBe(false);
@@ -2394,19 +2349,19 @@ describe('Drive', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderA}/permissions/read`,
+                folderA,
             );
             const aliceWriteB = await driveGetPermission(
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderB}/permissions/write`,
+                folderB,
             );
             const aliceReadC = await driveGetPermission(
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderC}/permissions/read`,
+                folderC,
             );
 
             expect(aliceReadA.canRead).toBe(true);
@@ -2834,7 +2789,7 @@ describe('Drive', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${stickiesId}/permissions/read`,
+                stickiesId,
             );
             expect(read.canRead).toBe(true);
         });
@@ -2844,7 +2799,7 @@ describe('Drive', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${stickiesId}/permissions/write`,
+                stickiesId,
             );
             expect(write.canWrite).toBe(false);
         });

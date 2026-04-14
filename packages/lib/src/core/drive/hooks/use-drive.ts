@@ -23,11 +23,8 @@ export const driveKeys = {
     mime: (ownerId: string, mimeType: string) => [...driveKeys.mimeTypes(ownerId), mimeType] as const,
     paths: (ownerId: string) => [...driveKeys.owner(ownerId), 'path'] as const,
     path: (ownerId: string, mountId: string, pathId: string) => [...driveKeys.paths(ownerId), mountId, pathId] as const,
-    permissions: (ownerId: string) => [...driveKeys.owner(ownerId), 'permissions'] as const,
-    read: (ownerId: string, mountId: string, pathId: string) =>
-        [...driveKeys.permissions(ownerId), 'read', mountId, pathId] as const,
-    write: (ownerId: string, mountId: string, pathId: string) =>
-        [...driveKeys.permissions(ownerId), 'write', mountId, pathId] as const,
+    permissions: (ownerId: string, mountId: string, pathId: string) =>
+        [...driveKeys.owner(ownerId), 'permissions', mountId, pathId] as const,
     shared: (ownerId: string, to: 'by-me' | 'with-me') => [...driveKeys.owner(ownerId), 'shared', to] as const,
     textPreviews: (ownerId: string) => [...driveKeys.owner(ownerId), 'text-preview'] as const,
     textPreview: (ownerId: string, mountId: string, pathId: string) =>
@@ -325,28 +322,14 @@ export function useEmailCollaborators(ownerId: string, mountId: string) {
     });
 }
 
-// CHECK READ PERMISSION
-export function useCheckReadPermission(ownerId: string, mountId: string, pathId: string | undefined) {
+// CHECK PERMISSIONS (read + write in a single request)
+export function useCheckPermissions(ownerId: string, mountId: string, pathId: string | undefined) {
     return useQuery({
-        queryKey: driveKeys.read(ownerId, mountId, pathId || ''),
+        queryKey: driveKeys.permissions(ownerId, mountId, pathId || ''),
         queryFn: async () => {
-            if (!pathId) return { canRead: false };
-            const response = await driveApi({ ownerId })({ mountId }).path({ pathId }).permissions.read.get();
-            return response.data || { canRead: false };
-        },
-        enabled: !!pathId && !!ownerId && !!mountId,
-        staleTime: 1000 * 60 * 5, // 5 minutes
-    });
-}
-
-// CHECK WRITE PERMISSION
-export function useCheckWritePermission(ownerId: string, mountId: string, pathId: string | undefined) {
-    return useQuery({
-        queryKey: driveKeys.write(ownerId, mountId, pathId || ''),
-        queryFn: async () => {
-            if (!pathId) return { canWrite: false };
-            const response = await driveApi({ ownerId })({ mountId }).path({ pathId }).permissions.write.get();
-            return response.data || { canWrite: false };
+            if (!pathId) return { canRead: false, canWrite: false };
+            const response = await driveApi({ ownerId })({ mountId }).path({ pathId }).permissions.get();
+            return response.data || { canRead: false, canWrite: false };
         },
         enabled: !!pathId && !!ownerId && !!mountId,
         staleTime: 1000 * 60 * 5, // 5 minutes
@@ -629,8 +612,7 @@ export function invalidateAclUpdated(
     queryClient.invalidateQueries({ queryKey: driveKeys.shared(ownerId, 'by-me') });
     queryClient.invalidateQueries({ queryKey: driveKeys.shared(ownerId, 'with-me') });
     queryClient.invalidateQueries({ queryKey: driveKeys.path(ownerId, mountId, pathId) });
-    queryClient.invalidateQueries({ queryKey: driveKeys.read(ownerId, mountId, pathId) });
-    queryClient.invalidateQueries({ queryKey: driveKeys.write(ownerId, mountId, pathId) });
+    queryClient.invalidateQueries({ queryKey: driveKeys.permissions(ownerId, mountId, pathId) });
     if (parentId) {
         queryClient.invalidateQueries({ queryKey: driveKeys.folder(ownerId, mountId, parentId) });
     }

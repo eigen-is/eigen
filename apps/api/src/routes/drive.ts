@@ -316,18 +316,14 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
     )
     .get(
-        '/drive/:ownerId/:mountId/path/:pathId/permissions/read',
+        '/drive/:ownerId/:mountId/path/:pathId/permissions',
         async ({ params, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
-            return { canRead: await drive.canRead(params.mountId, params.pathId, user) };
-        },
-        { auth: true },
-    )
-    .get(
-        '/drive/:ownerId/:mountId/path/:pathId/permissions/write',
-        async ({ params, user }) => {
-            const drive = await getSharedDrive(params.ownerId, user);
-            return { canWrite: await drive.canWrite(params.mountId, params.pathId, user) };
+            const [canRead, canWrite] = await Promise.all([
+                drive.canRead(params.mountId, params.pathId, user),
+                drive.canWrite(params.mountId, params.pathId, user),
+            ]);
+            return { canRead, canWrite };
         },
         { auth: true },
     )

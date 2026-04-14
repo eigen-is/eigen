@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { getDriveDownloadUrl } from '@workspace/lib/api';
-import { useCheckWritePermission, useTextPreview } from '@workspace/lib/drive';
+import { useCheckPermissions, useTextPreview } from '@workspace/lib/drive';
 import { invalidateEditorContent, useFileContent } from '@workspace/lib/editor';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { ErrorState, LoadingState } from '@workspace/ui';
@@ -22,8 +22,8 @@ export function NativeFileEditor({ path, onClose }: NativeFileEditorProps) {
     const [editing, setEditing] = useState(false);
     const [reloadKey, setReloadKey] = useState(0);
     const { data, isLoading, error } = useFileContent(path.ownerId, path.mountId, path.id);
-    const { data: writePermission } = useCheckWritePermission(path.ownerId, path.mountId, path.id);
-    const canWrite = writePermission?.canWrite ?? false;
+    const { data: permissions } = useCheckPermissions(path.ownerId, path.mountId, path.id);
+    const canWrite = permissions?.canWrite ?? false;
     const queryClient = useQueryClient();
     const { isMobile } = useLayout();
     const { data: preview } = useTextPreview(path.ownerId, path.mountId, path.id, !editing);
