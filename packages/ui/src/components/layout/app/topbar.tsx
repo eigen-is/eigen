@@ -36,16 +36,45 @@ type TopbarProps = {
     };
 };
 
-function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
+const GUEST_APPS = new Set(['Drive', 'Docs', 'Stickies', 'Slides', 'Sheets', 'Chat']);
+
+function LogoutDialog({
+    open,
+    onOpenChange,
+    onLogout,
+}: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    onLogout: () => void;
+}) {
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Log out?</DialogTitle>
+                    <DialogDescription>
+                        Logging out will end your current session. You will be logged out of your account and will need
+                        to log in again to continue.
+                    </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => onOpenChange(false)}>
+                        Go Back
+                    </Button>
+                    <Button variant="default" onClick={onLogout}>
+                        Log Out
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+function useLogout(rootRoute: TopbarProps['rootRoute']) {
     const router = useRouter();
     const navigate = rootRoute.useNavigate();
     const auth = useAuth();
-    const { appName } = useLayout();
     const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
-    const { data: settings } = useSpaceSettings();
-    const updateSettings = useUpdateSpaceSettings();
-    const isAdmin = useIsAdmin();
-    const isGuest = auth.user?.role === 'guest';
 
     const handleLogout = () => {
         auth.logout().then(() => {
@@ -56,28 +85,19 @@ function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
         });
     };
 
-    return auth.isAuthenticated ? (
-        <>
-            <Dialog open={logoutDialogOpen} onOpenChange={setLogoutDialogOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Log out?</DialogTitle>
-                        <DialogDescription>
-                            Logging out will end your current session. You will be logged out of your account and will
-                            need to log in again to continue.
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setLogoutDialogOpen(false)}>
-                            Go Back
-                        </Button>
-                        <Button variant="default" onClick={handleLogout}>
-                            Log Out
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+    return { logoutDialogOpen, setLogoutDialogOpen, handleLogout };
+}
 
+function GuestUserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
+    const auth = useAuth();
+    const { appName } = useLayout();
+    const { logoutDialogOpen, setLogoutDialogOpen, handleLogout } = useLogout(rootRoute);
+
+    if (!auth.isAuthenticated) return null;
+
+    return (
+        <>
+            <LogoutDialog open={logoutDialogOpen} onOpenChange={setLogoutDialogOpen} onLogout={handleLogout} />
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="relative h-8 w-8 rounded-full overflow-hidden p-0">
@@ -95,11 +115,7 @@ function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     {apps
-                        .filter(
-                            (app) =>
-                                !isGuest ||
-                                ['Drive', 'Docs', 'Stickies', 'Slides', 'Sheets', 'Chat'].includes(app.name),
-                        )
+                        .filter((app) => GUEST_APPS.has(app.name))
                         .map((app) => {
                             const isActive = app.name.toLowerCase() === appName.toLowerCase();
                             const Icon = app.icon;
@@ -116,6 +132,58 @@ function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
                                 </DropdownMenuItem>
                             );
                         })}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => setLogoutDialogOpen(true)}>
+                        <LogOut />
+                        Log out
+                    </DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
+        </>
+    );
+}
+
+function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
+    const auth = useAuth();
+    const { appName } = useLayout();
+    const { logoutDialogOpen, setLogoutDialogOpen, handleLogout } = useLogout(rootRoute);
+    const { data: settings } = useSpaceSettings();
+    const updateSettings = useUpdateSpaceSettings();
+    const isAdmin = useIsAdmin();
+
+    if (!auth.isAuthenticated) return null;
+
+    return (
+        <>
+            <LogoutDialog open={logoutDialogOpen} onOpenChange={setLogoutDialogOpen} onLogout={handleLogout} />
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" className="relative h-8 w-8 rounded-full overflow-hidden p-0">
+                        <UserAvatar
+                            name={auth.user?.name}
+                            email={auth.user?.email}
+                            userId={auth.user?.email}
+                            size="sm"
+                        />
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent className="w-56" align="end" forceMount>
+                    <DropdownMenuLabel className="font-normal">
+                        <UserItem name={auth.user?.name} email={auth.user?.email} className="p-0" />
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {apps.map((app) => {
+                        const isActive = app.name.toLowerCase() === appName.toLowerCase();
+                        const Icon = app.icon;
+                        return (
+                            <DropdownMenuItem key={app.name} asChild className={isActive ? 'bg-muted font-medium' : ''}>
+                                <a href={app.href}>
+                                    <Icon />
+                                    {app.name}
+                                </a>
+                            </DropdownMenuItem>
+                        );
+                    })}
                     {isAdmin && (
                         <>
                             <DropdownMenuSeparator />
@@ -127,41 +195,37 @@ function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
                             </DropdownMenuItem>
                         </>
                     )}
-                    {!isGuest && (
-                        <>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem asChild>
-                                <a href={getSpaceProfileUrl()}>
-                                    <UserRound />
-                                    Profile
-                                </a>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
-                                <a href={getSpacePasswordUrl()}>
-                                    <Settings />
-                                    Settings
-                                </a>
-                            </DropdownMenuItem>
-                            <DropdownMenuSub>
-                                <DropdownMenuSubTrigger>
-                                    <Palette />
-                                    Theme
-                                </DropdownMenuSubTrigger>
-                                <DropdownMenuSubContent>
-                                    <DropdownMenuRadioGroup
-                                        value={settings?.theme ?? 'light'}
-                                        onValueChange={(v) =>
-                                            updateSettings.mutate({ theme: v as 'light' | 'dark' | 'system' })
-                                        }
-                                    >
-                                        <DropdownMenuRadioItem value="light">Light</DropdownMenuRadioItem>
-                                        <DropdownMenuRadioItem value="dark">Dark</DropdownMenuRadioItem>
-                                        <DropdownMenuRadioItem value="system">System</DropdownMenuRadioItem>
-                                    </DropdownMenuRadioGroup>
-                                </DropdownMenuSubContent>
-                            </DropdownMenuSub>
-                        </>
-                    )}
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                        <a href={getSpaceProfileUrl()}>
+                            <UserRound />
+                            Profile
+                        </a>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                        <a href={getSpacePasswordUrl()}>
+                            <Settings />
+                            Settings
+                        </a>
+                    </DropdownMenuItem>
+                    <DropdownMenuSub>
+                        <DropdownMenuSubTrigger>
+                            <Palette />
+                            Theme
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent>
+                            <DropdownMenuRadioGroup
+                                value={settings?.theme ?? 'light'}
+                                onValueChange={(v) =>
+                                    updateSettings.mutate({ theme: v as 'light' | 'dark' | 'system' })
+                                }
+                            >
+                                <DropdownMenuRadioItem value="light">Light</DropdownMenuRadioItem>
+                                <DropdownMenuRadioItem value="dark">Dark</DropdownMenuRadioItem>
+                                <DropdownMenuRadioItem value="system">System</DropdownMenuRadioItem>
+                            </DropdownMenuRadioGroup>
+                        </DropdownMenuSubContent>
+                    </DropdownMenuSub>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => setLogoutDialogOpen(true)}>
                         <LogOut />
@@ -170,12 +234,13 @@ function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
                 </DropdownMenuContent>
             </DropdownMenu>
         </>
-    ) : null;
+    );
 }
 
 export function Topbar({ rootRoute }: TopbarProps) {
     const { appName, documentTitle, isMobile, sidebarMode, setSidebarOpen } = useLayout();
     const auth = useAuth();
+    const isGuest = auth.user?.role === 'guest';
     const { data: unreadCount = 0 } = useUnreadNotificationCount(auth.user?.id ?? '');
 
     useEffect(() => {
@@ -242,7 +307,7 @@ export function Topbar({ rootRoute }: TopbarProps) {
                         </DialogContent>
                     </Dialog>
                     <NotificationBell />
-                    <UserDropdown rootRoute={rootRoute} />
+                    {isGuest ? <GuestUserDropdown rootRoute={rootRoute} /> : <UserDropdown rootRoute={rootRoute} />}
                 </div>
             </div>
         </header>
