@@ -62,7 +62,7 @@ export function MemberDetail({ member, organizationId }: MemberDetailProps) {
     const navigate = useNavigate();
 
     const handleRoleChange = async (newRole: 'admin' | 'member' | 'owner') => {
-        await updateRole.mutateAsync({ memberId: member.id, role: newRole });
+        await updateRole.mutateAsync({ memberId: member.id, userId: member.userId, role: newRole });
     };
 
     const handleDelete = async () => {
