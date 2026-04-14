@@ -5,7 +5,7 @@ import type { DriveContextType } from '@workspace/lib/types/drive';
 import { createContext } from 'react';
 import { AppShell } from '../app/app-shell';
 import type { EigenDocAppConfig } from './eigendoc-config';
-import { EigenDocSidebar } from './eigendoc-sidebar';
+import { EigenDocSidebar, GuestEigenDocSidebar } from './eigendoc-sidebar';
 
 export const EigenDocDriveContext = createContext<DriveContextType>({
     rootPath: null,
@@ -20,9 +20,10 @@ type EigenDocRootProps = {
 
 export function EigenDocRoot({ config, rootRoute, isFullScreen = false }: EigenDocRootProps) {
     const { user } = useAuth();
+    const isGuest = user?.role === 'guest';
     const mountId = DEFAULT_MOUNT_ID;
-    const { data: root } = useRootFolder(user?.id || '', mountId);
-    const rootPath = root || null;
+    const { data: root } = useRootFolder(isGuest ? '' : user?.id || '', mountId);
+    const rootPath = isGuest ? null : root || null;
 
     if (!user) {
         return (
@@ -39,15 +40,23 @@ export function EigenDocRoot({ config, rootRoute, isFullScreen = false }: EigenD
             sidebarMode={isFullScreen ? 'none' : 'collapsible'}
             sidebar={
                 !isFullScreen
-                    ? ({ condensed, isMobile, onClose }) => (
-                          <EigenDocSidebar
-                              config={config}
-                              condensed={condensed}
-                              isMobile={isMobile}
-                              onClose={onClose}
-                              rootPath={rootPath}
-                          />
-                      )
+                    ? ({ condensed, isMobile, onClose }) =>
+                          isGuest ? (
+                              <GuestEigenDocSidebar
+                                  config={config}
+                                  condensed={condensed}
+                                  isMobile={isMobile}
+                                  onClose={onClose}
+                              />
+                          ) : (
+                              <EigenDocSidebar
+                                  config={config}
+                                  condensed={condensed}
+                                  isMobile={isMobile}
+                                  onClose={onClose}
+                                  rootPath={rootPath}
+                              />
+                          )
                     : undefined
             }
         >

@@ -43,3 +43,7 @@ export function getTeamDataPath(teamId: string): string {
 export function getOrgDataPath(orgId: string): string {
     return path.join(getDataRoot(), 'org', orgId);
 }
+
+export function getGuestHomePath(userId: string): string {
+    return path.join(getDataRoot(), 'guest', userId);
+}

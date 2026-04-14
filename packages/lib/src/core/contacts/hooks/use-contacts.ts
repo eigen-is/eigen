@@ -28,7 +28,7 @@ export function useContacts() {
             return response.data || [];
         },
         staleTime: 5 * 60 * 1000, // 5 minutes
-        enabled: !!ownerId,
+        enabled: !!ownerId && user?.role !== 'guest',
     });
 }
 

@@ -4,6 +4,7 @@ import { ApiError } from '../core';
 import { getOrgExists } from '../org/org.ts';
 import { getTeamExists } from '../team/team.ts';
 import { getUserById } from '../user/user.ts';
+import { GuestHome } from './guest-home.ts';
 import type { Home } from './home';
 import { getSyntheticOrgUser, OrgHome } from './org-home.ts';
 import { getSyntheticTeamUser, TeamHome } from './team-home.ts';
@@ -36,11 +37,18 @@ export async function getHome(ownerId: string): Promise<Home> {
                 case 'user': {
                     const user = await getUserById(parsed.id);
                     if (!user) {
+                        console.error(`[getHome] User not found for id=${parsed.id}, ownerId=${ownerId}`);
                         throw new ApiError(404, 'User not found');
                     }
-                    home = new UserHome(user, () => {
-                        cleanupHomeFactory(ownerId);
-                    });
+                    if (user.role === 'guest') {
+                        home = new GuestHome(user, () => {
+                            cleanupHomeFactory(ownerId);
+                        });
+                    } else {
+                        home = new UserHome(user, () => {
+                            cleanupHomeFactory(ownerId);
+                        });
+                    }
                     break;
                 }
                 case 'team': {

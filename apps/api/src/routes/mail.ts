@@ -1,7 +1,7 @@
 import type { EmailDraft } from '@workspace/lib/types/mail';
 import { Elysia, t } from 'elysia';
 import { contentDisposition, setCacheHeaders } from '../lib/core';
-import { requireLocalhost, requireSelf } from '../lib/core/access';
+import { requireLocalhost, requireNonGuest, requireSelf } from '../lib/core/access';
 import {
     mailboxCreate,
     mailboxDeliver,
@@ -70,6 +70,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
     .get(
         '/mail/:ownerId/mailboxes',
         async ({ params, user }) => {
+            requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             return await mailboxesList(user);
         },
@@ -78,6 +79,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
     .get(
         '/mail/:ownerId/mailbox/:mailboxPath',
         async ({ params, user }) => {
+            requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             return await mailboxGet(user, params.mailboxPath);
         },
@@ -86,6 +88,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
     .post(
         '/mail/:ownerId/mailbox',
         async ({ params, body, user }) => {
+            requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             return await mailboxCreate(user, body.mailbox);
         },
@@ -97,6 +100,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
     .get(
         '/mail/:ownerId/mailbox-exists/:mailboxPath',
         async ({ params, user }) => {
+            requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             return await mailboxExists(user, params.mailboxPath);
         },
@@ -105,6 +109,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
     .get(
         '/mail/:ownerId/message/:id',
         async ({ params, user }) => {
+            requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             return await messageGet(user, params.id);
         },
@@ -113,6 +118,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
     .get(
         '/mail/:ownerId/message/:id/download',
         async ({ params, user, set }) => {
+            requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             setCacheHeaders(set, 86400);
             set.headers['Content-Type'] = 'message/rfc822';
@@ -125,6 +131,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
     .delete(
         '/mail/:ownerId/message/:id',
         async ({ params, user }) => {
+            requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             return await messageDelete(user, params.id);
         },
@@ -133,6 +140,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
     .put(
         '/mail/:ownerId/message/move',
         async ({ params, body, user }) => {
+            requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             return await messageMove(user, body.messageId, body.targetMailbox);
         },
@@ -144,6 +152,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
     .put(
         '/mail/:ownerId/message/move-to-inbox',
         async ({ params, body, user }) => {
+            requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             return await messageMoveToInbox(user, body.messageId);
         },
@@ -155,6 +164,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
     .put(
         '/mail/:ownerId/message/move-to-archive',
         async ({ params, body, user }) => {
+            requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             return await messageMoveToArchive(user, body.messageId);
         },
@@ -166,6 +176,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
     .put(
         '/mail/:ownerId/message/move-to-spam',
         async ({ params, body, user }) => {
+            requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             return await messageMoveToSpam(user, body.messageId);
         },
@@ -177,6 +188,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
     .put(
         '/mail/:ownerId/message/move-to-trash',
         async ({ params, body, user }) => {
+            requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             return await messageMoveToTrash(user, body.messageId);
         },
@@ -188,6 +200,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
     .post(
         '/mail/:ownerId/message/copy',
         async ({ params, body, user }) => {
+            requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             return await messageCopy(user, body.messageId, body.targetMailbox);
         },
@@ -199,6 +212,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
     .put(
         '/mail/:ownerId/message/draft',
         async ({ params, body, user }) => {
+            requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             return await messageHandleDraft(user, body.mail as EmailDraft);
         },
@@ -210,6 +224,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
     .post(
         '/mail/:ownerId/message/send',
         async ({ params, body, user }) => {
+            requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             return await messageSend(user, body.mail as EmailDraft);
         },
@@ -221,6 +236,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
     .put(
         '/mail/:ownerId/message/:id/read',
         async ({ params, body, user }) => {
+            requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             return await messageSetRead(user, params.id, body.read);
         },
@@ -232,6 +248,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
     .put(
         '/mail/:ownerId/message/:id/flagged',
         async ({ params, body, user }) => {
+            requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             return await messageSetFlagged(user, params.id, body.flagged);
         },
@@ -243,6 +260,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
     .get(
         '/mail/:ownerId/message/:id/attachment/:index/:fileName',
         async ({ params, user, set }) => {
+            requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
             setCacheHeaders(set, 86400);
             set.headers['Content-Type'] = 'application/octet-stream';

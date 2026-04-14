@@ -15,15 +15,17 @@ export async function reconcileSharesForNewUser(user: User): Promise<void> {
             const owner = await getUserById(fromUserId);
             if (!owner) continue;
 
-            const calShares = await pullCalendarShares(fromUserId, user.email, []);
-            for (const result of calShares) {
-                targetHome.calendar.receiveShare(
-                    fromUserId,
-                    result.calendarId,
-                    result.name,
-                    result.color,
-                    result.permission,
-                );
+            if (targetHome.hasCalendar) {
+                const calShares = await pullCalendarShares(fromUserId, user.email, []);
+                for (const result of calShares) {
+                    targetHome.calendar.receiveShare(
+                        fromUserId,
+                        result.calendarId,
+                        result.name,
+                        result.color,
+                        result.permission,
+                    );
+                }
             }
 
             const sharedPaths = await pullSharedPaths(fromUserId, user);
@@ -31,29 +33,31 @@ export async function reconcileSharesForNewUser(user: User): Promise<void> {
                 await targetHome.drive.receiveACLChange(path, path.acl);
             }
 
-            const invitations = await pullPendingInvitations(fromUserId, user.email);
-            for (const event of invitations) {
-                targetHome.calendar.receiveInvitation({
-                    uid: event.uid,
-                    title: event.title,
-                    description: event.description,
-                    location: event.location,
-                    startTime: event.startTime,
-                    endTime: event.endTime,
-                    allDay: event.allDay,
-                    rrule: event.rrule,
-                    timezone: event.timezone,
-                    status: event.status,
-                    sequence: event.sequence,
-                    data: {
-                        organizer: { userId: fromUserId, email: owner.email, name: owner.name },
+            if (targetHome.hasCalendar) {
+                const invitations = await pullPendingInvitations(fromUserId, user.email);
+                for (const event of invitations) {
+                    targetHome.calendar.receiveInvitation({
+                        uid: event.uid,
+                        title: event.title,
+                        description: event.description,
+                        location: event.location,
+                        startTime: event.startTime,
+                        endTime: event.endTime,
+                        allDay: event.allDay,
+                        rrule: event.rrule,
+                        timezone: event.timezone,
+                        status: event.status,
+                        sequence: event.sequence,
+                        data: {
+                            organizer: { userId: fromUserId, email: owner.email, name: owner.name },
+                            organizerEventId: event.id,
+                            attendees: event.data?.attendees,
+                        },
+                        createByUserId: fromUserId,
                         organizerEventId: event.id,
-                        attendees: event.data?.attendees,
-                    },
-                    createByUserId: fromUserId,
-                    organizerEventId: event.id,
-                    organizerUserId: fromUserId,
-                });
+                        organizerUserId: fromUserId,
+                    });
+                }
             }
         } catch (error) {
             console.error(`Failed to reconcile shares from ${fromUserId} for new user ${user.id}:`, error);

@@ -12,7 +12,7 @@ import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
 import { UserAvatar } from '@workspace/ui/components/layout/user-avatar';
 import { Separator } from '@workspace/ui/components/separator';
-import { ClipboardList, Plus, Settings, UserPlus, Users, UsersRound } from 'lucide-react';
+import { ClipboardList, Plus, Settings, UserMinus, UserPlus, UserRoundCheck, Users, UsersRound } from 'lucide-react';
 import { useState } from 'react';
 
 type AdminSidebarProps = {
@@ -87,6 +87,18 @@ export function AdminSidebar({
                         icon={<UsersRound className="h-4 w-4" />}
                         label="Teams"
                         to="/teams"
+                        condensed={condensed}
+                    />
+                    <SidebarItem
+                        icon={<UserRoundCheck className="h-4 w-4" />}
+                        label="Guests"
+                        to="/guests"
+                        condensed={condensed}
+                    />
+                    <SidebarItem
+                        icon={<UserMinus className="h-4 w-4" />}
+                        label="Orphans"
+                        to="/orphans"
                         condensed={condensed}
                     />
                 </SidebarSection>

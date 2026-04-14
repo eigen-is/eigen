@@ -5,7 +5,7 @@ import type { DriveContextType } from '@workspace/lib/types/drive';
 import { ErrorState, LoadingState } from '@workspace/ui';
 import { AppShell } from '@workspace/ui/components/layout/app/app-shell.tsx';
 import { createContext } from 'react';
-import { DriveSidebar } from '../components/drive/drive-sidebar';
+import { DriveSidebar, GuestDriveSidebar } from '../components/drive/drive-sidebar';
 
 export const DriveContext = createContext<DriveContextType>({
     rootPath: null,
@@ -27,7 +27,25 @@ function DriveRoot() {
         );
     }
 
+    if (user.role === 'guest') return <GuestDriveRoot />;
+
     return <AuthenticatedDriveRoot />;
+}
+
+function GuestDriveRoot() {
+    return (
+        <AppShell
+            appName="drive"
+            rootRoute={Route}
+            sidebar={({ condensed, isMobile, onClose }) => (
+                <GuestDriveSidebar condensed={condensed} isMobile={isMobile} onClose={onClose} />
+            )}
+        >
+            <DriveContext.Provider value={{ rootPath: null, mountId: DEFAULT_MOUNT_ID }}>
+                <Outlet />
+            </DriveContext.Provider>
+        </AppShell>
+    );
 }
 
 function AuthenticatedDriveRoot() {

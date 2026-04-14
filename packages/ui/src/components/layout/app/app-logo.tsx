@@ -1,5 +1,6 @@
 import { Link } from '@tanstack/react-router';
-import { getSpaceAppUrl } from '@workspace/lib/api';
+import { getDriveAppUrl, getSpaceAppUrl } from '@workspace/lib/api';
+import { useAuth } from '@workspace/lib/auth';
 import { cn } from '../../../lib/utils.ts';
 import { Bar } from '../braket/bar.tsx';
 import { Ket } from '../braket/ket.tsx';
@@ -7,19 +8,24 @@ import { Ket } from '../braket/ket.tsx';
 type AppLogoProps = {
     appName?: string;
     className?: string;
+    logoHref?: string;
 };
 
-export function AppLogo({ appName = 'mail', className }: AppLogoProps) {
+export function AppLogo({ appName = 'mail', className, logoHref }: AppLogoProps) {
+    const { user } = useAuth();
     const isSpace = appName.toLowerCase() === 'space';
+    // Guests can't access the Space app — link them to Drive instead
+    const defaultHref = user?.role === 'guest' ? getDriveAppUrl() : isSpace ? undefined : getSpaceAppUrl();
+    const href = logoHref ?? defaultHref;
 
     return (
         <div className={cn('text-xl flex items-center select-none -mt-1', className)}>
-            {isSpace ? (
+            {isSpace || href === undefined ? (
                 <Link to="/" className="text-white font-bold hover:opacity-75 transition-opacity">
                     eigen
                 </Link>
             ) : (
-                <a href={getSpaceAppUrl()} className="text-white font-bold hover:opacity-75 transition-opacity">
+                <a href={href} className="text-white font-bold hover:opacity-75 transition-opacity">
                     eigen
                 </a>
             )}
