@@ -50,7 +50,7 @@ export function useUpdateMemberRole(organizationId?: string) {
             });
             if (error) throw new Error(String(error));
             // Keep user.role in sync so useIsAdmin works without an API call
-            await authClient.admin.setUserRole({ userId, role: role === 'member' ? 'user' : 'admin' });
+            await authClient.admin.setRole({ userId, role: role === 'member' ? 'user' : 'admin' });
             return data;
         },
         onSuccess: () => {
