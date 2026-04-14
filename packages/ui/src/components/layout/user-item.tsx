@@ -25,7 +25,12 @@ export function UserItem({
     mailLink = false,
     ...props
 }: UserItemProps) {
-    const { displayName, resolvedEmail, avatarSrc, isLoading } = useResolvedUser({ userId, email, name, imageUrl });
+    const { displayName, resolvedEmail, avatarSrc, isLoading } = useResolvedUser({
+        userId,
+        email,
+        name,
+        imageUrl,
+    });
 
     if (isLoading) return <EigenLoader />;
 

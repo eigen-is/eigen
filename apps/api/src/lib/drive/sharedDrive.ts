@@ -246,6 +246,10 @@ export default class SharedDrive extends Drive {
         visibility?: DriveVisibility,
         sharingRestricted?: boolean,
     ) {
+        if (this.user.role === 'guest') {
+            throw new ApiError(403, 'Guests cannot modify sharing settings');
+        }
+
         const memberships = await this.getUserMemberships();
         if (!(await this.canWrite(mountId, pathId, this.user, memberships))) {
             throw new ApiError(403, 'No write permission');
