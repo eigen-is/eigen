@@ -1,5 +1,4 @@
 import { useNavigate } from '@tanstack/react-router';
-import { useAuth } from '@workspace/lib/auth';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { SidebarItem, StorageUsage } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
@@ -17,6 +16,33 @@ type EigenDocSidebarProps = {
     rootPath?: DrivePath | null;
 };
 
+export function GuestEigenDocSidebar({
+    config,
+    condensed = false,
+    onClose,
+    isMobile = false,
+}: Omit<EigenDocSidebarProps, 'rootPath'>) {
+    return (
+        <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
+            {isMobile && <SidebarHeader appName={config.appName} onClose={onClose} />}
+            <SidebarSection condensed={condensed}>
+                <SidebarItem
+                    icon={<config.icon className="h-4 w-4" />}
+                    to="/"
+                    label={config.allLabel}
+                    condensed={condensed}
+                />
+                <SidebarItem
+                    icon={<Download className="h-4 w-4" />}
+                    to="/shared/with-me"
+                    label="Shared with me"
+                    condensed={condensed}
+                />
+            </SidebarSection>
+        </div>
+    );
+}
+
 export function EigenDocSidebar({
     config,
     condensed = false,
@@ -26,26 +52,22 @@ export function EigenDocSidebar({
 }: EigenDocSidebarProps) {
     const [createOpen, setCreateOpen] = useState(false);
     const navigate = useNavigate();
-    const { user } = useAuth();
-    const isGuest = user?.role === 'guest';
     const CreateDialog = config.createDialog;
 
     return (
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
             {isMobile && <SidebarHeader appName={config.appName} onClose={onClose} />}
-            {!isGuest && (
-                <div className="px-3 py-2">
-                    <Button
-                        variant="default"
-                        size={condensed ? 'icon' : 'default'}
-                        className={`${condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}`}
-                        onClick={() => setCreateOpen(true)}
-                    >
-                        <Plus className="h-4 w-4" />
-                        {!condensed && <span>{config.newLabel}</span>}
-                    </Button>
-                </div>
-            )}
+            <div className="px-3 py-2">
+                <Button
+                    variant="default"
+                    size={condensed ? 'icon' : 'default'}
+                    className={`${condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}`}
+                    onClick={() => setCreateOpen(true)}
+                >
+                    <Plus className="h-4 w-4" />
+                    {!condensed && <span>{config.newLabel}</span>}
+                </Button>
+            </div>
 
             <SidebarSection condensed={condensed}>
                 <SidebarItem
@@ -54,14 +76,12 @@ export function EigenDocSidebar({
                     label={config.allLabel}
                     condensed={condensed}
                 />
-                {!isGuest && (
-                    <SidebarItem
-                        icon={<UsersRound className="h-4 w-4" />}
-                        to="/shared/by-me"
-                        label="Shared by me"
-                        condensed={condensed}
-                    />
-                )}
+                <SidebarItem
+                    icon={<UsersRound className="h-4 w-4" />}
+                    to="/shared/by-me"
+                    label="Shared by me"
+                    condensed={condensed}
+                />
                 <SidebarItem
                     icon={<Download className="h-4 w-4" />}
                     to="/shared/with-me"
@@ -70,7 +90,7 @@ export function EigenDocSidebar({
                 />
             </SidebarSection>
 
-            {!isGuest && <StorageUsage className="mt-auto" condensed={condensed} />}
+            <StorageUsage className="mt-auto" condensed={condensed} />
 
             {rootPath && (
                 <CreateDialog
