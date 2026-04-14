@@ -63,7 +63,7 @@ export function DriveLayout({
     onRowActivate,
     onBackToList,
     onAfterAction,
-    pathId = 'unknown',
+    pathId,
     selectedPath = null,
     currentPath = null,
     allowCreateFolder = true,

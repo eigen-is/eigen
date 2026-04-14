@@ -58,7 +58,7 @@ function getCreateMenuItems(cb: CreateCallbacks) {
 type DriveListToolbarProps = CreateCallbacks & {
     ownerId: string;
     mountId: string;
-    pathId: string;
+    pathId?: string;
     showBreadcrumb?: boolean;
     onRowSelect?: (path: DrivePath) => void;
     onRowActivate?: (path: DrivePath) => void;
@@ -176,7 +176,7 @@ type DriveListProps = CreateCallbacks & {
     getItemHref?: (item: DrivePath) => string | undefined;
     ownerId: string;
     mountId: string;
-    pathId: string;
+    pathId?: string;
     showBreadcrumb?: boolean;
     allowDelete?: boolean;
     allowUpload?: boolean;
