@@ -3,8 +3,12 @@ import { z } from 'zod';
 import { LoginPage } from './loginpage.tsx';
 
 function LoginRoute() {
-    const { email } = useSearch({ strict: false }) as { email?: string };
-    return <LoginPage email={email} />;
+    const search = useSearch({ strict: false }) as { email?: string; redirect?: string };
+    // email may be a top-level param or embedded inside the redirect URL
+    const email =
+        search.email ||
+        (search.redirect?.includes('email=') ? new URLSearchParams(search.redirect.split('?')[1]).get('email') : null);
+    return <LoginPage email={email || undefined} />;
 }
 
 export const loginSearchSchema = z.object({
