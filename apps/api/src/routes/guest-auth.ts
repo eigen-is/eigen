@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 import { generateRandomString, hashPassword } from 'better-auth/crypto';
 import { and, eq, like, lt } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';
@@ -14,7 +14,7 @@ import { getUserByEmail } from '../lib/user/user';
 // Guests never see this; they authenticate only via OTP. This exists solely so we
 // can call auth.api.signInEmail to get properly signed session cookies.
 function guestPassword(email: string): string {
-    return `guest:${email}:${auth.options.secret}`;
+    return createHmac('sha256', auth.options.secret).update(`guest:${email}`).digest('hex');
 }
 
 function generateOtp(): string {
@@ -114,7 +114,7 @@ export const guestAuthRouter = new Elysia({ name: 'guest-auth' })
                 }
             } else {
                 const localPart = email.split('@')[0] ?? email;
-                const now2 = new Date();
+                const now = new Date();
                 const newId = generateRandomString(32);
                 // Insert user directly to bypass databaseHooks (guests must not be auto-added to org)
                 db.insert(userTable)
@@ -124,8 +124,8 @@ export const guestAuthRouter = new Elysia({ name: 'guest-auth' })
                         name: localPart,
                         emailVerified: true,
                         role: 'guest',
-                        createdAt: now2,
-                        updatedAt: now2,
+                        createdAt: now,
+                        updatedAt: now,
                     })
                     .run();
                 guestUser = await getUserByEmail(email);
