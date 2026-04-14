@@ -15,8 +15,10 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthWaitlistRouteImport } from './routes/_auth.waitlist'
 import { Route as AuthTeamsRouteImport } from './routes/_auth.teams'
 import { Route as AuthSettingsRouteImport } from './routes/_auth.settings'
+import { Route as AuthOrphansRouteImport } from './routes/_auth.orphans'
 import { Route as AuthOnboardingRouteImport } from './routes/_auth.onboarding'
 import { Route as AuthMembersRouteImport } from './routes/_auth.members'
+import { Route as AuthGuestsRouteImport } from './routes/_auth.guests'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -47,6 +49,11 @@ const AuthSettingsRoute = AuthSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AuthRoute,
 } as any)
+const AuthOrphansRoute = AuthOrphansRouteImport.update({
+  id: '/orphans',
+  path: '/orphans',
+  getParentRoute: () => AuthRoute,
+} as any)
 const AuthOnboardingRoute = AuthOnboardingRouteImport.update({
   id: '/onboarding',
   path: '/onboarding',
@@ -57,12 +64,19 @@ const AuthMembersRoute = AuthMembersRouteImport.update({
   path: '/members',
   getParentRoute: () => AuthRoute,
 } as any)
+const AuthGuestsRoute = AuthGuestsRouteImport.update({
+  id: '/guests',
+  path: '/guests',
+  getParentRoute: () => AuthRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/guests': typeof AuthGuestsRoute
   '/members': typeof AuthMembersRoute
   '/onboarding': typeof AuthOnboardingRoute
+  '/orphans': typeof AuthOrphansRoute
   '/settings': typeof AuthSettingsRoute
   '/teams': typeof AuthTeamsRoute
   '/waitlist': typeof AuthWaitlistRoute
@@ -70,8 +84,10 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/guests': typeof AuthGuestsRoute
   '/members': typeof AuthMembersRoute
   '/onboarding': typeof AuthOnboardingRoute
+  '/orphans': typeof AuthOrphansRoute
   '/settings': typeof AuthSettingsRoute
   '/teams': typeof AuthTeamsRoute
   '/waitlist': typeof AuthWaitlistRoute
@@ -81,8 +97,10 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_auth': typeof AuthRouteWithChildren
   '/login': typeof LoginRoute
+  '/_auth/guests': typeof AuthGuestsRoute
   '/_auth/members': typeof AuthMembersRoute
   '/_auth/onboarding': typeof AuthOnboardingRoute
+  '/_auth/orphans': typeof AuthOrphansRoute
   '/_auth/settings': typeof AuthSettingsRoute
   '/_auth/teams': typeof AuthTeamsRoute
   '/_auth/waitlist': typeof AuthWaitlistRoute
@@ -92,8 +110,10 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/guests'
     | '/members'
     | '/onboarding'
+    | '/orphans'
     | '/settings'
     | '/teams'
     | '/waitlist'
@@ -101,8 +121,10 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/login'
+    | '/guests'
     | '/members'
     | '/onboarding'
+    | '/orphans'
     | '/settings'
     | '/teams'
     | '/waitlist'
@@ -111,8 +133,10 @@ export interface FileRouteTypes {
     | '/'
     | '/_auth'
     | '/login'
+    | '/_auth/guests'
     | '/_auth/members'
     | '/_auth/onboarding'
+    | '/_auth/orphans'
     | '/_auth/settings'
     | '/_auth/teams'
     | '/_auth/waitlist'
@@ -168,6 +192,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthSettingsRouteImport
       parentRoute: typeof AuthRoute
     }
+    '/_auth/orphans': {
+      id: '/_auth/orphans'
+      path: '/orphans'
+      fullPath: '/orphans'
+      preLoaderRoute: typeof AuthOrphansRouteImport
+      parentRoute: typeof AuthRoute
+    }
     '/_auth/onboarding': {
       id: '/_auth/onboarding'
       path: '/onboarding'
@@ -182,20 +213,31 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthMembersRouteImport
       parentRoute: typeof AuthRoute
     }
+    '/_auth/guests': {
+      id: '/_auth/guests'
+      path: '/guests'
+      fullPath: '/guests'
+      preLoaderRoute: typeof AuthGuestsRouteImport
+      parentRoute: typeof AuthRoute
+    }
   }
 }
 
 interface AuthRouteChildren {
+  AuthGuestsRoute: typeof AuthGuestsRoute
   AuthMembersRoute: typeof AuthMembersRoute
   AuthOnboardingRoute: typeof AuthOnboardingRoute
+  AuthOrphansRoute: typeof AuthOrphansRoute
   AuthSettingsRoute: typeof AuthSettingsRoute
   AuthTeamsRoute: typeof AuthTeamsRoute
   AuthWaitlistRoute: typeof AuthWaitlistRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
+  AuthGuestsRoute: AuthGuestsRoute,
   AuthMembersRoute: AuthMembersRoute,
   AuthOnboardingRoute: AuthOnboardingRoute,
+  AuthOrphansRoute: AuthOrphansRoute,
   AuthSettingsRoute: AuthSettingsRoute,
   AuthTeamsRoute: AuthTeamsRoute,
   AuthWaitlistRoute: AuthWaitlistRoute,

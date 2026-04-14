@@ -1,3 +1,4 @@
+import { formatDate } from '@workspace/lib/date';
 import type { AdminUser } from '@workspace/lib/types/admin';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
@@ -119,7 +120,7 @@ export function AdminUserDetail({ user, onDelete }: AdminUserDetailProps) {
                 )}
                 <div>
                     <h3 className="text-sm font-medium text-muted-foreground mb-2">Created</h3>
-                    <p className="text-sm">{user.createdAt.toLocaleDateString()}</p>
+                    <p className="text-sm">{formatDate(user.createdAt)}</p>
                 </div>
             </div>
 

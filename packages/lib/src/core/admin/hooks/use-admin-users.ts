@@ -9,7 +9,7 @@ export function useAdminUsers(filter: 'guest' | 'orphan') {
         queryFn: async (): Promise<AdminUser[]> => {
             const response = await settingsApi.users({ filter }).get();
             if (!response.data) return [];
-            return (response.data as AdminUser[]).map((u) => ({
+            return response.data.map((u) => ({
                 ...u,
                 createdAt: new Date(u.createdAt),
             }));
