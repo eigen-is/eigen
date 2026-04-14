@@ -151,11 +151,11 @@ describe('Team Drives', () => {
         const mountId = mounts[0].id;
         const root = await driveGet(ctx.alice.user.sessionToken, teamOwner, mountId, 'root');
 
-        const writeRes = await authedRequest(
+        const permRes = await authedRequest(
             ctx.charlie.user.sessionToken,
-            `/drive/${teamOwner}/${mountId}/path/${root.id}/permissions/write`,
+            `/drive/${teamOwner}/${mountId}/path/${root.id}/permissions`,
         );
-        const result = await assertJson<PermissionResult>(writeRes);
+        const result = await assertJson<PermissionResult>(permRes);
         expect(result.canWrite).toBe(false);
     });
 
@@ -265,7 +265,7 @@ describe('Team ACL on personal drive', () => {
 
         const bobRead = await authedRequest(
             ctx.bob.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${folder.id}/permissions/read`,
+            `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${folder.id}/permissions`,
         );
         const bobResult = await assertJson<PermissionResult>(bobRead);
         expect(bobResult.canRead).toBe(true);
@@ -292,7 +292,7 @@ describe('Team ACL on personal drive', () => {
 
         const charlieRead = await authedRequest(
             ctx.charlie.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${folder.id}/permissions/read`,
+            `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${folder.id}/permissions`,
         );
         const charlieResult = await assertJson<PermissionResult>(charlieRead);
         expect(charlieResult.canRead).toBe(false);
@@ -319,7 +319,7 @@ describe('Team ACL on personal drive', () => {
 
         const bobWrite = await authedRequest(
             ctx.bob.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${folder.id}/permissions/write`,
+            `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${folder.id}/permissions`,
         );
         const bobResult = await assertJson<PermissionResult>(bobWrite);
         expect(bobResult.canWrite).toBe(true);
@@ -350,20 +350,20 @@ describe('Team ACL on personal drive', () => {
         // Charlie (individual write) can write
         const charlieWrite = await authedRequest(
             ctx.charlie.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${folder.id}/permissions/write`,
+            `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${folder.id}/permissions`,
         );
         expect((await assertJson<PermissionResult>(charlieWrite)).canWrite).toBe(true);
 
         // Bob (team read only) can read but not write
         const bobRead = await authedRequest(
             ctx.bob.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${folder.id}/permissions/read`,
+            `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${folder.id}/permissions`,
         );
         expect((await assertJson<PermissionResult>(bobRead)).canRead).toBe(true);
 
         const bobWrite = await authedRequest(
             ctx.bob.user.sessionToken,
-            `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${folder.id}/permissions/write`,
+            `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${folder.id}/permissions`,
         );
         expect((await assertJson<PermissionResult>(bobWrite)).canWrite).toBe(false);
     });
@@ -852,21 +852,11 @@ describe('Cross-Team Access Edge Cases', () => {
         });
 
         // Bob can now read the folder despite not being in team2
-        const bobRead = await driveGetPermission(
-            ctx.bob.user.sessionToken,
-            team2Owner,
-            team2MountId,
-            `path/${folder.id}/permissions/read`,
-        );
+        const bobRead = await driveGetPermission(ctx.bob.user.sessionToken, team2Owner, team2MountId, folder.id);
         expect(bobRead.canRead).toBe(true);
 
         // But Bob still can't read the team2 root
-        const bobRootRead = await driveGetPermission(
-            ctx.bob.user.sessionToken,
-            team2Owner,
-            team2MountId,
-            `path/${team2Root.id}/permissions/read`,
-        );
+        const bobRootRead = await driveGetPermission(ctx.bob.user.sessionToken, team2Owner, team2MountId, team2Root.id);
         expect(bobRootRead.canRead).toBe(false);
     });
 
@@ -894,17 +884,12 @@ describe('Cross-Team Access Edge Cases', () => {
             ctx.charlie.user.sessionToken,
             ctx.alice.user.id,
             aliceMountId,
-            `path/${folder.id}/permissions/read`,
+            folder.id,
         );
         expect(charlieRead.canRead).toBe(true);
 
         // Bob (not in team2) cannot access
-        const bobRead = await driveGetPermission(
-            ctx.bob.user.sessionToken,
-            ctx.alice.user.id,
-            aliceMountId,
-            `path/${folder.id}/permissions/read`,
-        );
+        const bobRead = await driveGetPermission(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId, folder.id);
         expect(bobRead.canRead).toBe(false);
     });
 
@@ -954,19 +939,19 @@ describe('Cross-Team Access Edge Cases', () => {
             ctx.bob.user.sessionToken,
             ctx.alice.user.id,
             aliceMountId,
-            `path/${parent.id}/permissions/read`,
+            parent.id,
         );
         const bobReadChild = await driveGetPermission(
             ctx.bob.user.sessionToken,
             ctx.alice.user.id,
             aliceMountId,
-            `path/${child.id}/permissions/read`,
+            child.id,
         );
         const bobWriteGrandchild = await driveGetPermission(
             ctx.bob.user.sessionToken,
             ctx.alice.user.id,
             aliceMountId,
-            `path/${grandchild.id}/permissions/write`,
+            grandchild.id,
         );
 
         expect(bobReadParent.canRead).toBe(true);
@@ -978,19 +963,19 @@ describe('Cross-Team Access Edge Cases', () => {
             ctx.charlie.user.sessionToken,
             ctx.alice.user.id,
             aliceMountId,
-            `path/${parent.id}/permissions/read`,
+            parent.id,
         );
         const charlieWriteChild = await driveGetPermission(
             ctx.charlie.user.sessionToken,
             ctx.alice.user.id,
             aliceMountId,
-            `path/${child.id}/permissions/write`,
+            child.id,
         );
         const charlieWriteGrandchild = await driveGetPermission(
             ctx.charlie.user.sessionToken,
             ctx.alice.user.id,
             aliceMountId,
-            `path/${grandchild.id}/permissions/write`,
+            grandchild.id,
         );
 
         expect(charlieReadParent.canRead).toBe(false); // No access to parent
@@ -1061,17 +1046,12 @@ describe('Team ACL Edge Cases with Personal Drives', () => {
         });
 
         // Bob (team) should have read-only
-        const bobRead = await driveGetPermission(
-            ctx.bob.user.sessionToken,
-            ctx.alice.user.id,
-            aliceMountId,
-            `path/${folder.id}/permissions/read`,
-        );
+        const bobRead = await driveGetPermission(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId, folder.id);
         const bobWrite = await driveGetPermission(
             ctx.bob.user.sessionToken,
             ctx.alice.user.id,
             aliceMountId,
-            `path/${folder.id}/permissions/write`,
+            folder.id,
         );
         expect(bobRead.canRead).toBe(true);
         expect(bobWrite.canWrite).toBe(false);
@@ -1081,13 +1061,13 @@ describe('Team ACL Edge Cases with Personal Drives', () => {
             ctx.charlie.user.sessionToken,
             ctx.alice.user.id,
             aliceMountId,
-            `path/${folder.id}/permissions/read`,
+            folder.id,
         );
         const charlieWrite = await driveGetPermission(
             ctx.charlie.user.sessionToken,
             ctx.alice.user.id,
             aliceMountId,
-            `path/${folder.id}/permissions/write`,
+            folder.id,
         );
         expect(charlieRead.canRead).toBe(true);
         expect(charlieWrite.canWrite).toBe(true);
@@ -1126,7 +1106,7 @@ describe('Team ACL Edge Cases with Personal Drives', () => {
             ctx.bob.user.sessionToken,
             ctx.alice.user.id,
             aliceMountId,
-            `path/${child.id}/permissions/write`,
+            child.id,
         );
         expect(bobWriteChild.canWrite).toBe(true);
 
@@ -1135,7 +1115,7 @@ describe('Team ACL Edge Cases with Personal Drives', () => {
             ctx.charlie.user.sessionToken,
             ctx.alice.user.id,
             aliceMountId,
-            `path/${child.id}/permissions/write`,
+            child.id,
         );
         expect(charlieWriteChild.canWrite).toBe(true); // Additive model: team write + individual read = write
     });
@@ -1158,12 +1138,7 @@ describe('Team ACL Edge Cases with Personal Drives', () => {
         });
 
         // Bob has both team and individual access
-        const bobRead = await driveGetPermission(
-            ctx.bob.user.sessionToken,
-            ctx.alice.user.id,
-            aliceMountId,
-            `path/${folder.id}/permissions/read`,
-        );
+        const bobRead = await driveGetPermission(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId, folder.id);
         expect(bobRead.canRead).toBe(true);
 
         // Remove bob from team
@@ -1178,13 +1153,13 @@ describe('Team ACL Edge Cases with Personal Drives', () => {
             ctx.bob.user.sessionToken,
             ctx.alice.user.id,
             aliceMountId,
-            `path/${folder.id}/permissions/read`,
+            folder.id,
         );
         const bobWriteAfter = await driveGetPermission(
             ctx.bob.user.sessionToken,
             ctx.alice.user.id,
             aliceMountId,
-            `path/${folder.id}/permissions/write`,
+            folder.id,
         );
         expect(bobReadAfter.canRead).toBe(true);
         expect(bobWriteAfter.canWrite).toBe(false); // Only read from individual ACL
@@ -1248,7 +1223,7 @@ describe('Team ACL Edge Cases with Personal Drives', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderB}/permissions/write`,
+                folderB,
             );
             expect(bobWriteB.canWrite).toBe(true);
 
@@ -1257,7 +1232,7 @@ describe('Team ACL Edge Cases with Personal Drives', () => {
                 ctx.charlie.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderB}/permissions/write`,
+                folderB,
             );
             expect(charlieWriteB.canWrite).toBe(true);
         });
@@ -1294,7 +1269,7 @@ describe('Team ACL Edge Cases with Personal Drives', () => {
                 ctx.charlie.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderB}/permissions/write`,
+                folderB,
             );
             expect(charlieWriteB.canWrite).toBe(true);
 
@@ -1303,13 +1278,13 @@ describe('Team ACL Edge Cases with Personal Drives', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderA}/permissions/read`,
+                folderA,
             );
             const bobWriteB = await driveGetPermission(
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderB}/permissions/write`,
+                folderB,
             );
             expect(bobReadA.canRead).toBe(true);
             expect(bobWriteB.canWrite).toBe(false);
@@ -1334,7 +1309,7 @@ describe('Team ACL Edge Cases with Personal Drives', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderA}/permissions/write`,
+                folderA,
             );
             expect(bobWriteA.canWrite).toBe(true);
 
@@ -1350,7 +1325,7 @@ describe('Team ACL Edge Cases with Personal Drives', () => {
                 ctx.bob.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `path/${folderA}/permissions/write`,
+                folderA,
             );
             expect(bobWriteAAfter.canWrite).toBe(false);
 

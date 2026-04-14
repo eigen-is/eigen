@@ -1,5 +1,5 @@
 import { useAuth } from '@workspace/lib/auth';
-import { useCheckWritePermission, useIsEffectiveOwner, useUpdateACL } from '@workspace/lib/drive';
+import { useCheckPermissions, useIsEffectiveOwner, useUpdateACL } from '@workspace/lib/drive';
 import type { DriveACL, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { DriveAccessList } from '@workspace/ui/components/layout/drive/drive-access-list';
@@ -25,7 +25,7 @@ export function DriveAccessDialog({ open, onOpenChange, path, prefillEmail }: Dr
     const { user } = useAuth();
     const updateACL = useUpdateACL(path?.ownerId || '', path?.mountId, user?.id);
     const isEffectiveOwner = useIsEffectiveOwner(path?.ownerId || '');
-    const { data: writePermission } = useCheckWritePermission(path?.ownerId || '', path?.mountId || '', path?.id);
+    const { data: permissions } = useCheckPermissions(path?.ownerId || '', path?.mountId || '', path?.id);
 
     if (!path) {
         return null;
@@ -72,7 +72,7 @@ export function DriveAccessDialog({ open, onOpenChange, path, prefillEmail }: Dr
                             onSave={handleSave}
                             onCancel={!isSubmitting ? () => onOpenChange(false) : undefined}
                             prefillEmail={prefillEmail}
-                            onEmailClick={writePermission?.canWrite ? handleEmailClick : undefined}
+                            onEmailClick={permissions?.canWrite ? handleEmailClick : undefined}
                         />
                     )}
                 </DialogContent>

@@ -9,7 +9,7 @@
 1. User clicks a text file in Drive → `isInlineEditable(mimeType, name)` check
 2. Navigates to `/drive/edit/:ownerId/:mountId/:pathId` route
 3. File opens in **view mode** (read-only) with breadcrumb toolbar + "Edit" button
-4. "Edit" button shown only if user has write permission (checked via `useCheckWritePermission`)
+4. "Edit" button shown only if user has write permission (checked via `useCheckPermissions`)
 5. Clicking "Edit" switches to **edit mode** with formatting toolbar + Cancel/Save buttons
 6. Save persists content via `PUT /editor/...` with concurrency check, then returns to view mode
 7. "Cancel" discards changes and returns to view mode

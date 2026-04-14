@@ -196,9 +196,9 @@ export function driveGetPermission(
     token: string,
     ownerId: string,
     mountId: string,
-    ...parts: string[]
+    pathId: string,
 ): Promise<PermissionResult> {
-    return driveGet<PermissionResult>(token, ownerId, mountId, ...parts);
+    return driveGet<PermissionResult>(token, ownerId, mountId, `path/${pathId}/permissions`);
 }
 
 export async function drivePost<T = DrivePath>(

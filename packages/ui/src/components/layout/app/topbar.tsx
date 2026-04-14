@@ -5,7 +5,7 @@ import { apps } from '@workspace/lib/apps.ts';
 import { useAuth } from '@workspace/lib/auth/auth-context.tsx';
 import { useUnreadNotificationCount } from '@workspace/lib/notification';
 import { useSpaceSettings, useUpdateSpaceSettings } from '@workspace/lib/space';
-import { LogOut, Menu, Palette, Settings, Shield, TriangleAlert, UserRound } from 'lucide-react';
+import { Grip, LogOut, Menu, Palette, Settings, Shield, TriangleAlert, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '../../button.tsx';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../dialog.tsx';
@@ -88,9 +88,53 @@ function useLogout(rootRoute: TopbarProps['rootRoute']) {
     return { logoutDialogOpen, setLogoutDialogOpen, handleLogout };
 }
 
+function AppSwitcher({ isGuest }: { isGuest: boolean }) {
+    const { appName, isMobile } = useLayout();
+    const isAdmin = useIsAdmin();
+    const appList = isGuest ? apps.filter((app) => GUEST_APPS.has(app.name)) : apps;
+
+    return (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="mr-1 h-8 w-8 text-white hover:bg-primary/20 hover:text-white"
+                >
+                    <Grip className="h-5 w-5" />
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-56" align={isMobile ? 'end' : 'start'} forceMount>
+                {appList.map((app) => {
+                    const isActive = app.name.toLowerCase() === appName.toLowerCase();
+                    const Icon = app.icon;
+                    return (
+                        <DropdownMenuItem key={app.name} asChild className={isActive ? 'bg-muted font-medium' : ''}>
+                            <a href={app.href}>
+                                <Icon />
+                                {app.name}
+                            </a>
+                        </DropdownMenuItem>
+                    );
+                })}
+                {isAdmin && !isGuest && (
+                    <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem asChild>
+                            <a href={getAdminAppUrl()}>
+                                <Shield />
+                                Admin
+                            </a>
+                        </DropdownMenuItem>
+                    </>
+                )}
+            </DropdownMenuContent>
+        </DropdownMenu>
+    );
+}
+
 function GuestUserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
     const auth = useAuth();
-    const { appName } = useLayout();
     const { logoutDialogOpen, setLogoutDialogOpen, handleLogout } = useLogout(rootRoute);
 
     if (!auth.isAuthenticated) return null;
@@ -113,25 +157,6 @@ function GuestUserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] 
                     <DropdownMenuLabel className="font-normal">
                         <UserItem name={auth.user?.name} email={auth.user?.email} className="p-0" />
                     </DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    {apps
-                        .filter((app) => GUEST_APPS.has(app.name))
-                        .map((app) => {
-                            const isActive = app.name.toLowerCase() === appName.toLowerCase();
-                            const Icon = app.icon;
-                            return (
-                                <DropdownMenuItem
-                                    key={app.name}
-                                    asChild
-                                    className={isActive ? 'bg-muted font-medium' : ''}
-                                >
-                                    <a href={app.href}>
-                                        <Icon />
-                                        {app.name}
-                                    </a>
-                                </DropdownMenuItem>
-                            );
-                        })}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => setLogoutDialogOpen(true)}>
                         <LogOut />
@@ -145,11 +170,9 @@ function GuestUserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] 
 
 function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
     const auth = useAuth();
-    const { appName } = useLayout();
     const { logoutDialogOpen, setLogoutDialogOpen, handleLogout } = useLogout(rootRoute);
     const { data: settings } = useSpaceSettings();
     const updateSettings = useUpdateSpaceSettings();
-    const isAdmin = useIsAdmin();
 
     if (!auth.isAuthenticated) return null;
 
@@ -171,30 +194,6 @@ function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
                     <DropdownMenuLabel className="font-normal">
                         <UserItem name={auth.user?.name} email={auth.user?.email} className="p-0" />
                     </DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    {apps.map((app) => {
-                        const isActive = app.name.toLowerCase() === appName.toLowerCase();
-                        const Icon = app.icon;
-                        return (
-                            <DropdownMenuItem key={app.name} asChild className={isActive ? 'bg-muted font-medium' : ''}>
-                                <a href={app.href}>
-                                    <Icon />
-                                    {app.name}
-                                </a>
-                            </DropdownMenuItem>
-                        );
-                    })}
-                    {isAdmin && (
-                        <>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem asChild>
-                                <a href={getAdminAppUrl()}>
-                                    <Shield />
-                                    Admin
-                                </a>
-                            </DropdownMenuItem>
-                        </>
-                    )}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>
                         <a href={getSpaceProfileUrl()}>
@@ -254,18 +253,19 @@ export function Topbar({ rootRoute }: TopbarProps) {
     return (
         <header className="bg-app shrink-0">
             <div className="flex h-12 items-center">
-                <div className="flex items-center px-4 shrink-0">
+                <div className="flex items-center pl-2 pr-4 shrink-0">
                     {showBurger && (
                         <Button
                             variant="ghost"
                             size="icon"
                             onClick={() => setSidebarOpen(true)}
-                            className="mr-2 text-white hover:bg-primary/20 hover:text-white"
+                            className="mr-1 text-white hover:bg-primary/20 hover:text-white"
                         >
                             <Menu className="h-5 w-5" />
                             <span className="sr-only">Open menu</span>
                         </Button>
                     )}
+                    {!isMobile && <AppSwitcher isGuest={isGuest} />}
                     <AppLogo appName={appName.toLowerCase()} />
                 </div>
 
@@ -278,12 +278,11 @@ export function Topbar({ rootRoute }: TopbarProps) {
                 <div className="flex items-center gap-1 px-4 shrink-0">
                     <Button
                         variant="ghost"
-                        className="relative h-8 w-8 rounded-full p-0"
+                        size="icon"
+                        className="h-8 w-8 text-white hover:bg-primary/20 hover:text-white"
                         onClick={() => setTestingDialogOpen(true)}
                     >
-                        <span className="flex items-center justify-center h-6 w-6 rounded-full bg-red-500 text-white">
-                            <TriangleAlert className="h-2 w-2" />
-                        </span>
+                        <TriangleAlert className="h-4 w-4" />
                     </Button>
                     <Dialog open={testingDialogOpen} onOpenChange={setTestingDialogOpen}>
                         <DialogContent>
@@ -307,6 +306,7 @@ export function Topbar({ rootRoute }: TopbarProps) {
                         </DialogContent>
                     </Dialog>
                     <NotificationBell />
+                    {isMobile && <AppSwitcher isGuest={isGuest} />}
                     {isGuest ? <GuestUserDropdown rootRoute={rootRoute} /> : <UserDropdown rootRoute={rootRoute} />}
                 </div>
             </div>

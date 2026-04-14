@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useChatRoom } from '@workspace/lib/chat';
-import { useCheckReadPermission } from '@workspace/lib/drive';
+import { useCheckPermissions } from '@workspace/lib/drive';
 import type { ChatMessage } from '@workspace/lib/types/chat';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import {
@@ -24,7 +24,7 @@ function ChatView() {
     const { ownerId, mountId, chatId } = Route.useParams();
     const chat = useChatRoom(ownerId, mountId, chatId);
 
-    const { data: readPermission, isLoading: permLoading } = useCheckReadPermission(ownerId, mountId, chatId);
+    const { data: permissions, isLoading: permLoading } = useCheckPermissions(ownerId, mountId, chatId);
 
     const [accessDialogOpen, setAccessDialogOpen] = useState(false);
     const [renameDialogOpen, setRenameDialogOpen] = useState(false);
@@ -33,7 +33,7 @@ function ChatView() {
     const [focusTrigger, setFocusTrigger] = useState(0);
 
     if (permLoading) return <LoadingState />;
-    if (!readPermission?.canRead) {
+    if (!permissions?.canRead) {
         return <RequestAccessView ownerId={ownerId} mountId={mountId} pathId={chatId} />;
     }
 
