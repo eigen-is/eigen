@@ -95,7 +95,6 @@ export function GuestDriveSidebar({
 export function DriveSidebar({ condensed = false, onClose, isMobile = false, rootPath }: DriveSidebarProps) {
     const auth = useAuth();
     const currentUserId = auth.user?.id || '';
-    const isGuest = auth.user?.role === 'guest';
     const { data: trashedItems } = useListTrash(currentUserId, DEFAULT_MOUNT_ID);
     const trashCount = trashedItems?.length ?? 0;
 
@@ -160,142 +159,122 @@ export function DriveSidebar({ condensed = false, onClose, isMobile = false, roo
             {isMobile && <SidebarHeader appName="drive" onClose={onClose} />}
 
             {/* New button dropdown */}
-            {!isGuest && (
-                <div className="px-3 py-2">
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button
-                                variant="default"
-                                size={condensed ? 'icon' : 'default'}
-                                className={`${condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}`}
-                            >
-                                <Plus className="h-4 w-4" />
-                                {!condensed && <span>New</span>}
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align={condensed ? 'center' : 'start'}>
-                            <DropdownMenuItem onClick={() => setCreateFolderOpen(true)}>
-                                <FolderPlus className="h-4 w-4 mr-2" />
-                                Create folder
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setCreateDocOpen(true)}>
-                                <FileText className="h-4 w-4 mr-2" />
-                                Create doc
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setCreateStickiesOpen(true)}>
-                                <StickyNote className="h-4 w-4 mr-2" />
-                                Create stickies
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setCreateChatOpen(true)}>
-                                <MessageSquare className="h-4 w-4 mr-2" />
-                                Create chat
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setCreateSlidesOpen(true)}>
-                                <Presentation className="h-4 w-4 mr-2" />
-                                Create slides
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setCreateSheetsOpen(true)}>
-                                <Sheet className="h-4 w-4 mr-2" />
-                                Create sheets
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setUploadOpen(true)}>
-                                <UploadIcon className="h-4 w-4 mr-2" />
-                                Upload file
-                                <input type="file" className="hidden" onChange={handleFileChange} />
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                </div>
-            )}
-
-            {isGuest ? (
-                <SidebarSection condensed={condensed}>
-                    <SidebarItem
-                        icon={<Download className="h-4 w-4" />}
-                        to="/shared/with-me"
-                        label="Shared with me"
-                        condensed={condensed}
-                    />
-                </SidebarSection>
-            ) : (
-                <>
-                    <SidebarSection condensed={condensed}>
-                        <SidebarItem
-                            icon={<Home className="h-4 w-4" />}
-                            to={rootPath ? `/fs/${rootPath.ownerId}/${rootPath.mountId}/${rootPath.id}` : '/'}
-                            label="Drive"
-                            condensed={condensed}
-                        />
-
-                        <SidebarItem
-                            icon={<Image className="h-4 w-4" />}
-                            to="/mime/image"
-                            label="All images"
-                            condensed={condensed}
-                        />
-                        <SidebarItem
-                            icon={<FileText className="h-4 w-4" />}
-                            to="/mime/application-eigendoc"
-                            label="All docs"
-                            condensed={condensed}
-                        />
-                        <SidebarItem
-                            icon={<StickyNote className="h-4 w-4" />}
-                            to="/mime/application-eigenstickies"
-                            label="All stickies"
-                            condensed={condensed}
-                        />
-                        <SidebarItem
-                            icon={<MessageSquare className="h-4 w-4" />}
-                            to="/mime/application-eigenchat"
-                            label="All chats"
-                            condensed={condensed}
-                        />
-                        <SidebarItem
-                            icon={<Presentation className="h-4 w-4" />}
-                            to="/mime/application-eigenslides"
-                            label="All slides"
-                            condensed={condensed}
-                        />
-                        <SidebarItem
-                            icon={<Sheet className="h-4 w-4" />}
-                            to="/mime/application-eigensheets"
-                            label="All sheets"
-                            condensed={condensed}
-                        />
-                    </SidebarSection>
-                    <Separator />
-                    <SidebarSection condensed={condensed}>
-                        <SidebarItem
-                            icon={<UsersRound className="h-4 w-4" />}
-                            to="/shared/by-me"
-                            label="Shared by me"
-                            condensed={condensed}
-                        />
-                        <SidebarItem
-                            icon={<Download className="h-4 w-4" />}
-                            to="/shared/with-me"
-                            label="Shared with me"
-                            condensed={condensed}
-                        />
-                    </SidebarSection>
-                    <Separator />
-                    <SidebarSection condensed={condensed}>
-                        <SidebarItem
-                            icon={<Trash2 className="h-4 w-4" />}
-                            to="/trash"
-                            label="Trash"
-                            condensed={condensed}
+            <div className="px-3 py-2">
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button
+                            variant="default"
+                            size={condensed ? 'icon' : 'default'}
+                            className={`${condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}`}
                         >
-                            {!condensed && trashCount > 0 && (
-                                <Badge variant="secondary" className="ml-auto text-xs">
-                                    {trashCount}
-                                </Badge>
-                            )}
-                        </SidebarItem>
-                    </SidebarSection>
-                </>
-            )}
+                            <Plus className="h-4 w-4" />
+                            {!condensed && <span>New</span>}
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align={condensed ? 'center' : 'start'}>
+                        <DropdownMenuItem onClick={() => setCreateFolderOpen(true)}>
+                            <FolderPlus className="h-4 w-4 mr-2" />
+                            Create folder
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setCreateDocOpen(true)}>
+                            <FileText className="h-4 w-4 mr-2" />
+                            Create doc
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setCreateStickiesOpen(true)}>
+                            <StickyNote className="h-4 w-4 mr-2" />
+                            Create stickies
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setCreateChatOpen(true)}>
+                            <MessageSquare className="h-4 w-4 mr-2" />
+                            Create chat
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setCreateSlidesOpen(true)}>
+                            <Presentation className="h-4 w-4 mr-2" />
+                            Create slides
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setCreateSheetsOpen(true)}>
+                            <Sheet className="h-4 w-4 mr-2" />
+                            Create sheets
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setUploadOpen(true)}>
+                            <UploadIcon className="h-4 w-4 mr-2" />
+                            Upload file
+                            <input type="file" className="hidden" onChange={handleFileChange} />
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            </div>
+
+            <SidebarSection condensed={condensed}>
+                <SidebarItem
+                    icon={<Home className="h-4 w-4" />}
+                    to={rootPath ? `/fs/${rootPath.ownerId}/${rootPath.mountId}/${rootPath.id}` : '/'}
+                    label="Drive"
+                    condensed={condensed}
+                />
+
+                <SidebarItem
+                    icon={<Image className="h-4 w-4" />}
+                    to="/mime/image"
+                    label="All images"
+                    condensed={condensed}
+                />
+                <SidebarItem
+                    icon={<FileText className="h-4 w-4" />}
+                    to="/mime/application-eigendoc"
+                    label="All docs"
+                    condensed={condensed}
+                />
+                <SidebarItem
+                    icon={<StickyNote className="h-4 w-4" />}
+                    to="/mime/application-eigenstickies"
+                    label="All stickies"
+                    condensed={condensed}
+                />
+                <SidebarItem
+                    icon={<MessageSquare className="h-4 w-4" />}
+                    to="/mime/application-eigenchat"
+                    label="All chats"
+                    condensed={condensed}
+                />
+                <SidebarItem
+                    icon={<Presentation className="h-4 w-4" />}
+                    to="/mime/application-eigenslides"
+                    label="All slides"
+                    condensed={condensed}
+                />
+                <SidebarItem
+                    icon={<Sheet className="h-4 w-4" />}
+                    to="/mime/application-eigensheets"
+                    label="All sheets"
+                    condensed={condensed}
+                />
+            </SidebarSection>
+            <Separator />
+            <SidebarSection condensed={condensed}>
+                <SidebarItem
+                    icon={<UsersRound className="h-4 w-4" />}
+                    to="/shared/by-me"
+                    label="Shared by me"
+                    condensed={condensed}
+                />
+                <SidebarItem
+                    icon={<Download className="h-4 w-4" />}
+                    to="/shared/with-me"
+                    label="Shared with me"
+                    condensed={condensed}
+                />
+            </SidebarSection>
+            <Separator />
+            <SidebarSection condensed={condensed}>
+                <SidebarItem icon={<Trash2 className="h-4 w-4" />} to="/trash" label="Trash" condensed={condensed}>
+                    {!condensed && trashCount > 0 && (
+                        <Badge variant="secondary" className="ml-auto text-xs">
+                            {trashCount}
+                        </Badge>
+                    )}
+                </SidebarItem>
+            </SidebarSection>
 
             {myTeams?.some((t) => t.mounts.length > 0) && (
                 <>
