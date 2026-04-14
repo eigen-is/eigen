@@ -1,6 +1,7 @@
 import { Elysia, t } from 'elysia';
 import { getUploadMaxSize } from '../lib/config/enforcement';
 import { ApiError } from '../lib/core';
+import { requireNonGuest } from '../lib/core/access';
 import { contentDisposition, setCacheHeaders } from '../lib/core/http';
 import { getSharedDrive } from '../lib/drive';
 import { exportDocument } from '../lib/export/export-document';
@@ -251,6 +252,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
     .put(
         '/drive/:ownerId/:mountId/path/:pathId/acl',
         async ({ params, body, user }) => {
+            requireNonGuest(user);
             const drive = await getSharedDrive(params.ownerId, user);
             await drive.updateACL(params.mountId, params.pathId, body.acl, body.visibility, body.sharingRestricted);
             return { success: true };
