@@ -18,8 +18,8 @@ function generateOtp(): string {
     return String(num % 1_000_000).padStart(6, '0');
 }
 
-// Deterministic password guests never see — exists solely so we can call
-// auth.api.signInEmail to get properly signed session cookies.
+// Deterministic password guests never see — exists so we can call
+// auth.api.signInEmail to get a response with signed session cookies.
 function guestPassword(email: string): string {
     return createHmac('sha256', auth.options.secret).update(`guest:${email}`).digest('hex');
 }
@@ -128,12 +128,6 @@ export async function verifyOtpAndSignIn(email: string, otp: string): Promise<Re
             .run();
     }
 
-    // Sign in through better-auth's full handler pipeline to get signed session cookies
-    return auth.handler(
-        new Request('http://localhost/auth/sign-in/email', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password }),
-        }),
-    );
+    // Sign in and return response with session cookie
+    return auth.api.signInEmail({ body: { email, password }, asResponse: true });
 }
