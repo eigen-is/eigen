@@ -15,15 +15,6 @@ export type OrgTeam = {
     updatedAt?: Date;
 };
 
-export type AdminUser = {
-    id: string;
-    email: string;
-    name: string;
-    image?: string | null;
-    role: string | null;
-    createdAt: Date;
-};
-
 export type FullOrganization = {
     name: string;
     slug: string;
