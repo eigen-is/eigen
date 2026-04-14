@@ -18,7 +18,7 @@ Five new apps joined the workspace:
   with Apple Calendar, Thunderbird or any standard client. Calendar invitations work over email too (iMIP), so inviting
   external people should work.
 - **eigen|sheets>**: collaborative spreadsheets. Real-time editing with Yjs, same as docs.
-- **eigen|slides>**: collaborative presentations. An slide editor with export to HTML and PDF. You can present
+- **eigen|slides>**: collaborative presentations. A slide editor with export to HTML and PDF. You can present
   directly from the browser.
 - **eigen|chat>**: real-time chat inspired by MUDs. Attachments, mentions and an unreasonable number of slash commands.
 - **eigen|admin>**: server administration with a setup wizard, team management, waitlist and
@@ -84,7 +84,7 @@ Beyond new apps, a lot happened under the hood:
 
 The original architecture held up pretty well. Per-user SQLite databases, file-based storage, Yjs for real-time collaboration.
 Nothing fundamental broke. The tricky parts turned out to be cross-user operations. The relay layer that solves this is also the foundation for horizontal
-scaling: since each user already has all its data in one separate directory, you can shard by user across multiple servers.
+scaling: since each user already has all their data in one separate directory, you can shard by user across multiple servers.
 
 ## What's missing
 
