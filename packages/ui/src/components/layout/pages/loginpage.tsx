@@ -114,8 +114,8 @@ function PasswordLoginForm() {
     );
 }
 
-function GuestLoginForm() {
-    const [email, setEmail] = useState('');
+function GuestLoginForm({ initialEmail = '' }: { initialEmail?: string }) {
+    const [email, setEmail] = useState(initialEmail);
     const [otp, setOtp] = useState('');
     const [step, setStep] = useState<'email' | 'otp'>('email');
     const [error, setError] = useState('');
@@ -212,7 +212,7 @@ function GuestLoginForm() {
     );
 }
 
-export function LoginPage() {
+export function LoginPage({ email: initialEmail }: { email?: string } = {}) {
     const { appName } = useApp();
 
     return (
@@ -231,7 +231,7 @@ export function LoginPage() {
                 </CardHeader>
 
                 <CardContent>
-                    <Tabs defaultValue="signin">
+                    <Tabs defaultValue={initialEmail ? 'guest' : 'signin'}>
                         <TabsList className="w-full mb-6">
                             <TabsTrigger value="signin" className="flex-1">
                                 Sign in
@@ -244,7 +244,7 @@ export function LoginPage() {
                             <PasswordLoginForm />
                         </TabsContent>
                         <TabsContent value="guest">
-                            <GuestLoginForm />
+                            <GuestLoginForm initialEmail={initialEmail} />
                         </TabsContent>
                     </Tabs>
                 </CardContent>
