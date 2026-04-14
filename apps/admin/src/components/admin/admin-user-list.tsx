@@ -1,5 +1,4 @@
 import { formatDate } from '@workspace/lib/date';
-import type { AdminUser } from '@workspace/lib/types/admin';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
 import { EmptyState } from '@workspace/ui/components/layout/app/empty-state';
@@ -11,6 +10,15 @@ import { UserItem } from '@workspace/ui/components/layout/user-item';
 import { cn } from '@workspace/ui/lib/utils';
 import { Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+
+type AdminUser = {
+    id: string;
+    email: string;
+    name: string;
+    image?: string | null;
+    role: string | null;
+    createdAt: Date;
+};
 
 type AdminUserListToolbarProps = {
     searchQuery: string;
