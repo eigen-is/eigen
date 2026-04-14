@@ -130,9 +130,8 @@ function GuestLoginForm({ initialEmail = '' }: { initialEmail?: string }) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email }),
             });
-            const data = await res.json();
             if (!res.ok) {
-                setError(data.message ?? 'Failed to send code');
+                setError((await res.text()) || 'Failed to send code');
                 return;
             }
             setStep('otp');
