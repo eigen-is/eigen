@@ -7,7 +7,7 @@ export const Route = createFileRoute('/')({
             throw redirect({ to: '/login' });
         }
         if (user.role === 'guest') {
-            throw redirect({ to: '/shared/with-me' });
+            throw redirect({ to: '/shared/$to', params: { to: 'with-me' } });
         }
         throw redirect({
             to: '/fs/$ownerId/$mountId/$pathId',
