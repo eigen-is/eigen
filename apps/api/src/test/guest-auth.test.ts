@@ -156,4 +156,37 @@ describe('Guest Auth', () => {
             expect(res.status).toBe(403);
         });
     });
+
+    describe('guest deletion', () => {
+        test('deleting a guest user removes their data directory', async () => {
+            const { existsSync } = await import('node:fs');
+            const { getGuestHomePath } = await import('../lib/config/paths');
+
+            // Create a guest user with a home directory
+            const guestEmail = 'delete-test-guest@external.com';
+            const password = crypto.randomUUID();
+            const created = await auth.api.createUser({
+                body: { email: guestEmail, password, name: 'Delete Test', role: 'user' },
+            });
+            const guestId = created.user.id;
+            getAuthDrizzleDb().update(userSchema).set({ role: 'guest' }).where(eq(userSchema.id, guestId)).run();
+
+            // Initialize GuestHome so the data directory is created
+            const { getHome, evictHome } = await import('../lib/home/get-home');
+            const home = await getHome(guestId);
+            expect(home).toBeTruthy();
+            await evictHome(guestId);
+
+            const guestDir = getGuestHomePath(guestId);
+            expect(existsSync(guestDir)).toBe(true);
+
+            // Delete the guest via the admin endpoint
+            const res = await authedRequest(ctx.alice.user.sessionToken, `/settings/user/${guestId}`, {
+                method: 'DELETE',
+            });
+            expect(res.status).toBe(200);
+
+            expect(existsSync(guestDir)).toBe(false);
+        });
+    });
 });

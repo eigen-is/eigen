@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import { eq } from 'drizzle-orm';
 import { member, teamMember } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../auth/auth';
-import { getUserHomePath } from '../config/paths';
+import { getGuestHomePath, getUserHomePath } from '../config/paths';
 import { ApiError } from '../core';
 import { evictHome } from '../home/get-home';
 import { getEigenDb } from '../share/db';
@@ -20,7 +20,7 @@ export async function deleteUserCompletely(userId: string, requestHeaders: Heade
     await evictHome(userId);
 
     // 2. Delete user's home directory
-    const homePath = getUserHomePath(userId);
+    const homePath = user.role === 'guest' ? getGuestHomePath(userId) : getUserHomePath(userId);
     if (fs.existsSync(homePath)) {
         fs.rmSync(homePath, { recursive: true, force: true });
     }
