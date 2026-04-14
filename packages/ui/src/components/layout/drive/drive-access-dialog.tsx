@@ -31,8 +31,9 @@ export function DriveAccessDialog({ open, onOpenChange, path, prefillEmail }: Dr
         return null;
     }
 
-    // Non-owner editors see read-only view when sharing is restricted
-    const readOnly = path.sharingRestricted && !isEffectiveOwner;
+    // Guests and non-owner editors (when sharing is restricted) see read-only view
+    const isGuest = user?.role === 'guest';
+    const readOnly = isGuest || (path.sharingRestricted && !isEffectiveOwner);
 
     const handleEmailClick = () => {
         setEmailPath(path);
