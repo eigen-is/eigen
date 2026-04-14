@@ -1,5 +1,6 @@
 import { useNavigate } from '@tanstack/react-router';
 import { useDeleteUser, useRemoveMember, useUpdateMemberRole } from '@workspace/lib/admin';
+import { formatDate } from '@workspace/lib/date';
 import type { OrgMember } from '@workspace/lib/types/admin';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
@@ -8,7 +9,7 @@ import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-b
 import { UserAvatar } from '@workspace/ui/components/layout/user-avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { KeyRound, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ResetPasswordDialog } from './reset-password-dialog';
 
 type MemberDetailToolbarProps = {
@@ -57,12 +58,28 @@ type MemberDetailProps = {
 
 export function MemberDetail({ member, organizationId }: MemberDetailProps) {
     const [showDelete, setShowDelete] = useState(false);
+    const [draftRole, setDraftRole] = useState(member.role);
     const updateRole = useUpdateMemberRole(organizationId);
     const deleteUser = useDeleteUser(organizationId);
     const navigate = useNavigate();
 
-    const handleRoleChange = async (newRole: 'admin' | 'member' | 'owner') => {
-        await updateRole.mutateAsync({ memberId: member.id, userId: member.userId, role: newRole });
+    const hasChanges = draftRole !== member.role;
+
+    // Reset draft when switching members
+    useEffect(() => {
+        setDraftRole(member.role);
+    }, [member.id, member.role]);
+
+    const handleSave = async () => {
+        await updateRole.mutateAsync({
+            memberId: member.id,
+            userId: member.userId,
+            role: draftRole as 'admin' | 'member' | 'owner',
+        });
+    };
+
+    const handleCancel = () => {
+        setDraftRole(member.role);
     };
 
     const handleDelete = async () => {
@@ -86,11 +103,7 @@ export function MemberDetail({ member, organizationId }: MemberDetailProps) {
                     {member.role === 'owner' ? (
                         <Badge variant="default">owner</Badge>
                     ) : (
-                        <Select
-                            value={member.role}
-                            onValueChange={(v) => handleRoleChange(v as 'admin' | 'member' | 'owner')}
-                            disabled={updateRole.isPending}
-                        >
+                        <Select value={draftRole} onValueChange={setDraftRole}>
                             <SelectTrigger className="w-40">
                                 <SelectValue />
                             </SelectTrigger>
@@ -104,9 +117,20 @@ export function MemberDetail({ member, organizationId }: MemberDetailProps) {
 
                 <div>
                     <h3 className="text-sm font-medium text-muted-foreground mb-2">Joined</h3>
-                    <p className="text-sm">{member.createdAt.toLocaleDateString()}</p>
+                    <p className="text-sm">{formatDate(member.createdAt)}</p>
                 </div>
             </div>
+
+            {hasChanges && (
+                <div className="flex items-center justify-end gap-2">
+                    <Button variant="outline" onClick={handleCancel}>
+                        Cancel
+                    </Button>
+                    <Button onClick={handleSave} disabled={updateRole.isPending}>
+                        {updateRole.isPending ? 'Saving...' : 'Save'}
+                    </Button>
+                </div>
+            )}
 
             {member.role !== 'owner' && (
                 <div className="border-t pt-6">
