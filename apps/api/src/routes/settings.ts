@@ -1,6 +1,9 @@
 import type { S3Config } from '@workspace/lib/types';
 import type { ServerSettings } from '@workspace/lib/types/settings';
+import { and, eq, ne, notInArray } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';
+import { member, user } from '../../auth-schema.ts';
+import { getAuthDrizzleDb } from '../lib/auth/auth';
 import { getS3Config, updateServerConfig } from '../lib/config/server-config';
 import { getServerSettings, updateServerSettings } from '../lib/config/server-settings';
 import { ApiError } from '../lib/core';
@@ -103,6 +106,23 @@ export const settingsRouter = new Elysia({ name: 'settings' })
             return getS3Config() ?? null;
         },
         { body: s3ConfigBody, auth: true },
+    )
+
+    .get(
+        '/settings/users/:filter',
+        async ({ params, user: authUser }) => {
+            await requireAdmin(authUser.id);
+            const db = getAuthDrizzleDb();
+            const memberUserIds = db.select({ userId: member.userId }).from(member);
+            return params.filter === 'guest'
+                ? db.select().from(user).where(eq(user.role, 'guest')).all()
+                : db
+                      .select()
+                      .from(user)
+                      .where(and(notInArray(user.id, memberUserIds), ne(user.role, 'guest')))
+                      .all();
+        },
+        { auth: true },
     )
 
     .delete(

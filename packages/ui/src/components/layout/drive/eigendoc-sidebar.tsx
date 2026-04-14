@@ -16,6 +16,33 @@ type EigenDocSidebarProps = {
     rootPath?: DrivePath | null;
 };
 
+export function GuestEigenDocSidebar({
+    config,
+    condensed = false,
+    onClose,
+    isMobile = false,
+}: Omit<EigenDocSidebarProps, 'rootPath'>) {
+    return (
+        <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
+            {isMobile && <SidebarHeader appName={config.appName} onClose={onClose} />}
+            <SidebarSection condensed={condensed}>
+                <SidebarItem
+                    icon={<config.icon className="h-4 w-4" />}
+                    to="/"
+                    label={config.allLabel}
+                    condensed={condensed}
+                />
+                <SidebarItem
+                    icon={<Download className="h-4 w-4" />}
+                    to="/shared/with-me"
+                    label="Shared with me"
+                    condensed={condensed}
+                />
+            </SidebarSection>
+        </div>
+    );
+}
+
 export function EigenDocSidebar({
     config,
     condensed = false,

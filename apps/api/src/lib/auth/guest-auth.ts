@@ -1,0 +1,139 @@
+import { createHmac, randomUUID } from 'node:crypto';
+import { generateRandomString, hashPassword } from 'better-auth/crypto';
+import { and, eq, like, lt } from 'drizzle-orm';
+import { account, user as userTable, verification } from '../../../auth-schema.ts';
+import { ApiError } from '../core/errors';
+import { sendMail } from '../core/mailer';
+import { reconcileSharesForNewUser } from '../share';
+import { getEntriesForTarget } from '../share/registry';
+import { getUserByEmail } from '../user/user';
+import { auth, getAuthDrizzleDb } from './auth';
+
+const OTP_EXPIRY_MS = 5 * 60 * 1000;
+
+function generateOtp(): string {
+    const bytes = new Uint8Array(4);
+    crypto.getRandomValues(bytes);
+    const num = ((bytes[0]! << 24) | (bytes[1]! << 16) | (bytes[2]! << 8) | bytes[3]!) >>> 0;
+    return String(num % 1_000_000).padStart(6, '0');
+}
+
+// Deterministic password guests never see — exists solely so we can call
+// auth.api.signInEmail to get properly signed session cookies.
+function guestPassword(email: string): string {
+    return createHmac('sha256', auth.options.secret).update(`guest:${email}`).digest('hex');
+}
+
+export async function requestOtp(email: string): Promise<void> {
+    const existingUser = await getUserByEmail(email);
+    if (existingUser) {
+        if (existingUser.role !== 'guest') throw new ApiError(400, 'Use password login');
+    } else {
+        const entries = await getEntriesForTarget(email);
+        if (entries.length === 0) throw new ApiError(400, 'No shared resources found for this email');
+    }
+
+    const db = getAuthDrizzleDb();
+    const now = new Date();
+
+    // Purge expired guest OTPs
+    db.delete(verification)
+        .where(and(like(verification.identifier, 'guest-otp:%'), lt(verification.expiresAt, now)))
+        .run();
+
+    const otp = generateOtp();
+    const identifier = `guest-otp:${email}`;
+
+    // Replace any existing OTP for this email
+    db.delete(verification).where(eq(verification.identifier, identifier)).run();
+    db.insert(verification)
+        .values({
+            id: randomUUID(),
+            identifier,
+            value: await Bun.password.hash(otp),
+            expiresAt: new Date(now.getTime() + OTP_EXPIRY_MS),
+            createdAt: now,
+            updatedAt: now,
+        })
+        .run();
+
+    const ok = await sendMail({
+        to: [{ name: email, address: email }],
+        subject: 'Your guest access code',
+        text: `Your guest access code is: ${otp}\n\nThis code expires in 5 minutes.`,
+    });
+    if (!ok) throw new ApiError(500, 'Failed to send verification code');
+}
+
+export async function verifyOtpAndSignIn(email: string, otp: string): Promise<Response> {
+    const db = getAuthDrizzleDb();
+    const identifier = `guest-otp:${email}`;
+
+    const record = db.select().from(verification).where(eq(verification.identifier, identifier)).get();
+    if (!record) throw new ApiError(400, 'Invalid code');
+
+    if (record.expiresAt < new Date()) {
+        db.delete(verification).where(eq(verification.id, record.id)).run();
+        throw new ApiError(400, 'Code expired');
+    }
+
+    const valid = await Bun.password.verify(otp, record.value);
+    if (!valid) throw new ApiError(400, 'Invalid code');
+
+    db.delete(verification).where(eq(verification.id, record.id)).run();
+
+    // Find or create guest user
+    let guestUser = await getUserByEmail(email);
+    if (guestUser && guestUser.role !== 'guest') throw new ApiError(400, 'Use password login');
+
+    if (!guestUser) {
+        const now = new Date();
+        // Insert directly to bypass databaseHooks (guests must not be auto-added to org)
+        db.insert(userTable)
+            .values({
+                id: generateRandomString(32),
+                email,
+                name: email.split('@')[0] ?? email,
+                emailVerified: true,
+                role: 'guest',
+                createdAt: now,
+                updatedAt: now,
+            })
+            .run();
+        guestUser = await getUserByEmail(email);
+        if (!guestUser) throw new ApiError(500, 'Failed to create guest user');
+        await reconcileSharesForNewUser(guestUser);
+    }
+
+    // Upsert credential account so sign-in works
+    const password = guestPassword(email);
+    const hashedPassword = await hashPassword(password);
+    const existingAccount = db.select().from(account).where(eq(account.userId, guestUser.id)).get();
+    if (existingAccount) {
+        db.update(account)
+            .set({ password: hashedPassword, updatedAt: new Date() })
+            .where(eq(account.id, existingAccount.id))
+            .run();
+    } else {
+        db.insert(account)
+            .values({
+                id: generateRandomString(32),
+                accountId: guestUser.id,
+                providerId: 'credential',
+                userId: guestUser.id,
+                password: hashedPassword,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+            })
+            .run();
+    }
+
+    // Sign in through better-auth's full handler pipeline to get signed session cookies
+    return auth.handler(
+        new Request('http://localhost/auth/sign-in/email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password }),
+        }),
+    );
+}

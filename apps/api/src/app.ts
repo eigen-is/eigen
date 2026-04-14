@@ -13,6 +13,7 @@ import { collabRouter } from './routes/collab';
 import { contactsRouter } from './routes/contacts';
 import { driveRouter } from './routes/drive.ts';
 import { editorRouter } from './routes/editor';
+import { guestAuthRouter } from './routes/guest-auth';
 import { homeRouter } from './routes/home.ts';
 import { internalRouter } from './routes/internal';
 import { mailRouter } from './routes/mail';
@@ -75,6 +76,7 @@ export const app = new Elysia()
     })
     .use(betterAuth)
     .use(setupRouter)
+    .use(guestAuthRouter)
 
     .use(mailRouter)
     .use(contactsRouter)

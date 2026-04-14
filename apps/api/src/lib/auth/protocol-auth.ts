@@ -1,3 +1,4 @@
+import { requireNonGuest } from '../core/access';
 import { ApiError } from '../core/errors';
 import { getUserByEmail } from '../user';
 import { auth } from './auth';
@@ -11,6 +12,7 @@ export type ProtocolUser = {
 export async function verifyProtocolAuth(email: string, password: string): Promise<ProtocolUser> {
     const user = await getUserByEmail(email);
     if (!user) throw new ApiError(401, 'Unauthorized');
+    requireNonGuest(user);
 
     // 1. Try app password (API key)
     const keyResult = await auth.api.verifyApiKey({ body: { key: password } });

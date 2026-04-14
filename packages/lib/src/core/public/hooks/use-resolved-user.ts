@@ -1,8 +1,8 @@
-import { useTeams } from '@workspace/lib/admin';
 import { API_HOST, getPublicAvatarUrl } from '@workspace/lib/api';
 import { useContacts } from '@workspace/lib/contacts';
+import { useMyTeams } from '@workspace/lib/home';
 import { parseOwnerId } from '@workspace/lib/types';
-import { usePublicConfig, usePublicUser } from './use-public';
+import { usePublicUser } from './use-public';
 
 type UseResolvedUserParams = {
     userId?: string;
@@ -14,8 +14,7 @@ type UseResolvedUserParams = {
 export function useResolvedUser({ userId, email, name, imageUrl }: UseResolvedUserParams) {
     const { data: dataContacts, isLoading: isLoadingContacts } = useContacts();
     const { data: dataPublic, isLoading: isLoadingPublic } = usePublicUser(userId || email || '');
-    const { data: org } = usePublicConfig();
-    const { data: teams } = useTeams(org?.orgId);
+    const { data: teams } = useMyTeams();
 
     const parsed = parseOwnerId(userId || email || '');
 

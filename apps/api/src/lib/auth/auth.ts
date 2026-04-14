@@ -64,6 +64,8 @@ export const auth = betterAuth({
         user: {
             create: {
                 after: async (user) => {
+                    // better-auth's hook type doesn't include admin plugin fields
+                    if (user['role'] === 'guest') return;
                     await authAddUserToDefaultOrg(user);
                     await reconcileSharesForNewUser(user);
                 },

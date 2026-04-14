@@ -72,6 +72,26 @@ function TeamMountItem({
     );
 }
 
+export function GuestDriveSidebar({
+    condensed = false,
+    onClose,
+    isMobile = false,
+}: Omit<DriveSidebarProps, 'rootPath'>) {
+    return (
+        <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
+            {isMobile && <SidebarHeader appName="drive" onClose={onClose} />}
+            <SidebarSection condensed={condensed}>
+                <SidebarItem
+                    icon={<Download className="h-4 w-4" />}
+                    to="/shared/with-me"
+                    label="Shared with me"
+                    condensed={condensed}
+                />
+            </SidebarSection>
+        </div>
+    );
+}
+
 export function DriveSidebar({ condensed = false, onClose, isMobile = false, rootPath }: DriveSidebarProps) {
     const auth = useAuth();
     const currentUserId = auth.user?.id || '';
