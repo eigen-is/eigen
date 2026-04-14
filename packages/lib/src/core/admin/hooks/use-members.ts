@@ -34,13 +34,23 @@ export function useMembers(organizationId?: string) {
 export function useUpdateMemberRole(organizationId?: string) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({ memberId, role }: { memberId: string; role: 'admin' | 'member' | 'owner' }) => {
+        mutationFn: async ({
+            memberId,
+            userId,
+            role,
+        }: {
+            memberId: string;
+            userId: string;
+            role: 'admin' | 'member' | 'owner';
+        }) => {
             const { data, error } = await authClient.organization.updateMemberRole({
                 memberId,
                 role,
                 organizationId,
             });
             if (error) throw new Error(String(error));
+            // Keep user.role in sync so useIsAdmin works without an API call
+            await authClient.admin.setUserRole({ userId, role: role === 'member' ? 'user' : 'admin' });
             return data;
         },
         onSuccess: () => {
