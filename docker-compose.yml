@@ -4,7 +4,6 @@ services:
     ports:
       - "80:80"
       - "443:443"
-      - "443:443/udp"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./docker/caddy/export-certs.sh:/usr/local/bin/export-certs.sh:ro
