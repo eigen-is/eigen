@@ -1,5 +1,4 @@
 import type { S3Config } from '@workspace/lib/types';
-import type { AdminUser } from '@workspace/lib/types/admin';
 import type { ServerSettings } from '@workspace/lib/types/settings';
 import { and, eq, ne, notInArray } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';
@@ -111,26 +110,17 @@ export const settingsRouter = new Elysia({ name: 'settings' })
 
     .get(
         '/settings/users/:filter',
-        async ({ params, user: authUser }): Promise<AdminUser[]> => {
+        async ({ params, user: authUser }) => {
             await requireAdmin(authUser.id);
             const db = getAuthDrizzleDb();
             const memberUserIds = db.select({ userId: member.userId }).from(member);
-            const rows =
-                params.filter === 'guest'
-                    ? db.select().from(user).where(eq(user.role, 'guest')).all()
-                    : db
-                          .select()
-                          .from(user)
-                          .where(and(notInArray(user.id, memberUserIds), ne(user.role, 'guest')))
-                          .all();
-            return rows.map((r) => ({
-                id: r.id,
-                email: r.email,
-                name: r.name,
-                image: r.image,
-                role: r.role,
-                createdAt: r.createdAt,
-            }));
+            return params.filter === 'guest'
+                ? db.select().from(user).where(eq(user.role, 'guest')).all()
+                : db
+                      .select()
+                      .from(user)
+                      .where(and(notInArray(user.id, memberUserIds), ne(user.role, 'guest')))
+                      .all();
         },
         { auth: true },
     )
