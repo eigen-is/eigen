@@ -13,10 +13,11 @@ type UseResolvedUserParams = {
 
 export function useResolvedUser({ userId, email, name, imageUrl }: UseResolvedUserParams) {
     const { data: dataContacts, isLoading: isLoadingContacts } = useContacts();
-    const { data: dataPublic, isLoading: isLoadingPublic } = usePublicUser(userId || email || '');
     const { data: teams } = useMyTeams();
 
     const parsed = parseOwnerId(userId || email || '');
+    const isTeam = parsed.type === 'team';
+    const { data: dataPublic, isLoading: isLoadingPublic } = usePublicUser(isTeam ? undefined : userId || email || '');
 
     const contact =
         !isLoadingContacts && email && dataContacts ? dataContacts.find((c) => c.email.includes(email)) : null;

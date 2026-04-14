@@ -327,6 +327,7 @@ export function ChatMessageInput({
                     visible={suggestOpen}
                     selectedIndex={selectedSuggestIdx}
                     onItemsChange={handleSuggestItemsChange}
+                    includeContacts={false}
                 />
                 {slashTargetOpen && slashTarget && (
                     <ChatPlayerSuggest
