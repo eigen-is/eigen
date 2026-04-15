@@ -59,6 +59,7 @@ next-env.d.ts
 /data/dkim/
 /backups/
 /.superpowers/
+.worktrees/
 .claude/settings.local.json
 .env.eigen
 /docs/superpowers/
