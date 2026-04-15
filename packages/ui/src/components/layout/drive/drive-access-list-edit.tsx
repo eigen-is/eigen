@@ -254,7 +254,7 @@ export function DriveAccessListEdit({
 
             <div className="space-y-2 overflow-y-auto min-h-0">
                 <div className="flex items-center justify-between rounded-md bg-muted/50 px-2 py-1.5">
-                    <h4 className="text-sm font-medium">People with access</h4>
+                    <h4 className="text-base font-medium">People with access</h4>
                     <div className="flex items-center gap-0.5">
                         <TooltipButton
                             icon={ClipboardCopy}
