@@ -3,6 +3,7 @@ import { Database as BunDatabase } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { type BunSQLiteDatabase, drizzle } from 'drizzle-orm/bun-sqlite';
+import { time } from '../../utils/timing';
 
 export type SchemaType = Record<string, unknown>;
 
@@ -41,7 +42,10 @@ export class ManagedDatabase<S extends SchemaType> {
 
     async open(autoSyncMs = 30000): Promise<BunSQLiteDatabase<S>> {
         if (this.drizzleDb) return this.drizzleDb;
+        return time(`ManagedDatabase.open ${this.config.name}`, () => this.openCold(autoSyncMs));
+    }
 
+    private async openCold(autoSyncMs: number): Promise<BunSQLiteDatabase<S>> {
         await this.callbacks.onOpen?.();
 
         const dir = path.dirname(this.localPath);
