@@ -1,7 +1,7 @@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@workspace/ui/components/collapsible';
 import { cn } from '@workspace/ui/lib/utils';
 import { ChevronDown } from 'lucide-react';
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 
 type CollapsibleUserListProps = {
     title: string;
@@ -24,6 +24,11 @@ export function CollapsibleUserList({
 }: CollapsibleUserListProps) {
     const collapsible = count > collapseThreshold;
     const [open, setOpen] = useState(!collapsible);
+
+    // Collapse when count crosses the threshold (e.g. after async data loads)
+    useEffect(() => {
+        if (collapsible) setOpen(false);
+    }, [collapsible]);
 
     if (!collapsible) {
         return (
