@@ -56,31 +56,35 @@ export function DriveAccessList({ path, className, onShareClick, onEmailClick }:
                     count={count}
                     actions={
                         <>
-                            <TooltipButton
-                                icon={ClipboardCopy}
-                                tooltipText="Copy emails"
-                                variant="ghost"
-                                className="h-7 w-7"
-                                onClick={handleCopyEmails}
-                            />
-                            <TooltipButton
-                                icon={Link}
-                                tooltipText="Copy link"
-                                variant="ghost"
-                                className="h-7 w-7"
-                                onClick={() => {
-                                    navigator.clipboard.writeText(getDriveShareUrl(path));
-                                    toast.success('Link copied to clipboard');
-                                }}
-                            />
-                            {onEmailClick && (
-                                <TooltipButton
-                                    icon={Mail}
-                                    tooltipText="Email collaborators"
-                                    variant="ghost"
-                                    className="h-7 w-7"
-                                    onClick={onEmailClick}
-                                />
+                            {count > 1 && (
+                                <>
+                                    <TooltipButton
+                                        icon={ClipboardCopy}
+                                        tooltipText="Copy emails"
+                                        variant="ghost"
+                                        className="h-7 w-7"
+                                        onClick={handleCopyEmails}
+                                    />
+                                    <TooltipButton
+                                        icon={Link}
+                                        tooltipText="Copy link"
+                                        variant="ghost"
+                                        className="h-7 w-7"
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(getDriveShareUrl(path));
+                                            toast.success('Link copied to clipboard');
+                                        }}
+                                    />
+                                    {onEmailClick && (
+                                        <TooltipButton
+                                            icon={Mail}
+                                            tooltipText="Email collaborators"
+                                            variant="ghost"
+                                            className="h-7 w-7"
+                                            onClick={onEmailClick}
+                                        />
+                                    )}
+                                </>
                             )}
                             {onShareClick && (
                                 <TooltipButton
