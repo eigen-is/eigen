@@ -1,4 +1,5 @@
 import { getDriveShareUrl } from '@workspace/lib/api';
+import { copyToClipboard } from '@workspace/lib/clipboard';
 import { formatDateTime } from '@workspace/lib/date';
 import {
     DEFAULT_MOUNT_ID,
@@ -31,7 +32,6 @@ import {
 } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { toast } from 'sonner';
 import { useKeyboardListNavigation } from '../../../hooks/use-keyboard-list-navigation';
 import { useListDrag } from '../../../hooks/use-list-drag';
 import { useListSelection } from '../../../hooks/use-list-selection';
@@ -405,24 +405,22 @@ export function DriveTable({
                         </DropdownMenuSub>
                     )}
 
-                {isSingleSelect && (
+                {isSingleSelect && onShareClick && (
                     <DropdownMenuSub>
                         <DropdownMenuSubTrigger>
                             <UserRoundPlus className="h-4 w-4 mr-2" />
                             Share
                         </DropdownMenuSubTrigger>
                         <DropdownMenuSubContent>
-                            {onShareClick && (
-                                <DropdownMenuItem
-                                    onClick={() => {
-                                        onShareClick(contextMenu.item!);
-                                        contextMenu.close();
-                                    }}
-                                >
-                                    <UserRoundPlus className="h-4 w-4 mr-2" />
-                                    Share
-                                </DropdownMenuItem>
-                            )}
+                            <DropdownMenuItem
+                                onClick={() => {
+                                    onShareClick(contextMenu.item!);
+                                    contextMenu.close();
+                                }}
+                            >
+                                <UserRoundPlus className="h-4 w-4 mr-2" />
+                                Share
+                            </DropdownMenuItem>
                             {onEmailCollaborators &&
                                 (contextMenu.item?.acl?.length || contextMenu.item?.visibility !== 'private') && (
                                     <DropdownMenuItem
@@ -437,8 +435,7 @@ export function DriveTable({
                                 )}
                             <DropdownMenuItem
                                 onClick={() => {
-                                    navigator.clipboard.writeText(getDriveShareUrl(contextMenu.item!));
-                                    toast.success('Link copied to clipboard');
+                                    copyToClipboard(getDriveShareUrl(contextMenu.item!), 'Link copied to clipboard');
                                     contextMenu.close();
                                 }}
                             >

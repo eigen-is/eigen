@@ -1,3 +1,4 @@
+import { toast } from 'sonner';
 import type { EigenClipboardData } from '../../types/clipboard';
 import type { DrivePath } from '../../types/drive';
 import { getDriveDownloadUrl } from '../api';
@@ -54,6 +55,11 @@ export async function writeEigenClipboardAsync(data: EigenClipboardData, plainTe
         items['text/plain'] = new Blob([plainText], { type: 'text/plain' });
     }
     await navigator.clipboard.write([new ClipboardItem(items)]);
+}
+
+export function copyToClipboard(text: string, message = 'Copied to clipboard') {
+    navigator.clipboard.writeText(text);
+    toast.success(message);
 }
 
 export function needsReUpload(sourceParentId: string | null | undefined, targetMediaFolderId: string | null): boolean {
