@@ -13,10 +13,8 @@ import { DriveAccessList } from '@workspace/ui/components/layout/drive';
 import { Table, TableBody, TableCell, TableRow } from '@workspace/ui/components/table';
 import { formatFileSize } from '@workspace/ui/lib/formatFileSize';
 import { ArrowRight, Download, MoreVertical, Pencil, Trash2, UserRoundPlus, X } from 'lucide-react';
-import { useState } from 'react';
 import { useLayout } from '../app/layout-context.tsx';
 import { LoadingState } from '../app/loading-state';
-import { DriveEmailCollaborators } from './drive-email-collaborators';
 
 type DriveDetailToolbarProps = {
     path: DrivePath;
@@ -99,8 +97,6 @@ type DriveDetailProps = {
 };
 
 export function DriveDetail({ path, onShareClick, onItemOpen }: DriveDetailProps) {
-    const [emailPath, setEmailPath] = useState<DrivePath | null>(null);
-
     if (!path) {
         return <LoadingState />;
     }
@@ -219,18 +215,9 @@ export function DriveDetail({ path, onShareClick, onItemOpen }: DriveDetailProps
                     )}
 
                 <div className="mt-4">
-                    <DriveAccessList path={path} onShareClick={onShareClick} onEmailClick={() => setEmailPath(path)} />
+                    <DriveAccessList path={path} onShareClick={onShareClick} />
                 </div>
             </div>
-            {emailPath && (
-                <DriveEmailCollaborators
-                    path={emailPath}
-                    open={true}
-                    onOpenChange={(open) => {
-                        if (!open) setEmailPath(null);
-                    }}
-                />
-            )}
         </div>
     );
 }

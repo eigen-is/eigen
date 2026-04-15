@@ -34,7 +34,16 @@ export function CollapsibleUserList({
         return (
             <div className={cn('space-y-2', className)}>
                 <div className="flex items-center justify-between rounded-md bg-muted/50 px-2 py-1.5">
-                    <h4 className="text-sm font-medium">{title}</h4>
+                    <div>
+                        <h4 className="text-sm font-medium">{title}</h4>
+                        {summaryLines && summaryLines.length > 0 && (
+                            <div className="text-xs text-muted-foreground">
+                                {summaryLines.map((line) => (
+                                    <div key={line}>{line}</div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                     {actions && <div className="flex items-center gap-0.5">{actions}</div>}
                 </div>
                 <div className="space-y-1">{children}</div>

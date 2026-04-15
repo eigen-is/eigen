@@ -1,11 +1,9 @@
-import { getDriveShareUrl } from '@workspace/lib/api';
 import { useDriveAccess } from '@workspace/lib/drive';
 import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
 import { AvatarIcon } from '@workspace/ui/components/avatar';
 import { Separator } from '@workspace/ui/components/separator';
 import { cn } from '@workspace/ui/lib/utils';
-import { ClipboardCopy, Link, Lock, Mail, Unlock, UserRoundPlus } from 'lucide-react';
-import { toast } from 'sonner';
+import { Lock, Unlock, UserRoundPlus } from 'lucide-react';
 import { CollapsibleUserList } from '../collapsible-user-list';
 import { TooltipButton } from '../toolbar';
 import { UserItem } from '../user-item';
@@ -14,7 +12,6 @@ export type DriveAccessListProps = {
     path: DrivePath;
     className?: string;
     onShareClick?: (path: DrivePath) => void;
-    onEmailClick?: () => void;
 };
 
 function buildSummary(entries: { owner?: boolean; write?: boolean; read?: boolean }[]): string {
@@ -33,7 +30,7 @@ function buildSummary(entries: { owner?: boolean; write?: boolean; read?: boolea
     return parts.join(', ');
 }
 
-export function DriveAccessList({ path, className, onShareClick, onEmailClick }: DriveAccessListProps) {
+export function DriveAccessList({ path, className, onShareClick }: DriveAccessListProps) {
     const { allEntries } = useDriveAccess(path);
 
     const isPublic = path.visibility !== 'private';
@@ -41,61 +38,23 @@ export function DriveAccessList({ path, className, onShareClick, onEmailClick }:
     const title = count === 1 ? '1 person with access' : `${count} people with access`;
     const summary = buildSummary(allEntries);
 
-    const handleCopyEmails = () => {
-        const emails = allEntries.map((e) => e.id).join(', ');
-        navigator.clipboard.writeText(emails);
-        toast.success('Emails copied to clipboard');
-    };
-
     return (
         <div className={cn('flex flex-col min-h-0', className)}>
             <div className="border-t py-4">
                 <CollapsibleUserList
                     title={title}
-                    summaryLines={count > 3 ? [summary] : undefined}
+                    summaryLines={[summary]}
                     count={count}
                     actions={
-                        <>
-                            {count > 1 && (
-                                <>
-                                    <TooltipButton
-                                        icon={ClipboardCopy}
-                                        tooltipText="Copy emails"
-                                        variant="ghost"
-                                        className="h-7 w-7"
-                                        onClick={handleCopyEmails}
-                                    />
-                                    <TooltipButton
-                                        icon={Link}
-                                        tooltipText="Copy link"
-                                        variant="ghost"
-                                        className="h-7 w-7"
-                                        onClick={() => {
-                                            navigator.clipboard.writeText(getDriveShareUrl(path));
-                                            toast.success('Link copied to clipboard');
-                                        }}
-                                    />
-                                    {onEmailClick && (
-                                        <TooltipButton
-                                            icon={Mail}
-                                            tooltipText="Email collaborators"
-                                            variant="ghost"
-                                            className="h-7 w-7"
-                                            onClick={onEmailClick}
-                                        />
-                                    )}
-                                </>
-                            )}
-                            {onShareClick && (
-                                <TooltipButton
-                                    icon={UserRoundPlus}
-                                    tooltipText="Share"
-                                    variant="ghost"
-                                    className="h-7 w-7"
-                                    onClick={() => onShareClick(path)}
-                                />
-                            )}
-                        </>
+                        onShareClick ? (
+                            <TooltipButton
+                                icon={UserRoundPlus}
+                                tooltipText="Share"
+                                variant="ghost"
+                                className="h-7 w-7"
+                                onClick={() => onShareClick(path)}
+                            />
+                        ) : undefined
                     }
                 >
                     {allEntries.map((access) => (
