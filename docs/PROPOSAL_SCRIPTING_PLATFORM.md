@@ -11,6 +11,9 @@ frontend app through a shared context provider pattern. Inspired by Google Apps 
   or process. SDK calls bridge back to eigen via stdin/stdout JSON-RPC
 - **Execution model**: Fully asynchronous — POST /execute returns immediately with an execution ID, progress
   and results are delivered via SSE. No HTTP request blocks on script execution
+- **SDK design**: Proxy-based domain access — the runner is completely generic. Adding new SDK methods requires
+  zero changes to the runner, only a backend handler. Domain methods mirror route structure, ownerId defaults
+  to the executing user
 - **API access**: Scripts declare permissions in a manifest, enforced at two levels (Deno flags + SDK call
   validation)
 - **Triggers**: Manual (Phase 1), cron-based and event-driven (future)
@@ -50,8 +53,8 @@ Main API (Bun, port 8000)
                                  fulfills SDK calls against Home instances)
 
 Deno Runner (one per script execution, sandboxed)
-├── Build SDK object (eigen.drive, eigen.fetch, eigen.log, ...)
-├── Override console.log/warn/error → route through eigen.log/eigen.error
+├── Build SDK via Proxy          (eigen.drive.*, eigen.calendar.*, etc. — generic, no method enumeration)
+├── Override console.log/warn/error → capture locally in logLines
 ├── Import + execute script source via data URI
 └── Return result or error via stdout JSON-RPC
 ```
@@ -84,12 +87,14 @@ Execution is fully asynchronous. The HTTP request never blocks on script executi
 2. Main API: Scripts.createExecution() writes to DB
    ScriptRunner.spawn() launches Deno subprocess, sends init via stdin
 
-3. Deno: runner.ts builds SDK, executes script
+3. Deno: runner.ts builds SDK via Proxy, executes script
 
-   SDK call flow (e.g. eigen.drive.list()):
-   a. Script calls eigen.drive.list(mountId)
-   b. Runner sends stdout: { id: 1, method: "drive.list", params: { mountId } }
-   c. ScriptRunner reads stdout, executes: getHome(ownerId) → home.drive.list(mountId)
+   SDK call flow (e.g. eigen.drive.listFolder({ mountId, pathId })):
+   a. Script calls eigen.drive.listFolder({ mountId, pathId })
+   b. Proxy intercepts → RPC stdout: { id: 1, method: "drive.listFolder", params: { ownerId, mountId, pathId } }
+      (ownerId auto-injected from eigen.user.id)
+   c. ScriptRunner reads stdout, resolves ownerId:
+      getHome(params.ownerId) → home.drive.list(mountId, pathId)
    d. ScriptRunner writes to Deno stdin: { id: 1, result: [...] }
    e. Runner resolves RPC promise → script receives file list
 
@@ -172,6 +177,21 @@ Execution records are pruned automatically: max 50 per script, oldest deleted fi
 | enabled | integer | |
 | lastRunAt | integer | Epoch ms, nullable |
 
+### `cron_triggers` (server-level, in `eigen.db` — Phase 2)
+
+Server-level index so the cron scheduler doesn't need to scan every user's DB on startup. Canonical trigger
+data stays in the user's `scripts.db`; this is a lookup table only.
+
+| Column | Type | Notes |
+|--------|------|-------|
+| triggerId | text PK | References triggers.id in user's scripts.db |
+| scriptId | text | |
+| ownerId | text | Home that owns the script |
+| cron | text | Cron expression (e.g. `"0 9 * * MON-FRI"`) |
+| enabled | integer | |
+
+CRUD operations on triggers update both the user's `scripts.db` and this server-level index atomically.
+
 ### `installations` (Future — Phase 2)
 
 | Column | Type | Notes |
@@ -252,7 +272,7 @@ export function cancelExecution(executionId: string): boolean {
 
 **Lifecycle:**
 - `runScript()` spawns Deno, starts timeout, begins reading stdout
-- SDK calls from the runner are handled inline: `getHome(ownerId)` → domain method → write result to stdin
+- SDK calls from the runner are handled inline: `getHome(params.ownerId)` → domain method → write result to stdin
 - On completion/error/timeout: update execution record, broadcast SSE, clean up
 - `cancelExecution()` kills the Deno process and marks the execution as `cancelled`
 - On API shutdown (`shutdownAllHomes()`): kill all active Deno processes
@@ -273,8 +293,12 @@ Each script execution gets its own Deno process with strict sandboxing:
 
 ### Runner (`runner.ts`)
 
-The runner executes inside the Deno subprocess. It builds the SDK, overrides console output, executes the
-script, and handles errors.
+The runner executes inside the Deno subprocess. It uses a Proxy-based SDK so domain methods are dispatched
+generically — the runner never enumerates SDK methods. Adding new backend capabilities requires zero runner
+changes.
+
+Console output (`console.log/warn/error`) is captured locally in `logLines` and sent with the final
+done/error message. No RPC needed for logging — stdout is reserved for SDK calls only.
 
 ```typescript
 // docker/scripts/runner.ts — runs inside Deno subprocess
@@ -342,39 +366,37 @@ async function rpc(method: string, params: unknown): Promise<unknown> {
     }
 })();
 
-// --- Console capture ---
-// Scripts will naturally use console.log(). Since stdout is our JSON-RPC channel,
-// we must intercept console output and route it through the log RPC.
+// --- Console capture (local only, no RPC) ---
 
 globalThis.console = {
     ...console,
-    log: (...args: unknown[]) => {
-        const msg = args.map(String).join(" ");
-        logLines.push(msg);
-        rpc("log", { message: msg });
-    },
-    warn: (...args: unknown[]) => {
-        const msg = args.map(String).join(" ");
-        logLines.push(`[warn] ${msg}`);
-        rpc("log", { message: `[warn] ${msg}` });
-    },
-    error: (...args: unknown[]) => {
-        const msg = args.map(String).join(" ");
-        logLines.push(`[error] ${msg}`);
-        rpc("error", { message: msg });
-    },
+    log: (...args: unknown[]) => logLines.push(args.map(String).join(" ")),
+    warn: (...args: unknown[]) => logLines.push(`[warn] ${args.map(String).join(" ")}`),
+    error: (...args: unknown[]) => logLines.push(`[error] ${args.map(String).join(" ")}`),
 };
 
-// --- SDK object ---
+// --- Proxy-based SDK ---
+// Domain methods are dispatched generically via Proxy. The runner never enumerates
+// methods — adding new SDK capabilities requires only a backend handler, not runner changes.
+// ownerId defaults to the executing user but can be overridden (e.g. for team data).
+
+function createDomainProxy(domain: string) {
+    return new Proxy({} as Record<string, (params?: Record<string, unknown>) => Promise<unknown>>, {
+        get(_, method: string) {
+            return (params: Record<string, unknown> = {}) =>
+                rpc(`${domain}.${method}`, { ownerId: init.context.user.id, ...params });
+        },
+    });
+}
 
 const eigen = {
-    drive: {
-        list: (mountId: string, pathId?: string) => rpc("drive.list", { mountId, pathId }),
-        read: (mountId: string, pathId: string) => rpc("drive.read", { mountId, pathId }),
-    },
+    drive: createDomainProxy("drive"),
+    calendar: createDomainProxy("calendar"),
+    mail: createDomainProxy("mail"),
+    contacts: createDomainProxy("contacts"),
+    // Future domains are added here — one line each
+
     fetch: (url: string, opts?: RequestInit) => fetch(url, opts),  // Deno native, domain-restricted
-    log: (msg: unknown) => { logLines.push(String(msg)); rpc("log", { message: String(msg) }); },
-    error: (msg: unknown) => { logLines.push(`[error] ${msg}`); rpc("error", { message: String(msg) }); },
     context: init.context,
     config: init.context.config || {},
     user: init.context.user,
@@ -394,10 +416,19 @@ try {
 }
 ```
 
+**Key design points:**
+- `createDomainProxy("drive")` creates a Proxy where `eigen.drive.anyMethod(params)` becomes
+  `rpc("drive.anyMethod", { ownerId: user.id, ...params })` — completely generic
+- `ownerId` is auto-injected from `eigen.user.id` but can be overridden:
+  `eigen.drive.listFolder({ ownerId: "team_abc", mountId, pathId })` for team data
+- Console capture is local-only — no RPC calls for logging. Stdout stays clean for SDK calls
+- Adding a new domain = one `createDomainProxy()` line in the runner + backend handlers. That's it.
+
 ### SDK Handler
 
-The main API fulfills SDK calls from the runner. Each call is validated against the script's granted permissions
-before execution. Errors are returned as structured objects with a `code` field.
+The main API fulfills SDK calls from the runner. Method names arrive as `"domain.method"` from the Proxy.
+Each call is validated against the script's granted permissions before execution. The handler resolves
+`ownerId` from params and uses `getHome()` — respecting the sharding seam.
 
 ```typescript
 // apps/api/src/lib/scripts/sdk-handler.ts
@@ -411,35 +442,65 @@ const SDK_ERROR = {
 } as const;
 
 const PERMISSION_MAP: Record<string, string> = {
-    "drive.list": "drive:read",
-    "drive.read": "drive:read",
-    // Phase 2: "drive.write": "drive:write", "drive.create": "drive:write",
-    // Phase 2: "mail.list": "mail:read", "mail.send": "mail:send", etc.
+    "drive.listFolder": "drive:read",
+    "drive.getPath": "drive:read",
+    "drive.readFile": "drive:read",
+    "docs.getText": "drive:read",
+    "docs.getJson": "drive:read",
+    "sheets.getCellValue": "drive:read",
+    "sheets.getRange": "drive:read",
+    "sheets.getSheetData": "drive:read",
+    // Phase 2: "drive.writeFile": "drive:write", "drive.create": "drive:write",
+    // Phase 2: "docs.insertContent": "drive:write", "sheets.setCellValue": "drive:write",
+    // Phase 2: "mail.list": "mail:read", "calendar.listEvents": "calendar:read", etc.
+};
+
+type SDKMethod = (home: Home, params: Record<string, unknown>) => Promise<unknown>;
+
+const METHOD_HANDLERS: Record<string, SDKMethod> = {
+    // Drive
+    "drive.listFolder": (home, p) =>
+        home.drive.list(p.mountId as string, p.pathId as string | undefined),
+    "drive.getPath": (home, p) =>
+        home.drive.getPath(p.mountId as string, p.pathId as string),
+    "drive.readFile": (home, p) =>
+        home.drive.readFile(p.mountId as string, p.pathId as string),
+    // Docs — uses shared DocumentReader (see Document Content Layer)
+    "docs.getText": (home, p) =>
+        readDocContent(home.drive, p.mountId as string, p.pathId as string).then(c => c.text),
+    "docs.getJson": (home, p) =>
+        readDocContent(home.drive, p.mountId as string, p.pathId as string).then(c => c.json),
+    // Sheets — uses shared DocumentReader
+    "sheets.getCellValue": (home, p) =>
+        readSheetCellValue(home.drive, p.mountId as string, p.pathId as string,
+            p.sheet as number, p.row as number, p.col as number, p.render as string | undefined),
+    "sheets.getRange": (home, p) =>
+        readSheetRange(home.drive, p.mountId as string, p.pathId as string,
+            p.sheet as number, p.startRow as number, p.startCol as number,
+            p.endRow as number, p.endCol as number, p.render as string | undefined),
+    "sheets.getSheetData": (home, p) =>
+        readSheetContent(home.drive, p.mountId as string, p.pathId as string).then(c => c.sheets[p.sheet as number]),
+    // Phase 2: "drive.writeFile", "drive.create", "docs.insertContent", "sheets.setCellValue", ...
 };
 
 export async function executeSDKMethod(
-    home: Home,
     method: string,
     params: Record<string, unknown>,
     permissions: string[],
 ): Promise<unknown> {
+    const handler = METHOD_HANDLERS[method];
+    if (!handler) {
+        return { error: { code: SDK_ERROR.INVALID_PARAMS, message: `Unknown method: ${method}` } };
+    }
+
     const required = PERMISSION_MAP[method];
     if (required && !permissions.includes(required)) {
         return { error: { code: SDK_ERROR.PERMISSION_DENIED, message: `${method} requires ${required}` } };
     }
 
     try {
-        switch (method) {
-            case "drive.list":
-                return home.drive.list(params.mountId as string, params.pathId as string | undefined);
-            case "drive.read":
-                return home.drive.readFile(params.mountId as string, params.pathId as string);
-            case "log":
-            case "error":
-                return;  // Captured in execution log, no backend action needed
-            default:
-                return { error: { code: SDK_ERROR.INVALID_PARAMS, message: `Unknown SDK method: ${method}` } };
-        }
+        const home = await getHome(params.ownerId as string);
+        return handler(home, params);
     } catch (e) {
         if (e instanceof ApiError) {
             const code = e.status === 404 ? SDK_ERROR.NOT_FOUND
@@ -453,6 +514,16 @@ export async function executeSDKMethod(
 }
 ```
 
+**Adding a new SDK method** is two lines:
+1. Add to `PERMISSION_MAP`: `"calendar.listEvents": "calendar:read"`
+2. Add to `METHOD_HANDLERS`: `"calendar.listEvents": (home, p) => home.calendar.listEvents(p.calendarId)`
+
+The runner needs no changes — the Proxy already forwards `eigen.calendar.listEvents(...)` as
+`rpc("calendar.listEvents", ...)`.
+
+Document-aware SDK methods (`docs.getText`, `sheets.getRange`) use the shared Document Content Layer (see
+below) — the same readers that power export, preview, and import.
+
 ### SDK Error Contract
 
 Scripts receive structured errors with a `code` field. This contract is stable from Phase 1 — scripts can
@@ -461,7 +532,7 @@ rely on error codes for control flow.
 ```javascript
 // In a user script
 try {
-    const files = await eigen.drive.list(mountId);
+    const files = await eigen.drive.listFolder({ mountId, pathId });
 } catch (e) {
     if (e.code === "NOT_FOUND") {
         console.log("Mount not found");
@@ -479,15 +550,21 @@ New codes may be added in future SDK versions, but existing codes are never remo
 Phase 1:
 
 ```
-drive:read
-fetch
+drive:read                  # drive.listFolder, drive.getPath, drive.readFile,
+                            # docs.getText, docs.getJson,
+                            # sheets.getCellValue, sheets.getRange, sheets.getSheetData
+fetch                       # eigen.fetch() — Deno native, domain-restricted
 ```
+
+Document read methods (`docs.*`, `sheets.*`) use the `drive:read` permission because documents are drive
+items — reading their content is reading drive data. This keeps the permission model simple: one token
+covers all read access to a user's files, whether raw or structured.
 
 Phase 2+:
 
 ```
-drive:write
-sheets:read | sheets:write
+drive:write                 # drive.writeFile, drive.create, docs.insertContent,
+                            # sheets.setCellValue, sheets.setCellRange
 mail:read   | mail:send
 calendar:read | calendar:write
 chat:read   | chat:send
@@ -519,19 +596,45 @@ are added in future versions, the runner adapts based on the version number. Rul
 - Context-aware: when triggered from a host app's sidebar, the app's current context (selection, active
   document, etc.) is passed to the script
 
-### Cron (Future — Phase 2)
+### Cron (Phase 2)
 
-- Standard cron syntax: `"0 9 * * MON-FRI"`
-- In-process scheduler in the worker — loads enabled cron triggers on startup, checks due jobs every 60s
-- No external dependency (no Redis, no cron daemon) — matches eigen's single-process SQLite philosophy
-- Missed runs (server down) are skipped, not queued
+Uses Bun's built-in `Bun.cron()` — no custom scheduler, no external dependencies.
+
+**Server-level cron index**: `cron_triggers` table in `eigen.db` (alongside the share registry). This is a
+lookup table so the scheduler doesn't need to scan every user's DB on startup. The canonical trigger data
+stays in the user's `scripts.db`.
+
+**Lifecycle:**
+1. **API startup**: load all enabled triggers from `cron_triggers` in `eigen.db`, register each with
+   `Bun.cron(name, schedule, callback)`
+2. **Callback fires**: `getHome(ownerId)` (cold-starts Home if needed) → `runScript()`
+3. **Trigger CRUD**: update both user's `scripts.db` and server-level `cron_triggers`, then
+   register/unregister the `Bun.cron()` in the same operation
+4. **API shutdown**: Bun handles cleanup of registered crons
+
+```typescript
+// On startup
+const triggers = await loadEnabledCronTriggers();  // from eigen.db
+for (const trigger of triggers) {
+    Bun.cron(trigger.triggerId, trigger.cron, async () => {
+        const home = await getHome(trigger.ownerId);
+        const script = await home.scripts.get(trigger.scriptId);
+        if (script?.enabled) {
+            await runScript({ ...script, ownerId: trigger.ownerId });
+        }
+    });
+}
+```
+
+Bun handles cron expression evaluation and timing. Missed runs (server down) are skipped, not queued.
+Home cold-start on cron trigger is the same as any request after idle — `getHome()` reconstructs on demand.
 
 ### Event-Driven (Future — Phase 2)
 
 - Subscribe to existing `SSEventType` events: `drive:created`, `mail:created`, `chat:message`, etc.
 - Optional filter: `{ event: "mail:created", filter: { from: "*@github.com" } }`
 - Scripts service registers a listener on `Home.broadcast()` — on event, checks enabled triggers for matches
-  and sends execution requests to the worker
+  and dispatches execution
 - Asynchronous — original action (mail delivery, file upload) is never blocked by script execution
 - Deduplication: if a script is already running for the same trigger+event, the new execution is skipped
 
@@ -664,8 +767,17 @@ type ScriptContext = {
     app: string;
     mountId?: string;
     documentId?: string;
+    // Text selection (Docs, Sheets, Slides, Mail, Chat)
     selection?: string;
+    // Drive
     selectedFiles?: { id: string; name: string; mimeType: string }[];
+    // Docs — from live ProseMirror editor
+    documentText?: string;                                // Full plain text
+    documentJson?: JSONContent;                           // ProseMirror JSON tree
+    // Sheets — from live fortune-sheet editor
+    activeCell?: { sheet: number; row: number; col: number; value: unknown; formula?: string };
+    selectedRange?: { sheet: number; startRow: number; startCol: number;
+                      endRow: number; endCol: number; values: unknown[][] };
     [key: string]: unknown;                               // app-specific fields
 };
 
@@ -673,6 +785,9 @@ type ScriptContext = {
 type ScriptAction =
     | { action: "replaceSelection"; value: string }
     | { action: "insertText"; value: string; position?: "before" | "after" }
+    | { action: "insertContent"; content: JSONContent }                           // Docs: structured ProseMirror node
+    | { action: "setCellValue"; sheet: number; row: number; col: number; value: unknown }  // Sheets
+    | { action: "setCellRange"; sheet: number; row: number; col: number; values: unknown[][] }
     | { action: "notify"; message: string };
 ```
 
@@ -690,9 +805,9 @@ array may change dynamically (e.g., `selection` is only present when text is act
 
 | App | Provides | Result actions |
 |-----|----------|----------------|
-| Docs | `selection`, `activeDocument`, `mountId` | `replaceSelection`, `insertText`, `notify` |
+| Docs | `selection`, `documentText`, `documentJson`, `mountId` | `replaceSelection`, `insertText`, `insertContent`, `notify` |
 | Drive | `selectedFiles`, `mountId` | `notify` |
-| Sheets | `selection`, `activeCell`, `selectedRange`, `mountId` | `replaceSelection`, `notify` |
+| Sheets | `selection`, `activeCell`, `selectedRange`, `mountId` | `replaceSelection`, `setCellValue`, `setCellRange`, `notify` |
 | Slides | `selection`, `activeObject`, `mountId` | `replaceSelection`, `notify` |
 | Mail | `selection`, `subject`, `body` | `replaceSelection`, `notify` |
 | Chat | `selection`, `roomId` | `replaceSelection`, `notify` |
@@ -704,8 +819,10 @@ the same interface.
 
 ### Phase 1 Context Providers
 
-- **Docs**: `getContext()` reads `editor.state.selection` via Tiptap/ProseMirror, `applyResult()` dispatches a
-  transaction to replace selection. Supports: `selection`, `replaceSelection`, `insertText`, `notify`
+- **Docs**: `getContext()` reads `editor.state.selection` via Tiptap/ProseMirror + full document content via
+  `editor.getJSON()` and `editor.getText()`. `applyResult()` dispatches ProseMirror transactions for
+  `replaceSelection`, `insertText`, `insertContent`. Rich document content is available without a backend
+  round-trip because the live editor already has it in memory.
 - **Drive**: `getContext()` reads selected file list from DriveTable state, `applyResult()` supports `notify`
   only. Useful for file-processing scripts (analyze metadata, check naming, list contents)
 
@@ -794,15 +911,15 @@ export async function onRun() {
 7. SSE event `scripts:completed` → sidebar fetches result
 8. Sidebar calls `docsContextProvider.applyResult()` → ProseMirror transaction replaces selection
 
-### Example: File Lister Script (Drive)
+### Example: Drive File Processing Script
 
-A script that works in Drive, processing selected files:
+A script that uses the SDK to read drive contents:
 
 ```javascript
-// Name: "Summarize Selected Files"
+// Name: "List folder sizes"
 // Permissions: ["drive:read"]
 // Extensions: [
-//   { app: "drive", type: "context-action", label: "Summarize selection", icon: "file-text",
+//   { app: "drive", type: "context-action", label: "List folder sizes", icon: "hard-drive",
 //     function: "onRun", requires: ["selectedFiles"] }
 // ]
 
@@ -810,10 +927,16 @@ export async function onRun() {
     const files = eigen.context.selectedFiles;
     if (!files?.length) return { action: "notify", message: "No files selected" };
 
-    const summary = files.map(f => `${f.name} (${f.mimeType})`).join("\n");
-    console.log(`Processing ${files.length} files`);
+    // SDK call — ownerId auto-injected from eigen.user.id
+    for (const file of files) {
+        const path = await eigen.drive.getPath({ mountId: eigen.context.mountId, pathId: file.id });
+        console.log(`${path.name}: ${path.size} bytes`);
+    }
 
-    return { action: "notify", message: `${files.length} files:\n${summary}` };
+    // Access team data by overriding ownerId
+    // const teamFiles = await eigen.drive.listFolder({ ownerId: "team_abc", mountId, pathId });
+
+    return { action: "notify", message: `Processed ${files.length} files — see log` };
 }
 ```
 
@@ -854,22 +977,30 @@ export function handleScriptSSEvent(event: ScriptSSEvent, queryClient: QueryClie
 ## Backend Structure
 
 ```
+apps/api/src/lib/document/                  # Document Content Layer (shared by SDK, export, import, preview)
+  types.ts              # DocContent, SheetContent, CellData, DocumentContent union
+  doc-reader.ts         # readDocContent() — Yjs → ProseMirror JSON + plain text
+  doc-writer.ts         # writeDocContent() — ProseMirror JSON → Yjs update (for import)
+  sheets-reader.ts      # readSheetContent() — Yjs → SheetContent with cell values/formulas
+  sheets-writer.ts      # writeSheetContent() — SheetContent → Yjs update (for import)
+
 apps/api/src/lib/scripts/
   scripts.ts            # Scripts domain class (CRUD, execution lifecycle)
   db-config.ts          # Drizzle schema + versioned migrations
   schema.ts             # Drizzle table definitions
   script-runner.ts      # Spawns + manages Deno subprocesses directly
-  sdk-handler.ts        # Handles SDK RPC calls from subprocess
+  sdk-handler.ts        # METHOD_HANDLERS + PERMISSION_MAP — delegates to document readers
   sse-events.ts         # SSE event builders for script domain
 
 apps/api/src/routes/
   scripts.ts            # Elysia router (CRUD, execute, cancel, list)
 
 docker/scripts/
-  runner.ts             # Deno runner (SDK construction + script execution)
+  runner.ts             # Deno runner (Proxy SDK + console capture + script execution)
 
 packages/lib/src/types/
   script.ts             # Shared types: Script, Execution, ScriptExtension, ScriptContext, ScriptAction
+  document.ts           # Shared content types: DocContent, SheetContent, CellData
 
 packages/lib/src/core/scripts/
   hooks/
@@ -937,8 +1068,10 @@ than directly accessing the target Home.
 
 ### SDK data access
 
-When a script accesses shared data (e.g. a team mount), the SDK handler uses the existing `pull*()`/
-`sendToHome()` patterns from home-relay, keeping all cross-Home access shard-compatible.
+SDK calls include `ownerId` explicitly. When a script accesses shared data (e.g. a team mount via
+`eigen.drive.listFolder({ ownerId: "team_abc", mountId, pathId })`), the SDK handler calls
+`getHome("team_abc")` — which in a sharded deployment routes through `home-relay.ts` automatically. No
+special handling needed in the scripts system.
 
 ## Limits & Safety
 
@@ -968,6 +1101,248 @@ Future options:
 
 This is a Phase 2+ concern. Phase 1 scripts handle enough with the SDK + `eigen.fetch()`.
 
+## Document Content Layer
+
+Collaborative document types (eigendoc, eigensheets, eigenslides) store content as Yjs databases, not plain
+files. Multiple systems need to read and write their structured content: the scripting SDK, export, import,
+preview, and future search indexing. The Document Content Layer is a shared abstraction that serves all of them.
+
+### The Problem
+
+`drive.readFile()` returns raw file data — useless for Yjs-backed documents. A scripting SDK that can only
+read binary Yjs blobs is not a real API. Export, preview, and import all need the same thing: structured
+access to document content. Today, `loadEigendocContent()` in the export system does this for docs only. No
+equivalent exists for sheets, slides, or stickies.
+
+### Architecture
+
+Two paths to document content, both needed:
+
+```
+Context path (frontend, live editor)           SDK path (backend, Yjs extraction)
+─────────────────────────────────────          ──────────────────────────────────
+Live ProseMirror / fortune-sheet editor        data.db (Yjs storage)
+  ↓ getContext()                                 ↓ yjs-loader.ts (exists)
+ScriptContext with documentText,               Y.Doc
+  documentJson, activeCell, etc.                 ↓ DocumentReader (new)
+  ↓                                            Structured content (DocContent, SheetContent)
+Available in sidebar scripts                     ↓
+(current document only,                        Available to SDK, export, import, preview
+ no backend round-trip)                        (any document, even closed ones)
+```
+
+**Context path**: fast, free, but only the currently-open document. The live editor already has content in
+memory — the context provider just exposes it.
+
+**SDK path**: works for any document, needed for cron/event triggers (no frontend), batch processing, and
+cross-document scripts. Requires backend Yjs extraction.
+
+### Shared Content Types
+
+```typescript
+// packages/lib/src/types/document.ts
+
+// --- Docs ---
+
+type DocContent = {
+    type: 'doc';
+    json: JSONContent;                // ProseMirror JSON (canonical intermediate)
+    text: string;                     // Plain text extraction
+    media: Map<string, MediaRef>;     // Referenced images/files
+};
+
+// --- Sheets ---
+
+type SheetContent = {
+    type: 'sheets';
+    sheets: SheetData[];
+};
+
+type SheetData = {
+    id: string;
+    name: string;
+    cells: CellData[];                // Sparse — only non-empty cells
+    config?: SheetConfig;             // Merges, row/col sizing
+};
+
+type CellData = {
+    row: number;
+    col: number;
+    value: unknown;                   // Computed value (fortune-sheet `v`)
+    formula?: string;                 // Formula string (fortune-sheet `f`), omitted if none
+    display?: string;                 // Formatted display (fortune-sheet `m`)
+    type?: 'number' | 'string' | 'boolean' | 'date' | 'error';
+};
+
+// --- Union ---
+
+type DocumentContent = DocContent | SheetContent;   // grows with slides/stickies
+```
+
+These types map directly to the underlying storage:
+
+| Content field | Fortune-sheet | Google Sheets API equivalent |
+|---|---|---|
+| `CellData.value` | `cell.v` | `effectiveValue` (computed) |
+| `CellData.formula` | `cell.f` | `userEnteredValue.formulaValue` |
+| `CellData.display` | `cell.m` | `formattedValue` |
+| `CellData.type` | `cell.ct.t` | `ExtendedValue` discriminant |
+
+### DocumentReaders
+
+```typescript
+// apps/api/src/lib/document/doc-reader.ts
+// Refactored from existing loadEigendocContent() in export/doc/content.ts
+
+async function readDocContent(drive: Drive, mountId: string, pathId: string): Promise<DocContent> {
+    // 1. Open data.db via mount system
+    // 2. Load Yjs state (existing yjs-loader.ts — snapshots + incremental updates)
+    // 3. Y.XmlFragment → ProseMirror JSON (existing @tiptap/y-tiptap)
+    // 4. Extract plain text (ProseMirror textBetween or static render)
+    // 5. Build media map
+}
+
+// apps/api/src/lib/document/sheets-reader.ts
+
+async function readSheetContent(drive: Drive, mountId: string, pathId: string): Promise<SheetContent> {
+    // 1. Open data.db via mount system
+    // 2. Load Yjs state → Y.Map('state') → parse JSON snapshot → Sheet[]
+    // 3. Map fortune-sheet cells to CellData[] (sparse, non-empty only)
+    //    cell.v → value, cell.f → formula, cell.m → display, cell.ct.t → type
+}
+```
+
+**Sheets formula note:** Fortune-sheet calculates formulas client-side only. The server reads last-saved
+computed values (`cell.v`) from the Yjs snapshot. These are fresh enough for scripting and export — they're
+synced whenever fortune-sheet flushes its snapshot (on save, on `beforeunload`, periodically during editing).
+Server-side formula recalculation is a future enhancement; when it arrives, `readSheetContent()` recalculates
+before returning, transparently to consumers.
+
+### DocumentWriters (for import)
+
+```typescript
+// apps/api/src/lib/document/doc-writer.ts
+
+async function writeDocContent(drive: Drive, mountId: string, pathId: string, content: DocContent): Promise<void> {
+    // 1. ProseMirror JSON → Y.XmlFragment (prosemirrorJSONToYDoc from y-prosemirror)
+    // 2. Write Yjs update via CollabDocument
+    // 3. Store media files in document container
+}
+
+// apps/api/src/lib/document/sheets-writer.ts
+
+async function writeSheetContent(drive: Drive, mountId: string, pathId: string, content: SheetContent): Promise<void> {
+    // 1. CellData[] → fortune-sheet Sheet[] JSON
+    // 2. Write to Y.Map('state') as snapshot
+    // 3. Write Yjs update via CollabDocument
+}
+```
+
+If other editors are connected when a write happens, the Yjs update syncs automatically via the existing
+WebSocket collaboration. If nobody's editing, the update is written directly to the database.
+
+### Scripting SDK Methods
+
+Following Google Sheets API patterns — default to computed values, optional `render` parameter:
+
+```javascript
+// --- Docs ---
+
+const text = await eigen.docs.getText({ mountId, pathId });
+// → "Hello world\nSecond paragraph..."
+
+const json = await eigen.docs.getJson({ mountId, pathId });
+// → { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Hello world" }] }] }
+
+// --- Sheets ---
+
+// Single cell — returns computed value by default
+const val = await eigen.sheets.getCellValue({ mountId, pathId, sheet: 0, row: 0, col: 0 });
+// → 42
+
+// With render option (like Google's ValueRenderOption)
+const formula = await eigen.sheets.getCellValue({
+    mountId, pathId, sheet: 0, row: 0, col: 0, render: "formula"
+});
+// → "=SUM(A1:A5)"
+
+const display = await eigen.sheets.getCellValue({
+    mountId, pathId, sheet: 0, row: 0, col: 0, render: "formatted"
+});
+// → "$42.00"
+
+// Range — returns 2D array of computed values
+const values = await eigen.sheets.getRange({
+    mountId, pathId, sheet: 0,
+    startRow: 0, startCol: 0, endRow: 9, endCol: 3,
+});
+// → [[1, "Alice", 95], [2, "Bob", 87], ...]
+
+// Full sheet data — returns all non-empty cells with value + formula + display
+const sheet = await eigen.sheets.getSheetData({ mountId, pathId, sheet: 0 });
+// → { id, name, cells: [{ row, col, value, formula, display, type }], config }
+```
+
+### ScriptActions for Document Writes
+
+Write operations on the currently-open document go through `applyResult()` on the context provider. The
+provider dispatches to the live editor — no backend round-trip needed.
+
+```javascript
+// Docs — insert structured ProseMirror content
+return { action: "insertContent", content: {
+    type: "paragraph",
+    content: [{ type: "text", text: "Generated by script" }]
+}};
+
+// Sheets — set a single cell
+return { action: "setCellValue", sheet: 0, row: 5, col: 0, value: 42 };
+
+// Sheets — set a range (row-major 2D array)
+return { action: "setCellRange", sheet: 0, row: 0, col: 0, values: [
+    ["Name", "Score", "Grade"],
+    ["Alice", 95, "A"],
+    ["Bob", 87, "B+"],
+]};
+```
+
+Backend SDK write methods (`docs.insertContent`, `sheets.setCellValue`) are Phase 2 — they apply Yjs
+updates through the Collab system and are needed for cron/event-triggered scripts that run without a frontend.
+
+### Consumers
+
+| Consumer | Uses reader | Uses writer | Exists today? |
+|----------|-------------|-------------|---------------|
+| **Scripting SDK** (`docs.getText`, `sheets.getRange`) | Yes | Phase 2 | No — built in Phase 1 |
+| **Export** (DOCX, PDF, HTML) | Yes | — | Docs only (`loadEigendocContent`) |
+| **Preview** (HTML rendering) | Yes | — | Docs only |
+| **Import** (DOCX, XLSX, ODS) | — | Yes | No |
+| **Search indexing** (future) | Yes | — | No |
+
+The existing `loadEigendocContent()` in `apps/api/src/lib/export/doc/content.ts` becomes a thin wrapper
+around `readDocContent()`. The export system, preview system, and scripting SDK all use the same reader.
+
+### File Structure
+
+```
+apps/api/src/lib/document/
+  doc-reader.ts         # readDocContent() — refactored from export/doc/content.ts
+  doc-writer.ts         # writeDocContent() — for import (Phase 2)
+  sheets-reader.ts      # readSheetContent() — new
+  sheets-writer.ts      # writeSheetContent() — for import (Phase 2)
+
+packages/lib/src/types/
+  document.ts           # DocContent, SheetContent, CellData — shared FE + BE
+
+apps/api/src/lib/export/
+  doc/content.ts        # → becomes thin wrapper around doc-reader.ts
+
+apps/api/src/lib/import/                    # Future
+  docx-import.ts        # DOCX → DocContent → writeDocContent()
+  xlsx-import.ts        # XLSX → SheetContent → writeSheetContent()
+  ods-import.ts         # ODS → DocContent/SheetContent → writer
+```
+
 ## Implementation Phases
 
 ### Phase 1 — MVP
@@ -978,38 +1353,50 @@ The minimum that proves the full pipeline end-to-end:
 - `Scripts` domain class (CRUD + execute + cancel)
 - `db-config.ts` with `scripts` + `executions` tables
 - `ScriptRunner` (direct Deno subprocess management from main API)
-- `runner.ts` (SDK + console capture + error handling)
-- `sdk-handler.ts` (drive.list, drive.read, log, error — read-only)
+- `runner.ts` (Proxy SDK + console capture + error handling)
+- `sdk-handler.ts` (`METHOD_HANDLERS` + `PERMISSION_MAP`)
 - SSE events for execution lifecycle
 - Routes: CRUD, execute, cancel, list
 - Personal scope only
 
+**Document Content Layer:**
+- `readDocContent()` — refactored from existing `loadEigendocContent()` (Yjs → PM JSON + text)
+- `readSheetContent()` — new (Yjs → SheetContent with cell values/formulas/display)
+- Shared types: `DocContent`, `SheetContent`, `CellData` in `packages/lib/src/types/document.ts`
+- Export system refactored to use `readDocContent()` as shared reader
+
 **SDK (read-only):**
-- `eigen.drive.list()`, `eigen.drive.read()` — enough for useful file-processing scripts
-- `eigen.fetch()` — external API calls (domain-restricted)
-- `eigen.log()`, `eigen.error()` — captured output
-- `eigen.context`, `eigen.config` — read-only invocation context + persisted config
+- `eigen.drive.*` — Proxy-based, auto-injects ownerId. Methods: `listFolder`, `getPath`, `readFile`
+- `eigen.docs.*` — `getText`, `getJson` (via `readDocContent()`)
+- `eigen.sheets.*` — `getCellValue`, `getRange`, `getSheetData` (via `readSheetContent()`)
+  with `render` option: `"value"` (default), `"formula"`, `"formatted"`
+- `eigen.fetch()` — external API calls (domain-restricted via Deno `--allow-net`)
+- `console.log/warn/error` — captured locally, delivered with execution result
+- `eigen.context`, `eigen.config`, `eigen.user` — read-only invocation context + persisted config
 - Structured error codes: `NOT_FOUND`, `PERMISSION_DENIED`, `QUOTA_EXCEEDED`, `INVALID_PARAMS`, `INTERNAL`
 
 **Frontend:**
 - Scripts app: list view + CodeMirror editor + "Run" button + output panel
 - `ScriptsPanel` in `packages/ui` (PropertiesPanel-based sidebar)
 - `ScriptContextProvider` interface
-- Context providers for Docs (selection + replaceSelection) and Drive (selectedFiles + notify)
+- Context providers for Docs (`selection`, `documentText`, `documentJson` + `replaceSelection`,
+  `insertText`, `insertContent`) and Drive (`selectedFiles` + `notify`)
 - Toolbar integration: `Code` icon button (alongside existing comment button)
-- Result actions: `replaceSelection`, `insertText`, `notify`
 
-### Phase 2 — Worker + Triggers + Writes
+### Phase 2 — Worker + Triggers + Writes + Import
 
 - **Worker process extraction** — move Deno management to dedicated Bun worker with IPC, add execution queue
   and per-user concurrency limits
-- Cron and event-driven triggers (scheduler in worker, event listener in main API)
-- **Write SDK operations**: `eigen.drive.write()`, `eigen.drive.create()` with quota enforcement and ACL
-  validation
+- **Cron triggers** — `Bun.cron()` per trigger, server-level `cron_triggers` index in `eigen.db`
+- **Event-driven triggers** — listener on `Home.broadcast()`, dispatches matching script executions
+- **Write SDK operations**: `drive.writeFile`, `drive.create`, `docs.insertContent`,
+  `sheets.setCellValue`, `sheets.setCellRange` — with quota enforcement and ACL validation
+- **DocumentWriters**: `writeDocContent()`, `writeSheetContent()` — for SDK writes and import
+- **File import**: DOCX → `DocContent` → `writeDocContent()`, XLSX → `SheetContent` → `writeSheetContent()`
 - Team/org script scope (Scripts domain in TeamHome/OrgHome)
 - Installation/permission approval flow
 - Prompt-based script inputs (`input` field in extensions)
-- Extended SDK: `eigen.sheets.*`, `eigen.mail.*`, `eigen.calendar.*`
+- Extended SDK: `eigen.mail.*`, `eigen.calendar.*` (Proxy makes these instant to add)
 - Context providers for remaining apps (Sheets, Slides, Mail, Chat, Calendar)
 - Admin controls (disable scripting, view/kill executions)
 
@@ -1019,7 +1406,9 @@ The minimum that proves the full pipeline end-to-end:
 - Script secrets/config store (encrypted, separate from script source)
 - Execution metrics and quota enforcement
 - Script versioning with rollback UI
-- Script import mechanism (bundling or import maps)
+- Script module/import mechanism (bundling or import maps)
+- Sheets export (HTML, XLSX) via `readSheetContent()` + format-specific serializers
+- Server-side formula recalculation (extract fortune-sheet formula engine)
 
 ## What Is NOT In Scope
 
