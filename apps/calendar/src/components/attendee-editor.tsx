@@ -1,3 +1,4 @@
+import { copyToClipboard } from '@workspace/lib/clipboard';
 import type { Attendee } from '@workspace/lib/types/calendar';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import { Badge } from '@workspace/ui/components/badge';
@@ -153,14 +154,13 @@ export function AttendeeList({ attendees, organizer }: AttendeeListProps) {
     const handleCopyEmails = () => {
         const emails = filteredAttendees.map((a) => a.email);
         if (organizer) emails.unshift(organizer.email);
-        navigator.clipboard.writeText(emails.join(', '));
-        toast.success('Emails copied to clipboard');
+        copyToClipboard(emails.join(', '), 'Emails copied to clipboard');
     };
 
     return (
         <CollapsibleUserList
             title={title}
-            summaryLines={summary.length > 0 ? summary : undefined}
+            summaryLines={summary ? [summary] : undefined}
             count={count}
             actions={
                 <TooltipButton
@@ -196,15 +196,15 @@ export function AttendeeList({ attendees, organizer }: AttendeeListProps) {
     );
 }
 
-function buildAttendeeSummary(attendees: Attendee[]): string[] {
+function buildAttendeeSummary(attendees: Attendee[]): string {
     const counts: Record<string, number> = {};
     for (const a of attendees) {
         counts[a.status] = (counts[a.status] || 0) + 1;
     }
-    const lines: string[] = [];
-    if (counts.accepted) lines.push(`${counts.accepted} accepted`);
-    if (counts.tentative) lines.push(`${counts.tentative} maybe`);
-    if (counts.pending) lines.push(`${counts.pending} pending`);
-    if (counts.declined) lines.push(`${counts.declined} declined`);
-    return lines;
+    const parts: string[] = [];
+    if (counts.accepted) parts.push(`${counts.accepted} accepted`);
+    if (counts.tentative) parts.push(`${counts.tentative} maybe`);
+    if (counts.pending) parts.push(`${counts.pending} pending`);
+    if (counts.declined) parts.push(`${counts.declined} declined`);
+    return parts.join(', ');
 }

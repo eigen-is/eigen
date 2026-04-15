@@ -1,5 +1,6 @@
 import { getDriveShareUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
+import { copyToClipboard } from '@workspace/lib/clipboard';
 import { type DirectAccessItem, useDriveAccess, useIsEffectiveOwner } from '@workspace/lib/drive';
 import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
@@ -20,7 +21,6 @@ import { Separator } from '@workspace/ui/components/separator';
 import { cn } from '@workspace/ui/lib/utils';
 import { ClipboardCopy, Link, Lock, Mail, Plus, Unlock, Users } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { toast } from 'sonner';
 import { ContactAutosuggest } from '../contacts/contact-autosuggest';
 import type { ContactSuggestion } from '../contacts/types';
 import { TooltipButton } from '../toolbar/tooltip-button';
@@ -263,8 +263,7 @@ export function DriveAccessListEdit({
                             className="h-7 w-7"
                             onClick={() => {
                                 const emails = [...directList, ...inheritedList].map((e) => e.id).join(', ');
-                                navigator.clipboard.writeText(emails);
-                                toast.success('Emails copied to clipboard');
+                                copyToClipboard(emails, 'Emails copied to clipboard');
                             }}
                         />
                         <TooltipButton
@@ -272,10 +271,7 @@ export function DriveAccessListEdit({
                             tooltipText="Copy link"
                             variant="ghost"
                             className="h-7 w-7"
-                            onClick={() => {
-                                navigator.clipboard.writeText(getDriveShareUrl(path));
-                                toast.success('Link copied to clipboard');
-                            }}
+                            onClick={() => copyToClipboard(getDriveShareUrl(path), 'Link copied to clipboard')}
                         />
                         {onEmailClick && (
                             <TooltipButton
