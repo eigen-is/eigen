@@ -9,8 +9,8 @@ frontend app through a shared context provider pattern. Inspired by Google Apps 
 - **Runtime**: Deno subprocess — each script runs in a sandboxed Deno process with granular permissions
 - **Sandboxing**: Process-level isolation via Deno's permission flags. No access to eigen's filesystem, memory,
   or process. SDK calls bridge back to eigen via stdin/stdout JSON-RPC
-- **Execution offloading**: A dedicated Bun worker process handles all script execution, keeping the main API's
-  event loop clean for HTTP request handling
+- **Execution model**: Fully asynchronous — POST /execute returns immediately with an execution ID, progress
+  and results are delivered via SSE. No HTTP request blocks on script execution
 - **API access**: Scripts declare permissions in a manifest, enforced at two levels (Deno flags + SDK call
   validation)
 - **Triggers**: Manual (Phase 1), cron-based and event-driven (future)
@@ -26,39 +26,28 @@ frontend app through a shared context provider pattern. Inspired by Google Apps 
 - **Deno subprocess** provides real process-level isolation with built-in permission flags that map directly to
   manifest permissions. Single binary dependency, works regardless of eigen's runtime
 
-### Why a Separate Worker Process
+### Worker Process — Deferred to Phase 2
 
-Script execution involves spawning subprocesses, managing I/O multiplexing, enforcing timeouts, and processing
-SDK call results. Running this on the main API's event loop would compete with HTTP request handling under load.
+Script execution involves spawning subprocesses, managing I/O, enforcing timeouts, and processing SDK calls.
+At scale (cron triggers, event-driven execution, many concurrent users), offloading this to a dedicated Bun
+worker process makes sense. But Phase 1 is manual-trigger only — a handful of executions per day. The Deno
+subprocess itself provides process isolation (a crashing script can't take down the API), so the worker's
+isolation benefit is redundant.
 
-A dedicated Bun worker process (spawned via `Bun.spawn` with IPC) offloads all of this:
-
-- The main API stays responsive — script I/O, timeout enforcement, and Deno lifecycle management happen on a
-  separate CPU core
-- Worker crash doesn't bring down the API — the main API detects exit and restarts the worker
-- Natural concurrency boundary — execution queue and per-user limits live in the worker
-- SDK calls proxy back to the main API via IPC, where Home instances and DB connections live
+Phase 1 spawns Deno directly from the main API via a `ScriptRunner` class. The code is structured so that
+extracting it into a worker process in Phase 2 is a mechanical refactor: move the Deno management code, add
+an IPC bridge. No architectural changes needed.
 
 ## Architecture
 
-### Process Model
+### Process Model (Phase 1)
 
 ```
 Main API (Bun, port 8000)
 ├── Scripts domain class        (CRUD for scripts/executions, personal DB)
 ├── Script routes               (HTTP API — create, edit, run, list extensions)
-└── ScriptBridge                (IPC bridge to worker — sends execution requests,
-                                 fulfills SDK calls from worker)
-
-Script Worker (separate Bun process, spawned at API startup)
-├── Execution queue             (per-user concurrency limit, FIFO)
-├── Timeout manager             (wall-clock kill per execution)
-└── Per-execution Deno management
-    ├── Spawn Deno subprocess
-    ├── Send init (source + context) via stdin
-    ├── Read JSON-RPC from stdout (SDK calls + done/error)
-    ├── Forward SDK calls to main API via IPC
-    └── Write SDK results to Deno stdin
+└── ScriptRunner                (spawns Deno subprocesses directly, manages lifecycle,
+                                 fulfills SDK calls against Home instances)
 
 Deno Runner (one per script execution, sandboxed)
 ├── Build SDK object (eigen.drive, eigen.fetch, eigen.log, ...)
@@ -67,28 +56,49 @@ Deno Runner (one per script execution, sandboxed)
 └── Return result or error via stdout JSON-RPC
 ```
 
+### Process Model (Phase 2 — Worker Extraction)
+
+```
+Main API (Bun, port 8000)
+├── Scripts domain class
+├── Script routes
+└── ScriptBridge                (IPC bridge to worker)
+
+Script Worker (separate Bun process, spawned at API startup)
+├── Execution queue             (per-user concurrency limit, FIFO)
+├── Timeout manager
+└── Per-execution Deno management (moved from ScriptRunner)
+```
+
+The worker extraction adds: per-user concurrency limits, execution queuing, and CPU isolation for the main
+API. The Deno management code moves unchanged; only the communication layer changes (direct calls → IPC).
+
 ### Data Flow — Script Execution
+
+Execution is fully asynchronous. The HTTP request never blocks on script execution.
 
 ```
 1. User clicks "Run" → POST /scripts/:ownerId/execute/:scriptId
-2. Main API: Scripts.createExecution() writes to DB, sends IPC to worker:
-   { type: "execute", executionId, source, context, permissions, timeout }
-3. Worker: spawns Deno subprocess, sends init via stdin
-4. Deno: runner.ts builds SDK, executes script
+   → Response: { executionId, status: "running" }  (returned immediately)
+
+2. Main API: Scripts.createExecution() writes to DB
+   ScriptRunner.spawn() launches Deno subprocess, sends init via stdin
+
+3. Deno: runner.ts builds SDK, executes script
 
    SDK call flow (e.g. eigen.drive.list()):
    a. Script calls eigen.drive.list(mountId)
    b. Runner sends stdout: { id: 1, method: "drive.list", params: { mountId } }
-   c. Worker reads stdout, sends IPC to main API:
-      { type: "sdk", executionId, callId: 1, method: "drive.list", params: { mountId } }
-   d. Main API: getHome(ownerId) → home.drive.list(mountId) → result
-   e. Main API sends IPC: { type: "sdk-result", executionId, callId: 1, result: [...] }
-   f. Worker writes to Deno stdin: { id: 1, result: [...] }
-   g. Runner resolves RPC promise → script receives file list
+   c. ScriptRunner reads stdout, executes: getHome(ownerId) → home.drive.list(mountId)
+   d. ScriptRunner writes to Deno stdin: { id: 1, result: [...] }
+   e. Runner resolves RPC promise → script receives file list
 
-5. Script finishes → runner sends { type: "done", result, log }
-6. Worker sends IPC: { type: "completed", executionId, result, log, durationMs }
-7. Main API: Scripts.completeExecution() updates DB, returns result to HTTP response
+4. Script finishes → runner sends { type: "done", result, log }
+5. ScriptRunner: Scripts.completeExecution() updates DB
+   home.broadcast(buildScriptEvent("scripts:completed", { executionId }))
+
+6. Frontend: SSE handler invalidates execution queries
+   → ScriptsPanel fetches result → calls applyResult() on context provider
 ```
 
 ### Data Flow — Context Action (Frontend Integration)
@@ -99,9 +109,12 @@ Deno Runner (one per script execution, sandboxed)
 3. User clicks "Translate" → sidebar calls docsContextProvider.getContext()
    → { selection: "Hello world", app: "docs", mountId, documentId }
 4. POST /scripts/:ownerId/execute/:scriptId with context body
-5. [execution pipeline as above — script calls eigen.fetch() to translate]
-6. Response: { action: "replaceSelection", value: "Bonjour le monde" }
-7. Sidebar calls docsContextProvider.applyResult(result)
+   → Returns { executionId, status: "running" } immediately
+5. Sidebar shows spinner, tracks executionId
+6. [execution pipeline as above — script calls eigen.fetch() to translate]
+7. SSE event: scripts:completed { executionId }
+8. Sidebar fetches execution result: { action: "replaceSelection", value: "Bonjour le monde" }
+9. Sidebar calls docsContextProvider.applyResult(result)
    → dispatches ProseMirror transaction replacing selection
 ```
 
@@ -118,7 +131,7 @@ scripts in the org's DB. This follows the existing Home ownership model (like Dr
 | id | text PK | nanoid |
 | name | text | Display name |
 | description | text | Optional |
-| source | text | JS source code |
+| source | text | JS source code (max 256KB, enforced at API layer) |
 | manifest | text (JSON) | `{ permissions: [...], extensions: [...] }` |
 | config | text (JSON) | Per-script key-value config (API keys, preferences) — persisted, not re-entered |
 | enabled | integer | 1 = active, 0 = disabled |
@@ -137,13 +150,16 @@ future enhancement.
 |--------|------|-------|
 | id | text PK | nanoid |
 | scriptId | text FK | |
-| status | text | `pending`, `running`, `completed`, `failed`, `timeout` |
+| status | text | `pending`, `running`, `completed`, `failed`, `timeout`, `cancelled` |
 | startedAt | integer | Epoch ms |
 | finishedAt | integer | Epoch ms, nullable |
 | durationMs | integer | Nullable |
 | log | text | Captured console output |
 | error | text | Error message if failed, nullable |
 | result | text (JSON) | Return value from script, nullable |
+
+Execution records are pruned automatically: max 50 per script, oldest deleted first. Pruning runs on
+`completeExecution()`.
 
 ### `triggers` (Future — Phase 2)
 
@@ -171,107 +187,83 @@ Personal scripts don't need installation records — the author has implicit acc
 
 ## Execution Environment
 
-### Worker Process
+### ScriptRunner
 
-The script worker is a standalone Bun process spawned by the main API at startup. Communication uses Bun's
-built-in IPC (`Bun.spawn` with `ipc` option).
-
-**Main API side (`ScriptBridge`):**
+The `ScriptRunner` class manages Deno subprocess lifecycle directly from the main API process. Each execution
+gets its own Deno process with a wall-clock timeout.
 
 ```typescript
-// apps/api/src/lib/scripts/script-bridge.ts
-const worker = Bun.spawn(["bun", "run", WORKER_PATH], {
-    ipc(message) {
-        // Handle messages from worker (SDK calls, completion, errors)
-        handleWorkerMessage(message);
-    },
-    serialization: "json",
-    stderr: "inherit",  // Worker errors visible in main API logs
-});
+// apps/api/src/lib/scripts/script-runner.ts
 
-// Send execution request to worker
-function requestExecution(req: ExecutionRequest) {
-    worker.send({ type: "execute", ...req });
+const activeExecutions = new Map<string, { proc: Subprocess; timer: Timer }>();
+
+export async function runScript(req: ExecutionRequest): Promise<void> {
+    const { executionId, source, context, permissions, timeout, ownerId } = req;
+    const runnerPath = path.resolve(import.meta.dir, "../../../docker/scripts/runner.ts");
+    const allowedDomains = getNetworkAllowlist(permissions);
+
+    const proc = Bun.spawn([
+        "deno", "run",
+        `--allow-read=${runnerPath}`,
+        "--deny-write",
+        "--deny-env",
+        "--deny-ffi",
+        "--no-prompt",
+        "--v8-flags=--max-heap-size=128",
+        ...(allowedDomains.length
+            ? [`--allow-net=${allowedDomains.join(",")}`]
+            : ["--deny-net"]),
+        runnerPath,
+    ], {
+        stdin: "pipe",
+        stdout: "pipe",
+        stderr: "pipe",
+    });
+
+    const timer = setTimeout(() => {
+        proc.kill();
+        completeExecution(executionId, "timeout");
+    }, timeout);
+
+    activeExecutions.set(executionId, { proc, timer });
+
+    // Send init
+    proc.stdin.write(JSON.stringify({
+        type: "init",
+        sdkVersion: 1,
+        source,
+        context: { user: context.user, config: context.config, ...context },
+        function: context.function || "onRun",
+    }) + "\n");
+
+    // Read stdout (JSON-RPC from runner)
+    handleRunnerOutput(executionId, proc, ownerId, permissions);
 }
 
-// Handle SDK call from worker — execute against the user's Home
-async function handleSDKCall(msg: SDKCallMessage) {
-    const home = await getHome(msg.ownerId);
-    const result = await executeSDKMethod(home, msg.method, msg.params, msg.permissions);
-    worker.send({ type: "sdk-result", executionId: msg.executionId, callId: msg.callId, result });
+export function cancelExecution(executionId: string): boolean {
+    const entry = activeExecutions.get(executionId);
+    if (!entry) return false;
+    entry.proc.kill();
+    clearTimeout(entry.timer);
+    activeExecutions.delete(executionId);
+    return true;
 }
 ```
 
-**Worker side:**
-
-```typescript
-// apps/api/src/lib/scripts/script-worker.ts
-const executions = new Map<string, DenoProcess>();
-const queue: ExecutionRequest[] = [];
-const running = new Map<string, number>();  // ownerId → count
-
-const MAX_CONCURRENT_PER_USER = 5;
-
-process.on("message", (msg) => {
-    if (msg.type === "execute") enqueueExecution(msg);
-    if (msg.type === "sdk-result") forwardSDKResult(msg);
-});
-
-function forwardSDKResult(msg: SDKResultMessage) {
-    const proc = executions.get(msg.executionId);
-    if (proc) {
-        proc.stdin.write(JSON.stringify({ id: msg.callId, result: msg.result }) + "\n");
-    }
-}
-```
-
-**Worker lifecycle:**
-- Spawned on API startup, before routes are registered
-- Main API monitors `worker.exited` — restarts on unexpected exit
-- On API shutdown (`shutdownAllHomes()`), sends `{ type: "shutdown" }` via IPC — worker kills all Deno
-  processes and exits
-- Running executions on worker crash are marked `failed` with "worker restart" error
+**Lifecycle:**
+- `runScript()` spawns Deno, starts timeout, begins reading stdout
+- SDK calls from the runner are handled inline: `getHome(ownerId)` → domain method → write result to stdin
+- On completion/error/timeout: update execution record, broadcast SSE, clean up
+- `cancelExecution()` kills the Deno process and marks the execution as `cancelled`
+- On API shutdown (`shutdownAllHomes()`): kill all active Deno processes
 
 ### Deno Subprocess
 
-The worker spawns a Deno process per script execution. Deno's permission flags enforce the first layer of
-sandboxing.
-
-```typescript
-const runnerPath = path.resolve(__dirname, "../../scripts/runner.ts");
-const allowedDomains = getNetworkAllowlist(permissions);
-
-const proc = Bun.spawn([
-    "deno", "run",
-    `--allow-read=${runnerPath}`,   // Runner needs to read itself
-    "--deny-write",                 // No filesystem writes
-    "--deny-env",                   // No environment variables
-    "--deny-ffi",                   // No native code
-    "--no-prompt",                  // Never prompt for permissions
-    ...(allowedDomains.length
-        ? [`--allow-net=${allowedDomains.join(",")}`]
-        : ["--deny-net"]),
-    runnerPath,
-], {
-    stdin: "pipe",
-    stdout: "pipe",
-    stderr: "pipe",
-});
-
-// Send init message with script source and context
-proc.stdin.write(JSON.stringify({
-    type: "init",
-    source: script.source,
-    context: { user, config: script.config, ...appContext },
-    function: targetFunction || "onRun",
-}) + "\n");
-
-// Start timeout timer
-const timer = setTimeout(() => proc.kill(), timeoutMs);
-```
+Each script execution gets its own Deno process with strict sandboxing:
 
 **Constraints:**
 - Wall clock timeout: 30s default (configurable per org in future)
+- Memory limit: 128MB via `--v8-flags=--max-heap-size=128`
 - `proc.kill()` on timeout — clean OS-level termination, execution marked `timeout`
 - `--allow-read` restricted to runner.ts path only — script cannot read eigen's filesystem
 - `--deny-write` prevents any filesystem writes
@@ -336,8 +328,13 @@ async function rpc(method: string, params: unknown): Promise<unknown> {
             const p = pending.get(msg.id);
             if (p) {
                 pending.delete(msg.id);
-                if (msg.error) p.reject(new Error(msg.error));
-                else p.resolve(msg.result);
+                if (msg.error) {
+                    const err = new Error(msg.error.message);
+                    (err as any).code = msg.error.code;
+                    p.reject(err);
+                } else {
+                    p.resolve(msg.result);
+                }
             }
         } catch {
             break;  // stdin closed
@@ -374,10 +371,6 @@ const eigen = {
     drive: {
         list: (mountId: string, pathId?: string) => rpc("drive.list", { mountId, pathId }),
         read: (mountId: string, pathId: string) => rpc("drive.read", { mountId, pathId }),
-        write: (mountId: string, pathId: string, data: string) =>
-            rpc("drive.write", { mountId, pathId, data }),
-        create: (mountId: string, name: string, opts?: Record<string, unknown>) =>
-            rpc("drive.create", { mountId, name, ...opts }),
     },
     fetch: (url: string, opts?: RequestInit) => fetch(url, opts),  // Deno native, domain-restricted
     log: (msg: unknown) => { logLines.push(String(msg)); rpc("log", { message: String(msg) }); },
@@ -403,18 +396,25 @@ try {
 
 ### SDK Handler
 
-The main API fulfills SDK calls from the worker. Each call is validated against the script's granted permissions
-before execution.
+The main API fulfills SDK calls from the runner. Each call is validated against the script's granted permissions
+before execution. Errors are returned as structured objects with a `code` field.
 
 ```typescript
 // apps/api/src/lib/scripts/sdk-handler.ts
 
+const SDK_ERROR = {
+    NOT_FOUND: "NOT_FOUND",
+    PERMISSION_DENIED: "PERMISSION_DENIED",
+    QUOTA_EXCEEDED: "QUOTA_EXCEEDED",
+    INVALID_PARAMS: "INVALID_PARAMS",
+    INTERNAL: "INTERNAL",
+} as const;
+
 const PERMISSION_MAP: Record<string, string> = {
     "drive.list": "drive:read",
     "drive.read": "drive:read",
-    "drive.write": "drive:write",
-    "drive.create": "drive:write",
-    // Future: mail.*, calendar.*, contacts.*, chat.*
+    // Phase 2: "drive.write": "drive:write", "drive.create": "drive:write",
+    // Phase 2: "mail.list": "mail:read", "mail.send": "mail:send", etc.
 };
 
 export async function executeSDKMethod(
@@ -425,38 +425,68 @@ export async function executeSDKMethod(
 ): Promise<unknown> {
     const required = PERMISSION_MAP[method];
     if (required && !permissions.includes(required)) {
-        throw new Error(`Permission denied: ${method} requires ${required}`);
+        return { error: { code: SDK_ERROR.PERMISSION_DENIED, message: `${method} requires ${required}` } };
     }
 
-    switch (method) {
-        case "drive.list":
-            return home.drive.list(params.mountId as string, params.pathId as string | undefined);
-        case "drive.read":
-            return home.drive.readFile(params.mountId as string, params.pathId as string);
-        case "drive.write":
-            return home.drive.writeFile(
-                params.mountId as string, params.pathId as string, params.data as string);
-        case "drive.create":
-            return home.drive.create(params.mountId as string, params.name as string, params);
-        case "log":
-        case "error":
-            return;  // Captured in execution log, no backend action needed
-        default:
-            throw new Error(`Unknown SDK method: ${method}`);
+    try {
+        switch (method) {
+            case "drive.list":
+                return home.drive.list(params.mountId as string, params.pathId as string | undefined);
+            case "drive.read":
+                return home.drive.readFile(params.mountId as string, params.pathId as string);
+            case "log":
+            case "error":
+                return;  // Captured in execution log, no backend action needed
+            default:
+                return { error: { code: SDK_ERROR.INVALID_PARAMS, message: `Unknown SDK method: ${method}` } };
+        }
+    } catch (e) {
+        if (e instanceof ApiError) {
+            const code = e.status === 404 ? SDK_ERROR.NOT_FOUND
+                : e.status === 403 ? SDK_ERROR.PERMISSION_DENIED
+                : e.status === 413 ? SDK_ERROR.QUOTA_EXCEEDED
+                : SDK_ERROR.INTERNAL;
+            return { error: { code, message: e.message } };
+        }
+        return { error: { code: SDK_ERROR.INTERNAL, message: "Internal error" } };
     }
 }
 ```
 
+### SDK Error Contract
+
+Scripts receive structured errors with a `code` field. This contract is stable from Phase 1 — scripts can
+rely on error codes for control flow.
+
+```javascript
+// In a user script
+try {
+    const files = await eigen.drive.list(mountId);
+} catch (e) {
+    if (e.code === "NOT_FOUND") {
+        console.log("Mount not found");
+    } else if (e.code === "PERMISSION_DENIED") {
+        console.log("No access to this mount");
+    }
+}
+```
+
+Error codes: `NOT_FOUND`, `PERMISSION_DENIED`, `QUOTA_EXCEEDED`, `INVALID_PARAMS`, `INTERNAL`.
+New codes may be added in future SDK versions, but existing codes are never removed or renamed.
+
 ### Permission Tokens
 
+Phase 1:
+
 ```
-drive:read  | drive:write
+drive:read
 fetch
 ```
 
-Future (Phase 2+):
+Phase 2+:
 
 ```
+drive:write
 sheets:read | sheets:write
 mail:read   | mail:send
 calendar:read | calendar:write
@@ -469,6 +499,15 @@ Enforced at two levels:
    always denied
 2. **SDK call validation** — each RPC call in `executeSDKMethod()` checks the script's granted permissions
    before executing
+
+### SDK Versioning
+
+The init message includes `sdkVersion: 1`. The runner uses this to construct the SDK object. When new methods
+are added in future versions, the runner adapts based on the version number. Rules:
+
+- New SDK versions only **add** methods — never remove or change existing signatures
+- Scripts don't declare a target SDK version — they always get the latest
+- The version number is for the runner to know what the host API supports (forward compatibility)
 
 ## Triggers
 
@@ -615,10 +654,10 @@ apply results after.
 // packages/lib/src/core/scripts/context-provider.ts
 
 type ScriptContextProvider = {
-    app: string;                                     // "docs", "sheets", "slides", etc.
-    capabilities: string[];                          // what this app can provide right now
-    getContext: () => ScriptContext;                  // gather current app state
-    applyResult: (result: ScriptResult) => void;     // apply script output back to the app
+    app: string;                                          // "docs", "sheets", "drive", etc.
+    capabilities: string[];                               // what this app can provide right now
+    getContext: () => ScriptContext;                       // gather current app state
+    applyResult: (result: ScriptAction) => Promise<void>; // apply script output back to the app
 };
 
 type ScriptContext = {
@@ -626,29 +665,23 @@ type ScriptContext = {
     mountId?: string;
     documentId?: string;
     selection?: string;
-    [key: string]: unknown;                          // app-specific fields
+    selectedFiles?: { id: string; name: string; mimeType: string }[];
+    [key: string]: unknown;                               // app-specific fields
 };
 
-type ScriptResult = {
-    action: string;                                  // "replaceSelection", "notify", etc.
-    [key: string]: unknown;                          // action-specific fields
-};
+// Discriminated union — exhaustive, type-safe
+type ScriptAction =
+    | { action: "replaceSelection"; value: string }
+    | { action: "insertText"; value: string; position?: "before" | "after" }
+    | { action: "notify"; message: string };
 ```
 
 The sidebar filters available scripts: a script's extension `requires` must be a subset of the provider's
 current `capabilities`. This filtering happens entirely on the frontend — the backend returns all scripts with
 their extensions, the sidebar filters by what the current app can provide.
 
-### Result Actions
-
-| Action | Params | Effect |
-|--------|--------|--------|
-| `replaceSelection` | `value: string` | Replace the current selection with the given text |
-| `insertText` | `value: string`, `position?: "before" \| "after"` | Insert text relative to cursor/selection |
-| `notify` | `message: string` | Show a toast notification |
-
-Each context provider's `applyResult()` handles the actions it supports. Unknown actions are ignored with a
-console warning.
+`applyResult()` validates the action before applying. Unknown actions return a structured error shown in the
+scripts panel — not silently ignored.
 
 ### Context Capabilities Per App
 
@@ -658,26 +691,23 @@ array may change dynamically (e.g., `selection` is only present when text is act
 | App | Provides | Result actions |
 |-----|----------|----------------|
 | Docs | `selection`, `activeDocument`, `mountId` | `replaceSelection`, `insertText`, `notify` |
+| Drive | `selectedFiles`, `mountId` | `notify` |
 | Sheets | `selection`, `activeCell`, `selectedRange`, `mountId` | `replaceSelection`, `notify` |
 | Slides | `selection`, `activeObject`, `mountId` | `replaceSelection`, `notify` |
 | Mail | `selection`, `subject`, `body` | `replaceSelection`, `notify` |
 | Chat | `selection`, `roomId` | `replaceSelection`, `notify` |
 | Calendar | `activeEvent`, `eventId` | `notify` |
-| Drive | `selectedFiles`, `mountId` | `notify` |
 
-**Key insight:** `selection` and `replaceSelection` are supported across docs, sheets, slides, mail compose,
-and chat input — enabling a whole class of generic text-processing scripts.
+**Phase 1 implements: Docs + Drive.** These exercise different capabilities (text selection vs file selection)
+and prove the pattern works across very different app types. Other apps add context providers later, following
+the same interface.
 
 ### Phase 1 Context Providers
 
-For MVP, implement context providers for **Docs** and **Sheets** to prove the pattern across two different app
-types (ProseMirror editor vs. spreadsheet grid):
-
 - **Docs**: `getContext()` reads `editor.state.selection` via Tiptap/ProseMirror, `applyResult()` dispatches a
-  transaction to replace selection
-- **Sheets**: `getContext()` reads active cell from fortune-sheet, `applyResult()` calls `setCellValue()`
-
-Other apps add their providers later, following the same interface.
+  transaction to replace selection. Supports: `selection`, `replaceSelection`, `insertText`, `notify`
+- **Drive**: `getContext()` reads selected file list from DriveTable state, `applyResult()` supports `notify`
+  only. Useful for file-processing scripts (analyze metadata, check naming, list contents)
 
 ## App Extensions
 
@@ -758,13 +788,68 @@ export async function onRun() {
 1. User selects text in a document
 2. Opens scripts sidebar, sees "Translate to French"
 3. Clicks it → sidebar calls `docsContextProvider.getContext()` → `{ selection: "Hello world", ... }`
-4. `POST /scripts/:ownerId/execute/:scriptId` with context
-5. Worker spawns Deno → script calls OpenAI → returns `{ action: "replaceSelection", value: "Bonjour le monde" }`
-6. Sidebar calls `docsContextProvider.applyResult()` → ProseMirror transaction replaces selection
+4. `POST /scripts/:ownerId/execute/:scriptId` with context → `{ executionId, status: "running" }`
+5. Sidebar shows spinner
+6. [Deno spawns → script calls OpenAI → returns `{ action: "replaceSelection", value: "Bonjour le monde" }`]
+7. SSE event `scripts:completed` → sidebar fetches result
+8. Sidebar calls `docsContextProvider.applyResult()` → ProseMirror transaction replaces selection
 
-**Same script in Sheets** — no changes needed:
-1. User clicks a cell with "Hello world"
-2. Same flow → Sheets context provider calls `setCellValue()` with the translated text
+### Example: File Lister Script (Drive)
+
+A script that works in Drive, processing selected files:
+
+```javascript
+// Name: "Summarize Selected Files"
+// Permissions: ["drive:read"]
+// Extensions: [
+//   { app: "drive", type: "context-action", label: "Summarize selection", icon: "file-text",
+//     function: "onRun", requires: ["selectedFiles"] }
+// ]
+
+export async function onRun() {
+    const files = eigen.context.selectedFiles;
+    if (!files?.length) return { action: "notify", message: "No files selected" };
+
+    const summary = files.map(f => `${f.name} (${f.mimeType})`).join("\n");
+    console.log(`Processing ${files.length} files`);
+
+    return { action: "notify", message: `${files.length} files:\n${summary}` };
+}
+```
+
+## SSE Events
+
+Script execution integrates with the existing SSE system for real-time updates.
+
+### Event Types
+
+```typescript
+// In packages/lib/src/types/sse.ts
+
+type ScriptSSEvent =
+    | { type: "scripts:started"; script: { executionId: string } }
+    | { type: "scripts:completed"; script: { executionId: string } }
+    | { type: "scripts:failed"; script: { executionId: string } };
+```
+
+Events are minimal (just `executionId`) — consistent with other domain SSE events. The frontend invalidates
+execution queries on any script SSE event.
+
+### SSE Handler
+
+```typescript
+// packages/lib/src/core/scripts/sse-handlers.ts
+
+export function handleScriptSSEvent(event: ScriptSSEvent, queryClient: QueryClient) {
+    switch (event.type) {
+        case "scripts:started":
+        case "scripts:completed":
+        case "scripts:failed":
+            queryClient.invalidateQueries({ queryKey: scriptKeys.executions() });
+            break;
+    }
+}
+```
 
 ## Backend Structure
 
@@ -773,23 +858,22 @@ apps/api/src/lib/scripts/
   scripts.ts            # Scripts domain class (CRUD, execution lifecycle)
   db-config.ts          # Drizzle schema + versioned migrations
   schema.ts             # Drizzle table definitions
-  script-bridge.ts      # IPC bridge to worker process
-  script-worker.ts      # Worker process entry point (execution queue, Deno management)
+  script-runner.ts      # Spawns + manages Deno subprocesses directly
   sdk-handler.ts        # Handles SDK RPC calls from subprocess
   sse-events.ts         # SSE event builders for script domain
 
 apps/api/src/routes/
-  scripts.ts            # Elysia router (CRUD, execute, list)
+  scripts.ts            # Elysia router (CRUD, execute, cancel, list)
 
 docker/scripts/
   runner.ts             # Deno runner (SDK construction + script execution)
 
 packages/lib/src/types/
-  script.ts             # Shared types: Script, Execution, ScriptExtension, ScriptContext, ScriptResult
+  script.ts             # Shared types: Script, Execution, ScriptExtension, ScriptContext, ScriptAction
 
 packages/lib/src/core/scripts/
   hooks/
-    use-scripts.ts      # useScripts, useScript, useExecutions, useRunScript, etc.
+    use-scripts.ts      # useScripts, useScript, useExecutions, useRunScript, useCancelScript
     index.ts
   sse-handlers.ts       # Cache invalidation for script events
   context-provider.ts   # ScriptContextProvider type definition
@@ -856,6 +940,34 @@ than directly accessing the target Home.
 When a script accesses shared data (e.g. a team mount), the SDK handler uses the existing `pull*()`/
 `sendToHome()` patterns from home-relay, keeping all cross-Home access shard-compatible.
 
+## Limits & Safety
+
+| Limit | Value | Enforced by |
+|-------|-------|-------------|
+| Script source size | 256 KB | API route validation |
+| Execution timeout | 30 s | ScriptRunner (wall-clock `proc.kill()`) |
+| Heap memory | 128 MB | Deno `--v8-flags=--max-heap-size=128` |
+| Execution history | 50 per script | `completeExecution()` pruning |
+| Filesystem access | None | Deno `--deny-write`, `--allow-read` restricted to runner |
+| Environment variables | None | Deno `--deny-env` |
+| FFI | None | Deno `--deny-ffi` |
+| Network | Allowlisted domains only | Deno `--allow-net` / `--deny-net` |
+
+Phase 2 adds: per-user concurrency limit (5), execution queue in worker process, per-org scripting toggle.
+
+## Script Imports (Future)
+
+Phase 1 scripts are self-contained — no external imports. Deno supports URL imports (`import ... from
+"https://..."`) but these require `--allow-net`, which is coupled to the `fetch` permission and restricted to
+allowlisted domains.
+
+Future options:
+- **Bundling step**: pre-bundle scripts with their dependencies before execution
+- **Curated standard library**: inject common utilities (date formatting, CSV parsing) into the runner
+- **Import maps**: Deno import maps pointing to approved package URLs
+
+This is a Phase 2+ concern. Phase 1 scripts handle enough with the SDK + `eigen.fetch()`.
+
 ## Implementation Phases
 
 ### Phase 1 — MVP
@@ -863,36 +975,42 @@ When a script accesses shared data (e.g. a team mount), the SDK handler uses the
 The minimum that proves the full pipeline end-to-end:
 
 **Backend:**
-- `Scripts` domain class (CRUD + execute)
+- `Scripts` domain class (CRUD + execute + cancel)
 - `db-config.ts` with `scripts` + `executions` tables
-- `ScriptBridge` (IPC to worker)
-- `script-worker.ts` (execution queue, Deno subprocess management)
+- `ScriptRunner` (direct Deno subprocess management from main API)
 - `runner.ts` (SDK + console capture + error handling)
-- `sdk-handler.ts` (drive.list, drive.read, log, error)
-- Routes: CRUD, execute, list
+- `sdk-handler.ts` (drive.list, drive.read, log, error — read-only)
+- SSE events for execution lifecycle
+- Routes: CRUD, execute, cancel, list
 - Personal scope only
 
-**SDK:**
+**SDK (read-only):**
 - `eigen.drive.list()`, `eigen.drive.read()` — enough for useful file-processing scripts
 - `eigen.fetch()` — external API calls (domain-restricted)
 - `eigen.log()`, `eigen.error()` — captured output
 - `eigen.context`, `eigen.config` — read-only invocation context + persisted config
+- Structured error codes: `NOT_FOUND`, `PERMISSION_DENIED`, `QUOTA_EXCEEDED`, `INVALID_PARAMS`, `INTERNAL`
 
 **Frontend:**
 - Scripts app: list view + CodeMirror editor + "Run" button + output panel
 - `ScriptsPanel` in `packages/ui` (PropertiesPanel-based sidebar)
 - `ScriptContextProvider` interface
-- Context providers for Docs + Sheets
+- Context providers for Docs (selection + replaceSelection) and Drive (selectedFiles + notify)
 - Toolbar integration: `Code` icon button (alongside existing comment button)
-- Result actions: `replaceSelection`, `notify`
+- Result actions: `replaceSelection`, `insertText`, `notify`
 
-### Phase 2 — Triggers & Sharing
+### Phase 2 — Worker + Triggers + Writes
 
+- **Worker process extraction** — move Deno management to dedicated Bun worker with IPC, add execution queue
+  and per-user concurrency limits
 - Cron and event-driven triggers (scheduler in worker, event listener in main API)
+- **Write SDK operations**: `eigen.drive.write()`, `eigen.drive.create()` with quota enforcement and ACL
+  validation
 - Team/org script scope (Scripts domain in TeamHome/OrgHome)
 - Installation/permission approval flow
 - Prompt-based script inputs (`input` field in extensions)
 - Extended SDK: `eigen.sheets.*`, `eigen.mail.*`, `eigen.calendar.*`
+- Context providers for remaining apps (Sheets, Slides, Mail, Chat, Calendar)
 - Admin controls (disable scripting, view/kill executions)
 
 ### Phase 3 — Rich Extensions
@@ -901,6 +1019,7 @@ The minimum that proves the full pipeline end-to-end:
 - Script secrets/config store (encrypted, separate from script source)
 - Execution metrics and quota enforcement
 - Script versioning with rollback UI
+- Script import mechanism (bundling or import maps)
 
 ## What Is NOT In Scope
 
