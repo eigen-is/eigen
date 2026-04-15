@@ -158,7 +158,20 @@ export function AttendeeList({ attendees, organizer }: AttendeeListProps) {
     };
 
     return (
-        <div className="space-y-1">
+        <CollapsibleUserList
+            title={title}
+            summaryLines={count > 3 ? summary : undefined}
+            count={count}
+            actions={
+                <TooltipButton
+                    icon={ClipboardCopy}
+                    tooltipText="Copy emails"
+                    variant="ghost"
+                    className="h-7 w-7"
+                    onClick={handleCopyEmails}
+                />
+            }
+        >
             {organizer && (
                 <div className="flex items-center justify-between">
                     <UserItem email={organizer.email} name={organizer.name} />
@@ -167,34 +180,19 @@ export function AttendeeList({ attendees, organizer }: AttendeeListProps) {
                     </Badge>
                 </div>
             )}
-            <CollapsibleUserList
-                title={title}
-                summaryLines={count > 3 ? summary : undefined}
-                count={filteredAttendees.length}
-                actions={
-                    <TooltipButton
-                        icon={ClipboardCopy}
-                        tooltipText="Copy emails"
-                        variant="ghost"
-                        className="h-7 w-7"
-                        onClick={handleCopyEmails}
-                    />
-                }
-            >
-                {filteredAttendees.map((attendee) => {
-                    const StatusIcon = statusIcon[attendee.status];
-                    return (
-                        <div key={attendee.email} className="flex items-center justify-between">
-                            <UserItem email={attendee.email} name={attendee.name} />
-                            <Badge variant="outline" className="text-xs gap-1">
-                                <StatusIcon className="h-3 w-3" />
-                                {statusLabel[attendee.status]}
-                            </Badge>
-                        </div>
-                    );
-                })}
-            </CollapsibleUserList>
-        </div>
+            {filteredAttendees.map((attendee) => {
+                const StatusIcon = statusIcon[attendee.status];
+                return (
+                    <div key={attendee.email} className="flex items-center justify-between">
+                        <UserItem email={attendee.email} name={attendee.name} />
+                        <Badge variant="outline" className="text-xs gap-1">
+                            <StatusIcon className="h-3 w-3" />
+                            {statusLabel[attendee.status]}
+                        </Badge>
+                    </div>
+                );
+            })}
+        </CollapsibleUserList>
     );
 }
 

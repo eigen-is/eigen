@@ -33,7 +33,7 @@ export function CollapsibleUserList({
     if (!collapsible) {
         return (
             <div className={cn('space-y-2', className)}>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between min-h-[2.25rem]">
                     <h4 className="text-sm font-medium">{title}</h4>
                     {actions && <div className="flex items-center gap-0.5">{actions}</div>}
                 </div>
