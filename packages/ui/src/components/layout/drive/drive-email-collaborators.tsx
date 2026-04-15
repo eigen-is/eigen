@@ -66,6 +66,7 @@ export function DriveEmailCollaborators({ path, open, onOpenChange }: DriveEmail
                             onChange={(e) => setSubject(e.target.value)}
                             maxLength={200}
                         />
+                        <div className="text-xs text-muted-foreground text-right">{subject.length}/200</div>
                     </div>
                     <div className="space-y-2">
                         <Label htmlFor="email-message">Message</Label>
@@ -78,6 +79,9 @@ export function DriveEmailCollaborators({ path, open, onOpenChange }: DriveEmail
                             className="min-h-[100px] resize-none"
                             maxLength={5000}
                         />
+                        <div className="text-xs text-muted-foreground text-right">
+                            {message.length.toLocaleString()}/{(5000).toLocaleString()}
+                        </div>
                     </div>
                     <div className="flex items-center gap-2">
                         <Checkbox
@@ -90,6 +94,7 @@ export function DriveEmailCollaborators({ path, open, onOpenChange }: DriveEmail
                         </Label>
                     </div>
                 </div>
+                <p className="text-xs text-muted-foreground">A link to the document will be included in the message</p>
                 <DialogFooter>
                     <Button variant="outline" onClick={() => onOpenChange(false)} disabled={emailMutation.isPending}>
                         Cancel

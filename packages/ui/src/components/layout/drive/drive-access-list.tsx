@@ -4,6 +4,7 @@ import { AvatarIcon } from '@workspace/ui/components/avatar';
 import { Separator } from '@workspace/ui/components/separator';
 import { cn } from '@workspace/ui/lib/utils';
 import { Lock, Unlock, UserRoundPlus } from 'lucide-react';
+import { CollapsibleUserList } from '../collapsible-user-list';
 import { TooltipButton } from '../toolbar';
 import { UserItem } from '../user-item';
 
@@ -13,28 +14,57 @@ export type DriveAccessListProps = {
     onShareClick?: (path: DrivePath) => void;
 };
 
+function buildSummary(entries: { owner?: boolean; write?: boolean; read?: boolean }[]): string {
+    let owners = 0;
+    let editors = 0;
+    let viewers = 0;
+    for (const e of entries) {
+        if (e.owner) owners++;
+        else if (e.write) editors++;
+        else if (e.read) viewers++;
+    }
+    const parts: string[] = [];
+    if (owners) parts.push(`${owners} owner${owners > 1 ? 's' : ''}`);
+    if (editors) parts.push(`${editors} editor${editors > 1 ? 's' : ''}`);
+    if (viewers) parts.push(`${viewers} viewer${viewers > 1 ? 's' : ''}`);
+    return parts.join(', ');
+}
+
 export function DriveAccessList({ path, className, onShareClick }: DriveAccessListProps) {
     const { allEntries } = useDriveAccess(path);
 
     const isPublic = path.visibility !== 'private';
+    const count = allEntries.length;
+    const title = count === 1 ? '1 person with access' : `${count} people with access`;
+    const summary = buildSummary(allEntries);
 
     return (
         <div className={cn('flex flex-col min-h-0', className)}>
-            <div className="flex items-center justify-between h-12 border-t border-b shrink-0">
-                <h3 className="text-base font-medium">People with access</h3>
-                {onShareClick && (
-                    <TooltipButton icon={UserRoundPlus} tooltipText="Share" onClick={() => onShareClick(path)} />
-                )}
-            </div>
-
-            <div className="space-y-2 py-4 overflow-y-auto min-h-0">
-                {allEntries.map((access) => (
-                    <UserItem
-                        key={access.id}
-                        email={access.id}
-                        label={access.owner ? 'Owner' : <AccessLabel access={access} />}
-                    />
-                ))}
+            <div className="border-t py-4">
+                <CollapsibleUserList
+                    title={title}
+                    summaryLines={summary ? [summary] : undefined}
+                    count={count}
+                    actions={
+                        onShareClick ? (
+                            <TooltipButton
+                                icon={UserRoundPlus}
+                                tooltipText="Share"
+                                variant="ghost"
+                                className="h-7 w-7"
+                                onClick={() => onShareClick(path)}
+                            />
+                        ) : undefined
+                    }
+                >
+                    {allEntries.map((access) => (
+                        <UserItem
+                            key={access.id}
+                            email={access.id}
+                            label={access.owner ? 'Owner' : <AccessLabel access={access} />}
+                        />
+                    ))}
+                </CollapsibleUserList>
             </div>
             <Separator className="shrink-0" />
             <div className="shrink-0 pt-4">
