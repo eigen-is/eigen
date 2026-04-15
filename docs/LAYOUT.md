@@ -153,8 +153,9 @@ menu needs submenu.
 
 | Component    | File              | Description                                           |
 |--------------|-------------------|-------------------------------------------------------|
-| `UserAvatar` | `user-avatar.tsx` | Avatar with auto-fetch. DigiDoodle fallback. sm/md/lg |
-| `UserItem`   | `user-item.tsx`   | Avatar + name + email row                             |
+| `UserAvatar`          | `user-avatar.tsx`           | Avatar with auto-fetch. DigiDoodle fallback. sm/md/lg         |
+| `UserItem`            | `user-item.tsx`             | Avatar + name + email row                                     |
+| `CollapsibleUserList` | `collapsible-user-list.tsx` | Collapsible summary header + user list (Drive ACL, attendees) |
 
 ### Labels
 
