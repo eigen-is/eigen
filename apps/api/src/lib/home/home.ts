@@ -2,6 +2,7 @@ import * as path from 'node:path';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import type { User } from 'better-auth/types';
 import { createAsyncSingleton } from '../../utils/singleton';
+import { time } from '../../utils/timing';
 import type { Calendar } from '../calendar/calendar';
 import { resolveUserQuotas } from '../config/quota';
 import type { Contacts } from '../contacts/contacts';
@@ -91,12 +92,15 @@ export class Home {
         }
         this.initializationStarted = true;
 
-        await this.settings?.load();
-        await this._drive?.init(autoCreateDefaultMount);
-        await this._contacts?.init();
-        await this._mail?.init();
-        await this._calendar?.init();
-        await this._notifications?.init();
+        await time('Home.init.settings', () => this.settings?.load() ?? Promise.resolve());
+
+        await Promise.all([
+            time('Home.init.drive', () => this._drive?.init(autoCreateDefaultMount) ?? Promise.resolve()),
+            time('Home.init.contacts', () => this._contacts?.init() ?? Promise.resolve()),
+            time('Home.init.mail', () => this._mail?.init() ?? Promise.resolve()),
+            time('Home.init.calendar', () => this._calendar?.init() ?? Promise.resolve()),
+            time('Home.init.notifications', () => this._notifications?.init() ?? Promise.resolve()),
+        ]);
 
         this.initialized = true;
         console.log(`[Home] Initialized for ${this.user.id}`);
