@@ -47,11 +47,16 @@ export class ChatRoom {
             }
         }
 
-        this.managedDb = await this.drive.openDatabase(this.path.mountId, CHAT_ROOM_DB_CONFIG, dataDbPath.id);
+        // openDatabase (potentially cold S3 GET) and findContainerPath
+        // (local metadata walk) don't depend on each other — run concurrently.
+        const dataDbId = dataDbPath.id;
+        const [managedDb, containerPath] = await Promise.all([
+            this.drive.openDatabase(this.path.mountId, CHAT_ROOM_DB_CONFIG, dataDbId),
+            this.drive.findContainerPath(this.path.mountId, this.path.parentId ?? ''),
+        ]);
+        this.managedDb = managedDb;
         this.db = this.managedDb.db;
-
-        // Walk parentId chain to find outermost collab container (if any)
-        this.containerPath = await this.drive.findContainerPath(this.path.mountId, this.path.parentId ?? '');
+        this.containerPath = containerPath;
 
         return this;
     }
