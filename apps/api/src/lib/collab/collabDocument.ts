@@ -227,6 +227,7 @@ export default class CollabDocument {
     }
 
     public destruct() {
+        if (this.closed) return;
         this.closed = true;
         this.drive.touchUpdatedAt(this.path.mountId, this.path.id).catch(() => {});
         for (const conn of this.connections) {

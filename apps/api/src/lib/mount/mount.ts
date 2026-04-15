@@ -872,20 +872,23 @@ export class Mount {
     async closeDatabase(pathId: string): Promise<void> {
         const getter = this.documentDbs.get(pathId);
         if (getter) {
+            // Delete BEFORE closing — a concurrent openDatabase() during the async
+            // close must create a fresh ManagedDatabase, not reuse the closing one.
+            this.documentDbs.delete(pathId);
             const db = await getter();
             await db.close();
-            this.documentDbs.delete(pathId);
         }
     }
 
     async closeAllDatabases(): Promise<void> {
-        for (const [, getter] of this.documentDbs) {
+        const entries = [...this.documentDbs.values()];
+        this.documentDbs.clear();
+        for (const getter of entries) {
             try {
                 const db = await getter();
                 await db.close();
             } catch {}
         }
-        this.documentDbs.clear();
     }
 
     async getTotalSize(): Promise<number> {
