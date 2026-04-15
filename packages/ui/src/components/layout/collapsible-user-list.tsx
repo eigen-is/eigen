@@ -40,7 +40,7 @@ export function CollapsibleUserList({
     return (
         <Collapsible open={open} onOpenChange={setOpen} className={className}>
             <div className="flex items-start justify-between">
-                <CollapsibleTrigger className="flex items-start gap-0 group cursor-pointer text-left">
+                <CollapsibleTrigger className="flex items-start cursor-pointer text-left">
                     <div>
                         <h4 className="text-sm font-medium">{title}</h4>
                         {summaryLines && summaryLines.length > 0 && (
