@@ -245,7 +245,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                 }
                 onOpenChange={onOpenChange}
             >
-                <DialogContent size="md">
+                <DialogContent size="md" onOpenAutoFocus={(e) => e.preventDefault()}>
                     <DialogHeader>
                         <DialogTitle className="text-xl">{event.title}</DialogTitle>
                     </DialogHeader>

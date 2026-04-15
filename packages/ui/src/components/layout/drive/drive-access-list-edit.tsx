@@ -1,5 +1,6 @@
 import { getDriveShareUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
+import { copyToClipboard } from '@workspace/lib/clipboard';
 import { type DirectAccessItem, useDriveAccess, useIsEffectiveOwner } from '@workspace/lib/drive';
 import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
@@ -18,9 +19,8 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Separator } from '@workspace/ui/components/separator';
 import { cn } from '@workspace/ui/lib/utils';
-import { Link, Lock, Mail, Plus, Unlock, Users } from 'lucide-react';
+import { ClipboardCopy, Link, Lock, Mail, Plus, Unlock, Users } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { toast } from 'sonner';
 import { ContactAutosuggest } from '../contacts/contact-autosuggest';
 import type { ContactSuggestion } from '../contacts/types';
 import { TooltipButton } from '../toolbar/tooltip-button';
@@ -253,7 +253,38 @@ export function DriveAccessListEdit({
             <Separator className="my-4 shrink-0" />
 
             <div className="space-y-2 overflow-y-auto min-h-0">
-                <h4 className="text-base font-medium">People with access</h4>
+                <div className="flex items-center justify-between rounded-md bg-muted/50 px-2 py-1.5">
+                    <h4 className="text-base font-medium">People with access</h4>
+                    <div className="flex items-center gap-0.5">
+                        <TooltipButton
+                            icon={ClipboardCopy}
+                            tooltipText="Copy emails"
+                            variant="ghost"
+                            className="h-7 w-7"
+                            onClick={() => {
+                                const emails = [...directList, ...inheritedList].map((e) => e.id).join(', ');
+                                copyToClipboard(emails, 'Emails copied to clipboard');
+                            }}
+                        />
+                        <TooltipButton
+                            icon={Link}
+                            tooltipText="Copy link"
+                            variant="ghost"
+                            className="h-7 w-7"
+                            onClick={() => copyToClipboard(getDriveShareUrl(path), 'Link copied to clipboard')}
+                        />
+                        {onEmailClick && (
+                            <TooltipButton
+                                icon={Mail}
+                                tooltipText={pendingChanges ? 'Save changes first' : 'Email collaborators'}
+                                variant="ghost"
+                                className="h-7 w-7"
+                                disabled={pendingChanges}
+                                onClick={onEmailClick}
+                            />
+                        )}
+                    </div>
+                </div>
 
                 {directList.map((access: DirectAccessItem) => {
                     return (
@@ -352,26 +383,6 @@ export function DriveAccessListEdit({
             <Separator className="my-4 shrink-0" />
 
             <DialogFooter className="shrink-0">
-                <TooltipButton
-                    icon={Link}
-                    tooltipText="Copy link"
-                    variant="outline"
-                    className={cn(!onEmailClick && !myTeams?.length && 'mr-auto')}
-                    onClick={() => {
-                        navigator.clipboard.writeText(getDriveShareUrl(path));
-                        toast.success('Link copied to clipboard');
-                    }}
-                />
-                {onEmailClick && (
-                    <TooltipButton
-                        icon={Mail}
-                        tooltipText={pendingChanges ? 'Save changes first' : 'Email collaborators'}
-                        variant="outline"
-                        disabled={pendingChanges}
-                        className={cn(!myTeams?.length && 'mr-auto')}
-                        onClick={onEmailClick}
-                    />
-                )}
                 {myTeams && myTeams.length > 0 && (
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>

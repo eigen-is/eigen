@@ -1,3 +1,5 @@
+import { getDriveShareUrl } from '@workspace/lib/api';
+import { copyToClipboard } from '@workspace/lib/clipboard';
 import { formatDateTime } from '@workspace/lib/date';
 import {
     DEFAULT_MOUNT_ID,
@@ -22,6 +24,7 @@ import {
     ExternalLink,
     Eye,
     FileDown,
+    Link,
     Mail,
     Pencil,
     Trash2,
@@ -403,32 +406,45 @@ export function DriveTable({
                     )}
 
                 {isSingleSelect && onShareClick && (
-                    <DropdownMenuItem
-                        onClick={() => {
-                            onShareClick?.(contextMenu.item!);
-                            contextMenu.close();
-                        }}
-                        className="flex items-center"
-                    >
-                        <UserRoundPlus className="h-4 w-4 mr-2" />
-                        Share
-                    </DropdownMenuItem>
+                    <DropdownMenuSub>
+                        <DropdownMenuSubTrigger>
+                            <UserRoundPlus className="h-4 w-4 mr-2" />
+                            Share
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent>
+                            <DropdownMenuItem
+                                onClick={() => {
+                                    onShareClick(contextMenu.item!);
+                                    contextMenu.close();
+                                }}
+                            >
+                                <UserRoundPlus className="h-4 w-4 mr-2" />
+                                Share
+                            </DropdownMenuItem>
+                            {onEmailCollaborators &&
+                                (contextMenu.item?.acl?.length || contextMenu.item?.visibility !== 'private') && (
+                                    <DropdownMenuItem
+                                        onClick={() => {
+                                            onEmailCollaborators(contextMenu.item!);
+                                            contextMenu.close();
+                                        }}
+                                    >
+                                        <Mail className="h-4 w-4 mr-2" />
+                                        Email collaborators
+                                    </DropdownMenuItem>
+                                )}
+                            <DropdownMenuItem
+                                onClick={() => {
+                                    copyToClipboard(getDriveShareUrl(contextMenu.item!), 'Link copied to clipboard');
+                                    contextMenu.close();
+                                }}
+                            >
+                                <Link className="h-4 w-4 mr-2" />
+                                Copy link
+                            </DropdownMenuItem>
+                        </DropdownMenuSubContent>
+                    </DropdownMenuSub>
                 )}
-                {isSingleSelect &&
-                    onEmailCollaborators &&
-                    contextMenu.item &&
-                    (contextMenu.item.acl?.length || contextMenu.item.visibility !== 'private') && (
-                        <DropdownMenuItem
-                            onClick={() => {
-                                onEmailCollaborators(contextMenu.item!);
-                                contextMenu.close();
-                            }}
-                            className="flex items-center"
-                        >
-                            <Mail className="h-4 w-4 mr-2" />
-                            Email collaborators
-                        </DropdownMenuItem>
-                    )}
                 {isSingleSelect && onRename && (
                     <DropdownMenuItem
                         onClick={() => {
