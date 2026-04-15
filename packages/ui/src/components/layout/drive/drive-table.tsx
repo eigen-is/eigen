@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import { useKeyboardListNavigation } from '../../../hooks/use-keyboard-list-navigation';
 import { useListDrag } from '../../../hooks/use-list-drag';
 import { useListSelection } from '../../../hooks/use-list-selection';
@@ -437,6 +438,7 @@ export function DriveTable({
                             <DropdownMenuItem
                                 onClick={() => {
                                     navigator.clipboard.writeText(getDriveShareUrl(contextMenu.item!));
+                                    toast.success('Link copied to clipboard');
                                     contextMenu.close();
                                 }}
                             >

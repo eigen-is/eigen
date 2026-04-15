@@ -43,7 +43,7 @@ export function DriveAccessList({ path, className, onShareClick }: DriveAccessLi
             <div className="border-t py-4">
                 <CollapsibleUserList
                     title={title}
-                    summaryLines={[summary]}
+                    summaryLines={summary ? [summary] : undefined}
                     count={count}
                     actions={
                         onShareClick ? (

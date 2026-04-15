@@ -160,7 +160,7 @@ export function AttendeeList({ attendees, organizer }: AttendeeListProps) {
     return (
         <CollapsibleUserList
             title={title}
-            summaryLines={count > 3 ? summary : undefined}
+            summaryLines={summary.length > 0 ? summary : undefined}
             count={count}
             actions={
                 <TooltipButton
