@@ -1,4 +1,4 @@
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@workspace/ui/components/collapsible';
+import { Collapsible, CollapsibleContent } from '@workspace/ui/components/collapsible';
 import { cn } from '@workspace/ui/lib/utils';
 import { ChevronDown } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
@@ -44,7 +44,10 @@ export function CollapsibleUserList({
 
     return (
         <Collapsible open={open} onOpenChange={setOpen} className={className}>
-            <CollapsibleTrigger className="flex items-center justify-between w-full cursor-pointer text-left rounded-md bg-muted/50 px-2 py-1.5 outline-none">
+            <div
+                className="flex items-center justify-between w-full cursor-pointer text-left rounded-md bg-muted/50 px-2 py-1.5"
+                onClick={() => setOpen(!open)}
+            >
                 <div>
                     <h4 className="text-sm font-medium">{title}</h4>
                     {summaryLines && summaryLines.length > 0 && (
@@ -56,7 +59,6 @@ export function CollapsibleUserList({
                     )}
                 </div>
                 <div className="flex items-center gap-0.5">
-                    {/* Stop action button clicks from toggling the collapsible */}
                     {actions && <div onClick={(e) => e.stopPropagation()}>{actions}</div>}
                     <ChevronDown
                         className={cn(
@@ -65,7 +67,7 @@ export function CollapsibleUserList({
                         )}
                     />
                 </div>
-            </CollapsibleTrigger>
+            </div>
             <CollapsibleContent>
                 <div className="space-y-1 pt-2">{children}</div>
             </CollapsibleContent>
