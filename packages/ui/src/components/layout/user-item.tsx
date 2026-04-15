@@ -54,7 +54,7 @@ export function UserItem({
                             )}
                         </span>
                     )}
-                    {label && <span>{label}</span>}
+                    {label && <span className="ml-auto">{label}</span>}
                 </div>
             </div>
         </div>
