@@ -1,9 +1,10 @@
+import { getDriveShareUrl } from '@workspace/lib/api';
 import { useDriveAccess } from '@workspace/lib/drive';
 import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
 import { AvatarIcon } from '@workspace/ui/components/avatar';
 import { Separator } from '@workspace/ui/components/separator';
 import { cn } from '@workspace/ui/lib/utils';
-import { ClipboardCopy, Lock, Mail, Unlock, UserRoundPlus } from 'lucide-react';
+import { ClipboardCopy, Link, Lock, Mail, Unlock, UserRoundPlus } from 'lucide-react';
 import { toast } from 'sonner';
 import { CollapsibleUserList } from '../collapsible-user-list';
 import { TooltipButton } from '../toolbar';
@@ -61,6 +62,16 @@ export function DriveAccessList({ path, className, onShareClick, onEmailClick }:
                                 variant="ghost"
                                 className="h-7 w-7"
                                 onClick={handleCopyEmails}
+                            />
+                            <TooltipButton
+                                icon={Link}
+                                tooltipText="Copy link"
+                                variant="ghost"
+                                className="h-7 w-7"
+                                onClick={() => {
+                                    navigator.clipboard.writeText(getDriveShareUrl(path));
+                                    toast.success('Link copied to clipboard');
+                                }}
                             />
                             {onEmailClick && (
                                 <TooltipButton
