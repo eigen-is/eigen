@@ -50,7 +50,11 @@ export function DriveAccessDialog({ open, onOpenChange, path, prefillEmail }: Dr
     return (
         <>
             <Dialog open={open} onOpenChange={onOpenChange}>
-                <DialogContent size="lg" className="max-h-[80vh] flex flex-col overflow-hidden">
+                <DialogContent
+                    size="lg"
+                    className="max-h-[80vh] flex flex-col overflow-hidden"
+                    onOpenAutoFocus={readOnly ? (e) => e.preventDefault() : undefined}
+                >
                     <DialogHeader>
                         <div className="sm:max-w-[600px]">
                             <DialogTitle className="truncate overflow-visible" title={path.name}>
