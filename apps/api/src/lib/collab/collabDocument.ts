@@ -8,6 +8,7 @@ import * as encoding from 'lib0/encoding';
 import * as awarenessProtocol from 'y-protocols/awareness';
 import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
+import { COMMENT_INDEX_DB_CONFIG } from '../chat/comment-db-config';
 import type { ManagedDatabase } from '../core';
 import { ApiError } from '../core/errors';
 import type { Drive } from '../drive';
@@ -153,13 +154,25 @@ export default class CollabDocument {
     }
 
     public async init() {
-        let dataDbPath = await this.drive.getChildByName(this.path.mountId, this.path.id, 'data.db');
+        let [dataDbPath, commentsDbPath] = await Promise.all([
+            this.drive.getChildByName(this.path.mountId, this.path.id, 'data.db'),
+            this.drive.getChildByName(this.path.mountId, this.path.id, 'comments.db'),
+        ]);
         if (!dataDbPath) {
             await CollabDocument.create(this.drive, this.path.mountId, this.path.id);
-            dataDbPath = await this.drive.getChildByName(this.path.mountId, this.path.id, 'data.db');
+            [dataDbPath, commentsDbPath] = await Promise.all([
+                this.drive.getChildByName(this.path.mountId, this.path.id, 'data.db'),
+                this.drive.getChildByName(this.path.mountId, this.path.id, 'comments.db'),
+            ]);
             if (!dataDbPath) {
                 throw new ApiError(500, `Failed to create data.db in ${this.path.name}`);
             }
+        }
+
+        // Speculatively warm comments.db so /comments hits Mount.documentDbs' cache.
+        // Fire-and-forget: the /comments request will surface any genuine problem.
+        if (commentsDbPath) {
+            this.drive.openDatabase(this.path.mountId, COMMENT_INDEX_DB_CONFIG, commentsDbPath.id).catch(() => {});
         }
 
         const managedDb = await this.drive.openDatabase(this.path.mountId, COLLAB_DB_CONFIG, dataDbPath.id);
