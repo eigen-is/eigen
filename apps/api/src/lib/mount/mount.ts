@@ -789,9 +789,12 @@ export class Mount {
     }
 
     private async downloadToTemp(storageKey: string, tempId: string): Promise<string> {
+        const start = Bun.nanoseconds();
         const tempPath = this.getTempPath(tempId);
         const file = this.storage.read(storageKey);
-        await Bun.write(tempPath, file);
+        const bytes = await Bun.write(tempPath, file);
+        const ms = (Bun.nanoseconds() - start) / 1_000_000;
+        console.log(`[timing] Mount.download ${storageKey} ${(bytes / 1024) | 0}KB ${ms.toFixed(1)}ms`);
         return tempPath;
     }
 
