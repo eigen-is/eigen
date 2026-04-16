@@ -31,7 +31,7 @@ import { resolveCalendarName, toLocalDateString, truncateRRule } from './calenda
 import { RecurrencePicker } from './recurrence-picker';
 import type { RecurringAction } from './recurring-action-dialog';
 import { RecurringActionDialog } from './recurring-action-dialog';
-import { addMinutes, roundToNext15Minutes, TimeSelect } from './time-select';
+import { addMinutes, roundToNext15Minutes, TimeSelect, timeToMinutes } from './time-select';
 
 type EditEventDialogProps = {
     open: boolean;
@@ -242,7 +242,19 @@ export function EditEventDialog({
 
     const handleStartTimeChange = (newStart: string) => {
         setStartTime(newStart);
-        setEndTime(addMinutes(newStart, 30));
+        const newEnd = addMinutes(newStart, 30);
+        setEndTime(newEnd);
+        const wraps = timeToMinutes(newEnd) <= timeToMinutes(newStart);
+        const d = new Date(`${startDate}T00:00`);
+        if (wraps) d.setDate(d.getDate() + 1);
+        setEndDate(toLocalDateString(d));
+    };
+
+    const handleEndTimeChange = (newEnd: string, dayOffset: number) => {
+        setEndTime(newEnd);
+        const d = new Date(`${startDate}T00:00`);
+        if (dayOffset > 0) d.setDate(d.getDate() + dayOffset);
+        setEndDate(toLocalDateString(d));
     };
 
     return (
@@ -298,7 +310,7 @@ export function EditEventDialog({
                                         <span className="text-muted-foreground text-sm">–</span>
                                         <TimeSelect
                                             value={endTime}
-                                            onChange={setEndTime}
+                                            onChange={handleEndTimeChange}
                                             referenceTime={startTime}
                                             minTime={addMinutes(startTime, 15)}
                                         />

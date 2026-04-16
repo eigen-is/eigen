@@ -1,5 +1,11 @@
 export function formatTime(date: Date | string | number): string {
-    return new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const d = new Date(date);
+    const h = d.getHours();
+    const m = d.getMinutes();
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const hour = h % 12 || 12;
+    if (m === 0) return `${hour} ${ampm}`;
+    return `${hour}:${String(m).padStart(2, '0')} ${ampm}`;
 }
 
 export function formatDate(date: Date | string | number): string {

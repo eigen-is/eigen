@@ -1,4 +1,5 @@
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '../../types/calendar';
+import { formatTime } from '../date';
 
 export type ViewMode = 'month' | 'week';
 
@@ -87,13 +88,7 @@ export function toISODateString(date: Date): string {
 
 export function formatEventTime(event: CalendarEventOccurrence): string {
     if (event.allDay) return '';
-    const d = new Date(event.startTime * 1000);
-    const h = d.getHours();
-    const m = d.getMinutes();
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    const hour = h % 12 || 12;
-    if (m === 0) return `${hour} ${ampm}`;
-    return `${hour}:${String(m).padStart(2, '0')} ${ampm}`;
+    return formatTime(new Date(event.startTime * 1000));
 }
 
 export function getCalendarColor(
@@ -109,6 +104,14 @@ export function getCalendarColor(
         if (sc) return sc.color || sc.calendarColor;
     }
     return '#4285f4';
+}
+
+export function isFreeBusyEvent(event: CalendarEventOccurrence): boolean {
+    return !event.id;
+}
+
+export function formatFreeBusyTitle(endTime: number): string {
+    return `Busy until ${formatTime(new Date(endTime * 1000))}`;
 }
 
 export function getInviteStatus(event: CalendarEventOccurrence, userEmail?: string): 'pending' | 'declined' | null {

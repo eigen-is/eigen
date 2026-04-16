@@ -37,7 +37,7 @@ function isValidTime(str: string): boolean {
 
 type TimeSelectProps = {
     value: string;
-    onChange: (value: string) => void;
+    onChange: (value: string, dayOffset: number) => void;
     referenceTime?: string;
     minTime?: string;
 };
@@ -115,7 +115,9 @@ export function TimeSelect({ value, onChange, referenceTime, minTime }: TimeSele
         if (isValidTime(trimmed)) {
             const [h, m] = trimmed.split(':');
             const formattedTime = `${String(parseInt(h, 10)).padStart(2, '0')}:${m.padStart(2, '0')}`;
-            onChange(formattedTime);
+            const minutes = timeToMinutes(formattedTime);
+            const dayOffset = refMinutes != null && minutes <= refMinutes ? 1 : 0;
+            onChange(formattedTime, dayOffset);
         } else {
             setInputValue(value);
         }
@@ -159,7 +161,7 @@ export function TimeSelect({ value, onChange, referenceTime, minTime }: TimeSele
                                 slot.time === value && 'bg-accent font-medium',
                             )}
                             onClick={() => {
-                                onChange(slot.time);
+                                onChange(slot.time, slot.dayOffset);
                                 setInputValue(slot.time);
                                 setOpen(false);
                             }}
