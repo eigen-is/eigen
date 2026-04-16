@@ -25,12 +25,14 @@ async function sharpResize(
 
         if (!metadata.width || !metadata.height) return null;
 
-        const width = metadata.width;
-        const height = metadata.pageHeight || metadata.height;
+        const rotated = metadata.orientation && metadata.orientation >= 5;
+        const width = rotated ? metadata.pageHeight || metadata.height! : metadata.width;
+        const height = rotated ? metadata.width : metadata.pageHeight || metadata.height!;
 
         if (width > 12000 || height > 12000) return null;
 
         const data = await image
+            .rotate()
             .resize(options.maxSize, options.maxSize, {
                 fit: options.fit,
                 position: 'center',
