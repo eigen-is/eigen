@@ -2,7 +2,7 @@ import _ from "lodash";
 import {hideCRCount, removeActiveImage} from "..";
 import {Context, getFlowdata} from "../context";
 import {cancelNormalSelected, updateCell} from "../modules/cell";
-import {handleFormulaInput} from "../modules/formula";
+import {handleFormulaInput} from "../modules/formula-ui";
 import {
     copy,
     deleteSelectedCellText,

@@ -13,7 +13,7 @@ import {
     getcellrange,
     iscelldata,
     isFormula,
-} from "./formula";
+} from "./formula-ui";
 import {attrToCssName, convertSpanToShareString, isInlineStringCell, isInlineStringCT,} from "./inline-string";
 import {isRealNull, isRealNum, valueIsError} from "./validation";
 import {getCellTextInfo} from "./text";

@@ -14,7 +14,7 @@ import {
     israngeseleciton,
     rangeSetValue,
     setCaretPosition,
-} from "./formula";
+} from "./formula-ui";
 import {inlineStyleAffectAttribute, updateInlineStringFormat, updateInlineStringFormatOutside,} from "./inline-string";
 import {colLocationByIndex, rowLocationByIndex} from "./location";
 import {normalizeSelection, selectionCopyShow, selectIsOverlap,} from "./selection";

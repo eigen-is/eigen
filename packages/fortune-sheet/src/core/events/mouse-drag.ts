@@ -20,7 +20,7 @@ import {Settings} from "../settings";
 import {GlobalCache} from "../types";
 import {getSheetIndex} from "../utils";
 import {onDropCellSelect, onDropCellSelectEnd} from "../modules/dropCell";
-import {handleFormulaInput, rangeDragColumn, rangeDragRow} from "../modules/formula";
+import {handleFormulaInput, rangeDragColumn, rangeDragRow} from "../modules/formula-ui";
 import {onRangeSelectionModalMove, onRangeSelectionModalMoveEnd} from "../modules/hyperlink";
 import {onSearchDialogMove, onSearchDialogMoveEnd} from "../modules/searchReplace";
 import {fixPositionOnFrozenCells} from "./mouse-resize";

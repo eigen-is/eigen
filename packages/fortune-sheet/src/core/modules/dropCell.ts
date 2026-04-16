@@ -7,7 +7,7 @@ import {colLocation, rowLocation} from "./location";
 import {getSheetIndex, isAllowEdit} from "../utils";
 import {getBorderInfoCompute} from "./border";
 import {genarate, update} from "../../engine/format";
-import * as formula from "./formula";
+import * as formula from "./formula-ui";
 import {isRealNum} from "./validation";
 import {CFSplitRange} from "./ConditionFormat";
 import {normalizeSelection} from "./selection";

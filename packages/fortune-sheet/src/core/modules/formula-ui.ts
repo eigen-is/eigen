@@ -28,6 +28,9 @@ import {colors} from "./color";
 import {colLocation, mousePosition, rowLocation} from "./location";
 import {cancelFunctionrangeSelected, seletedHighlistByindex} from ".";
 import {arrayMatch, executeAffectedFormulas, getFormulaRunList, setFormulaCellInfo,} from "./formulaHelper";
+import {FormulaEngine, isFormula} from "../../engine/formula-engine";
+
+export {isFormula, isCellReference} from "../../engine/formula-engine";
 
 let functionHTMLIndex = 0;
 let rangeIndexes: number[] = [];
@@ -52,10 +55,6 @@ const rowColumnWithSheetName = `(?:${sheetNameRegexp})?(${rowColumnRegexp})`;
 const LABEL_EXTRACT_REGEXP = new RegExp(
     `^${rowColumnWithSheetName}(?:[:]${rowColumnWithSheetName})?$`
 );
-
-export function isFormula(value: any) {
-    return _.isString(value) && value.slice(0, 1) === "=" && value.length > 1;
-}
 
 // FormulaCache is defined as class to avoid being frozen by immer
 export class FormulaCache {
@@ -107,6 +106,8 @@ export class FormulaCache {
 
     formulaCellInfoMap: FormulaCellInfoMap | null;
 
+    engine: FormulaEngine;
+
     constructor() {
         const that = this;
         this.data_parm_index = 0;
@@ -116,6 +117,7 @@ export class FormulaCache {
         this.formulaCellInfoMap = null;
         this.cellTextToIndexList = {};
         this.parser = new Parser();
+        this.engine = new FormulaEngine();
         this.parser.on(
             "callCellValue",
             (cellCoord: any, options: any, done: any) => {

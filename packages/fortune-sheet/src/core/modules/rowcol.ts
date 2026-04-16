@@ -3,7 +3,7 @@ import {Context} from "../context";
 import {Sheet} from "../types";
 import {getSheetIndex} from "../utils";
 import {getcellFormula} from "./cell";
-import {functionStrChange} from "./formula";
+import {functionStrChange} from "./formula-ui";
 
 const refreshLocalMergeData = (merge_new: Record<string, any>, file: Sheet) => {
     Object.entries(merge_new).forEach(([, v]) => {
