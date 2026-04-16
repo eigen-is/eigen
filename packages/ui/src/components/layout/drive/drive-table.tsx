@@ -327,6 +327,7 @@ export function DriveTable({
             </Table>
 
             <ContextMenuAnchor contextMenu={contextMenu} className="w-48">
+                {/* Section 1: Open actions */}
                 {isSingleSelect &&
                     contextMenu.item &&
                     (contextMenu.item.type !== 'file' ||
@@ -367,6 +368,12 @@ export function DriveTable({
                         Quick preview
                     </DropdownMenuItem>
                 )}
+
+                {/* Section 2: Download, Export, Rename */}
+                {isSingleSelect &&
+                    ((onDownload && contextMenu.item?.type === 'file') ||
+                        ((contextMenu.item?.type === 'doc' || contextMenu.item?.type === 'slides') && onExport) ||
+                        onRename) && <DropdownMenuSeparator />}
                 {isSingleSelect && onDownload && contextMenu.item?.type === 'file' && (
                     <DropdownMenuItem
                         onClick={() => {
@@ -404,47 +411,6 @@ export function DriveTable({
                             </DropdownMenuSubContent>
                         </DropdownMenuSub>
                     )}
-
-                {isSingleSelect && onShareClick && (
-                    <DropdownMenuSub>
-                        <DropdownMenuSubTrigger>
-                            <UserRoundPlus className="h-4 w-4 mr-2" />
-                            Share
-                        </DropdownMenuSubTrigger>
-                        <DropdownMenuSubContent>
-                            <DropdownMenuItem
-                                onClick={() => {
-                                    onShareClick(contextMenu.item!);
-                                    contextMenu.close();
-                                }}
-                            >
-                                <UserRoundPlus className="h-4 w-4 mr-2" />
-                                Share
-                            </DropdownMenuItem>
-                            {onEmailCollaborators &&
-                                (contextMenu.item?.acl?.length || contextMenu.item?.visibility !== 'private') && (
-                                    <DropdownMenuItem
-                                        onClick={() => {
-                                            onEmailCollaborators(contextMenu.item!);
-                                            contextMenu.close();
-                                        }}
-                                    >
-                                        <Mail className="h-4 w-4 mr-2" />
-                                        Email collaborators
-                                    </DropdownMenuItem>
-                                )}
-                            <DropdownMenuItem
-                                onClick={() => {
-                                    copyToClipboard(getDriveShareUrl(contextMenu.item!), 'Link copied to clipboard');
-                                    contextMenu.close();
-                                }}
-                            >
-                                <Link className="h-4 w-4 mr-2" />
-                                Copy link
-                            </DropdownMenuItem>
-                        </DropdownMenuSubContent>
-                    </DropdownMenuSub>
-                )}
                 {isSingleSelect && onRename && (
                     <DropdownMenuItem
                         onClick={() => {
@@ -458,11 +424,58 @@ export function DriveTable({
                     </DropdownMenuItem>
                 )}
 
+                {/* Section 3: Share */}
+                {isSingleSelect && onShareClick && (
+                    <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuSub>
+                            <DropdownMenuSubTrigger>
+                                <UserRoundPlus className="h-4 w-4 mr-2" />
+                                Share
+                            </DropdownMenuSubTrigger>
+                            <DropdownMenuSubContent>
+                                <DropdownMenuItem
+                                    onClick={() => {
+                                        onShareClick(contextMenu.item!);
+                                        contextMenu.close();
+                                    }}
+                                >
+                                    <UserRoundPlus className="h-4 w-4 mr-2" />
+                                    Share
+                                </DropdownMenuItem>
+                                {onEmailCollaborators &&
+                                    (contextMenu.item?.acl?.length || contextMenu.item?.visibility !== 'private') && (
+                                        <DropdownMenuItem
+                                            onClick={() => {
+                                                onEmailCollaborators(contextMenu.item!);
+                                                contextMenu.close();
+                                            }}
+                                        >
+                                            <Mail className="h-4 w-4 mr-2" />
+                                            Email collaborators
+                                        </DropdownMenuItem>
+                                    )}
+                                <DropdownMenuItem
+                                    onClick={() => {
+                                        copyToClipboard(
+                                            getDriveShareUrl(contextMenu.item!),
+                                            'Link copied to clipboard',
+                                        );
+                                        contextMenu.close();
+                                    }}
+                                >
+                                    <Link className="h-4 w-4 mr-2" />
+                                    Copy link
+                                </DropdownMenuItem>
+                            </DropdownMenuSubContent>
+                        </DropdownMenuSub>
+                    </>
+                )}
+
+                {/* Section 4: Move to bin */}
                 {allowDelete && contextItems.length > 0 && (
                     <>
-                        {isSingleSelect && (onDownload || onShareClick || onEmailCollaborators || onRename) && (
-                            <DropdownMenuSeparator />
-                        )}
+                        <DropdownMenuSeparator />
                         <DropdownMenuItem
                             onClick={() => {
                                 onDelete?.(contextItems);
@@ -471,7 +484,7 @@ export function DriveTable({
                             className="flex items-center"
                         >
                             <Trash2 className="h-4 w-4 mr-2" />
-                            {isSingleSelect ? 'Delete' : `Delete ${contextItems.length} items`}
+                            {isSingleSelect ? 'Move to bin' : `Move ${contextItems.length} items to bin`}
                         </DropdownMenuItem>
                     </>
                 )}
