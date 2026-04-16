@@ -794,7 +794,9 @@ export class Mount {
         const file = this.storage.read(storageKey);
         await Bun.write(tempPath, file);
         const ms = (Bun.nanoseconds() - start) / 1_000_000;
-        console.log(`[timing] Mount.download ${storageKey} ${(file.size / 1024) | 0}KB ${ms.toFixed(1)}ms`);
+        console.log(
+            `[timing] Mount.download ${storageKey} ${(Bun.file(tempPath).size / 1024) | 0}KB ${ms.toFixed(1)}ms`,
+        );
         return tempPath;
     }
 
