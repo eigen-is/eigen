@@ -14,7 +14,7 @@ import {Cell, CellStyle, SingleRange} from "../types";
 import {CommonOptions, getSheet} from "./common";
 import {SHEET_NOT_FOUND} from "./errors";
 // @ts-ignore
-import SSF from "../modules/ssf";
+import SSF from "../../engine/ssf";
 
 export function getCellValue(
     ctx: Context,

@@ -16,7 +16,7 @@ import {hasPartMC} from "./validation";
 import {CFSplitRange, getComputeMap} from "./ConditionFormat";
 import {update} from "./format";
 // @ts-ignore
-import SSF from "./ssf";
+import SSF from "../../engine/ssf";
 
 export const selectionCache = {
     isPasteAction: false,
