@@ -589,7 +589,7 @@ const TiptapEditor = ({
                                     : undefined
                             }
                         >
-                            <EditorContent editor={editor} className="h-full tiptap-wrapper" />
+                            <EditorContent editor={editor} className="h-full min-w-0 tiptap-wrapper" />
                         </div>
                     </div>
                     {isWide && (

@@ -181,6 +181,7 @@ body {
     max-width: 100%;
     margin: 0 auto;
     padding: 2cm;
+    overflow-wrap: anywhere;
 }
 
 /* For PDF: @page margin handles whitespace, so remove .page padding */
