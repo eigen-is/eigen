@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useCollabDocumentInfo } from '@workspace/lib/collab';
+import { MediaResolverProvider } from '@workspace/lib/drive';
 import { LoadingState, RequestAccessView } from '@workspace/ui';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
 import { DriveAccessDialog } from '@workspace/ui/components/layout/drive/drive-access-dialog';
@@ -38,6 +39,9 @@ function SheetView() {
     );
 
     const canWrite = docInfo?.canWrite ?? false;
+    const mediaFolderId = useMemo(() => {
+        return docInfo?.folderContents?.find((item) => item.name === 'media')?.id ?? null;
+    }, [docInfo?.folderContents]);
     const chatFolderId = docInfo?.folderContents?.find((f) => f.name === 'chat')?.id ?? null;
 
     const handleAccessDialogOpen = useCallback(() => setAccessDialogOpen(true), []);
@@ -46,16 +50,22 @@ function SheetView() {
     if (!path) return <RequestAccessView ownerId={ownerId} mountId={mountId} pathId={pathId} />;
 
     return (
-        <>
+        <MediaResolverProvider
+            ownerId={ownerId}
+            mountId={mountId}
+            mediaFolderId={mediaFolderId}
+            chatFolderId={chatFolderId}
+        >
             <SheetEditor
                 ownerId={ownerId}
                 path={path}
                 canWrite={canWrite}
+                mediaFolderId={mediaFolderId}
                 chatFolderId={chatFolderId}
                 onAccessDialogOpen={handleAccessDialogOpen}
                 initialChatName={chat}
             />
             <DriveAccessDialog path={path} open={accessDialogOpen} onOpenChange={setAccessDialogOpen} />
-        </>
+        </MediaResolverProvider>
     );
 }

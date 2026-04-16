@@ -1345,13 +1345,14 @@ export class Canvas {
             );
         }
 
-        // Cell comment indicator (red triangle top-right)
+        // Comment indicator triangle
         if (flowdata?.[r]?.[c]?.commentChatNames?.length) {
+            const commentInfo = this.sheetCtx.hooks.getCommentInfo?.(r, c);
             renderCtx.beginPath();
-            renderCtx.moveTo(endX + offsetLeft - 9, startY + offsetTop);
+            renderCtx.moveTo(endX + offsetLeft - 12, startY + offsetTop);
             renderCtx.lineTo(endX + offsetLeft - 1, startY + offsetTop);
-            renderCtx.lineTo(endX + offsetLeft - 1, startY + offsetTop + 8);
-            renderCtx.fillStyle = "#FC6666";
+            renderCtx.lineTo(endX + offsetLeft - 1, startY + offsetTop + 11);
+            renderCtx.fillStyle = commentInfo?.indicatorColor ?? commentInfo?.color ?? "#FC6666";
             renderCtx.fill();
             renderCtx.closePath();
         }
@@ -1528,13 +1529,14 @@ export class Canvas {
             renderCtx.closePath();
         }
 
-        // Cell comment indicator (red triangle top-right)
+        // Comment indicator triangle
         if (cell?.commentChatNames?.length) {
+            const commentInfo = this.sheetCtx.hooks.getCommentInfo?.(r, c);
             renderCtx.beginPath();
-            renderCtx.moveTo(endX + offsetLeft - 8, startY + offsetTop);
-            renderCtx.lineTo(endX + offsetLeft, startY + offsetTop);
-            renderCtx.lineTo(endX + offsetLeft, startY + offsetTop + 8);
-            renderCtx.fillStyle = "#FC6666";
+            renderCtx.moveTo(endX + offsetLeft - 12, startY + offsetTop);
+            renderCtx.lineTo(endX + offsetLeft - 1, startY + offsetTop);
+            renderCtx.lineTo(endX + offsetLeft - 1, startY + offsetTop + 11);
+            renderCtx.fillStyle = commentInfo?.indicatorColor ?? commentInfo?.color ?? "#FC6666";
             renderCtx.fill();
             renderCtx.closePath();
         }

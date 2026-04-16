@@ -108,7 +108,7 @@ export type Image = {
     height: number;
     left: number;
     top: number;
-    src: string;
+    mediaName: string;
 };
 
 export type Sheet = {

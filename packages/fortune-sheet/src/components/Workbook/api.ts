@@ -10,6 +10,7 @@ import {
     deleteSheet,
     getFlowdata,
     getSheetIndex,
+    insertImage,
     insertRowCol,
     Op,
     opToPatch,
@@ -326,6 +327,9 @@ export function generateAPIs(
                 }
             });
         },
+
+        insertImage: (mediaName: string, width: number, height: number) =>
+            setContext((draftCtx) => insertImage(draftCtx, mediaName, width, height)),
 
         handleUndo,
         handleRedo,

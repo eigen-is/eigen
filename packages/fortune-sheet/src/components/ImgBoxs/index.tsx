@@ -1,207 +1,125 @@
 import {onImageMoveStart, onImageResizeStart} from "../../core";
-import {useContext, useMemo} from "react";
+import type {Image} from "../../core/types";
+import {useCallback, useContext, useMemo} from "react";
 import {WorkbookContext} from "../../context";
-import {Maximize2, Pencil, Trash2} from "lucide-react";
+
+const HANDLE_POSITIONS = [
+    {key: "lt", className: "-top-1.5 -left-1.5 cursor-nwse-resize"},
+    {key: "mt", className: "-top-1.5 left-1/2 -translate-x-1/2 cursor-ns-resize"},
+    {key: "rt", className: "-top-1.5 -right-1.5 cursor-nesw-resize"},
+    {key: "lm", className: "top-1/2 -left-1.5 -translate-y-1/2 cursor-ew-resize"},
+    {key: "rm", className: "top-1/2 -right-1.5 -translate-y-1/2 cursor-ew-resize"},
+    {key: "lb", className: "-bottom-1.5 -left-1.5 cursor-nesw-resize"},
+    {key: "mb", className: "-bottom-1.5 left-1/2 -translate-x-1/2 cursor-ns-resize"},
+    {key: "rb", className: "-bottom-1.5 -right-1.5 cursor-nwse-resize"},
+] as const;
+
+function useResolvedImageUrl(mediaName: string | undefined) {
+    const {settings} = useContext(WorkbookContext);
+    return useMemo(
+        () => mediaName ? settings.hooks?.resolveImageUrl?.(mediaName) ?? null : null,
+        [mediaName, settings.hooks],
+    );
+}
+
+function ActiveImage({img}: { img: Image }) {
+    const {context, refs} = useContext(WorkbookContext);
+    const url = useResolvedImageUrl(img.mediaName);
+    const w = img.width * context.zoomRatio;
+    const h = img.height * context.zoomRatio;
+
+    return (
+        <div
+            id="luckysheet-modal-dialog-activeImage"
+            className="absolute"
+            style={{
+                zIndex: 20,
+                width: w,
+                height: h,
+                left: img.left * context.zoomRatio,
+                top: img.top * context.zoomRatio,
+                outline: "1px solid var(--selection-handle)",
+            }}
+        >
+            {/* Class kept for DOM querySelector in image.ts resize logic */}
+            <div
+                className="luckysheet-modal-dialog-content cursor-move"
+                style={{
+                    width: w,
+                    height: h,
+                    backgroundImage: url ? `url(${url})` : undefined,
+                    backgroundSize: `${w}px ${h}px`,
+                    backgroundRepeat: "no-repeat",
+                }}
+                onMouseDown={(e) => {
+                    onImageMoveStart(context, refs.globalCache, e.nativeEvent);
+                    e.stopPropagation();
+                }}
+            />
+            {HANDLE_POSITIONS.map(({key, className}) => (
+                <div
+                    key={key}
+                    className={`absolute h-3 w-3 bg-background border border-selection-handle rounded-sm ${className}`}
+                    data-type={key}
+                    onMouseDown={(e) => {
+                        onImageResizeStart(refs.globalCache, e.nativeEvent, key);
+                        e.stopPropagation();
+                    }}
+                />
+            ))}
+        </div>
+    );
+}
+
+function InactiveImage({img}: { img: Image }) {
+    const {context, setContext} = useContext(WorkbookContext);
+    const url = useResolvedImageUrl(img.mediaName);
+    const w = img.width * context.zoomRatio;
+    const h = img.height * context.zoomRatio;
+
+    const handleClick = useCallback((e: React.MouseEvent) => {
+        setContext((ctx) => {
+            ctx.activeImg = img.id;
+        });
+        e.stopPropagation();
+    }, [setContext, img.id]);
+
+    if (!url) return null;
+
+    return (
+        <div
+            id={img.id}
+            className="absolute overflow-hidden"
+            style={{
+                width: w,
+                height: h,
+                left: img.left * context.zoomRatio,
+                top: img.top * context.zoomRatio,
+                zIndex: 19,
+            }}
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={handleClick}
+            tabIndex={0}
+        >
+            <img src={url} alt="" style={{width: w, height: h}}/>
+        </div>
+    );
+}
 
 export function ImgBoxs() {
-    const {context, setContext, refs} = useContext(WorkbookContext);
+    const {context} = useContext(WorkbookContext);
     const activeImg = useMemo(() => {
         return context.insertedImgs?.find(img => img.id === context.activeImg);
     }, [context.activeImg, context.insertedImgs]);
 
     return (
         <div id="luckysheet-image-showBoxs">
-            {activeImg && (
-                <div
-                    id="luckysheet-modal-dialog-activeImage"
-                    className="luckysheet-modal-dialog"
-                    style={{
-                        padding: 0,
-                        position: "absolute",
-                        zIndex: 300,
-                        width: activeImg.width * context.zoomRatio,
-                        height: activeImg.height * context.zoomRatio,
-                        left: activeImg.left * context.zoomRatio,
-                        top: activeImg.top * context.zoomRatio,
-                    }}
-                >
-                    <div
-                        className="luckysheet-modal-dialog-border"
-                        style={{position: "absolute"}}
-                    />
-                    <div
-                        className="luckysheet-modal-dialog-content"
-                        style={{
-                            width: activeImg.width * context.zoomRatio,
-                            height: activeImg.height * context.zoomRatio,
-                            backgroundImage: `url(${activeImg.src})`,
-                            backgroundSize: `${activeImg.width * context.zoomRatio}px ${
-                                activeImg.height * context.zoomRatio
-                            }px`,
-                            backgroundRepeat: "no-repeat",
-                            // context.activeImg.width * context.zoomRatio +
-                            // context.activeImg.height * context.zoomRatio,
-                        }}
-                        onMouseDown={(e) => {
-                            const {nativeEvent} = e;
-                            onImageMoveStart(context, refs.globalCache, nativeEvent);
-                            e.stopPropagation();
-                        }}
-                    />
-                    <div className="luckysheet-modal-dialog-resize">
-                        {["lt", "mt", "lm", "rm", "rt", "lb", "mb", "rb"].map((v) => (
-                            <div
-                                key={v}
-                                className={`luckysheet-modal-dialog-resize-item luckysheet-modal-dialog-resize-item-${v}`}
-                                data-type={v}
-                                onMouseDown={(e) => {
-                                    const {nativeEvent} = e;
-                                    onImageResizeStart(refs.globalCache, nativeEvent, v);
-                                    e.stopPropagation();
-                                }}
-                            />
-                        ))}
-                    </div>
-                    <div className="luckysheet-modal-dialog-controll">
-            <span
-                className="luckysheet-modal-controll-btn luckysheet-modal-controll-crop"
-                role="button"
-                tabIndex={0}
-                aria-label="Crop"
-                title="Crop"
-            >
-              <Pencil size={14} aria-hidden="true"/>
-            </span>
-                        <span
-                            className="luckysheet-modal-controll-btn luckysheet-modal-controll-restore"
-                            role="button"
-                            tabIndex={0}
-                            aria-label="Restore original"
-                            title="Restore original"
-                        >
-              <Maximize2 size={14} aria-hidden="true"/>
-            </span>
-                        <span
-                            className="luckysheet-modal-controll-btn luckysheet-modal-controll-del"
-                            role="button"
-                            tabIndex={0}
-                            aria-label="Delete"
-                            title="Delete"
-                        >
-              <Trash2 size={14} aria-hidden="true"/>
-            </span>
-                    </div>
-                </div>
-            )}
-            <div className="img-list">
-                {context.insertedImgs?.map((v: any) => {
-                    const {id, left, top, width, height, src} = v;
-                    if (v.id === context.activeImg) return null;
-                    return (
-                        <div
-                            id={id}
-                            key={id}
-                            className="luckysheet-modal-dialog luckysheet-modal-dialog-image"
-                            style={{
-                                width: width * context.zoomRatio,
-                                height: height * context.zoomRatio,
-                                padding: 0,
-                                position: "absolute",
-                                left: left * context.zoomRatio,
-                                top: top * context.zoomRatio,
-                                zIndex: 200,
-                            }}
-                            onMouseDown={(e) => e.stopPropagation()}
-                            onClick={(e) => {
-                                setContext((ctx) => {
-                                    ctx.activeImg = id;
-                                });
-                                e.stopPropagation();
-                            }}
-                            tabIndex={0}
-                        >
-                            <div
-                                className="luckysheet-modal-dialog-content"
-                                style={{
-                                    width: "100%",
-                                    height: "100%",
-                                    overflow: "hidden",
-                                    position: "relative",
-                                }}
-                            >
-                                <img
-                                    src={src}
-                                    alt=""
-                                    style={{
-                                        width: width * context.zoomRatio,
-                                        height: height * context.zoomRatio,
-                                    }}
-                                />
-                            </div>
-                            <div className="luckysheet-modal-dialog-border"/>
-                        </div>
-                    );
-                })}
-            </div>
-            <div
-                id="luckysheet-modal-dialog-cropping"
-                className="luckysheet-modal-dialog"
-                style={{
-                    display: "none",
-                    padding: 0,
-                    position: "absolute",
-                    zIndex: 300,
-                }}
-            >
-                <div className="cropping-mask"/>
-                <div className="cropping-content"/>
-                <div
-                    className="luckysheet-modal-dialog-border"
-                    style={{position: "absolute"}}
-                />
-                <div className="luckysheet-modal-dialog-resize">
-                    <div className="resize-item lt" data-type="lt"/>
-                    <div className="resize-item mt" data-type="mt"/>
-                    <div className="resize-item lm" data-type="lm"/>
-                    <div className="resize-item rm" data-type="rm"/>
-                    <div className="resize-item rt" data-type="rt"/>
-                    <div className="resize-item lb" data-type="lb"/>
-                    <div className="resize-item mb" data-type="mb"/>
-                    <div className="resize-item rb" data-type="rb"/>
-                </div>
-                <div className="luckysheet-modal-dialog-controll">
-          <span
-              className="luckysheet-modal-controll-btn luckysheet-modal-controll-crop"
-              role="button"
-              tabIndex={0}
-              aria-label="Crop"
-              title="Crop"
-          >
-            <Pencil size={14} aria-hidden="true"/>
-          </span>
-                    <span
-                        className="luckysheet-modal-controll-btn luckysheet-modal-controll-restore"
-                        role="button"
-                        tabIndex={0}
-                        aria-label="Restore original"
-                        title="Restore original"
-                    >
-            <Maximize2 size={14} aria-hidden="true"/>
-          </span>
-                    <span
-                        className="luckysheet-modal-controll-btn luckysheet-modal-controll-del"
-                        role="button"
-                        tabIndex={0}
-                        aria-label="Delete"
-                        title="Delete"
-                    >
-            <Trash2 size={14} aria-hidden="true"/>
-          </span>
-                </div>
-            </div>
-
+            {activeImg && <ActiveImage img={activeImg}/>}
+            {context.insertedImgs?.map((img) => {
+                if (img.id === context.activeImg) return null;
+                return <InactiveImage key={img.id} img={img}/>;
+            })}
             <div className="cell-date-picker"/>
         </div>
     );
 }
-

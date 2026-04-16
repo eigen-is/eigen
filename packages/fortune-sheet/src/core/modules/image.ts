@@ -4,57 +4,9 @@ import {mergeBorder} from ".";
 import {Context, getFlowdata} from "../context";
 import {getSheetIndex} from "../utils";
 
-type ImageProps = {
-    defaultWidth: number;
-    defaultHeight: number;
-    currentObj: null;
-    currentWinW: null;
-    currentWinH: null;
-    resize: null;
-    resizeXY: null;
-    move: boolean;
-    moveXY: object | null;
-    cursorStartPosition: { x: number; y: number } | null;
-};
-
-export const imageProps: ImageProps = {
-    defaultWidth: 144,
-    defaultHeight: 84,
-    currentObj: null,
-    currentWinW: null,
-    currentWinH: null,
-    resize: null,
-    resizeXY: null,
-    move: false,
-    moveXY: null,
-    cursorStartPosition: null,
-};
-
-export function generateRandomId(prefix: string) {
-    if (prefix == null) {
-        prefix = "img";
-    }
-
-    const userAgent = window.navigator.userAgent
-        .replace(/[^a-zA-Z0-9]/g, "")
-        .split("");
-
-    let mid = "";
-
-    for (let i = 0; i < 12; i += 1) {
-        mid += userAgent[Math.round(Math.random() * (userAgent.length - 1))];
-    }
-
-    const time = new Date().getTime();
-
-    return `${prefix}_${mid}_${time}`;
-}
-
-export function showImgChooser() {
-    const chooser = document.getElementById(
-        "fortune-img-upload"
-    ) as HTMLInputElement;
-    if (chooser) chooser.click();
+let counter = 0;
+function generateImageId() {
+    return `img_${Date.now()}_${++counter}`;
 }
 
 export function saveImage(ctx: Context) {
@@ -74,50 +26,42 @@ export function removeActiveImage(ctx: Context) {
     saveImage(ctx);
 }
 
-export function insertImage(ctx: Context, image: HTMLImageElement) {
-    try {
-        const last =
-            ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1];
-        let rowIndex = last?.row_focus;
-        let colIndex = last?.column_focus;
-        if (!last) {
-            rowIndex = 0;
-            colIndex = 0;
-        } else {
-            if (rowIndex == null) {
-                [rowIndex] = last.row;
-            }
-            if (colIndex == null) {
-                [colIndex] = last.column;
-            }
+export function insertImage(ctx: Context, mediaName: string, width: number, height: number) {
+    const last =
+        ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1];
+    let rowIndex = last?.row_focus;
+    let colIndex = last?.column_focus;
+    if (!last) {
+        rowIndex = 0;
+        colIndex = 0;
+    } else {
+        if (rowIndex == null) {
+            [rowIndex] = last.row;
         }
-        const flowdata = getFlowdata(ctx);
-        let left = colIndex === 0 ? 0 : ctx.visibledatacolumn[colIndex - 1];
-        let top = rowIndex === 0 ? 0 : ctx.visibledatarow[rowIndex - 1];
-        if (flowdata) {
-            const margeset = mergeBorder(ctx, flowdata, rowIndex, colIndex);
-            if (margeset) {
-                [top] = margeset.row;
-                [left] = margeset.column;
-            }
+        if (colIndex == null) {
+            [colIndex] = last.column;
         }
-        const {width} = image;
-        const {height} = image;
-        const img = {
-            id: generateRandomId("img"),
-            src: image.src,
-            left,
-            top,
-            width: width * 0.5,
-            height: height * 0.5,
-            originWidth: width,
-            originHeight: height,
-        };
-        ctx.insertedImgs = (ctx.insertedImgs || []).concat(img);
-        saveImage(ctx);
-    } catch (err) {
-        // Error handling for image loading
     }
+    const flowdata = getFlowdata(ctx);
+    let left = colIndex === 0 ? 0 : ctx.visibledatacolumn[colIndex - 1];
+    let top = rowIndex === 0 ? 0 : ctx.visibledatarow[rowIndex - 1];
+    if (flowdata) {
+        const margeset = mergeBorder(ctx, flowdata, rowIndex, colIndex);
+        if (margeset) {
+            [top] = margeset.row;
+            [left] = margeset.column;
+        }
+    }
+    const img = {
+        id: generateImageId(),
+        mediaName,
+        left,
+        top,
+        width: width * 0.5,
+        height: height * 0.5,
+    };
+    ctx.insertedImgs = (ctx.insertedImgs || []).concat(img);
+    saveImage(ctx);
 }
 
 function getImagePosition() {
@@ -137,19 +81,13 @@ export function cancelActiveImgItem(ctx: Context, globalCache: GlobalCache) {
 export function onImageMoveStart(
     ctx: Context,
     globalCache: GlobalCache,
-    e: MouseEvent
-    // { r, c, rc }: { r: number; c: number; rc: string },
+    e: MouseEvent,
 ) {
     const position = getImagePosition();
     if (position) {
         const {top, left} = position;
         _.set(globalCache, "image", {
-            cursorMoveStartPosition: {
-                x: e.pageX,
-                y: e.pageY,
-            },
-            // movingId,
-            // imageRC: { r, c, rc },
+            cursorMoveStartPosition: {x: e.pageX, y: e.pageY},
             imgInitialPosition: {left, top},
         });
     }

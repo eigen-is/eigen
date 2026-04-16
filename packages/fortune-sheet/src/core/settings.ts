@@ -115,7 +115,9 @@ export type Hooks = {
     onCommentColor?: (row: number, column: number, color: string | null) => void;
     onCommentResolve?: (row: number, column: number) => void;
     onCommentReopen?: (row: number, column: number) => void;
-    getCommentInfo?: (row: number, column: number) => { color: string | null; status: 'open' | 'resolved' } | null;
+    getCommentInfo?: (row: number, column: number) => { color: string | null; indicatorColor?: string | null; status: 'open' | 'resolved' } | null;
+    onInsertImage?: () => void;
+    resolveImageUrl?: (mediaName: string) => string | null;
 };
 
 export type Settings = {

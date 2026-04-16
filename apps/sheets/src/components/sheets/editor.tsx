@@ -1,8 +1,8 @@
 import { Workbook, type WorkbookInstance } from '@workspace/fortune-sheet';
 import { useAuth } from '@workspace/lib/auth';
 import { useComments, useResolveComment, useUpdateCommentColor } from '@workspace/lib/chat';
-import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants/colors';
-import { MediaResolverProvider } from '@workspace/lib/drive';
+import { EIGEN_STICKIES_COLORS, EIGEN_STICKIES_INDICATOR_MAP } from '@workspace/lib/constants/colors';
+import { useMediaResolver, useUploadFile } from '@workspace/lib/drive';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { CommentDialog, CommentPanel, CreateCommentDialog, LoadingState, NoteCardContextMenu } from '@workspace/ui';
@@ -16,6 +16,7 @@ type SheetEditorProps = {
     ownerId: string;
     path: DrivePath;
     canWrite: boolean;
+    mediaFolderId: string | null;
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
     initialChatName?: string;
@@ -50,6 +51,7 @@ const TOOLBAR_ITEMS = [
     'freeze',
     'conditionFormat',
     'filter',
+    'image',
     'quick-formula',
     'search',
 ];
@@ -58,11 +60,13 @@ export function SheetEditor({
     ownerId,
     path,
     canWrite,
+    mediaFolderId,
     chatFolderId,
     onAccessDialogOpen,
     initialChatName,
 }: SheetEditorProps) {
     const workbookRef = useRef<WorkbookInstance>(null);
+    const imageInputRef = useRef<HTMLInputElement>(null);
 
     const { initialData, synced, handleOp, onDataChange, handleRestore } = useSheet(
         ownerId,
@@ -72,6 +76,8 @@ export function SheetEditor({
     );
 
     const auth = useAuth();
+    const uploadFile = useUploadFile(ownerId, path.mountId);
+    const { resolveMediaUrl } = useMediaResolver();
     const [commentPanelOpen, setCommentPanelOpen] = useState(false);
     const [commentDialogOpen, setCommentDialogOpen] = useState(false);
     const [commentSelectedText, setCommentSelectedText] = useState('');
@@ -96,6 +102,32 @@ export function SheetEditor({
         setCommentSelectedText(`Cell ${columnToLetter(c)}${r + 1}`);
         setCommentDialogOpen(true);
     }, []);
+
+    const handleImageFile = useCallback(
+        async (file: File) => {
+            if (!mediaFolderId || !file.type.startsWith('image/')) return;
+            const result = await uploadFile.mutateAsync({ parentId: mediaFolderId, file }).catch(() => null);
+            if (!result) return;
+            const objectUrl = URL.createObjectURL(file);
+            const img = new window.Image();
+            img.onload = () => {
+                workbookRef.current?.insertImage(result.name, img.naturalWidth, img.naturalHeight);
+                URL.revokeObjectURL(objectUrl);
+            };
+            img.onerror = () => URL.revokeObjectURL(objectUrl);
+            img.src = objectUrl;
+        },
+        [mediaFolderId, uploadFile],
+    );
+
+    const handleImageSelect = useCallback(
+        (e: React.ChangeEvent<HTMLInputElement>) => {
+            const file = e.target.files?.[0];
+            if (file) handleImageFile(file);
+            e.target.value = '';
+        },
+        [handleImageFile],
+    );
 
     const handleCommentCreated = useCallback(
         (chatName: string) => {
@@ -142,12 +174,8 @@ export function SheetEditor({
     }
 
     return (
-        <MediaResolverProvider
-            ownerId={ownerId}
-            mountId={path.mountId}
-            mediaFolderId={null}
-            chatFolderId={chatFolderId}
-        >
+        <>
+            <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
             <div className="flex flex-col h-full w-full relative">
                 <div className="flex-1 overflow-hidden">
                     <Workbook
@@ -170,6 +198,10 @@ export function SheetEditor({
                         column={26}
                         row={100}
                         hooks={{
+                            ...(canWrite && mediaFolderId
+                                ? { onInsertImage: () => imageInputRef.current?.click() }
+                                : {}),
+                            resolveImageUrl: resolveMediaUrl,
                             ...(canWrite && chatFolderId
                                 ? {
                                       onAddComment: (r: number, c: number) => {
@@ -219,7 +251,11 @@ export function SheetEditor({
                                 const chatName = fd?.[r]?.[c]?.commentChatNames?.[0];
                                 if (!chatName) return null;
                                 const entry = allComments.find((c) => c.chatName === chatName);
-                                return entry ? { color: entry.color, status: entry.status } : null;
+                                if (!entry) return null;
+                                const indicatorColor = entry.color
+                                    ? (EIGEN_STICKIES_INDICATOR_MAP.get(entry.color) ?? entry.color)
+                                    : null;
+                                return { color: entry.color, indicatorColor, status: entry.status };
                             },
                         }}
                     />
@@ -315,6 +351,6 @@ export function SheetEditor({
                     }}
                 />
             </ContextMenuAnchor>
-        </MediaResolverProvider>
+        </>
     );
 }
