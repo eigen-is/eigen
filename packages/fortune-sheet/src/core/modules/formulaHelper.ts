@@ -11,6 +11,7 @@ import {
     iscelldata,
     isFunctionRange,
 } from "..";
+import { getCalculationOrder, matchDependencies } from "../../engine/dependency-graph";
 
 // Make sure setFormulaObject() is executed *after* the cell modifications
 export function setFormulaCellInfo(
@@ -242,43 +243,7 @@ export function getFormulaRunList(
     updateValueArray: any[],
     formulaCellInfoMap: any
 ) {
-    const formulaRunList = [];
-    let stack = updateValueArray;
-    const existsFormulaRunList: any = {};
-    while (stack.length > 0) {
-        const formulaObject = stack.pop();
-
-        if (_.isNil(formulaObject) || formulaObject.key in existsFormulaRunList) {
-            continue;
-        }
-
-        if (formulaObject.color === "b") {
-            formulaObject.color = "w";
-            formulaRunList.push(formulaObject);
-            existsFormulaRunList[formulaObject.key] = 1;
-            continue;
-        }
-
-        const cacheStack: any = [];
-        Object.keys(formulaObject.parents).forEach((parentKey) => {
-            const parentFormulaObject = formulaCellInfoMap[parentKey];
-            if (!_.isNil(parentFormulaObject)) {
-                cacheStack.push(parentFormulaObject);
-            }
-        });
-
-        if (cacheStack.length === 0) {
-            formulaRunList.push(formulaObject);
-            existsFormulaRunList[formulaObject.key] = 1;
-        } else {
-            formulaObject.color = "b";
-            stack.push(formulaObject);
-            stack = stack.concat(cacheStack);
-        }
-    }
-
-    formulaRunList.reverse();
-    return formulaRunList;
+    return getCalculationOrder(updateValueArray, formulaCellInfoMap);
 }
 
 export const arrayMatch = (
@@ -288,37 +253,5 @@ export const arrayMatch = (
     _updateValueObjects: any,
     func: any
 ) => {
-    for (let a = 0; a < formulaDependency.length; a += 1) {
-        const range = formulaDependency[a];
-        const cacheKey = `r${range.row[0]}${range.row[1]}c${range.column[0]}${range.column[1]}id${range.sheetId}`;
-        if (cacheKey in arrayMatchCache) {
-            const amc: any[] = arrayMatchCache[cacheKey];
-            amc.forEach((item) => {
-                func(item.key, item.r, item.c, item.sheetId);
-            });
-        } else {
-            const functionArr = [];
-            for (let r = range.row[0]; r <= range.row[1]; r += 1) {
-                for (let c = range.column[0]; c <= range.column[1]; c += 1) {
-                    const key = `r${r}c${c}i${range.sheetId}`;
-                    func(key, r, c, range.sheetId);
-                    if (
-                        (_formulaCellInfoMap && key in _formulaCellInfoMap) ||
-                        (_updateValueObjects && key in _updateValueObjects)
-                    ) {
-                        functionArr.push({
-                            key,
-                            r,
-                            c,
-                            sheetId: range.sheetId,
-                        });
-                    }
-                }
-            }
-
-            if (_formulaCellInfoMap || _updateValueObjects) {
-                arrayMatchCache[cacheKey] = functionArr;
-            }
-        }
-    }
+    matchDependencies(arrayMatchCache, formulaDependency, _formulaCellInfoMap, _updateValueObjects, func);
 };
