@@ -443,6 +443,7 @@ const eigen = {
     // Document domains — object model with getActive() / getById()
     docs: createDocDomain("docs"),
     sheets: createDocDomain("sheets"),
+    slides: createDocDomain("slides"),
 
     // Flat domains — direct method dispatch
     drive: createDomainProxy("drive"),
@@ -527,32 +528,39 @@ const SDK_METHODS: Record<string, { permission: string; handler: SDKMethod }> = 
     "docs.getText": {
         permission: "drive:read",
         handler: (home, p) =>
-            readDocContent(home.drive, p.mountId as string, p.pathId as string).then(c => c.text),
+            readDocContent(p.ownerId as string, p.mountId as string, p.pathId as string).then(c => c.text),
     },
     "docs.getJson": {
         permission: "drive:read",
         handler: (home, p) =>
-            readDocContent(home.drive, p.mountId as string, p.pathId as string).then(c => c.json),
+            readDocContent(p.ownerId as string, p.mountId as string, p.pathId as string).then(c => c.json),
     },
 
     // Sheets (document domain — mountId/pathId injected by document proxy)
     "sheets.getCell": {
         permission: "drive:read",
         handler: (home, p) =>
-            readSheetCellValue(home.drive, p.mountId as string, p.pathId as string,
+            readSheetCellValue(p.ownerId as string, p.mountId as string, p.pathId as string,
                 p.cell as string, p.render as string | undefined),
     },
     "sheets.getRange": {
         permission: "drive:read",
         handler: (home, p) =>
-            readSheetRange(home.drive, p.mountId as string, p.pathId as string,
+            readSheetRange(p.ownerId as string, p.mountId as string, p.pathId as string,
                 p.cell as string, p.render as string | undefined),
     },
     "sheets.getSheetData": {
         permission: "drive:read",
         handler: (home, p) =>
-            readSheetContent(home.drive, p.mountId as string, p.pathId as string)
+            readSheetContent(p.ownerId as string, p.mountId as string, p.pathId as string)
                 .then(c => c.sheets[p.sheet as number]),
+    },
+
+    // Slides (document domain — mountId/pathId injected by document proxy)
+    "slides.getDeck": {
+        permission: "drive:read",
+        handler: (home, p) =>
+            readSlidesContent(p.ownerId as string, p.mountId as string, p.pathId as string).then(c => c.deck),
     },
 
     // Phase 2: "drive.writeFile", "drive.create", "docs.insertContent", "sheets.setCell", ...
@@ -901,6 +909,8 @@ following the same interface.
   Document content reads go through `eigen.docs.getActive().getText()` / `.getJson()` on the backend
 - **Drive**: `getContext()` reads selected file list from DriveTable state, `applyResults()` supports `notify`
   only. Useful for file-processing scripts (analyze metadata, check naming, list contents)
+- **Slides** (Phase 2): `getContext()` provides mountId/pathId and current slide selection.
+  Document content reads go through `eigen.slides.getActive().getDeck()` on the backend
 
 ## App Extensions
 
@@ -1125,10 +1135,12 @@ export function handleScriptSSEvent(event: ScriptSSEvent, queryClient: QueryClie
 
 ```
 apps/api/src/lib/document/                  # Document Content Layer (shared by SDK, export, import, preview)
-  doc-reader.ts         # readDocContent() — Yjs → ProseMirror JSON + plain text
-  doc-writer.ts         # writeDocContent() — ProseMirror JSON → Yjs update (for import)
-  sheets-reader.ts      # readSheetContent() — Yjs → SheetContent with cell values/formulas
-  sheets-writer.ts      # writeSheetContent() — SheetContent → Yjs update (for import)
+  doc-reader.ts         # readDocContent(ownerId, mountId, pathId) — Yjs → ProseMirror JSON + plain text
+  doc-writer.ts         # writeDocContent(ownerId, mountId, pathId, content) — ProseMirror JSON → Yjs update
+  sheets-reader.ts      # readSheetContent(ownerId, mountId, pathId) — Yjs → SheetContent with cells/formulas
+  sheets-writer.ts      # writeSheetContent(ownerId, mountId, pathId, content) — SheetContent → Yjs update
+  slides-reader.ts      # readSlidesContent(ownerId, mountId, pathId) — Yjs → DeckData
+  slides-writer.ts      # writeSlidesContent(ownerId, mountId, pathId, content) — DeckData → Yjs update
 
 apps/api/src/lib/scripts/
   scripts.ts            # Scripts domain class (CRUD, execution lifecycle)
@@ -1144,7 +1156,7 @@ apps/api/src/routes/
 
 packages/lib/src/types/
   script.ts             # Shared types: Script, Execution, ScriptExtension, ScriptContext, ScriptAction
-  document.ts           # Shared content types: DocContent, SheetContent, CellData
+  document.ts           # Shared content types: DocContent, SheetContent, SlidesContent, CellData
 
 packages/lib/src/core/scripts/
   hooks/
@@ -1269,10 +1281,14 @@ equivalent exists for sheets, slides, or stickies.
 SDK / Export / Preview / Import / Search
           ↓
 Document Content Layer (backend)
-  readDocContent()  / readSheetContent()
+  readDocContent() / readSheetContent() / readSlidesContent()
           ↓
 Yjs database (data.db) → yjs-loader.ts → Y.Doc → structured content
 ```
+
+All readers take `(ownerId, mountId, pathId)` — consistent with every other API surface in Eigen. The reader
+resolves `ownerId` → Home → Drive internally. For the scripting SDK, `ownerId` defaults to the executing
+user's ID when not specified, matching the flat-domain proxy pattern (`eigen.drive.*` auto-injects ownerId).
 
 ### Shared Content Types
 
@@ -1311,9 +1327,17 @@ type CellData = {
     type?: 'number' | 'string' | 'boolean' | 'date' | 'error';
 };
 
+// --- Slides ---
+
+type SlidesContent = {
+    type: 'slides';
+    deck: DeckData;                   // { slides, objects, slideOrder }
+    media: Map<string, MediaRef>;     // Referenced images/files
+};
+
 // --- Union ---
 
-type DocumentContent = DocContent | SheetContent;   // grows with slides/stickies
+type DocumentContent = DocContent | SheetContent | SlidesContent;   // grows with stickies
 ```
 
 These types map directly to the underlying storage:
@@ -1325,57 +1349,90 @@ These types map directly to the underlying storage:
 | `CellData.display` | `cell.m` | `formattedValue` |
 | `CellData.type` | `cell.ct.t` | `ExtendedValue` discriminant |
 
-### DocumentReaders
+### Document Readers
+
+All readers take `(ownerId, mountId, pathId)` and resolve the Home → Drive → Mount internally.
 
 ```typescript
 // apps/api/src/lib/document/doc-reader.ts
 // Refactored from existing loadEigendocContent() in export/doc/content.ts
 
-async function readDocContent(drive: Drive, mountId: string, pathId: string): Promise<DocContent> {
-    // 1. Open data.db via mount system
-    // 2. Load Yjs state (existing yjs-loader.ts — snapshots + incremental updates)
-    // 3. Y.XmlFragment → ProseMirror JSON (existing @tiptap/y-tiptap)
-    // 4. Extract plain text (ProseMirror textBetween or static render)
-    // 5. Build media map
+async function readDocContent(ownerId: string, mountId: string, pathId: string): Promise<DocContent> {
+    // 1. getHome(ownerId) → home.drive → mount
+    // 2. Open data.db via mount system
+    // 3. Load Yjs state (existing yjs-loader.ts — snapshots + incremental updates)
+    // 4. Y.XmlFragment → ProseMirror JSON (existing @tiptap/y-tiptap)
+    // 5. Extract plain text (ProseMirror textBetween or static render)
+    // 6. Build media map
 }
 
 // apps/api/src/lib/document/sheets-reader.ts
 
-async function readSheetContent(drive: Drive, mountId: string, pathId: string): Promise<SheetContent> {
-    // 1. Open data.db via mount system
-    // 2. Load Yjs state → Y.Map('state') → parse JSON snapshot → Sheet[]
-    // 3. Map fortune-sheet cells to CellData[] (sparse, non-empty only)
+async function readSheetContent(ownerId: string, mountId: string, pathId: string): Promise<SheetContent> {
+    // 1. getHome(ownerId) → home.drive → mount
+    // 2. Open data.db via mount system
+    // 3. Load Yjs state → Y.Map('state') → parse JSON snapshot → Sheet[]
+    // 4. Map fortune-sheet cells to CellData[] (sparse, non-empty only)
     //    cell.v → value, cell.f → formula, cell.m → display, cell.ct.t → type
+    // 5. Optionally recalculate formulas via headless FormulaEngine (see below)
+}
+
+// apps/api/src/lib/document/slides-reader.ts
+// Refactored from existing loadSlidesContent() in export/slides/content.ts
+
+async function readSlidesContent(ownerId: string, mountId: string, pathId: string): Promise<SlidesContent> {
+    // 1. getHome(ownerId) → home.drive → mount
+    // 2. Open data.db via mount system
+    // 3. Load Yjs state → ydoc.getMap('slides'), ydoc.getMap('objects'), ydoc.getArray('slideOrder')
+    // 4. Map Y.Map entries to typed SlideObject[] via field extraction
+    // 5. Build media map
 }
 ```
 
-**Sheets formula note:** Fortune-sheet calculates formulas client-side only. The server reads last-saved
-computed values (`cell.v`) from the Yjs snapshot. These are fresh enough for scripting and export — they're
-synced whenever fortune-sheet flushes its snapshot (on save, on `beforeunload`, periodically during editing).
-Server-side formula recalculation is a future enhancement; when it arrives, `readSheetContent()` recalculates
-before returning, transparently to consumers.
+**Sheets formula recalculation:** Fortune-sheet calculates formulas client-side only. The Yjs snapshot
+contains last-saved computed values (`cell.v`), which are synced whenever fortune-sheet flushes its
+snapshot (on save, on `beforeunload`, periodically during editing). For Phase 1, this is sufficient.
+
+Server-side formula recalculation is planned as part of a broader fortune-sheet refactoring effort (see
+`docs/PROPOSAL_SHEETS_REFACTORING.md`). Fortune-sheet's formula parser (`formula-parser/`) is already
+headless-ready with zero browser dependencies. The plan is to extract it into a headless `FormulaEngine`
+alongside the number formatting engine (`ssf.ts`). When ready, `readSheetContent()` will optionally
+recalculate before returning — transparently to all consumers (scripting, export, import).
 
 **Sheets A1 notation:** The SDK handler parses A1 notation (e.g., `"A1"`, `"B2:D10"`, `"Sheet2!A1:C5"`)
 into numeric row/col/range and delegates to `readSheetContent()`. Parsing is trivial
 (`/^([A-Z]+)(\d+)$/` → col/row conversion) and lives in a shared utility.
 
-### DocumentWriters (for import)
+### Document Writers (for import)
+
+All writers take `(ownerId, mountId, pathId, content)` — same addressing as readers.
 
 ```typescript
 // apps/api/src/lib/document/doc-writer.ts
 
-async function writeDocContent(drive: Drive, mountId: string, pathId: string, content: DocContent): Promise<void> {
-    // 1. ProseMirror JSON → Y.XmlFragment (prosemirrorJSONToYDoc from y-prosemirror)
-    // 2. Write Yjs update via CollabDocument
-    // 3. Store media files in document container
+async function writeDocContent(ownerId: string, mountId: string, pathId: string, content: DocContent): Promise<void> {
+    // 1. getHome(ownerId) → home.drive → mount
+    // 2. ProseMirror JSON → Y.XmlFragment (prosemirrorJSONToYDoc from y-prosemirror)
+    // 3. Write Yjs update via CollabDocument
+    // 4. Store media files in document container
 }
 
 // apps/api/src/lib/document/sheets-writer.ts
 
-async function writeSheetContent(drive: Drive, mountId: string, pathId: string, content: SheetContent): Promise<void> {
-    // 1. CellData[] → fortune-sheet Sheet[] JSON
-    // 2. Write to Y.Map('state') as snapshot
+async function writeSheetContent(ownerId: string, mountId: string, pathId: string, content: SheetContent): Promise<void> {
+    // 1. getHome(ownerId) → home.drive → mount
+    // 2. CellData[] → fortune-sheet Sheet[] JSON
+    // 3. Write to Y.Map('state') as snapshot
+    // 4. Write Yjs update via CollabDocument
+}
+
+// apps/api/src/lib/document/slides-writer.ts
+
+async function writeSlidesContent(ownerId: string, mountId: string, pathId: string, content: SlidesContent): Promise<void> {
+    // 1. getHome(ownerId) → home.drive → mount
+    // 2. DeckData → Y.Map('slides') + Y.Map('objects') + Y.Array('slideOrder')
     // 3. Write Yjs update via CollabDocument
+    // 4. Store media files in document container
 }
 ```
 
@@ -1429,6 +1486,18 @@ const data = await sheet.getSheetData({ sheet: 0 });
 // Read a different spreadsheet
 const other = eigen.sheets.getById({ mountId: "...", pathId: "..." });
 const otherValues = await other.getRange("A1:B5");
+
+// --- Slides ---
+
+const slides = eigen.slides.getActive();
+const deck = await slides.getDeck();
+// → { slides: { [id]: { id, objectIds, backgroundColor, ... } },
+//     objects: { [id]: { id, slideId, type, x, y, w, h, text, ... } },
+//     slideOrder: ["slide1", "slide2", ...] }
+
+// Read a different presentation
+const otherDeck = eigen.slides.getById({ mountId: "...", pathId: "..." });
+const otherData = await otherDeck.getDeck();
 ```
 
 ### ScriptActions for Document Writes
@@ -1465,37 +1534,41 @@ updates through the Collab system and are needed for cron/event-triggered script
 
 ### Consumers
 
-| Consumer | Uses reader | Uses writer | Exists today? |
-|----------|-------------|-------------|---------------|
-| **Scripting SDK** (`docs.getText`, `sheets.getRange`) | Yes | Phase 2 | No — built in Phase 1 |
-| **Export** (DOCX, PDF, HTML) | Yes | — | Docs only (`loadEigendocContent`) |
-| **Preview** (HTML rendering) | Yes | — | Docs only |
-| **Import** (DOCX, XLSX, ODS) | — | Yes | No |
-| **Search indexing** (future) | Yes | — | No |
+| Consumer | Doc reader | Sheet reader | Slides reader | Writers | Exists today? |
+|----------|-----------|-------------|--------------|---------|---------------|
+| **Scripting SDK** | `getText`, `getJson` | `getCell`, `getRange`, `getSheetData` | `getDeck` | Phase 2 | No — built in Phase 1 |
+| **Export** (DOCX, PDF, HTML) | Yes | Phase 1 | Yes | — | Docs + Slides (`loadEigendocContent`, `loadSlidesContent`) |
+| **Preview** (HTML rendering) | Yes | Phase 1 | Yes | — | Docs + Slides |
+| **Import** (DOCX, XLSX, PPTX) | — | — | — | Yes | No |
+| **Search indexing** (future) | Yes | Yes | Yes | — | No |
 
-The existing `loadEigendocContent()` in `apps/api/src/lib/export/doc/content.ts` becomes a thin wrapper
-around `readDocContent()`. The export system, preview system, and scripting SDK all use the same reader.
+The existing `loadEigendocContent()` in `apps/api/src/lib/export/doc/content.ts` and `loadSlidesContent()`
+in `apps/api/src/lib/export/slides/content.ts` become thin wrappers around `readDocContent()` and
+`readSlidesContent()`. The export system, preview system, and scripting SDK all use the same readers.
 
 ### File Structure
 
 ```
 apps/api/src/lib/document/
-  doc-reader.ts         # readDocContent() — refactored from export/doc/content.ts
-  doc-writer.ts         # writeDocContent() — for import (Phase 2)
-  sheets-reader.ts      # readSheetContent() — new
-  sheets-writer.ts      # writeSheetContent() — for import (Phase 2)
+  doc-reader.ts         # readDocContent(ownerId, mountId, pathId) — refactored from export/doc/content.ts
+  doc-writer.ts         # writeDocContent(ownerId, mountId, pathId, content) — for import (Phase 2)
+  sheets-reader.ts      # readSheetContent(ownerId, mountId, pathId) — new
+  sheets-writer.ts      # writeSheetContent(ownerId, mountId, pathId, content) — for import (Phase 2)
+  slides-reader.ts      # readSlidesContent(ownerId, mountId, pathId) — refactored from export/slides/content.ts
+  slides-writer.ts      # writeSlidesContent(ownerId, mountId, pathId, content) — for import (Phase 2)
   a1-notation.ts        # parseA1Notation() — A1 → numeric row/col conversion
 
 packages/lib/src/types/
-  document.ts           # DocContent, SheetContent, CellData — shared FE + BE
+  document.ts           # DocContent, SheetContent, SlidesContent, CellData — shared FE + BE
 
 apps/api/src/lib/export/
   doc/content.ts        # → becomes thin wrapper around doc-reader.ts
+  slides/content.ts     # → becomes thin wrapper around slides-reader.ts
 
 apps/api/src/lib/import/                    # Future
   docx-import.ts        # DOCX → DocContent → writeDocContent()
   xlsx-import.ts        # XLSX → SheetContent → writeSheetContent()
-  ods-import.ts         # ODS → DocContent/SheetContent → writer
+  pptx-import.ts        # PPTX → SlidesContent → writeSlidesContent()
 ```
 
 ## Implementation Phases
@@ -1515,16 +1588,18 @@ The minimum that proves the full pipeline end-to-end:
 - Personal scope only
 
 **Document Content Layer:**
-- `readDocContent()` — refactored from existing `loadEigendocContent()` (Yjs → PM JSON + text)
-- `readSheetContent()` — new (Yjs → SheetContent with cell values/formulas/display)
+- `readDocContent(ownerId, mountId, pathId)` — refactored from existing `loadEigendocContent()` (Yjs → PM JSON + text)
+- `readSheetContent(ownerId, mountId, pathId)` — new (Yjs → SheetContent with cell values/formulas/display)
+- `readSlidesContent(ownerId, mountId, pathId)` — refactored from existing `loadSlidesContent()` (Yjs → DeckData)
 - `a1-notation.ts` — A1 notation parser for sheets SDK methods
-- Shared types: `DocContent`, `SheetContent`, `CellData` in `packages/lib/src/types/document.ts`
-- Export system refactored to use `readDocContent()` as shared reader
+- Shared types: `DocContent`, `SheetContent`, `SlidesContent`, `CellData` in `packages/lib/src/types/document.ts`
+- Export system refactored to use `readDocContent()` and `readSlidesContent()` as shared readers
 
 **SDK (read-only):**
 - `eigen.docs.getActive()` / `eigen.docs.getById({...})` — document proxies. Methods: `getText`, `getJson`
 - `eigen.sheets.getActive()` / `eigen.sheets.getById({...})` — sheet proxies. Methods: `getCell` (A1 notation),
   `getRange` (A1 notation), `getSheetData`. Render options: `"value"` (default), `"formula"`, `"formatted"`
+- `eigen.slides.getActive()` / `eigen.slides.getById({...})` — slides proxies. Methods: `getDeck`
 - `eigen.drive.*` — flat proxy, auto-injects ownerId. Methods: `listFolder`, `getPath`, `readFile`
 - `eigen.fetch()` — external API calls (domain-restricted via Deno `--allow-net`)
 - `eigen.progress(message)` — real-time progress via SSE
@@ -1551,8 +1626,9 @@ The minimum that proves the full pipeline end-to-end:
 - **Event-driven triggers** — listener on `Home.broadcast()`, dispatches matching script executions
 - **Write SDK operations**: `drive.writeFile`, `drive.create`, `docs.insertContent`,
   `sheets.setCell`, `sheets.setCellRange` — with quota enforcement and ACL validation
-- **DocumentWriters**: `writeDocContent()`, `writeSheetContent()` — for SDK writes and import
-- **File import**: DOCX → `DocContent` → `writeDocContent()`, XLSX → `SheetContent` → `writeSheetContent()`
+- **DocumentWriters**: `writeDocContent()`, `writeSheetContent()`, `writeSlidesContent()` — for SDK writes and import
+- **File import**: DOCX → `DocContent` → `writeDocContent()`, XLSX → `SheetContent` → `writeSheetContent()`,
+  PPTX → `SlidesContent` → `writeSlidesContent()`
 - **User-scoped properties** — per-user config for shared scripts (like Google's `UserProperties`)
 - Team/org script scope (Scripts domain in TeamHome/OrgHome)
 - Installation/permission approval flow
@@ -1569,8 +1645,11 @@ The minimum that proves the full pipeline end-to-end:
 - Script versioning with rollback UI
 - Script module/import mechanism (bundling or import maps)
 - Sheets export (HTML, XLSX) via `readSheetContent()` + format-specific serializers
-- Server-side formula recalculation (extract fortune-sheet formula engine)
 - Custom sheet functions (batch evaluation of `=EIGEN_FUNC()` cells via scripting engine)
+
+Note: server-side formula recalculation is tracked separately in `docs/PROPOSAL_SHEETS_REFACTORING.md` as
+part of the fortune-sheet cleanup effort. When that work lands, `readSheetContent()` gains accurate formula
+values automatically — no scripting-side changes needed.
 
 ## Google Apps Script Comparison
 

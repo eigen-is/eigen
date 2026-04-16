@@ -363,7 +363,13 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                             } as Patch);
                         }
                     }
-                    const newContext = applyPatches(ctx_, history.inversePatches);
+                    let newContext = applyPatches(ctx_, history.inversePatches);
+                    const si = getSheetIndex(newContext, newContext.currentSheetId);
+                    if (si != null) {
+                        newContext = produce(newContext, (draft) => {
+                            draft.insertedImgs = draft.luckysheetfile[si].images;
+                        });
+                    }
                     globalCache.current.redoList.push(history);
                     const inversedOptions = inverseRowColOptions(history.options);
                     if (inversedOptions?.insertRowColOp) {
@@ -406,7 +412,13 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             const history = globalCache.current.redoList.pop();
             if (history) {
                 setContext((ctx_) => {
-                    const newContext = applyPatches(ctx_, history.patches);
+                    let newContext = applyPatches(ctx_, history.patches);
+                    const si = getSheetIndex(newContext, newContext.currentSheetId);
+                    if (si != null) {
+                        newContext = produce(newContext, (draft) => {
+                            draft.insertedImgs = draft.luckysheetfile[si].images;
+                        });
+                    }
                     globalCache.current.undoList.push(history);
                     emitOp(newContext, history.patches, history.options);
 

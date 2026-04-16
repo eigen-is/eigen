@@ -37,7 +37,7 @@ function buildSection(label: string, value: string): string {
 
 function buildEventHtml(event: CalendarEvent, organizer: Organizer, banner?: string): string {
     const domain = getDomain();
-    const calendarUrl = domain === 'localhost' ? '' : `https://${domain}/calendar`;
+    const domainUrl = domain === 'localhost' ? '' : `https://${domain}`;
     const sections: string[] = [];
 
     const when = formatEventWhen(event.startTime, event.endTime, event.allDay, event.timezone);
@@ -51,8 +51,8 @@ function buildEventHtml(event: CalendarEvent, organizer: Organizer, banner?: str
         : '';
 
     const organizerName = escapeHtml(organizer.name || organizer.email);
-    const footerLink = calendarUrl
-        ? `<a href="${calendarUrl}" style="color:#1a73e8;text-decoration:none">Eigen Calendar</a>`
+    const footerLink = domainUrl
+        ? `<a href="${domainUrl}" style="color:#1a73e8;text-decoration:none">Eigen Calendar</a>`
         : 'Eigen Calendar';
 
     return `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:0 16px">

@@ -14,7 +14,6 @@ import {
     jfrefreshgrid,
     locale,
     removeActiveImage,
-    showImgChooser,
     showSelected,
     sortSelection,
 } from "../../core";
@@ -616,14 +615,15 @@ export const ContextMenu: React.FC = () => {
                 );
             }
             if (name === "image") {
+                if (!settings.hooks?.onInsertImage) return null;
                 return (
                     <DropdownMenuItem
                         key={name}
                         onClick={() => {
                             setContext((draftCtx) => {
-                                showImgChooser();
                                 draftCtx.contextMenu = {};
                             });
+                            settings.hooks!.onInsertImage!();
                         }}
                     >
                         {rightclick.image}

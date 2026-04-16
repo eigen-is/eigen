@@ -270,6 +270,14 @@ export const EIGEN_STICKIES_COLORS = [EIGEN_STICKIES_COLOR_ROW].map((ri) =>
     [1, 3, 5, 7, 9, 11, 13, 15].map((ci) => EIGEN_COLORS[ci][ri]),
 );
 
+export const EIGEN_STICKIES_INDICATOR_ROW = 4;
+export const EIGEN_STICKIES_INDICATOR_MAP: Map<string, string> = new Map(
+    [1, 3, 5, 7, 9, 11, 13, 15].map((ci) => [
+        EIGEN_COLORS_MAP[ci][EIGEN_STICKIES_COLOR_ROW],
+        EIGEN_COLORS_MAP[ci][EIGEN_STICKIES_INDICATOR_ROW],
+    ]),
+);
+
 export function hexToRgba(hex: string, alpha: number): string {
     const r = parseInt(hex.slice(1, 3), 16);
     const g = parseInt(hex.slice(3, 5), 16);

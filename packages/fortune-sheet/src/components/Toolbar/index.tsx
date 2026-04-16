@@ -18,7 +18,6 @@ import {
     handleVerticalAlign,
     locale,
     normalizedCellAttr,
-    showImgChooser,
     toolbarItemClickHandler,
     toolbarItemSelectedFunc,
     updateFormat,
@@ -569,6 +568,7 @@ export function Toolbar({
             }
 
             if (name === "image") {
+                if (!settings.hooks?.onInsertImage) return null;
                 return (
                     <TooltipButton
                         key={name}
@@ -576,7 +576,7 @@ export function Toolbar({
                         tooltipText={toolbar.insertImage}
                         onClick={() => {
                             if (contextRef.current.allowEdit === false) return;
-                            showImgChooser();
+                            settings.hooks!.onInsertImage!();
                         }}
                     />
                 );
