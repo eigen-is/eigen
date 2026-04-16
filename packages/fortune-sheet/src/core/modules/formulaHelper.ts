@@ -5,6 +5,7 @@ import {
     execfunction,
     FormulaCell,
     FormulaCellInfo,
+    FormulaCellInfoMap,
     FormulaDependency,
     getcellFormula,
     getcellrange,
@@ -83,10 +84,6 @@ export function setFormulaCellInfo(
                     point = j;
                 } // end single quote
                 else {
-                    // if (squote === i - 1) // The first character after a paired single quote cannot be a single quote
-                    // {
-                    //    ; // Reaching here means the formula is invalid
-                    // }
                     // If '' it represents an output of '
                     if (
                         j < calc_funcStr_length - 1 &&
@@ -95,18 +92,10 @@ export function setFormulaCellInfo(
                         j += 1;
                     } else {
                         // If the next character is not ', it means the end of a single quote
-                        // if (calc_funcStr.charAt(i - 1) === "'") {//The last character after the paired single quote cannot be a single quote
-                        // ;//Go here to explain the formula error
                         point = j + 1;
                         formulaTextArray.push(calc_funcStr.substring(squote, point));
                         sq_end_array.push(formulaTextArray.length - 1);
                         squote = -1;
-                        // } else {
-                        //    point = i + 1;
-                        //    formulaTextArray.push(calc_funcStr.substring(squote, point));
-                        //    sq_end_array.push(formulaTextArray.length - 1);
-                        //    squote = -1;
-                        // }
                     }
                 }
             } else if (char === '"' && squote === -1) {
@@ -196,20 +185,16 @@ export function setFormulaCellInfo(
 
 export function executeAffectedFormulas(
     ctx: Context,
-    formulaRunList: any[],
-    calcChains: any
+    formulaRunList: FormulaCellInfo[],
+    calcChains: FormulaCell[]
 ) {
     const calcChainSet = new Set<string>();
-    calcChains.forEach((item: any) => {
+    calcChains.forEach((item) => {
         calcChainSet.add(`${item.r}_${item.c}_${item.id}`);
     });
 
     for (let i = 0; i < formulaRunList.length; i += 1) {
         const formulaCell = formulaRunList[i];
-        if (formulaCell.level === Math.max) {
-            continue;
-        }
-
         const {calc_funcStr} = formulaCell;
 
         const v = execfunction(
@@ -240,18 +225,18 @@ export function executeAffectedFormulas(
 }
 
 export function getFormulaRunList(
-    updateValueArray: any[],
-    formulaCellInfoMap: any
+    updateValueArray: FormulaCellInfo[],
+    formulaCellInfoMap: FormulaCellInfoMap
 ) {
     return getCalculationOrder(updateValueArray, formulaCellInfoMap);
 }
 
 export const arrayMatch = (
-    arrayMatchCache: any,
-    formulaDependency: any,
-    _formulaCellInfoMap: any,
-    _updateValueObjects: any,
-    func: any
+    arrayMatchCache: Record<string, Array<{ key: string; r: number; c: number; sheetId: string }>>,
+    formulaDependency: FormulaDependency[],
+    _formulaCellInfoMap: FormulaCellInfoMap | null,
+    _updateValueObjects: Record<string, unknown> | null,
+    func: (key: string, r: number, c: number, sheetId: string) => void
 ) => {
     matchDependencies(arrayMatchCache, formulaDependency, _formulaCellInfoMap, _updateValueObjects, func);
 };
