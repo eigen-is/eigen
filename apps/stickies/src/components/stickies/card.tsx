@@ -39,13 +39,21 @@ export function StickyCard({ card, canWrite = true, yjsDoc, ownerId, mountId, on
         disabled: !canWrite,
     });
 
+    const wasDragged = useRef(false);
+
+    useEffect(() => {
+        if (isDragging) wasDragged.current = true;
+    }, [isDragging]);
+
     const rotation = useMemo(() => hashRotation(card.id), [card.id]);
 
     const handleClick = (e: React.MouseEvent) => {
-        if (!isDragging) {
-            e.stopPropagation();
-            setIsDialogOpen(true);
+        if (wasDragged.current) {
+            wasDragged.current = false;
+            return;
         }
+        e.stopPropagation();
+        setIsDialogOpen(true);
     };
 
     return (

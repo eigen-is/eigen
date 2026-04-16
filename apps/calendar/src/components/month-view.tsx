@@ -6,6 +6,7 @@ import {
     getEventsForDay,
     getInviteStatus,
     getMonthRange,
+    isFreeBusyEvent,
     isToday,
     WEEKDAY_HEADERS,
 } from '@workspace/lib/calendar';
@@ -43,7 +44,7 @@ export function MonthView({
         const match = events.find(
             (e) => e.id === initialEventId || e.uid === initialEventId || e.data?.organizerEventId === initialEventId,
         );
-        if (match) {
+        if (match && !isFreeBusyEvent(match)) {
             didAutoOpen.current = true;
             setSelectedEvent(match);
             setDetailOpen(true);
@@ -61,6 +62,7 @@ export function MonthView({
 
     const handleEventClick = (event: CalendarEventOccurrence, e: React.MouseEvent) => {
         e.stopPropagation();
+        if (isFreeBusyEvent(event)) return;
         setSelectedEvent(event);
         setDetailOpen(true);
     };
@@ -125,14 +127,20 @@ export function MonthView({
 
                                         <div className="space-y-0.5">
                                             {visibleEvents.map((event, idx) => {
+                                                const freeBusy = isFreeBusyEvent(event);
                                                 const color = getCalendarColor(event, calendars, sharedCalendars);
-                                                const inviteStatus = getInviteStatus(event, user?.email);
+                                                const inviteStatus = freeBusy
+                                                    ? null
+                                                    : getInviteStatus(event, user?.email);
                                                 if (event.allDay) {
                                                     return (
                                                         <div
                                                             key={`${event.id}-${event.occurrenceDate}-${idx}`}
                                                             className={cn(
-                                                                'text-xs leading-tight px-1 py-0.5 rounded text-white truncate cursor-pointer hover:opacity-80',
+                                                                'text-xs leading-tight px-1 py-0.5 rounded text-white truncate',
+                                                                freeBusy
+                                                                    ? 'opacity-50 cursor-default'
+                                                                    : 'cursor-pointer hover:opacity-80',
                                                                 inviteStatus === 'pending' &&
                                                                     'border border-dashed border-current bg-transparent !text-foreground',
                                                                 inviteStatus === 'declined' && 'opacity-40',
@@ -153,7 +161,10 @@ export function MonthView({
                                                     <div
                                                         key={`${event.id}-${event.occurrenceDate}-${idx}`}
                                                         className={cn(
-                                                            'text-xs leading-tight flex items-center gap-1 truncate cursor-pointer hover:bg-accent rounded px-0.5',
+                                                            'text-xs leading-tight flex items-center gap-1 truncate rounded px-0.5',
+                                                            freeBusy
+                                                                ? 'opacity-50 cursor-default'
+                                                                : 'cursor-pointer hover:bg-accent',
                                                             inviteStatus === 'declined' && 'opacity-40',
                                                         )}
                                                         onClick={(e) => handleEventClick(event, e)}

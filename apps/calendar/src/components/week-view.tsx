@@ -6,6 +6,7 @@ import {
     getEventsForDay,
     getInviteStatus,
     getWeekRange,
+    isFreeBusyEvent,
     isToday,
     WEEKDAY_HEADERS,
 } from '@workspace/lib/calendar';
@@ -41,7 +42,7 @@ export function WeekView({
         const match = events.find(
             (e) => e.id === initialEventId || e.uid === initialEventId || e.data?.organizerEventId === initialEventId,
         );
-        if (match) {
+        if (match && !isFreeBusyEvent(match)) {
             didAutoOpen.current = true;
             setSelectedEvent(match);
             setDetailOpen(true);
@@ -53,6 +54,7 @@ export function WeekView({
 
     const handleEventClick = (event: CalendarEventOccurrence, e: React.MouseEvent) => {
         e.stopPropagation();
+        if (isFreeBusyEvent(event)) return;
         setSelectedEvent(event);
         setDetailOpen(true);
     };
@@ -102,13 +104,17 @@ export function WeekView({
                             >
                                 <div className="space-y-0.5">
                                     {allDayEvents.map((event, idx) => {
+                                        const freeBusy = isFreeBusyEvent(event);
                                         const color = getCalendarColor(event, calendars, sharedCalendars);
-                                        const inviteStatus = getInviteStatus(event, user?.email);
+                                        const inviteStatus = freeBusy ? null : getInviteStatus(event, user?.email);
                                         return (
                                             <div
                                                 key={`${event.id}-${event.occurrenceDate}-${idx}`}
                                                 className={cn(
-                                                    'text-xs leading-tight px-1.5 py-1 rounded text-white truncate cursor-pointer hover:opacity-80',
+                                                    'text-xs leading-tight px-1.5 py-1 rounded text-white truncate',
+                                                    freeBusy
+                                                        ? 'opacity-50 cursor-default'
+                                                        : 'cursor-pointer hover:opacity-80',
                                                     inviteStatus === 'pending' &&
                                                         'border border-dashed bg-transparent !text-foreground',
                                                     inviteStatus === 'declined' && 'opacity-40',
@@ -131,13 +137,17 @@ export function WeekView({
                                     )}
 
                                     {timedEvents.map((event, idx) => {
+                                        const freeBusy = isFreeBusyEvent(event);
                                         const color = getCalendarColor(event, calendars, sharedCalendars);
-                                        const inviteStatus = getInviteStatus(event, user?.email);
+                                        const inviteStatus = freeBusy ? null : getInviteStatus(event, user?.email);
                                         return (
                                             <div
                                                 key={`${event.id}-${event.occurrenceDate}-${idx}`}
                                                 className={cn(
-                                                    'text-sm leading-tight flex items-start gap-1.5 py-0.5 px-0.5 cursor-pointer hover:bg-accent rounded',
+                                                    'text-sm leading-tight flex items-start gap-1.5 py-0.5 px-0.5 rounded',
+                                                    freeBusy
+                                                        ? 'opacity-50 cursor-default'
+                                                        : 'cursor-pointer hover:bg-accent',
                                                     inviteStatus === 'declined' && 'opacity-40',
                                                 )}
                                                 onClick={(e) => handleEventClick(event, e)}

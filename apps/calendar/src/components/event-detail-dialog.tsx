@@ -7,6 +7,7 @@ import {
     useRsvp,
     useUpdateEvent,
 } from '@workspace/lib/calendar';
+import { formatTime } from '@workspace/lib/date';
 import { useMyTeams } from '@workspace/lib/home';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
 import { Button } from '@workspace/ui/components/button';
@@ -42,50 +43,32 @@ type EventDetailDialogProps = {
     sharedCalendar?: SharedCalendar | null;
 };
 
-function formatTime(timestamp: number, allDay: boolean): string {
-    if (allDay) {
-        return new Date(timestamp * 1000).toLocaleDateString('en', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-            timeZone: 'UTC',
-        });
-    }
-    return new Date(timestamp * 1000).toLocaleString('en', {
+function formatFullDate(timestamp: number): string {
+    return new Date(timestamp * 1000).toLocaleDateString('en', {
         weekday: 'long',
         year: 'numeric',
         month: 'long',
         day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
+        timeZone: 'UTC',
     });
 }
 
 function formatTimeRange(event: CalendarEventOccurrence): string {
     if (event.allDay) {
-        const start = formatTime(event.startTime, true);
+        const start = formatFullDate(event.startTime);
         const endDate = new Date((event.endTime - 86400) * 1000);
         const startDate = new Date(event.startTime * 1000);
         if (startDate.toDateString() === endDate.toDateString()) {
             return start;
         }
-        return `${start} — ${formatTime(event.endTime - 86400, true)}`;
+        return `${start} — ${formatFullDate(event.endTime - 86400)}`;
     }
     const startStr = new Date(event.startTime * 1000).toLocaleString('en', {
         weekday: 'long',
         month: 'long',
         day: 'numeric',
     });
-    const startTime = new Date(event.startTime * 1000).toLocaleTimeString('en', {
-        hour: '2-digit',
-        minute: '2-digit',
-    });
-    const endTime = new Date(event.endTime * 1000).toLocaleTimeString('en', {
-        hour: '2-digit',
-        minute: '2-digit',
-    });
-    return `${startStr} · ${startTime} – ${endTime}`;
+    return `${startStr} · ${formatTime(new Date(event.startTime * 1000))} – ${formatTime(new Date(event.endTime * 1000))}`;
 }
 
 export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedCalendar }: EventDetailDialogProps) {

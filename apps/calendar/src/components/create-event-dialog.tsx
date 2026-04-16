@@ -103,8 +103,20 @@ export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCale
         const minEndMinutes = timeToMinutes(minEnd);
 
         if (currentEndMinutes < minEndMinutes) {
-            setEndTime(addMinutes(newStart, 30));
+            const newEnd = addMinutes(newStart, 30);
+            setEndTime(newEnd);
+            const wraps = timeToMinutes(newEnd) <= timeToMinutes(newStart);
+            const d = new Date(`${startDate}T00:00`);
+            if (wraps) d.setDate(d.getDate() + 1);
+            setEndDate(toLocalDateString(d));
         }
+    };
+
+    const handleEndTimeChange = (newEnd: string, dayOffset: number) => {
+        setEndTime(newEnd);
+        const d = new Date(`${startDate}T00:00`);
+        if (dayOffset > 0) d.setDate(d.getDate() + dayOffset);
+        setEndDate(toLocalDateString(d));
     };
 
     const getMinEndTime = () => {
@@ -202,7 +214,7 @@ export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCale
                                     <span className="text-muted-foreground text-sm">–</span>
                                     <TimeSelect
                                         value={endTime}
-                                        onChange={setEndTime}
+                                        onChange={handleEndTimeChange}
                                         referenceTime={startTime}
                                         minTime={getMinEndTime()}
                                     />

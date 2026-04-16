@@ -3,6 +3,7 @@ import { calendarApi } from '@workspace/lib/api';
 import type {
     CalendarEventOccurrence,
     CreateEventInput,
+    FreeBusyBlock,
     SharedCalendar,
     UpdateCalendarInput,
     UpdateEventInput,
@@ -10,6 +11,7 @@ import type {
 } from '@workspace/lib/types/calendar';
 import { AppError, onMutationError } from '../../api-error';
 import { invalidateHomeSize } from '../../home';
+import { formatFreeBusyTitle, toISODateString } from '../calendar-utils';
 
 export const calendarKeys = {
     all: ['calendar'] as const,
@@ -175,7 +177,7 @@ export function useCalendarAccess(ownerId: string, calendarId: string, enabled =
 }
 
 export function useAllSharedCalendarEvents(sharedCalendars: SharedCalendar[], from: number, to: number) {
-    const visibleShared = sharedCalendars.filter((sc) => sc.visible && sc.permission !== 'free-busy');
+    const visibleShared = sharedCalendars.filter((sc) => sc.visible);
 
     const results = useQueries({
         queries: visibleShared.map((sc) => ({
@@ -185,7 +187,36 @@ export function useAllSharedCalendarEvents(sharedCalendars: SharedCalendar[], fr
                     .calendars({ calId: sc.calendarId })
                     ['event-range']({ from: String(from) })({ to: String(to) })
                     .get();
-                return (response.data || []) as CalendarEventOccurrence[];
+                const data = response.data || [];
+                if (sc.permission === 'free-busy') {
+                    return (data as FreeBusyBlock[]).map(
+                        (block): CalendarEventOccurrence => ({
+                            id: '',
+                            calendarId: sc.calendarId,
+                            uid: '',
+                            uri: '',
+                            title: block.allDay ? 'Busy' : formatFreeBusyTitle(block.endTime),
+                            description: null,
+                            location: null,
+                            startTime: block.startTime,
+                            endTime: block.endTime,
+                            allDay: block.allDay,
+                            rrule: null,
+                            timezone: null,
+                            parentEventId: null,
+                            recurrenceDate: null,
+                            status: block.status,
+                            sequence: 0,
+                            etag: '',
+                            data: null,
+                            createByUserId: null,
+                            createdAt: 0,
+                            updatedAt: 0,
+                            occurrenceDate: toISODateString(new Date(block.startTime * 1000)),
+                        }),
+                    );
+                }
+                return data as CalendarEventOccurrence[];
             },
             staleTime: 2 * 60 * 1000,
             enabled: from > 0 && to > 0,
