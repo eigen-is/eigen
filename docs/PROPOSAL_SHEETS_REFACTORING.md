@@ -3,6 +3,27 @@
 Refactoring plan for `packages/fortune-sheet/` to extract a headless formula engine and number formatting
 system, improve code quality, and enable server-side formula recalculation for the Document Content Layer.
 
+## TODO: Complete Engine Extraction
+
+The `engine/` directory (Steps 1-5) is done, but several pure calculation functions still live in                                                                                                                                               
+`formula-ui.ts` and take `Context` instead of `CellResolver`. Until these are migrated, the server-side                                                                                                                                         
+engine cannot handle array formulas, batch recalculation, or formula range rewriting.                                                                                                                                                           
+                                                                                                                                                                                                                                                
+Functions to migrate to `engine/` (all pure — zero DOM, just Context-coupled):                                                                                                                                                                  
+                                                                                                                                                                                                                                                
+- **`isFunctionRange`** — rewrites formulas with array operations (e.g. `luckysheet_getarraydata`)                                                                                                                                              
+- **`getcellrange`** — parses cell reference text (e.g. "A1:B3") to row/col range objects                                                                                                                                                       
+- **`execFunctionGroup`** — orchestrates batch recalculation using dependency graph                                                                                                                                                             
+- **`groupValuesRefresh`** — applies computed formula values back to cell data                                                                                                                                                                  
+- **`insertUpdateFunctionGroup`** — registers formula cells in the calculation chain                                                                                                                                                            
+- **`getAllFunctionGroup`** — collects all formula cells across sheets                                                                                                                                                                          
+                                                                                                                                                                                                                                                
+The transformation is the same pattern used for parser event handlers: replace `Context` / `getFlowdata(ctx)`                                                                                                                                   
+parameters with `CellResolver`. This was proven in Step 4 and is mechanical — no logic changes needed.                                                                                                                                          
+                                                                                                                                                                                                                                                
+**Until this is done, `FormulaEngine.evaluate()` handles individual formulas but cannot do full-sheet
+recalculation or array formula evaluation on the server.** 
+
 ## Verification Status
 
 All critical assumptions have been verified by reading source code:
