@@ -80,15 +80,16 @@ export function FileMenu({
                     <Button variant="ghost">File</Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start">
+                    {/* Section 1: Create & Open */}
                     <DropdownMenuItem onClick={() => rootFolder && setCreateOpen(true)}>
                         <FileText className="h-4 w-4 mr-2" /> {createLabel}
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => navigate({ to: `/` })}>
                         <Folder className="h-4 w-4 mr-2" /> Open
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setRenameOpen(true)}>
-                        <Pencil className="h-4 w-4 mr-2" /> Rename
-                    </DropdownMenuItem>
+
+                    {/* Section 2: Export & Rename */}
+                    <DropdownMenuSeparator />
                     {onExport && (
                         <DropdownMenuSub>
                             <DropdownMenuSubTrigger>
@@ -103,6 +104,11 @@ export function FileMenu({
                             </DropdownMenuSubContent>
                         </DropdownMenuSub>
                     )}
+                    <DropdownMenuItem onClick={() => setRenameOpen(true)}>
+                        <Pencil className="h-4 w-4 mr-2" /> Rename
+                    </DropdownMenuItem>
+
+                    {/* Section 3: Share */}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={onAccessDialogOpen}>
                         <UserRoundPlus className="h-4 w-4 mr-2" /> Share
@@ -112,6 +118,9 @@ export function FileMenu({
                             <Mail className="h-4 w-4 mr-2" /> Email collaborators
                         </DropdownMenuItem>
                     )}
+
+                    {/* Section 4: Version history & Print */}
+                    {(onRestore || children) && <DropdownMenuSeparator />}
                     {onRestore && (
                         <DropdownMenuSub>
                             <DropdownMenuSubTrigger>
@@ -140,11 +149,13 @@ export function FileMenu({
                         </DropdownMenuSub>
                     )}
                     {children}
+
+                    {/* Section 5: Move to bin */}
                     {canWrite && (
                         <>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={() => setDeleteOpen(true)}>
-                                <Trash2 className="h-4 w-4 mr-2" /> Delete
+                                <Trash2 className="h-4 w-4 mr-2" /> Move to bin
                             </DropdownMenuItem>
                         </>
                     )}
