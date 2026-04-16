@@ -1,7 +1,7 @@
 import _ from "lodash";
 import {Context, getFlowdata} from "../context";
 import {locale} from "../locale";
-import {delFunctionGroup, execfunction, execFunctionGroup, functionCopy,} from "../modules/formula";
+import {delFunctionGroup, execfunction, execFunctionGroup, functionCopy,} from "../modules/formula-ui";
 import {getdatabyselection, getQKBorder} from "../modules/cell";
 import {genarate, update} from "../../engine/format";
 import {normalizeSelection, selectionCache} from "../modules/selection";

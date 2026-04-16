@@ -2,7 +2,7 @@ import _ from "lodash";
 import {Context, getFlowdata} from "../context";
 import {getSheetIndex, isAllowEdit} from "../utils";
 import {mergeBorder} from "./cell";
-import {getcellrange, iscelldata} from "./formula";
+import {getcellrange, iscelldata} from "./formula-ui";
 import {colLocation, rowLocation} from "./location";
 import {normalizeSelection} from "./selection";
 import {changeSheet} from "./sheet";

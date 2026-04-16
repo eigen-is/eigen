@@ -1,6 +1,6 @@
 import {Context, getFlowdata} from "../context";
 import {CellMatrix, Selection} from "../types";
-import {execFunctionGroup} from "./formula";
+import {execFunctionGroup} from "./formula-ui";
 import {setFormulaCellInfo} from "./formulaHelper";
 
 function runExecFunction(

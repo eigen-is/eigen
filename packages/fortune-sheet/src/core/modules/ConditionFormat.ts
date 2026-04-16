@@ -4,7 +4,7 @@ import {CellMatrix, Sheet} from "../types";
 import {getSheetIndex} from "../utils";
 import {getCellValue, getRangeByTxt} from "./cell";
 import {genarate} from "../../engine/format";
-import {execfunction, functionCopy} from "./formula";
+import {execfunction, functionCopy} from "./formula-ui";
 import {checkProtectionFormatCells} from "./protection";
 import {isRealNull} from "./validation";
 

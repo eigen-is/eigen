@@ -4,7 +4,7 @@ export * from "./cell";
 export * from "./clipboard";
 export * from "./color";
 export * from "./cursor";
-export * from "./formula";
+export * from "./formula-ui";
 export * from "./freeze";
 export * from "./inline-string";
 export * from "./location";
