@@ -12,7 +12,7 @@ import { createMountConfig } from '../mount';
 import { checkS3Connection } from '../storage/s3-storage';
 import { Home } from './home';
 
-export function getSyntheticTeamUser(ownerId: string): User {
+export function getSyntheticTeamUser(ownerId: string, teamName?: string): User {
     const parsed = parseOwnerId(ownerId);
     if (!parsed || parsed.type !== 'team') {
         throw new ApiError(400, 'Invalid teamId format');
@@ -20,7 +20,7 @@ export function getSyntheticTeamUser(ownerId: string): User {
 
     return {
         id: ownerId,
-        name: ownerId,
+        name: teamName || ownerId,
         email: '',
         emailVerified: false,
         createdAt: new Date(),

@@ -93,8 +93,7 @@ async function getTextPreviewData(mount: Mount, drivePath: DrivePath): Promise<T
 
     // Cache hit
     if (fs.existsSync(cacheFile)) {
-        const cached = JSON.parse(await Bun.file(cacheFile).text());
-        return cached as TextPreviewResult;
+        return (await Bun.file(cacheFile).json()) as TextPreviewResult;
     }
 
     // Read file as text directly — no intermediate ArrayBuffer
@@ -124,7 +123,7 @@ async function getOrCachePreview(
     const cacheFile = path.join(mount.previewsDir, getTextCacheKey(drivePath.id, drivePath.updatedAt));
 
     if (fs.existsSync(cacheFile)) {
-        return JSON.parse(await Bun.file(cacheFile).text()) as TextPreviewResult;
+        return (await Bun.file(cacheFile).json()) as TextPreviewResult;
     }
 
     try {
