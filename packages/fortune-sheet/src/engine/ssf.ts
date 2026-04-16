@@ -11,7 +11,7 @@ interface SSFInterface {
     load_table: (tbl: any) => void;
     load_table_into: (tbl: any) => void;
     parse_date_code: (v: number, fmt?: any, opts?: any) => any;
-    is_date: (fmt: number) => boolean;
+    is_date: (fmt: number | string) => boolean;
     _table: any;
     tables: any[];
     _general_int: (v: number) => string;
