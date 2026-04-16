@@ -117,3 +117,7 @@ export function usePreview() {
     if (!context) throw new Error('usePreview must be used within a PreviewProvider');
     return context;
 }
+
+export function useOptionalPreview() {
+    return useContext(PreviewContext);
+}
