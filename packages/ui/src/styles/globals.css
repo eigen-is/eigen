@@ -228,14 +228,13 @@
     }
 
     .eigen-list-item {
-        @apply bg-background cursor-pointer select-none transition-all duration-150;
+        @apply bg-background cursor-pointer select-none;
         box-shadow: inset 2px 0 0 0 transparent;
     }
 
     .eigen-list-item:hover {
-        @apply bg-muted/50;
+        @apply bg-muted;
         box-shadow: inset 2px 0 0 0 var(--color-muted-foreground);
-        opacity: 0.85;
     }
 
     .eigen-list-item-active {
