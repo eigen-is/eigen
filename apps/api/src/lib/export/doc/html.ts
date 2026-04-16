@@ -168,8 +168,8 @@ table { border-collapse: collapse; border-spacing: 0; }
 
 body {
     font-family: "Inter", system-ui, -apple-system, sans-serif;
-    font-size: 1rem;
-    line-height: 1.7;
+    font-size: 11pt;
+    line-height: 1.5;
     color: #1a1a2e;
     margin: 0;
     padding: 0;
