@@ -30,7 +30,7 @@ export async function propagateInvitation(
         if (attendee.email.toLowerCase() === organizerEmail) continue;
         try {
             const targetUser = await getUserByEmail(attendee.email);
-            if (!targetUser) {
+            if (!targetUser || targetUser.role === 'guest') {
                 await addRegistryEntry(organizerHome.user.id, attendee.email);
                 // Send iMIP invite email to external attendee
                 const organizer = { userId: user.id, email: user.email, name: user.name ?? undefined };
@@ -71,7 +71,7 @@ export async function propagateInvitation(
         if (attendee.email.toLowerCase() === organizerEmail) continue;
         try {
             const targetUser = await getUserByEmail(attendee.email);
-            if (!targetUser) {
+            if (!targetUser || targetUser.role === 'guest') {
                 const organizer = { userId: user.id, email: user.email, name: user.name ?? undefined };
                 const mail = composeCancelEmail(event, organizer, [attendee]);
                 sendMail(mail).catch((err) => console.error('Failed to send iMIP cancel:', err));
@@ -91,7 +91,7 @@ export async function propagateInvitation(
         if (attendee.email.toLowerCase() === organizerEmail) continue;
         try {
             const targetUser = await getUserByEmail(attendee.email);
-            if (!targetUser) {
+            if (!targetUser || targetUser.role === 'guest') {
                 const organizer = { userId: user.id, email: user.email, name: user.name ?? undefined };
                 const mail = composeUpdateEmail(event, organizer, [attendee]);
                 sendMail(mail).catch((err) => console.error('Failed to send iMIP update:', err));
@@ -146,7 +146,7 @@ export async function propagateCancellation(organizerHome: Home, event: Calendar
     for (const attendee of attendees) {
         try {
             const targetUser = await getUserByEmail(attendee.email);
-            if (!targetUser) {
+            if (!targetUser || targetUser.role === 'guest') {
                 const organizer = {
                     userId: organizerHome.user.id,
                     email: organizerHome.user.email,
