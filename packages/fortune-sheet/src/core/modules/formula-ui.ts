@@ -1,5 +1,4 @@
 import _ from "lodash";
-// @ts-ignore
 import {ERROR_REF, Parser} from "../../formula-parser";
 import type {
     Cell,
@@ -64,7 +63,7 @@ export class FormulaCache {
 
     data_parm_index: number;
 
-    cellTextToIndexList: any;
+    cellTextToIndexList: Record<string, FormulaDependency>;
 
     rangechangeindex?: number;
 
@@ -496,13 +495,10 @@ function checkSpecialFunctionRange(
                 .split("'")[0];
 
             const str_nb = _.trim(str);
-            // console.log(function_str, tempFunc,str, this.iscelldata(str_nb),this.isFunctionRangeSave,r,c);
             if (iscelldata(str_nb)) {
                 if (typeof cellRangeFunction === "function") {
                     cellRangeFunction(str_nb);
                 }
-                // this.isFunctionRangeSaveChange(str, r, c, index, dynamicArray_compute);
-                // console.log(function_str, str, this.isFunctionRangeSave,r,c);
             }
         } catch {
         }
@@ -535,9 +531,6 @@ export function isFunctionRange(
         compare: 0,
         braces: 0,
     };
-
-    // let luckysheetfile = getluckysheetfile();
-    // let dynamicArray_compute = luckysheetfile[getSheetIndex(Store.currentSheetId)_.isNil(]["dynamicArray_compute"]) ? {} : luckysheetfile[getSheetIndex(Store.currentSheetId)]["dynamicArray_compute"];
 
     // bracket: 0 = operator bracket, 1 = function bracket
     const cal1: any[] = [];
@@ -583,9 +576,6 @@ export function isFunctionRange(
             bracket.pop();
 
             if (bracket.length === 0) {
-                // function_str += _this.isFunctionRange(str,r,c, index,dynamicArray_compute,cellRangeFunction) + ")";
-                // str = "";
-
                 let functionS = isFunctionRange(
                     ctx,
                     str,
@@ -661,9 +651,6 @@ export function isFunctionRange(
             matchConfig.braces === 0
         ) {
             if (bracket.length <= 1) {
-                // function_str += _this.isFunctionRange(str, r, c, index,dynamicArray_compute,cellRangeFunction) + ",";
-                // str = "";
-
                 let functionS = isFunctionRange(
                     ctx,
                     str,
@@ -904,10 +891,6 @@ export function delFunctionGroup(
             if (calc.r === r && calc.c === c && calc.id === id) {
                 calcChainClone.splice(i, 1);
                 modified = true;
-                // server.saveParam("fc", index, calc, {
-                //   op: "del",
-                //   pos: i,
-                // });
                 break;
             }
         }
@@ -929,10 +912,6 @@ export function delFunctionGroup(
             ) {
                 dynamicArrayClone.splice(i, 1);
                 modified = true;
-                // server.saveParam("ac", index, null, {
-                //   op: "del",
-                //   pos: i,
-                // });
                 break;
             }
         }
@@ -998,12 +977,6 @@ export function insertUpdateFunctionGroup(
         id = ctx.currentSheetId;
     }
 
-    // let func = getcellFormula(ctx, r, c, id);
-    // if (_.isNil(func) || func.length==0) {
-    //     this.delFunctionGroup(r, c, index);
-    //     return;
-    // }
-
     const {luckysheetfile} = ctx;
     const idx = getSheetIndex(ctx, id);
     if (_.isNil(idx)) {
@@ -1022,10 +995,6 @@ export function insertUpdateFunctionGroup(
         for (let i = 0; i < calcChain.length; i += 1) {
             const calc = calcChain[i];
             if (calc.r === r && calc.c === c && calc.id === id) {
-                // server.saveParam("fc", index, calc, {
-                //   op: "update",
-                //   pos: i,
-                // });
                 return;
             }
         }
@@ -1038,11 +1007,6 @@ export function insertUpdateFunctionGroup(
     };
     calcChain.push(cc);
     file.calcChain = calcChain;
-
-    // server.saveParam("fc", index, cc, {
-    //   op: "add",
-    //   pos: file.calcChain.length - 1,
-    // });
     ctx.luckysheetfile = luckysheetfile;
 }
 
@@ -1104,22 +1068,6 @@ export function execfunction(
         }
     }
 
-    /*
-  if (sparklines) {
-    return [true, result, txt, { type: "sparklines", data: sparklines }];
-  }
-
-  if (dynamicArrayItem) {
-    return [
-      true,
-      result,
-      txt,
-      { type: "dynamicArrayItem", data: dynamicArrayItem },
-    ];
-  }
-  */
-
-    // console.log(result, txt);
     return [true, _.isNil(formulaError) ? result : formulaError, txt];
 }
 
@@ -1184,13 +1132,8 @@ export function groupValuesRefresh(ctx: Context) {
             updateValue.v = item.v;
             updateValue.f = item.f;
             setCellValue(ctx, item.r, item.c, data, updateValue);
-            // server.saveParam("v", item.id, data[item.r][item.c], {
-            //     "r": item.r,
-            //     "c": item.c
-            // });
         }
 
-        // editor.webWorkerFlowDataCache(Store.flowdata); // store data to worker
         ctx.groupValuesRefreshData = [];
     }
 }
@@ -1676,19 +1619,6 @@ function searchFunction(ctx: Context, searchtxt: string) {
     }
 
     ctx.functionCandidates = list;
-
-    // const listHTML = _this.searchFunctionHTML(list);
-    // $("#luckysheet-formula-search-c").html(listHTML).show();
-    // $("#luckysheet-formula-help-c").hide();
-
-    // const $c = $editer.parent();
-    // const offset = $c.offset();
-    // _this.searchFunctionPosition(
-    //   $("#luckysheet-formula-search-c"),
-    //   $c,
-    //   offset.left,
-    //   offset.top
-    // );
 }
 
 export function getrangeseleciton() {
@@ -1746,51 +1676,6 @@ function helpFunctionExe(
     ctx: Context
 ) {
     const {functionlist} = locale(ctx);
-    // let _locale = locale();
-    // let locale_formulaMore = _locale.formulaMore;
-    // if ($("#luckysheet-formula-help-c").length === 0) {
-    //   $("body").after(
-    //     replaceHtml(_this.helpHTML, {
-    //       helpClose: locale_formulaMore.helpClose,
-    //       helpCollapse: locale_formulaMore.helpCollapse,
-    //       helpExample: locale_formulaMore.helpExample,
-    //       helpAbstract: locale_formulaMore.helpAbstract,
-    //     })
-    //   );
-    //   $("#luckysheet-formula-help-c .luckysheet-formula-help-close").click(
-    //     function () {
-    //       $("#luckysheet-formula-help-c").hide();
-    //     }
-    //   );
-    //   $("#luckysheet-formula-help-c .luckysheet-formula-help-collapse").click(
-    //     function () {
-    //       let $content = $(
-    //         "#luckysheet-formula-help-c .luckysheet-formula-help-content"
-    //       );
-    //       $content.slideToggle(100, function () {
-    //         let $c = _this.rangeResizeTo.parent(),
-    //           offset = $c.offset();
-    //         _this.searchFunctionPosition(
-    //           $("#luckysheet-formula-help-c"),
-    //           $c,
-    //           offset.left,
-    //           offset.top,
-    //           true
-    //         );
-    //       });
-
-    //       if ($content.is(":hidden")) {
-    //         $(this).html('<i class="fa fa-angle-up" aria-hidden="true"></i>');
-    //       } else {
-    //         $(this).html('<i class="fa fa-angle-down" aria-hidden="true"></i>');
-    //       }
-    //     }
-    //   );
-
-    //   for (let i = 0; i < functionlist.length; i++) {
-    //     functionlistPosition[functionlist[i].n] = i;
-    //   }
-    // }
     if (_.isEmpty(ctx.formulaCache.functionlistMap)) {
         for (let i = 0; i < functionlist.length; i += 1) {
             ctx.formulaCache.functionlistMap[functionlist[i].n] = functionlist[i];
@@ -1868,16 +1753,6 @@ function helpFunctionExe(
 
 export function rangeHightlightselected(ctx: Context, $editor: HTMLDivElement) {
     const currSelection = getrangeseleciton();
-    // $("#luckysheet-formula-search-c, #luckysheet-formula-help-c").hide();
-    // $(
-    //   "#fortune-formula-functionrange .fortune-formula-functionrange-highlight .fortune-selection-copy-hc"
-    // ).css("opacity", "0.03");
-    // $("#luckysheet-formula-search-c, #luckysheet-formula-help-c").hide();
-
-    // if (
-    //   $(currSelection).closest(".fortune-formula-functionrange-cell").length ==
-    //   0
-    // ) {
     if (!currSelection) return;
 
     const currText = _.trim(currSelection.textContent || "");
@@ -1889,18 +1764,6 @@ export function rangeHightlightselected(ctx: Context, $editor: HTMLDivElement) {
         ctx.functionHint = funcName?.toUpperCase();
         ctx.functionCandidates = [];
     }
-    // return;
-    // }
-
-    // const $anchorOffset = $(currSelection).closest(
-    //   ".fortune-formula-functionrange-cell"
-    // );
-    // const rangeindex = $anchorOffset.attr("rangeindex");
-    // const rangeid = `fortune-formula-functionrange-highlight-${rangeindex}`;
-
-    // $(`#${rangeid}`).find(".fortune-selection-copy-hc").css({
-    //   opacity: "0.13",
-    // });
 }
 
 function functionHTML(txt: string) {
@@ -2161,10 +2024,6 @@ export function handleFormulaInput(
     preText?: string,
     refreshRangeSelect = true
 ) {
-    // if (isEditMode()) {
-    //   // The formula bar is disabled in this mode
-    //   return;
-    // }
     let value1: string;
     const value1txt = preText ?? $editor.innerText;
     let value = $editor.innerText;
@@ -2762,7 +2621,6 @@ export function rangeSetValue(
             ctx.formulaCache.rangetosheet
         );
     }
-    // let $editor;
 
     if (
         !israngeseleciton(ctx) &&
@@ -2770,112 +2628,6 @@ export function rangeSetValue(
             ctx.formulaCache.rangedrag_column_start ||
             ctx.formulaCache.rangedrag_row_start)
     ) {
-        //   if (
-        //     $("#luckysheet-search-formula-parm").is(":visible") ||
-        //     $("#luckysheet-search-formula-parm-select").is(":visible")
-        //   ) {
-        //     // Select range in formula parameter box
-        //     $editor = $("#luckysheet-rich-text-editor");
-        //     $("#luckysheet-search-formula-parm-select-input").val(range);
-        //     $("#luckysheet-search-formula-parm .parmBox")
-        //       .eq(formulaCache.data_parm_index)
-        //       .find(".txt input")
-        //       .val(range);
-
-        //     // Display the value corresponding to the parameter
-        //     const txtdata = luckysheet_getcelldata(range).data;
-        //     if (txtdata instanceof Array) {
-        //       // Parameter is a multi-cell selection
-        //       const txtArr = [];
-
-        //       for (let i = 0; i < txtdata.length; i += 1) {
-        //         for (let j = 0; j < txtdata[i].length; j += 1) {
-        //           if (txtdata[i][j] == null) {
-        //             txtArr.push(null);
-        //           } else {
-        //             txtArr.push(txtdata[i][j].v);
-        //           }
-        //         }
-        //       }
-
-        //       $("#luckysheet-search-formula-parm .parmBox")
-        //         .eq(formulaCache.data_parm_index)
-        //         .find(".val")
-        //         .text(` = {${txtArr.join(",")}}`);
-        //     } else {
-        //       // Parameter is a single-cell selection
-        //       $("#luckysheet-search-formula-parm .parmBox")
-        //         .eq(formulaCache.data_parm_index)
-        //         .find(".val")
-        //         .text(` = {${txtdata.v}}`);
-        //     }
-
-        //     // Display calculation result
-        //     let isVal = true; // parameter is not empty
-        //     const parmValArr = []; // collection of parameter values
-        //     let lvi = -1; // index of the last parameter with a value
-        //     $("#luckysheet-search-formula-parm .parmBox").each(function (i, e) {
-        //       const parmtxt = $(e).find(".txt input").val();
-        //       if (
-        //         parmtxt === "" &&
-        //         $(e).find(".txt input").attr("data_parm_require") === "m"
-        //       ) {
-        //         isVal = false;
-        //       }
-        //       if (parmtxt !== "") {
-        //         lvi = i;
-        //       }
-        //     });
-
-        // Cell display
-        //     let functionHtmlTxt;
-        //     if (lvi === -1) {
-        //       functionHtmlTxt = `=${$(
-        //         "#luckysheet-search-formula-parm .luckysheet-modal-dialog-title-text"
-        //       ).text()}()`;
-        //     } else if (lvi === 0) {
-        //       functionHtmlTxt = `=${$(
-        //         "#luckysheet-search-formula-parm .luckysheet-modal-dialog-title-text"
-        //       ).text()}(${$("#luckysheet-search-formula-parm .parmBox")
-        //         .eq(0)
-        //         .find(".txt input")
-        //         .val()})`;
-        //     } else {
-        //       for (let j = 0; j <= lvi; j += 1) {
-        //         parmValArr.push(
-        //           $("#luckysheet-search-formula-parm .parmBox")
-        //             .eq(j)
-        //             .find(".txt input")
-        //             .val()
-        //         );
-        //       }
-        //       functionHtmlTxt = `=${$(
-        //         "#luckysheet-search-formula-parm .luckysheet-modal-dialog-title-text"
-        //       ).text()}(${parmValArr.join(",")})`;
-        //     }
-
-        //     const function_str = functionHTMLGenerate(functionHtmlTxt);
-        //     $("#luckysheet-rich-text-editor").html(function_str);
-        //     $("#luckysheet-functionbox-cell").html(
-        //       $("#luckysheet-rich-text-editor").html()
-        //     );
-
-        //     if (isVal) {
-        //       // Formula calculation
-        //       const fp = _.trim(
-        //         functionParserExe($("#luckysheet-rich-text-editor").text())
-        //       );
-        //       const result = new Function(`return ${fp}`)();
-        //       $("#luckysheet-search-formula-parm .result span").text(result);
-        //     }
-        //   } else {
-        // const currSelection = window.getSelection();
-        // const anchorOffset = currSelection!.anchorNode;
-        // $editor = $(anchorOffset).closest("div");
-
-        // const $span = $editor
-        //   .find(`span[rangeindex='${formulaCache.rangechangeindex}']`)
-        //   .html(range);
         const span = $editor.querySelector(
             `span[rangeindex='${ctx.formulaCache.rangechangeindex}']`
         ) as HTMLSpanElement;
@@ -2883,7 +2635,6 @@ export function rangeSetValue(
             span.innerHTML = range;
             setCaretPosition(ctx, span, 0, range.length);
         }
-        //   }
     } else {
         const function_str = `<span class="fortune-formula-functionrange-cell" rangeindex="${functionHTMLIndex}" dir="auto" style="color:${colors[functionHTMLIndex]};">${range}</span>`;
         const newEle = parseElement(function_str);
@@ -3027,17 +2778,6 @@ export function rangeDrag(
         columnseleted = [func_selectedrange.column[0], col_index];
     }
 
-    // rowseleted[0] = luckysheetFreezen.changeFreezenIndex(rowseleted[0], "h");
-    // rowseleted[1] = luckysheetFreezen.changeFreezenIndex(rowseleted[1], "h");
-    // columnseleted[0] = luckysheetFreezen.changeFreezenIndex(
-    //   columnseleted[0],
-    //   "v"
-    // );
-    // columnseleted[1] = luckysheetFreezen.changeFreezenIndex(
-    //   columnseleted[1],
-    //   "v"
-    // );
-
     const changeparam = mergeMoveMain(
         ctx,
         columnseleted,
@@ -3061,18 +2801,6 @@ export function rangeDrag(
     func_selectedrange.top_move = top;
     func_selectedrange.height_move = height;
 
-    // luckysheet_count_show(left, top, width, height, rowseleted, columnseleted);
-
-    // if ($("#luckysheet-ifFormulaGenerator-multiRange-dialog").is(":visible")) {
-    //   // IF formula generator: select range
-    //   const range = getRangetxt(
-    //     ctx,
-    //     ctx.currentSheetId,
-    //     { row: rowseleted, column: columnseleted },
-    //     ctx.currentSheetId
-    //   );
-    //   $("#luckysheet-ifFormulaGenerator-multiRange-dialog input").val(range);
-    // } else {
     rangeSetValue(
         ctx,
         cellInput,
@@ -3084,9 +2812,6 @@ export function rangeDrag(
     );
 
     setRangeSelect(container, left, top, height, width);
-    // }
-
-    // luckysheetFreezen.scrollFreezen(rowseleted, columnseleted);
     e.preventDefault();
 }
 
@@ -3136,17 +2861,6 @@ export function rangeDragColumn(
         columnseleted = [func_selectedrange.column[0], col_index];
     }
 
-    // // rowseleted[0] = luckysheetFreezen.changeFreezenIndex(rowseleted[0], "h");
-    // // rowseleted[1] = luckysheetFreezen.changeFreezenIndex(rowseleted[1], "h");
-    // columnseleted[0] = luckysheetFreezen.changeFreezenIndex(
-    //   columnseleted[0],
-    //   "v"
-    // );
-    // columnseleted[1] = luckysheetFreezen.changeFreezenIndex(
-    //   columnseleted[1],
-    //   "v"
-    // );
-
     const changeparam = mergeMoveMain(
         ctx,
         columnseleted,
@@ -3160,25 +2874,11 @@ export function rangeDragColumn(
     if (changeparam != null) {
         // @ts-ignore
         [columnseleted, , , , left, width] = changeparam;
-        // rowseleted= changeparam[1];
-        // top = changeparam[2];
-        // height = changeparam[3];
-        // left = changeparam[4];
-        // width = changeparam[5];
     }
 
     func_selectedrange.column = columnseleted;
     func_selectedrange.left_move = left;
     func_selectedrange.width_move = width;
-
-    // luckysheet_count_show(
-    //   left,
-    //   row_pre,
-    //   width,
-    //   row - row_pre - 1,
-    //   [0, row_index],
-    //   columnseleted
-    // );
 
     rangeSetValue(
         ctx,
@@ -3191,8 +2891,6 @@ export function rangeDragColumn(
     );
 
     setRangeSelect(container, left, row_pre, row - row_pre - 1, width);
-
-    // luckysheetFreezen.scrollFreezen([0, row_index], columnseleted);
 }
 
 export function rangeDragRow(
@@ -3242,11 +2940,6 @@ export function rangeDragRow(
         rowseleted = [func_selectedrange.row[0], row_index];
     }
 
-    // rowseleted[0] = luckysheetFreezen.changeFreezenIndex(rowseleted[0], "h");
-    // rowseleted[1] = luckysheetFreezen.changeFreezenIndex(rowseleted[1], "h");
-    // // columnseleted[0] = luckysheetFreezen.changeFreezenIndex(columnseleted[0], "v");
-    // // columnseleted[1] = luckysheetFreezen.changeFreezenIndex(columnseleted[1], "v");
-
     const changeparam = mergeMoveMain(
         ctx,
         [0, col_index],
@@ -3266,11 +2959,6 @@ export function rangeDragRow(
     func_selectedrange.top_move = top;
     func_selectedrange.height_move = height;
 
-    // luckysheet_count_show(col_pre, top, col - col_pre - 1, height, rowseleted, [
-    //   0,
-    //   col_index,
-    // ]);
-
     rangeSetValue(
         ctx,
         cellInput,
@@ -3281,8 +2969,6 @@ export function rangeDragRow(
         fxInput
     );
     setRangeSelect(container, col_pre, top, height, col - col_pre - 1);
-
-    // luckysheetFreezen.scrollFreezen(rowseleted, [0, col_index]);
 }
 
 function updateparam(orient: string, txt: string, step: number) {
