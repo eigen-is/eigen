@@ -1192,7 +1192,7 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
                 case "%":
                 case "+":
                 case "-":
-                    if (fmtStr.charAt(i) == " " || fmtStr.charAt(i) == "*") ++i;
+                    ++i;
                     break;
                 case "(":
                 case ")":

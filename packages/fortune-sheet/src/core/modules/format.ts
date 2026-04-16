@@ -2,7 +2,7 @@ import numeral from "numeral";
 import _ from "lodash";
 import {isdatetime, isRealNum, valueIsError} from "./validation";
 // @ts-ignore
-import SSF from "./ssf";
+import SSF from "../../engine/ssf";
 import {CellMatrix} from "../types";
 import {getCellValue} from "./cell";
 
