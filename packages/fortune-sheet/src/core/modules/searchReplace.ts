@@ -5,7 +5,7 @@ import {locale} from "../locale";
 import {CellMatrix, GlobalCache, SearchResult, Selection} from "../types";
 import {chatatABC, getRegExpStr, getSheetIndex, isAllowEdit, replaceHtml,} from "../utils";
 import {setCellValue} from "./cell";
-import {valueShowEs} from "./format";
+import {valueShowEs} from "../../engine/format";
 import {normalizeSelection, scrollToHighlightCell} from "./selection";
 
 export function getSearchIndexArr(
