@@ -124,7 +124,16 @@ export const EditorToolbar = ({
 
     const applyLink = () => {
         if (!linkUrl) return;
-        editor.chain().focus().setLink({ href: linkUrl }).run();
+        const { from, to } = editor.state.selection;
+        if (from === to) {
+            editor
+                .chain()
+                .focus()
+                .insertContent({ type: 'text', text: linkUrl, marks: [{ type: 'link', attrs: { href: linkUrl } }] })
+                .run();
+        } else {
+            editor.chain().focus().setLink({ href: linkUrl }).run();
+        }
         setLinkUrl('');
         setLinkDialogOpen(false);
     };
