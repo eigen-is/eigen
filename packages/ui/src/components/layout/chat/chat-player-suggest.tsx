@@ -1,8 +1,8 @@
 import type { RoomMember } from '@workspace/lib/types/chat';
 import { useEffect, useMemo } from 'react';
+import { ContactSuggestList } from '../contacts/contact-suggest-list';
 import type { ContactSuggestion } from '../contacts/types';
 import { useContactSuggestions } from '../contacts/use-contact-suggestions';
-import { UserItem } from '../user-item';
 
 type ChatPlayerSuggestProps = {
     query: string;
@@ -43,7 +43,7 @@ export function ChatPlayerSuggest({
 
         if (!includeContacts) {
             if (q && memberSuggestions.some((s) => s.email.toLowerCase() === q)) return [];
-            return memberSuggestions.slice(0, 6);
+            return memberSuggestions;
         }
 
         const seen = new Set<string>();
@@ -56,7 +56,7 @@ export function ChatPlayerSuggest({
             }
         }
         if (q && merged.some((s) => s.email.toLowerCase() === q)) return [];
-        return merged.slice(0, 6);
+        return merged;
     }, [visible, query, roomMembers, contactSuggestions, includeContacts]);
 
     const emails = useMemo(() => items.map((i) => i.email), [items]);
@@ -65,22 +65,12 @@ export function ChatPlayerSuggest({
         onItemsChange(items.length, emails);
     }, [items.length, emails, onItemsChange]);
 
-    if (items.length === 0) return null;
-
     return (
-        <ul className="absolute bottom-full left-0 right-0 z-10 bg-background border rounded-md shadow-lg overflow-y-auto max-h-48 mb-1">
-            {items.map((suggestion, index) => (
-                <li
-                    key={suggestion.id}
-                    className={`px-3 py-2 eigen-list-item ${index === selectedIndex ? 'eigen-list-item-active' : ''}`}
-                    onMouseDown={(e) => {
-                        e.preventDefault();
-                        onSelect(suggestion.email);
-                    }}
-                >
-                    <UserItem name={suggestion.displayName} email={suggestion.email} userId={suggestion.id} />
-                </li>
-            ))}
-        </ul>
+        <ContactSuggestList
+            items={items}
+            selectedIndex={selectedIndex}
+            onSelect={(suggestion) => onSelect(suggestion.email)}
+            className="bottom-full left-0 right-0 mb-1"
+        />
     );
 }

@@ -1,4 +1,5 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
+import { useScrollToIndex } from '../../../hooks/use-scroll-to-index';
 
 type CommandHelp = {
     cmd: string;
@@ -22,6 +23,9 @@ export function ChatSlashSuggest({
     selectedIndex,
     onItemsChange,
 }: ChatSlashSuggestProps) {
+    const listRef = useRef<HTMLUListElement>(null);
+    useScrollToIndex(listRef, selectedIndex);
+
     const items = useMemo(() => {
         if (!visible || !query) return [];
 
@@ -41,7 +45,7 @@ export function ChatSlashSuggest({
             }
         }
 
-        return results.slice(0, 8);
+        return results;
     }, [visible, query, commandsHelp]);
 
     const cmds = useMemo(() => items.map((i) => i.cmd.split(',')[0].split(' ')[0].trim()), [items]);
@@ -53,7 +57,10 @@ export function ChatSlashSuggest({
     if (items.length === 0) return null;
 
     return (
-        <ul className="absolute bottom-full left-0 right-0 z-10 bg-background border rounded-md shadow-lg overflow-y-auto max-h-48 mb-1">
+        <ul
+            ref={listRef}
+            className="absolute bottom-full left-0 right-0 z-10 bg-background border rounded-md shadow-lg overflow-y-auto max-h-48 mb-1"
+        >
             {items.map((item, index) => (
                 <li
                     key={item.cmd}

@@ -1,6 +1,6 @@
 import { Input } from '@workspace/ui/components/input';
 import { type KeyboardEvent, useCallback, useRef, useState } from 'react';
-import { UserItem } from '../user-item';
+import { ContactSuggestList } from './contact-suggest-list';
 import type { ContactAutosuggestProps, ContactSuggestion } from './types';
 import { useContactSuggestions } from './use-contact-suggestions';
 
@@ -11,7 +11,6 @@ export function ContactAutosuggest({
     appendMode = false,
     onlyEigenIsMails = false,
     excludeEmails,
-    maxSuggestions = 5,
     className = '',
     suggestionsClassName = '',
     inputClassName = '',
@@ -27,15 +26,12 @@ export function ContactAutosuggest({
     const [isOpen, setIsOpen] = useState(false);
     const [selectedIndex, setSelectedIndex] = useState(0);
     const inputRef = useRef<HTMLInputElement>(null);
-    const suggestionsRef = useRef<HTMLUListElement>(null);
 
     // Handle controlled vs uncontrolled state
     const [internalValue, setInternalValue] = useState(initialValue);
     const inputValue = controlledValue !== undefined ? controlledValue : internalValue;
 
     const { suggestions, isLoading } = useContactSuggestions(inputValue, onlyEigenIsMails, excludeEmails);
-
-    const displayedSuggestions = suggestions.slice(0, maxSuggestions);
 
     const handleSelect = useCallback(
         (suggestion: ContactSuggestion) => {
@@ -72,12 +68,12 @@ export function ContactAutosuggest({
 
     const handleKeyDown = useCallback(
         (e: KeyboardEvent<HTMLInputElement>) => {
-            if (!isOpen || displayedSuggestions.length === 0) return;
+            if (!isOpen || suggestions.length === 0) return;
 
             switch (e.key) {
                 case 'ArrowDown':
                     e.preventDefault();
-                    setSelectedIndex((prev) => (prev < displayedSuggestions.length - 1 ? prev + 1 : prev));
+                    setSelectedIndex((prev) => (prev < suggestions.length - 1 ? prev + 1 : prev));
                     break;
 
                 case 'ArrowUp':
@@ -88,8 +84,8 @@ export function ContactAutosuggest({
                 case 'Enter':
                 case 'Tab':
                     e.preventDefault();
-                    if (displayedSuggestions[selectedIndex]) {
-                        handleSelect(displayedSuggestions[selectedIndex]);
+                    if (suggestions[selectedIndex]) {
+                        handleSelect(suggestions[selectedIndex]);
                     }
                     break;
 
@@ -99,7 +95,7 @@ export function ContactAutosuggest({
                     break;
             }
         },
-        [isOpen, displayedSuggestions, selectedIndex, handleSelect],
+        [isOpen, suggestions, selectedIndex, handleSelect],
     );
 
     const handleKeyDownSubmit = (event: React.KeyboardEvent<HTMLInputElement>) => {
@@ -115,10 +111,7 @@ export function ContactAutosuggest({
 
     const handleBlur = useCallback(() => {
         setTimeout(() => {
-            if (
-                !suggestionsRef.current?.contains(document.activeElement) &&
-                inputRef.current !== document.activeElement
-            ) {
+            if (inputRef.current !== document.activeElement) {
                 setIsOpen(false);
             }
         }, 300);
@@ -130,14 +123,11 @@ export function ContactAutosuggest({
                 id={id}
                 name={name}
                 ref={(elm) => {
-                    // Handle both internal ref and external ref if provided
                     if (typeof externalInputRef === 'function') {
                         externalInputRef(elm);
                     } else if (externalInputRef) {
                         (externalInputRef as React.MutableRefObject<HTMLInputElement | null>).current = elm;
                     }
-
-                    // Always update our internal ref
                     inputRef.current = elm;
                 }}
                 value={inputValue}
@@ -155,25 +145,13 @@ export function ContactAutosuggest({
                 required={required}
             />
 
-            {isOpen && displayedSuggestions.length > 0 && (
-                <ul
-                    ref={suggestionsRef}
-                    className={`absolute z-10 w-full bg-background mt-1 border rounded-md shadow-lg overflow-y-auto max-h-60 ${suggestionsClassName}`}
-                    tabIndex={-1}
-                >
-                    {displayedSuggestions.map((suggestion, index) => (
-                        <li
-                            key={suggestion.id}
-                            className={`px-3 py-2 eigen-list-item ${
-                                index === selectedIndex ? 'eigen-list-item-active' : ''
-                            }`}
-                            onClick={() => handleSelect(suggestion)}
-                            aria-selected={index === selectedIndex}
-                        >
-                            <UserItem name={suggestion.displayName} email={suggestion.email} userId={suggestion.id} />
-                        </li>
-                    ))}
-                </ul>
+            {isOpen && (
+                <ContactSuggestList
+                    items={suggestions}
+                    selectedIndex={selectedIndex}
+                    onSelect={handleSelect}
+                    className={`w-full mt-1 ${suggestionsClassName}`}
+                />
             )}
 
             {isOpen && isLoading && (

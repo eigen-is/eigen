@@ -53,14 +53,16 @@ export function useKeyboardListNavigation<T>({
     }, [containerRef]);
 
     const scrollToRow = (index: number) => {
-        if (containerRef.current) {
-            const listItems = containerRef.current.querySelectorAll(itemSelector);
-            if (listItems[index]) {
-                listItems[index].scrollIntoView({
-                    behavior: 'smooth',
-                    block: 'nearest',
-                });
-            }
+        const container = containerRef.current;
+        if (!container) return;
+        const item = container.querySelectorAll(itemSelector)[index] as HTMLElement | undefined;
+        if (!item) return;
+        const itemTop = item.offsetTop;
+        const itemBottom = itemTop + item.offsetHeight;
+        if (itemTop < container.scrollTop) {
+            container.scrollTop = itemTop;
+        } else if (itemBottom > container.scrollTop + container.clientHeight) {
+            container.scrollTop = itemBottom - container.clientHeight;
         }
     };
 
