@@ -2,7 +2,7 @@ import { parseOwnerId } from '@workspace/lib/types';
 import { createAsyncSingleton } from '../../utils/singleton';
 import { ApiError } from '../core';
 import { getOrgExists } from '../org/org.ts';
-import { getTeamExists } from '../team/team.ts';
+import { getTeam } from '../team/team.ts';
 import { getUserById } from '../user/user.ts';
 import { GuestHome } from './guest-home.ts';
 import type { Home } from './home';
@@ -52,10 +52,11 @@ export async function getHome(ownerId: string): Promise<Home> {
                     break;
                 }
                 case 'team': {
-                    if (!(await getTeamExists(parsed.id))) {
+                    const teamData = await getTeam(parsed.id);
+                    if (!teamData) {
                         throw new ApiError(404, 'Team not found');
                     }
-                    home = new TeamHome(getSyntheticTeamUser(ownerId), () => {
+                    home = new TeamHome(getSyntheticTeamUser(ownerId, teamData.name), () => {
                         cleanupHomeFactory(ownerId);
                     });
                     break;
