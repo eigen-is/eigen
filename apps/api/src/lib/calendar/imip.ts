@@ -1,3 +1,4 @@
+import { formatEventWhen } from '@workspace/lib/date';
 import {
     type Attendee,
     type CalendarEvent,
@@ -9,27 +10,58 @@ import type { Attachment } from '@workspace/lib/types/mail';
 import { externalOwnerId } from '@workspace/lib/types/owner';
 import { parseIcs } from '../caldav/ical-parse';
 import { serializeEventForImip } from '../caldav/ical-serialize';
+import { getDomain } from '../config/server-config';
 import type { OutboundICalEvent, OutboundMail } from '../core/mailer';
+import { escapeHtml } from '../export/media';
 import type { Home } from '../home';
 import type { ReceiveInvitationPayload } from './calendar';
 
 type Organizer = NonNullable<EventData['organizer']>;
 
-function formatEventTime(epochSeconds: number, allDay: boolean): string {
-    const d = new Date(epochSeconds * 1000);
-    if (allDay) return d.toISOString().slice(0, 10);
-    return d.toUTCString();
-}
-
 function buildEventSummary(event: CalendarEvent): string {
+    const when = formatEventWhen(event.startTime, event.endTime, event.allDay, event.timezone);
     const lines: string[] = [];
     lines.push(`What: ${event.title}`);
-    lines.push(
-        `When: ${formatEventTime(event.startTime, event.allDay)} - ${formatEventTime(event.endTime, event.allDay)}`,
-    );
+    lines.push(`When: ${when}`);
     if (event.location) lines.push(`Where: ${event.location}`);
     if (event.description) lines.push(`Description: ${event.description}`);
     return lines.join('\n');
+}
+
+function buildSection(label: string, value: string): string {
+    return `<div style="margin-bottom:16px">
+      <div style="font-weight:600;font-size:13px;color:#5f6368;margin-bottom:4px">${label}</div>
+      <div style="font-size:14px;color:#1a1a1a">${value}</div>
+    </div>`;
+}
+
+function buildEventHtml(event: CalendarEvent, organizer: Organizer, banner?: string): string {
+    const domain = getDomain();
+    const calendarUrl = domain === 'localhost' ? '' : `https://${domain}/calendar`;
+    const sections: string[] = [];
+
+    const when = formatEventWhen(event.startTime, event.endTime, event.allDay, event.timezone);
+    sections.push(buildSection('When', escapeHtml(when)));
+    if (event.location) sections.push(buildSection('Where', escapeHtml(event.location)));
+    if (event.description)
+        sections.push(buildSection('Description', escapeHtml(event.description).replace(/\n/g, '<br>')));
+
+    const bannerHtml = banner
+        ? `<div style="background:#fce8e6;color:#c5221f;font-weight:600;font-size:13px;padding:8px 12px;border-radius:4px;margin-bottom:16px">${banner}</div>`
+        : '';
+
+    const organizerName = escapeHtml(organizer.name || organizer.email);
+    const footerLink = calendarUrl
+        ? `<a href="${calendarUrl}" style="color:#1a73e8;text-decoration:none">Eigen Calendar</a>`
+        : 'Eigen Calendar';
+
+    return `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:0 16px">
+  <div style="border:1px solid #e0e0e0;border-radius:8px;padding:24px;margin:16px 0">
+    ${bannerHtml}<h2 style="margin:0 0 20px;font-size:18px;font-weight:600;color:#1a1a1a">${escapeHtml(event.title)}</h2>
+    ${sections.join('\n    ')}
+  </div>
+  <div style="font-size:12px;color:#5f6368;padding:0 4px">Invitation from ${organizerName} · ${footerLink}</div>
+</div>`;
 }
 
 function withOrganizer(event: CalendarEvent, organizer: Organizer): CalendarEvent {
@@ -46,6 +78,7 @@ export function composeInviteEmail(event: CalendarEvent, organizer: Organizer, a
         to: attendees.map((a) => ({ name: a.name ?? '', address: a.email })),
         subject: `Invitation: ${event.title}`,
         text: buildEventSummary(event),
+        html: buildEventHtml(event, organizer),
         icalEvent: icalEvent(withOrganizer(event, organizer), 'REQUEST'),
     };
 }
@@ -56,6 +89,7 @@ export function composeUpdateEmail(event: CalendarEvent, organizer: Organizer, a
         to: attendees.map((a) => ({ name: a.name ?? '', address: a.email })),
         subject: `Updated invitation: ${event.title}`,
         text: buildEventSummary(event),
+        html: buildEventHtml(event, organizer, 'This event has been updated'),
         icalEvent: icalEvent(withOrganizer(event, organizer), 'REQUEST'),
     };
 }
@@ -66,6 +100,7 @@ export function composeCancelEmail(event: CalendarEvent, organizer: Organizer, a
         to: attendees.map((a) => ({ name: a.name ?? '', address: a.email })),
         subject: `Cancelled: ${event.title}`,
         text: `This event has been cancelled:\n\n${buildEventSummary(event)}`,
+        html: buildEventHtml(event, organizer, 'This event has been cancelled'),
         icalEvent: icalEvent(withOrganizer(event, organizer), 'CANCEL'),
     };
 }
@@ -83,8 +118,8 @@ export function composeRsvpReply(
     attendeeName: string,
     status: Attendee['status'],
 ): OutboundMail {
-    const organizerEmail = event.data?.organizer?.email;
-    if (!organizerEmail) throw new Error('Event has no organizer');
+    const organizer = event.data?.organizer;
+    if (!organizer) throw new Error('Event has no organizer');
 
     const replyEvent: CalendarEvent = {
         ...event,
@@ -94,11 +129,13 @@ export function composeRsvpReply(
         },
     };
 
+    const statusLabel = STATUS_LABELS[status].toLowerCase();
     return {
         from: { name: attendeeName, address: attendeeEmail },
-        to: [{ name: event.data?.organizer?.name ?? '', address: organizerEmail }],
+        to: [{ name: organizer.name ?? '', address: organizer.email }],
         subject: `${STATUS_LABELS[status]}: ${event.title}`,
-        text: `${attendeeName} has ${STATUS_LABELS[status].toLowerCase()} the invitation: ${event.title}`,
+        text: `${attendeeName} has ${statusLabel} the invitation: ${event.title}`,
+        html: buildEventHtml(event, organizer, `${escapeHtml(attendeeName)} has ${statusLabel} the invitation`),
         icalEvent: icalEvent(replyEvent, 'REPLY'),
     };
 }

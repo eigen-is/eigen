@@ -3,6 +3,7 @@ import { cn } from '@workspace/ui/lib/utils';
 import { XIcon } from 'lucide-react';
 import { Dialog as DialogPrimitive } from 'radix-ui';
 import type * as React from 'react';
+import { useOptionalPreview } from './layout/preview-provider/preview-provider';
 
 function Dialog({ ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
     return <DialogPrimitive.Root data-slot="dialog" {...props} />;
@@ -47,11 +48,14 @@ function DialogContent({
     children,
     showCloseButton = true,
     size,
+    onPointerDownOutside,
     ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
     showCloseButton?: boolean;
     size?: DialogSize;
 }) {
+    const preview = useOptionalPreview();
+
     return (
         <DialogPortal data-slot="dialog-portal">
             <DialogOverlay />
@@ -62,6 +66,15 @@ function DialogContent({
                     size ? dialogSizeMap[size] : 'sm:max-w-xl',
                     className,
                 )}
+                // Preview renders behind the dialog overlay and can't receive pointer events,
+                // so we intercept the dismiss and close the preview instead of the dialog
+                onPointerDownOutside={(e) => {
+                    if (preview?.isPreviewOpen) {
+                        e.preventDefault();
+                        preview.closePreview();
+                    }
+                    onPointerDownOutside?.(e);
+                }}
                 {...props}
             >
                 {children}
