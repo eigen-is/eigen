@@ -55,7 +55,7 @@ describe("engine/format — genarate", () => {
     test("infers decimal number with correct fixed-point format", () => {
         const result = genarate(3.14);
         expect(result).not.toBeNull();
-        const [m, ct, v] = result!;
+        const [, ct, v] = result!;
         expect(ct.fa).toBe("0.00");
         expect(ct.t).toBe("n");
         expect(typeof v).toBe("number");

@@ -1,4 +1,4 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import type { FormulaCellInfo, FormulaCellInfoMap } from "../../core/types";
 import { detectCycle, getCalculationOrder, matchDependencies } from "../dependency-graph";
 
