@@ -14,7 +14,7 @@ import {getBorderInfoCompute} from "./border";
 import {escapeHTMLTag, getSheetIndex, isAllowEdit, replaceHtml,} from "../utils";
 import {hasPartMC} from "./validation";
 import {CFSplitRange, getComputeMap} from "./ConditionFormat";
-import {update} from "./format";
+import {update} from "../../engine/format";
 // @ts-ignore
 import SSF from "../../engine/ssf";
 

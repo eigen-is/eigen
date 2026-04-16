@@ -6,7 +6,7 @@ import {Cell, CellMatrix, GlobalCache} from "../types";
 import {getSheetIndex, isAllowEdit} from "../utils";
 import {getRangetxt, isAllSelectedCellsInStatus, normalizedAttr, setCellValue,} from "./cell";
 import {colors} from "./color";
-import {genarate, is_date, update} from "./format";
+import {genarate, is_date, update} from "../../engine/format";
 import {
     createFormulaRangeSelect,
     execfunction,

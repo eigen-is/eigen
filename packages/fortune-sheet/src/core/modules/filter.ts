@@ -3,7 +3,7 @@ import {locale} from "../locale";
 import {Context, getFlowdata} from "../context";
 import {Cell, CellMatrix} from "../types";
 import {getSheetIndex, isAllowEdit, rgbToHex} from "../utils";
-import {update} from "./format";
+import {update} from "../../engine/format";
 import {normalizeSelection} from "./selection";
 import {isRealNull} from "./validation";
 import {normalizedAttr} from "./cell";

@@ -4,7 +4,7 @@ import {Cell, CellMatrix, FormulaDependency, Range, Selection, SingleRange,} fro
 import {getSheetIndex, indexToColumnChar, rgbToHex} from "../utils";
 import {checkCF, getComputeMap} from "./ConditionFormat";
 import {getFailureText, validateCellData} from "./dataVerification";
-import {genarate, update} from "./format";
+import {genarate, update} from "../../engine/format";
 import {
     delFunctionGroup,
     execfunction,

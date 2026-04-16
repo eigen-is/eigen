@@ -3,7 +3,7 @@ import {Context, getFlowdata} from "../context";
 import {locale} from "../locale";
 import {delFunctionGroup, execfunction, execFunctionGroup, functionCopy,} from "../modules/formula";
 import {getdatabyselection, getQKBorder} from "../modules/cell";
-import {genarate, update} from "../modules/format";
+import {genarate, update} from "../../engine/format";
 import {normalizeSelection, selectionCache} from "../modules/selection";
 import {Cell, CellMatrix} from "../types";
 import {getSheetIndex, isAllowEdit} from "../utils";

@@ -6,7 +6,7 @@ import {Cell, CellMatrix, Rect} from "../types";
 import {colLocation, rowLocation} from "./location";
 import {getSheetIndex, isAllowEdit} from "../utils";
 import {getBorderInfoCompute} from "./border";
-import {genarate, update} from "./format";
+import {genarate, update} from "../../engine/format";
 import * as formula from "./formula";
 import {isRealNum} from "./validation";
 import {CFSplitRange} from "./ConditionFormat";
