@@ -1,5 +1,6 @@
 import { MaxFileSizeExceededError, parseMultipartRequest } from '@mjackson/multipart-parser';
 import type {
+    AddressObject,
     DraftAttachmentUpload,
     Email,
     EmailDraft,
@@ -264,7 +265,7 @@ export default class Maildir {
 
         const allAttachments = [...existingAttachments, ...newAttachments];
 
-        email.from = {
+        const from: AddressObject = {
             value: [{ address: user.email, name: user.name }],
             html: user.email,
             text: user.email,
@@ -273,7 +274,7 @@ export default class Maildir {
         const emlContent = await createEmlContent({
             id: existingId ?? createUniqueMessageId(),
             subject: email.subject || '',
-            from: email.from,
+            from,
             to: email.to,
             cc: email.cc,
             bcc: email.bcc,
@@ -324,8 +325,7 @@ export default class Maildir {
                 if (!part.isFile || !part.filename) continue;
 
                 const tempId = crypto.randomUUID();
-                const tempPath = this.store.getDraftTempPath(tempId);
-                const writer = this.store.storage.file(tempPath).writer({ highWaterMark: 256 * 1024 });
+                const writer = this.store.openDraftTempWriter(tempId);
 
                 let size = 0;
                 try {
@@ -347,7 +347,7 @@ export default class Maildir {
                 };
 
                 try {
-                    await this.store.storage.write(this.store.getDraftTempMetaPath(tempId), JSON.stringify(meta));
+                    await this.store.writeDraftTempMeta(tempId, meta);
                 } catch (e) {
                     await this.store.cleanupDraftTemp(tempId);
                     throw e;
@@ -370,24 +370,9 @@ export default class Maildir {
         filename: string;
         contentType: string;
     }> {
-        const tempPath = this.store.getDraftTempPath(tempId);
-        const metaPath = this.store.getDraftTempMetaPath(tempId);
-
-        const file = this.store.storage.file(tempPath);
-        if (!(await file.exists())) {
-            throw new ApiError(404, `Temp attachment '${tempId}' not found`);
-        }
-
-        const metaFile = this.store.storage.file(metaPath);
-        const meta = (await metaFile.exists())
-            ? ((await metaFile.json()) as { filename: string; contentType: string })
-            : { filename: tempId, contentType: 'application/octet-stream' };
-
-        return {
-            content: Buffer.from(await file.arrayBuffer()),
-            filename: meta.filename,
-            contentType: meta.contentType,
-        };
+        const result = await this.store.readDraftTempFile(tempId);
+        if (!result) throw new ApiError(404, `Temp attachment '${tempId}' not found`);
+        return result;
     }
 
     async cleanupDraftTempFile(tempId: string): Promise<void> {

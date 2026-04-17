@@ -22,7 +22,9 @@ export const Route = createFileRoute('/_auth/$filterType/$filterId')({
     validateSearch: (search: Record<string, unknown>) => {
         const mailId = typeof search.mailId === 'string' ? search.mailId : undefined;
         const to = typeof search.to === 'string' ? search.to.toLowerCase() : undefined;
-        const mode = !mailId && typeof search.mode === 'string' ? search.mode : undefined;
+        // mode='compose' can coexist with mailId — when auto-save assigns an id to a fresh compose,
+        // we keep mode so the composer session stays stable (key-identity, toolbar, etc.).
+        const mode = typeof search.mode === 'string' ? search.mode : undefined;
 
         return { mailId, mode, to } as MailSearchParams;
     },
@@ -155,9 +157,13 @@ function MailRoute() {
                     {showDetail ? (
                         isDraft ? (
                             <EmailDraft
-                                // Remount when switching between drafts so LightEditor picks up the new
-                                // initial content (Tiptap's `useEditor` only consumes `content` on mount).
-                                key={selectedEmail?.id ?? 'compose'}
+                                // Identity key: one compose session (mode='compose') stays stable even
+                                // after the first auto-save assigns an id and updates the URL. When
+                                // the user navigates to a different draft from the list, mode is
+                                // absent and mailId changes — the remount lets LightEditor pick up
+                                // the new initial content (Tiptap's useEditor reads `content` on
+                                // mount only).
+                                key={mode === 'compose' ? 'compose-session' : (selectedEmail?.id ?? 'empty')}
                                 ref={draftRef}
                                 email={selectedEmail as EmailDraftType}
                                 sendDraft={actions.handleSendEmail}

@@ -1,6 +1,6 @@
 import { useAuth } from '@workspace/lib/auth';
 import { useUploadDraftAttachment } from '@workspace/lib/mail';
-import type { AttachmentMeta, EmailDraft as EmailDraftType, NewDraft } from '@workspace/lib/types/mail';
+import type { EmailDraft as EmailDraftType, NewDraft } from '@workspace/lib/types/mail';
 import { ContactAutosuggest, Toolbar, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import {
@@ -79,7 +79,7 @@ export const EmailDraft = forwardRef<EmailDraftHandle, EmailDraftProps>(function
         setId,
         addAttachment,
         removeAttachment,
-        clearAttachmentTempIds,
+        setAttachmentsFromServer,
         toDraft,
         attachmentsFingerprint,
         isSendable,
@@ -107,7 +107,7 @@ export const EmailDraft = forwardRef<EmailDraftHandle, EmailDraftProps>(function
                       // "user removed all original attachments", which we must respect.
                       keepAttachmentIndexes: state.id ? keepAttachmentIndexes : undefined,
                   });
-                  if (tempAttachmentIds.length) clearAttachmentTempIds();
+                  if (result) setAttachmentsFromServer(result.attachments ?? []);
                   return result;
               }
             : undefined,
@@ -120,19 +120,26 @@ export const EmailDraft = forwardRef<EmailDraftHandle, EmailDraftProps>(function
     const uploadFiles = async (files: FileList | File[] | null) => {
         if (!files) return;
         const list = files instanceof FileList ? Array.from(files) : files;
-        for (const file of list) {
-            const result = await uploadMutation.mutateAsync(file).catch(() => null);
-            if (!result) continue;
+        // Uploads run in parallel — multiple small attachments shouldn't block on each other.
+        // Errors toast via the mutation hook; any individual failure still lets the others proceed.
+        const results = await Promise.all(
+            list.map(async (file) => {
+                const result = await uploadMutation.mutateAsync(file).catch(() => null);
+                return result ? { file, result } : null;
+            }),
+        );
+        for (const entry of results) {
+            if (!entry) continue;
+            const { file, result } = entry;
             const localUrl = file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined;
-            const meta: AttachmentMeta = {
+            addAttachment({
                 key: `upload-${result.tempId}`,
                 tempId: result.tempId,
                 filename: result.filename,
                 size: result.size,
                 contentType: result.contentType,
                 localUrl,
-            };
-            addAttachment(meta);
+            });
         }
         scheduleSave();
     };

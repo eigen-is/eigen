@@ -61,13 +61,14 @@ export function useMailActions() {
         }
     };
 
-    // After the first auto-save of a fresh compose, switch the URL from ?mode=compose to
-    // ?mailId=... so a reload lands back on the same in-progress draft.
+    // After the first auto-save of a fresh compose, add ?mailId=... to the URL so a reload lands
+    // back on the same draft. Keep mode='compose' so the composer session key stays stable and
+    // the composer isn't remounted mid-typing.
     const handleDraftIdAssigned = (id: string) => {
         navigate({
             to: Route.fullPath,
             params: { filterType, filterId },
-            search: { mailId: id },
+            search: (prev) => ({ ...prev, mailId: id, mode: 'compose' }),
             replace: true,
         });
     };

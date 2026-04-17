@@ -1,5 +1,5 @@
 import { useAuth } from '@workspace/lib/auth';
-import type { AddressObject, AttachmentMeta, EmailDraft, NewDraft } from '@workspace/lib/types/mail';
+import type { AddressObject, Attachment, AttachmentMeta, EmailDraft, NewDraft } from '@workspace/lib/types/mail';
 import { useCallback, useRef, useState } from 'react';
 
 type DraftState = {
@@ -93,11 +93,26 @@ export function useDraftState(email: EmailDraft | null, prefillTo?: string) {
         }));
     }, []);
 
-    const clearAttachmentTempIds = useCallback(() => {
-        setState((prev) => ({
-            ...prev,
-            attachments: prev.attachments.map((a) => ({ ...a, tempId: undefined })),
-        }));
+    // After a successful save, replace local attachment metas with the freshly-parsed list from
+    // the server. Keys are preserved by filename+size where possible so React doesn't remount
+    // chips that represent the same attachment across saves.
+    const setAttachmentsFromServer = useCallback((parsed: Attachment[]) => {
+        setState((prev) => {
+            const visible = parsed.filter((a) => !a.contentType.startsWith('text/calendar'));
+            const attachments: AttachmentMeta[] = visible.map((a, i) => {
+                const filename = a.filename || `Attachment ${i + 1}`;
+                const prevMatch = prev.attachments.find((p) => p.filename === filename && p.size === a.size);
+                return {
+                    key: prevMatch?.key ?? `server-${i}-${filename}-${a.size}`,
+                    filename,
+                    size: a.size,
+                    contentType: a.contentType,
+                    index: i,
+                    localUrl: prevMatch?.localUrl,
+                };
+            });
+            return { ...prev, attachments };
+        });
     }, []);
 
     const toDraft = useCallback((): NewDraft => {
@@ -141,7 +156,7 @@ export function useDraftState(email: EmailDraft | null, prefillTo?: string) {
         setId,
         addAttachment,
         removeAttachment,
-        clearAttachmentTempIds,
+        setAttachmentsFromServer,
         toDraft,
         attachmentsFingerprint,
         isSendable,
