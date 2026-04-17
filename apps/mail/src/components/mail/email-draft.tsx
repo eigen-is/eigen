@@ -55,16 +55,16 @@ type EmailDraftProps = {
     to?: string;
     sendDraft: (mail: NewDraft | EmailDraftType) => Promise<unknown>;
     onAutoSave?: (mail: NewDraft | EmailDraftType) => Promise<unknown>;
+    isSending: boolean;
 };
 
-export function EmailDraft({ email, to, sendDraft, onAutoSave }: EmailDraftProps) {
+export function EmailDraft({ email, to, sendDraft, onAutoSave, isSending }: EmailDraftProps) {
     // Create refs for the input fields
     const toFieldRef = useRef<HTMLInputElement>(null);
     const subjectFieldRef = useRef<HTMLInputElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const ccFieldRef = useRef<HTMLInputElement>(null);
     const bccFieldRef = useRef<HTMLInputElement>(null);
-    const [isSending, setIsSending] = useState(false);
     const [alertMessage, setAlertMessage] = useState<string | null>(null);
     const [confirmNoSubject, setConfirmNoSubject] = useState(false);
 
@@ -169,12 +169,7 @@ export function EmailDraft({ email, to, sendDraft, onAutoSave }: EmailDraftProps
     }, [email?.id]);
 
     const doSend = async () => {
-        try {
-            setIsSending(true);
-            await sendDraft(getCurrentDraft());
-        } finally {
-            setIsSending(false);
-        }
+        await sendDraft(getCurrentDraft());
     };
 
     const handleSendEmail = async () => {
