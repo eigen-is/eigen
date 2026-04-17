@@ -113,6 +113,11 @@ export async function messageHandleDraft(user: User, mail: EmailDraft) {
     return await mailClient.messageHandleDraft(mail);
 }
 
+export async function uploadDraftAttachment(user: User, request: Request) {
+    const mailClient = await getMailClient(user);
+    return await mailClient.uploadDraftAttachment(request);
+}
+
 export async function messageSend(user: User, mail: EmailDraft) {
     const mailClient = await getMailClient(user);
     return await mailClient.messageSend(mail);

@@ -265,6 +265,70 @@ export default class Maildir {
         return parsed as EmailDraft;
     }
 
+    async uploadDraftAttachment(request: Request): Promise<{
+        tempId: string;
+        filename: string;
+        size: number;
+        contentType: string;
+    }> {
+        await this.store.ensureDraftTempDir();
+
+        const formData = await request.formData();
+        const file = formData.get('file');
+        if (!file || typeof file === 'string') {
+            throw new ApiError(400, 'No file in request');
+        }
+
+        const MAX_SIZE = 25 * 1024 * 1024;
+        if (file.size > MAX_SIZE) {
+            throw new ApiError(413, 'Attachment exceeds 25MB limit');
+        }
+
+        const tempId = crypto.randomUUID();
+        const tempPath = this.store.getDraftTempPath(tempId);
+        const metaPath = this.store.getDraftTempMetaPath(tempId);
+
+        const meta = {
+            filename: file.name,
+            size: file.size,
+            contentType: file.type || 'application/octet-stream',
+        };
+
+        await this.store.storage.write(tempPath, await file.arrayBuffer());
+        await this.store.storage.write(metaPath, JSON.stringify(meta));
+
+        return { tempId, ...meta };
+    }
+
+    async getDraftTempFile(tempId: string): Promise<{
+        content: Buffer;
+        filename: string;
+        contentType: string;
+    }> {
+        const tempPath = this.store.getDraftTempPath(tempId);
+        const metaPath = this.store.getDraftTempMetaPath(tempId);
+
+        const file = this.store.storage.file(tempPath);
+        if (!(await file.exists())) {
+            throw new ApiError(404, `Temp attachment '${tempId}' not found`);
+        }
+
+        const metaFile = this.store.storage.file(metaPath);
+        const meta = (await metaFile.exists())
+            ? ((await metaFile.json()) as { filename: string; contentType: string })
+            : { filename: tempId, contentType: 'application/octet-stream' };
+
+        return {
+            content: Buffer.from(await file.arrayBuffer()),
+            filename: meta.filename,
+            contentType: meta.contentType,
+        };
+    }
+
+    async cleanupDraftTempFile(tempId: string): Promise<void> {
+        await this.store.cleanupDraftTemp(tempId);
+    }
+
     async messageSend(mailToSend: EmailDraft): Promise<EmailDraft> {
         const mail = await this.messageHandleDraft(mailToSend);
         const message = draftToOutboundMail(mail, this.home.user.email);
