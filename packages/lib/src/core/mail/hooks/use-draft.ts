@@ -23,10 +23,26 @@ export function createDraftEmail(input: DraftInput): NewDraft {
     };
 }
 
-export async function updateDraftEmail(draft: NewDraft | EmailDraft, ownerId: string): Promise<EmailDraft | null> {
+export async function updateDraftEmail(
+    draft: NewDraft | EmailDraft,
+    ownerId: string,
+    tempAttachmentIds?: string[],
+): Promise<EmailDraft | null> {
     const response = await mailApi({ ownerId }).message.draft.put({
         mail: draft,
+        tempAttachmentIds,
     });
+    if (response.error) throw new AppError(response);
+    return response.data || null;
+}
+
+export async function uploadDraftAttachment(
+    ownerId: string,
+    file: File,
+): Promise<{ tempId: string; filename: string; size: number; contentType: string } | null> {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await mailApi({ ownerId }).message.draft.attachment.post(formData as never);
     if (response.error) throw new AppError(response);
     return response.data || null;
 }
@@ -45,7 +61,8 @@ export function useUpdateDraft() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (draft: NewDraft | EmailDraft) => updateDraftEmail(draft, ownerId),
+        mutationFn: (input: { draft: NewDraft | EmailDraft; tempAttachmentIds?: string[] }) =>
+            updateDraftEmail(input.draft, ownerId, input.tempAttachmentIds),
         onSuccess: (data) => {
             queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, 'Drafts') });
             if (data?.id) queryClient.invalidateQueries({ queryKey: emailKeys.detail(ownerId, data.id) });

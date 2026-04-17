@@ -15,6 +15,7 @@ import { ConfirmDialog } from '@workspace/ui/components/layout/delete/confirm-di
 import { LightEditor } from '@workspace/ui/components/layout/editor';
 import { Send, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { DraftAttachments } from './draft-attachments';
 import { useDraftAutoSave } from './hooks/use-draft-auto-save';
 import { useDraftState } from './hooks/use-draft-state';
 
@@ -39,7 +40,7 @@ type EmailDraftProps = {
     email: EmailDraftType | null;
     to?: string;
     sendDraft: (mail: NewDraft | EmailDraftType) => Promise<unknown>;
-    onAutoSave?: (mail: NewDraft | EmailDraftType) => Promise<unknown>;
+    onAutoSave?: (mail: NewDraft | EmailDraftType, tempAttachmentIds?: string[]) => Promise<unknown>;
     isSending: boolean;
 };
 
@@ -48,13 +49,29 @@ export function EmailDraft({ email, to, sendDraft, onAutoSave, isSending }: Emai
     const [confirmNoSubject, setConfirmNoSubject] = useState(false);
     const auth = useAuth();
 
-    const { state, setField, toDraft, isSendable, isSaveable } = useDraftState(email, to);
+    const {
+        state,
+        setField,
+        addAttachment,
+        removeAttachment,
+        clearAttachmentTempIds,
+        toDraft,
+        isSendable,
+        isSaveable,
+    } = useDraftState(email, to);
 
     const { scheduleSave } = useDraftAutoSave({
         toDraft,
         isSaveable,
         draftId: state.id,
-        onSave: onAutoSave,
+        onSave: onAutoSave
+            ? async (draft) => {
+                  const tempAttachmentIds = state.attachments.map((a) => a.tempId).filter((id): id is string => !!id);
+                  const result = await onAutoSave(draft, tempAttachmentIds.length ? tempAttachmentIds : undefined);
+                  if (tempAttachmentIds.length) clearAttachmentTempIds();
+                  return result;
+              }
+            : undefined,
         onIdAssigned: (id) => setField('id', id),
     });
 
@@ -152,6 +169,18 @@ export function EmailDraft({ email, to, sendDraft, onAutoSave, isSending }: Emai
                             />
                         </div>
                     </div>
+                    <DraftAttachments
+                        attachments={state.attachments}
+                        onAdd={(meta) => {
+                            addAttachment(meta);
+                            scheduleSave();
+                        }}
+                        onRemove={(i) => {
+                            removeAttachment(i);
+                            scheduleSave();
+                        }}
+                        disabled={isSending}
+                    />
                     <div className="flex-1 p-4">
                         <LightEditor
                             content={state.body}

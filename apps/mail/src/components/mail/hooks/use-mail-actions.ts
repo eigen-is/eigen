@@ -51,7 +51,7 @@ export function useMailActions() {
     };
 
     const handleNewDraftEmail = async (mail: NewDraft | EmailDraft) => {
-        const draft = await updateDraft.mutateAsync(mail);
+        const draft = await updateDraft.mutateAsync({ draft: mail });
         if (draft) {
             navigate({
                 to: Route.fullPath,
@@ -207,7 +207,8 @@ export function useMailActions() {
         handleSendEmail,
         handleNewDraftEmail,
         handleToggleMailRead,
-        saveDraft: updateDraft.mutateAsync,
+        saveDraft: (draft: NewDraft | EmailDraft, tempAttachmentIds?: string[]) =>
+            updateDraft.mutateAsync({ draft, tempAttachmentIds }),
         isSendPending: sendDraftMutation.isPending,
     };
 }
