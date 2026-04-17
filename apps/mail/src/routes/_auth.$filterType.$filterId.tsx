@@ -157,6 +157,7 @@ function MailRoute() {
                                 sendDraft={actions.handleSendEmail}
                                 onAutoSave={actions.saveDraft}
                                 to={to}
+                                isSending={actions.isSendPending}
                             />
                         ) : (
                             <EmailDetail email={selectedEmail} toggleMailRead={actions.handleToggleMailRead} />
