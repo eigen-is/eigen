@@ -49,6 +49,16 @@ describe.skipIf(isWindows)('Mail', () => {
         expect(data).toBe(false);
     });
 
+    test('create mailbox with invalid name returns 400', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/mailbox`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mailbox: 'Bad!Name' }),
+        });
+        expect(res.status).toBe(400);
+        expect(await res.text()).toContain('Invalid mailbox');
+    });
+
     test('create duplicate mailbox returns 409', async () => {
         const res1 = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/mailbox`, {
             method: 'POST',

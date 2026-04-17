@@ -1,6 +1,6 @@
 import type { FSWatcher } from 'node:fs';
 import type { BunFile } from 'bun';
-import { LocalFilesystem, PATHS, STANDARD_MAILBOXES } from '../core';
+import { ApiError, LocalFilesystem, PATHS, STANDARD_MAILBOXES } from '../core';
 import { buildMaildirFilename, createUniqueMessageId } from './mailutils';
 
 export class MaildirStore {
@@ -172,7 +172,7 @@ export class MaildirStore {
     private mailboxDir(mailbox: string): string {
         if (mailbox === '' || mailbox === 'INBOX') return this.basePath;
         if (/[^a-zA-Z0-9._\- /]/.test(mailbox) || mailbox.includes('..')) {
-            throw new Error(`Invalid mailbox name: ${mailbox}`);
+            throw new ApiError(400, `Invalid mailbox name: ${mailbox}`);
         }
         return `${this.basePath}/.${mailbox.replace('/', '.')}`;
     }
