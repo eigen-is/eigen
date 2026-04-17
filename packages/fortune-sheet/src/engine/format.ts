@@ -1,9 +1,8 @@
 import numeral from "numeral";
 import _ from "lodash";
-import {isdatetime, isRealNum, valueIsError} from "../state/modules/validation";
+import {isdatetime, isRealNum, valueIsError} from "./validation";
 import SSF from "./ssf";
-import {CellMatrix} from "../state/types";
-import {getCellValue} from "../state/modules/cell";
+import type {CellMatrix} from "../state/types";
 
 const base1904 = new Date(1900, 2, 1, 0, 0, 0);
 
@@ -342,22 +341,30 @@ function fuzzynum(s: string | number) {
     return v;
 }
 
+function cellAttr(d: CellMatrix, r: number, c: number, attr: "m" | "v"): any {
+    const cell = d[r]?.[c];
+    if (cell == null || typeof cell !== "object") return null;
+    // Date cells always return the display string (m)
+    if (cell.ct?.t === "d") return cell.m ?? null;
+    return cell[attr] ?? null;
+}
+
 export function valueShowEs(r: number, c: number, d: CellMatrix) {
-    let value = getCellValue(r, c, d, "m");
+    let value = cellAttr(d, r, c, "m");
     if (value == null) {
-        value = getCellValue(r, c, d, "v");
+        value = cellAttr(d, r, c, "v");
     } else {
         if (!Number.isNaN(fuzzynum(value))) {
             if (_.isString(value) && value.indexOf("%") > -1) {
             } else {
-                value = getCellValue(r, c, d, "v");
+                value = cellAttr(d, r, c, "v");
             }
         }
         // else if (!isNaN(parseDate(value).getDate())){
         else if (d[r]?.[c]?.ct?.t === "d") {
         } else if (d[r]?.[c]?.ct?.t === "b") {
         } else {
-            value = getCellValue(r, c, d, "v");
+            value = cellAttr(d, r, c, "v");
         }
     }
     return value;
