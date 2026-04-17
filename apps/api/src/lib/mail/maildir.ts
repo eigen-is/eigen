@@ -259,7 +259,7 @@ export default class Maildir {
         return parsed as EmailDraft;
     }
 
-    async messageSend(mailToSend: EmailDraft): Promise<EmailDraft | null> {
+    async messageSend(mailToSend: EmailDraft): Promise<EmailDraft> {
         const mail = await this.messageHandleDraft(mailToSend);
         const message = draftToOutboundMail(mail, this.home.user.email);
 
@@ -267,19 +267,17 @@ export default class Maildir {
             throw new ApiError(400, 'Cannot send email with empty subject and body');
         }
 
-        try {
-            const sent = await sendMail(message);
+        const sent = await sendMail(message);
 
-            if (sent) {
-                await this.messageMove(mail.id, 'Sent');
-                await this.renameFlag(mail.id, { draft: false }, SSEventType.MAIL_FLAGS_CHANGED);
-                this.db.setDraft(mail.id, false);
-                this.emit(SSEventType.MAIL_SENT, { messageId: mail.id, mailbox: 'Sent' });
-            }
-        } catch (error) {
-            console.error('Error sending email:', error);
-            return null;
+        if (!sent) {
+            throw new ApiError(500, 'Failed to send email');
         }
+
+        await this.messageMove(mail.id, 'Sent');
+        await this.renameFlag(mail.id, { draft: false }, SSEventType.MAIL_FLAGS_CHANGED);
+        this.db.setDraft(mail.id, false);
+        this.emit(SSEventType.MAIL_SENT, { messageId: mail.id, mailbox: 'Sent' });
+
         return mail;
     }
 
