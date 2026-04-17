@@ -1,9 +1,11 @@
-// @ts-ignore
 import {ERROR_REF, Parser} from "./parser";
+import type {CellInfo, ParserOptions, RangeCell} from "./parser/parser";
 import type {Cell, FormulaDependency, FormulaCellInfoMap} from "../state/types";
 import type {CellResolver, EvaluationResult, FormulaEngineState} from "./types";
 import {getCalculationOrder} from "./dependency-graph";
 import SSF from "./ssf";
+
+type DoneCallback = (value: unknown) => void;
 
 export function isFormula(value: unknown): boolean {
     return typeof value === "string" && value.length > 1 && value[0] === "=";
@@ -37,14 +39,13 @@ function inferType(value: unknown): EvaluationResult["type"] {
 
 export class FormulaEngine {
     state: FormulaEngineState;
-    private parser: any;
+    private parser: Parser;
     private currentResolver: CellResolver | null = null;
 
     constructor() {
         this.state = {
             execFunctionGlobalData: {},
             formulaCellInfoMap: null,
-            execFunctionExist: undefined,
             cellTextToIndexList: {},
         };
 
@@ -52,7 +53,7 @@ export class FormulaEngine {
 
         this.parser.on(
             "callCellValue",
-            (cellCoord: any, options: any, done: any) => {
+            (cellCoord: CellInfo, options: ParserOptions, done: DoneCallback) => {
                 const resolver = this.currentResolver!;
                 const sheetId =
                     cellCoord.sheetName == null
@@ -78,7 +79,12 @@ export class FormulaEngine {
 
         this.parser.on(
             "callRangeValue",
-            (startCellCoord: any, endCellCoord: any, options: any, done: any) => {
+            (
+                startCellCoord: RangeCell,
+                endCellCoord: RangeCell,
+                options: ParserOptions,
+                done: DoneCallback
+            ) => {
                 const resolver = this.currentResolver!;
                 const sheetId =
                     startCellCoord.sheetName == null
@@ -180,7 +186,11 @@ export class FormulaEngine {
     getDependencies(formula: string, sheetId: string): FormulaDependency[] {
         const deps: FormulaDependency[] = [];
 
-        const cellHandler = (cellCoord: any, options: any, done: any) => {
+        const cellHandler = (
+            cellCoord: CellInfo,
+            options: ParserOptions,
+            done: DoneCallback
+        ) => {
             const depSheetId = cellCoord.sheetName == null
                 ? options.sheetId
                 : sheetId;
@@ -193,10 +203,10 @@ export class FormulaEngine {
         };
 
         const rangeHandler = (
-            startCellCoord: any,
-            endCellCoord: any,
-            options: any,
-            done: any
+            startCellCoord: RangeCell,
+            endCellCoord: RangeCell,
+            options: ParserOptions,
+            done: DoneCallback
         ) => {
             const depSheetId = startCellCoord.sheetName == null
                 ? options.sheetId
@@ -230,7 +240,6 @@ export class FormulaEngine {
         this.state = {
             execFunctionGlobalData: {},
             formulaCellInfoMap: null,
-            execFunctionExist: undefined,
             cellTextToIndexList: {},
         };
     }

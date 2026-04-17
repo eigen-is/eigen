@@ -1,10 +1,9 @@
 import _ from "lodash";
-import type {Cell, CellMatrix, FormulaDependency, History, Selection,} from "../types";
-import type {FormulaCellInfoMap} from "../types";
+import type {Cell, CellMatrix, FormulaCellInfoMap, FormulaDependency, History, Selection} from "../types";
 import type {Context} from "../context";
 import {getFlowdata} from "../context";
 import {getSheetIdByName} from "../utils";
-import type {CellResolver} from "../../engine/types";
+import type {CalculationChainEntry, CellResolver} from "../../engine/types";
 import {FormulaEngine, isFormula} from "../../engine/formula-engine";
 import {setFormulaCellInfo} from "./formulaHelper";
 
@@ -31,10 +30,7 @@ export function resetRangeIndexes() {
     formulaUIState.rangeIndexes = [];
 }
 
-/**
- * Adapts Context to the CellResolver interface expected by FormulaEngine,
- * so the engine can resolve cell values from the state layer.
- */
+// Adapts Context to the CellResolver interface expected by FormulaEngine.
 export function createContextResolver(ctx: Context): CellResolver {
     return {
         getCell(sheetId: string, row: number, col: number) {
@@ -130,7 +126,7 @@ export class FormulaCache {
 
     functionlistMap: any;
 
-    execFunctionExist?: any[];
+    execFunctionExist?: CalculationChainEntry[];
 
     engine: FormulaEngine;
 
