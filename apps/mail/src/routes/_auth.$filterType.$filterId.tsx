@@ -5,7 +5,7 @@ import { EmptyState } from '@workspace/ui';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context.tsx';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { EmailDetail, EmailDetailToolbar } from '../components/mail/email-detail';
 import { EmailDraft, type EmailDraftHandle, EmailDraftToolbar } from '../components/mail/email-draft';
 import { EmailList, EmailListToolbar } from '../components/mail/email-list';
@@ -74,12 +74,6 @@ function MailRoute() {
             setPendingDeleteEmails([]);
         }
     };
-
-    useEffect(() => {
-        if (mailId && mode) {
-            actions.navigateToList();
-        }
-    }, [mailId, mode]);
 
     const listWidth = isTablet ? '320px' : '400px';
     const showDetail = !!(selectedEmail || mode === 'compose');

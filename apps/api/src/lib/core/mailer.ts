@@ -53,7 +53,10 @@ export function createTransport(): Mail {
 export async function sendMail(message: OutboundMail): Promise<boolean> {
     const from = message.from ?? { name: '', address: `noreply@${getDomain()}` };
 
-    if (!isProduction() && getDomain() === 'localhost') {
+    // Skip outbound delivery in dev/test unless an SMTP host is explicitly configured.
+    // Previously this required getDomain()==='localhost', which made CI (test.eigen.is) try to
+    // actually send via sendmail(1) and fail.
+    if (!isProduction() && !process.env['SMTP_HOST']) {
         console.log('[DEV] Skipping email:', { from, to: message.to, subject: message.subject });
         return true;
     }
