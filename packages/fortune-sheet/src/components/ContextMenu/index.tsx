@@ -16,7 +16,7 @@ import {
     removeActiveImage,
     showSelected,
     sortSelection,
-} from "../../core";
+} from "../../state";
 import React, {useCallback, useContext} from "react";
 import {SetContextOptions, WorkbookContext} from "../../context";
 import {useAlert} from "../../hooks/useAlert";

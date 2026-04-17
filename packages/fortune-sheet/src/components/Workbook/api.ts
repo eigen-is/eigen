@@ -20,7 +20,7 @@ import {
     Settings,
     Sheet,
     SingleRange,
-} from "../../core";
+} from "../../state";
 import {applyPatches} from "immer";
 import _ from "lodash";
 import {SetContextOptions} from "../../context";

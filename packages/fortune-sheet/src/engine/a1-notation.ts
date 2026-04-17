@@ -5,9 +5,9 @@ export {
     rowIndexToLabel,
     extractLabel,
     toLabel,
-} from "../formula-parser/helper/cell";
+} from "./parser/helper/cell";
 
-import { columnLabelToIndex, columnIndexToLabel, rowLabelToIndex, rowIndexToLabel } from "../formula-parser/helper/cell";
+import {columnIndexToLabel, columnLabelToIndex, rowIndexToLabel, rowLabelToIndex} from "./parser/helper/cell";
 
 export type CellRef = { col: number; row: number };
 

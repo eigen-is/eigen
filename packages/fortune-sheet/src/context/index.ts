@@ -1,5 +1,5 @@
 import React from "react";
-import {Context, defaultContext, defaultSettings, GlobalCache, PatchOptions, Settings,} from "../core";
+import {Context, defaultContext, defaultSettings, GlobalCache, PatchOptions, Settings,} from "../state";
 
 export type RefValues = {
     globalCache: GlobalCache;

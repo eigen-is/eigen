@@ -1,5 +1,5 @@
 import {useContext, useMemo} from "react";
-import {getSheetIndex, indexToColumnChar, locale} from "../../core";
+import {getSheetIndex, indexToColumnChar, locale} from "../../state";
 import {WorkbookContext} from "../../context";
 import {useDialog} from "../../hooks/useDialog";
 import {Button} from "@workspace/ui/components/button";

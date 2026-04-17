@@ -1,4 +1,4 @@
-import {applyLocation, getFlowdata, getOptionValue, getSelectRange, locale,} from "../../core";
+import {applyLocation, getFlowdata, getOptionValue, getSelectRange, locale,} from "../../state";
 import produce from "immer";
 import {useCallback, useContext, useState} from "react";
 import {WorkbookContext} from "../../context";

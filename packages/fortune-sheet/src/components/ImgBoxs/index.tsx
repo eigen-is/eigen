@@ -1,5 +1,5 @@
-import {onImageMoveStart, onImageResizeStart} from "../../core";
-import type {Image} from "../../core/types";
+import {onImageMoveStart, onImageResizeStart} from "../../state";
+import type {Image} from "../../state/types";
 import {useCallback, useContext, useMemo} from "react";
 import {WorkbookContext} from "../../context";
 

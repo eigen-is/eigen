@@ -1,5 +1,5 @@
 import {useCallback, useContext} from "react";
-import {locale, updateItem} from "../../core";
+import {locale, updateItem} from "../../state";
 import {WorkbookContext} from "../../context";
 import {useDialog} from "../../hooks/useDialog";
 import {ConditionRules} from "./ConditionRules";

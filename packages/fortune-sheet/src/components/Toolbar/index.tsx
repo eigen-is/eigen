@@ -21,7 +21,7 @@ import {
     toolbarItemClickHandler,
     toolbarItemSelectedFunc,
     updateFormat,
-} from "../../core";
+} from "../../state";
 import {
     DropdownMenu,
     DropdownMenuContent,

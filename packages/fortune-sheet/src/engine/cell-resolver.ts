@@ -1,5 +1,5 @@
-import type { Cell, CellMatrix } from "../core/types";
-import type { CellResolver, SheetInfo } from "./types";
+import type {Cell, CellMatrix} from "../state/types";
+import type {CellResolver, SheetInfo} from "./types";
 
 export type { CellResolver } from "./types";
 

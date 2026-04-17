@@ -1,5 +1,5 @@
 export * from "./components";
-export * from "./core";
+export * from "./state";
 export { FormulaEngine } from "./engine/formula-engine";
 export { createArrayResolver } from "./engine/cell-resolver";
 export {
@@ -36,5 +36,5 @@ export {
     Parser,
     extractLabel,
     toLabel,
-} from "./formula-parser";
-export {error as formulaError, ERROR} from "./formula-parser";
+} from "./engine/parser";
+export {error as formulaError, ERROR} from "./engine/parser";

@@ -1,4 +1,4 @@
-import {locale} from "../../../core";
+import {locale} from "../../../state";
 import React, {useContext} from "react";
 import {WorkbookContext} from "../../../context";
 import {ChevronUp, X} from "lucide-react";

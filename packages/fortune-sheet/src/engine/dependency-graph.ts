@@ -1,4 +1,4 @@
-import type { FormulaCellInfo, FormulaCellInfoMap, FormulaDependency } from "../core/types";
+import type {FormulaCellInfo, FormulaCellInfoMap, FormulaDependency} from "../state/types";
 
 // Topological sort: returns formula cells in evaluation order (dependencies before dependents).
 // Uses a stack-based DFS with two-color marking: gray (in-progress) → black (done).

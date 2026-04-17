@@ -1,12 +1,6 @@
-import { describe, expect, test } from "bun:test";
-import type { CellMatrix } from "../../core/types";
-import {
-    datenum_local,
-    genarate,
-    is_date,
-    update,
-    valueShowEs,
-} from "../format";
+import {describe, expect, test} from "bun:test";
+import type {CellMatrix} from "../../state/types";
+import {datenum_local, genarate, is_date, update, valueShowEs,} from "../format";
 
 describe("engine/format — datenum_local", () => {
     test("converts a date to an Excel serial number", () => {
