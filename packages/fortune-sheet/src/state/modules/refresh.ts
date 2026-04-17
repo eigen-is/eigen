@@ -14,7 +14,7 @@ function runExecFunction(
         for (let r = range[s].row[0]; r <= range[s].row[1]; r += 1) {
             for (let c = range[s].column[0]; c <= range[s].column[1]; c += 1) {
                 setFormulaCellInfo(ctx, {r, c, id: index}, data);
-                ctx.formulaCache.execFunctionExist.push({r, c, i: index});
+                ctx.formulaCache.execFunctionExist.push({r, c, id: index});
             }
         }
     }

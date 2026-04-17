@@ -33,7 +33,7 @@ function postPasteCut(
             }
 
             execF_rc[`${r}_${c}_${source.sheetId}`] = 0;
-            ctx.formulaCache.execFunctionExist.push({r, c, i: source.sheetId});
+            ctx.formulaCache.execFunctionExist.push({r, c, id: source.sheetId});
         }
     }
 
@@ -45,7 +45,7 @@ function postPasteCut(
             }
 
             execF_rc[`${r}_${c}_${target.sheetId}`] = 0;
-            ctx.formulaCache.execFunctionExist.push({r, c, i: target.sheetId});
+            ctx.formulaCache.execFunctionExist.push({r, c, id: target.sheetId});
         }
     }
 

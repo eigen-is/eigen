@@ -474,7 +474,7 @@ function backFormulaInput(
     ctx.formulaCache.execFunctionExist.push({
         r,
         c,
-        i: ctx.currentSheetId,
+        id: ctx.currentSheetId,
     });
 
     // server.historyParam(d, ctx.currentSheetId, {
