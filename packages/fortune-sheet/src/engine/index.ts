@@ -16,6 +16,13 @@ export {
 } from "./a1-notation";
 export { default as SSF } from "./ssf";
 export { genarate, update, is_date, datenum_local, valueShowEs } from "./format";
+export {
+    iscelldata,
+    operatorjson,
+    operatorPriority,
+    calPostfixExpression,
+    checkBracketNum,
+} from "./formula-utils";
 export type {
     CellResolver,
     EvaluationResult,
