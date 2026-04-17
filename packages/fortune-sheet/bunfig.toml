@@ -1,2 +1,2 @@
 [test]
-preload = ["./src/formula-parser/test/index.test.ts"]
+preload = ["./src/engine/parser/test/index.test.ts"]
