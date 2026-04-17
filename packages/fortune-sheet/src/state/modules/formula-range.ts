@@ -13,10 +13,14 @@ import {
     getcellrange,
     iscelldata,
     operatorjson,
-    parseElement,
     setFunctionHTMLIndex,
 } from "./formula-ui";
 import {israngeseleciton} from "./formula-editor";
+
+function parseElement(eleString: string) {
+    return new DOMParser().parseFromString(eleString, "text/html").body
+        .childNodes[0];
+}
 
 export function createFormulaRangeSelect(
     ctx: Context,
