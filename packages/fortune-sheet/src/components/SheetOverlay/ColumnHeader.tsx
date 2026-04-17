@@ -12,7 +12,7 @@ import {
     isAllowEdit,
     selectTitlesMap,
     selectTitlesRange,
-} from "../../core";
+} from "../../state";
 import React, {useCallback, useContext, useEffect, useMemo, useRef, useState,} from "react";
 import {WorkbookContext} from "../../context";
 import {CircleChevronDown} from "lucide-react";

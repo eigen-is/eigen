@@ -8,7 +8,7 @@ import {
     Sheet as SheetType,
     updateContextWithCanvas,
     updateContextWithSheetData,
-} from "../../core";
+} from "../../state";
 import {WorkbookContext} from "../../context";
 import {SheetOverlay} from "../SheetOverlay";
 

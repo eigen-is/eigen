@@ -1,5 +1,5 @@
 import {useCallback, useContext, useMemo, useState} from "react";
-import {cancelNormalSelected, locale, setCaretPosition,} from "../../core";
+import {cancelNormalSelected, locale, setCaretPosition,} from "../../state";
 import {WorkbookContext} from "../../context";
 import {Button} from "@workspace/ui/components/button";
 import {DialogFooter, DialogHeader, DialogTitle} from "@workspace/ui/components/dialog";

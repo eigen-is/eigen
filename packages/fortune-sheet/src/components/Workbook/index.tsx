@@ -21,7 +21,7 @@ import {
     setFormulaCellInfoMap,
     Settings,
     Sheet as SheetType,
-} from "../../core";
+} from "../../state";
 import React, {useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState,} from "react";
 import {applyPatches, enablePatches, Patch, produce, produceWithPatches,} from "immer";
 import _ from "lodash";
@@ -38,7 +38,7 @@ import {FilterMenu} from "../ContextMenu/FilterMenu";
 
 import {readEigenClipboard} from "@workspace/lib/clipboard";
 import type {EigenClipboardData, EigenClipboardTextItem} from "@workspace/lib/types/clipboard";
-import {consumePendingCopy} from "../../core/modules/clipboard";
+import {consumePendingCopy} from "../../state/modules/clipboard";
 
 
 enablePatches();

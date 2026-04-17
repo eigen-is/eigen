@@ -1,4 +1,4 @@
-import type { Cell, CellMatrix, FormulaCellInfoMap, FormulaDependency } from "../core/types";
+import type {Cell, CellMatrix, FormulaCellInfoMap, FormulaDependency} from "../state/types";
 
 export type CellResolver = {
     getCell(sheetId: string, row: number, col: number): Cell | null;

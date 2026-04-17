@@ -7,7 +7,7 @@ import {
     getSheetIndex,
     locale,
     setCellValue,
-} from "../../core";
+} from "../../state";
 import {useCallback, useContext, useEffect, useState} from "react";
 import {WorkbookContext} from "../../context";
 import {useDialog} from "../../hooks/useDialog";

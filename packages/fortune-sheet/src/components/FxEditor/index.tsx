@@ -14,7 +14,7 @@ import {
     rangeHightlightselected,
     updateCell,
     valueShowEs,
-} from "../../core";
+} from "../../state";
 import {useCallback, useContext, useEffect, useMemo, useRef, useState,} from "react";
 import {WorkbookContext} from "../../context";
 import {FunctionSquare} from "lucide-react";

@@ -1,5 +1,5 @@
 import {useContext, useMemo} from "react";
-import {getRangetxt} from "../../core";
+import {getRangetxt} from "../../state";
 import {WorkbookContext} from "../../context";
 
 export function NameBox() {

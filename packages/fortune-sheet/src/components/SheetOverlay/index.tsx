@@ -25,7 +25,7 @@ import {
     onCellsMoveStart,
     selectAll,
     showLinkCard,
-} from "../../core";
+} from "../../state";
 import _ from "lodash";
 import {SetContextOptions, WorkbookContext} from "../../context";
 import {ColumnHeader} from "./ColumnHeader";

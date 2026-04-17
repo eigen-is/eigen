@@ -1,5 +1,5 @@
 import {useCallback, useContext, useEffect, useState} from "react";
-import {locale, setConditionRules} from "../../core";
+import {locale, setConditionRules} from "../../state";
 import produce from "immer";
 import {Button} from "@workspace/ui/components/button";
 import {Input} from "@workspace/ui/components/input";

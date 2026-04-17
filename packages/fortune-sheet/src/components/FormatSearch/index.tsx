@@ -1,5 +1,5 @@
 import {useCallback, useContext, useMemo, useState} from "react";
-import {cancelNormalSelected, getSheetIndex, locale, update,} from "../../core";
+import {cancelNormalSelected, getSheetIndex, locale, update,} from "../../state";
 import {Button} from "@workspace/ui/components/button";
 import {Input} from "@workspace/ui/components/input";
 import {Label} from "@workspace/ui/components/label";

@@ -1,4 +1,4 @@
-import {getRangetxt, locale} from "../../core";
+import {getRangetxt, locale} from "../../state";
 
 import {useCallback, useContext, useEffect, useState} from "react";
 import {DataVerification} from ".";

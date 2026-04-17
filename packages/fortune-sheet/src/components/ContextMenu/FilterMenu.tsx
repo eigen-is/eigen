@@ -10,7 +10,7 @@ import {
     locale,
     orderbydatafiler,
     saveFilter,
-} from "../../core";
+} from "../../state";
 import React, {useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState,} from "react";
 import produce from "immer";
 import {WorkbookContext} from "../../context";

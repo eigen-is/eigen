@@ -3,7 +3,7 @@ import {
     fixColumnStyleOverflowInFreeze,
     fixRowStyleOverflowInFreeze,
     getSheetIndex,
-} from "../../core";
+} from "../../state";
 import {useCallback, useContext, useEffect} from "react";
 import {WorkbookContext} from "../../context";
 import {SVGIcon} from "../icon-map";

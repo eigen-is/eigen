@@ -1,4 +1,12 @@
-import {api, cancelActiveImgItem, cancelNormalSelected, deleteSheet, editSheetName, locale, type Sheet,} from "../../core";
+import {
+    api,
+    cancelActiveImgItem,
+    cancelNormalSelected,
+    deleteSheet,
+    editSheetName,
+    locale,
+    type Sheet,
+} from "../../state";
 import {ChevronDown} from "lucide-react";
 import React, {useCallback, useContext, useEffect, useRef, useState,} from "react";
 import {WorkbookContext} from "../../context";

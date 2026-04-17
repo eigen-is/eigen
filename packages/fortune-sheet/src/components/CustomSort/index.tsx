@@ -1,4 +1,4 @@
-import {Context, getSheetIndex, indexToColumnChar, locale, sortSelection,} from "../../core";
+import {Context, getSheetIndex, indexToColumnChar, locale, sortSelection,} from "../../state";
 import React, {ChangeEvent, useCallback, useContext, useEffect, useState,} from "react";
 import {WorkbookContext} from "../../context";
 import {useDialog} from "../../hooks/useDialog";

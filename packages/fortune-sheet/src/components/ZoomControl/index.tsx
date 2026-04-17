@@ -1,5 +1,5 @@
 import {useCallback, useContext, useRef, useState} from "react";
-import {Context, getSheetIndex, locale, MAX_ZOOM_RATIO, MIN_ZOOM_RATIO,} from "../../core";
+import {Context, getSheetIndex, locale, MAX_ZOOM_RATIO, MIN_ZOOM_RATIO,} from "../../state";
 import {WorkbookContext} from "../../context";
 import {Minus, Plus} from "lucide-react";
 import {useOutsideClick} from "../../hooks/useOutsideClick";

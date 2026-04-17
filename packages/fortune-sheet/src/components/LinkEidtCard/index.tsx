@@ -10,7 +10,7 @@ import {
     removeHyperlink,
     replaceHtml,
     saveHyperlink,
-} from "../../core";
+} from "../../state";
 import "./index.css";
 import {WorkbookContext} from "../../context";
 import type {LucideIcon} from "lucide-react";

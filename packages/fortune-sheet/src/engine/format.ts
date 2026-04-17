@@ -1,9 +1,9 @@
 import numeral from "numeral";
 import _ from "lodash";
-import {isdatetime, isRealNum, valueIsError} from "../core/modules/validation";
+import {isdatetime, isRealNum, valueIsError} from "../state/modules/validation";
 import SSF from "./ssf";
-import {CellMatrix} from "../core/types";
-import {getCellValue} from "../core/modules/cell";
+import {CellMatrix} from "../state/types";
+import {getCellValue} from "../state/modules/cell";
 
 const base1904 = new Date(1900, 2, 1, 0, 0, 0);
 

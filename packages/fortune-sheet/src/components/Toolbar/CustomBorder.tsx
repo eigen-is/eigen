@@ -1,5 +1,5 @@
 import {useContext, useState} from "react";
-import {locale} from "../../core";
+import {locale} from "../../state";
 import {WorkbookContext} from "../../context";
 import {ColorPicker} from "@workspace/ui/components/layout/media/color-picker";
 import {

@@ -16,7 +16,7 @@ import {
     moveHighlightCell,
     moveToEnd,
     valueShowEs,
-} from "../../core";
+} from "../../state";
 import React, {useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState,} from "react";
 import _ from "lodash";
 import {WorkbookContext} from "../../context";

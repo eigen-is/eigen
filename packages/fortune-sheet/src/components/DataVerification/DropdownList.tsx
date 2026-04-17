@@ -1,4 +1,4 @@
-import {getCellValue, getDropdownList, getFlowdata, getSheetIndex, mergeBorder, setDropcownValue,} from "../../core";
+import {getCellValue, getDropdownList, getFlowdata, getSheetIndex, mergeBorder, setDropcownValue,} from "../../state";
 import {useCallback, useContext, useEffect, useRef, useState,} from "react";
 import {WorkbookContext} from "../../context";
 import {useOutsideClick} from "../../hooks/useOutsideClick";

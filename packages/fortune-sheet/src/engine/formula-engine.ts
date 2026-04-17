@@ -1,7 +1,7 @@
 // @ts-ignore
-import { ERROR_REF, Parser } from "../formula-parser";
-import type { Cell, FormulaDependency } from "../core/types";
-import type { CellResolver, EvaluationResult, FormulaEngineState } from "./types";
+import {ERROR_REF, Parser} from "./parser";
+import type {Cell, FormulaDependency} from "../state/types";
+import type {CellResolver, EvaluationResult, FormulaEngineState} from "./types";
 import SSF from "./ssf";
 
 export function isFormula(value: unknown): boolean {

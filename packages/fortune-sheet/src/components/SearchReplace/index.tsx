@@ -7,7 +7,7 @@ import {
     searchAll,
     searchNext,
     SearchResult,
-} from "../../core";
+} from "../../state";
 import {useCallback, useContext, useState} from "react";
 import {WorkbookContext} from "../../context";
 import {useAlert} from "../../hooks/useAlert";
