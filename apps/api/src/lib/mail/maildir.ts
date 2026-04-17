@@ -48,7 +48,9 @@ export default class Maildir {
             const welcome = welcomeMail(this.home.user.name, this.home.user.email);
             if (welcome) await this.store.deliverAtomic(welcome, '');
         }
-        this.store.watchMailboxes((mailbox) => this.syncMailbox(mailbox).catch(() => {}));
+        this.store.watchMailboxes((mailbox) =>
+            this.syncMailbox(mailbox).catch((err) => console.error('maildir: mailbox sync failed', err)),
+        );
     }
 
     async size(): Promise<number> {
