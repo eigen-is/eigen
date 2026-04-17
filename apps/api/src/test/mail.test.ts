@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
-import * as mailer from '../lib/core/mailer';
+// Static import of '../lib/core/mailer' would trigger server-config module evaluation
+// before './setup' sets EIGEN_DATA_ROOT. Dynamic-import it inside the test instead.
 import { assertJson, authedRequest, findOrFail, getTestContext } from './setup';
 
 const isWindows = process.platform === 'win32';
@@ -438,6 +439,7 @@ describe.skipIf(isWindows)('Mail', () => {
         });
         const draft = await assertJson<EmailSummary>(draftRes);
 
+        const mailer = await import('../lib/core/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValueOnce(false);
 
         try {
