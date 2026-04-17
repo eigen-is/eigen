@@ -119,3 +119,12 @@ export type DraftInput = {
     subject?: string;
     text?: string;
 };
+
+export type AttachmentMeta = {
+    tempId?: string;
+    filename: string;
+    size: number;
+    contentType: string;
+    index?: number;
+    localUrl?: string;
+};
