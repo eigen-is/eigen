@@ -17,13 +17,13 @@ import { EmailContextMenu } from './email-context-menu';
 
 type EmailDetailToolbarProps = {
     email: Email;
-    onReply?: (emailId: string) => void;
-    onReplyAll?: (emailId: string) => void;
-    onForward?: (emailId: string) => void;
-    onArchive?: (emailId: string) => void;
-    onReportSpam?: (emailId: string) => void;
-    onDelete?: (emailId: string) => void;
-    onMoveToFolder?: (emailId: string, folderId: string) => void;
+    onReply: (emailId: string) => void;
+    onReplyAll: (emailId: string) => void;
+    onForward: (emailId: string) => void;
+    onArchive: (emailId: string) => void;
+    onReportSpam: (emailId: string) => void;
+    onDelete: (emailId: string) => void;
+    onMoveToFolder: (emailId: string, folderId: string) => void;
     mailboxes?: MaildirMailbox[];
 };
 
@@ -42,21 +42,21 @@ export function EmailDetailToolbar({
         <Toolbar>
             <div className="flex items-center gap-1">
                 {email.mailbox !== 'Archive' && (
-                    <TooltipButton icon={Archive} tooltipText="Archive" onClick={() => onArchive?.(email.id)} />
+                    <TooltipButton icon={Archive} tooltipText="Archive" onClick={() => onArchive(email.id)} />
                 )}
                 {email.mailbox !== 'Junk' && (
                     <TooltipButton
                         icon={AlertTriangle}
                         tooltipText="Report Spam"
-                        onClick={() => onReportSpam?.(email.id)}
+                        onClick={() => onReportSpam(email.id)}
                     />
                 )}
-                <TooltipButton icon={Trash2} tooltipText="Delete" onClick={() => onDelete?.(email.id)} />
+                <TooltipButton icon={Trash2} tooltipText="Delete" onClick={() => onDelete(email.id)} />
             </div>
             <div className="flex items-center gap-1">
-                <TooltipButton icon={Reply} tooltipText="Reply" onClick={() => onReply?.(email.id)} />
-                <TooltipButton icon={ReplyAll} tooltipText="Reply All" onClick={() => onReplyAll?.(email.id)} />
-                <TooltipButton icon={Forward} tooltipText="Forward" onClick={() => onForward?.(email.id)} />
+                <TooltipButton icon={Reply} tooltipText="Reply" onClick={() => onReply(email.id)} />
+                <TooltipButton icon={ReplyAll} tooltipText="Reply All" onClick={() => onReplyAll(email.id)} />
+                <TooltipButton icon={Forward} tooltipText="Forward" onClick={() => onForward(email.id)} />
                 <div className="h-6 w-[1px] bg-border mx-1" />
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -73,38 +73,10 @@ export function EmailDetailToolbar({
                             onReply={onReply}
                             onReplyAll={onReplyAll}
                             onForward={onForward}
-                            onArchive={
-                                onArchive
-                                    ? (ids) =>
-                                          ids.forEach((id) => {
-                                              onArchive(id);
-                                          })
-                                    : undefined
-                            }
-                            onReportSpam={
-                                onReportSpam
-                                    ? (ids) =>
-                                          ids.forEach((id) => {
-                                              onReportSpam(id);
-                                          })
-                                    : undefined
-                            }
-                            onDelete={
-                                onDelete
-                                    ? (ids) =>
-                                          ids.forEach((id) => {
-                                              onDelete(id);
-                                          })
-                                    : undefined
-                            }
-                            onMoveToFolder={
-                                onMoveToFolder
-                                    ? (ids, folderId) =>
-                                          ids.forEach((id) => {
-                                              onMoveToFolder(id, folderId);
-                                          })
-                                    : undefined
-                            }
+                            onArchive={(ids) => ids.forEach((id) => onArchive(id))}
+                            onReportSpam={(ids) => ids.forEach((id) => onReportSpam(id))}
+                            onDelete={(ids) => ids.forEach((id) => onDelete(id))}
+                            onMoveToFolder={(ids, folderId) => ids.forEach((id) => onMoveToFolder(id, folderId))}
                             onClose={() => {}}
                             onPrint={() => printDocument()}
                         />
@@ -161,6 +133,21 @@ export function MailLink({
     );
 }
 
+function formatContactObject(contact: AddressObject, compact: boolean = false) {
+    return contact.value.map((address, idx, arr) => (
+        <span key={address.address || idx}>
+            <MailLink email={address.address} name={address.name} mailLink={!compact} compact={compact} />
+            {idx < arr.length - 1 ? ', ' : ''}
+        </span>
+    ));
+}
+
+function formatContactObjects(contacts: AddressObject | AddressObject[], compact: boolean = false) {
+    return Array.isArray(contacts)
+        ? contacts.map((contact) => formatContactObject(contact, compact))
+        : formatContactObject(contacts, compact);
+}
+
 export function EmailDetail({ email, toggleMailRead }: EmailDetailProps) {
     const { user } = useAuth();
     const hasMarkedAsRead = useRef<string | null>(null);
@@ -203,34 +190,10 @@ export function EmailDetail({ email, toggleMailRead }: EmailDetailProps) {
 
     const needsToShowDetails = needsToShowTo || needsToShowCc || needsToShowBcc;
 
-    // Format date
-    let formattedDate = 'Unknown date';
-    try {
-        if (email.date) {
-            const dateValue = new Date(email.date);
-            formattedDate = formatFullDateTime(dateValue);
-        }
-    } catch (error) {
-        console.error('Error formatting date:', error);
-    }
+    const formattedDate = email.date ? formatFullDateTime(new Date(email.date)) : 'Unknown date';
 
     // Get email content
     const emailContent = email.html || email.textAsHtml || email.text || '';
-
-    const formatContactObjects = (contacts: AddressObject | AddressObject[], compact: boolean = false) => {
-        return Array.isArray(contacts)
-            ? contacts.map((contact) => formatContactObject(contact, compact))
-            : formatContactObject(contacts, compact);
-    };
-
-    const formatContactObject = (contact: AddressObject, compact: boolean = false) => {
-        return contact.value.map((address, idx, arr) => (
-            <span key={address.address || idx}>
-                <MailLink email={address.address} name={address.name} mailLink={!compact} compact={compact} />
-                {idx < arr.length - 1 ? ', ' : ''}
-            </span>
-        ));
-    };
 
     return (
         <div className="flex flex-col h-full bg-background">
