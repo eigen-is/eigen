@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { mailApi } from '@workspace/lib/api';
+import { getMailDraftAttachmentUploadUrl, mailApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import type { DraftInput, EmailDraft, NewDraft } from '@workspace/lib/types/mail';
 import { toast } from 'sonner';
@@ -42,9 +42,13 @@ export async function uploadDraftAttachment(
 ): Promise<{ tempId: string; filename: string; size: number; contentType: string } | null> {
     const formData = new FormData();
     formData.append('file', file);
-    const response = await mailApi({ ownerId }).message.draft.attachment.post(formData as never);
-    if (response.error) throw new AppError(response);
-    return response.data || null;
+    const res = await fetch(getMailDraftAttachmentUploadUrl(ownerId), {
+        method: 'POST',
+        body: formData,
+        credentials: 'include',
+    });
+    if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+    return (await res.json()) as { tempId: string; filename: string; size: number; contentType: string };
 }
 
 export async function sendDraftEmail(draft: NewDraft | EmailDraft, ownerId: string): Promise<EmailDraft | null> {

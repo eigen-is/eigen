@@ -23,6 +23,7 @@ export function useDraftAutoSave({
     const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
     const lastSavedRef = useRef<string>('');
     const savingRef = useRef(false);
+    const disabledRef = useRef(false);
 
     const toDraftRef = useRef(toDraft);
     toDraftRef.current = toDraft;
@@ -46,7 +47,7 @@ export function useDraftAutoSave({
         });
 
     const doSave = useCallback(async () => {
-        if (savingRef.current) return;
+        if (savingRef.current || disabledRef.current) return;
         const draft = toDraftRef.current();
         const snapshot = buildSnapshot(draft);
         if (snapshot === lastSavedRef.current) return;
@@ -64,15 +65,23 @@ export function useDraftAutoSave({
     }, []);
 
     const scheduleSave = useCallback(() => {
-        if (!isSaveableRef.current) return;
+        if (disabledRef.current || !isSaveableRef.current) return;
         if (timerRef.current) clearTimeout(timerRef.current);
         timerRef.current = setTimeout(doSave, debounceMs);
     }, [doSave, debounceMs]);
+
+    // Disable future saves — called when the draft is about to be sent or deleted,
+    // preventing both pending timers and the unmount save from resurrecting the draft.
+    const disable = useCallback(() => {
+        disabledRef.current = true;
+        if (timerRef.current) clearTimeout(timerRef.current);
+    }, []);
 
     // Save on unmount — refs ensure we use latest state/handlers, not stale mount-time closure.
     useEffect(() => {
         return () => {
             if (timerRef.current) clearTimeout(timerRef.current);
+            if (disabledRef.current) return;
             if (isSaveableRef.current && !savingRef.current) {
                 const draft = toDraftRef.current();
                 const snapshot = buildSnapshot(draft);
@@ -83,5 +92,5 @@ export function useDraftAutoSave({
         };
     }, []);
 
-    return { scheduleSave, saveNow: doSave };
+    return { scheduleSave, saveNow: doSave, disable };
 }

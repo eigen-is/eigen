@@ -1,5 +1,6 @@
 import { useAuth } from '@workspace/lib/auth';
-import type { EmailDraft as EmailDraftType, NewDraft } from '@workspace/lib/types/mail';
+import { uploadDraftAttachment } from '@workspace/lib/mail';
+import type { AttachmentMeta, EmailDraft as EmailDraftType, NewDraft } from '@workspace/lib/types/mail';
 import { ContactAutosuggest, Toolbar, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import {
@@ -13,24 +14,36 @@ import {
 import { Input } from '@workspace/ui/components/input';
 import { ConfirmDialog } from '@workspace/ui/components/layout/delete/confirm-dialog';
 import { LightEditor } from '@workspace/ui/components/layout/editor';
-import { Send, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { cn } from '@workspace/ui/lib/utils';
+import { Paperclip, Send, Trash2 } from 'lucide-react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { DraftAttachments } from './draft-attachments';
 import { useDraftAutoSave } from './hooks/use-draft-auto-save';
 import { useDraftState } from './hooks/use-draft-state';
 
+export type EmailDraftHandle = {
+    openFilePicker: () => void;
+};
+
 export function EmailDraftToolbar({
     onDelete,
+    onAttach,
     isSending,
     hasId,
 }: {
     onDelete: () => void;
+    onAttach?: () => void;
     isSending: boolean;
     hasId: boolean;
 }) {
     return (
         <Toolbar>
-            <TooltipButton icon={Send} tooltipText="Send" type="submit" form="draft-form" disabled={isSending} />
+            <div className="flex items-center gap-1">
+                <TooltipButton icon={Send} tooltipText="Send" type="submit" form="draft-form" disabled={isSending} />
+                {onAttach && (
+                    <TooltipButton icon={Paperclip} tooltipText="Attach file" onClick={onAttach} disabled={isSending} />
+                )}
+            </div>
             {hasId && <TooltipButton icon={Trash2} tooltipText="Delete" onClick={onDelete} disabled={isSending} />}
         </Toolbar>
     );
@@ -44,10 +57,16 @@ type EmailDraftProps = {
     isSending: boolean;
 };
 
-export function EmailDraft({ email, to, sendDraft, onAutoSave, isSending }: EmailDraftProps) {
+export const EmailDraft = forwardRef<EmailDraftHandle, EmailDraftProps>(function EmailDraft(
+    { email, to, sendDraft, onAutoSave, isSending },
+    ref,
+) {
     const [alertMessage, setAlertMessage] = useState<string | null>(null);
     const [confirmNoSubject, setConfirmNoSubject] = useState(false);
+    const [isDragging, setIsDragging] = useState(false);
     const auth = useAuth();
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const dragCounterRef = useRef(0);
 
     const {
         state,
@@ -60,7 +79,11 @@ export function EmailDraft({ email, to, sendDraft, onAutoSave, isSending }: Emai
         isSaveable,
     } = useDraftState(email, to);
 
-    const { scheduleSave, saveNow } = useDraftAutoSave({
+    const {
+        scheduleSave,
+        saveNow,
+        disable: disableAutoSave,
+    } = useDraftAutoSave({
         toDraft,
         isSaveable,
         draftId: state.id,
@@ -77,6 +100,41 @@ export function EmailDraft({ email, to, sendDraft, onAutoSave, isSending }: Emai
 
     const fromName = auth.user?.name || auth.user?.email || '';
     const fromEmail = auth.user?.email || '';
+
+    const ownerId = auth.user?.id;
+    const uploadFiles = useCallback(
+        async (files: FileList | File[] | null) => {
+            if (!files || !ownerId) return;
+            const list = files instanceof FileList ? Array.from(files) : files;
+            for (const file of list) {
+                try {
+                    const result = await uploadDraftAttachment(ownerId, file);
+                    if (!result) continue;
+                    const localUrl = file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined;
+                    const meta: AttachmentMeta = {
+                        tempId: result.tempId,
+                        filename: result.filename,
+                        size: result.size,
+                        contentType: result.contentType,
+                        localUrl,
+                    };
+                    addAttachment(meta);
+                } catch (e) {
+                    console.error('Attachment upload failed', e);
+                }
+            }
+            scheduleSave();
+        },
+        [ownerId, addAttachment, scheduleSave],
+    );
+
+    useImperativeHandle(
+        ref,
+        () => ({
+            openFilePicker: () => fileInputRef.current?.click(),
+        }),
+        [],
+    );
 
     useEffect(() => {
         scheduleSave();
@@ -95,13 +153,59 @@ export function EmailDraft({ email, to, sendDraft, onAutoSave, isSending }: Emai
             setConfirmNoSubject(true);
             return;
         }
-        const hasPendingUploads = state.attachments.some((a) => a.tempId);
-        if (hasPendingUploads) await saveNow();
+        if (state.attachments.some((a) => a.tempId)) await saveNow();
+        disableAutoSave();
         await sendDraft(toDraft());
     };
 
+    const handleDragEnter = (e: React.DragEvent) => {
+        if (!e.dataTransfer?.types?.includes('Files')) return;
+        e.preventDefault();
+        dragCounterRef.current += 1;
+        setIsDragging(true);
+    };
+
+    const handleDragLeave = (e: React.DragEvent) => {
+        e.preventDefault();
+        dragCounterRef.current -= 1;
+        if (dragCounterRef.current <= 0) {
+            dragCounterRef.current = 0;
+            setIsDragging(false);
+        }
+    };
+
+    const handleDragOver = (e: React.DragEvent) => {
+        if (!e.dataTransfer?.types?.includes('Files')) return;
+        e.preventDefault();
+    };
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        dragCounterRef.current = 0;
+        setIsDragging(false);
+        const files = e.dataTransfer?.files;
+        if (files && files.length > 0) void uploadFiles(files);
+    };
+
     return (
-        <div className="flex flex-col h-full w-full">
+        <div
+            className="relative flex flex-col h-full w-full"
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+        >
+            <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                    void uploadFiles(e.target.files);
+                    e.target.value = '';
+                }}
+                disabled={isSending}
+            />
             <div className="flex-1 overflow-auto">
                 <form
                     id="draft-form"
@@ -173,15 +277,10 @@ export function EmailDraft({ email, to, sendDraft, onAutoSave, isSending }: Emai
                     </div>
                     <DraftAttachments
                         attachments={state.attachments}
-                        onAdd={(meta) => {
-                            addAttachment(meta);
-                            scheduleSave();
-                        }}
                         onRemove={(i) => {
                             removeAttachment(i);
                             scheduleSave();
                         }}
-                        disabled={isSending}
                     />
                     <div className="flex-1 p-4">
                         <LightEditor
@@ -194,6 +293,17 @@ export function EmailDraft({ email, to, sendDraft, onAutoSave, isSending }: Emai
                         />
                     </div>
                 </form>
+            </div>
+            <div
+                className={cn(
+                    'pointer-events-none absolute inset-2 rounded-lg border-2 border-dashed border-primary bg-primary/5 flex items-center justify-center transition-opacity',
+                    isDragging ? 'opacity-100' : 'opacity-0',
+                )}
+            >
+                <div className="flex items-center gap-2 text-primary text-sm font-medium">
+                    <Paperclip className="h-4 w-4" />
+                    Drop files to attach
+                </div>
             </div>
             <Dialog open={!!alertMessage} onOpenChange={() => setAlertMessage(null)}>
                 <DialogContent>
@@ -215,9 +325,10 @@ export function EmailDraft({ email, to, sendDraft, onAutoSave, isSending }: Emai
                 onConfirm={async () => {
                     setConfirmNoSubject(false);
                     if (state.attachments.some((a) => a.tempId)) await saveNow();
+                    disableAutoSave();
                     await sendDraft(toDraft());
                 }}
             />
         </div>
     );
-}
+});
