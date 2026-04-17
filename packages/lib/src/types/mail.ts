@@ -118,6 +118,7 @@ export type DraftInput = {
     bcc?: AddressObject;
     subject?: string;
     text?: string;
+    html?: string;
 };
 
 export type AttachmentMeta = {

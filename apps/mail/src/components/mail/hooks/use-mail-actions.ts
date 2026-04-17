@@ -134,7 +134,11 @@ export function useMailActions() {
     };
 
     const formatEmailQuote = (email: Email) => {
-        return `\n\nOn ${formatFullDateTime(new Date(email.date))} ${email.from?.value[0]?.name} <${email.from?.value[0]?.address}> wrote:\n\n${email.text}`;
+        const fromName = email.from?.value[0]?.name || '';
+        const fromAddress = email.from?.value[0]?.address || '';
+        const header = `On ${formatFullDateTime(new Date(email.date))} ${fromName} &lt;${fromAddress}&gt; wrote:`;
+        const content = email.html || email.text || '';
+        return `<br><br><p>${header}</p><blockquote>${content}</blockquote>`;
     };
 
     const handleReplyEmail = async (emailId: string) => {
@@ -144,7 +148,7 @@ export function useMailActions() {
             createDraftEmail({
                 to: email.replyTo || email.from,
                 subject: email.subject?.startsWith('RE:') ? email.subject : `RE: ${email.subject}`,
-                text: formatEmailQuote(email),
+                html: formatEmailQuote(email),
             }),
         );
     };
@@ -163,7 +167,7 @@ export function useMailActions() {
             createDraftEmail({
                 to: { value: allRecipients, html: '', text: '' },
                 subject: email.subject?.startsWith('RE:') ? email.subject : `RE: ${email.subject}`,
-                text: formatEmailQuote(email),
+                html: formatEmailQuote(email),
             }),
         );
     };
@@ -174,7 +178,7 @@ export function useMailActions() {
         await handleNewDraftEmail(
             createDraftEmail({
                 subject: `FW: ${email.subject}`,
-                text: formatEmailQuote(email),
+                html: formatEmailQuote(email),
             }),
         );
     };

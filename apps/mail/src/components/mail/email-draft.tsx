@@ -1,5 +1,4 @@
 import { useAuth } from '@workspace/lib/auth';
-import { createDraftEmail } from '@workspace/lib/mail';
 import type { EmailDraft as EmailDraftType, NewDraft } from '@workspace/lib/types/mail';
 import { ContactAutosuggest, Toolbar, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
@@ -13,25 +12,11 @@ import {
 } from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
 import { ConfirmDialog } from '@workspace/ui/components/layout/delete/confirm-dialog';
-import { Textarea } from '@workspace/ui/components/textarea';
+import { LightEditor } from '@workspace/ui/components/layout/editor';
 import { Send, Trash2 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-
-export function getEmailDraftStatus(draft: NewDraft | EmailDraftType) {
-    // Check if draft is sendable (to field is not empty)
-    const isSendable = !!(draft.to?.text && draft.to.text.trim() !== '');
-
-    // Check if draft is saveable (at least one of subject, to, cc, bcc, or text is not empty)
-    const isSaveable = !!(
-        (draft.subject && draft.subject.toString().trim() !== '') ||
-        (draft.to?.text && draft.to.text.trim() !== '') ||
-        (draft.cc?.text && draft.cc.text.trim() !== '') ||
-        (draft.bcc?.text && draft.bcc.text.trim() !== '') ||
-        (draft.text && draft.text.trim() !== '')
-    );
-
-    return { isSendable, isSaveable };
-}
+import { useEffect, useState } from 'react';
+import { useDraftAutoSave } from './hooks/use-draft-auto-save';
+import { useDraftState } from './hooks/use-draft-state';
 
 export function EmailDraftToolbar({
     onDelete,
@@ -59,145 +44,45 @@ type EmailDraftProps = {
 };
 
 export function EmailDraft({ email, to, sendDraft, onAutoSave, isSending }: EmailDraftProps) {
-    // Create refs for the input fields
-    const toFieldRef = useRef<HTMLInputElement>(null);
-    const subjectFieldRef = useRef<HTMLInputElement>(null);
-    const textareaRef = useRef<HTMLTextAreaElement>(null);
-    const ccFieldRef = useRef<HTMLInputElement>(null);
-    const bccFieldRef = useRef<HTMLInputElement>(null);
     const [alertMessage, setAlertMessage] = useState<string | null>(null);
     const [confirmNoSubject, setConfirmNoSubject] = useState(false);
-
     const auth = useAuth();
 
-    const draft = useMemo(() => {
-        const d = email ?? createDraftEmail({});
-        return {
-            ...d,
-            from: {
-                value: [{ name: auth.user!.name || '', address: auth.user!.email || '' }],
-                html: '',
-                text: '',
-            },
-            ...(to ? { to: { value: [{ name: '', address: to }], html: to, text: to } } : {}),
-        };
-    }, [email, to, auth.user]);
+    const { state, setField, toDraft, isSendable, isSaveable } = useDraftState(email, to);
 
-    const fromName = draft.from?.value[0].name || draft.from?.value[0].address;
-    const fromEmail = draft.from?.value[0].address;
+    const { scheduleSave } = useDraftAutoSave({
+        toDraft,
+        isSaveable,
+        draftId: state.id,
+        onSave: onAutoSave || (() => Promise.resolve()),
+        onIdAssigned: (id) => setField('id', id),
+    });
 
-    // Set focus on the appropriate field based on priority
+    const fromName = auth.user?.name || auth.user?.email || '';
+    const fromEmail = auth.user?.email || '';
+
     useEffect(() => {
-        // Check if To field is empty by checking the defaultValue we're using in the input
-        const toFieldEmpty = !draft.to || draft.to.html === '' || draft.to.text === '';
-
-        // Check if subject is empty
-        const subjectEmpty = !draft.subject || String(draft.subject).trim() === '';
-
-        if (toFieldEmpty && toFieldRef.current) {
-            toFieldRef.current.focus();
-        } else if (subjectEmpty && subjectFieldRef.current) {
-            subjectFieldRef.current.focus();
-        } else if (textareaRef.current) {
-            textareaRef.current.focus();
-        }
-    }, [draft]);
-
-    // Create a function to get the current draft values
-    const getCurrentDraft = useCallback(() => {
-        const convertStringToEmailAddressArray = (field: string) => {
-            if (!field || field.trim() === '') {
-                return [];
-            }
-            // field can be a comma separated list of email addresses
-            return field.split(',').map((value) => {
-                // value can be name <address> but also only address
-                const [name, address] = value.split('<');
-                if (!address) {
-                    return {
-                        name: '',
-                        address: name.trim(),
-                    };
-                }
-                return {
-                    name: name.trim(),
-                    address: address.trim().replace('>', ''),
-                };
-            });
-        };
-
-        return {
-            ...draft,
-            to: toFieldRef.current?.value
-                ? {
-                      value: convertStringToEmailAddressArray(toFieldRef.current?.value || ''),
-                      text: toFieldRef.current?.value || '',
-                      html: toFieldRef.current?.value || '',
-                  }
-                : undefined,
-            cc: ccFieldRef.current?.value
-                ? {
-                      value: convertStringToEmailAddressArray(ccFieldRef.current?.value || ''),
-                      text: ccFieldRef.current?.value || '',
-                      html: ccFieldRef.current?.value || '',
-                  }
-                : undefined,
-            bcc: bccFieldRef.current?.value
-                ? {
-                      value: convertStringToEmailAddressArray(bccFieldRef.current?.value || ''),
-                      text: bccFieldRef.current?.value || '',
-                      html: bccFieldRef.current?.value || '',
-                  }
-                : undefined,
-            subject: subjectFieldRef.current?.value || '',
-            text: textareaRef.current?.value || '',
-        };
-    }, [draft]);
-
-    // Save draft on unmount (navigation away / page leave)
-    const onAutoSaveRef = useRef(onAutoSave);
-    onAutoSaveRef.current = onAutoSave;
-    useEffect(() => {
-        if (!email?.id) return;
-        return () => {
-            const current = getCurrentDraft();
-            if (getEmailDraftStatus(current).isSaveable) {
-                onAutoSaveRef.current?.(current).catch(() => {});
-            }
-        };
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- save on unmount only
-    }, [email?.id]);
-
-    const doSend = async () => {
-        await sendDraft(getCurrentDraft());
-    };
+        scheduleSave();
+    }, [state.to, state.cc, state.bcc, state.subject, state.body, scheduleSave]);
 
     const handleSendEmail = async () => {
-        const toValue = toFieldRef.current?.value.trim();
-        if (!toValue) {
+        if (!isSendable) {
             setAlertMessage('Please specify at least one recipient.');
             return;
         }
-
-        const subjectEmpty = !subjectFieldRef.current?.value.trim();
-        const bodyEmpty = !textareaRef.current?.value.trim();
-
-        if (subjectEmpty && bodyEmpty) {
+        if (!state.subject.trim() && !state.body.trim()) {
             setAlertMessage('Please add a subject or message.');
             return;
         }
-
-        if (subjectEmpty) {
+        if (!state.subject.trim()) {
             setConfirmNoSubject(true);
             return;
         }
-
-        await doSend();
+        await sendDraft(toDraft());
     };
 
     return (
         <div className="flex flex-col h-full w-full">
-            {/* Email Form */}
             <div className="flex-1 overflow-auto">
                 <form
                     id="draft-form"
@@ -208,61 +93,45 @@ export function EmailDraft({ email, to, sendDraft, onAutoSave, isSending }: Emai
                     }}
                 >
                     <div className="space-y-1 px-4 py-2">
-                        {/* To field */}
                         <div className="flex items-center border-b">
                             <div className="w-16 text-sm text-muted-foreground py-2">To:</div>
                             <ContactAutosuggest
-                                initialValue={draft.to?.text || ''}
-                                onChange={() => {
-                                    // Value is read from ref on submit
-                                }}
-                                appendMode={true}
+                                initialValue={state.to}
+                                onChange={(val) => setField('to', val)}
+                                appendMode
                                 className="flex-1"
                                 inputClassName="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
-                                inputRef={toFieldRef}
                                 disabled={isSending}
                                 autoComplete="off"
                                 id="to"
                             />
                         </div>
-
-                        {/* CC field */}
                         <div className="flex items-center border-b">
                             <div className="w-16 text-sm text-muted-foreground py-2">Cc:</div>
                             <ContactAutosuggest
-                                initialValue={draft.cc?.text || ''}
-                                onChange={() => {
-                                    // Value is read from ref on submit
-                                }}
-                                appendMode={true}
+                                initialValue={state.cc}
+                                onChange={(val) => setField('cc', val)}
+                                appendMode
                                 className="flex-1"
                                 inputClassName="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
-                                inputRef={ccFieldRef}
                                 disabled={isSending}
                                 autoComplete="off"
                                 id="cc"
                             />
                         </div>
-
-                        {/* BCC field */}
                         <div className="flex items-center border-b">
                             <div className="w-16 text-sm text-muted-foreground py-2">Bcc:</div>
                             <ContactAutosuggest
-                                initialValue={draft.bcc?.text || ''}
-                                onChange={() => {
-                                    // Value is read from ref on submit
-                                }}
-                                appendMode={true}
+                                initialValue={state.bcc}
+                                onChange={(val) => setField('bcc', val)}
+                                appendMode
                                 className="flex-1"
                                 inputClassName="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
-                                inputRef={bccFieldRef}
                                 disabled={isSending}
                                 autoComplete="off"
                                 id="bcc"
                             />
                         </div>
-
-                        {/* From field (non-editable) */}
                         <div className="flex items-center border-b">
                             <div className="w-16 text-sm text-muted-foreground py-2">From:</div>
                             <Input
@@ -272,28 +141,25 @@ export function EmailDraft({ email, to, sendDraft, onAutoSave, isSending }: Emai
                                 className="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
                             />
                         </div>
-
-                        {/* Subject field */}
                         <div className="flex items-center border-b">
                             <div className="w-16 text-sm text-muted-foreground py-2">Subject:</div>
                             <Input
                                 id="subject"
-                                ref={subjectFieldRef}
-                                defaultValue={draft.subject ? String(draft.subject) : ''}
+                                value={state.subject}
+                                onChange={(e) => setField('subject', e.target.value)}
                                 className="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
                                 disabled={isSending}
                             />
                         </div>
                     </div>
-
-                    {/* Email body */}
                     <div className="flex-1 p-4">
-                        <Textarea
-                            className="w-full h-full min-h-[200px] border-none resize-none focus-visible:ring-0 bg-transparent p-0"
+                        <LightEditor
+                            content={state.body}
+                            onChange={(html) => setField('body', html)}
                             placeholder="Write your message here..."
-                            defaultValue={draft.text || ''}
-                            ref={textareaRef}
-                            disabled={isSending}
+                            toolbar="floating"
+                            className="w-full min-h-[200px]"
+                            editable={!isSending}
                         />
                     </div>
                 </form>
@@ -317,7 +183,7 @@ export function EmailDraft({ email, to, sendDraft, onAutoSave, isSending }: Emai
                 confirmText="Send"
                 onConfirm={() => {
                     setConfirmNoSubject(false);
-                    doSend();
+                    sendDraft(toDraft());
                 }}
             />
         </div>
