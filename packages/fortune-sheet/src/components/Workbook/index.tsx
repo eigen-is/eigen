@@ -1,6 +1,5 @@
 import {
     calcSelectionInfo,
-    CellMatrix,
     CellWithRowAndCol,
     Context,
     defaultContext,
@@ -22,6 +21,7 @@ import {
     Settings,
     Sheet as SheetType,
 } from "../../state";
+import type {CellMatrix} from "../../engine/types";
 import React, {useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState,} from "react";
 import {applyPatches, enablePatches, Patch, produce, produceWithPatches,} from "immer";
 import _ from "lodash";

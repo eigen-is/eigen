@@ -2,7 +2,7 @@ import _ from "lodash";
 import {isdatatypemulti} from ".";
 import type {Context} from "../context";
 import {locale} from "../locale";
-import {Cell} from "../types";
+import type {Cell} from "../../engine/types";
 import {normalizedCellAttr} from "./cell";
 import {isInlineStringCell} from "./inline-string";
 

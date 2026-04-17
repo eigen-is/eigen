@@ -440,7 +440,6 @@ export function pasteHandlerOfPaintModel(
                         delete value.v;
                         delete value.m;
                         delete value.f;
-                        delete value.spl;
 
                         if (value.ct && value.ct.t === "inlineStr") {
                             delete value.ct;

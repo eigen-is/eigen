@@ -1,7 +1,7 @@
 import _ from "lodash";
 import {locale} from "../locale";
 import {Context, getFlowdata} from "../context";
-import {Cell, CellMatrix} from "../types";
+import type {Cell, CellMatrix} from "../../engine/types";
 import {getSheetIndex, isAllowEdit, rgbToHex} from "../utils";
 import {update} from "../../engine/format";
 import {normalizeSelection} from "./selection";

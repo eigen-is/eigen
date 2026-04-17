@@ -64,7 +64,6 @@ export function mergeCells(
                             delete cell_clone.m;
                             delete cell_clone.ct;
                             delete cell_clone.f;
-                            delete cell_clone.spl;
 
                             d[r][c] = cell_clone;
                         }
@@ -130,7 +129,6 @@ export function mergeCells(
                                 delete cell_clone.m;
                                 delete cell_clone.ct;
                                 delete cell_clone.f;
-                                delete cell_clone.spl;
 
                                 d[r][c] = cell_clone;
                             }

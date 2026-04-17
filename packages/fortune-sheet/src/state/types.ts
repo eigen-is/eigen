@@ -1,4 +1,5 @@
 import {Patch as ImmerPatch} from "immer";
+import type {Cell, CellMatrix} from "../engine/types";
 import {PatchOptions} from "./utils";
 
 export type Op = {
@@ -22,42 +23,11 @@ export type Rect = {
     height: number;
 };
 
-export type CellStyle = {
-    bl?: number;
-    it?: number;
-    ff?: number | string;
-    fs?: number;
-    fc?: string;
-    ht?: number;
-    vt?: number;
-    tb?: string;
-    cl?: number;
-    un?: number;
-    tr?: string;
-};
-
-export type Cell = {
-    v?: string | number | boolean;
-    m?: string | number;
-    mc?: { r: number; c: number; rs?: number; cs?: number };
-    f?: string;
-    ct?: { fa?: string; t?: string; s?: any };
-    qp?: number;
-    spl?: any;
-    bg?: string;
-    lo?: number;
-    rt?: number;
-    hl?: { r: number; c: number; id: string };
-    commentChatNames?: string[];
-} & CellStyle;
-
 export type CellWithRowAndCol = {
     r: number;
     c: number;
     v: Cell | null;
 };
-
-export type CellMatrix = (Cell | null)[][];
 
 export type Selection = {
     left?: number;
@@ -294,30 +264,8 @@ export type SingleRange = { row: number[]; column: number[] };
 export type Range = SingleRange[];
 
 // FORMULA
-export type FormulaDependency = {
-    row: [number, number];
-    column: [number, number];
-    sheetId: string | undefined;
-};
-
 type AncestorFormulaCell = {
     [rxcxix: string]: number;
-};
-
-export type FormulaCellInfo = {
-    formulaDependency: FormulaDependency[];
-    calc_funcStr: string;
-    key: string;
-    r: number;
-    c: number;
-    id: string;
-    parents: AncestorFormulaCell;
-    chidren: AncestorFormulaCell;
-    color: string;
-};
-
-export type FormulaCellInfoMap = {
-    [rxcxix: string]: FormulaCellInfo;
 };
 
 export type FormulaCell = {

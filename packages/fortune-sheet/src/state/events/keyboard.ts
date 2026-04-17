@@ -13,7 +13,8 @@ import {
 } from "../modules/selection";
 import {cancelPaintModel, handleBold} from "../modules/toolbar";
 import {hasPartMC} from "../modules/validation";
-import {CellMatrix, GlobalCache} from "../types";
+import type {CellMatrix} from "../../engine/types";
+import {GlobalCache} from "../types";
 import {getNowDateTime, getSheetIndex, isAllowEdit} from "../utils";
 import {handleCopy} from "./copy";
 import {jfrefreshgrid} from "../modules/refresh";

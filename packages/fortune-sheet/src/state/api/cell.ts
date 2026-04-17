@@ -10,7 +10,8 @@ import {
     updateDropCell,
     updateFormatCell,
 } from "../modules";
-import {Cell, CellStyle, SingleRange} from "../types";
+import type {Cell, CellStyle} from "../../engine/types";
+import {SingleRange} from "../types";
 import {CommonOptions, getSheet} from "./common";
 import {SHEET_NOT_FOUND} from "./errors";
 // @ts-ignore
@@ -35,19 +36,17 @@ export function getCellValue(
     let ret;
 
     if (cellData && _.isPlainObject(cellData)) {
-        ret = cellData[type];
-
-        if (type === "f" && ret != null) {
-            ret = functionHTMLGenerate(ret);
-        } else if (type === "f") {
-            ret = cellData.v;
-        } else if (cellData && cellData.ct && cellData.ct.fa === "yyyy-MM-dd") {
+        if (type === "f") {
+            ret = cellData.f != null ? functionHTMLGenerate(cellData.f) : cellData.v;
+        } else if (cellData.ct && cellData.ct.fa === "yyyy-MM-dd") {
             ret = cellData.m;
         } else if (cellData.ct?.t === "inlineStr") {
             ret = cellData.ct.s.reduce(
                 (prev: string, cur: any) => prev + (cur.v ?? ""),
                 ""
             );
+        } else {
+            ret = cellData[type];
         }
     }
 
@@ -185,8 +184,6 @@ export function clearCell(
         if (cell.f != null) {
             delete cell.f;
             delFunctionGroup(ctx, row, column, sheet.id);
-
-            delete cell.spl;
         }
     }
 }

@@ -2,7 +2,8 @@ import _ from "lodash";
 import dayjs from "dayjs";
 
 import {Context, getFlowdata} from "../context";
-import {Cell, CellMatrix, Rect} from "../types";
+import type {Cell, CellMatrix} from "../../engine/types";
+import {Rect} from "../types";
 import {colLocation, rowLocation} from "./location";
 import {getSheetIndex, isAllowEdit} from "../utils";
 import {getBorderInfoCompute} from "./border";
@@ -2356,9 +2357,7 @@ export function updateDropCell(ctx: Context) {
 
                         [, cell.v, cell.f] = v;
 
-                        if (cell.spl != null) {
-                            cell.spl = v[3].data;
-                        } else if (cell.v != null) {
+                        if (cell.v != null) {
                             if (
                                 isRealNum(cell.v) &&
                                 !/^\d{6}(18|19|20)?\d{2}(0[1-9]|1[12])(0[1-9]|[12]\d|3[01])\d{3}(\d|X)$/i.test(
@@ -2468,9 +2467,7 @@ export function updateDropCell(ctx: Context) {
 
                         [, cell.v, cell.f] = v;
 
-                        if (cell.spl != null) {
-                            cell.spl = v[3].data;
-                        } else if (cell.v != null) {
+                        if (cell.v != null) {
                             if (
                                 isRealNum(cell.v) &&
                                 !/^\d{6}(18|19|20)?\d{2}(0[1-9]|1[12])(0[1-9]|[12]\d|3[01])\d{3}(\d|X)$/i.test(
@@ -2577,9 +2574,7 @@ export function updateDropCell(ctx: Context) {
 
                         [, cell.v, cell.f] = v;
 
-                        if (cell.spl != null) {
-                            cell.spl = v[3].data;
-                        } else if (cell.v != null) {
+                        if (cell.v != null) {
                             if (
                                 isRealNum(cell.v) &&
                                 !/^\d{6}(18|19|20)?\d{2}(0[1-9]|1[12])(0[1-9]|[12]\d|3[01])\d{3}(\d|X)$/i.test(
@@ -2676,9 +2671,7 @@ export function updateDropCell(ctx: Context) {
 
                         [, cell.v, cell.f] = v;
 
-                        if (cell.spl != null) {
-                            cell.spl = v[3].data;
-                        } else if (cell.v != null) {
+                        if (cell.v != null) {
                             if (
                                 isRealNum(cell.v) &&
                                 !/^\d{6}(18|19|20)?\d{2}(0[1-9]|1[12])(0[1-9]|[12]\d|3[01])\d{3}(\d|X)$/i.test(

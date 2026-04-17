@@ -3,8 +3,8 @@ import {SheetConfig} from ".";
 import {FormulaCache} from "./modules";
 import {normalizeSelection} from "./modules/selection";
 import {Hooks} from "./settings";
+import type {Cell} from "../engine/types";
 import {
-    Cell,
     ConditionRulesProps,
     DataRegulationProps,
     FilterOptions,
@@ -201,7 +201,13 @@ export type Context = {
     // default cell
     defaultCell: Cell;
 
-    groupValuesRefreshData: any[];
+    groupValuesRefreshData: {
+        r: number;
+        c: number;
+        v: Cell["v"];
+        f: string;
+        id: string;
+    }[];
     formulaCache: FormulaCache;
     hooks: Hooks;
     // in read-only mode, force-highlight cells referenced by formulas

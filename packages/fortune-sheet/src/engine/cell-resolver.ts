@@ -1,5 +1,4 @@
-import type {Cell, CellMatrix} from "../state/types";
-import type {CalculationChainEntry, CellResolver, SheetInfo} from "./types";
+import type {CalculationChainEntry, Cell, CellMatrix, CellResolver, SheetInfo} from "./types";
 
 export type { CellResolver } from "./types";
 

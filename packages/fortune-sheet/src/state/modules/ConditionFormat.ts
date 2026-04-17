@@ -1,6 +1,7 @@
 import _ from "lodash";
 import {Context, getFlowdata} from "../context";
-import {CellMatrix, Sheet} from "../types";
+import type {CellMatrix} from "../../engine/types";
+import {Sheet} from "../types";
 import {getSheetIndex} from "../utils";
 import {getCellValue, getRangeByTxt} from "./cell";
 import {genarate} from "../../engine/format";

@@ -5,7 +5,7 @@ import {delFunctionGroup, execfunction, execFunctionGroup, functionCopy,} from "
 import {getdatabyselection, getQKBorder} from "../modules/cell";
 import {genarate, update} from "../../engine/format";
 import {normalizeSelection, selectionCache} from "../modules/selection";
-import {Cell, CellMatrix} from "../types";
+import type {Cell, CellMatrix} from "../../engine/types";
 import {getSheetIndex, isAllowEdit} from "../utils";
 import {hasPartMC, isRealNum} from "../modules/validation";
 import {getBorderInfoCompute} from "../modules/border";
@@ -1150,7 +1150,6 @@ function pasteHandlerOfCopyPaste(
             for (let j = 0; j < copyData[i].length; j += 1) {
                 if (copyData[i][j] != null && copyData[i]![j]!.f != null) {
                     delete copyData[i]![j]!.f;
-                    delete copyData[i]![j]!.spl;
                 }
             }
         }
@@ -1359,18 +1358,12 @@ function pasteHandlerOfCopyPaste(
                             true
                         );
 
-                        if (!_.isNil(value.spl)) {
-                            // value.f = funcV[2];
-                            // value.v = funcV[1];
-                            // value.spl = funcV[3].data;
-                        } else {
-                            [, value.v, value.f] = funcV;
+                        [, value.v, value.f] = funcV;
 
-                            if (!_.isNil(value.ct) && !_.isNil(value.ct.fa)) {
-                                value.m = update(value.ct.fa, funcV[1]);
-                            } else {
-                                value.m = update("General", funcV[1]);
-                            }
+                        if (!_.isNil(value.ct) && !_.isNil(value.ct.fa)) {
+                            value.m = update(value.ct.fa, funcV[1]);
+                        } else {
+                            value.m = update("General", funcV[1]);
                         }
                     }
 
@@ -1522,7 +1515,7 @@ function handleFormulaStringPaste(ctx: Context, formulaStr: string) {
     if (!d) return;
 
     if (!d[r][c]) d[r][c] = {};
-    d[r][c]!.m = val.toString();
+    d[r][c]!.m = val == null ? "" : val.toString();
     d[r][c]!.v = val;
     d[r][c]!.f = formulaStr;
 }

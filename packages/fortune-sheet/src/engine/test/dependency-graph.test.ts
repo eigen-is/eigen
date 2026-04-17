@@ -1,5 +1,5 @@
 import {describe, expect, test} from "bun:test";
-import type {FormulaCellInfo, FormulaCellInfoMap} from "../../state/types";
+import type {FormulaCellInfo, FormulaCellInfoMap} from "../types";
 import {detectCycle, getCalculationOrder, matchDependencies} from "../dependency-graph";
 
 // Helper to build a minimal FormulaCellInfo for test use
