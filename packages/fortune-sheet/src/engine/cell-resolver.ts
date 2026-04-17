@@ -1,5 +1,5 @@
 import type {Cell, CellMatrix} from "../state/types";
-import type {CellResolver, SheetInfo} from "./types";
+import type {CalculationChainEntry, CellResolver, SheetInfo} from "./types";
 
 export type { CellResolver } from "./types";
 
@@ -7,8 +7,8 @@ type SheetData = {
     id: string;
     name: string;
     data: CellMatrix | null;
-    calculationChain: any[];
-    dynamicArrayCompute: any[];
+    calculationChain: CalculationChainEntry[];
+    dynamicArrayCompute: unknown[];
 };
 
 export function createArrayResolver(sheets: SheetData[]): CellResolver {

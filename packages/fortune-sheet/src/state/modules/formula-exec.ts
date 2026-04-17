@@ -1,12 +1,6 @@
-/**
- * Context-coupled formula execution functions.
- *
- * These functions inherently read/write Context (formula caches, sheet data,
- * calc chains, etc.) and therefore belong in the state layer.
- *
- * Extracted from engine/formula-calc.ts so that the engine directory has zero
- * state-runtime dependencies.
- */
+// Context-coupled formula execution. These functions read/write Context
+// (formula caches, sheet data, calc chains) so they stay in the state layer.
+// The engine directory has zero state-runtime dependencies.
 import _ from "lodash";
 import type {
     Cell,
@@ -33,8 +27,7 @@ import {
 } from "../../engine/formula-utils";
 import { createContextResolver } from "./formula-cache";
 
-// ─── Regex for cell label extraction ───────────────────────────────────────
-
+// Regex for cell label extraction
 const simpleSheetName = "[A-Za-z0-9_\u00C0-\u02AF]+";
 const quotedSheetName = "'(?:(?!').|'')*'";
 const sheetNameRegexp = `(${simpleSheetName}|${quotedSheetName})!`;
@@ -43,8 +36,6 @@ const rowColumnWithSheetName = `(?:${sheetNameRegexp})?(${rowColumnRegexp})`;
 const LABEL_EXTRACT_REGEXP = new RegExp(
     `^${rowColumnWithSheetName}(?:[:]${rowColumnWithSheetName})?$`
 );
-
-// ─── Private helpers ───────────────────────────────────────────────────────
 
 function addToCellIndexList(ctx: Context, txt: string, infoObj: any): void {
     if (txt == null || txt.length === 0 || infoObj == null) {
@@ -137,7 +128,6 @@ function insertUpdateDynamicArray(ctx: Context, dynamicArrayItem: any): any[] {
     return dynamicArray;
 }
 
-// ─── Exported functions ────────────────────────────────────────────────────
 
 export function getcellrange(
     ctx: Context,
@@ -835,8 +825,7 @@ export function execFunctionGroup(
         const key = `r${origin_r}c${origin_c}i${id}`;
         updateValueObjects[key] = 1;
     } else {
-        for (let x = 0; x < ctx.formulaCache.execFunctionExist.length; x += 1) {
-            const cell = ctx.formulaCache.execFunctionExist[x] as { r: number; c: number; id: string };
+        for (const cell of ctx.formulaCache.execFunctionExist) {
             const key = `r${cell.r}c${cell.c}i${cell.id}`;
             updateValueObjects[key] = 1;
         }

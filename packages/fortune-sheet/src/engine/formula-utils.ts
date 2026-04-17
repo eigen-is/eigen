@@ -1,12 +1,6 @@
-/**
- * Pure utility functions for formula parsing and evaluation.
- *
- * These functions have zero dependency on Context or any state module.
- * Extracted from engine/formula-calc.ts to keep the engine layer pure.
- */
+// Pure utility functions for formula parsing and evaluation.
+// Zero dependencies on Context or any state module.
 import { columnLabelToIndex } from "./a1-notation";
-
-// ─── Operator tables ────────────────────────────────────────────────────────
 
 export const operatorPriority: Readonly<Record<string, number>> = {
     "^": 0,
@@ -27,15 +21,9 @@ export const operatorjson: Readonly<Record<string, number>> = (() => {
     return map;
 })();
 
-// ─── iscelldata ─────────────────────────────────────────────────────────────
-
-/**
- * Check whether `txt` looks like a cell reference or range.
- *
- * Handles single cells (A1, $A$1), ranges (A1:B3), column-only ranges (A:C),
- * and sheet-qualified references (Sheet1!A1).  This is different from
- * `isCellReference` in formula-engine.ts which requires digits in every part.
- */
+// Handles single cells (A1, $A$1), ranges (A1:B3), column-only ranges (A:C),
+// and sheet-qualified references (Sheet1!A1). Differs from `isCellReference`
+// in formula-engine.ts which requires digits in every part.
 export function iscelldata(txt: string) {
     const val = txt.split("!");
     let rangetxt: string;
@@ -100,12 +88,8 @@ export function iscelldata(txt: string) {
     return false;
 }
 
-// ─── calPostfixExpression ───────────────────────────────────────────────────
-
-/**
- * Evaluate a reversed-postfix expression stack, wrapping each operator
- * application in a `luckysheet_compareWith(...)` call.
- */
+// Evaluates a reversed-postfix expression stack, wrapping each operator
+// application in a luckysheet_compareWith(...) call.
 export function calPostfixExpression(cal: string[]): string {
     if (cal.length === 0) {
         return "";
@@ -130,12 +114,7 @@ export function calPostfixExpression(cal: string[]): string {
     return "";
 }
 
-// ─── checkBracketNum ────────────────────────────────────────────────────────
-
-/**
- * Check whether parentheses in `fp` are balanced, excluding brackets
- * that appear inside quoted strings.
- */
+// Checks parentheses are balanced, ignoring brackets inside quoted strings.
 export function checkBracketNum(fp: string): boolean {
     const bra_l = fp.match(/\(/g);
     const bra_r = fp.match(/\)/g);

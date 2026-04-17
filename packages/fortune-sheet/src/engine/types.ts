@@ -18,7 +18,7 @@ export type SheetInfo = {
     id: string;
     name: string;
     calculationChain: CalculationChainEntry[];
-    dynamicArrayCompute: any[];
+    dynamicArrayCompute: unknown[];
 };
 
 export type CalculationChainEntry = {
@@ -36,6 +36,5 @@ export type EvaluationResult = {
 export type FormulaEngineState = {
     execFunctionGlobalData: Record<string, unknown>;
     formulaCellInfoMap: FormulaCellInfoMap | null;
-    execFunctionExist: CalculationChainEntry[] | undefined;
     cellTextToIndexList: Record<string, FormulaDependency>;
 };
