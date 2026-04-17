@@ -1,5 +1,3 @@
-import { getMailAttachmentUrl } from '@workspace/lib/api';
-import { useAuth } from '@workspace/lib/auth';
 import { formatFullDateTime } from '@workspace/lib/date';
 import type { AddressObject, Attachment, Email, MaildirMailbox } from '@workspace/lib/types/mail';
 import { Toolbar, TooltipButton } from '@workspace/ui';
@@ -10,10 +8,11 @@ import { UserItem } from '@workspace/ui/components/layout/user-item';
 import { Separator } from '@workspace/ui/components/separator';
 import { Table, TableBody, TableCell, TableRow } from '@workspace/ui/components/table';
 import { printDocument } from '@workspace/ui/lib/printElement';
-import { AlertTriangle, Archive, Forward, MoreVertical, Paperclip, Reply, ReplyAll, Trash2 } from 'lucide-react';
+import { AlertTriangle, Archive, Forward, MoreVertical, Reply, ReplyAll, Trash2 } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { CalendarInviteWidget } from './calendar-invite-widget';
 import { EmailContextMenu } from './email-context-menu';
+import { ReadAttachments } from './read-attachments';
 
 type EmailDetailToolbarProps = {
     email: Email;
@@ -165,7 +164,6 @@ function formatContactObjects(contacts: AddressObject | AddressObject[], compact
 }
 
 export function EmailDetail({ email, toggleMailRead }: EmailDetailProps) {
-    const { user } = useAuth();
     const hasMarkedAsRead = useRef<string | null>(null);
 
     useEffect(() => {
@@ -276,6 +274,8 @@ export function EmailDetail({ email, toggleMailRead }: EmailDetailProps) {
 
                     <Separator />
 
+                    <ReadAttachments emailId={email.id} attachments={email.attachments} />
+
                     {/* Email body */}
                     <div className="prose prose-sm max-w-none">
                         {email.html || email.textAsHtml ? (
@@ -296,55 +296,6 @@ export function EmailDetail({ email, toggleMailRead }: EmailDetailProps) {
                                     attachmentIndex={index}
                                 />
                             ),
-                    )}
-
-                    {/* Attachments (excluding calendar invites shown above) */}
-                    {email.attachments?.some((a: Attachment) => !a.contentType.startsWith('text/calendar')) && (
-                        <div className="mt-6 pt-6 border-t">
-                            <h3 className="font-medium mb-3 flex items-center gap-2">
-                                <Paperclip className="h-4 w-4" />
-                                Attachments (
-                                {
-                                    email.attachments.filter(
-                                        (a: Attachment) => !a.contentType.startsWith('text/calendar'),
-                                    ).length
-                                }
-                                )
-                            </h3>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                {email.attachments.map((attachment: Attachment, index: number) =>
-                                    attachment.contentType.startsWith('text/calendar') ? null : (
-                                        <div
-                                            key={index}
-                                            className="flex items-center p-3 border rounded-md hover:bg-muted/50 cursor-pointer select-none"
-                                            onClick={() => {
-                                                const fileName = attachment.filename || `Attachment ${index + 1}`;
-                                                if (!user) return;
-                                                const downloadUrl = getMailAttachmentUrl(
-                                                    user.id,
-                                                    email.id,
-                                                    index,
-                                                    fileName,
-                                                );
-
-                                                const a = document.createElement('a');
-                                                a.href = downloadUrl;
-                                                a.download = fileName;
-                                                document.body.appendChild(a);
-                                                a.click();
-                                                document.body.removeChild(a);
-                                            }}
-                                        >
-                                            <Paperclip className="h-4 w-4 mr-2 text-muted-foreground" />
-                                            <span className="text-sm truncate">
-                                                {attachment.filename || `Attachment ${index + 1}`}
-                                            </span>
-                                        </div>
-                                    ),
-                                )}
-                            </div>
-                        </div>
                     )}
                 </div>
             </div>
