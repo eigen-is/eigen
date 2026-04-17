@@ -35,6 +35,59 @@ export class MaildirStore {
         await this.storage.write(this.storage.pathJoin(this.basePath, 'subscriptions'), subscriptions);
     }
 
+    getDraftTempDir(): string {
+        return this.storage.pathJoin(this.basePath, 'tmp-attachments');
+    }
+
+    async ensureDraftTempDir(): Promise<void> {
+        const dir = this.getDraftTempDir();
+        if (!(await this.storage.dirExists(dir))) {
+            await this.storage.mkdir(dir);
+        }
+    }
+
+    private sanitizeTempId(tempId: string): string {
+        return tempId.replace(/[^a-zA-Z0-9-_]/g, '_');
+    }
+
+    getDraftTempPath(tempId: string): string {
+        return this.storage.pathJoin(this.getDraftTempDir(), this.sanitizeTempId(tempId));
+    }
+
+    getDraftTempMetaPath(tempId: string): string {
+        return `${this.getDraftTempPath(tempId)}.json`;
+    }
+
+    async cleanupDraftTemp(tempId: string): Promise<void> {
+        const tempPath = this.getDraftTempPath(tempId);
+        const metaPath = this.getDraftTempMetaPath(tempId);
+        try {
+            if (await this.storage.fileExists(tempPath)) {
+                await this.storage.unlink(tempPath);
+            }
+        } catch {}
+        try {
+            if (await this.storage.fileExists(metaPath)) {
+                await this.storage.unlink(metaPath);
+            }
+        } catch {}
+    }
+
+    async cleanupStaleDraftTemps(maxAgeMs: number = 24 * 60 * 60 * 1000): Promise<void> {
+        const dir = this.getDraftTempDir();
+        if (!(await this.storage.dirExists(dir))) return;
+        const now = Date.now();
+        for (const name of await this.storage.readdir(dir)) {
+            const filePath = this.storage.pathJoin(dir, name);
+            try {
+                const stat = await this.storage.stat(filePath);
+                if (now - stat.mtimeMs > maxAgeMs) {
+                    await this.storage.unlink(filePath);
+                }
+            } catch {}
+        }
+    }
+
     async mailboxDirExists(mailbox: string): Promise<boolean> {
         return this.storage.dirExists(this.mailboxDir(mailbox));
     }

@@ -22,6 +22,7 @@ import {
     messageSend,
     messageSetFlagged,
     messageSetRead,
+    uploadDraftAttachment,
 } from '../lib/mail/mail';
 import { betterAuth } from './auth';
 
@@ -219,6 +220,18 @@ export const mailRouter = new Elysia({ name: 'mail' })
         {
             auth: true,
             body: t.Object({ mail: MailDraftSchema }),
+        },
+    )
+    .post(
+        '/mail/:ownerId/message/draft/attachment',
+        async ({ params, user, request }) => {
+            requireNonGuest(user);
+            requireSelf(params.ownerId, user.id);
+            return await uploadDraftAttachment(user, request);
+        },
+        {
+            auth: true,
+            parse: 'none',
         },
     )
     .post(
