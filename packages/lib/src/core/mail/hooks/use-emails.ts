@@ -29,6 +29,7 @@ export function useEmails(mailboxPath: string) {
             return response.data || [];
         },
         staleTime: 1 * 60 * 1000,
+        retry: 1,
         enabled: !!ownerId,
     });
 }
@@ -46,6 +47,7 @@ export function useEmail(messageId: string | undefined) {
         },
         enabled: !!messageId && !!ownerId,
         staleTime: Infinity,
+        retry: 1,
     });
 }
 
