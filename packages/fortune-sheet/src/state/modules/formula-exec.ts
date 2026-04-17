@@ -836,8 +836,8 @@ export function execFunctionGroup(
         updateValueObjects[key] = 1;
     } else {
         for (let x = 0; x < ctx.formulaCache.execFunctionExist.length; x += 1) {
-            const cell = ctx.formulaCache.execFunctionExist[x] as any;
-            const key = `r${cell.r}c${cell.c}i${cell.i}`;
+            const cell = ctx.formulaCache.execFunctionExist[x] as { r: number; c: number; id: string };
+            const key = `r${cell.r}c${cell.c}i${cell.id}`;
             updateValueObjects[key] = 1;
         }
     }
