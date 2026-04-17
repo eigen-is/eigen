@@ -1,10 +1,10 @@
 import _ from "lodash";
-import {ERROR_REF, Parser} from "../../engine/parser";
 import type {Cell, CellMatrix, FormulaDependency, History, Selection,} from "../types";
 import type {FormulaCellInfoMap} from "../types";
 import type {Context} from "../context";
 import {getFlowdata} from "../context";
 import {getSheetIdByName} from "../utils";
+import type {CellResolver} from "../../engine/types";
 import {FormulaEngine, isFormula} from "../../engine/formula-engine";
 import {setFormulaCellInfo} from "./formulaHelper";
 
@@ -36,10 +36,65 @@ export function parseElement(eleString: string) {
         .childNodes[0];
 }
 
+/**
+ * Adapts Context to the CellResolver interface expected by FormulaEngine,
+ * so the engine can resolve cell values from the state layer.
+ */
+export function createContextResolver(ctx: Context): CellResolver {
+    return {
+        getCell(sheetId: string, row: number, col: number) {
+            const flowdata = getFlowdata(ctx, sheetId);
+            return flowdata?.[row]?.[col] ?? null;
+        },
+        getRange(sheetId: string, startRow: number, startCol: number, endRow: number, endCol: number) {
+            const flowdata = getFlowdata(ctx, sheetId);
+            const result: (Cell | null)[][] = [];
+            for (let r = startRow; r <= endRow; r++) {
+                const rowData: (Cell | null)[] = [];
+                for (let c = startCol; c <= endCol; c++) {
+                    rowData.push(flowdata?.[r]?.[c] ?? null);
+                }
+                result.push(rowData);
+            }
+            return result;
+        },
+        getSheetIdByName(name: string) {
+            return getSheetIdByName(ctx, name) ?? null;
+        },
+        getSheetData(sheetId: string) {
+            return getFlowdata(ctx, sheetId) ?? null;
+        },
+        getSheets() {
+            return ctx.luckysheetfile.map(f => ({
+                id: f.id ?? "",
+                name: f.name,
+                calculationChain: f.calcChain ?? [],
+                dynamicArrayCompute: f.dynamicArray_compute ?? [],
+            }));
+        },
+    };
+}
+
 // FormulaCache is defined as class to avoid being frozen by immer
 export class FormulaCache {
-    parser: any;
+    // Shared state — delegated to engine so both FE and BE use the same cache
+    get execFunctionGlobalData(): Record<string, unknown> {
+        return this.engine.state.execFunctionGlobalData;
+    }
 
+    set execFunctionGlobalData(v: Record<string, unknown> | null | undefined) {
+        this.engine.state.execFunctionGlobalData = (v as Record<string, unknown>) ?? {};
+    }
+
+    get formulaCellInfoMap(): FormulaCellInfoMap | null {
+        return this.engine.state.formulaCellInfoMap;
+    }
+
+    set formulaCellInfoMap(v: FormulaCellInfoMap | null) {
+        this.engine.state.formulaCellInfoMap = v;
+    }
+
+    // UI-only state — stays on FormulaCache
     func_selectedrange?: Selection;
 
     data_parm_index: number;
@@ -82,95 +137,14 @@ export class FormulaCache {
 
     execFunctionExist?: any[];
 
-    execFunctionGlobalData: any;
-
-    formulaCellInfoMap: FormulaCellInfoMap | null;
-
     engine: FormulaEngine;
 
     constructor() {
-        const that = this;
         this.data_parm_index = 0;
         this.selectingRangeIndex = -1;
         this.functionlistMap = {};
-        this.execFunctionGlobalData = {};
-        this.formulaCellInfoMap = null;
         this.cellTextToIndexList = {};
-        this.parser = new Parser();
         this.engine = new FormulaEngine();
-        this.parser.on(
-            "callCellValue",
-            (cellCoord: any, options: any, done: any) => {
-                const context = that.parser.context as Context;
-                const id =
-                    cellCoord.sheetName == null
-                        ? options.sheetId
-                        : getSheetIdByName(context, cellCoord.sheetName);
-                if (id == null) throw Error(ERROR_REF);
-                const flowdata = getFlowdata(context, id);
-                const cell =
-                    context?.formulaCache.execFunctionGlobalData?.[
-                        `${cellCoord.row.index}_${cellCoord.column.index}_${id}`
-                        ] || flowdata?.[cellCoord.row.index]?.[cellCoord.column.index];
-                const v = that.tryGetCellAsNumber(cell);
-                done(v);
-            }
-        );
-
-        this.parser.on(
-            "callRangeValue",
-            (startCellCoord: any, endCellCoord: any, options: any, done: any) => {
-                const context = that.parser.context as Context;
-                const id =
-                    startCellCoord.sheetName == null
-                        ? options.sheetId
-                        : getSheetIdByName(context, startCellCoord.sheetName);
-                if (id == null) throw Error(ERROR_REF);
-                const flowdata = getFlowdata(context, id);
-                const fragment = [];
-                let startRow = startCellCoord.row.index;
-                let endRow = endCellCoord.row.index;
-                let startCol = startCellCoord.column.index;
-                let endCol = endCellCoord.column.index;
-                const emptyRow = startRow === -1 || endRow === -1;
-                const emptyCol = startCol === -1 || endCol === -1;
-                if (emptyRow) {
-                    startRow = 0;
-                    endRow = flowdata?.length ?? 0;
-                }
-                if (emptyCol) {
-                    startCol = 0;
-                    endCol = flowdata?.[0].length ?? 0;
-                }
-                if (emptyRow && emptyCol) throw Error(ERROR_REF);
-
-                for (let row = startRow; row <= endRow; row += 1) {
-                    const colFragment = [];
-
-                    for (let col = startCol; col <= endCol; col += 1) {
-                        const cell =
-                            context?.formulaCache.execFunctionGlobalData?.[
-                                `${row}_${col}_${id}`
-                                ] || flowdata?.[row]?.[col];
-                        const v = that.tryGetCellAsNumber(cell);
-                        colFragment.push(v);
-                    }
-                    fragment.push(colFragment);
-                }
-
-                if (fragment) {
-                    done(fragment);
-                }
-            }
-        );
-    }
-
-    tryGetCellAsNumber(cell: Cell) {
-        if (cell?.ct?.t === "n") {
-            const n = Number(cell?.v);
-            return Number.isNaN(n) ? cell.v : n;
-        }
-        return cell?.v;
     }
 
     updateFormulaCache(

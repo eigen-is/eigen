@@ -31,6 +31,7 @@ import {
     calPostfixExpression,
     checkBracketNum,
 } from "../../engine/formula-utils";
+import { createContextResolver } from "./formula-cache";
 
 // ─── Regex for cell label extraction ───────────────────────────────────────
 
@@ -715,7 +716,7 @@ export function execfunction(
     calcChainSet?: Set<string>,
     isrefresh?: boolean,
     notInsertFunc?: boolean
-) {
+): any[] {
     if (txt.indexOf(error.r) > -1) {
         return [false, error.r, txt];
     }
@@ -730,33 +731,14 @@ export function execfunction(
 
     ctx.calculateSheetId = id;
 
-    ctx.formulaCache.parser.context = ctx;
-    const parsedResponse = ctx.formulaCache.parser.parse(txt.substring(1), {
-        sheetId: id || ctx.currentSheetId,
-    });
-
-    const { error: formulaError } = parsedResponse;
-    let { result } = parsedResponse;
-
-    // https://stackoverflow.com/a/643827/8200626
-    // https://github.com/ruilisi/fortune-sheet/issues/551
-    if (
-        Object.prototype.toString.call(result) === "[object Date]" &&
-        result != null
-    ) {
-        result = result.toString();
-    }
+    const resolver = createContextResolver(ctx);
+    const evalResult = ctx.formulaCache.engine.evaluate(txt, id!, r ?? 0, c ?? 0, resolver);
+    const result = evalResult.value;
 
     if (r != null && c != null) {
         if (isrefresh) {
             // eslint-disable-next-line no-use-before-define
-            execFunctionGroup(
-                ctx,
-                r,
-                c,
-                formulaError == null ? result : formulaError,
-                id
-            );
+            execFunctionGroup(ctx, r, c, result, id);
         }
 
         if (!notInsertFunc) {
@@ -764,7 +746,7 @@ export function execfunction(
         }
     }
 
-    return [true, formulaError == null ? result : formulaError, txt];
+    return [true, result, txt];
 }
 
 export function groupValuesRefresh(ctx: Context): void {
