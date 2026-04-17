@@ -3,26 +3,18 @@
 Refactoring plan for `packages/fortune-sheet/` to extract a headless formula engine and number formatting
 system, improve code quality, and enable server-side formula recalculation for the Document Content Layer.
 
-## TODO: Complete Engine Extraction
+## Completed: Engine Extraction + formula-calc Decoupling
 
-The `engine/` directory (Steps 1-5) is done, but several pure calculation functions still live in                                                                                                                                               
-`formula-ui.ts` and take `Context` instead of `CellResolver`. Until these are migrated, the server-side                                                                                                                                         
-engine cannot handle array formulas, batch recalculation, or formula range rewriting.                                                                                                                                                           
-                                                                                                                                                                                                                                                
-Functions to migrate to `engine/` (all pure — zero DOM, just Context-coupled):                                                                                                                                                                  
-                                                                                                                                                                                                                                                
-- **`isFunctionRange`** — rewrites formulas with array operations (e.g. `luckysheet_getarraydata`)                                                                                                                                              
-- **`getcellrange`** — parses cell reference text (e.g. "A1:B3") to row/col range objects                                                                                                                                                       
-- **`execFunctionGroup`** — orchestrates batch recalculation using dependency graph                                                                                                                                                             
-- **`groupValuesRefresh`** — applies computed formula values back to cell data                                                                                                                                                                  
-- **`insertUpdateFunctionGroup`** — registers formula cells in the calculation chain                                                                                                                                                            
-- **`getAllFunctionGroup`** — collects all formula cells across sheets                                                                                                                                                                          
-                                                                                                                                                                                                                                                
-The transformation is the same pattern used for parser event handlers: replace `Context` / `getFlowdata(ctx)`                                                                                                                                   
-parameters with `CellResolver`. This was proven in Step 4 and is mechanical — no logic changes needed.                                                                                                                                          
-                                                                                                                                                                                                                                                
-**Until this is done, `FormulaEngine.evaluate()` handles individual formulas but cannot do full-sheet
-recalculation or array formula evaluation on the server.** 
+The `engine/` directory is fully decoupled from state runtime:
+
+- **Pure utilities** (`iscelldata`, `operatorjson`, `checkBracketNum`) in `engine/formula-utils.ts`
+- **Context-coupled orchestration** (`execFunctionGroup`, `groupValuesRefresh`, etc.) moved to
+  `state/modules/formula-exec.ts` — these still use Context for the UI layer
+- **`FormulaEngine.recalculateAll(resolver)`** enables server-side batch formula recalculation
+  using only `CellResolver` — no Context needed
+
+**Remaining for Step 6 (server integration):** Wire `recalculateAll()` into the Document Content
+Layer's `readSheetContent()` to get fresh formula values for scripting, export, and search indexing.
 
 ## Verification Status
 
