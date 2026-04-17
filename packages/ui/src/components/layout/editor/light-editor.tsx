@@ -39,7 +39,7 @@ export function LightEditor({
     if (!editor) return null;
 
     return (
-        <div className="relative">
+        <div className="relative flex flex-col h-full">
             {toolbar === 'fixed' && (
                 <div className="mb-2">
                     <LightEditorToolbar editor={editor} />
@@ -50,7 +50,7 @@ export function LightEditor({
                     <LightEditorToolbar editor={editor} />
                 </BubbleMenu>
             )}
-            <EditorContent editor={editor} />
+            <EditorContent editor={editor} className="flex-1 flex flex-col [&>.tiptap]:flex-1" />
         </div>
     );
 }

@@ -83,6 +83,7 @@ export const EmailDraft = forwardRef<EmailDraftHandle, EmailDraftProps>(function
         scheduleSave,
         saveNow,
         disable: disableAutoSave,
+        setHasPendingAttachments,
     } = useDraftAutoSave({
         toDraft,
         isSaveable,
@@ -119,13 +120,14 @@ export const EmailDraft = forwardRef<EmailDraftHandle, EmailDraftProps>(function
                         localUrl,
                     };
                     addAttachment(meta);
+                    setHasPendingAttachments(true);
                 } catch (e) {
                     console.error('Attachment upload failed', e);
                 }
             }
             scheduleSave();
         },
-        [ownerId, addAttachment, scheduleSave],
+        [ownerId, addAttachment, scheduleSave, setHasPendingAttachments],
     );
 
     useImperativeHandle(
@@ -140,6 +142,16 @@ export const EmailDraft = forwardRef<EmailDraftHandle, EmailDraftProps>(function
         scheduleSave();
     }, [state.to, state.cc, state.bcc, state.subject, state.body, scheduleSave]);
 
+    const sendWithFreshDraft = useCallback(async () => {
+        // Flush pending save first. The server returns the persisted draft with its assigned ID;
+        // we use that directly so send sees isNew=false and re-extracts attachments from the EML
+        // on disk (rather than racing against React's setState for the ID).
+        const saved = (await saveNow()) as EmailDraftType | null | undefined;
+        disableAutoSave();
+        const mail = saved ?? toDraft();
+        await sendDraft(mail);
+    }, [saveNow, disableAutoSave, toDraft, sendDraft]);
+
     const handleSendEmail = async () => {
         if (!isSendable) {
             setAlertMessage('Please specify at least one recipient.');
@@ -153,9 +165,7 @@ export const EmailDraft = forwardRef<EmailDraftHandle, EmailDraftProps>(function
             setConfirmNoSubject(true);
             return;
         }
-        if (state.attachments.some((a) => a.tempId)) await saveNow();
-        disableAutoSave();
-        await sendDraft(toDraft());
+        await sendWithFreshDraft();
     };
 
     const handleDragEnter = (e: React.DragEvent) => {
@@ -282,13 +292,21 @@ export const EmailDraft = forwardRef<EmailDraftHandle, EmailDraftProps>(function
                             scheduleSave();
                         }}
                     />
-                    <div className="flex-1 p-4">
+                    <div
+                        className="flex-1 p-4 cursor-text"
+                        onClick={(e) => {
+                            if (e.target === e.currentTarget) {
+                                const editable = e.currentTarget.querySelector<HTMLElement>('[contenteditable="true"]');
+                                editable?.focus();
+                            }
+                        }}
+                    >
                         <LightEditor
                             content={state.body}
                             onChange={(html) => setField('body', html)}
                             placeholder="Write your message here..."
                             toolbar="floating"
-                            className="w-full min-h-[200px]"
+                            className="w-full h-full"
                             editable={!isSending}
                         />
                     </div>
@@ -324,9 +342,7 @@ export const EmailDraft = forwardRef<EmailDraftHandle, EmailDraftProps>(function
                 confirmText="Send"
                 onConfirm={async () => {
                     setConfirmNoSubject(false);
-                    if (state.attachments.some((a) => a.tempId)) await saveNow();
-                    disableAutoSave();
-                    await sendDraft(toDraft());
+                    await sendWithFreshDraft();
                 }}
             />
         </div>
