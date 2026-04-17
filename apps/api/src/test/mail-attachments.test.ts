@@ -22,12 +22,16 @@ async function putDraft(
     sessionToken: string,
     ownerId: string,
     mail: Partial<EmailDraft>,
-    tempAttachmentIds?: string[],
+    options: { tempAttachmentIds?: string[]; keepAttachmentIndexes?: number[] } = {},
 ): Promise<EmailDraft> {
     const res = await authedRequest(sessionToken, `/mail/${ownerId}/message/draft`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mail, tempAttachmentIds }),
+        body: JSON.stringify({
+            mail,
+            tempAttachmentIds: options.tempAttachmentIds,
+            keepAttachmentIndexes: options.keepAttachmentIndexes,
+        }),
     });
     return assertJson(res);
 }
@@ -80,7 +84,7 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
                 isDraft: true,
                 mailbox: 'Drafts',
             },
-            [uploaded.tempId],
+            { tempAttachmentIds: [uploaded.tempId] },
         );
 
         expect(draft.mailbox).toBe('Drafts');
@@ -110,7 +114,7 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
                 isDraft: true,
                 mailbox: 'Drafts',
             },
-            [uploaded.tempId],
+            { tempAttachmentIds: [uploaded.tempId] },
         );
         expect(first.attachments.length).toBe(1);
 
@@ -149,7 +153,7 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
                 isDraft: true,
                 mailbox: 'Drafts',
             },
-            [uploaded.tempId],
+            { tempAttachmentIds: [uploaded.tempId] },
         );
         expect(draft.attachments.length).toBe(1);
 
@@ -165,5 +169,60 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
         const found = sent.find((m) => m.id === draft.id);
         expect(found).toBeTruthy();
         expect(found?.hasAttachments).toBe(true);
+    });
+
+    test('keepAttachmentIndexes drops attachments the user removed', async () => {
+        const a = new File(['a-bytes'], 'a.txt', { type: 'text/plain' });
+        const b = new File(['b-bytes'], 'b.txt', { type: 'text/plain' });
+        const uploadA = await uploadDraftAttachment(ctx.alice.user.sessionToken, ctx.alice.user.id, a);
+        const uploadB = await uploadDraftAttachment(ctx.alice.user.sessionToken, ctx.alice.user.id, b);
+
+        const first = await putDraft(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            {
+                subject: 'Two attachments',
+                to: {
+                    value: [{ address: 'bob@test.eigen.is', name: 'Bob' }],
+                    text: 'Bob <bob@test.eigen.is>',
+                    html: '',
+                },
+                text: 'both',
+                html: '<p>both</p>',
+            },
+            { tempAttachmentIds: [uploadA.tempId, uploadB.tempId] },
+        );
+        expect(first.attachments.length).toBe(2);
+
+        // User removes the second attachment in the UI, then auto-save fires with only index 0 kept.
+        const second = await putDraft(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            {
+                id: first.id,
+                subject: 'Two attachments',
+                to: first.to,
+                text: 'both',
+                html: '<p>both</p>',
+            },
+            { keepAttachmentIndexes: [0] },
+        );
+        expect(second.attachments.length).toBe(1);
+        expect(second.attachments[0].filename).toBe('a.txt');
+
+        // Removing all attachments (empty keep list) must also be respected.
+        const third = await putDraft(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            {
+                id: second.id,
+                subject: 'Two attachments',
+                to: second.to,
+                text: 'none',
+                html: '<p>none</p>',
+            },
+            { keepAttachmentIndexes: [] },
+        );
+        expect(third.attachments.length).toBe(0);
     });
 });

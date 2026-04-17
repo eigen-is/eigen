@@ -1,9 +1,10 @@
 import { COMMANDS_HELP, commandNeedsSpace, SLASH_COMMANDS } from '@workspace/lib/chat';
 import type { RoomMember } from '@workspace/lib/types/chat';
-import { Paperclip, Send, X } from 'lucide-react';
+import { Paperclip, Send } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '../../../lib/utils';
 import { Button } from '../../button';
+import { SimpleAttachmentChip } from '../attachment/simple-attachment-chip';
 import { ChatPlayerSuggest } from './chat-player-suggest';
 import { ChatSlashSuggest } from './chat-slash-suggest';
 import { getAtSuggestQuery, getSlashTargetQuery } from './chat-utils';
@@ -293,19 +294,7 @@ export function ChatMessageInput({
             {files.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-2">
                     {files.map((file, i) => (
-                        <div
-                            key={i}
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-muted text-xs border"
-                        >
-                            <Paperclip className="h-3 w-3 text-muted-foreground" />
-                            <span className="truncate max-w-[150px]">{file.name}</span>
-                            <button
-                                onClick={() => removeFile(i)}
-                                className="text-muted-foreground hover:text-foreground"
-                            >
-                                <X className="h-3 w-3" />
-                            </button>
-                        </div>
+                        <SimpleAttachmentChip key={i} filename={file.name} onRemove={() => removeFile(i)} />
                     ))}
                 </div>
             )}

@@ -2,18 +2,32 @@ import type { EmailDraft, NewDraft } from '@workspace/lib/types/mail';
 import { useCallback, useEffect, useRef } from 'react';
 
 type AutoSaveOptions = {
-    toDraft: () => NewDraft | EmailDraft;
+    toDraft: () => NewDraft;
+    attachmentsFingerprint: () => string;
     isSaveable: boolean;
     draftId?: string;
-    onSave?: (draft: NewDraft | EmailDraft) => Promise<unknown>;
+    onSave?: (draft: NewDraft) => Promise<EmailDraft | null | undefined | unknown>;
     onIdAssigned?: (id: string) => void;
     debounceMs?: number;
 };
 
-const noopSave = () => Promise.resolve();
+const noopSave = () => Promise.resolve(null);
+
+function buildSnapshot(draft: NewDraft, attachmentsFingerprint: string): string {
+    return JSON.stringify({
+        to: draft.to,
+        cc: draft.cc,
+        bcc: draft.bcc,
+        subject: draft.subject,
+        text: draft.text,
+        html: draft.html,
+        attachments: attachmentsFingerprint,
+    });
+}
 
 export function useDraftAutoSave({
     toDraft,
+    attachmentsFingerprint,
     isSaveable,
     draftId,
     onSave = noopSave,
@@ -21,12 +35,15 @@ export function useDraftAutoSave({
     debounceMs = 2500,
 }: AutoSaveOptions) {
     const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-    const lastSavedRef = useRef<string>('');
+    // Seed with the initial snapshot so opening an existing draft doesn't trigger a no-op save.
+    const lastSavedRef = useRef<string>(buildSnapshot(toDraft(), attachmentsFingerprint()));
     const savingRef = useRef(false);
     const disabledRef = useRef(false);
 
     const toDraftRef = useRef(toDraft);
     toDraftRef.current = toDraft;
+    const fingerprintRef = useRef(attachmentsFingerprint);
+    fingerprintRef.current = attachmentsFingerprint;
     const onSaveRef = useRef(onSave);
     onSaveRef.current = onSave;
     const onIdAssignedRef = useRef(onIdAssigned);
@@ -36,32 +53,16 @@ export function useDraftAutoSave({
     const draftIdRef = useRef(draftId);
     draftIdRef.current = draftId;
 
-    const pendingAttachmentsRef = useRef(false);
-    const setHasPendingAttachments = useCallback((has: boolean) => {
-        pendingAttachmentsRef.current = has;
-    }, []);
-
-    const buildSnapshot = (draft: NewDraft | EmailDraft) =>
-        JSON.stringify({
-            to: draft.to,
-            cc: draft.cc,
-            bcc: draft.bcc,
-            subject: draft.subject,
-            text: draft.text,
-            html: draft.html,
-        });
-
-    const doSave = useCallback(async (): Promise<unknown> => {
+    const doSave = useCallback(async () => {
         if (savingRef.current || disabledRef.current) return null;
         const draft = toDraftRef.current();
-        const snapshot = buildSnapshot(draft);
-        if (snapshot === lastSavedRef.current && !pendingAttachmentsRef.current) return null;
+        const snapshot = buildSnapshot(draft, fingerprintRef.current());
+        if (snapshot === lastSavedRef.current) return null;
 
         savingRef.current = true;
         try {
             const result = await onSaveRef.current(draft);
             lastSavedRef.current = snapshot;
-            pendingAttachmentsRef.current = false;
             if (!draftIdRef.current && result && typeof result === 'object' && 'id' in result) {
                 onIdAssignedRef.current?.(result.id as string);
             }
@@ -89,15 +90,14 @@ export function useDraftAutoSave({
         return () => {
             if (timerRef.current) clearTimeout(timerRef.current);
             if (disabledRef.current) return;
-            if (isSaveableRef.current && !savingRef.current) {
-                const draft = toDraftRef.current();
-                const snapshot = buildSnapshot(draft);
-                if (snapshot !== lastSavedRef.current) {
-                    onSaveRef.current(draft).catch(() => {});
-                }
+            if (!isSaveableRef.current || savingRef.current) return;
+            const draft = toDraftRef.current();
+            const snapshot = buildSnapshot(draft, fingerprintRef.current());
+            if (snapshot !== lastSavedRef.current) {
+                onSaveRef.current(draft).catch(() => {});
             }
         };
     }, []);
 
-    return { scheduleSave, saveNow: doSave, disable, setHasPendingAttachments };
+    return { scheduleSave, saveNow: doSave, disable };
 }

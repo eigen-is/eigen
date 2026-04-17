@@ -95,18 +95,15 @@ export type EmailDraft = Omit<Email, 'to' | 'cc' | 'bcc'> & {
     bcc?: AddressObject;
 };
 
-/** The minimal shape produced by createDraftEmail and accepted by the draft/send API. */
 export type NewDraft = {
     id?: string;
     subject?: string;
     text?: string;
-    html?: string | false;
+    html?: string;
     from?: AddressObject;
     to?: AddressObject;
     cc?: AddressObject;
     bcc?: AddressObject;
-    isDraft: boolean;
-    mailbox: string;
     messageId?: string;
     inReplyTo?: string;
     references?: string[] | string;
@@ -121,11 +118,23 @@ export type DraftInput = {
     html?: string;
 };
 
+export type DraftAttachmentUpload = {
+    tempId: string;
+    filename: string;
+    size: number;
+    contentType: string;
+};
+
 export type AttachmentMeta = {
+    /** Stable client-side identity for React keys. */
+    key: string;
+    /** Present while the binary is still staged on the server and not yet embedded in the draft EML. */
     tempId?: string;
     filename: string;
     size: number;
     contentType: string;
+    /** Position of the parsed attachment in the on-disk EML (for download URLs). */
     index?: number;
+    /** Blob URL for local image thumbnails — not sent to the server. */
     localUrl?: string;
 };

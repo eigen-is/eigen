@@ -1,8 +1,8 @@
 import { EditorContent, useEditor } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
+import StarterKit from '@tiptap/starter-kit';
 import { cn } from '../../../lib/utils';
 import { LightEditorToolbar } from './light-editor-toolbar';
-import { getLightExtensions } from './light-extensions';
 
 type LightEditorProps = {
     content: string;
@@ -13,6 +13,20 @@ type LightEditorProps = {
     editable?: boolean;
 };
 
+// StarterKit configured for "light" rich text: bold, italic, lists, blockquote, hard break, link.
+// Heavier structural marks (headings, code blocks, horizontal rules) are disabled.
+const LIGHT_EXTENSIONS = [
+    StarterKit.configure({
+        heading: false,
+        codeBlock: false,
+        code: false,
+        horizontalRule: false,
+        link: {
+            HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' },
+        },
+    }),
+];
+
 export function LightEditor({
     content,
     onChange,
@@ -22,7 +36,7 @@ export function LightEditor({
     editable = true,
 }: LightEditorProps) {
     const editor = useEditor({
-        extensions: getLightExtensions(),
+        extensions: LIGHT_EXTENSIONS,
         content,
         editable,
         editorProps: {
