@@ -13,6 +13,7 @@ export function createDraftEmail(input: DraftInput): NewDraft {
         id: undefined,
         subject: input.subject || '',
         text: input.text || '',
+        html: input.html || '',
         from: undefined,
         to: input.to,
         cc: input.cc,
