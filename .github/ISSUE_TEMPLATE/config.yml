@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/eigen-foundation/eigen/security/advisories/new
+    about: Please report security issues privately, not via public issues. See SECURITY.md.
+  - name: Questions, ideas, or general discussion
+    url: mailto:reinder@eigen.is
+    about: For open-ended questions or project direction, email reinder@eigen.is.

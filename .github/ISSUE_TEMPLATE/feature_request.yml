@@ -1,0 +1,56 @@
+name: Feature request
+description: Suggest a new feature or improvement.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Rough ideas are welcome. For anything larger than a small change, please open an issue
+        before writing code — see [CONTRIBUTING.md](https://github.com/eigen-foundation/eigen/blob/main/docs/CONTRIBUTING.md).
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: What are you trying to do that's hard or impossible today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How might Eigen solve this? Rough ideas are fine.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other ways to solve this, including doing nothing.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which area?
+      multiple: true
+      options:
+        - Mail
+        - Drive
+        - Docs
+        - Sheets
+        - Slides
+        - Stickies
+        - Calendar
+        - Contacts
+        - Chat
+        - Space
+        - Admin
+        - API / backend
+        - IMAP / CalDAV / WebDAV
+        - Docs / guides
+        - Deployment / Docker
+        - Other
+    validations:
+      required: true

@@ -167,6 +167,9 @@ See [CONTRIBUTING.md](docs/CONTRIBUTING.md) for how to get involved — whether 
 adopting a subsystem, or sponsoring the project. The full project context (for humans and AI agents alike) lives in
 [AGENTS.md](AGENTS.md), and [CODE-STANDARDS.md](docs/CODE-STANDARDS.md) covers code style and architecture patterns.
 
+Found a security issue? Please **do not** open a public issue — see [SECURITY.md](SECURITY.md) for how to report
+privately.
+
 ### Documentation
 
 Architecture docs live in `docs/`:

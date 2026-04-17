@@ -21,6 +21,7 @@ I move fast on the codebase; things change week to week. A few things to keep in
 - **PRs may need rebasing** if the area you touched has changed. Don't take it personally.
 - **Open an issue first** if you're planning something bigger. Saves everyone time.
 - **Bug reports and ideas** are just as useful as code. Sometimes more.
+- **Security issues** go through [SECURITY.md](../SECURITY.md), not public issues.
 
 ## Ways to contribute
 
@@ -69,9 +70,25 @@ Reach out at [reinder@eigen.is](mailto:reinder@eigen.is) or just open an issue s
 If you or your company want to support the project, reach out at
 [reinder@eigen.is](mailto:reinder@eigen.is).
 
-### Pull requests
+### Issues first, PRs for small fixes
 
-Small fixes (bugs, typos, UI tweaks): just open a PR. For bigger changes, open an issue first.
+I'd rather see feature ideas and larger changes as **issues**, not pull requests.
+
+The codebase moves fast. Things change week to week. A PR for a new feature that sits for a few days often
+needs a full rebase by the time I can review it — and sometimes the approach it was built on has already
+shifted. That's frustrating for both of us.
+
+A simple rule:
+
+- **Small fixes** (bugs, typos, UI tweaks, one-liners): open a PR directly. Always welcome.
+- **New features or bigger changes**: open an **issue** first. Describe the problem and what you'd like to
+  build. If we agree on the direction, go for it — no wasted work.
+- **Want to adopt a whole area** — a full app (say Docs, Contacts, or Calendar), or a cross-cutting concern
+  like search or accessibility? That's the most valuable kind of contribution. See
+  [Adopt an app or area](#adopt-an-app-or-area) above, and email me at
+  [reinder@eigen.is](mailto:reinder@eigen.is) to talk.
+
+#### PR checklist (for small fixes)
 
 1. Fork the repo, create a branch
 2. Run `bun run check` before pushing (lint + typecheck + tests)
