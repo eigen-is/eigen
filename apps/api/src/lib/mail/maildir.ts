@@ -48,7 +48,9 @@ export default class Maildir {
             const welcome = welcomeMail(this.home.user.name, this.home.user.email);
             if (welcome) await this.store.deliverAtomic(welcome, '');
         }
-        this.store.watchMailboxes((mailbox) => this.syncMailbox(mailbox).catch(() => {}));
+        this.store.watchMailboxes((mailbox) =>
+            this.syncMailbox(mailbox).catch((err) => console.error('maildir: mailbox sync failed', err)),
+        );
     }
 
     async size(): Promise<number> {
@@ -247,7 +249,11 @@ export default class Maildir {
         );
 
         const parsed = await this.readAndParse(uniqueId, 'Drafts', filename);
-        if (!parsed) throw new Error(`Failed to parse draft message: ${uniqueId}`);
+        if (!parsed) {
+            // Clean up the orphan we just wrote so no disk file is left without a DB row
+            await this.store.deleteMessage('Drafts', filename).catch(() => {});
+            throw new ApiError(500, 'Failed to parse saved draft');
+        }
 
         applyFlagsFromFilename(parsed, filename);
         parsed.filename = filename;
@@ -259,7 +265,7 @@ export default class Maildir {
         return parsed as EmailDraft;
     }
 
-    async messageSend(mailToSend: EmailDraft): Promise<EmailDraft | null> {
+    async messageSend(mailToSend: EmailDraft): Promise<EmailDraft> {
         const mail = await this.messageHandleDraft(mailToSend);
         const message = draftToOutboundMail(mail, this.home.user.email);
 
@@ -267,19 +273,17 @@ export default class Maildir {
             throw new ApiError(400, 'Cannot send email with empty subject and body');
         }
 
-        try {
-            const sent = await sendMail(message);
+        const sent = await sendMail(message);
 
-            if (sent) {
-                await this.messageMove(mail.id, 'Sent');
-                await this.renameFlag(mail.id, { draft: false }, SSEventType.MAIL_FLAGS_CHANGED);
-                this.db.setDraft(mail.id, false);
-                this.emit(SSEventType.MAIL_SENT, { messageId: mail.id, mailbox: 'Sent' });
-            }
-        } catch (error) {
-            console.error('Error sending email:', error);
-            return null;
+        if (!sent) {
+            throw new ApiError(500, 'Failed to send email');
         }
+
+        await this.messageMove(mail.id, 'Sent');
+        await this.renameFlag(mail.id, { draft: false }, SSEventType.MAIL_FLAGS_CHANGED);
+        this.db.setDraft(mail.id, false);
+        this.emit(SSEventType.MAIL_SENT, { messageId: mail.id, mailbox: 'Sent' });
+
         return mail;
     }
 

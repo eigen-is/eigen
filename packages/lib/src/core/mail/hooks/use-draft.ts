@@ -48,6 +48,8 @@ export function useUpdateDraft() {
         onSuccess: (data) => {
             queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, 'Drafts') });
             if (data?.id) queryClient.invalidateQueries({ queryKey: emailKeys.detail(ownerId, data.id) });
+            invalidateMailboxes(queryClient, ownerId);
+            invalidateHomeSize(queryClient, ownerId);
         },
         onError: onMutationError,
     });
