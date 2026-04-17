@@ -87,6 +87,13 @@ export function useDraftState(email: EmailDraft | null, prefillTo?: string) {
         }));
     }, []);
 
+    const clearAttachmentTempIds = useCallback(() => {
+        setState((prev) => ({
+            ...prev,
+            attachments: prev.attachments.map((a) => ({ ...a, tempId: undefined })),
+        }));
+    }, []);
+
     const toDraft = useCallback((): NewDraft | EmailDraft => {
         const s = stateRef.current;
         const e = emailRef.current;
@@ -126,6 +133,7 @@ export function useDraftState(email: EmailDraft | null, prefillTo?: string) {
         setField,
         addAttachment,
         removeAttachment,
+        clearAttachmentTempIds,
         toDraft,
         isSendable,
         isSaveable,
