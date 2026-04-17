@@ -247,7 +247,11 @@ export default class Maildir {
         );
 
         const parsed = await this.readAndParse(uniqueId, 'Drafts', filename);
-        if (!parsed) throw new Error(`Failed to parse draft message: ${uniqueId}`);
+        if (!parsed) {
+            // Clean up the orphan we just wrote so no disk file is left without a DB row
+            await this.store.deleteMessage('Drafts', filename).catch(() => {});
+            throw new ApiError(500, 'Failed to parse saved draft');
+        }
 
         applyFlagsFromFilename(parsed, filename);
         parsed.filename = filename;
