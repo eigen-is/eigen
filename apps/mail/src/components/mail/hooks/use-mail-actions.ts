@@ -10,7 +10,7 @@ import {
     useToggleReadEmail,
     useUpdateDraft,
 } from '@workspace/lib/mail';
-import type { Email, EmailDraft, NewDraft } from '@workspace/lib/types/mail';
+import type { Email, NewDraft } from '@workspace/lib/types/mail';
 import { Route } from '../../../routes/_auth.$filterType.$filterId';
 
 export function useMailActions() {
@@ -45,13 +45,13 @@ export function useMailActions() {
         navigateToList();
     };
 
-    const handleSendEmail = async (mail: NewDraft | EmailDraft) => {
+    const handleSendEmail = async (mail: NewDraft) => {
         await sendDraftMutation.mutateAsync(mail);
         navigateToList();
     };
 
-    const handleNewDraftEmail = async (mail: NewDraft | EmailDraft) => {
-        const draft = await updateDraft.mutateAsync(mail);
+    const handleNewDraftEmail = async (mail: NewDraft) => {
+        const draft = await updateDraft.mutateAsync({ draft: mail });
         if (draft) {
             navigate({
                 to: Route.fullPath,
@@ -59,6 +59,18 @@ export function useMailActions() {
                 search: { mailId: draft.id },
             });
         }
+    };
+
+    // After the first auto-save of a fresh compose, add ?mailId=... to the URL so a reload lands
+    // back on the same draft. Keep mode='compose' so the composer session key stays stable and
+    // the composer isn't remounted mid-typing.
+    const handleDraftIdAssigned = (id: string) => {
+        navigate({
+            to: Route.fullPath,
+            params: { filterType, filterId },
+            search: (prev) => ({ ...prev, mailId: id, mode: 'compose' }),
+            replace: true,
+        });
     };
 
     const handleDeleteEmail = async (mail: Email) => {
@@ -133,8 +145,18 @@ export function useMailActions() {
         navigateToList();
     };
 
+    const escapeHtml = (s: string) =>
+        s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
     const formatEmailQuote = (email: Email) => {
-        return `\n\nOn ${formatFullDateTime(new Date(email.date))} ${email.from?.value[0]?.name} <${email.from?.value[0]?.address}> wrote:\n\n${email.text}`;
+        const fromName = escapeHtml(email.from?.value[0]?.name || '');
+        const fromAddress = escapeHtml(email.from?.value[0]?.address || '');
+        const dateText = escapeHtml(formatFullDateTime(new Date(email.date)));
+        const header = `On ${dateText} ${fromName} &lt;${fromAddress}&gt; wrote:`;
+        // email.html is already sanitized by the backend via isomorphic-dompurify in mail-parse.ts,
+        // and email.text is plain text (not HTML) so it's safe to embed as-is in a blockquote.
+        const content = email.html || (email.text ? escapeHtml(email.text).replace(/\n/g, '<br>') : '');
+        return `<br><br><p>${header}</p><blockquote>${content}</blockquote>`;
     };
 
     const handleReplyEmail = async (emailId: string) => {
@@ -144,7 +166,7 @@ export function useMailActions() {
             createDraftEmail({
                 to: email.replyTo || email.from,
                 subject: email.subject?.startsWith('RE:') ? email.subject : `RE: ${email.subject}`,
-                text: formatEmailQuote(email),
+                html: formatEmailQuote(email),
             }),
         );
     };
@@ -163,7 +185,7 @@ export function useMailActions() {
             createDraftEmail({
                 to: { value: allRecipients, html: '', text: '' },
                 subject: email.subject?.startsWith('RE:') ? email.subject : `RE: ${email.subject}`,
-                text: formatEmailQuote(email),
+                html: formatEmailQuote(email),
             }),
         );
     };
@@ -174,7 +196,7 @@ export function useMailActions() {
         await handleNewDraftEmail(
             createDraftEmail({
                 subject: `FW: ${email.subject}`,
-                text: formatEmailQuote(email),
+                html: formatEmailQuote(email),
             }),
         );
     };
@@ -203,7 +225,16 @@ export function useMailActions() {
         handleSendEmail,
         handleNewDraftEmail,
         handleToggleMailRead,
-        saveDraft: updateDraft.mutateAsync,
+        saveDraft: (
+            draft: NewDraft,
+            options: { tempAttachmentIds?: string[]; keepAttachmentIndexes?: number[] } = {},
+        ) =>
+            updateDraft.mutateAsync({
+                draft,
+                tempAttachmentIds: options.tempAttachmentIds,
+                keepAttachmentIndexes: options.keepAttachmentIndexes,
+            }),
+        handleDraftIdAssigned,
         isSendPending: sendDraftMutation.isPending,
     };
 }

@@ -1,4 +1,4 @@
-import type { Email, EmailDraft, EmailSummary } from '@workspace/lib/types/mail';
+import type { Email, EmailDraft, EmailSummary, NewDraft } from '@workspace/lib/types/mail';
 import type { User } from 'better-auth/types';
 import { processInboundImip } from '../calendar/imip';
 import { ApiError } from '../core/errors';
@@ -108,12 +108,22 @@ export async function messageCopy(user: User, messageId: string, targetMailbox: 
     return await mail.messageCopy(messageId, targetMailbox);
 }
 
-export async function messageHandleDraft(user: User, mail: EmailDraft) {
+export type DraftUpdateOptions = {
+    tempAttachmentIds?: string[];
+    keepAttachmentIndexes?: number[];
+};
+
+export async function messageHandleDraft(user: User, mail: NewDraft | EmailDraft, options?: DraftUpdateOptions) {
     const mailClient = await getMailClient(user);
-    return await mailClient.messageHandleDraft(mail);
+    return await mailClient.messageHandleDraft(mail, options);
 }
 
-export async function messageSend(user: User, mail: EmailDraft) {
+export async function uploadDraftAttachment(user: User, request: Request) {
+    const mailClient = await getMailClient(user);
+    return await mailClient.uploadDraftAttachment(request);
+}
+
+export async function messageSend(user: User, mail: NewDraft | EmailDraft) {
     const mailClient = await getMailClient(user);
     return await mailClient.messageSend(mail);
 }

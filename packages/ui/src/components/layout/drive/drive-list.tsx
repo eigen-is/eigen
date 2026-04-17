@@ -312,18 +312,22 @@ export function DriveList({
 
     const contentDiv = (
         <div
-            className={cn('h-full flex flex-col relative border-r', isDragging && 'bg-secondary/30')}
+            className="h-full flex flex-col relative border-r"
             onDragOver={handleDragOver}
             onDragEnter={handleDragEnter}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
         >
-            {allowUpload && isDragging && (
-                <div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-10 pointer-events-none">
-                    <div className="bg-card p-6 rounded-lg shadow-lg text-center">
-                        <UploadIcon className="h-12 w-12 mx-auto mb-4 text-primary animate-bounce" />
-                        <h3 className="text-xl font-medium mb-2">Drop files here</h3>
-                        <p className="text-muted-foreground">Release to upload</p>
+            {allowUpload && (
+                <div
+                    className={cn(
+                        'pointer-events-none absolute inset-0 rounded-lg border-2 border-dashed border-primary bg-primary/5 flex items-center justify-center transition-opacity z-10',
+                        isDragging ? 'opacity-100' : 'opacity-0',
+                    )}
+                >
+                    <div className="flex items-center gap-2 text-primary text-sm font-medium">
+                        <UploadIcon className="h-4 w-4" />
+                        Drop files to upload
                     </div>
                 </div>
             )}
