@@ -321,7 +321,7 @@ export function DriveList({
             {allowUpload && (
                 <div
                     className={cn(
-                        'pointer-events-none absolute inset-2 rounded-lg border-2 border-dashed border-primary bg-primary/5 flex items-center justify-center transition-opacity z-10',
+                        'pointer-events-none absolute inset-1 rounded-lg border-2 border-dashed border-primary bg-primary/5 flex items-center justify-center transition-opacity z-10',
                         isDragging ? 'opacity-100' : 'opacity-0',
                     )}
                 >
