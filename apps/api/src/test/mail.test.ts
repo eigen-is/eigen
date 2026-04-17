@@ -1,5 +1,7 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
+// Static import of '../lib/core/mailer' would trigger server-config module evaluation
+// before './setup' sets EIGEN_DATA_ROOT. Dynamic-import it inside the test instead.
 import { assertJson, authedRequest, findOrFail, getTestContext } from './setup';
 
 const isWindows = process.platform === 'win32';
@@ -46,6 +48,16 @@ describe.skipIf(isWindows)('Mail', () => {
         expect(res.status).toBe(200);
         const data = await res.json();
         expect(data).toBe(false);
+    });
+
+    test('create mailbox with invalid name returns 400', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/mailbox`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mailbox: 'Bad!Name' }),
+        });
+        expect(res.status).toBe(400);
+        expect(await res.text()).toContain('Invalid mailbox');
     });
 
     test('create duplicate mailbox returns 409', async () => {
@@ -407,5 +419,62 @@ describe.skipIf(isWindows)('Mail', () => {
             expect(data).not.toBe(false);
             expect((data as MaildirMailbox).path).toBe('ValidAfterTraversal');
         });
+    });
+
+    test('send with failing SMTP returns 500 and keeps draft in Drafts', async () => {
+        const draftRes = await authedRequest(ctx.alice.user.sessionToken, `/mail/${ctx.alice.user.id}/message/draft`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                mail: {
+                    subject: 'SMTP failure test',
+                    text: 'body',
+                    to: {
+                        value: [{ address: 'target@example.com', name: '' }],
+                        html: 'target@example.com',
+                        text: 'target@example.com',
+                    },
+                },
+            }),
+        });
+        const draft = await assertJson<EmailSummary>(draftRes);
+
+        const mailer = await import('../lib/core/mailer');
+        const spy = spyOn(mailer, 'sendMail').mockResolvedValueOnce(false);
+
+        try {
+            const sendRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/mail/${ctx.alice.user.id}/message/send`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        mail: {
+                            id: draft.id,
+                            subject: 'SMTP failure test',
+                            text: 'body',
+                            to: {
+                                value: [{ address: 'target@example.com', name: '' }],
+                                html: 'target@example.com',
+                                text: 'target@example.com',
+                            },
+                        },
+                    }),
+                },
+            );
+
+            expect(sendRes.status).toBe(500);
+            expect(await sendRes.text()).toContain('Failed to send');
+
+            const draftsRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/mail/${ctx.alice.user.id}/mailbox/Drafts`,
+            );
+            const drafts = await assertJson<EmailSummary[]>(draftsRes);
+            expect(drafts.some((d) => d.id === draft.id)).toBe(true);
+        } finally {
+            spy.mockRestore();
+        }
     });
 });

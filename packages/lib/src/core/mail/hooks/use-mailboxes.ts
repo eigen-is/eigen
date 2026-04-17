@@ -23,7 +23,6 @@ export function useMailboxes() {
             return response.data || [];
         },
         staleTime: 1 * 60 * 1000, // 1 minute
-        refetchOnWindowFocus: false,
         retry: 1,
         enabled: !!ownerId,
     });

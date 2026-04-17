@@ -11,7 +11,6 @@ import {
     useUpdateDraft,
 } from '@workspace/lib/mail';
 import type { Email, EmailDraft, NewDraft } from '@workspace/lib/types/mail';
-import { toast } from 'sonner';
 import { Route } from '../../../routes/_auth.$filterType.$filterId';
 
 export function useMailActions() {
@@ -140,10 +139,7 @@ export function useMailActions() {
 
     const handleReplyEmail = async (emailId: string) => {
         const email = await getEmailById(emailId);
-        if (!email) {
-            toast.error('Could not load email');
-            return;
-        }
+        if (!email) return;
         await handleNewDraftEmail(
             createDraftEmail({
                 to: email.replyTo || email.from,
@@ -155,10 +151,7 @@ export function useMailActions() {
 
     const handleReplyAllEmail = async (emailId: string) => {
         const email = await getEmailById(emailId);
-        if (!email) {
-            toast.error('Could not load email');
-            return;
-        }
+        if (!email) return;
         const myEmail = user?.email?.toLowerCase();
         const toValues = Array.isArray(email.to) ? email.to.flatMap((t) => t.value) : email.to?.value || [];
         const ccValues = Array.isArray(email.cc) ? email.cc.flatMap((c) => c.value) : email.cc?.value || [];
@@ -177,10 +170,7 @@ export function useMailActions() {
 
     const handleForwardEmail = async (emailId: string) => {
         const email = await getEmailById(emailId);
-        if (!email) {
-            toast.error('Could not load email');
-            return;
-        }
+        if (!email) return;
         await handleNewDraftEmail(
             createDraftEmail({
                 subject: `FW: ${email.subject}`,
