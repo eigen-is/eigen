@@ -60,7 +60,7 @@ export function EmailDraft({ email, to, sendDraft, onAutoSave, isSending }: Emai
         isSaveable,
     } = useDraftState(email, to);
 
-    const { scheduleSave } = useDraftAutoSave({
+    const { scheduleSave, saveNow } = useDraftAutoSave({
         toDraft,
         isSaveable,
         draftId: state.id,
@@ -95,6 +95,8 @@ export function EmailDraft({ email, to, sendDraft, onAutoSave, isSending }: Emai
             setConfirmNoSubject(true);
             return;
         }
+        const hasPendingUploads = state.attachments.some((a) => a.tempId);
+        if (hasPendingUploads) await saveNow();
         await sendDraft(toDraft());
     };
 
@@ -210,9 +212,10 @@ export function EmailDraft({ email, to, sendDraft, onAutoSave, isSending }: Emai
                 title="Send without subject?"
                 description="This message has no subject. Send anyway?"
                 confirmText="Send"
-                onConfirm={() => {
+                onConfirm={async () => {
                     setConfirmNoSubject(false);
-                    sendDraft(toDraft());
+                    if (state.attachments.some((a) => a.tempId)) await saveNow();
+                    await sendDraft(toDraft());
                 }}
             />
         </div>
