@@ -1,20 +1,18 @@
-import { getDriveDownloadUrl, getDriveThumbnailUrl } from '@workspace/lib/api';
 import { useContacts } from '@workspace/lib/contacts';
 import { formatDateTime } from '@workspace/lib/date';
-import { useFolderLookup } from '@workspace/lib/drive';
 import { usePublicUser } from '@workspace/lib/public';
 import type { ChatMessage } from '@workspace/lib/types/chat';
 import type { Contact } from '@workspace/lib/types/contact';
 import { EMAIL_FIND_REGEX } from '@workspace/lib/validation';
 import { URL_REGEX } from '@workspace/ui/components/layout/linked-text';
 import { UserItem } from '@workspace/ui/components/layout/user-item';
-import { Check, Paperclip, Pencil, Trash2, X } from 'lucide-react';
+import { Check, Pencil, Trash2, X } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '../../../components/hover-card';
 import { cn } from '../../../lib/utils';
 import { LoadingState } from '../app/loading-state';
+import { AttachmentChip } from '../attachment/attachment-chip';
 import { EigenLoader } from '../braket/eigen-loader.tsx';
-import { usePreview } from '../preview-provider';
 import { TooltipButton } from '../toolbar/tooltip-button';
 import { UserAvatar } from '../user-avatar';
 
@@ -41,52 +39,6 @@ function isSameAuthorAndClose(prev: ChatMessage, curr: ChatMessage): boolean {
     if (prev.authorId !== curr.authorId) return false;
     const diff = new Date(curr.createdAt).getTime() - new Date(prev.createdAt).getTime();
     return diff < 5 * 60 * 1000;
-}
-
-function AttachmentChip({
-    fileName,
-    ownerId,
-    mountId,
-    mediaFolderId,
-}: {
-    fileName: string;
-    ownerId: string;
-    mountId: string;
-    mediaFolderId: string;
-}) {
-    const { findByName } = useFolderLookup(ownerId, mountId, mediaFolderId);
-    const fileInfo = findByName(fileName);
-    const { openPreview } = usePreview();
-
-    const name = fileInfo?.details?.originalName || fileInfo?.name || fileName;
-    const downloadUrl = fileInfo ? getDriveDownloadUrl(ownerId, mountId, fileInfo.id) : '#';
-    const thumbnailUrl = fileInfo?.thumbnail ? getDriveThumbnailUrl(ownerId, mountId, fileInfo.thumbnail) : null;
-    const isImage = fileInfo?.mimeType?.startsWith('image/');
-
-    const handleClick = (e: React.MouseEvent) => {
-        if (fileInfo) {
-            e.preventDefault();
-            openPreview(fileInfo);
-        }
-    };
-
-    return (
-        <a
-            href={downloadUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-md bg-muted text-xs text-foreground hover:bg-muted/80 transition-colors border overflow-hidden min-h-10"
-            onClick={handleClick}
-        >
-            {thumbnailUrl && isImage ? (
-                <img src={thumbnailUrl} alt={name} className="h-10 w-10 object-cover rounded-l-md" />
-            ) : null}
-            <div className="flex items-center gap-1.5 px-2.5 py-1.5">
-                {!thumbnailUrl && <Paperclip className="h-3 w-3 text-muted-foreground shrink-0" />}
-                <span className="truncate max-w-[200px]">{name}</span>
-            </div>
-        </a>
-    );
 }
 
 function InlineEmail({ email }: { email: string }) {
