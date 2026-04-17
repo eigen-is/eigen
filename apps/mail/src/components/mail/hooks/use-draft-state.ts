@@ -1,7 +1,7 @@
 import { useAuth } from '@workspace/lib/auth';
 import { createDraftEmail } from '@workspace/lib/mail';
 import type { AddressObject, AttachmentMeta, EmailDraft, NewDraft } from '@workspace/lib/types/mail';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
 type DraftState = {
     id?: string;
@@ -65,6 +65,13 @@ export function useDraftState(email: EmailDraft | null, prefillTo?: string) {
     const auth = useAuth();
     const [state, setState] = useState<DraftState>(() => initState(email, prefillTo));
 
+    const stateRef = useRef(state);
+    stateRef.current = state;
+    const emailRef = useRef(email);
+    emailRef.current = email;
+    const userRef = useRef(auth.user);
+    userRef.current = auth.user;
+
     const setField = useCallback(<K extends keyof DraftState>(field: K, value: DraftState[K]) => {
         setState((prev) => ({ ...prev, [field]: value }));
     }, []);
@@ -80,43 +87,39 @@ export function useDraftState(email: EmailDraft | null, prefillTo?: string) {
         }));
     }, []);
 
-    const toDraft = useMemo((): (() => NewDraft | EmailDraft) => {
-        return () => {
-            const from = {
-                value: [{ name: auth.user?.name || '', address: auth.user?.email || '' }],
-                html: '',
-                text: '',
-            };
-            const base = email ? { ...email } : createDraftEmail({});
-
-            return {
-                ...base,
-                id: state.id,
-                from,
-                to: stringToAddressObject(state.to),
-                cc: stringToAddressObject(state.cc),
-                bcc: stringToAddressObject(state.bcc),
-                subject: state.subject,
-                text: state.body
-                    .replace(/<[^>]+>/g, ' ')
-                    .replace(/\s+/g, ' ')
-                    .trim(),
-                html: state.body,
-                inReplyTo: state.inReplyTo,
-                references: state.references,
-                messageId: state.messageId,
-            };
+    const toDraft = useCallback((): NewDraft | EmailDraft => {
+        const s = stateRef.current;
+        const e = emailRef.current;
+        const u = userRef.current;
+        const from = {
+            value: [{ name: u?.name || '', address: u?.email || '' }],
+            html: '',
+            text: '',
         };
-    }, [state, email, auth.user]);
+        const base = e ? { ...e } : createDraftEmail({});
 
+        return {
+            ...base,
+            id: s.id,
+            from,
+            to: stringToAddressObject(s.to),
+            cc: stringToAddressObject(s.cc),
+            bcc: stringToAddressObject(s.bcc),
+            subject: s.subject,
+            text: s.body
+                .replace(/<[^>]+>/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim(),
+            html: s.body,
+            inReplyTo: s.inReplyTo,
+            references: s.references,
+            messageId: s.messageId,
+        };
+    }, []);
+
+    const bodyText = state.body.replace(/<[^>]+>/g, '').trim();
     const isSendable = !!state.to.trim();
-    const isSaveable = !!(
-        state.to.trim() ||
-        state.subject.trim() ||
-        state.cc.trim() ||
-        state.bcc.trim() ||
-        state.body.trim()
-    );
+    const isSaveable = !!(state.to.trim() || state.subject.trim() || state.cc.trim() || state.bcc.trim() || bodyText);
 
     return {
         state,

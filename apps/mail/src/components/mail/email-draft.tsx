@@ -54,7 +54,7 @@ export function EmailDraft({ email, to, sendDraft, onAutoSave, isSending }: Emai
         toDraft,
         isSaveable,
         draftId: state.id,
-        onSave: onAutoSave || (() => Promise.resolve()),
+        onSave: onAutoSave,
         onIdAssigned: (id) => setField('id', id),
     });
 

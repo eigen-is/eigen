@@ -5,16 +5,18 @@ type AutoSaveOptions = {
     toDraft: () => NewDraft | EmailDraft;
     isSaveable: boolean;
     draftId?: string;
-    onSave: (draft: NewDraft | EmailDraft) => Promise<unknown>;
+    onSave?: (draft: NewDraft | EmailDraft) => Promise<unknown>;
     onIdAssigned?: (id: string) => void;
     debounceMs?: number;
 };
+
+const noopSave = () => Promise.resolve();
 
 export function useDraftAutoSave({
     toDraft,
     isSaveable,
     draftId,
-    onSave,
+    onSave = noopSave,
     onIdAssigned,
     debounceMs = 2500,
 }: AutoSaveOptions) {
@@ -22,10 +24,19 @@ export function useDraftAutoSave({
     const lastSavedRef = useRef<string>('');
     const savingRef = useRef(false);
 
-    const doSave = useCallback(async () => {
-        if (savingRef.current) return;
-        const draft = toDraft();
-        const snapshot = JSON.stringify({
+    const toDraftRef = useRef(toDraft);
+    toDraftRef.current = toDraft;
+    const onSaveRef = useRef(onSave);
+    onSaveRef.current = onSave;
+    const onIdAssignedRef = useRef(onIdAssigned);
+    onIdAssignedRef.current = onIdAssigned;
+    const isSaveableRef = useRef(isSaveable);
+    isSaveableRef.current = isSaveable;
+    const draftIdRef = useRef(draftId);
+    draftIdRef.current = draftId;
+
+    const buildSnapshot = (draft: NewDraft | EmailDraft) =>
+        JSON.stringify({
             to: draft.to,
             cc: draft.cc,
             bcc: draft.bcc,
@@ -33,42 +44,40 @@ export function useDraftAutoSave({
             text: draft.text,
             html: draft.html,
         });
+
+    const doSave = useCallback(async () => {
+        if (savingRef.current) return;
+        const draft = toDraftRef.current();
+        const snapshot = buildSnapshot(draft);
         if (snapshot === lastSavedRef.current) return;
 
         savingRef.current = true;
         try {
-            const result = await onSave(draft);
+            const result = await onSaveRef.current(draft);
             lastSavedRef.current = snapshot;
-            if (!draftId && result && typeof result === 'object' && 'id' in result) {
-                onIdAssigned?.(result.id as string);
+            if (!draftIdRef.current && result && typeof result === 'object' && 'id' in result) {
+                onIdAssignedRef.current?.(result.id as string);
             }
         } finally {
             savingRef.current = false;
         }
-    }, [toDraft, onSave, draftId, onIdAssigned]);
+    }, []);
 
     const scheduleSave = useCallback(() => {
-        if (!isSaveable) return;
+        if (!isSaveableRef.current) return;
         if (timerRef.current) clearTimeout(timerRef.current);
         timerRef.current = setTimeout(doSave, debounceMs);
-    }, [doSave, isSaveable, debounceMs]);
+    }, [doSave, debounceMs]);
 
-    // Save on unmount
+    // Save on unmount — refs ensure we use latest state/handlers, not stale mount-time closure.
     useEffect(() => {
         return () => {
             if (timerRef.current) clearTimeout(timerRef.current);
-            if (isSaveable && !savingRef.current) {
-                const draft = toDraft();
-                const snapshot = JSON.stringify({
-                    to: draft.to,
-                    cc: draft.cc,
-                    bcc: draft.bcc,
-                    subject: draft.subject,
-                    text: draft.text,
-                    html: draft.html,
-                });
+            if (isSaveableRef.current && !savingRef.current) {
+                const draft = toDraftRef.current();
+                const snapshot = buildSnapshot(draft);
                 if (snapshot !== lastSavedRef.current) {
-                    onSave(draft).catch(() => {});
+                    onSaveRef.current(draft).catch(() => {});
                 }
             }
         };
