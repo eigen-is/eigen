@@ -36,6 +36,11 @@ export function useDraftAutoSave({
     const draftIdRef = useRef(draftId);
     draftIdRef.current = draftId;
 
+    const pendingAttachmentsRef = useRef(false);
+    const setHasPendingAttachments = useCallback((has: boolean) => {
+        pendingAttachmentsRef.current = has;
+    }, []);
+
     const buildSnapshot = (draft: NewDraft | EmailDraft) =>
         JSON.stringify({
             to: draft.to,
@@ -46,19 +51,21 @@ export function useDraftAutoSave({
             html: draft.html,
         });
 
-    const doSave = useCallback(async () => {
-        if (savingRef.current || disabledRef.current) return;
+    const doSave = useCallback(async (): Promise<unknown> => {
+        if (savingRef.current || disabledRef.current) return null;
         const draft = toDraftRef.current();
         const snapshot = buildSnapshot(draft);
-        if (snapshot === lastSavedRef.current) return;
+        if (snapshot === lastSavedRef.current && !pendingAttachmentsRef.current) return null;
 
         savingRef.current = true;
         try {
             const result = await onSaveRef.current(draft);
             lastSavedRef.current = snapshot;
+            pendingAttachmentsRef.current = false;
             if (!draftIdRef.current && result && typeof result === 'object' && 'id' in result) {
                 onIdAssignedRef.current?.(result.id as string);
             }
+            return result;
         } finally {
             savingRef.current = false;
         }
@@ -92,5 +99,5 @@ export function useDraftAutoSave({
         };
     }, []);
 
-    return { scheduleSave, saveNow: doSave, disable };
+    return { scheduleSave, saveNow: doSave, disable, setHasPendingAttachments };
 }
