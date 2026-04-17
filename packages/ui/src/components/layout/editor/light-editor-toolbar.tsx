@@ -32,7 +32,8 @@ export function LightEditorToolbar({ editor }: { editor: Editor }) {
 
     const setLink = useCallback(() => {
         if (linkUrl.trim()) {
-            const url = linkUrl.startsWith('http') ? linkUrl : `https://${linkUrl}`;
+            const url =
+                linkUrl.startsWith('http://') || linkUrl.startsWith('https://') ? linkUrl : `https://${linkUrl}`;
             editor.chain().focus().setLink({ href: url }).run();
         }
         setShowLinkInput(false);
