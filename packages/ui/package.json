@@ -36,6 +36,12 @@
     "input-otp": "^1.4.2",
     "radix-ui": "^1.4.3"
   },
+  "peerDependencies": {
+    "@tiptap/core": "^3.21.0",
+    "@tiptap/react": "^3.21.0",
+    "@tiptap/starter-kit": "^3.21.0",
+    "@tiptap/pm": "^3.21.0"
+  },
   "exports": {
     ".": "./src/index.ts",
     "./globals.css": "./src/styles/globals.css",
@@ -56,6 +62,7 @@
     "./components/layout/contacts": "./src/components/layout/contacts/index.ts",
     "./components/layout/context-menu": "./src/components/layout/context-menu/index.ts",
     "./components/layout/delete": "./src/components/layout/delete/index.ts",
+    "./components/layout/editor": "./src/components/layout/editor/index.ts",
     "./components/layout/drive": "./src/components/layout/drive/index.ts",
     "./components/layout/home": "./src/components/layout/home/index.ts",
     "./components/layout/labels": "./src/components/layout/labels/index.ts",

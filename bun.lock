@@ -354,6 +354,12 @@
         "input-otp": "^1.4.2",
         "radix-ui": "^1.4.3",
       },
+      "peerDependencies": {
+        "@tiptap/core": "^3.21.0",
+        "@tiptap/pm": "^3.21.0",
+        "@tiptap/react": "^3.21.0",
+        "@tiptap/starter-kit": "^3.21.0",
+      },
     },
   },
   "overrides": {
