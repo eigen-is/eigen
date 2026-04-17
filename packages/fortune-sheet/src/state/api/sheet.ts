@@ -2,7 +2,8 @@ import _ from "lodash";
 import {v4 as uuidv4} from "uuid";
 import {dataToCelldata, getSheet} from "./common";
 import {Context} from "../context";
-import {CellMatrix, CellWithRowAndCol, Sheet, SingleRange} from "../types";
+import type {CellMatrix} from "../../engine/types";
+import {CellWithRowAndCol, Sheet, SingleRange} from "../types";
 import {getSheetIndex} from "../utils";
 import {api, execfunction, insertUpdateFunctionGroup, locale} from "..";
 

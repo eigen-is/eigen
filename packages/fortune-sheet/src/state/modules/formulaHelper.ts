@@ -1,12 +1,9 @@
 import _ from "lodash";
+import type {CellMatrix, FormulaCellInfo, FormulaCellInfoMap, FormulaDependency} from "../../engine/types";
 import {
-    CellMatrix,
     Context,
     execfunction,
     FormulaCell,
-    FormulaCellInfo,
-    FormulaCellInfoMap,
-    FormulaDependency,
     getcellFormula,
     getcellrange,
     iscelldata,
@@ -211,7 +208,6 @@ export function executeAffectedFormulas(
             c: formulaCell.c,
             v: v[1],
             f: v[2],
-            spe: v[3],
             id: formulaCell.id,
         });
 

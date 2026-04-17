@@ -1,8 +1,6 @@
 import {
     addSheet,
     api,
-    Cell,
-    CellMatrix,
     CellWithRowAndCol,
     Context,
     createFilterOptions,
@@ -21,6 +19,7 @@ import {
     Sheet,
     SingleRange,
 } from "../../state";
+import type {Cell, CellMatrix} from "../../engine/types";
 import {applyPatches} from "immer";
 import _ from "lodash";
 import {SetContextOptions} from "../../context";

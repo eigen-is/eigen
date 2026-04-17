@@ -2,7 +2,8 @@ import _ from "lodash";
 
 import {Context, getFlowdata} from "../context";
 import {locale} from "../locale";
-import {CellMatrix, GlobalCache, SearchResult, Selection} from "../types";
+import type {CellMatrix} from "../../engine/types";
+import {GlobalCache, SearchResult, Selection} from "../types";
 import {chatatABC, getRegExpStr, getSheetIndex, isAllowEdit, replaceHtml,} from "../utils";
 import {setCellValue} from "./cell";
 import {valueShowEs} from "../../engine/format";

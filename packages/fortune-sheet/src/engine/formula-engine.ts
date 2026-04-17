@@ -1,7 +1,6 @@
 import {ERROR_REF, Parser} from "./parser";
 import type {CellInfo, ParserOptions, RangeCell} from "./parser/parser";
-import type {Cell, FormulaDependency, FormulaCellInfoMap} from "../state/types";
-import type {CellResolver, EvaluationResult, FormulaEngineState} from "./types";
+import type {Cell, CellResolver, EvaluationResult, FormulaCellInfoMap, FormulaDependency, FormulaEngineState} from "./types";
 import {getCalculationOrder} from "./dependency-graph";
 import SSF from "./ssf";
 
@@ -150,7 +149,18 @@ export class FormulaEngine {
                 return { value: error, display: error, type: "error" };
             }
 
-            const value = result instanceof Date ? result.toString() : result;
+            const raw = result instanceof Date ? result.toString() : result;
+            // Cell-scoped formulas produce scalars. Range references can
+            // surface arrays if a formula evaluates to a bare range — coerce
+            // those (and any other non-primitive) to a string for storage.
+            const value: Cell["v"] =
+                typeof raw === "string" ||
+                typeof raw === "number" ||
+                typeof raw === "boolean"
+                    ? raw
+                    : raw == null
+                        ? undefined
+                        : String(raw);
             const type = inferType(value);
             const display = value == null ? "" : String(value);
 

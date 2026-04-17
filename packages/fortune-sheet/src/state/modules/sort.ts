@@ -1,7 +1,8 @@
 import numeral from "numeral";
 import _ from "lodash";
 import {execfunction, functionCopy, update} from ".";
-import {Cell, CellMatrix, Context, diff, getFlowdata, isdatetime, isRealNull, isRealNum,} from "..";
+import type {Cell, CellMatrix} from "../../engine/types";
+import {Context, diff, getFlowdata, isdatetime, isRealNull, isRealNum,} from "..";
 import {jfrefreshgrid} from "./refresh";
 
 export function orderbydata(

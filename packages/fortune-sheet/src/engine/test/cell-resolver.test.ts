@@ -1,6 +1,6 @@
 import {describe, expect, test} from "bun:test";
 import {createArrayResolver} from "../cell-resolver";
-import type {Cell, CellMatrix} from "../../state/types";
+import type {Cell, CellMatrix} from "../types";
 
 const cellA: Cell = { v: 42, m: "42" };
 const cellB: Cell = { v: "hello", m: "hello" };

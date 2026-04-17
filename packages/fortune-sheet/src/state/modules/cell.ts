@@ -1,6 +1,7 @@
 import _ from "lodash";
 import {Context, getFlowdata} from "../context";
-import {Cell, CellMatrix, FormulaDependency, Range, Selection, SingleRange,} from "../types";
+import type {Cell, CellMatrix, FormulaDependency} from "../../engine/types";
+import {Range, Selection, SingleRange} from "../types";
 import {getSheetIndex, indexToColumnChar, rgbToHex} from "../utils";
 import {checkCF, getComputeMap} from "./ConditionFormat";
 import {getFailureText, validateCellData} from "./dataVerification";
@@ -148,10 +149,6 @@ export function setCellValue(
             } else if ("f" in cell) {
                 delete cell.f;
             }
-
-            // if (!_.isNil(v.spl)) {
-            //   cell.spl = v.spl;
-            // }
 
             if (!_.isNil(v.ct)) {
                 cell.ct = v.ct;
@@ -775,7 +772,7 @@ export function updateCell(
 
     if (!isCurInline) {
         if (isRealNull(value) && !isPrevInline) {
-            if (!curv || (isRealNull(curv.v) && !curv.spl && !curv.f)) {
+            if (!curv || (isRealNull(curv.v) && !curv.f)) {
                 cancelNormalSelected(ctx);
                 return;
             }
@@ -806,7 +803,6 @@ export function updateCell(
             if (curv.f) {
                 // If it turns out to be a formula but the updated data is not a formula, delete the formula.
                 delete curv.f;
-                delete curv.spl; // Delete the configuration string of sparklines of the cell
             }
         }
     }
@@ -820,21 +816,6 @@ export function updateCell(
                 const v = execfunction(ctx, value, r, c, undefined, undefined, true);
                 curv = _.cloneDeep(d?.[r]?.[c] || {});
                 [, curv.v, curv.f] = v;
-
-                // The sparklines configuration string entered into a cell must be handled separately when it causes an error.
-                if (v.length === 4 && v[3].type === "sparklines") {
-                    delete curv.m;
-                    delete curv.v;
-
-                    const curCalv = v[3].data;
-
-                    if (_.isArray(curCalv) && !_.isPlainObject(curCalv[0])) {
-                        [curv.v] = curCalv;
-                    } else {
-                        curv.spl = v[3].data;
-                    }
-                } else if (v.length === 4 && v[3].type === "dynamicArrayItem") {
-                }
             }
             // from API setCellValue,luckysheet.setCellValue(0, 0, {f: "=sum(D1)", bg:"#0188fb"}),value is an object, so get attribute f as value
             else if (_.isPlainObject(value)) {
@@ -854,21 +835,6 @@ export function updateCell(
 
                     curv = _.cloneDeep(d?.[r]?.[c] || {});
                     [, curv.v, curv.f] = v;
-
-                    // The sparklines configuration string entered into a cell must be handled separately when it causes an error.
-                    if (v.length === 4 && v[3].type === "sparklines") {
-                        delete curv.m;
-                        delete curv.v;
-
-                        const curCalv = v[3].data;
-
-                        if (_.isArray(curCalv) && !_.isPlainObject(curCalv[0])) {
-                            [curv.v] = curCalv;
-                        } else {
-                            curv.spl = v[3].data;
-                        }
-                    } else if (v.length === 4 && v[3].type === "dynamicArrayItem") {
-                    }
                 }
                 // from API setCellValue,luckysheet.setCellValue(0, 0, {f: "=sum(D1)", bg:"#0188fb"}),value is an object, so get attribute f as value
                 else {
@@ -884,7 +850,6 @@ export function updateCell(
                 curv.v = value;
 
                 delete curv.f;
-                delete curv.spl;
 
                 if (curv.qp === 1 && `${value}`.substring(0, 1) !== "'") {
                     // if quotePrefix is 1, cell is force string, cell clear quotePrefix when it is updated
@@ -904,18 +869,6 @@ export function updateCell(
                 v: v[1],
                 f: v[2],
             };
-
-            // The sparklines configuration string entered into a cell must be handled separately when it causes an error.
-            if (v.length === 4 && v[3].type === "sparklines") {
-                const curCalv = v[3].data;
-
-                if (_.isArray(curCalv) && !_.isPlainObject(curCalv[0])) {
-                    [value.v] = curCalv;
-                } else {
-                    value.spl = v[3].data;
-                }
-            } else if (v.length === 4 && v[3].type === "dynamicArrayItem") {
-            }
         }
         // from API setCellValue,luckysheet.setCellValue(0, 0, {f: "=sum(D1)", bg:"#0188fb"}),value is an object, so get attribute f as value
         else if (_.isPlainObject(value)) {
@@ -938,18 +891,6 @@ export function updateCell(
 
                 // update attribute v
                 [, value.v, value.f] = v;
-
-                // The sparklines configuration string entered into a cell must be handled separately when it causes an error.
-                if (v.length === 4 && v[3].type === "sparklines") {
-                    const curCalv = v[3].data;
-
-                    if (_.isArray(curCalv) && !_.isPlainObject(curCalv[0])) {
-                        [value.v] = curCalv;
-                    } else {
-                        value.spl = v[3].data;
-                    }
-                } else if (v.length === 4 && v[3].type === "dynamicArrayItem") {
-                }
             } else {
                 const v = curv;
                 if (_.isNil(value.v)) {
@@ -1017,32 +958,6 @@ export function updateCell(
             }
         }
     }
-
-    // Dynamic array
-    /*
-    let dynamicArray = null;
-    if (dynamicArrayItem) {
-      // let file = ctx.luckysheetfile[getSheetIndex(ctx.currentSheetId)];
-      dynamicArray = $.extend(
-        true,
-        [],
-        this.insertUpdateDynamicArray(dynamicArrayItem)
-      );
-      // dynamicArray.push(dynamicArrayItem);
-    }
-
-    let allParam = {
-      dynamicArray,
-    };
-
-    if (RowlChange) {
-      allParam = {
-        cfg,
-        dynamicArray,
-        RowlChange,
-      };
-    }
-    */
 
     if (ctx.hooks.afterUpdateCell) {
         const newValue = _.cloneDeep(flowdata[r][c]);

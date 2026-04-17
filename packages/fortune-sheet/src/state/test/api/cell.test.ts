@@ -25,7 +25,7 @@ describe("fortune-sheet/core/api/cell", () => {
                     data: [
                         [null, null],
                         [
-                            {m: "5", v: "5", f: "=SUM(A1:B1)", spl: "##"},
+                            {m: "5", v: "5", f: "=SUM(A1:B1)"},
                             {m: "5", v: "5", it: 1, fc: "#ff0"},
                         ],
                     ],

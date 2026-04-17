@@ -1,6 +1,6 @@
 import _ from "lodash";
 import {Context} from "../context";
-import {Cell, CellMatrix, CellStyle} from "../types";
+import type {Cell, CellMatrix, CellStyle} from "../../engine/types";
 import {getCellValue, getFontStyleByCell} from "./cell";
 import {selectTextContent, selectTextContentCross} from "./cursor";
 

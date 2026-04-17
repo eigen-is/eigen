@@ -1,6 +1,6 @@
 import _ from "lodash";
 import {Context, getFlowdata} from "../context";
-import {CellMatrix} from "../types";
+import type {CellMatrix} from "../../engine/types";
 import {getSheetIndex} from "../utils";
 
 // Get computed border data for the table

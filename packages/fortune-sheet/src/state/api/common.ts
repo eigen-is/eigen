@@ -1,6 +1,7 @@
 import _ from "lodash";
 import {Context} from "../context";
-import {CellMatrix, CellWithRowAndCol, Sheet} from "../types";
+import type {CellMatrix} from "../../engine/types";
+import {CellWithRowAndCol, Sheet} from "../types";
 import {getSheetIndex} from "../utils";
 import {SHEET_NOT_FOUND} from "./errors";
 

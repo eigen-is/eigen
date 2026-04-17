@@ -4,7 +4,8 @@ import {initSheetData} from "../api/sheet";
 import {Context} from "../context";
 import {locale} from "../locale";
 import {Settings} from "../settings";
-import {CellMatrix, Sheet} from "../types";
+import type {CellMatrix} from "../../engine/types";
+import {Sheet} from "../types";
 import {generateRandomSheetName, getSheetIndex} from "../utils";
 import {setFormulaCellInfo} from "./formulaHelper";
 

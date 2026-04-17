@@ -1,9 +1,9 @@
 import _ from "lodash";
-import type {Cell, CellMatrix, FormulaCellInfoMap, FormulaDependency, History, Selection} from "../types";
+import type {History, Selection} from "../types";
 import type {Context} from "../context";
 import {getFlowdata} from "../context";
 import {getSheetIdByName} from "../utils";
-import type {CalculationChainEntry, CellResolver} from "../../engine/types";
+import type {CalculationChainEntry, Cell, CellMatrix, CellResolver, FormulaCellInfoMap, FormulaDependency} from "../../engine/types";
 import {FormulaEngine, isFormula} from "../../engine/formula-engine";
 import {setFormulaCellInfo} from "./formulaHelper";
 

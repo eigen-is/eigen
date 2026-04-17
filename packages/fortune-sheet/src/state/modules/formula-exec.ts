@@ -2,12 +2,8 @@
 // (formula caches, sheet data, calc chains) so they stay in the state layer.
 // The engine directory has zero state-runtime dependencies.
 import _ from "lodash";
-import type {
-    Cell,
-    CellMatrix,
-    FormulaCell,
-    FormulaDependency,
-} from "../types";
+import type {Cell, CellMatrix, FormulaCellInfo, FormulaDependency} from "../../engine/types";
+import type {FormulaCell} from "../types";
 import { Context, getFlowdata } from "../context";
 import { columnCharToIndex, getSheetIndex } from "../utils";
 import { setCellValue } from "./cell";
@@ -37,7 +33,7 @@ const LABEL_EXTRACT_REGEXP = new RegExp(
     `^${rowColumnWithSheetName}(?:[:]${rowColumnWithSheetName})?$`
 );
 
-function addToCellIndexList(ctx: Context, txt: string, infoObj: any): void {
+function addToCellIndexList(ctx: Context, txt: string, infoObj: FormulaDependency | null): void {
     if (txt == null || txt.length === 0 || infoObj == null) {
         return;
     }
@@ -59,8 +55,8 @@ function checkSpecialFunctionRange(
     r: number | null,
     c: number | null,
     id: string,
-    dynamicArray_compute?: any,
-    cellRangeFunction?: any
+    dynamicArray_compute?: unknown,
+    cellRangeFunction?: ((str: string) => void) | null
 ): void {
     if (
         function_str.substring(0, 30) === "luckysheet_getSpecialReference" ||
@@ -96,38 +92,6 @@ function checkSpecialFunctionRange(
         }
     }
 }
-
-function insertUpdateDynamicArray(ctx: Context, dynamicArrayItem: any): any[] {
-    const { r, c } = dynamicArrayItem;
-    let { id } = dynamicArrayItem;
-    if (id == null) {
-        id = ctx.currentSheetId;
-    }
-
-    const { luckysheetfile } = ctx;
-    const idx = getSheetIndex(ctx, id);
-    if (idx == null) return [];
-
-    const file = luckysheetfile[idx];
-
-    let { dynamicArray } = file;
-    if (dynamicArray == null) {
-        dynamicArray = [];
-    }
-
-    for (let i = 0; i < dynamicArray.length; i += 1) {
-        const calc = dynamicArray[i];
-        if (calc.r === r && calc.c === c && calc.id === id) {
-            calc.data = dynamicArrayItem.data;
-            calc.f = dynamicArrayItem.f;
-            return dynamicArray;
-        }
-    }
-
-    dynamicArray.push(dynamicArrayItem);
-    return dynamicArray;
-}
-
 
 export function getcellrange(
     ctx: Context,
@@ -252,8 +216,8 @@ export function isFunctionRange(
     r: number | null,
     c: number | null,
     id: string,
-    dynamicArray_compute: any,
-    cellRangeFunction: any
+    dynamicArray_compute: unknown,
+    cellRangeFunction: ((str: string) => void) | null
 ): string {
     if (txt.substring(0, 1) === "=") {
         txt = txt.substring(1);
@@ -274,9 +238,9 @@ export function isFunctionRange(
     };
 
     // bracket: 0 = operator bracket, 1 = function bracket
-    const cal1: any[] = [];
-    const cal2: any[] = [];
-    const bracket: any[] = [];
+    const cal1: string[] = [];
+    const cal2: string[] = [];
+    const bracket: number[] = [];
     while (i < funcstack.length) {
         const s = funcstack[i];
 
@@ -436,7 +400,7 @@ export function isFunctionRange(
                         let stackCeilPri = op[cal1[0]];
 
                         while (cal1.length > 0 && stackCeilPri != null) {
-                            cal2.unshift(cal1.shift());
+                            cal2.unshift(cal1.shift()!);
                             stackCeilPri = op[cal1[0]];
                         }
                     }
@@ -476,7 +440,7 @@ export function isFunctionRange(
                         sPri = sPri == null ? 1000 : sPri;
 
                         while (cal1.length > 0 && sPri >= stackCeilPri) {
-                            cal2.unshift(cal1.shift());
+                            cal2.unshift(cal1.shift()!);
 
                             stackCeilPri = op[cal1[0]];
                             stackCeilPri = stackCeilPri == null ? 1000 : stackCeilPri;
@@ -546,7 +510,7 @@ export function isFunctionRange(
                 }
 
                 while (cal1.length > 0) {
-                    cal2.unshift(cal1.shift());
+                    cal2.unshift(cal1.shift()!);
                 }
             }
 
@@ -697,6 +661,8 @@ export function insertUpdateFunctionGroup(
     ctx.luckysheetfile = luckysheetfile;
 }
 
+export type ExecFunctionResult = [boolean, Cell["v"], string];
+
 export function execfunction(
     ctx: Context,
     txt: string,
@@ -706,7 +672,7 @@ export function execfunction(
     calcChainSet?: Set<string>,
     isrefresh?: boolean,
     notInsertFunc?: boolean
-): any[] {
+): ExecFunctionResult {
     if (txt.indexOf(error.r) > -1) {
         return [false, error.r, txt];
     }
@@ -741,45 +707,30 @@ export function execfunction(
 
 export function groupValuesRefresh(ctx: Context): void {
     const { luckysheetfile } = ctx;
-    if (ctx.groupValuesRefreshData.length > 0) {
-        for (let i = 0; i < ctx.groupValuesRefreshData.length; i += 1) {
-            const item = ctx.groupValuesRefreshData[i];
+    if (ctx.groupValuesRefreshData.length === 0) return;
 
-            const idx = getSheetIndex(ctx, item.id);
-            if (idx == null) continue;
+    for (const item of ctx.groupValuesRefreshData) {
+        const idx = getSheetIndex(ctx, item.id);
+        if (idx == null) continue;
 
-            const file = luckysheetfile[idx];
-            const { data } = file;
-            if (data == null) {
-                continue;
-            }
+        const { data } = luckysheetfile[idx];
+        if (data == null) continue;
 
-            const updateValue: any = {};
-            if (item.spe != null) {
-                if (item.spe.type === "sparklines") {
-                    updateValue.spl = item.spe.data;
-                } else if (item.spe.type === "dynamicArrayItem") {
-                    file.dynamicArray = insertUpdateDynamicArray(ctx, item.spe.data);
-                }
-            }
-            updateValue.v = item.v;
-            updateValue.f = item.f;
-            setCellValue(ctx, item.r, item.c, data, updateValue);
-        }
-
-        ctx.groupValuesRefreshData = [];
+        setCellValue(ctx, item.r, item.c, data, { v: item.v, f: item.f });
     }
+
+    ctx.groupValuesRefreshData = [];
 }
 
 export function setFormulaCellInfoMap(
     ctx: Context,
-    calcChains?: any[],
-    data?: CellMatrix
+    calcChains?: FormulaCell[],
+    data?: CellMatrix | null
 ): void {
     if (calcChains == null) return;
     for (let i = 0; i < calcChains.length; i += 1) {
         const formulaCell = calcChains[i];
-        setFormulaCellInfo(ctx, formulaCell, data);
+        setFormulaCellInfo(ctx, formulaCell, data ?? undefined);
     }
 }
 
@@ -787,9 +738,9 @@ export function execFunctionGroup(
     ctx: Context,
     origin_r: number | null,
     origin_c: number | null,
-    value: any,
+    value: unknown,
     id?: string,
-    data?: any,
+    data?: CellMatrix | null,
     isForce = false
 ): void {
     // 0. null checks
@@ -820,7 +771,7 @@ export function execFunctionGroup(
     const calcChains: FormulaCell[] = getAllFunctionGroup(ctx);
 
     // 2. Store the cells involved in the modification
-    const updateValueObjects: any = {};
+    const updateValueObjects: Record<string, number> = {};
     if (ctx.formulaCache.execFunctionExist == null) {
         const key = `r${origin_r}c${origin_c}i${id}`;
         updateValueObjects[key] = 1;
@@ -843,7 +794,7 @@ export function execFunctionGroup(
 
     // 4. Form a graph structure of references between formulas
     // basically fills parents in formulaCellInfoMap[i]
-    const updateValueArray: any = [];
+    const updateValueArray: FormulaCellInfo[] = [];
     const arrayMatchCache: Record<
         string,
         { key: string; r: number; c: number; sheetId: string }[]

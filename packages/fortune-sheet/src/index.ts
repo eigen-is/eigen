@@ -18,8 +18,14 @@ export {
 } from "./engine/a1-notation";
 export { default as SSF } from "./engine/ssf";
 export type {
+    Cell,
+    CellMatrix,
+    CellStyle,
     CellResolver,
     EvaluationResult,
+    FormulaCellInfo,
+    FormulaCellInfoMap,
+    FormulaDependency,
     FormulaEngineState,
     SheetInfo,
     CalculationChainEntry,

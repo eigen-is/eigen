@@ -1,6 +1,7 @@
 import {v4 as uuidv4} from "uuid";
 import React from "react";
-import {Cell, CellMatrix, Selection, Sheet} from "./types";
+import type {Cell, CellMatrix} from "../engine/types";
+import {Selection, Sheet} from "./types";
 
 export type Hooks = {
     beforeUpdateCell?: (r: number, c: number, value: any) => boolean;

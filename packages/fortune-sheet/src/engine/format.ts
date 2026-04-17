@@ -2,7 +2,7 @@ import numeral from "numeral";
 import _ from "lodash";
 import {isdatetime, isRealNum, valueIsError} from "./validation";
 import SSF from "./ssf";
-import type {CellMatrix} from "../state/types";
+import type {CellMatrix} from "./types";
 
 const base1904 = new Date(1900, 2, 1, 0, 0, 0);
 
