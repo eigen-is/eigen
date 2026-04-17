@@ -1536,7 +1536,7 @@ export default {
             ],
         },
         {
-            n: "RANK_EQ",
+            n: "RANK.EQ",
             t: 1,
             d: "Returns the rank of a specified value in a dataset. If there is more than one entry of the same value in the dataset, the top rank of the entries will be returned.",
             a: "Top rank of a specified value in a dataset.",
@@ -1570,7 +1570,7 @@ export default {
             ],
         },
         {
-            n: "RANK_AVG",
+            n: "RANK.AVG",
             t: 1,
             d: "Returns the rank of a specified value in a dataset. If there is more than one entry of the same value in the dataset, the average rank of the entries will be returned.",
             a: "Average rank of a specified value in a dataset.",
@@ -1604,7 +1604,7 @@ export default {
             ],
         },
         {
-            n: "PERCENTRANK_EXC",
+            n: "PERCENTRANK.EXC",
             t: 1,
             d: "Returns the percentage rank (percentile) from 0 to 1 exclusive of a specified value in a dataset.",
             a: "Percentage rank (percentile) from 0 to 1 exclusive.",
@@ -1638,7 +1638,7 @@ export default {
             ],
         },
         {
-            n: "PERCENTRANK_INC",
+            n: "PERCENTRANK.INC",
             t: 1,
             d: "Returns the percentage rank (percentile) from 0 to 1 inclusive of a specified value in a dataset.",
             a: "Percentage rank (percentile) from 0 to 1 inclusive.",
@@ -1742,7 +1742,7 @@ export default {
             ],
         },
         {
-            n: "MODE_SNGL",
+            n: "MODE.SNGL",
             t: 1,
             d: "Returns the most commonly occurring value in a dataset.",
             a: "Most commonly occurring value in a dataset.",
@@ -1768,7 +1768,7 @@ export default {
             ],
         },
         {
-            n: "WEIBULL_DIST",
+            n: "WEIBULL.DIST",
             t: 1,
             d: "Returns the value of the Weibull distribution function (or Weibull cumulative distribution function) for a specified shape and scale.",
             a: "Weibull distribution function.",
@@ -1938,7 +1938,7 @@ export default {
             ],
         },
         {
-            n: "BINOM_DIST",
+            n: "BINOM.DIST",
             t: 1,
             d: "Calculates the probability of drawing a certain number of successes (or a maximum number of successes) in a certain number of tries given a population of a certain size containing a certain number of successes, with replacement of draws.",
             a: "Binomial distribution probability.",
@@ -1980,7 +1980,7 @@ export default {
             ],
         },
         {
-            n: "BINOM_INV",
+            n: "BINOM.INV",
             t: 1,
             d: "Calculates the smallest value for which the cumulative binomial distribution is greater than or equal to a specified criteria.",
             a: "Inverse cumulative binomial distribution function.",
@@ -2006,40 +2006,6 @@ export default {
                     name: "target_prob",
                     detail: "The desired threshold probability.",
                     example: "0.8",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-            ],
-        },
-        {
-            n: "CONFIDENCE_NORM",
-            t: 1,
-            d: "Calculates the width of half the confidence interval for a normal distribution.",
-            a: "Confidence interval for a normal distribution.",
-            m: [3, 3],
-            p: [
-                {
-                    name: "alpha",
-                    detail:
-                        "One minus the desired confidence level. E.g. `0.1` for `0.9`, or 90%, confidence.",
-                    example: "0.05",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-                {
-                    name: "standard_deviation",
-                    detail: "The standard deviation of the population.",
-                    example: "1.6",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-                {
-                    name: "pop_size",
-                    detail: "The size of the population.",
-                    example: "250",
                     require: "m",
                     repeat: "n",
                     type: "rangenumber",
@@ -2074,7 +2040,7 @@ export default {
             ],
         },
         {
-            n: "COVARIANCE_P",
+            n: "COVARIANCE.P",
             t: 1,
             d: "Calculates the covariance of a dataset.",
             a: "The covariance of a dataset.",
@@ -2101,7 +2067,7 @@ export default {
             ],
         },
         {
-            n: "COVARIANCE_S",
+            n: "COVARIANCE.S",
             t: 1,
             d: "Calculates the sample covariance of a dataset.",
             a: "The sample covariance of a dataset.",
@@ -2153,7 +2119,7 @@ export default {
             ],
         },
         {
-            n: "EXPON_DIST",
+            n: "EXPON.DIST",
             t: 1,
             d: "Returns the value of the exponential distribution function with a specified lambda at a specified value.",
             a: "Exponential distribution function.",
@@ -2313,7 +2279,7 @@ export default {
             ],
         },
         {
-            n: "PERCENTILE_EXC",
+            n: "PERCENTILE.EXC",
             t: 1,
             d: "Returns the value at a given percentile of a dataset exclusive of 0 and 1.",
             a: "Value at a given percentile of a dataset exclusive of 0 and 1.",
@@ -2339,7 +2305,7 @@ export default {
             ],
         },
         {
-            n: "PERCENTILE_INC",
+            n: "PERCENTILE.INC",
             t: 1,
             d: "Returns the value at a given percentile of a dataset.",
             a: "Value at a given percentile of a dataset.",
@@ -2392,7 +2358,7 @@ export default {
             ],
         },
         {
-            n: "NORM_S_INV",
+            n: "NORM.S.INV",
             t: 1,
             d: "Returns the value of the inverse standard normal distribution function for a specified value.",
             a: "Inverse standard normal distribution function.",
@@ -2410,7 +2376,7 @@ export default {
             ],
         },
         {
-            n: "NORM_S_DIST",
+            n: "NORM.S.DIST",
             t: 1,
             d: "Returns the value of the standard normal cumulative distribution function for a specified value.",
             a: "Standard normal cumulative distribution function.",
@@ -2437,7 +2403,7 @@ export default {
             ],
         },
         {
-            n: "NORM_INV",
+            n: "NORM.INV",
             t: 1,
             d: "Returns the value of the inverse normal distribution function for a specified value, mean, and standard deviation.",
             a: "Inverse normal distribution function.",
@@ -2471,7 +2437,7 @@ export default {
             ],
         },
         {
-            n: "NORM_DIST",
+            n: "NORM.DIST",
             t: 1,
             d: "Returns the value of the normal distribution function (or normal cumulative distribution function) for a specified value, mean, and standard deviation.",
             a: "Normal distribution function.",
@@ -2514,7 +2480,7 @@ export default {
             ],
         },
         {
-            n: "NEGBINOM_DIST",
+            n: "NEGBINOM.DIST",
             t: 1,
             d: "Calculates the probability of drawing a certain number of failures before a certain number of successes given a probability of success in independent trials.",
             a: "Negative binomial distribution probability.",
@@ -2691,7 +2657,7 @@ export default {
             ],
         },
         {
-            n: "LOGNORM_INV",
+            n: "LOGNORM.INV",
             t: 1,
             d: "Returns the value of the inverse log-normal cumulative distribution with given mean and standard deviation at a specified value.",
             a: "Inverse log-normal cumulative distribution function.",
@@ -2727,7 +2693,7 @@ export default {
             ],
         },
         {
-            n: "LOGNORM_DIST",
+            n: "LOGNORM.DIST",
             t: 1,
             d: "Returns the value of the log-normal cumulative distribution with given mean and standard deviation at a specified value.",
             a: "Log-normal cumulative distribution probability.",
@@ -2772,7 +2738,7 @@ export default {
             ],
         },
         {
-            n: "Z_TEST",
+            n: "Z.TEST",
             t: 1,
             d: "Returns the one-tailed p-value of a Z-test with standard distribution.",
             a: "One-tailed p-value of a z-test.",
@@ -2850,7 +2816,7 @@ export default {
             ],
         },
         {
-            n: "QUARTILE_EXC",
+            n: "QUARTILE.EXC",
             t: 1,
             d: "Returns a value nearest to a specified quartile of a dataset exclusive of 0 and 4.",
             a: "Value nearest to a specific quartile of a dataset exclusive of 0 and 4.",
@@ -2875,7 +2841,7 @@ export default {
             ],
         },
         {
-            n: "QUARTILE_INC",
+            n: "QUARTILE.INC",
             t: 1,
             d: "Returns a value nearest to a specified quartile of a dataset.",
             a: "Value nearest to a specific quartile of a dataset.",
@@ -2900,7 +2866,7 @@ export default {
             ],
         },
         {
-            n: "POISSON_DIST",
+            n: "POISSON.DIST",
             t: 1,
             d: "Returns the value of the Poisson distribution function (or Poisson cumulative distribution function) for a specified value and mean.",
             a: "Poisson distribution function.",
@@ -2961,7 +2927,7 @@ export default {
             ],
         },
         {
-            n: "T_DIST",
+            n: "T.DIST",
             t: 1,
             d: "Calculates the left tail probability for a Student's t-distribution with a given input (x).",
             a: "The left-tailed Student's t-distribution",
@@ -2995,32 +2961,7 @@ export default {
             ],
         },
         {
-            n: "T_DIST_2T",
-            t: 1,
-            d: "Calculates the probability for two tailed Student's t-distribution with a given input (x).",
-            a: "The two tailed Student's t-distribution",
-            m: [2, 2],
-            p: [
-                {
-                    name: "x",
-                    detail: "The input to the t-distribution function.",
-                    example: "A2",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-                {
-                    name: "degrees_freedom",
-                    detail: "The number of degrees of freedom.",
-                    example: "30",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-            ],
-        },
-        {
-            n: "T_DIST_RT",
+            n: "T.DIST.RT",
             t: 1,
             d: "Calculates the right tail probability for a Student's t-distribution with a given input (x).",
             a: "The right-tailed Student's t-distribution",
@@ -3045,7 +2986,7 @@ export default {
             ],
         },
         {
-            n: "T_INV",
+            n: "T.INV",
             t: 1,
             d: "Calculates the negative inverse of the one-tailed TDIST function.",
             a: "T.INV",
@@ -3071,33 +3012,7 @@ export default {
             ],
         },
         {
-            n: "T_INV_2T",
-            t: 1,
-            d: "Calculates the inverse of the two-tailed TDIST function.",
-            a: "T.INV.2T",
-            m: [2, 2],
-            p: [
-                {
-                    name: "probability",
-                    detail:
-                        "The probability associated with the two-tailed t-distribution.",
-                    example: "0.35",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-                {
-                    name: "degrees_freedom",
-                    detail: "The number of degrees of freedom.",
-                    example: "1",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-            ],
-        },
-        {
-            n: "T_TEST",
+            n: "T.TEST",
             t: 1,
             d: "t-test. Returns the probability associated with Student's t-test. Determines whether two samples are likely to have come from the same two underlying populations that have the same mean.",
             a: "Returns the probability associated with t-test.",
@@ -3140,7 +3055,7 @@ export default {
             ],
         },
         {
-            n: "F_DIST",
+            n: "F.DIST",
             t: 1,
             d: "Calculates the left-tailed F probability distribution (degree of diversity) for two data sets with given input x. Alternately called Fisher-Snedecor distribution or Snedecor's F distribution.",
             a: "F probability distribution (left-tailed).",
@@ -3182,7 +3097,7 @@ export default {
             ],
         },
         {
-            n: "F_DIST_RT",
+            n: "F.DIST.RT",
             t: 1,
             d: "Calculates the right-tailed F probability distribution (degree of diversity) for two data sets with given input x. Alternately called Fisher-Snedecor distribution or Snedecor's F distribution.",
             a: "F probability distribution.",
@@ -3216,7 +3131,7 @@ export default {
             ],
         },
         {
-            n: "VAR_P",
+            n: "VAR.P",
             t: 1,
             d: "Calculates the variance based on an entire population.",
             a: "Variance of entire population.",
@@ -3241,7 +3156,7 @@ export default {
             ],
         },
         {
-            n: "VAR_S",
+            n: "VAR.S",
             t: 1,
             d: "Calculates the variance based on a sample.",
             a: "Variance.",
@@ -3453,7 +3368,7 @@ export default {
             ],
         },
         {
-            n: "SKEW_P",
+            n: "SKEW.P",
             t: 1,
             d: "Calculates the skewness of a dataset, which describes the symmetry of that dataset about the mean. This assumes the dataset is for the population.",
             a: "Skewness of a population's dataset.",
@@ -3604,86 +3519,6 @@ export default {
             ],
         },
         {
-            n: "ADDRESS",
-            t: 2,
-            d: "Returns a cell reference as a string.",
-            a: "Cell reference as a string.",
-            m: [2, 5],
-            p: [
-                {
-                    name: "row",
-                    detail: "The row number of the cell reference",
-                    example: "1",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-                {
-                    name: "column",
-                    detail:
-                        "The column number (not name) of the cell reference. `A` is column number `1`.",
-                    example: "2",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-                {
-                    name: "absolute_relative_mode",
-                    detail:
-                        "An indicator of whether the reference is row/column absolute. `1` is row and column absolute (e.g. $A$1), `2` is row absolute and column relative (e.g. A$1), `3` is row relative and column absolute (e.g. $A1), and `4` is row and column relative (e.g. A1).",
-                    example: "4",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-                {
-                    name: "use_a1_notation",
-                    detail:
-                        "A boolean indicating whether to use `A1` style notation (TRUE) or `R1C1` style notation (FALSE).",
-                    example: "FALSE()",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "sheet",
-                    detail:
-                        "Text indicating the name of the sheet into which the address points.",
-                    example: '"Sheet2"',
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-            ],
-        },
-        {
-            n: "INDIRECT",
-            t: 2,
-            d: "Returns a cell reference specified by a string.",
-            a: "A cell reference specified by a string.",
-            m: [1, 2],
-            p: [
-                {
-                    name: "cell_reference_as_string",
-                    detail:
-                        "A cell reference, written as a string with surrounding quotation marks.",
-                    example: '"Sheet2!"&B10',
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "is_A1_notation",
-                    detail:
-                        "Indicates if the cell reference is in A1 notation (TRUE) or R1C1 notation (FALSE).",
-                    example: "FALSE()",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-            ],
-        },
-        {
             n: "ROW",
             t: 2,
             d: "Returns the row number of a specified cell.",
@@ -3747,58 +3582,6 @@ export default {
                     detail: "The range whose column count will be returned.",
                     example: "A9:W62",
                     require: "m",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-            ],
-        },
-        {
-            n: "OFFSET",
-            t: 2,
-            d: "Returns a range reference shifted a specified number of rows and columns from a starting cell reference.",
-            a: "A range reference offset relative to a cell.",
-            m: [3, 5],
-            p: [
-                {
-                    name: "cell_reference",
-                    detail:
-                        "The starting point from which to count the offset rows and columns.",
-                    example: "A2",
-                    require: "m",
-                    repeat: "n",
-                    type: "range",
-                },
-                {
-                    name: "offset_rows",
-                    detail: "The number of rows to offset by.",
-                    example: "3",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-                {
-                    name: "offset_columns",
-                    detail: "The number of columns to offset by.",
-                    example: "4",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-                {
-                    name: "height",
-                    detail:
-                        "The height of the range to return starting at the offset target.",
-                    example: "2",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-                {
-                    name: "width",
-                    detail:
-                        "The width of the range to return starting at the offset target.",
-                    example: "2",
-                    require: "o",
                     repeat: "n",
                     type: "rangenumber",
                 },
@@ -3873,51 +3656,6 @@ export default {
             ],
         },
         {
-            n: "GETPIVOTDATA",
-            t: 2,
-            d: "Extracts an aggregated value from a pivot table that corresponds to the specified row and column headings.",
-            a: "Extracts an aggregated value from a pivot table that corresponds to the specified row and column headings.",
-            m: [2, 254],
-            p: [
-                {
-                    name: "value_name",
-                    detail:
-                        "The name of the value in the pivot table for which you want to get data.",
-                    example: '"SUM of number of units"',
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "any_pivot_table_cell",
-                    detail:
-                        "Any reference to a cell in the desired pivot table (top corner recommended).",
-                    example: "'Pivot table'!A1",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "original_column",
-                    detail:
-                        "The name of the column in the original data set (not the pivot table).",
-                    example: '"division"',
-                    require: "o",
-                    repeat: "y",
-                    type: "rangeall",
-                },
-                {
-                    name: "pivot_item",
-                    detail:
-                        "The name of the row or column shown in the pivot table corresponding to *original_column* that you want to retrieve.",
-                    example: '"east"',
-                    require: "o",
-                    repeat: "y",
-                    type: "rangeall",
-                },
-            ],
-        },
-        {
             n: "CHOOSE",
             t: 2,
             d: "Returns an element from a list of choices based on index.",
@@ -3947,32 +3685,6 @@ export default {
                     example: '"B"',
                     require: "o",
                     repeat: "y",
-                    type: "rangeall",
-                },
-            ],
-        },
-        {
-            n: "HYPERLINK",
-            t: 2,
-            d: "Creates a hyperlink inside a cell.",
-            a: "Creates a hyperlink inside a cell.",
-            p: [
-                {
-                    name: "url",
-                    detail:
-                        "The full URL of the link location enclosed in quotation marks, or a reference to a cell containing such a URL.",
-                    example: '"http://www.luckysheet.com/"',
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "link_label",
-                    detail:
-                        "The text to display in the cell as the link, enclosed in quotation marks, or a reference to a cell containing such a label.",
-                    example: '"luckysheet"',
-                    require: "m",
-                    repeat: "n",
                     type: "rangeall",
                 },
             ],
@@ -4175,7 +3887,7 @@ export default {
             ],
         },
         {
-            n: "NETWORKDAYS_INTL",
+            n: "NETWORKDAYS.INTL",
             t: 6,
             d: "Returns the number of net working days between two provided days excluding specified weekend days and holidays.",
             a: "Net working days between two dates (specifying weekends).",
@@ -4490,7 +4202,7 @@ export default {
             ],
         },
         {
-            n: "WORKDAY_INTL",
+            n: "WORKDAY.INTL",
             t: 6,
             d: "Calculates the date after a specified number of workdays excluding specified weekend days and holidays.",
             a: "Date after a number of workdays (specifying weekends).",
@@ -7610,23 +7322,6 @@ export default {
             ],
         },
         {
-            n: "UNARY_PERCENT",
-            t: 11,
-            d: "Returns a value interpreted as a percentage; that is, `UNARY_PERCENT(100)` equals `1`.",
-            a: "Value interpreted as a percentage.",
-            m: [1, 1],
-            p: [
-                {
-                    name: "percentage",
-                    detail: "The value to interpret as a percentage.",
-                    example: "A2",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-            ],
-        },
-        {
             n: "CONCATENATE",
             t: 12,
             d: "Appends strings to one another.",
@@ -7894,41 +7589,6 @@ export default {
             ],
         },
         {
-            n: "FINDB",
-            t: 12,
-            d: "Returns the position at which a string is first found within text counting each double-character as 2.",
-            a: "Position at which a string is first found within text (binary).",
-            m: [2, 3],
-            p: [
-                {
-                    name: "search_for",
-                    detail: "The string to look for within `text_to_search`.",
-                    example: '"new"',
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "text_to_search",
-                    detail:
-                        "The text to search for the first occurrence of `search_for`.",
-                    example: '"new year"',
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "starting_at",
-                    detail:
-                        "The character within `text_to_search` at which to start the search.",
-                    example: "2",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-            ],
-        },
-        {
             n: "JOIN",
             t: 12,
             d: "Concatenates the elements of one or more one-dimensional arrays using a specified delimiter.",
@@ -8053,23 +7713,6 @@ export default {
             t: 12,
             d: "Returns the length of a string.",
             a: "Length of a string.",
-            m: [1, 1],
-            p: [
-                {
-                    name: "text",
-                    detail: "The string whose length will be returned.",
-                    example: "A2",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-            ],
-        },
-        {
-            n: "LENB",
-            t: 12,
-            d: "Returns the length of a string in bytes.",
-            a: "Length of a string in bytes.",
             m: [1, 1],
             p: [
                 {
@@ -8720,69 +8363,6 @@ export default {
             ],
         },
         {
-            n: "MDETERM",
-            t: 14,
-            d: "Returns the matrix determinant of a square matrix specified as an array or range.",
-            a: "Matrix determinant of a square matrix.",
-            m: [1, 1],
-            p: [
-                {
-                    name: "square_matrix",
-                    detail:
-                        "An array or range with an equal number of rows and columns representing a matrix whose determinant will be calculated.",
-                    example: "A1:D4",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-            ],
-        },
-        {
-            n: "MINVERSE",
-            t: 14,
-            d: "Returns the multiplicative inverse of a square matrix specified as an array or range.",
-            a: "Multiplicative inverse of square matrix.",
-            m: [1, 1],
-            p: [
-                {
-                    name: "square_matrix",
-                    detail:
-                        "An array or range with an equal number of rows and columns representing a matrix whose multiplicative inverse will be calculated.",
-                    example: "A1:D4",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-            ],
-        },
-        {
-            n: "MMULT",
-            t: 14,
-            d: "Calculates the matrix product of two matrices specified as arrays or ranges.",
-            a: "The matrix product of two matrices.",
-            m: [2, 2],
-            p: [
-                {
-                    name: "matrix1",
-                    detail:
-                        "The first matrix in the matrix multiplication operation, represented as an array or range.",
-                    example: "A1:B3",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-                {
-                    name: "matrix2",
-                    detail:
-                        "The second matrix in the matrix multiplication operation, represented as an array or range.",
-                    example: "C1:F2",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-            ],
-        },
-        {
             n: "SUMPRODUCT",
             t: 14,
             d: "Calculates the sum of the products of corresponding entries in two equal-sized arrays or ranges.",
@@ -8859,24 +8439,6 @@ export default {
             a: "The `#N/A` error.",
             m: [0, 0],
             p: [],
-        },
-        {
-            n: "ERROR_TYPE",
-            t: 15,
-            d: "Returns a number corresponding to the error value in a different cell.",
-            a: "Error value of cell (as number).",
-            m: [1, 1],
-            p: [
-                {
-                    name: "reference",
-                    detail:
-                        "The cell to find the error number for although you can also provide the error value directly.",
-                    example: "A3",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-            ],
         },
         {
             n: "ISBLANK",
@@ -9063,96 +8625,6 @@ export default {
                     require: "m",
                     repeat: "n",
                     type: "rangeall",
-                },
-            ],
-        },
-        {
-            n: "TO_DATE",
-            t: 16,
-            d: "Converts a provided number to a date.",
-            a: "Converts a provided number to a date.",
-            m: [1, 1],
-            p: [
-                {
-                    name: "value",
-                    detail:
-                        "The argument or reference to a cell to be converted to a date.",
-                    example: "25405",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-            ],
-        },
-        {
-            n: "TO_PURE_NUMBER",
-            t: 16,
-            d: "Converts a provided date/time, percentage, currency or other formatted numeric value to a pure number without formatting.",
-            a: "Converts any numeric value to a pure number.",
-            m: [1, 1],
-            p: [
-                {
-                    name: "value",
-                    detail:
-                        "The argument or reference to a cell to be converted to a pure number.",
-                    example: "50%",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-            ],
-        },
-        {
-            n: "TO_TEXT",
-            t: 16,
-            d: "Converts a provided numeric value to a text value.",
-            a: "Converts a provided numeric value to a text value.",
-            m: [1, 1],
-            p: [
-                {
-                    name: "value",
-                    detail:
-                        "The argument or reference to a cell to be converted to text.",
-                    example: "24",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-            ],
-        },
-        {
-            n: "TO_DOLLARS",
-            t: 16,
-            d: "Converts a provided number to a dollar value.",
-            a: "Converts a provided number to a dollar value.",
-            m: [1, 1],
-            p: [
-                {
-                    name: "value",
-                    detail:
-                        "The argument or reference to a cell to be converted to a dollar value.",
-                    example: "A2",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-            ],
-        },
-        {
-            n: "TO_PERCENT",
-            t: 16,
-            d: "Converts a provided number to a percentage.",
-            a: "Converts a provided number to a percentage.",
-            m: [1, 1],
-            p: [
-                {
-                    name: "value",
-                    detail:
-                        "The argument or reference to a cell to be converted to a percentage.",
-                    example: "A2",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangenumber",
                 },
             ],
         },
@@ -9589,1190 +9061,6 @@ export default {
             ],
         },
         {
-            n: "AGE_BY_IDCARD",
-            t: "3",
-            d: "Calculate the age based on the Chinese ID number. Support 15 or 18",
-            a: "Get age based on ID number.",
-            m: [1, 2],
-            p: [
-                {
-                    name: "ID number",
-                    example: "A1",
-                    detail: "15-digit or 18-digit ID number or range.",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Deadline",
-                    example: '"2017-10-01"',
-                    detail:
-                        "The deadline or range of age calculation. The default is the current day.",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangedatetime",
-                },
-            ],
-        },
-        {
-            n: "SEX_BY_IDCARD",
-            t: "3",
-            d: "Calculate gender based on Chinese ID number. Support 15 or 18",
-            a: "Get gender based on ID number.",
-            m: [1, 1],
-            p: [
-                {
-                    name: "ID number",
-                    example: '"31033519900101XXXX"',
-                    detail: "15-digit or 18-digit ID number or range.",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-            ],
-        },
-        {
-            n: "BIRTHDAY_BY_IDCARD",
-            t: "3",
-            d: "Calculate the birthday based on the Chinese ID number. Support 15 or 18",
-            a: "Get the birthday based on the ID number.",
-            m: [1, 2],
-            p: [
-                {
-                    name: "ID number",
-                    example: '"31033519900101XXXX"',
-                    detail: "15-digit or 18-digit ID number or range.",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Birthday format",
-                    example: "0",
-                    detail:
-                        "Date type, default:0:[1900/01/01], 1:[1900-01-01], 2:[January 1, 1900]",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-            ],
-        },
-        {
-            n: "PROVINCE_BY_IDCARD",
-            t: "3",
-            d: "Calculate the province of birthplace based on the Chinese ID number. Support 15 or 18",
-            a: "Get the province of birthplace based on the ID number.",
-            m: [1, 1],
-            p: [
-                {
-                    name: "ID number",
-                    example: '"31033519900101XXXX"',
-                    detail: "15-digit or 18-digit ID number or range.",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-            ],
-        },
-        {
-            n: "CITY_BY_IDCARD",
-            t: "3",
-            d: "Calculate the city of birthplace based on the Chinese ID number. Support 15 or 18",
-            a: "Get the city of birthplace based on the ID number.",
-            m: [1, 1],
-            p: [
-                {
-                    name: "ID number",
-                    example: '"31033519900101XXXX"',
-                    detail: "15-digit or 18-digit ID number or range.",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-            ],
-        },
-        {
-            n: "STAR_BY_IDCARD",
-            t: "3",
-            d: "Calculate the constellation based on the Chinese ID number. Support 15 or 18",
-            a: "Get the constellation based on the ID number.",
-            m: [1, 1],
-            p: [
-                {
-                    name: "ID number",
-                    example: '"31033519900101XXXX"',
-                    detail: "15-digit or 18-digit ID number or range.",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-            ],
-        },
-        {
-            n: "ANIMAL_BY_IDCARD",
-            t: "3",
-            d: "Calculate the zodiac (rat, ox, tiger, rabbit...) based on the Chinese ID number. Support 15 or 18",
-            a: "Get the zodiac according to the ID number.",
-            m: [1, 1],
-            p: [
-                {
-                    name: "ID number",
-                    example: '"31033519900101XXXX"',
-                    detail: "15-digit or 18-digit ID number or range.",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-            ],
-        },
-        {
-            n: "ISIDCARD",
-            t: "3",
-            d: "Verify that the format of the ID card is correct. Support 15 or 18",
-            a: "Verify the correctness of the ID card format.",
-            m: [1, 1],
-            p: [
-                {
-                    name: "ID number",
-                    example: '"31033519900101XXXX"',
-                    detail: "15-digit or 18-digit ID number or range.",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-            ],
-        },
-        {
-            n: "DM_TEXT_CUTWORD",
-            t: "4",
-            d: "Text segmentation. Split a series of words into a series of individual words",
-            a: "Chinese text segmentation.",
-            m: [1, 2],
-            p: [
-                {
-                    name: "Text",
-                    example: '"I came to Beijing Tsinghua University"',
-                    detail: "Any text that needs word segmentation.",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Word segmentation mode",
-                    example: "0",
-                    detail:
-                        "The default is 0[precision mode], 1[full mode], 2[search engine mode].",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-            ],
-        },
-        {
-            n: "DM_TEXT_TFIDF",
-            t: "4",
-            d: "Use tf-idf algorithm for keyword extraction. Identify keywords from a series of text",
-            a: "tf-idf keyword recognition.",
-            m: [1, 3],
-            p: [
-                {
-                    name: "Text",
-                    example: '"I came to Beijing Tsinghua University"',
-                    detail: "Any text that needs word segmentation.",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Number of keywords",
-                    example: "20",
-                    detail:
-                        "The number of keywords returned by the algorithm, the default is 20",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-                {
-                    name: "Corpus",
-                    example: "1",
-                    detail:
-                        "Select a corpus in a specific field, the default is 0[General], 1[Finance], 2[Medical]",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-            ],
-        },
-        {
-            n: "DM_TEXT_TEXTRANK",
-            t: "4",
-            d: "Use TextRank algorithm to extract keywords. Identify keywords from a series of text",
-            a: "TextRank keyword recognition.",
-            m: [1, 3],
-            p: [
-                {
-                    name: "Text",
-                    example: '"I came to Beijing Tsinghua University"',
-                    detail: "Any text that needs word segmentation.",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Number of keywords",
-                    example: "20",
-                    detail:
-                        "The number of keywords returned by the algorithm, the default is 20",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-                {
-                    name: "Corpus",
-                    example: "1",
-                    detail:
-                        "Select a corpus in a specific field, the default is 0[General], 1[Finance], 2[Medical]",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-            ],
-        },
-        {
-            n: "DATA_CN_STOCK_CLOSE",
-            t: "5",
-            d: "According to the stock code and date, return the corresponding stock closing price of A shares.",
-            a: "Returns the closing price of stock.",
-            m: [1, 3],
-            p: [
-                {
-                    name: "Stock code",
-                    example: '"000001"',
-                    detail: "6-digit stock code, required.",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Date",
-                    example: "2015-01-08",
-                    detail:
-                        "The trading day of the stock, the default is the latest trading day",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangedate",
-                },
-                {
-                    name: "Reversion and exclusion",
-                    example: "0",
-                    detail:
-                        "Select the ex right restoration type of the stock, default to 0 [former reversion], 1 [original price], 2 [post reversion]",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-            ],
-        },
-        {
-            n: "DATA_CN_STOCK_OPEN",
-            t: "5",
-            d: "According to the stock code and date, return the opening price of stock.",
-            a: "Return the opening price of a shares.",
-            m: [1, 3],
-            p: [
-                {
-                    name: "Stock code",
-                    example: '"000001"',
-                    detail: "6-digit stock code, required.",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Date",
-                    example: "2015-01-08",
-                    detail:
-                        "The trading day of the stock, the default is the latest trading day",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangedate",
-                },
-                {
-                    name: "Reversion and exclusion",
-                    example: "0",
-                    detail:
-                        "Select the ex right restoration type of the stock, default to 0 [former reversion], 1 [original price], 2 [post reversion]",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-            ],
-        },
-        {
-            n: "DATA_CN_STOCK_MAX",
-            t: "5",
-            d: "According to the stock code and date, return the highest price of stock.",
-            a: "Return the highest price of stock.",
-            m: [1, 3],
-            p: [
-                {
-                    name: "Stock code",
-                    example: '"000001"',
-                    detail: "6-digit stock code, required.",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Date",
-                    example: "2015-01-08",
-                    detail:
-                        "The trading day of the stock, the default is the latest trading day",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangedate",
-                },
-                {
-                    name: "Reversion and exclusion",
-                    example: "0",
-                    detail:
-                        "Select the ex right restoration type of the stock, default to 0 [former reversion], 1 [original price], 2 [post reversion]",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-            ],
-        },
-        {
-            n: "DATA_CN_STOCK_MIN",
-            t: "5",
-            d: "According to the stock code and date, return the lowest price of stock.",
-            a: "Returns the lowest price of stock.",
-            m: [1, 3],
-            p: [
-                {
-                    name: "Stock code",
-                    example: '"000001"',
-                    detail: "6-digit stock code, required.",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Date",
-                    example: "2015-01-08",
-                    detail:
-                        "The trading day of the stock, the default is the latest trading day",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangedate",
-                },
-                {
-                    name: "Reversion and exclusion",
-                    example: "0",
-                    detail:
-                        "Select the ex right restoration type of the stock, default to 0 [former reversion], 1 [original price], 2 [post reversion]",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-            ],
-        },
-        {
-            n: "DATA_CN_STOCK_VOLUMN",
-            t: "5",
-            d: "According to the stock code and date, return the corresponding stock trading volume of A shares.",
-            a: "Returns the corresponding stock trading volume of A shares.",
-            m: [1, 3],
-            p: [
-                {
-                    name: "Stock code",
-                    example: '"000001"',
-                    detail: "6-digit stock code, required.",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Date",
-                    example: "2015-01-08",
-                    detail:
-                        "The trading day of the stock, the default is the latest trading day",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangedate",
-                },
-                {
-                    name: "Reversion and exclusion",
-                    example: "0",
-                    detail:
-                        "Select the ex right restoration type of the stock, default to 0 [former reversion], 1 [original price], 2 [post reversion]",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-            ],
-        },
-        {
-            n: "DATA_CN_STOCK_AMOUNT",
-            t: "5",
-            d: "According to the stock code and date, return the corresponding stock turnover of A shares.",
-            a: "Returns the corresponding stock turnover of A shares.",
-            m: [1, 3],
-            p: [
-                {
-                    name: "Stock code",
-                    example: '"000001"',
-                    detail: "6-digit stock code, required.",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Date",
-                    example: "2015-01-08",
-                    detail:
-                        "The trading day of the stock, the default is the latest trading day",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangedate",
-                },
-                {
-                    name: "Reversion and exclusion",
-                    example: "0",
-                    detail:
-                        "Select the ex right restoration type of the stock, default to 0 [former reversion], 1 [original price], 2 [post reversion]",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-            ],
-        },
-        {
-            n: "ISDATE",
-            t: "6",
-            d: "Returns whether a value is a date.",
-            a: "Whether a value is a date.",
-            m: [1, 1],
-            p: [
-                {
-                    name: "value",
-                    example: '"1990-01-01"',
-                    detail: "The value to be verified as a date.",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-            ],
-        },
-        {
-            n: "LINESPLINES",
-            t: "3",
-            d: "Generate sparklines embedded in the cell to describe the continuous trend of data",
-            a: "Generate sparklines line chart",
-            m: [1, 8],
-            p: [
-                {
-                    name: "Range",
-                    example: "A1:A20",
-                    detail:
-                        "Range，Values can be calculated effectively, such as A1:A20, {1,2,3,4,5}, etc.",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Line color",
-                    example: "#2ec7c9",
-                    detail:
-                        "The line color of the line graph can be range A1, color table index value or specific color value. Set it to 0 or false to not display it. It supports regx, rgb, rgba, etc. Default #2ec7c9",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Line thickness",
-                    example: "1",
-                    detail: "Line thickness of the line graph, the default is 1px",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Auxiliary line",
-                    example: "avg",
-                    detail:
-                        "A horizontal line, which can be min, max, avg, median, range or custom value, default 0 none",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Auxiliary line color",
-                    example: "#000",
-                    detail:
-                        "Color setting of auxiliary line, same as line color configuration, default #000",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Maximum mark",
-                    example: "#fc5c5c",
-                    detail:
-                        "Identifies the maximum value of the line graph, the same line color configuration, default 0 does not display",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Minimum mark",
-                    example: "#fc5c5c",
-                    detail:
-                        "Identify the minimum value of the line graph, the same line color configuration, default 0 does not display",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Mark size",
-                    example: "1.5",
-                    detail:
-                        "The maximum and minimum mark size settings, the default is 1.5",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-            ],
-        },
-        {
-            n: "AREASPLINES",
-            t: "3",
-            d: "Generate sparklines embedded in the cell area chart, generally used to describe the continuous cumulative value trend of the data",
-            a: "Generate sparklines area chart",
-            m: [1, 5],
-            p: [
-                {
-                    name: "Range",
-                    example: "A1:A20",
-                    detail:
-                        "Range，Values can be calculated effectively, such as A1:A20, {1,2,3,4,5}, etc.",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Line color",
-                    example: "#2ec7c9",
-                    detail:
-                        "The line color of the line graph can be range A1, color table index value or specific color value. Set it to 0 or false to not display it. It supports regx, rgb, rgba, etc. Default #2ec7c9",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Fill color",
-                    example: "#CCF3F4",
-                    detail:
-                        "Form an area chart, the same line color configuration, default 0 does not display",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Line thickness",
-                    example: "1",
-                    detail: "Line thickness of the line graph, the default is 1px",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Auxiliary line",
-                    example: "avg",
-                    detail:
-                        "A horizontal line, which can be min, max, avg, median, range or custom value, default 0 none",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Auxiliary line color",
-                    example: "#000",
-                    detail:
-                        "Color setting of auxiliary line, same as line color configuration, default #000",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-            ],
-        },
-        {
-            n: "COLUMNSPLINES",
-            t: "3",
-            d: "Generate sparklines embedded in the vertical histogram of cells, generally used to describe the size of discrete data",
-            a: "Generate sparklines vertical histogram",
-            m: [1, 6],
-            p: [
-                {
-                    name: "Range",
-                    example: "A1:A20",
-                    detail:
-                        "Range，Values can be calculated effectively, such as A1:A20, {1,2,3,4,5}, etc.",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Bar interval",
-                    example: "1",
-                    detail: "The distance between bars, the default is 1",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Bar color",
-                    example: "#fc5c5c",
-                    detail:
-                        "The line color of the line graph can be range A1, color table index value or specific color value. Set it to 0 or false to not display it. It supports regx, rgb, rgba, etc. Default #fc5c5c",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Negative bar color",
-                    example: "#97b552",
-                    detail:
-                        "Negative bar color setting, representing the color of negative value, same as the bar color configuration, default #97b552",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Max",
-                    example: "100",
-                    detail:
-                        "The maximum value of the bar chart, used to standardize the length of the bar chart, the default is to automatically calculate false, auto, null",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Color palette",
-                    example: "#97b552",
-                    detail:
-                        "The color palette can set the color of each bar individually, multiple settings can be set, and two formats are supported: 1 color such as #000, which means that the color of the first bar is black; 2 value range: color, such as -2:# 000 indicates that the bar with a value of -2 is black, 0:5:#000 indicates that the bar with a value of 0-5 is black, and the default is empty",
-                    require: "o",
-                    repeat: "y",
-                    type: "rangeall",
-                },
-            ],
-        },
-        {
-            n: "STACKCOLUMNSPLINES",
-            t: "3",
-            d: "Generate sparklines, a cumulative vertical histogram embedded in a cell, generally used to describe the numerical size of multiple dimensions of discrete data",
-            a: "Generate sparklines cumulative vertical histogram",
-            m: [1, 5],
-            p: [
-                {
-                    name: "Range",
-                    example: "A1:A20",
-                    detail:
-                        "Range，Values can be calculated effectively, such as A1:A20, {1,2,3,4,5}, etc.",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Stack by column",
-                    example: "1",
-                    detail:
-                        "If you need to stack by row, set this item to false or 0, the default is 1",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Bar interval",
-                    example: "1",
-                    detail: "The distance between bars, the default is 1",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Max",
-                    example: "100",
-                    detail:
-                        "The maximum value of the cumulative bar, used to regulate the length of the bar, the default is to automatically calculate false, auto, null",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Color palette",
-                    example: "#97b552",
-                    detail:
-                        "The color palette can individually set the bar color of each dimension, which can be set to the range of A1:A10, etc. The default is #2ec7c9, #fc5c5c, #5ab1ef, #ffb980...",
-                    require: "o",
-                    repeat: "y",
-                    type: "rangeall",
-                },
-            ],
-        },
-        {
-            n: "BARSPLINES",
-            t: "3",
-            d: "Generate sparklines embedded in the cell, generally used to describe the size of discrete data",
-            a: "Generate sparklines horizontal bar graph",
-            m: [1, 6],
-            p: [
-                {
-                    name: "Range",
-                    example: "A1:A20",
-                    detail:
-                        "Range，Values can be calculated effectively, such as A1:A20, {1,2,3,4,5}, etc.",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Bar interval",
-                    example: "1",
-                    detail: "The distance between bars, the default is 1",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Bar color",
-                    example: "#fc5c5c",
-                    detail:
-                        "The line color of the line graph can be range A1, color table index value or specific color value. Set it to 0 or false to not display it. It supports regx, rgb, rgba, etc. Default #fc5c5c",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Negative bar color",
-                    example: "#97b552",
-                    detail:
-                        "Negative bar color setting, representing the color of negative value, same as the bar color configuration, default #97b552",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Max",
-                    example: "100",
-                    detail:
-                        "The maximum value of the bar chart, used to standardize the length of the bar chart, the default is to automatically calculate false, auto, null",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Color palette",
-                    example: "#97b552",
-                    detail:
-                        "The color palette can set the color of each bar individually, multiple settings can be set, and two formats are supported: 1 color such as #000, which means that the color of the first bar is black; 2 value range: color, such as -2:# 000 indicates that the bar with a value of -2 is black, 0:5:#000 indicates that the bar with a value of 0-5 is black, and the default is empty",
-                    require: "o",
-                    repeat: "y",
-                    type: "rangeall",
-                },
-            ],
-        },
-        {
-            n: "STACKBARSPLINES",
-            t: "3",
-            d: "Generate sparklines, a cumulative horizontal bar graph embedded in a cell, which is generally used to describe the numerical size of multiple dimensions of discrete data",
-            a: "Generate sparklines cumulative horizontal bar graph",
-            m: [1, 5],
-            p: [
-                {
-                    name: "Range",
-                    example: "A1:A20",
-                    detail:
-                        "Range，Values can be calculated effectively, such as A1:A20, {1,2,3,4,5}, etc.",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Stack by column",
-                    example: "1",
-                    detail:
-                        "If you need to stack by row, set this item to false or 0, the default is 1",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Bar interval",
-                    example: "1",
-                    detail: "The distance between bars, the default is 1",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Max",
-                    example: "100",
-                    detail:
-                        "The maximum value of the cumulative bar, used to regulate the length of the bar, the default is to automatically calculate false, auto, null",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Color palette",
-                    example: "#97b552",
-                    detail:
-                        "The color palette can individually set the bar color of each dimension, which can be set to the range of A1:A10, etc. The default is #2ec7c9, #fc5c5c, #5ab1ef, #ffb980...",
-                    require: "o",
-                    repeat: "y",
-                    type: "rangeall",
-                },
-            ],
-        },
-        {
-            n: "DISCRETESPLINES",
-            t: "3",
-            d: "Generate sparklines embedded in the cell, generally used to describe the trend of discrete data",
-            a: "Generate sparklines discrete graph",
-            m: [1, 4],
-            p: [
-                {
-                    name: "Range",
-                    example: "A1:A20",
-                    detail:
-                        "Range，Values can be calculated effectively, such as A1:A20, {1,2,3,4,5}, etc.",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Segmentation threshold",
-                    example: "1",
-                    detail:
-                        "Discrete graph column color distinction, for example: if the value is 0, blue is greater than 0, red is less than 0, and the default is 0",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Above threshold color",
-                    example: "#2ec7c9",
-                    detail:
-                        "The line color of the line graph can be range A1, color table index value or specific color value. Set it to 0 or false to not display it. It supports regx, rgb, rgba, etc. Default #2ec7c9",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Below threshold color",
-                    example: "#fc5c5c",
-                    detail:
-                        "The color setting of the bar below the threshold, the same as the color above the threshold, default #fc5c5c",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-            ],
-        },
-        {
-            n: "TRISTATESPLINES",
-            t: "3",
-            d: "Generate sparklines, a three-state graph embedded in the cell, which is generally used to describe the trend of three situations, such as winning, losing, or drawing.",
-            a: "Generate sparklines three-state graph",
-            m: [1, 6],
-            p: [
-                {
-                    name: "Range",
-                    example: "A1:A20",
-                    detail:
-                        "Range，Values can be calculated effectively, such as A1:A20, {1,2,3,4,5}, etc.",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Bar interval",
-                    example: "1",
-                    detail: "The distance between bars, the default is 1",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Bar color",
-                    example: "#fc5c5c",
-                    detail:
-                        "The line color of the line graph can be range A1, color table index value or specific color value. Set it to 0 or false to not display it. It supports regx, rgb, rgba, etc. Default #fc5c5c",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Negative bar color",
-                    example: "#97b552",
-                    detail:
-                        "Negative bar color setting, representing the color of negative value, same as the bar color configuration, default #97b552",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Zero value bar color",
-                    example: "#999",
-                    detail:
-                        "Zero value bar color setting, representing 0 value color, the same color configuration of the bar, default #999",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Color palette",
-                    example: "#97b552",
-                    detail:
-                        "The color palette can set the color of each bar individually, multiple settings can be set, and two formats are supported: 1 color such as #000, which means that the color of the first bar is black; 2 value range: color, such as -2:# 000 indicates that the bar with a value of -2 is black, 0:5:#000 indicates that the bar with a value of 0-5 is black, and the default is empty",
-                    require: "o",
-                    repeat: "y",
-                    type: "rangeall",
-                },
-            ],
-        },
-        {
-            n: "PIESPLINES",
-            t: "3",
-            d: "Generate sparklines pie chart embedded in the cell, generally used to describe the proportion of data",
-            a: "Generate sparklines pie chart",
-            m: [1, 5],
-            p: [
-                {
-                    name: "Range",
-                    example: "A1:A20",
-                    detail:
-                        "Range，Values can be calculated effectively, such as A1:A20, {1,2,3,4,5}, etc.",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Rotation angle",
-                    example: "0",
-                    detail: "The rotation angle of the pie chart, the default is 0",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "border",
-                    example: "0",
-                    detail: "Pie chart border size, default is none 0",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Border color",
-                    example: "#000",
-                    detail: "The border color of the pie chart, the default is #000",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Color palette",
-                    example: "#97b552",
-                    detail:
-                        "The color of the slice can be set in the palette, which can be set to the range of A1:A10, etc. The default is #2ec7c9, #fc5c5c, #5ab1ef, #ffb980...",
-                    require: "o",
-                    repeat: "y",
-                    type: "rangeall",
-                },
-            ],
-        },
-        {
-            n: "BOXSPLINES",
-            t: "3",
-            d: "Generate sparklines embedded in the cell box plot, generally used to describe the statistical distribution of the data set",
-            a: "Generate sparklines box plot",
-            m: [1, 4],
-            p: [
-                {
-                    name: "Range",
-                    example: "A1:A20",
-                    detail:
-                        "Range，Values can be calculated effectively, such as A1:A20, {1,2,3,4,5}, etc.",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Outlier ratio",
-                    example: "1.5",
-                    detail:
-                        "The threshold range of outliers, if it is 0 or false, it will not be displayed, the default is 1.5 times",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Target value",
-                    example: "10",
-                    detail:
-                        "The target value setting on the box plot, the default is false and does not display",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Point size",
-                    example: "1.5",
-                    detail:
-                        "The radius of the target point and outlier is set, the default is 1.5",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-            ],
-        },
-        {
-            n: "BULLETSPLINES",
-            t: "3",
-            d: "Generate sparklines embedded in the cell, generally used to describe the task achievement rate",
-            a: "Generating sparklines bullets",
-            m: [2, 3],
-            p: [
-                {
-                    name: "Target",
-                    example: "10",
-                    detail:
-                        "The numerical value can be calculated effectively for the achieved target value, such as A1, 100, etc.",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "achieved",
-                    example: "8",
-                    detail:
-                        "Only when the value is completed can the value be calculated effectively, such as A1, 100, etc.",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-                {
-                    name: "Contrast",
-                    example: "12",
-                    detail:
-                        "Comparative values, such as excess, minimum, and bottom line for awards, can be effectively calculated, such as A1, 100, etc. You can set up to 9 comparison values",
-                    require: "o",
-                    repeat: "y",
-                    type: "rangeall",
-                },
-            ],
-        },
-        {
-            n: "COMPOSESPLINES",
-            t: "3",
-            d: "Support multiple types of pictures in the same cell, each parameter represents a sparklines diagram",
-            a: "Combine sparklines graphs into one cell",
-            m: [1, 1],
-            p: [
-                {
-                    name: "config",
-                    example: "PIESPLINES(A1:A20)",
-                    detail:
-                        "Sparklines chart settings, such as A1:A20, a completed pie chart, line chart settings, etc.",
-                    require: "m",
-                    repeat: "y",
-                    type: "rangeall",
-                },
-            ],
-        },
-        {
-            n: "SORT",
-            t: "14",
-            d: "Sorts the rows of a given array or range by the values in one or more columns.",
-            a: "Sorts rows of range by specified column.",
-            m: [1, 4],
-            p: [
-                {
-                    name: "range",
-                    detail: "The data to be sorted.",
-                    example: "A2:A17",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-                {
-                    name: "sort_column",
-                    detail:
-                        "The index of the column in `range` or a range outside of `range` containing the values by which to sort.",
-                    example: "1",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-                {
-                    name: "is_ascending",
-                    detail:
-                        "`TRUE` or `FALSE` indicating whether to sort `sort_column` in ascending order. `FALSE` sorts in descending order.",
-                    example: "-1",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-                {
-                    name: "sort_column2",
-                    detail: "Additional columns.",
-                    example: "TRUE()",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-            ],
-        },
-        {
-            n: "FILTER",
-            t: "14",
-            d: "Returns a filtered version of the source range, returning only rows or columns which meet the specified conditions.",
-            a: "Filters a range based off provided conditions.",
-            m: [2, 3],
-            p: [
-                {
-                    name: "range",
-                    detail: "The data to be filtered.",
-                    example: "A5:D20",
-                    require: "m",
-                    repeat: "n",
-                    type: "range",
-                },
-                {
-                    name: "condition1",
-                    detail:
-                        "A column or row containing true or false values corresponding to the first column or row of `range`, or an array formula evaluating to true or false.",
-                    example: "1",
-                    require: "m",
-                    repeat: "n",
-                    type: "range",
-                },
-                {
-                    name: "condition2",
-                    detail:
-                        "Additional rows or columns containing boolean values `TRUE` or `FALSE` indicating whether the corresponding row or column in `range` should pass through `FILTER`. Can also contain array formula expressions which evaluate to such rows or columns. All conditions must be of the same type (row or column). Mixing row conditions and column conditions is not permitted.",
-                    example: '""',
-                    require: "o",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-            ],
-        },
-        {
             n: "UNIQUE",
             t: "14",
             d: "Returns unique rows in the provided source range, discarding duplicates. Rows are returned in the order in which they first appear in the source range.",
@@ -10804,109 +9092,6 @@ export default {
                     require: "o",
                     repeat: "n",
                     type: "rangeall",
-                },
-            ],
-        },
-        {
-            n: "RANDARRAY",
-            t: "14",
-            d: "Returns a grid of random numbers between 0 inclusive and 1 exclusive. The grid size will match the provided rows and columns arguments. If neither rows nor columns are provided, then the grid will be size 1 x 1.",
-            a: "Returns a grid of random numbers.",
-            m: [0, 2],
-            p: [
-                {
-                    name: "rows",
-                    detail: "The number of rows to populate with a random number.",
-                    example: "1",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-                {
-                    name: "columns",
-                    detail: "The number of columns to populate with a random number.",
-                    example: "1",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-            ],
-        },
-        {
-            n: "SEQUENCE",
-            t: "14",
-            d: "Returns a grid of sequential numbers starting at a specified start value and  increasing by a specified step size. By default, the sequence starts at and  increases by 1.",
-            a: "Returns a grid of sequential numbers.",
-            m: [1, 4],
-            p: [
-                {
-                    name: "rows",
-                    detail: "The number of rows in the function's resulting grid.",
-                    example: "1",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-                {
-                    name: "columns",
-                    detail:
-                        "The number of columns in the function's resulting grid. If omitted, the result grid will have 1 column.",
-                    example: "1",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-                {
-                    name: "start",
-                    detail:
-                        "The number, at which to start the sequence. If omitted, the sequence will start at 1.",
-                    example: "1",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-                {
-                    name: "step",
-                    detail:
-                        "The amount each value in the sequence will differ by. If omitted, each value will differ by 1.",
-                    example: "1",
-                    require: "o",
-                    repeat: "n",
-                    type: "rangenumber",
-                },
-            ],
-        },
-        {
-            n: "EVALUATE",
-            t: "3",
-            d: "Evaluate a formula or expression expressed in words and return the result",
-            a: "Evaluate according to literal formula or expression.",
-            m: [1, 1],
-            p: [
-                {
-                    name: "expression",
-                    example: '"A1+5*2^2"',
-                    detail: "Formula or expression",
-                    require: "m",
-                    repeat: "n",
-                    type: "rangeall",
-                },
-            ],
-        },
-        {
-            n: "REMOTE",
-            t: "5",
-            d: "Calls a function on a remote server",
-            a: "Calls a function on a remote back end server/API.",
-            m: [1, 1],
-            p: [
-                {
-                    name: "remote_expression",
-                    example: "SUM(A1:A10000000)",
-                    detail: "Formula",
-                    require: "m",
-                    repeat: "n",
-                    type: "string",
                 },
             ],
         },
