@@ -1,3 +1,4 @@
+import { MaxFileSizeExceededError, parseMultipartRequest } from '@mjackson/multipart-parser';
 import type { Email, EmailDraft, EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { ApiError, STANDARD_MAILBOXES } from '../core';
@@ -309,31 +310,47 @@ export default class Maildir {
     }> {
         await this.store.ensureDraftTempDir();
 
-        const formData = await request.formData();
-        const file = formData.get('file');
-        if (!file || typeof file === 'string') {
-            throw new ApiError(400, 'No file in request');
-        }
-
         const MAX_SIZE = 25 * 1024 * 1024;
-        if (file.size > MAX_SIZE) {
-            throw new ApiError(413, 'Attachment exceeds 25MB limit');
+        try {
+            for await (const part of parseMultipartRequest(request, { maxFileSize: MAX_SIZE })) {
+                if (!part.isFile || !part.filename) continue;
+
+                const tempId = crypto.randomUUID();
+                const tempPath = this.store.getDraftTempPath(tempId);
+                const metaPath = this.store.getDraftTempMetaPath(tempId);
+
+                const chunks: Uint8Array[] = [];
+                let size = 0;
+                for (const chunk of part.content) {
+                    chunks.push(chunk);
+                    size += chunk.length;
+                }
+                const body = new Uint8Array(size);
+                let offset = 0;
+                for (const chunk of chunks) {
+                    body.set(chunk, offset);
+                    offset += chunk.length;
+                }
+
+                const meta = {
+                    filename: part.filename,
+                    size,
+                    contentType: part.mediaType || 'application/octet-stream',
+                };
+
+                await this.store.storage.write(tempPath, body);
+                await this.store.storage.write(metaPath, JSON.stringify(meta));
+
+                return { tempId, ...meta };
+            }
+        } catch (e) {
+            if (e instanceof MaxFileSizeExceededError) {
+                throw new ApiError(413, 'Attachment exceeds 25MB limit');
+            }
+            throw e;
         }
 
-        const tempId = crypto.randomUUID();
-        const tempPath = this.store.getDraftTempPath(tempId);
-        const metaPath = this.store.getDraftTempMetaPath(tempId);
-
-        const meta = {
-            filename: file.name,
-            size: file.size,
-            contentType: file.type || 'application/octet-stream',
-        };
-
-        await this.store.storage.write(tempPath, await file.arrayBuffer());
-        await this.store.storage.write(metaPath, JSON.stringify(meta));
-
-        return { tempId, ...meta };
+        throw new ApiError(400, 'No file in request');
     }
 
     async getDraftTempFile(tempId: string): Promise<{

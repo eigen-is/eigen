@@ -36,7 +36,8 @@ export class MaildirStore {
     }
 
     getDraftTempDir(): string {
-        return this.storage.pathJoin(this.basePath, 'tmp-attachments');
+        // Sibling of the Maildir tree (not inside it) so Dovecot IMAP doesn't see it as a folder.
+        return 'draft-attachments';
     }
 
     async ensureDraftTempDir(): Promise<void> {

@@ -93,6 +93,8 @@ export const getSSEEventsUrl = (ownerId: string) => `${API_HOST}/sse/${ownerId}/
 export const getContactsAvatarUploadUrl = (ownerId: string) => `${API_HOST}/contacts/${ownerId}/avatar`;
 export const getDriveFileUploadUrl = (ownerId: string, mountId: string, pathId: string) =>
     `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}`;
+export const getMailDraftAttachmentUploadUrl = (ownerId: string) =>
+    `${API_HOST}/mail/${ownerId}/message/draft/attachment`;
 export const getDriveDownloadUrl = (ownerId: string, mountId: string, pathId: string) =>
     `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/download`;
 export const getDriveExportUrl = (ownerId: string, mountId: string, pathId: string, format: string) =>
