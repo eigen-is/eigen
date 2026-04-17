@@ -314,7 +314,7 @@ export const EmailDraft = forwardRef<EmailDraftHandle, EmailDraftProps>(function
             </div>
             <div
                 className={cn(
-                    'pointer-events-none absolute inset-2 rounded-lg border-2 border-dashed border-primary bg-primary/5 flex items-center justify-center transition-opacity',
+                    'pointer-events-none absolute inset-1 rounded-lg border-2 border-dashed border-primary bg-primary/5 flex items-center justify-center transition-opacity',
                     isDragging ? 'opacity-100' : 'opacity-0',
                 )}
             >
