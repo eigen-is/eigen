@@ -215,11 +215,14 @@ export const mailRouter = new Elysia({ name: 'mail' })
         async ({ params, body, user }) => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            return await messageHandleDraft(user, body.mail as EmailDraft);
+            return await messageHandleDraft(user, body.mail as EmailDraft, body.tempAttachmentIds);
         },
         {
             auth: true,
-            body: t.Object({ mail: MailDraftSchema }),
+            body: t.Object({
+                mail: MailDraftSchema,
+                tempAttachmentIds: t.Optional(t.Array(t.String())),
+            }),
         },
     )
     .post(

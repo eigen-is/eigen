@@ -108,9 +108,9 @@ export async function messageCopy(user: User, messageId: string, targetMailbox: 
     return await mail.messageCopy(messageId, targetMailbox);
 }
 
-export async function messageHandleDraft(user: User, mail: EmailDraft) {
+export async function messageHandleDraft(user: User, mail: EmailDraft, tempAttachmentIds?: string[]) {
     const mailClient = await getMailClient(user);
-    return await mailClient.messageHandleDraft(mail);
+    return await mailClient.messageHandleDraft(mail, tempAttachmentIds);
 }
 
 export async function uploadDraftAttachment(user: User, request: Request) {

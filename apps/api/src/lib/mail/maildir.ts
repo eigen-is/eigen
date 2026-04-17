@@ -6,7 +6,7 @@ import type { Home } from '../home';
 import { parseEml } from './mail-parse';
 import MailDB from './maildb';
 import { MaildirStore } from './maildir-store';
-import { createEmlContent } from './mailfile';
+import { createEmlContent, type EmlAttachment } from './mailfile';
 import {
     applyFlagsFromFilename,
     createUniqueMessageId,
@@ -207,18 +207,46 @@ export default class Maildir {
 
     // -- Draft & Send --
 
-    async messageHandleDraft(email: EmailDraft): Promise<EmailDraft> {
+    async messageHandleDraft(email: EmailDraft, tempAttachmentIds?: string[]): Promise<EmailDraft> {
         const isNew = (email.id || '').trim() === '';
         const user = this.home.user;
 
-        // Delete old draft if updating
+        // Re-extract existing attachments from previous EML (only when updating)
+        const existingAttachments: EmlAttachment[] = [];
         if (!isNew) {
             const old = this.db.getEmail(email.id);
             if (old) {
+                const parsed = await this.readAndParse(email.id, old.mailbox, old.filename);
+                if (parsed?.attachments) {
+                    for (const a of parsed.attachments) {
+                        if (!a.filename || a.content === undefined) continue;
+                        const content = Buffer.isBuffer(a.content)
+                            ? a.content
+                            : a.content instanceof Uint8Array
+                              ? Buffer.from(a.content)
+                              : Buffer.from(String(a.content));
+                        existingAttachments.push({
+                            filename: a.filename,
+                            content,
+                            contentType: a.contentType,
+                        });
+                    }
+                }
                 await this.store.deleteMessage(old.mailbox, old.filename);
                 this.db.deleteEmail(email.id);
             }
         }
+
+        // Add new staged attachments from temp files
+        const newAttachments: EmlAttachment[] = [];
+        if (tempAttachmentIds?.length) {
+            for (const tempId of tempAttachmentIds) {
+                const { content, filename, contentType } = await this.getDraftTempFile(tempId);
+                newAttachments.push({ filename, content, contentType });
+            }
+        }
+
+        const allAttachments = [...existingAttachments, ...newAttachments];
 
         email.from = {
             value: [{ address: user.email, name: user.name }],
@@ -226,7 +254,7 @@ export default class Maildir {
             text: user.email,
         };
 
-        const emlContent = createEmlContent({
+        const emlContent = await createEmlContent({
             id: isNew ? createUniqueMessageId() : email.id,
             subject: email.subject || '',
             from: email.from,
@@ -236,6 +264,7 @@ export default class Maildir {
             text: email.text || '',
             html: email.html || '',
             date: new Date(),
+            attachments: allAttachments.length ? allAttachments : undefined,
         });
 
         const { uniqueId, filename } = await this.store.deliverToCur(
@@ -247,6 +276,13 @@ export default class Maildir {
             },
             isNew ? undefined : email.id,
         );
+
+        // Clean up temp files only after successful EML delivery
+        if (tempAttachmentIds?.length) {
+            for (const tempId of tempAttachmentIds) {
+                await this.cleanupDraftTempFile(tempId);
+            }
+        }
 
         const parsed = await this.readAndParse(uniqueId, 'Drafts', filename);
         if (!parsed) {
