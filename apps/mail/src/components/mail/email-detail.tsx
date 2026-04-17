@@ -73,10 +73,26 @@ export function EmailDetailToolbar({
                             onReply={onReply}
                             onReplyAll={onReplyAll}
                             onForward={onForward}
-                            onArchive={(ids) => ids.forEach((id) => onArchive(id))}
-                            onReportSpam={(ids) => ids.forEach((id) => onReportSpam(id))}
-                            onDelete={(ids) => ids.forEach((id) => onDelete(id))}
-                            onMoveToFolder={(ids, folderId) => ids.forEach((id) => onMoveToFolder(id, folderId))}
+                            onArchive={(ids) =>
+                                ids.forEach((id) => {
+                                    onArchive(id);
+                                })
+                            }
+                            onReportSpam={(ids) =>
+                                ids.forEach((id) => {
+                                    onReportSpam(id);
+                                })
+                            }
+                            onDelete={(ids) =>
+                                ids.forEach((id) => {
+                                    onDelete(id);
+                                })
+                            }
+                            onMoveToFolder={(ids, folderId) =>
+                                ids.forEach((id) => {
+                                    onMoveToFolder(id, folderId);
+                                })
+                            }
                             onClose={() => {}}
                             onPrint={() => printDocument()}
                         />
