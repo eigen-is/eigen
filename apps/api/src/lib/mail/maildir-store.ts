@@ -20,6 +20,35 @@ export class MaildirStore {
         this.TMP = TMP;
     }
 
+    openDraftTempWriter(tempId: string) {
+        return this.storage.file(this.getDraftTempPath(tempId)).writer({ highWaterMark: 256 * 1024 });
+    }
+
+    async writeDraftTempMeta(
+        tempId: string,
+        meta: { filename: string; size: number; contentType: string },
+    ): Promise<void> {
+        await this.storage.write(this.getDraftTempMetaPath(tempId), JSON.stringify(meta));
+    }
+
+    async readDraftTempFile(
+        tempId: string,
+    ): Promise<{ content: Buffer; filename: string; contentType: string } | null> {
+        const tempPath = this.getDraftTempPath(tempId);
+        const metaPath = this.getDraftTempMetaPath(tempId);
+        const file = this.storage.file(tempPath);
+        if (!(await file.exists())) return null;
+        const metaFile = this.storage.file(metaPath);
+        const meta = (await metaFile.exists())
+            ? ((await metaFile.json()) as { filename: string; contentType: string })
+            : { filename: tempId, contentType: 'application/octet-stream' };
+        return {
+            content: Buffer.from(await file.arrayBuffer()),
+            filename: meta.filename,
+            contentType: meta.contentType,
+        };
+    }
+
     async exists(): Promise<boolean> {
         return this.storage.dirExists(this.basePath);
     }

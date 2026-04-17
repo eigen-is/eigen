@@ -35,6 +35,7 @@ export async function createEmlContent(input: EmlInput): Promise<string> {
         from: formatAddresses(input.from),
         to: formatAddresses(input.to),
         cc: formatAddresses(input.cc),
+        bcc: formatAddresses(input.bcc),
         subject: input.subject || '',
         text: input.text || '',
         html: input.html || '',

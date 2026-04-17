@@ -171,6 +171,49 @@ describe.skipIf(isWindows)('Mail — Draft Attachments', () => {
         expect(found?.hasAttachments).toBe(true);
     });
 
+    test('simulates client: attach → save → edit body → save again keeps attachment', async () => {
+        // Reproduces the bug where the client (post-keepAttachmentIndexes fix) lost the attachment
+        // on the second save because state.attachments[0].index was never populated from the
+        // server response. The fix: server's returned EmailDraft is used to rebuild client state
+        // with fresh indexes. This test simulates that flow end-to-end over HTTP.
+        const file = new File(['keep-bytes'], 'keep.txt', { type: 'text/plain' });
+        const uploaded = await uploadDraftAttachment(ctx.alice.user.sessionToken, ctx.alice.user.id, file);
+
+        const first = await putDraft(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            {
+                subject: 'Edit me',
+                to: {
+                    value: [{ address: 'bob@test.eigen.is', name: 'Bob' }],
+                    text: 'Bob <bob@test.eigen.is>',
+                    html: '',
+                },
+                text: 'v1',
+                html: '<p>v1</p>',
+            },
+            { tempAttachmentIds: [uploaded.tempId] },
+        );
+        expect(first.attachments.length).toBe(1);
+
+        // Client would now map server attachments[0] to { index: 0 }. Next save sends [0].
+        const second = await putDraft(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            {
+                id: first.id,
+                subject: 'Edit me',
+                to: first.to,
+                text: 'v2 edited',
+                html: '<p>v2 edited</p>',
+            },
+            { keepAttachmentIndexes: [0] },
+        );
+        expect(second.attachments.length).toBe(1);
+        expect(second.attachments[0].filename).toBe('keep.txt');
+        expect(second.text?.trim()).toBe('v2 edited');
+    });
+
     test('keepAttachmentIndexes drops attachments the user removed', async () => {
         const a = new File(['a-bytes'], 'a.txt', { type: 'text/plain' });
         const b = new File(['b-bytes'], 'b.txt', { type: 'text/plain' });
