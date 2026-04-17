@@ -564,51 +564,6 @@ export function israngeseleciton(ctx: Context, istooltip?: boolean) {
     return false;
 }
 
-export function checkBracketNum(fp: string) {
-    const bra_l = fp.match(/\(/g);
-    const bra_r = fp.match(/\)/g);
-    const bra_tl_txt = fp.match(/(['"])(?:(?!\1).)*?\1/g);
-    const bra_tr_txt = fp.match(/(['"])(?:(?!\1).)*?\1/g);
-
-    let bra_l_len = 0;
-    let bra_r_len = 0;
-    if (!_.isNil(bra_l)) {
-        bra_l_len += bra_l.length;
-    }
-    if (!_.isNil(bra_r)) {
-        bra_r_len += bra_r.length;
-    }
-
-    let bra_tl_len = 0;
-    let bra_tr_len = 0;
-    if (!_.isNil(bra_tl_txt)) {
-        for (let i = 0; i < bra_tl_txt.length; i += 1) {
-            const bra_tl = bra_tl_txt[i].match(/\(/g);
-            if (!_.isNil(bra_tl)) {
-                bra_tl_len += bra_tl.length;
-            }
-        }
-    }
-
-    if (!_.isNil(bra_tr_txt)) {
-        for (let i = 0; i < bra_tr_txt.length; i += 1) {
-            const bra_tr = bra_tr_txt[i].match(/\)/g);
-            if (!_.isNil(bra_tr)) {
-                bra_tr_len += bra_tr.length;
-            }
-        }
-    }
-
-    bra_l_len -= bra_tl_len;
-    bra_r_len -= bra_tr_len;
-
-    if (bra_l_len !== bra_r_len) {
-        return false;
-    }
-
-    return true;
-}
-
 function functionRange(
     ctx: Context,
     obj: HTMLDivElement,
