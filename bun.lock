@@ -221,6 +221,10 @@
       "name": "@apps/mail",
       "version": "0.0.1",
       "dependencies": {
+        "@tiptap/core": "^3.21.0",
+        "@tiptap/pm": "^3.21.0",
+        "@tiptap/react": "^3.21.0",
+        "@tiptap/starter-kit": "^3.21.0",
         "@workspace/lib": "workspace:*",
         "@workspace/ui": "workspace:*",
       },
@@ -353,6 +357,12 @@
         "cmdk": "^1.1.1",
         "input-otp": "^1.4.2",
         "radix-ui": "^1.4.3",
+      },
+      "peerDependencies": {
+        "@tiptap/core": "^3.21.0",
+        "@tiptap/pm": "^3.21.0",
+        "@tiptap/react": "^3.21.0",
+        "@tiptap/starter-kit": "^3.21.0",
       },
     },
   },

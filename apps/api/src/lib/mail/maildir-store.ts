@@ -20,6 +20,35 @@ export class MaildirStore {
         this.TMP = TMP;
     }
 
+    openDraftTempWriter(tempId: string) {
+        return this.storage.file(this.getDraftTempPath(tempId)).writer({ highWaterMark: 256 * 1024 });
+    }
+
+    async writeDraftTempMeta(
+        tempId: string,
+        meta: { filename: string; size: number; contentType: string },
+    ): Promise<void> {
+        await this.storage.write(this.getDraftTempMetaPath(tempId), JSON.stringify(meta));
+    }
+
+    async readDraftTempFile(
+        tempId: string,
+    ): Promise<{ content: Buffer; filename: string; contentType: string } | null> {
+        const tempPath = this.getDraftTempPath(tempId);
+        const metaPath = this.getDraftTempMetaPath(tempId);
+        const file = this.storage.file(tempPath);
+        if (!(await file.exists())) return null;
+        const metaFile = this.storage.file(metaPath);
+        const meta = (await metaFile.exists())
+            ? ((await metaFile.json()) as { filename: string; contentType: string })
+            : { filename: tempId, contentType: 'application/octet-stream' };
+        return {
+            content: Buffer.from(await file.arrayBuffer()),
+            filename: meta.filename,
+            contentType: meta.contentType,
+        };
+    }
+
     async exists(): Promise<boolean> {
         return this.storage.dirExists(this.basePath);
     }
@@ -33,6 +62,60 @@ export class MaildirStore {
 
         const subscriptions = `${STANDARD_MAILBOXES.filter((m) => m !== '').join('\n')}\n`;
         await this.storage.write(this.storage.pathJoin(this.basePath, 'subscriptions'), subscriptions);
+    }
+
+    getDraftTempDir(): string {
+        // Sibling of the Maildir tree (not inside it) so Dovecot IMAP doesn't see it as a folder.
+        return 'draft-attachments';
+    }
+
+    async ensureDraftTempDir(): Promise<void> {
+        const dir = this.getDraftTempDir();
+        if (!(await this.storage.dirExists(dir))) {
+            await this.storage.mkdir(dir);
+        }
+    }
+
+    private sanitizeTempId(tempId: string): string {
+        return tempId.replace(/[^a-zA-Z0-9-_]/g, '_');
+    }
+
+    getDraftTempPath(tempId: string): string {
+        return this.storage.pathJoin(this.getDraftTempDir(), this.sanitizeTempId(tempId));
+    }
+
+    getDraftTempMetaPath(tempId: string): string {
+        return `${this.getDraftTempPath(tempId)}.json`;
+    }
+
+    async cleanupDraftTemp(tempId: string): Promise<void> {
+        const tempPath = this.getDraftTempPath(tempId);
+        const metaPath = this.getDraftTempMetaPath(tempId);
+        try {
+            if (await this.storage.fileExists(tempPath)) {
+                await this.storage.unlink(tempPath);
+            }
+        } catch {}
+        try {
+            if (await this.storage.fileExists(metaPath)) {
+                await this.storage.unlink(metaPath);
+            }
+        } catch {}
+    }
+
+    async cleanupStaleDraftTemps(maxAgeMs: number = 24 * 60 * 60 * 1000): Promise<void> {
+        const dir = this.getDraftTempDir();
+        if (!(await this.storage.dirExists(dir))) return;
+        const now = Date.now();
+        for (const name of await this.storage.readdir(dir)) {
+            const filePath = this.storage.pathJoin(dir, name);
+            try {
+                const stat = await this.storage.stat(filePath);
+                if (now - stat.mtimeMs > maxAgeMs) {
+                    await this.storage.unlink(filePath);
+                }
+            } catch {}
+        }
     }
 
     async mailboxDirExists(mailbox: string): Promise<boolean> {

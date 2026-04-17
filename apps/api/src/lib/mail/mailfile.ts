@@ -1,4 +1,11 @@
 import type { AddressObject } from '@workspace/lib/types/mail';
+import MailComposer from 'nodemailer/lib/mail-composer';
+
+export type EmlAttachment = {
+    filename: string;
+    content: Buffer;
+    contentType?: string;
+};
 
 export type EmlInput = {
     id: string;
@@ -10,6 +17,7 @@ export type EmlInput = {
     text: string;
     html: string;
     date?: Date;
+    attachments?: EmlAttachment[];
 };
 
 function formatAddresses(field: AddressObject | undefined): string {
@@ -22,36 +30,30 @@ function formatAddresses(field: AddressObject | undefined): string {
         .join(', ');
 }
 
-export function createEmlContent(input: EmlInput): string {
-    const date = input.date ? input.date.toUTCString() : new Date().toUTCString();
+export async function createEmlContent(input: EmlInput): Promise<string> {
+    const composer = new MailComposer({
+        from: formatAddresses(input.from),
+        to: formatAddresses(input.to),
+        cc: formatAddresses(input.cc),
+        bcc: formatAddresses(input.bcc),
+        subject: input.subject || '',
+        text: input.text || '',
+        html: input.html || '',
+        date: input.date ?? new Date(),
+        messageId: `<${input.id}@eigen.local>`,
+        attachments: input.attachments?.map((a) => ({
+            filename: a.filename,
+            content: a.content,
+            contentType: a.contentType,
+        })),
+    });
 
-    const boundary = `boundary-${crypto.randomUUID()}`;
+    const buffer = await new Promise<Buffer>((resolve, reject) => {
+        composer.compile().build((err, message) => {
+            if (err) reject(err);
+            else resolve(message);
+        });
+    });
 
-    const headers = [
-        `From: ${formatAddresses(input.from)}`,
-        `To: ${formatAddresses(input.to)}`,
-        `CC: ${formatAddresses(input.cc)}`,
-        `Subject: ${input.subject || ''}`,
-        `Date: ${date}`,
-        `Message-ID: <${input.id}@eigen.local>`,
-        `MIME-Version: 1.0`,
-        `Content-Type: multipart/alternative; boundary="${boundary}"`,
-    ];
-
-    const body = [
-        ``,
-        `--${boundary}`,
-        `Content-Type: text/plain; charset=utf-8`,
-        ``,
-        input.text || '',
-        ``,
-        `--${boundary}`,
-        `Content-Type: text/html; charset=utf-8`,
-        ``,
-        input.html || '',
-        ``,
-        `--${boundary}--`,
-    ];
-
-    return [...headers, ...body].join('\r\n');
+    return buffer.toString('utf-8');
 }
