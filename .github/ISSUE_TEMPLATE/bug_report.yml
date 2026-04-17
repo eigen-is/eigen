@@ -1,0 +1,90 @@
+name: Bug report
+description: Something doesn't work the way it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please fill out as much as you can.
+
+        For security issues, **do not** use this form — see [SECURITY.md](https://github.com/eigen-foundation/eigen/blob/main/SECURITY.md).
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect to happen, and what happened instead?
+      placeholder: When I click X, I expect Y, but I see Z.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Go to '...'
+        2. Click on '...'
+        3. See error
+    validations:
+      required: true
+
+  - type: dropdown
+    id: app
+    attributes:
+      label: Which app or area?
+      options:
+        - Mail
+        - Drive
+        - Docs
+        - Sheets
+        - Slides
+        - Stickies
+        - Calendar
+        - Contacts
+        - Chat
+        - Space
+        - Admin
+        - API / backend
+        - IMAP / Dovecot
+        - CalDAV
+        - Docker / deployment
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: How are you running Eigen?
+      options:
+        - bun run serve (local development)
+        - Docker Compose (local)
+        - Docker Compose (VPS / production)
+        - eigen.is (hosted)
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Commit or version
+      description: Output of `git rev-parse --short HEAD`, or a tag.
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Browser, OS, Bun version (`bun --version`), etc.
+      placeholder: |
+        - Browser: Firefox 128
+        - OS: macOS 14.5
+        - Bun: 1.1.x
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs, screenshots, or stack traces
+      description: Relevant server logs, browser console errors, or screenshots. Scrub secrets before pasting.
+      render: shell

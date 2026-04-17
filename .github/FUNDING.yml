@@ -1,0 +1,9 @@
+# GitHub Sponsors / funding button configuration.
+# See https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/displaying-a-sponsor-button-in-your-repository
+#
+# Eigen isn't accepting donations or sponsorships yet. When that changes, uncomment
+# the appropriate lines below. In the meantime, reach out at reinder@eigen.is.
+#
+# github: eigen-foundation
+# open_collective: eigen
+# custom: ["https://eigen.is/sponsor"]
