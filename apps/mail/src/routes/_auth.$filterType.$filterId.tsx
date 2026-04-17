@@ -155,10 +155,14 @@ function MailRoute() {
                     {showDetail ? (
                         isDraft ? (
                             <EmailDraft
+                                // Remount when switching between drafts so LightEditor picks up the new
+                                // initial content (Tiptap's `useEditor` only consumes `content` on mount).
+                                key={selectedEmail?.id ?? 'compose'}
                                 ref={draftRef}
                                 email={selectedEmail as EmailDraftType}
                                 sendDraft={actions.handleSendEmail}
                                 onAutoSave={actions.saveDraft}
+                                onDraftIdAssigned={actions.handleDraftIdAssigned}
                                 to={to}
                                 isSending={actions.isSendPending}
                             />

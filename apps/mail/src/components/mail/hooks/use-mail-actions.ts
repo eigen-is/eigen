@@ -10,7 +10,7 @@ import {
     useToggleReadEmail,
     useUpdateDraft,
 } from '@workspace/lib/mail';
-import type { Email, EmailDraft, NewDraft } from '@workspace/lib/types/mail';
+import type { Email, NewDraft } from '@workspace/lib/types/mail';
 import { Route } from '../../../routes/_auth.$filterType.$filterId';
 
 export function useMailActions() {
@@ -45,12 +45,12 @@ export function useMailActions() {
         navigateToList();
     };
 
-    const handleSendEmail = async (mail: NewDraft | EmailDraft) => {
+    const handleSendEmail = async (mail: NewDraft) => {
         await sendDraftMutation.mutateAsync(mail);
         navigateToList();
     };
 
-    const handleNewDraftEmail = async (mail: NewDraft | EmailDraft) => {
+    const handleNewDraftEmail = async (mail: NewDraft) => {
         const draft = await updateDraft.mutateAsync({ draft: mail });
         if (draft) {
             navigate({
@@ -59,6 +59,17 @@ export function useMailActions() {
                 search: { mailId: draft.id },
             });
         }
+    };
+
+    // After the first auto-save of a fresh compose, switch the URL from ?mode=compose to
+    // ?mailId=... so a reload lands back on the same in-progress draft.
+    const handleDraftIdAssigned = (id: string) => {
+        navigate({
+            to: Route.fullPath,
+            params: { filterType, filterId },
+            search: { mailId: id },
+            replace: true,
+        });
     };
 
     const handleDeleteEmail = async (mail: Email) => {
@@ -133,11 +144,17 @@ export function useMailActions() {
         navigateToList();
     };
 
+    const escapeHtml = (s: string) =>
+        s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
     const formatEmailQuote = (email: Email) => {
-        const fromName = email.from?.value[0]?.name || '';
-        const fromAddress = email.from?.value[0]?.address || '';
-        const header = `On ${formatFullDateTime(new Date(email.date))} ${fromName} &lt;${fromAddress}&gt; wrote:`;
-        const content = email.html || email.text || '';
+        const fromName = escapeHtml(email.from?.value[0]?.name || '');
+        const fromAddress = escapeHtml(email.from?.value[0]?.address || '');
+        const dateText = escapeHtml(formatFullDateTime(new Date(email.date)));
+        const header = `On ${dateText} ${fromName} &lt;${fromAddress}&gt; wrote:`;
+        // email.html is already sanitized by the backend via isomorphic-dompurify in mail-parse.ts,
+        // and email.text is plain text (not HTML) so it's safe to embed as-is in a blockquote.
+        const content = email.html || (email.text ? escapeHtml(email.text).replace(/\n/g, '<br>') : '');
         return `<br><br><p>${header}</p><blockquote>${content}</blockquote>`;
     };
 
@@ -207,8 +224,16 @@ export function useMailActions() {
         handleSendEmail,
         handleNewDraftEmail,
         handleToggleMailRead,
-        saveDraft: (draft: NewDraft | EmailDraft, tempAttachmentIds?: string[]) =>
-            updateDraft.mutateAsync({ draft, tempAttachmentIds }),
+        saveDraft: (
+            draft: NewDraft,
+            options: { tempAttachmentIds?: string[]; keepAttachmentIndexes?: number[] } = {},
+        ) =>
+            updateDraft.mutateAsync({
+                draft,
+                tempAttachmentIds: options.tempAttachmentIds,
+                keepAttachmentIndexes: options.keepAttachmentIndexes,
+            }),
+        handleDraftIdAssigned,
         isSendPending: sendDraftMutation.isPending,
     };
 }

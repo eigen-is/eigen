@@ -1,5 +1,12 @@
 import { MaxFileSizeExceededError, parseMultipartRequest } from '@mjackson/multipart-parser';
-import type { Email, EmailDraft, EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
+import type {
+    DraftAttachmentUpload,
+    Email,
+    EmailDraft,
+    EmailSummary,
+    MaildirMailbox,
+    NewDraft,
+} from '@workspace/lib/types/mail';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { ApiError, STANDARD_MAILBOXES } from '../core';
 import { sendMail } from '../core/mailer';
@@ -52,6 +59,9 @@ export default class Maildir {
         this.store.watchMailboxes((mailbox) =>
             this.syncMailbox(mailbox).catch((err) => console.error('maildir: mailbox sync failed', err)),
         );
+        this.store
+            .cleanupStaleDraftTemps()
+            .catch((err) => console.error('maildir: stale draft temp cleanup failed', err));
     }
 
     async size(): Promise<number> {
@@ -208,43 +218,48 @@ export default class Maildir {
 
     // -- Draft & Send --
 
-    async messageHandleDraft(email: EmailDraft, tempAttachmentIds?: string[]): Promise<EmailDraft> {
-        const isNew = (email.id || '').trim() === '';
+    async messageHandleDraft(
+        email: NewDraft | EmailDraft,
+        options: { tempAttachmentIds?: string[]; keepAttachmentIndexes?: number[] } = {},
+    ): Promise<EmailDraft> {
+        const existingId = email.id?.trim() || undefined;
         const user = this.home.user;
 
-        // Re-extract existing attachments from previous EML (only when updating)
+        // Re-extract attachments from the previous EML, filtered against the client's keep list.
+        // keepAttachmentIndexes=undefined means "keep all" (initial save). Calendar parts are
+        // always excluded — they belong to the original message the draft is replying to.
         const existingAttachments: EmlAttachment[] = [];
-        if (!isNew) {
-            const old = this.db.getEmail(email.id);
+        if (existingId) {
+            const old = this.db.getEmail(existingId);
             if (old) {
-                const parsed = await this.readAndParse(email.id, old.mailbox, old.filename);
-                if (parsed?.attachments) {
-                    for (const a of parsed.attachments) {
-                        if (!a.filename || a.content === undefined) continue;
-                        const content = Buffer.isBuffer(a.content)
-                            ? a.content
-                            : a.content instanceof Uint8Array
-                              ? Buffer.from(a.content)
-                              : Buffer.from(String(a.content));
-                        existingAttachments.push({
-                            filename: a.filename,
-                            content,
-                            contentType: a.contentType,
-                        });
+                const parsed = await this.readAndParse(existingId, old.mailbox, old.filename);
+                const keepSet = options.keepAttachmentIndexes ? new Set(options.keepAttachmentIndexes) : null;
+                const attachments = parsed?.attachments ?? [];
+                for (let i = 0; i < attachments.length; i++) {
+                    const a = attachments[i];
+                    if (!a.filename || a.contentType.startsWith('text/calendar')) continue;
+                    if (keepSet && !keepSet.has(i)) continue;
+                    if (!(a.content instanceof Uint8Array)) {
+                        console.warn(
+                            `draft ${existingId}: skipping attachment ${a.filename} (unexpected content type ${typeof a.content})`,
+                        );
+                        continue;
                     }
+                    existingAttachments.push({
+                        filename: a.filename,
+                        content: Buffer.isBuffer(a.content) ? a.content : Buffer.from(a.content),
+                        contentType: a.contentType,
+                    });
                 }
                 await this.store.deleteMessage(old.mailbox, old.filename);
-                this.db.deleteEmail(email.id);
+                this.db.deleteEmail(existingId);
             }
         }
 
-        // Add new staged attachments from temp files
         const newAttachments: EmlAttachment[] = [];
-        if (tempAttachmentIds?.length) {
-            for (const tempId of tempAttachmentIds) {
-                const { content, filename, contentType } = await this.getDraftTempFile(tempId);
-                newAttachments.push({ filename, content, contentType });
-            }
+        for (const tempId of options.tempAttachmentIds ?? []) {
+            const { content, filename, contentType } = await this.getDraftTempFile(tempId);
+            newAttachments.push({ filename, content, contentType });
         }
 
         const allAttachments = [...existingAttachments, ...newAttachments];
@@ -256,7 +271,7 @@ export default class Maildir {
         };
 
         const emlContent = await createEmlContent({
-            id: isNew ? createUniqueMessageId() : email.id,
+            id: existingId ?? createUniqueMessageId(),
             subject: email.subject || '',
             from: email.from,
             to: email.to,
@@ -275,19 +290,17 @@ export default class Maildir {
                 draft: true,
                 seen: true,
             },
-            isNew ? undefined : email.id,
+            existingId,
         );
 
-        // Clean up temp files only after successful EML delivery
-        if (tempAttachmentIds?.length) {
-            for (const tempId of tempAttachmentIds) {
-                await this.cleanupDraftTempFile(tempId);
-            }
+        for (const tempId of options.tempAttachmentIds ?? []) {
+            await this.cleanupDraftTempFile(tempId);
         }
 
         const parsed = await this.readAndParse(uniqueId, 'Drafts', filename);
         if (!parsed) {
-            // Clean up the orphan we just wrote so no disk file is left without a DB row
+            // The EML was written but couldn't be re-parsed — delete the orphan so no disk file
+            // exists without a matching DB row.
             await this.store.deleteMessage('Drafts', filename).catch(() => {});
             throw new ApiError(500, 'Failed to parse saved draft');
         }
@@ -302,12 +315,7 @@ export default class Maildir {
         return parsed as EmailDraft;
     }
 
-    async uploadDraftAttachment(request: Request): Promise<{
-        tempId: string;
-        filename: string;
-        size: number;
-        contentType: string;
-    }> {
+    async uploadDraftAttachment(request: Request): Promise<DraftAttachmentUpload> {
         await this.store.ensureDraftTempDir();
 
         const MAX_SIZE = 25 * 1024 * 1024;
@@ -317,19 +325,19 @@ export default class Maildir {
 
                 const tempId = crypto.randomUUID();
                 const tempPath = this.store.getDraftTempPath(tempId);
-                const metaPath = this.store.getDraftTempMetaPath(tempId);
+                const writer = this.store.storage.file(tempPath).writer({ highWaterMark: 256 * 1024 });
 
-                const chunks: Uint8Array[] = [];
                 let size = 0;
-                for (const chunk of part.content) {
-                    chunks.push(chunk);
-                    size += chunk.length;
-                }
-                const body = new Uint8Array(size);
-                let offset = 0;
-                for (const chunk of chunks) {
-                    body.set(chunk, offset);
-                    offset += chunk.length;
+                try {
+                    for (const chunk of part.content) {
+                        writer.write(chunk);
+                        size += chunk.length;
+                    }
+                    await writer.end();
+                } catch (e) {
+                    await writer.end();
+                    await this.store.cleanupDraftTemp(tempId);
+                    throw e;
                 }
 
                 const meta = {
@@ -338,8 +346,12 @@ export default class Maildir {
                     contentType: part.mediaType || 'application/octet-stream',
                 };
 
-                await this.store.storage.write(tempPath, body);
-                await this.store.storage.write(metaPath, JSON.stringify(meta));
+                try {
+                    await this.store.storage.write(this.store.getDraftTempMetaPath(tempId), JSON.stringify(meta));
+                } catch (e) {
+                    await this.store.cleanupDraftTemp(tempId);
+                    throw e;
+                }
 
                 return { tempId, ...meta };
             }
@@ -382,7 +394,7 @@ export default class Maildir {
         await this.store.cleanupDraftTemp(tempId);
     }
 
-    async messageSend(mailToSend: EmailDraft): Promise<EmailDraft> {
+    async messageSend(mailToSend: NewDraft | EmailDraft): Promise<EmailDraft> {
         const mail = await this.messageHandleDraft(mailToSend);
         const message = draftToOutboundMail(mail, this.home.user.email);
 

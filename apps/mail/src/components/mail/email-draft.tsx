@@ -1,5 +1,5 @@
 import { useAuth } from '@workspace/lib/auth';
-import { uploadDraftAttachment } from '@workspace/lib/mail';
+import { useUploadDraftAttachment } from '@workspace/lib/mail';
 import type { AttachmentMeta, EmailDraft as EmailDraftType, NewDraft } from '@workspace/lib/types/mail';
 import { ContactAutosuggest, Toolbar, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
@@ -52,29 +52,36 @@ export function EmailDraftToolbar({
 type EmailDraftProps = {
     email: EmailDraftType | null;
     to?: string;
-    sendDraft: (mail: NewDraft | EmailDraftType) => Promise<unknown>;
-    onAutoSave?: (mail: NewDraft | EmailDraftType, tempAttachmentIds?: string[]) => Promise<unknown>;
+    sendDraft: (mail: NewDraft) => Promise<unknown>;
+    onAutoSave?: (
+        mail: NewDraft,
+        options?: { tempAttachmentIds?: string[]; keepAttachmentIndexes?: number[] },
+    ) => Promise<EmailDraftType | null | undefined>;
+    onDraftIdAssigned?: (id: string) => void;
     isSending: boolean;
 };
 
 export const EmailDraft = forwardRef<EmailDraftHandle, EmailDraftProps>(function EmailDraft(
-    { email, to, sendDraft, onAutoSave, isSending },
+    { email, to, sendDraft, onAutoSave, onDraftIdAssigned, isSending },
     ref,
 ) {
     const [alertMessage, setAlertMessage] = useState<string | null>(null);
     const [confirmNoSubject, setConfirmNoSubject] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
-    const auth = useAuth();
+    const { user } = useAuth();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const dragCounterRef = useRef(0);
+    const uploadMutation = useUploadDraftAttachment();
 
     const {
         state,
         setField,
+        setId,
         addAttachment,
         removeAttachment,
         clearAttachmentTempIds,
         toDraft,
+        attachmentsFingerprint,
         isSendable,
         isSaveable,
     } = useDraftState(email, to);
@@ -83,73 +90,68 @@ export const EmailDraft = forwardRef<EmailDraftHandle, EmailDraftProps>(function
         scheduleSave,
         saveNow,
         disable: disableAutoSave,
-        setHasPendingAttachments,
     } = useDraftAutoSave({
         toDraft,
+        attachmentsFingerprint,
         isSaveable,
         draftId: state.id,
         onSave: onAutoSave
             ? async (draft) => {
                   const tempAttachmentIds = state.attachments.map((a) => a.tempId).filter((id): id is string => !!id);
-                  const result = await onAutoSave(draft, tempAttachmentIds.length ? tempAttachmentIds : undefined);
+                  const keepAttachmentIndexes = state.attachments
+                      .map((a) => a.index)
+                      .filter((i): i is number => typeof i === 'number');
+                  const result = await onAutoSave(draft, {
+                      tempAttachmentIds: tempAttachmentIds.length ? tempAttachmentIds : undefined,
+                      // Always send the keep list when the draft has an id — an empty array means
+                      // "user removed all original attachments", which we must respect.
+                      keepAttachmentIndexes: state.id ? keepAttachmentIndexes : undefined,
+                  });
                   if (tempAttachmentIds.length) clearAttachmentTempIds();
                   return result;
               }
             : undefined,
-        onIdAssigned: (id) => setField('id', id),
+        onIdAssigned: (id) => {
+            setId(id);
+            onDraftIdAssigned?.(id);
+        },
     });
 
-    const fromName = auth.user?.name || auth.user?.email || '';
-    const fromEmail = auth.user?.email || '';
+    const uploadFiles = async (files: FileList | File[] | null) => {
+        if (!files) return;
+        const list = files instanceof FileList ? Array.from(files) : files;
+        for (const file of list) {
+            const result = await uploadMutation.mutateAsync(file).catch(() => null);
+            if (!result) continue;
+            const localUrl = file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined;
+            const meta: AttachmentMeta = {
+                key: `upload-${result.tempId}`,
+                tempId: result.tempId,
+                filename: result.filename,
+                size: result.size,
+                contentType: result.contentType,
+                localUrl,
+            };
+            addAttachment(meta);
+        }
+        scheduleSave();
+    };
 
-    const ownerId = auth.user?.id;
-    const uploadFiles = useCallback(
-        async (files: FileList | File[] | null) => {
-            if (!files || !ownerId) return;
-            const list = files instanceof FileList ? Array.from(files) : files;
-            for (const file of list) {
-                try {
-                    const result = await uploadDraftAttachment(ownerId, file);
-                    if (!result) continue;
-                    const localUrl = file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined;
-                    const meta: AttachmentMeta = {
-                        tempId: result.tempId,
-                        filename: result.filename,
-                        size: result.size,
-                        contentType: result.contentType,
-                        localUrl,
-                    };
-                    addAttachment(meta);
-                    setHasPendingAttachments(true);
-                } catch (e) {
-                    console.error('Attachment upload failed', e);
-                }
-            }
-            scheduleSave();
-        },
-        [ownerId, addAttachment, scheduleSave, setHasPendingAttachments],
-    );
-
-    useImperativeHandle(
-        ref,
-        () => ({
-            openFilePicker: () => fileInputRef.current?.click(),
-        }),
-        [],
-    );
+    useImperativeHandle(ref, () => ({
+        openFilePicker: () => fileInputRef.current?.click(),
+    }));
 
     useEffect(() => {
         scheduleSave();
     }, [state.to, state.cc, state.bcc, state.subject, state.body, scheduleSave]);
 
     const sendWithFreshDraft = useCallback(async () => {
-        // Flush pending save first. The server returns the persisted draft with its assigned ID;
-        // we use that directly so send sees isNew=false and re-extracts attachments from the EML
-        // on disk (rather than racing against React's setState for the ID).
-        const saved = (await saveNow()) as EmailDraftType | null | undefined;
+        // Flush pending save first. setId inside useDraftState updates its stateRef synchronously,
+        // so toDraft() after saveNow() includes the server-assigned id and the send path sees
+        // isNew=false and re-extracts attachments from the EML on disk.
+        await saveNow();
         disableAutoSave();
-        const mail = saved ?? toDraft();
-        await sendDraft(mail);
+        await sendDraft(toDraft());
     }, [saveNow, disableAutoSave, toDraft, sendDraft]);
 
     const handleSendEmail = async () => {
@@ -196,6 +198,8 @@ export const EmailDraft = forwardRef<EmailDraftHandle, EmailDraftProps>(function
         const files = e.dataTransfer?.files;
         if (files && files.length > 0) void uploadFiles(files);
     };
+
+    const fromDisplay = user ? `${user.name || user.email} <${user.email}>` : '';
 
     return (
         <div
@@ -269,7 +273,7 @@ export const EmailDraft = forwardRef<EmailDraftHandle, EmailDraftProps>(function
                             <div className="w-16 text-sm text-muted-foreground py-2">From:</div>
                             <Input
                                 id="from"
-                                value={`${fromName} <${fromEmail}>`}
+                                value={fromDisplay}
                                 disabled
                                 className="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
                             />

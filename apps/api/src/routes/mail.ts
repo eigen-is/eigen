@@ -1,4 +1,3 @@
-import type { EmailDraft } from '@workspace/lib/types/mail';
 import { Elysia, t } from 'elysia';
 import { contentDisposition, setCacheHeaders } from '../lib/core';
 import { requireLocalhost, requireNonGuest, requireSelf } from '../lib/core/access';
@@ -46,7 +45,7 @@ const MailDraftSchema = t.Object({
     cc: t.Optional(AddressObjectSchema),
     bcc: t.Optional(AddressObjectSchema),
     text: t.Optional(t.String()),
-    html: t.Optional(t.Union([t.String(), t.Boolean({ const: false })])),
+    html: t.Optional(t.String()),
     messageId: t.Optional(t.String()),
     inReplyTo: t.Optional(t.String()),
     references: t.Optional(t.Union([t.Array(t.String()), t.String()])),
@@ -215,13 +214,17 @@ export const mailRouter = new Elysia({ name: 'mail' })
         async ({ params, body, user }) => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            return await messageHandleDraft(user, body.mail as EmailDraft, body.tempAttachmentIds);
+            return await messageHandleDraft(user, body.mail, {
+                tempAttachmentIds: body.tempAttachmentIds,
+                keepAttachmentIndexes: body.keepAttachmentIndexes,
+            });
         },
         {
             auth: true,
             body: t.Object({
                 mail: MailDraftSchema,
                 tempAttachmentIds: t.Optional(t.Array(t.String())),
+                keepAttachmentIndexes: t.Optional(t.Array(t.Number())),
             }),
         },
     )
@@ -242,7 +245,7 @@ export const mailRouter = new Elysia({ name: 'mail' })
         async ({ params, body, user }) => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            return await messageSend(user, body.mail as EmailDraft);
+            return await messageSend(user, body.mail);
         },
         {
             auth: true,

@@ -1,5 +1,4 @@
 import { useAuth } from '@workspace/lib/auth';
-import { createDraftEmail } from '@workspace/lib/mail';
 import type { AddressObject, AttachmentMeta, EmailDraft, NewDraft } from '@workspace/lib/types/mail';
 import { useCallback, useRef, useState } from 'react';
 
@@ -41,6 +40,7 @@ function initState(email: EmailDraft | null, prefillTo?: string): DraftState {
             subject: email.subject ? String(email.subject) : '',
             body: email.html || email.text || '',
             attachments: (email.attachments || []).map((a, i) => ({
+                key: `saved-${i}-${a.filename ?? ''}-${a.size}`,
                 filename: a.filename || `Attachment ${i + 1}`,
                 size: a.size,
                 contentType: a.contentType,
@@ -67,13 +67,19 @@ export function useDraftState(email: EmailDraft | null, prefillTo?: string) {
 
     const stateRef = useRef(state);
     stateRef.current = state;
-    const emailRef = useRef(email);
-    emailRef.current = email;
     const userRef = useRef(auth.user);
     userRef.current = auth.user;
 
     const setField = useCallback(<K extends keyof DraftState>(field: K, value: DraftState[K]) => {
         setState((prev) => ({ ...prev, [field]: value }));
+    }, []);
+
+    const setId = useCallback((id: string) => {
+        // Sync the ref synchronously so toDraft() sees the new id immediately, without
+        // waiting for React to re-render and rebind stateRef. This matters when the composer
+        // calls saveNow() and then sendDraft(toDraft()) back-to-back.
+        stateRef.current = { ...stateRef.current, id };
+        setState((prev) => ({ ...prev, id }));
     }, []);
 
     const addAttachment = useCallback((meta: AttachmentMeta) => {
@@ -94,21 +100,16 @@ export function useDraftState(email: EmailDraft | null, prefillTo?: string) {
         }));
     }, []);
 
-    const toDraft = useCallback((): NewDraft | EmailDraft => {
+    const toDraft = useCallback((): NewDraft => {
         const s = stateRef.current;
-        const e = emailRef.current;
         const u = userRef.current;
-        const from = {
-            value: [{ name: u?.name || '', address: u?.email || '' }],
-            html: '',
-            text: '',
-        };
-        const base = e ? { ...e } : createDraftEmail({});
-
         return {
-            ...base,
             id: s.id,
-            from,
+            from: {
+                value: [{ name: u?.name || '', address: u?.email || '' }],
+                html: '',
+                text: '',
+            },
             to: stringToAddressObject(s.to),
             cc: stringToAddressObject(s.cc),
             bcc: stringToAddressObject(s.bcc),
@@ -124,6 +125,12 @@ export function useDraftState(email: EmailDraft | null, prefillTo?: string) {
         };
     }, []);
 
+    // Stable serialization of the attachment list for dirty tracking. Covers adds, removes, and
+    // the transition from tempId → indexed (after a successful save consumes the temp file).
+    const attachmentsFingerprint = useCallback(() => {
+        return stateRef.current.attachments.map((a) => `${a.key}:${a.tempId ?? ''}:${a.index ?? ''}`).join('|');
+    }, []);
+
     const bodyText = state.body.replace(/<[^>]+>/g, '').trim();
     const isSendable = !!state.to.trim();
     const isSaveable = !!(state.to.trim() || state.subject.trim() || state.cc.trim() || state.bcc.trim() || bodyText);
@@ -131,10 +138,12 @@ export function useDraftState(email: EmailDraft | null, prefillTo?: string) {
     return {
         state,
         setField,
+        setId,
         addAttachment,
         removeAttachment,
         clearAttachmentTempIds,
         toDraft,
+        attachmentsFingerprint,
         isSendable,
         isSaveable,
     };
