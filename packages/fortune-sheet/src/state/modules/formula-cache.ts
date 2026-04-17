@@ -31,11 +31,6 @@ export function resetRangeIndexes() {
     formulaUIState.rangeIndexes = [];
 }
 
-export function parseElement(eleString: string) {
-    return new DOMParser().parseFromString(eleString, "text/html").body
-        .childNodes[0];
-}
-
 /**
  * Adapts Context to the CellResolver interface expected by FormulaEngine,
  * so the engine can resolve cell values from the state layer.
