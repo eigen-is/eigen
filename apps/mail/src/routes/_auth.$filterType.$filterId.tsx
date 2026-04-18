@@ -5,9 +5,9 @@ import { EmptyState } from '@workspace/ui';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context.tsx';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { EmailDetail, EmailDetailToolbar } from '../components/mail/email-detail';
-import { EmailDraft, type EmailDraftHandle, EmailDraftToolbar } from '../components/mail/email-draft';
+import { EmailDraft, EmailDraftToolbar } from '../components/mail/email-draft';
 import { EmailList, EmailListToolbar } from '../components/mail/email-list';
 import { useMailActions } from '../components/mail/hooks/use-mail-actions';
 
@@ -38,8 +38,6 @@ function MailRoute() {
     const [searchQuery, setSearchQuery] = useState('');
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [pendingDeleteEmails, setPendingDeleteEmails] = useState<Email[]>([]);
-    const draftRef = useRef<EmailDraftHandle>(null);
-
     const { data: emails = [], isLoading: isEmailsLoading, error: emailsError } = useEmails(filterId);
     const { data: selectedEmail = null } = useEmail(mailId);
     const { data: mailboxes = [] } = useMailboxes();
@@ -84,7 +82,6 @@ function MailRoute() {
     const detailToolbar = isDraft ? (
         <EmailDraftToolbar
             onDelete={() => handleDeleteEmail(selectedEmail as EmailDraftType)}
-            onAttach={() => draftRef.current?.openFilePicker()}
             isSending={actions.isSendPending}
             hasId={!!selectedEmail?.id}
         />
@@ -158,7 +155,6 @@ function MailRoute() {
                                 // the new initial content (Tiptap's useEditor reads `content` on
                                 // mount only).
                                 key={mode === 'compose' ? 'compose-session' : (selectedEmail?.id ?? 'empty')}
-                                ref={draftRef}
                                 email={selectedEmail as EmailDraftType}
                                 sendDraft={actions.handleSendEmail}
                                 onAutoSave={actions.saveDraft}

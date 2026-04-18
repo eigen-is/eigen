@@ -16,34 +16,23 @@ import { ConfirmDialog } from '@workspace/ui/components/layout/delete/confirm-di
 import { LightEditor } from '@workspace/ui/components/layout/editor';
 import { cn } from '@workspace/ui/lib/utils';
 import { Paperclip, Send, Trash2 } from 'lucide-react';
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { DraftAttachments } from './draft-attachments';
 import { useDraftAutoSave } from './hooks/use-draft-auto-save';
 import { useDraftState } from './hooks/use-draft-state';
 
-export type EmailDraftHandle = {
-    openFilePicker: () => void;
-};
-
 export function EmailDraftToolbar({
     onDelete,
-    onAttach,
     isSending,
     hasId,
 }: {
     onDelete: () => void;
-    onAttach?: () => void;
     isSending: boolean;
     hasId: boolean;
 }) {
     return (
         <Toolbar>
-            <div className="flex items-center gap-1">
-                <TooltipButton icon={Send} tooltipText="Send" type="submit" form="draft-form" disabled={isSending} />
-                {onAttach && (
-                    <TooltipButton icon={Paperclip} tooltipText="Attach file" onClick={onAttach} disabled={isSending} />
-                )}
-            </div>
+            <div />
             {hasId && <TooltipButton icon={Trash2} tooltipText="Delete" onClick={onDelete} disabled={isSending} />}
         </Toolbar>
     );
@@ -61,10 +50,7 @@ type EmailDraftProps = {
     isSending: boolean;
 };
 
-export const EmailDraft = forwardRef<EmailDraftHandle, EmailDraftProps>(function EmailDraft(
-    { email, to, sendDraft, onAutoSave, onDraftIdAssigned, isSending },
-    ref,
-) {
+export function EmailDraft({ email, to, sendDraft, onAutoSave, onDraftIdAssigned, isSending }: EmailDraftProps) {
     const [alertMessage, setAlertMessage] = useState<string | null>(null);
     const [confirmNoSubject, setConfirmNoSubject] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
@@ -144,10 +130,6 @@ export const EmailDraft = forwardRef<EmailDraftHandle, EmailDraftProps>(function
         }
         scheduleSave();
     };
-
-    useImperativeHandle(ref, () => ({
-        openFilePicker: () => fileInputRef.current?.click(),
-    }));
 
     useEffect(() => {
         scheduleSave();
@@ -231,102 +213,112 @@ export const EmailDraft = forwardRef<EmailDraftHandle, EmailDraftProps>(function
                 }}
                 disabled={isSending}
             />
-            <div className="flex-1 overflow-auto">
-                <form
-                    id="draft-form"
-                    className="flex flex-col h-full"
-                    onSubmit={(e) => {
-                        e.preventDefault();
-                        handleSendEmail();
-                    }}
-                >
-                    <div className="space-y-1 px-4 py-2">
-                        <div className="flex items-center border-b">
-                            <div className="w-16 text-sm text-muted-foreground py-2">To:</div>
-                            <ContactAutosuggest
-                                initialValue={state.to}
-                                onChange={(val) => setField('to', val)}
-                                appendMode
-                                className="flex-1"
-                                inputClassName="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
-                                disabled={isSending}
-                                autoComplete="off"
-                                id="to"
-                            />
-                        </div>
-                        <div className="flex items-center border-b">
-                            <div className="w-16 text-sm text-muted-foreground py-2">Cc:</div>
-                            <ContactAutosuggest
-                                initialValue={state.cc}
-                                onChange={(val) => setField('cc', val)}
-                                appendMode
-                                className="flex-1"
-                                inputClassName="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
-                                disabled={isSending}
-                                autoComplete="off"
-                                id="cc"
-                            />
-                        </div>
-                        <div className="flex items-center border-b">
-                            <div className="w-16 text-sm text-muted-foreground py-2">Bcc:</div>
-                            <ContactAutosuggest
-                                initialValue={state.bcc}
-                                onChange={(val) => setField('bcc', val)}
-                                appendMode
-                                className="flex-1"
-                                inputClassName="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
-                                disabled={isSending}
-                                autoComplete="off"
-                                id="bcc"
-                            />
-                        </div>
-                        <div className="flex items-center border-b">
-                            <div className="w-16 text-sm text-muted-foreground py-2">From:</div>
-                            <Input
-                                id="from"
-                                value={fromDisplay}
-                                disabled
-                                className="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
-                            />
-                        </div>
-                        <div className="flex items-center border-b">
-                            <div className="w-16 text-sm text-muted-foreground py-2">Subject:</div>
-                            <Input
-                                id="subject"
-                                value={state.subject}
-                                onChange={(e) => setField('subject', e.target.value)}
-                                className="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
-                                disabled={isSending}
-                            />
-                        </div>
-                    </div>
-                    <DraftAttachments
-                        attachments={state.attachments}
-                        onRemove={(i) => {
-                            removeAttachment(i);
-                            scheduleSave();
-                        }}
-                    />
-                    <div
-                        className="flex-1 p-4 cursor-text"
-                        onClick={(e) => {
-                            if (e.target === e.currentTarget) {
-                                const editable = e.currentTarget.querySelector<HTMLElement>('[contenteditable="true"]');
-                                editable?.focus();
-                            }
-                        }}
-                    >
-                        <LightEditor
-                            content={state.body}
-                            onChange={(html) => setField('body', html)}
-                            onChangeText={(text) => setField('bodyText', text)}
-                            placeholder="Write your message here..."
-                            toolbar="floating"
-                            className="w-full h-full"
-                            editable={!isSending}
+            <form
+                id="draft-form"
+                className="flex flex-col flex-1 min-h-0"
+                onSubmit={(e) => {
+                    e.preventDefault();
+                    handleSendEmail();
+                }}
+            >
+                <div className="space-y-1 px-4 py-2 shrink-0">
+                    <div className="flex items-center border-b">
+                        <div className="w-16 text-sm text-muted-foreground py-2">To:</div>
+                        <ContactAutosuggest
+                            initialValue={state.to}
+                            onChange={(val) => setField('to', val)}
+                            appendMode
+                            className="flex-1"
+                            inputClassName="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
+                            disabled={isSending}
+                            autoComplete="off"
+                            id="to"
                         />
                     </div>
-                </form>
+                    <div className="flex items-center border-b">
+                        <div className="w-16 text-sm text-muted-foreground py-2">Cc:</div>
+                        <ContactAutosuggest
+                            initialValue={state.cc}
+                            onChange={(val) => setField('cc', val)}
+                            appendMode
+                            className="flex-1"
+                            inputClassName="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
+                            disabled={isSending}
+                            autoComplete="off"
+                            id="cc"
+                        />
+                    </div>
+                    <div className="flex items-center border-b">
+                        <div className="w-16 text-sm text-muted-foreground py-2">Bcc:</div>
+                        <ContactAutosuggest
+                            initialValue={state.bcc}
+                            onChange={(val) => setField('bcc', val)}
+                            appendMode
+                            className="flex-1"
+                            inputClassName="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
+                            disabled={isSending}
+                            autoComplete="off"
+                            id="bcc"
+                        />
+                    </div>
+                    <div className="flex items-center border-b">
+                        <div className="w-16 text-sm text-muted-foreground py-2">From:</div>
+                        <Input
+                            id="from"
+                            value={fromDisplay}
+                            disabled
+                            className="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
+                        />
+                    </div>
+                    <div className="flex items-center border-b">
+                        <div className="w-16 text-sm text-muted-foreground py-2">Subject:</div>
+                        <Input
+                            id="subject"
+                            value={state.subject}
+                            onChange={(e) => setField('subject', e.target.value)}
+                            className="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
+                            disabled={isSending}
+                        />
+                    </div>
+                </div>
+                <DraftAttachments
+                    attachments={state.attachments}
+                    onRemove={(i) => {
+                        removeAttachment(i);
+                        scheduleSave();
+                    }}
+                />
+                <div
+                    className="flex-1 overflow-auto p-4 cursor-text"
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget) {
+                            const editable = e.currentTarget.querySelector<HTMLElement>('[contenteditable="true"]');
+                            editable?.focus();
+                        }
+                    }}
+                >
+                    <LightEditor
+                        content={state.body}
+                        onChange={(html) => setField('body', html)}
+                        onChangeText={(text) => setField('bodyText', text)}
+                        placeholder="Write your message here..."
+                        toolbar="floating"
+                        className="w-full h-full"
+                        editable={!isSending}
+                    />
+                </div>
+            </form>
+            <div className="flex items-center justify-end gap-2 px-4 py-3">
+                <TooltipButton
+                    icon={Paperclip}
+                    tooltipText="Attach file"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isSending}
+                />
+                <Button type="submit" form="draft-form" disabled={isSending} size="sm">
+                    <Send className="h-4 w-4" />
+                    Send
+                </Button>
             </div>
             <div
                 className={cn(
@@ -363,4 +355,4 @@ export const EmailDraft = forwardRef<EmailDraftHandle, EmailDraftProps>(function
             />
         </div>
     );
-});
+}

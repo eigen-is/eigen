@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChatMessage, RoomMember } from '../../../types/chat';
 import { validateEmailTarget } from '../../../validation';
 import { useAuth } from '../../auth';
@@ -31,6 +31,11 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
 
     const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
     const lastWhisperFromRef = useRef<string | null>(null);
+
+    useEffect(() => {
+        setLocalMessages([]);
+        lastWhisperFromRef.current = null;
+    }, [chatId]);
 
     const chatName = chatPath?.name?.replace('.eigenchat', '') || 'Chat';
 
