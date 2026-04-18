@@ -1,345 +1,333 @@
 # Document Content Layer
 
-Server-side read/write access to Eigen documents (docs, sheets, slides). Supports three use cases:
+One mechanism for reading and writing Eigen document content (docs, sheets, slides) on the
+server, shared by **export**, **import**, and the future **scripting engine**. No new
+persistence layer, no new broadcast layer, no duplicated code.
 
-- **Export**: read document → convert to file format (.xlsx, .docx, .pptx)
-- **Import**: parse file format → write to document (changes appear real-time in connected clients)
-- **Scripting**: read + write documents programmatically via API
+The `Y.Doc` inside `CollabDocument` is the single source of truth. Writes to it automatically
+persist (via `DbProvider`) and broadcast to connected clients (via the existing collab sync
+protocol). Everything else in this document is just plumbing around that fact.
 
-## Design
-
-No new abstractions. The existing `CollabDocument` already handles persistence and WebSocket broadcast.
-The Document Content Layer is just **per-type functions** that read/write the Y.Doc inside it.
-
-```
-CollabDocument (exists — persistence + WebSocket broadcast)
-     │
-   Y.Doc
-     │
-     ├── readSheets(doc) / writeSheets(doc, ...)     ← per-type read/write
-     ├── readDoc(doc)    / writeDoc(doc, ...)
-     └── readSlides(doc) / writeSlides(doc, ...)
-               │
-     ┌─────────┼─────────┐
-     Export   Import   Scripting
-```
-
-Any write to the Y.Doc automatically:
-1. Persists to SQLite (CollabDocument's update handler)
-2. Broadcasts to connected WebSocket clients (real-time)
-
-No extra plumbing needed. Write to the doc, and connected users see changes appear.
-
-## Yjs Structures by Type
-
-| Type   | Yjs root                                                           | Data model          |
-|--------|--------------------------------------------------------------------|---------------------|
-| Sheets | `Y.Map('state')` (snapshot JSON) + `Y.Array('ops')` (delta ops)   | `Sheet[]` (2D cell arrays with formulas, formatting) |
-| Docs   | `Y.XmlFragment('default')` (Tiptap/ProseMirror)                   | ProseMirror JSON tree |
-| Slides | `Y.Map('slides')` + `Y.Map('objects')` + `Y.Array('slideOrder')` | Slide objects with position/style/text |
-
-## File Layout
-
-Existing export code moves from `lib/export/` into `lib/document/`. Import code lives alongside.
+## The layers
 
 ```
-apps/api/src/lib/document/
-├── sheets.ts                    # readSheets(doc), writeSheetSnapshot(doc, sheets)
-├── import/
-│   └── sheets-xlsx.ts           # xlsxToSheets(buffer) — pure converter
-├── export/
-│   ├── export-document.ts       # exportDocument() dispatcher (moved from lib/export/)
-│   ├── doc/                     # (moved from lib/export/doc/)
-│   │   ├── content.ts
-│   │   ├── docx.ts
-│   │   ├── html.ts
-│   │   ├── pdf.ts
-│   │   └── render.ts
-│   ├── slides/                  # (moved from lib/export/slides/)
-│   │   ├── content.ts
-│   │   ├── html.ts
-│   │   ├── pdf.ts
-│   │   └── render.ts
-│   ├── sheets/                  # (new — future xlsx export)
-│   ├── fonts.ts                 # (moved from lib/export/)
-│   ├── media.ts                 # (moved from lib/export/)
-│   ├── weasyprint.ts            # (moved from lib/export/)
-│   └── modules.d.ts             # (moved from lib/export/)
+┌─────────────────────────────────────────────────────────────────┐
+│  Layer 4: callers                                                │
+│  Drive routes   •   Scripting SDK handler   •   Export pipeline  │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │ uses
+┌───────────────────────────▼─────────────────────────────────────┐
+│  Layer 3: addressing helpers (resolve a Y.Doc from IDs)          │
+│    For writes: drive.getCollabDocument(mountId, pathId)          │
+│    For reads:  mount.openDatabase(...) + loadYjsState()          │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │ produces Y.Doc
+┌───────────────────────────▼─────────────────────────────────────┐
+│  Layer 2: per-type Yjs content functions                         │
+│    readSheets(doc) / writeSheets(doc, sheets) / pushSheetOps     │
+│    readDoc(doc)    / writeDoc(doc, json)                         │
+│    readSlides(doc) / writeSlides(doc, deck)                      │
+└───────────────────────────┬─────────────────────────────────────┘
+                            │ uses
+┌───────────────────────────▼─────────────────────────────────────┐
+│  Layer 1: pure converters (no Yjs, no Drive)                     │
+│    xlsxToSheets(buf) / sheetsToXlsx(sheets)                      │
+│    docxToPmJson(buf) / pmJsonToDocx(json, media)                 │
+│    pptxToDeck(buf)   / deckToPptx(deck, media)                   │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-Content read functions (existing `doc/content.ts`, `slides/content.ts`) stay in the export
-subdirectory for now — they're tightly coupled to their export renderers. `sheets.ts` at the
-top level is new and shared by both import and export.
+Each layer depends only on the one below it. Layers 1 and 2 are pure functions with no
+network or filesystem access — trivial to unit-test.
 
-## Route Patterns
+## Why writes "just work"
 
-Three route patterns on the same file path prefix (`/drive/:ownerId/:mountId/file/:pathId/`):
-
-| Route | Method | What it does |
-|-------|--------|-------------|
-| `.../export/:format` | `GET` | Eigen doc → file download (docx, pdf, xlsx) |
-| `.../convert/:targetType` | `POST` | Drive file → new Eigen doc alongside it |
-| `.../import` | `POST` | Upload file → overwrite existing Eigen doc content |
-
-**Export** (exists): source is an Eigen doc, returns file download.
-
-**Convert** (new): source is a regular file in Drive (e.g., .xlsx), creates a new Eigen
-document of `:targetType` in the same folder. Drive context menu: "Convert to Sheet".
-
-**Import** (new): source is an uploaded file in the request body, target is the Eigen doc
-at `:pathId`. Sheets app: "Import xlsx" menu item replaces sheet content.
-
-All use `drive.resolveFile()` for ACL. None add methods to the Drive class.
-
-### Convert route (Drive file → new Eigen doc)
+A write at Layer 2 looks like this:
 
 ```typescript
-.post(
-    '/drive/:ownerId/:mountId/file/:pathId/convert/:targetType',
-    async ({ params, user }) => {
-        const drive = await getSharedDrive(params.ownerId, user);
-        return await convertDocument(drive, params.mountId, params.pathId, params.targetType);
-    },
-    { auth: true },
-)
-```
-
-```typescript
-// apps/api/src/lib/document/import/convert-document.ts
-
-async function convertDocument(
-    drive: SharedDrive, mountId: string, pathId: string, targetType: string
-): Promise<{ path: DrivePath }> {
-    const { mount, path } = await drive.resolveFile(mountId, pathId);
-
-    if (targetType === 'eigensheets') {
-        if (!path.name.endsWith('.xlsx'))
-            throw new ApiError(400, 'Only .xlsx files can be converted to sheets');
-
-        // 1. Read the xlsx file from drive storage
-        const buffer = await mount.readFile(path.id);
-
-        // 2. Parse xlsx → Sheet[] (pure converter)
-        const sheets = await xlsxToSheets(buffer);
-
-        // 3. Create new eigensheets document alongside the source file
-        const name = path.name.replace(/\.xlsx$/i, '');
-        const newPath = await drive.createSheets(mountId, path.parentId, name);
-
-        // 4. Open its collab document and write the snapshot
-        const collabDoc = await drive.getCollabDocument(mountId, newPath.id);
-        writeSheetSnapshot(collabDoc.doc, sheets);
-
-        return { path: newPath };
-    }
-    throw new ApiError(400, `Conversion to "${targetType}" is not supported`);
+function writeSheets(doc: Y.Doc, sheets: Sheet[]): void {
+    doc.transact(() => {
+        doc.getMap('state').set('snapshot', JSON.stringify(sheets));
+        const ops = doc.getArray('ops');
+        if (ops.length > 0) ops.delete(0, ops.length);
+    });
 }
 ```
 
-### Import route (upload into existing Eigen doc)
+Because `doc` is the `Y.Doc` owned by `CollabDocument`, this mutation triggers its update
+handler which (a) inserts a row in `data.db` via `DbProvider.storeUpdate()` and (b) sends a
+sync message to every connected WebSocket. Connected editors see the change appear in real
+time with **no extra plumbing in this file**. That is the whole point of routing imports
+through `CollabDocument.doc` rather than writing to the DB directly.
+
+## Reads: two paths, same result
+
+For reads, two paths exist and both yield the same content because they read from the same
+`data.db`:
+
+| Path | When to use | Cost |
+|------|-------------|------|
+| `mount.openDatabase(COLLAB_DB_CONFIG, dataDbId)` + `loadYjsState()` | One-shot reads (export, preview, scripting `get*`) | Ephemeral `Y.Doc` — disposable |
+| `drive.getCollabDocument(mountId, pathId).doc` | When you also write in the same flow, or need up-to-the-millisecond freshness | Creates a long-lived collab instance |
+
+The export pipeline already uses the cheap path (`export/doc/content.ts`, `export/slides/
+content.ts`). Keep it. Don't reroute reads through `CollabDocument` unless there's a reason —
+it caches a live instance that isn't cleaned up until the next WebSocket close.
+
+## Writes: one path
+
+Always through `drive.getCollabDocument()`. Direct writes to `data.db` would bypass
+broadcast, which defeats the whole point — connected clients would miss the change and
+overwrite it on their next save.
+
+### Permission check is the caller's responsibility
+
+`SharedDrive.getCollabDocument()` only checks **read** permission. The usual write check
+lives in `CollabDocument.handleMessage(canWrite)` — per WebSocket message. **Direct writes
+bypass that check**, so route handlers must call `drive.canWrite(...)` before writing.
+`drive.createSheets()` et al. already verify write permission on the parent folder, so
+newly-created documents don't need a second check.
+
+## Per-type functions
+
+All live in `apps/api/src/lib/document/` as pure functions on `Y.Doc`.
+
+### Sheets (`document/sheets.ts`)
 
 ```typescript
-.post(
-    '/drive/:ownerId/:mountId/file/:pathId/import',
-    async ({ params, request, user }) => {
-        const drive = await getSharedDrive(params.ownerId, user);
-        return await importIntoDocument(drive, params.mountId, params.pathId, request);
-    },
-    { auth: true, parse: 'none' },
-)
+// Snapshot = the JSON blob in Y.Map('state'). Pending ops in Y.Array('ops') are not
+// replayed server-side (fortune-sheet's applyOp is client-side). OK in Phase 1 because
+// clients flush the snapshot on save/beforeunload — see use-sheet.ts.
+function readSheets(doc: Y.Doc): Sheet[]
+
+// Full replace. Used by import.
+function writeSheets(doc: Y.Doc, sheets: Sheet[]): void
+
+// Future: granular writes for scripting. Pushes to Y.Array('ops') in the same op format
+// clients produce, so connected clients apply via workbook.applyOp() — no full reload.
+function pushSheetOps(doc: Y.Doc, ops: Op[]): void
 ```
 
-```typescript
-// apps/api/src/lib/document/import/import-document.ts
+### Docs (`document/doc.ts`)
 
-async function importIntoDocument(
-    drive: SharedDrive, mountId: string, pathId: string, request: Request
-): Promise<{ success: true }> {
-    const { mount, path } = await drive.resolveFile(mountId, pathId);
+```typescript
+function readDoc(doc: Y.Doc): JSONContent
+// Uses yXmlFragmentToProsemirrorJSON(doc.getXmlFragment('default'))
+// Already implemented in export/doc/content.ts — move or re-export.
+
+function writeDoc(doc: Y.Doc, json: JSONContent): void
+// Build a temp doc via prosemirrorJSONToYDoc() (y-prosemirror), then merge into doc
+// via restoreYjsDoc() from packages/lib/src/core/collab/yjs-utils.ts. Both primitives
+// already exist.
+```
+
+### Slides (`document/slides.ts`)
+
+```typescript
+function readSlides(doc: Y.Doc): DeckData
+// Already implemented in export/slides/content.ts — move or re-export.
+
+function writeSlides(doc: Y.Doc, deck: DeckData): void
+// Same recipe as writeDoc: build temp doc with Y.Map('slides'), Y.Map('objects'),
+// Y.Array('slideOrder'), then restoreYjsDoc into target.
+```
+
+All write functions wrap their mutations in `doc.transact()` so they produce a single Yjs
+update (one broadcast, one DB row).
+
+## Pure converters
+
+No Yjs, no Drive, no filesystem. Just buffer ⇆ native content type.
+
+```
+apps/api/src/lib/document/convert/
+  xlsx.ts   # xlsxToSheets(buf): Sheet[]                sheetsToXlsx(sheets): Buffer
+  docx.ts   # docxToPmJson(buf): JSONContent            pmJsonToDocx(json, media): Buffer
+  pptx.ts   # pptxToDeck(buf): DeckData                 deckToPptx(deck, media): Buffer
+```
+
+Converters operate on the **native** per-type content (`Sheet[]`, `JSONContent`, `DeckData`).
+Higher layers (scripting SDK) can wrap these in DTOs (`SheetContent`, `DocContent`) if they
+want a normalized API shape — that's additive and stays out of the content layer.
+
+## Route patterns
+
+Three route patterns share the `/drive/:ownerId/:mountId/file/:pathId/` prefix.
+
+| Route | Method | What it does |
+|-------|--------|--------------|
+| `.../export/:format` | GET | Eigen doc → downloadable file (existing) |
+| `.../convert/:targetType` | POST | Drive file → new Eigen doc in the same folder |
+| `.../import` | POST | Upload → overwrite existing Eigen doc content |
+
+All three use `drive.resolveFile()` for ACL resolution and mount access. Only convert and
+import touch `drive.getCollabDocument()` (for writes). None add methods to `Drive`.
+
+### Convert (new)
+
+```typescript
+.post('/drive/:ownerId/:mountId/file/:pathId/convert/:targetType', async ({ params, user }) => {
+    const drive = await getSharedDrive(params.ownerId, user);
+    const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
+
+    if (params.targetType !== 'eigensheets') {
+        throw new ApiError(400, `Conversion to "${params.targetType}" is not supported`);
+    }
+    if (!path.name.toLowerCase().endsWith('.xlsx')) {
+        throw new ApiError(400, 'Only .xlsx files can be converted to sheets');
+    }
+
+    const buffer = await mount.readFile(path.id);
+    const sheets = await xlsxToSheets(buffer);
+
+    // createSheets enforces write permission on path.parentId.
+    const name = path.name.replace(/\.xlsx$/i, '');
+    const newPath = await drive.createSheets(params.mountId, path.parentId, name);
+
+    const collabDoc = await drive.getCollabDocument(params.mountId, newPath.id);
+    writeSheets(collabDoc.doc, sheets);
+    return newPath;
+}, { auth: true })
+```
+
+### Import (new)
+
+```typescript
+.post('/drive/:ownerId/:mountId/file/:pathId/import', async ({ params, request, user }) => {
+    const drive = await getSharedDrive(params.ownerId, user);
+    const { path } = await drive.resolveFile(params.mountId, params.pathId);
+
+    if (!(await drive.canWrite(params.mountId, params.pathId, user))) {
+        throw new ApiError(403, 'No write permission');
+    }
+
+    const maxSize = await getUploadMaxSize(params.ownerId, user.id, params.mountId);
+    const buffer = Buffer.from(await request.arrayBuffer());
+    if (buffer.byteLength > maxSize) throw new ApiError(413, 'Upload too large');
 
     if (path.mimeType === DRIVE_MIME_SHEETS) {
-        // Parse uploaded xlsx from request body
-        const buffer = Buffer.from(await request.arrayBuffer());
         const sheets = await xlsxToSheets(buffer);
-
-        // Write into the existing document's Y.Doc
-        const collabDoc = await drive.getCollabDocument(mountId, pathId);
-        writeSheetSnapshot(collabDoc.doc, sheets);
-
+        const collabDoc = await drive.getCollabDocument(params.mountId, params.pathId);
+        writeSheets(collabDoc.doc, sheets);
         return { success: true };
     }
     throw new ApiError(400, `Import into ${path.mimeType} is not supported`);
-}
+}, { auth: true, parse: 'none' })
 ```
 
-## Frontend Integration
+## Scripting integration
 
-Two entry points, two different routes:
-
-### Drive context menu: "Convert to Sheet"
-
-Shown on `.xlsx` files in the drive file browser. Hits the **convert** route — creates a
-new eigensheets alongside the xlsx file, then navigates to it or refreshes the folder.
+The future scripting SDK handler calls the **same** Layer 2 functions. Only addressing
+differs — routes go through `SharedDrive` with a user context, scripts go through `Home`
+with an `ownerId`:
 
 ```typescript
-// In drive's context menu items
-{
-    label: 'Convert to Sheet',
-    icon: Sheet,
-    visible: (path) => path.name.endsWith('.xlsx'),
-    onClick: (path) => convertMutation.mutate({
-        mountId, pathId: path.id, targetType: 'eigensheets'
-    }),
-}
-```
+// In apps/api/src/lib/scripts/sdk-handler.ts (Phase 2)
 
-### Sheets app: "Import xlsx"
-
-Menu item in the sheets toolbar. Opens a file picker, uploads the xlsx directly to the
-**import** route — replaces the current sheet's content. Single request, no intermediate
-drive file.
-
-```typescript
-// In sheets toolbar/file menu
-{
-    label: 'Import xlsx',
-    onClick: () => {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = '.xlsx';
-        input.onchange = () => importMutation.mutate({
-            mountId, pathId, file: input.files[0]
-        });
-        input.click();
+"sheets.getRange": {
+    permission: "drive:read",
+    handler: async (home, p) => {
+        const mount = home.drive.getMount(p.mountId);
+        const dataDbPath = await mount.getChildByName(p.pathId, 'data.db');
+        const managedDb = await mount.openDatabase(COLLAB_DB_CONFIG, dataDbPath.id);
+        const { doc } = loadYjsState(managedDb);
+        return extractRange(readSheets(doc), p.cell);
     },
-}
+},
+
+"sheets.setCell": {
+    permission: "drive:write",
+    handler: async (home, p) => {
+        const collabDoc = await home.drive.getCollabDocument(p.mountId, p.pathId);
+        pushSheetOps(collabDoc.doc, [{ op: 'v', r: p.row, c: p.col, v: p.value }]);
+        return { ok: true };
+    },
+},
 ```
 
-## Content Read/Write Functions
+Same `readSheets` / `pushSheetOps` — no duplicated content logic. The scripting SDK never
+touches XLSX or DOCX converters; those are for file-format I/O only.
 
-### Sheets
+If a DTO layer turns out useful (e.g. `readSheetContent(ownerId, mountId, pathId):
+SheetContent` that normalizes value/formula/display into a flat cell list), it belongs in
+the scripting side as a thin wrapper over Layer 2 — not inside this layer.
 
-```typescript
-// apps/api/src/lib/document/sheets.ts
+## File layout
 
-// Read: snapshot + replay pending ops → clean Sheet[]
-function readSheets(doc: Y.Doc): Sheet[]
-
-// Write full snapshot (for import — replaces everything)
-function writeSheetSnapshot(doc: Y.Doc, sheets: Sheet[]): void
+```
+apps/api/src/lib/document/
+  sheets.ts                 # readSheets, writeSheets, pushSheetOps (Phase 2)
+  doc.ts                    # readDoc, writeDoc
+  slides.ts                 # readSlides, writeSlides
+  convert/
+    xlsx.ts                 # xlsxToSheets, sheetsToXlsx
+    docx.ts                 # docxToPmJson, pmJsonToDocx (future)
+    pptx.ts                 # pptxToDeck, deckToPptx (future)
 ```
 
-**Read path**: Parse `state.snapshot` JSON, replay ops from `Y.Array('ops')`. Optionally
-recalculate formulas via `FormulaEngine.recalculateAll(createArrayResolver(sheets))`.
+`apps/api/src/lib/export/` stays where it is. Once the `document/` folder proves out we
+can merge `export/doc/content.ts` and `export/slides/content.ts` in as `readDoc` /
+`readSlides`, but that's cleanup — not a blocker.
 
-**Write path**: Replace snapshot entirely in a single transaction:
-```typescript
-function writeSheetSnapshot(doc: Y.Doc, sheets: Sheet[]) {
-    doc.transact(() => {
-        doc.getMap('state').set('snapshot', JSON.stringify(sheets))
-        const ops = doc.getArray('ops')
-        ops.delete(0, ops.length)
-    })
-}
-```
+## Frontend integration
 
-### Future: granular writes for scripting
+Two new entry points, two mutations in `packages/lib/src/core/drive/hooks/`.
 
-```typescript
-// Write single cell (appears as one edit to connected clients)
-function writeSheetCell(doc: Y.Doc, sheetId: string, r: number, c: number, value: CellUpdate): void
+- **Drive context menu: "Convert to Sheet"** — shown on `.xlsx` files. Calls the convert
+  route, then navigates to the new eigensheets file.
+- **Sheets app toolbar: "Import xlsx"** — opens a file picker filtered to `.xlsx`, uploads
+  directly to the import route, which overwrites the current sheet.
 
-// Write range (batch cell updates in one transaction)
-function writeSheetRange(doc: Y.Doc, sheetId: string, updates: CellRangeUpdate[]): void
-```
+Both hooks follow the project's `onMutationError` pattern — error toasts live in the hook,
+not in app components.
 
-Push ops to `Y.Array('ops')` using the same op format the client uses. Connected clients
-apply via `applyOp()` — granular, no full reload.
+## Implementation order
 
-### Docs
+Start with just enough to ship xlsx → sheets for both flows:
 
-```typescript
-// Read: Y.XmlFragment → ProseMirror JSON
-function readDocJSON(doc: Y.Doc): ProseMirrorJSON
+1. **`document/convert/xlsx.ts`** — `xlsxToSheets(buffer)`. Add `exceljs` dep.
+2. **`document/sheets.ts`** — `writeSheets(doc, sheets)`. Snapshot replace only.
+3. **Convert route** — `POST /drive/.../file/:pathId/convert/:targetType`. Wire through.
+4. **Drive "Convert to Sheet"** context menu + `useConvertDocument` hook.
+5. **Import route** — `POST /drive/.../file/:pathId/import`.
+6. **Sheets "Import xlsx"** toolbar item + `useImportDocument` hook.
 
-// Write: ProseMirror JSON → Y.XmlFragment (for import)
-function writeDocFromJSON(doc: Y.Doc, content: ProseMirrorJSON): void
-```
+Then only when needed:
 
-### Slides
+7. `readSheets(doc)` + `sheetsToXlsx(sheets)` → wire into `exportDocument()` for `xlsx`.
+8. `readDoc` / `writeDoc` + docx converters → DOCX import.
+9. `pushSheetOps` + scripting SDK granular writes.
 
-```typescript
-// Read: Y.Maps → plain SlideData
-function readSlides(doc: Y.Doc): SlideData
+Steps 1–6 are a few hundred lines total. No refactoring required, no new abstractions on
+top of what `CollabDocument` and `drive.getCollabDocument()` already give us.
 
-// Write: SlideData → Y.Maps (for import)
-function writeSlides(doc: Y.Doc, slides: SlideData): void
-```
+## Edge cases & tradeoffs
 
-## xlsx → Sheet[] Converter
+- **Sheets ops are not replayed on read.** Fortune-sheet's formula engine and op application
+  are client-side. Snapshots are flushed on save and `beforeunload`, so Phase 1 reads the
+  last flushed state — slightly stale under active editing. Server-side op replay is part
+  of the fortune-sheet refactoring effort (`PROPOSAL_SHEETS_REFACTORING.md`).
+- **Write permission must be checked explicitly.** `SharedDrive.getCollabDocument()` only
+  checks read permission; the WebSocket path's per-message `canWrite` gate doesn't apply to
+  direct writes. Add an explicit `drive.canWrite(...)` before any direct write.
+- **`getCollabDocument()` keeps a live instance warm.** For a one-shot import with no
+  connected editors, the instance stays in memory until the next `closeCollabDocument()` or
+  `shutdownAllHomes()`. Not a leak, but worth noting.
+- **Import is lossy by design.** XLSX → fortune-sheet drops charts, pivot tables, and
+  conditional formatting. Document this in the user-facing copy, don't try to preserve
+  everything.
+- **No migration needed.** This design doesn't change any existing data layout — it only
+  adds new entry points.
 
-The core of sheets import. A pure function: buffer in, `Sheet[]` out.
-
-```typescript
-// apps/api/src/lib/document/import/sheets-xlsx.ts
-
-async function xlsxToSheets(buffer: Buffer): Promise<Sheet[]>
-```
-
-Uses `exceljs` to parse the xlsx. Maps ExcelJS types to fortune-sheet types:
-
-| ExcelJS                        | Fortune-sheet Cell       |
-|--------------------------------|--------------------------|
-| `cell.value` (number)          | `v`, `ct: { t: 'n' }`   |
-| `cell.value` (string)          | `v`, `ct: { t: 's' }`   |
-| `cell.value` (boolean)         | `v`, `ct: { t: 'b' }`   |
-| `cell.value` (Date)            | `v` (serial number), `ct: { t: 'n', fa: date format }` |
-| `cell.formula`                 | `f: '=' + formula`       |
-| `cell.numFmt`                  | `ct: { fa: numFmt }`     |
-| `cell.style.font.bold`         | `bl: 1`                  |
-| `cell.style.font.italic`       | `it: 1`                  |
-| `cell.style.font.size`         | `fs`                     |
-| `cell.style.font.color`        | `fc`                     |
-| `cell.style.fill`              | `bg`                     |
-| `cell.style.alignment.horizontal` | `ht` (0=center, 1=left, 2=right) |
-| `cell.style.alignment.vertical`   | `vt` (0=middle, 1=top, 2=bottom) |
-| `cell.style.alignment.wrapText`   | `tb: '2'`               |
-| Merged cells                   | `config.merge` + `mc` on cells |
-| Row heights                    | `config.rowlen`          |
-| Column widths                  | `config.columnlen`       |
-| Hidden rows/columns            | `config.rowhidden`, `config.colhidden` |
-| Frozen panes                   | `frozen: { type, range }` |
-| `worksheet.name`               | `name`                   |
-
-The converter handles the common cases. Unsupported features (charts, pivot tables,
-conditional formatting) are silently skipped — the sheet is still usable, just without
-those features.
-
-## Implementation Order
-
-1. **Move existing export code** — `lib/export/` → `lib/document/export/`, update imports
-2. **`xlsxToSheets()`** — pure converter, add `exceljs` dependency
-3. **`writeSheetSnapshot()`** — write Sheet[] into Y.Doc
-4. **Convert route** — `POST /file/:pathId/convert/eigensheets` + Drive context menu
-5. **Import route** — `POST /file/:pathId/import` + Sheets "Import xlsx" menu item
-6. **`readSheets()`** — parse snapshot + replay ops (needed for export + scripting)
-7. **Sheets xlsx export** — `sheetsToXlsx()` + wire into export route
-
-Steps 2-3 are the foundation (pure converter + Yjs write). Steps 4-5 wire them into two
-user-facing flows. Start with import because it's higher value for onboarding than export.
-
-## What Already Exists
+## What already exists
 
 | Component | Location | Status |
-|---|---|---|
+|-----------|----------|--------|
 | `loadYjsState()` | `apps/api/src/lib/collab/yjs-loader.ts` | Ready |
-| `CollabDocument` | `apps/api/src/lib/collab/collabDocument.ts` | Ready |
-| `jsonToYType()` | `packages/lib/src/core/collab/yjs-utils.ts` | Ready |
-| `FormulaEngine.recalculateAll()` | `packages/fortune-sheet/src/engine/` | Ready |
-| Doc content reader | `apps/api/src/lib/export/doc/content.ts` | Ready (will move) |
-| Slides content reader | `apps/api/src/lib/export/slides/content.ts` | Ready (will move) |
-| Export route | `apps/api/src/routes/drive.ts` L162-172 | Ready |
-| `exportDocument()` | `apps/api/src/lib/export/export-document.ts` | Ready (will move) |
-| `drive.createSheets()` | `apps/api/src/lib/drive/drive.ts` | Ready |
-| `drive.getCollabDocument()` | `apps/api/src/lib/drive/drive.ts` | Ready |
-| `applyOp()` format | `packages/fortune-sheet/src/state/types.ts` | Ready |
+| `CollabDocument` (broadcast + persist) | `apps/api/src/lib/collab/collabDocument.ts` | Ready |
+| `jsonToYType`, `restoreYjsDoc` | `packages/lib/src/core/collab/yjs-utils.ts` | Ready |
+| `drive.resolveFile()`, `createSheets()`, `getCollabDocument()`, `canWrite()` | `apps/api/src/lib/drive/drive.ts` | Ready |
+| Export route + dispatcher | `apps/api/src/routes/drive.ts` L162, `lib/export/export-document.ts` | Ready |
+| Doc content reader | `apps/api/src/lib/export/doc/content.ts` | Ready — may migrate |
+| Slides content reader | `apps/api/src/lib/export/slides/content.ts` | Ready — may migrate |
+| Fortune-sheet op types | `packages/fortune-sheet/src/state/types.ts` | Ready |
