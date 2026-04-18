@@ -7,6 +7,7 @@ import { getSharedDrive } from '../lib/drive';
 import { exportDocument } from '../lib/export/export-document';
 import { getHome } from '../lib/home';
 import { sendToHome } from '../lib/home/home-relay';
+import { convertToDocument, importIntoDocument } from '../lib/import/import-document';
 import { getScreenPreview, getTextPreview } from '../lib/preview/preview-cache';
 import { getThumbnail } from '../lib/shared/thumbnails';
 import { betterAuth } from './auth';
@@ -169,6 +170,31 @@ export const driveRouter = new Elysia({ name: 'drive' })
             return result.data;
         },
         { auth: true },
+    )
+    .post(
+        '/drive/:ownerId/:mountId/file/:pathId/convert/:targetType',
+        async ({ params, user }) => {
+            const drive = await getSharedDrive(params.ownerId, user);
+            const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
+            return await convertToDocument(drive, mount, path, params.targetType);
+        },
+        { auth: true },
+    )
+    .post(
+        '/drive/:ownerId/:mountId/file/:pathId/import',
+        async ({ params, request, user }) => {
+            const drive = await getSharedDrive(params.ownerId, user);
+            const { path } = await drive.resolveFile(params.mountId, params.pathId);
+            if (!(await drive.canWrite(params.mountId, params.pathId, user))) {
+                throw new ApiError(403, 'No write permission');
+            }
+            const maxSize = await getUploadMaxSize(params.ownerId, user.id, params.mountId);
+            const buffer = Buffer.from(await request.arrayBuffer());
+            if (buffer.byteLength > maxSize) throw new ApiError(413, 'Upload too large');
+            await importIntoDocument(drive, path, buffer);
+            return { success: true };
+        },
+        { auth: true, parse: 'none' },
     )
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/embed/:fileName',

@@ -1,6 +1,6 @@
-import {Patch as ImmerPatch} from "immer";
+import type {Patch as ImmerPatch} from "immer";
 import type {Cell, CellMatrix} from "../engine/types";
-import {PatchOptions} from "./utils";
+import type {PatchOptions} from "./utils";
 
 export type Op = {
     op:
