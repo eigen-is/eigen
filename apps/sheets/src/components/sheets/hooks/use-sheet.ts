@@ -27,6 +27,7 @@ export function useSheet(
     const docRef = useRef<Y.Doc | null>(null);
     const providerRef = useRef<WebsocketProvider | null>(null);
     const isLocalOpRef = useRef(false);
+    const isLocalSnapshotRef = useRef(false);
     const readyForOpsRef = useRef(false);
     const latestDataRef = useRef<Sheet[] | null>(null);
     const pendingOpsRef = useRef<Op[][] | null>(null);
@@ -41,6 +42,7 @@ export function useSheet(
         } catch {
             return;
         }
+        isLocalSnapshotRef.current = true;
         doc.transact(() => {
             doc.getMap('state').set('snapshot', json);
             const opsArray = doc.getArray('ops');
@@ -85,6 +87,23 @@ export function useSheet(
                     });
                 }
             });
+        });
+
+        stateMap.observe(() => {
+            if (!readyForOpsRef.current) return;
+            if (isLocalSnapshotRef.current) {
+                isLocalSnapshotRef.current = false;
+                return;
+            }
+            const snapshot = stateMap.get('snapshot') as string | undefined;
+            if (!snapshot) return;
+            try {
+                const data = JSON.parse(snapshot) as Sheet[];
+                latestDataRef.current = data;
+                if (workbookRef.current) workbookRef.current.updateSheet(data);
+            } catch (e) {
+                console.error('[sheet] Failed to apply remote snapshot:', e);
+            }
         });
 
         wsProvider.on('sync', (isSynced: boolean) => {
@@ -165,6 +184,7 @@ export function useSheet(
             const doc = docRef.current;
             if (!doc) return;
 
+            isLocalSnapshotRef.current = true;
             restoreYjsDoc(doc, state, (v) => v);
 
             const stateMap = doc.getMap('state');
