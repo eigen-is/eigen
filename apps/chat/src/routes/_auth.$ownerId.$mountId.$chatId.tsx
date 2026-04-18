@@ -1,7 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useChatRoom } from '@workspace/lib/chat';
+import { useChatEditing, useChatRoom } from '@workspace/lib/chat';
 import { useCheckPermissions } from '@workspace/lib/drive';
-import type { ChatMessage } from '@workspace/lib/types/chat';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import {
     ChatMessageInput,
@@ -23,35 +22,17 @@ import { useState } from 'react';
 function ChatView() {
     const { ownerId, mountId, chatId } = Route.useParams();
     const chat = useChatRoom(ownerId, mountId, chatId);
+    const editing = useChatEditing(chat);
 
     const { data: permissions, isLoading: permLoading } = useCheckPermissions(ownerId, mountId, chatId);
 
     const [accessDialogOpen, setAccessDialogOpen] = useState(false);
     const [renameDialogOpen, setRenameDialogOpen] = useState(false);
-    const [deleteTarget, setDeleteTarget] = useState<ChatMessage | null>(null);
-    const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
-    const [focusTrigger, setFocusTrigger] = useState(0);
 
     if (permLoading) return <LoadingState />;
     if (!permissions?.canRead) {
         return <RequestAccessView ownerId={ownerId} mountId={mountId} pathId={chatId} />;
     }
-
-    const handleDeleteConfirm = async () => {
-        if (!deleteTarget) return;
-        await chat.handleDeleteMessage(deleteTarget.id);
-        setDeleteTarget(null);
-    };
-
-    const endEditing = () => {
-        setEditingMessageId(null);
-        setFocusTrigger((n) => n + 1);
-    };
-
-    const handleSaveEdit = async (messageId: string, content: string) => {
-        await chat.handleEditMessage(messageId, content);
-        endEditing();
-    };
 
     const isTeam = parseOwnerId(ownerId).type === 'team';
 
@@ -101,11 +82,11 @@ function ChatView() {
                             hasOlderMessages={chat.hasOlderMessages}
                             isFetchingOlderMessages={chat.isFetchingOlderMessages}
                             onLoadMore={chat.fetchOlderMessages}
-                            onEditMessage={(msg) => setEditingMessageId(msg.id)}
-                            onDeleteMessage={setDeleteTarget}
-                            editingMessageId={editingMessageId}
-                            onSaveEdit={handleSaveEdit}
-                            onCancelEdit={endEditing}
+                            onEditMessage={(msg) => editing.setEditingMessageId(msg.id)}
+                            onDeleteMessage={editing.setDeleteTarget}
+                            editingMessageId={editing.editingMessageId}
+                            onSaveEdit={editing.handleSaveEdit}
+                            onCancelEdit={editing.endEditing}
                         />
                         <ChatMessageInput
                             onSend={chat.handleSendMessage}
@@ -114,25 +95,8 @@ function ChatView() {
                             placeholder={`Message ${chat.chatName}`}
                             roomMembers={chat.roomMembers}
                             currentUserEmail={chat.currentUserEmail}
-                            messageCount={chat.messages.length + focusTrigger}
-                            onKeyDown={(e, content) => {
-                                if (e.key === 'ArrowUp' && !content.trim()) {
-                                    const lastOwn = [...chat.messages]
-                                        .reverse()
-                                        .find(
-                                            (m) =>
-                                                m.authorId === chat.currentUserId &&
-                                                !m.deletedAt &&
-                                                m.type === 'message',
-                                        );
-                                    if (lastOwn) {
-                                        e.preventDefault();
-                                        setEditingMessageId(lastOwn.id);
-                                        return true;
-                                    }
-                                }
-                                return undefined;
-                            }}
+                            messageCount={chat.messages.length + editing.focusTrigger}
+                            onKeyDown={editing.onKeyDown}
                         />
                     </div>
                 </Column>
@@ -147,11 +111,11 @@ function ChatView() {
             <DriveRenameItem path={chat.chatPath ?? null} open={renameDialogOpen} onOpenChange={setRenameDialogOpen} />
 
             <DeleteDialog
-                open={!!deleteTarget}
-                onOpenChange={(open) => !open && setDeleteTarget(null)}
+                open={!!editing.deleteTarget}
+                onOpenChange={(open) => !open && editing.setDeleteTarget(null)}
                 title="Delete Message"
                 description="Are you sure you want to delete this message? This cannot be undone."
-                onDelete={handleDeleteConfirm}
+                onDelete={editing.handleDeleteConfirm}
             />
         </>
     );
