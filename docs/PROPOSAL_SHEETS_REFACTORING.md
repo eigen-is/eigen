@@ -16,9 +16,9 @@ The `engine/` directory is fully decoupled from state runtime:
 **Remaining for Step 6 (server integration):** Wire `recalculateAll()` into the Document Content
 Layer's `readSheetContent()` to get fresh formula values for scripting, export, and search indexing.
 
-## Verification Status
+## Design Decisions
 
-All critical assumptions have been verified by reading source code:
+Key properties verified during extraction:
 
 - **`execfunction()` has zero DOM dependencies** — all 16 DOM references in `formula.ts` are in UI-only
   functions. The calculation path (`execfunction` → `parser.parse` → `callCellValue`/`callRangeValue` →
@@ -43,163 +43,46 @@ Three independent goals converge on the same refactoring:
 3. **Reusability** — number formatting (`SSF.format()`) and A1 notation parsing are general utilities that
    belong in a headless module, not buried in a UI-coupled spreadsheet package
 
-## Current Architecture
+## Architecture (Post-Extraction)
 
 ```
 packages/fortune-sheet/src/
-├── formula-parser/              # Pure formula parser (JISON grammar + @formulajs/formulajs)
-│   ├── parser.ts                # Parser class — event-based cell resolution, zero DOM deps
-│   ├── grammar-parser/          # Generated JISON grammar
-│   ├── evaluate-by-operator/    # 13 operators + formula function dispatch
-│   └── helper/                  # Cell coordinate helpers (pure)
+├── engine/                          # Headless formula engine (zero DOM deps)
+│   ├── formula-engine.ts            # FormulaEngine class (evaluate, recalculateAll, getDependencies)
+│   ├── formula-utils.ts             # Pure utilities (iscelldata, checkBracketNum, calPostfixExpression)
+│   ├── dependency-graph.ts          # Topological sort + cycle detection
+│   ├── cell-resolver.ts             # CellResolver interface + createArrayResolver
+│   ├── ssf.ts                       # Number formatting (moved from core/modules/)
+│   ├── format.ts                    # Format inference (moved from core/modules/)
+│   ├── a1-notation.ts               # A1 ↔ row/col parsing
+│   ├── types.ts                     # CellResolver, EvaluationResult, FormulaEngineState
+│   └── index.ts                     # Barrel exports
+├── formula-parser/                  # Pure formula parser (JISON grammar + @formulajs/formulajs)
+│   ├── parser.ts                    # Parser class — event-based cell resolution, zero DOM deps
+│   ├── grammar-parser/              # Generated JISON grammar
+│   ├── evaluate-by-operator/        # 13 operators + formula function dispatch
+│   └── helper/                      # Cell coordinate helpers (pure)
+├── state/
+│   └── modules/
+│       ├── formula-exec.ts          # Context-coupled orchestration (execFunctionGroup, etc.)
+│       ├── formula-ui.ts            # Barrel: re-exports from engine + formula-exec
+│       └── ...
 ├── core/
 │   ├── modules/
-│   │   ├── formula.ts           # 3,550 lines — calculation + DOM + UI ← MAIN PROBLEM
-│   │   ├── formulaHelper.ts     # 324 lines — dependency graph (mostly pure)
-│   │   ├── ssf.ts               # 1,969 lines — number formatting (pure)
-│   │   ├── format.ts            # 365 lines — format inference (pure)
-│   │   ├── cell.ts              # 1,639 lines — cell value/style getters
-│   │   ├── selection.ts         # 2,332 lines — selection state + UI rendering
-│   │   ├── dropCell.ts          # 3,036 lines — drag-drop (DOM-heavy)
-│   │   ├── text.ts              # 1,828 lines — text rendering (DOM-heavy)
-│   │   ├── rowcol.ts            # 2,298 lines — row/column operations
-│   │   └── ...                  # 28 more modules
-│   ├── context.ts               # 600 lines — global state (200+ properties)
-│   └── types.ts                 # Cell, Sheet, FormulaCache types
-├── components/                  # React components
+│   │   ├── formulaHelper.ts         # Thin bridge delegating to engine/dependency-graph
+│   │   ├── cell.ts                  # Cell value/style getters
+│   │   ├── selection.ts             # Selection state + UI rendering
+│   │   ├── dropCell.ts              # Drag-drop (DOM-heavy)
+│   │   ├── text.ts                  # Text rendering (DOM-heavy)
+│   │   ├── rowcol.ts                # Row/column operations
+│   │   └── ...                      # Other modules
+│   ├── context.ts                   # Global state (200+ properties)
+│   └── types.ts                     # Cell, Sheet, FormulaCache types
+├── components/                      # React components
 └── index.ts
 ```
 
-### What's Already Headless
-
-These modules have **zero browser dependencies** and can run in Bun/Node today:
-
-| Module | Lines | What it does |
-|--------|-------|-------------|
-| `formula-parser/parser.ts` | 300 | JISON-based formula parser with event emitters for cell resolution |
-| `formula-parser/evaluate-by-operator/` | 400 | Arithmetic, comparison, string operators + `@formulajs/formulajs` dispatch |
-| `formula-parser/helper/` | 200 | Cell coordinate conversions (A1 ↔ row/col) |
-| `core/modules/ssf.ts` | 1,969 | Excel SSF number/date/time formatting engine |
-| `core/modules/format.ts` | 365 | Format type inference from raw values |
-| `core/modules/formulaHelper.ts` | 324 | Dependency graph building + topological sort |
-
-**Total: ~3,558 lines of pure, extractable code.**
-
-### What's Entangled — But Separable
-
-`formula.ts` (3,550 lines) contains both pure calculation and DOM/UI code, but **they are not interleaved
-at the function level**. Verified by tracing every DOM reference (16 total, all listed below):
-
-**Pure calculation functions** (zero DOM access):
-- `execfunction()` — core evaluator, delegates to `parser.parse()`, returns `[success, value, formula]`
-- `execFunctionGroup()` — executes calculation chain, reads/writes `flowdata` arrays only
-- `groupValuesRefresh()` — batch-applies computed values to cell matrix
-- `insertUpdateFunctionGroup()` — updates `calcChain` data structure
-- `isFunctionRange()`, `getcellrange()`, `iscelldata()`, `isFormula()` — parsing helpers
-- Parser event handlers (`callCellValue`, `callRangeValue`) — resolve from `flowdata[row][col]` only
-
-**DOM/UI functions** (all 16 DOM references are confined to these):
-- `setCaretPosition()` — `document.createRange()`, `window.getSelection()` (lines 1586-1587)
-- `functionRange()` — `window.getSelection()` (lines 1605-1618)
-- `searchFunction()` — `window.getSelection()` (line 1693)
-- `rangeHightlightselected()` — `document.getElementsByClassName()` (line 2890)
-- `handleFormulaInput()` — `window.getSelection()`, `$editor.innerHTML` (lines 2183-2213)
-- `israngeseleciton()` — `document.activeElement` (line 2738)
-- `parseElement()` — `new DOMParser()` (line 237)
-- Range drag handlers — `container.querySelector()` (line 2956)
-
-**Key finding:** The split is at the function boundary, not within functions. Extraction means moving
-functions between files, not rewriting them.
-
-### Context Properties Used by Calculation Path
-
-The calculation path accesses these Context properties (verified by tracing `execfunction()` and all
-functions it calls):
-
-| Property | Type | Used for |
-|---|---|---|
-| `ctx.currentSheetId` | string | Active sheet ID |
-| `ctx.calculateSheetId` | string | Sheet being calculated (written by execfunction) |
-| `ctx.luckysheetfile` | Sheet[] | All sheets with cell data |
-| `ctx.formulaCache.parser` | Parser | Formula parser instance |
-| `ctx.formulaCache.execFunctionGlobalData` | Record | Temporary values during batch calc |
-| `ctx.formulaCache.execFunctionExist` | any[] | Cells modified in current calc |
-| `ctx.formulaCache.formulaCellInfoMap` | Map | Dependency graph cache |
-| `ctx.groupValuesRefreshData` | array | Queue of cells to update |
-
-No UI state (`selection`, `rangeHighlight`, `scrollLeft`, etc.) is touched by calculation.
-
-### FormulaCache Splits Cleanly
-
-The `FormulaCache` class has two distinct property groups:
-
-**Calculation** (needed for headless): `parser`, `execFunctionGlobalData`, `formulaCellInfoMap`,
-`execFunctionExist`, `cellTextToIndexList`, `data_parm_index`, `functionlistMap`
-
-**UI** (all optional `?`, unused in calculation): `func_selectedrange`, `selectingRangeIndex`,
-`rangeResizeObj/Index/xy/WinH/WinW/To`, `rangeSetValueTo`, `rangeIndex`, `rangestart`, `rangetosheet`,
-`rangedrag_column_start`, `rangedrag_row_start`, `functionRangeIndex`
-
-## Target Architecture
-
-```
-packages/fortune-sheet/
-├── src/
-│   ├── engine/                          # NEW — headless calculation engine (zero DOM)
-│   │   ├── formula-engine.ts            # FormulaEngine class (parse + evaluate + recalculate)
-│   │   ├── dependency-graph.ts          # Dependency tracking + topological sort
-│   │   ├── cell-resolver.ts             # CellResolver interface + in-memory implementation
-│   │   ├── ssf.ts                       # Number formatting (moved from core/modules/)
-│   │   ├── format.ts                    # Format inference (moved from core/modules/)
-│   │   ├── a1-notation.ts              # A1 ↔ row/col parsing
-│   │   └── index.ts                     # Public API
-│   ├── formula-parser/                  # Unchanged — already clean
-│   │   ├── parser.ts
-│   │   ├── grammar-parser/
-│   │   ├── evaluate-by-operator/
-│   │   └── helper/
-│   ├── core/
-│   │   ├── modules/
-│   │   │   ├── formula-ui.ts            # RENAMED — only DOM/UI parts of old formula.ts
-│   │   │   ├── formulaHelper.ts         # Thin wrapper, delegates to engine/dependency-graph.ts
-│   │   │   ├── cell.ts                  # Unchanged
-│   │   │   ├── selection.ts             # Unchanged (UI-coupled, not in scope)
-│   │   │   └── ...
-│   │   ├── context.ts                   # Unchanged
-│   │   └── types.ts                     # Unchanged
-│   ├── components/                      # Unchanged
-│   └── index.ts                         # Adds engine/ exports
-```
-
-### Key Design: FormulaEngine
-
-```typescript
-// packages/fortune-sheet/src/engine/formula-engine.ts
-
-type CellResolver = {
-    getCell(sheetId: string, row: number, col: number): Cell | null;
-    getRange(sheetId: string, startRow: number, startCol: number,
-             endRow: number, endCol: number): (Cell | null)[][];
-    getSheetIdByName(name: string): string | null;
-};
-
-type EvaluationResult = {
-    value: unknown;
-    display: string;
-    type: 'number' | 'string' | 'boolean' | 'date' | 'error';
-};
-
-class FormulaEngine {
-    evaluate(formula: string, sheetId: string, row: number, col: number,
-             resolver: CellResolver): EvaluationResult;
-
-    evaluateAll(cells: FormulaCell[], resolver: CellResolver): Map<string, EvaluationResult>;
-
-    getDependencies(formula: string, sheetId: string): FormulaDependency[];
-
-    format(value: unknown, pattern: string): string;
-}
-```
+### Key Design: CellResolver
 
 **`CellResolver` is the abstraction boundary.** The engine never touches Yjs, SQLite, or Context — it
 asks for cell values through the resolver. For the UI, the resolver reads from Context's flowdata. For the
@@ -267,7 +150,7 @@ async function readSheetContent(ownerId: string, mountId: string, pathId: string
 
 ## Refactoring Plan
 
-### Step 1: Extract SSF + Format (low risk, high value)
+### ~~Step 1: Extract SSF + Format~~ (DONE)
 
 Move `ssf.ts` and `format.ts` into `engine/`. Update imports in `core/modules/` to point to the new
 location. No logic changes — pure file moves.
@@ -278,7 +161,7 @@ and the pattern for subsequent extractions.
 **Tests to add:** SSF formatting edge cases (dates, currencies, conditional formats, fractions). Currently
 untested.
 
-### Step 2: Extract A1 Notation Parser
+### ~~Step 2: Extract A1 Notation Parser~~ (DONE)
 
 Create `engine/a1-notation.ts` from the cell coordinate helpers in `formula-parser/helper/cell.ts` plus
 new A1 range parsing:
@@ -291,7 +174,7 @@ function toA1(row: number, col: number): string;
 
 This serves both the formula engine and the scripting SDK (`sheets.getCell("A1")`).
 
-### Step 3: Extract Dependency Graph
+### ~~Step 3: Extract Dependency Graph~~ (DONE)
 
 Move the pure parts of `formulaHelper.ts` into `engine/dependency-graph.ts`:
 
@@ -304,7 +187,7 @@ global state.
 **Add: cycle detection.** The current code has no circular reference detection. Server-side evaluation needs
 this to avoid infinite loops.
 
-### Step 4: Build FormulaEngine (verified — cleaner than expected)
+### ~~Step 4: Build FormulaEngine~~ (DONE)
 
 The split is at the function boundary, not within functions. No function mixes pure calculation with DOM
 code — extraction means moving functions between files, not rewriting them.
@@ -338,14 +221,12 @@ a clear responsibility.
 helper). In the engine, these need to delegate to the `CellResolver` interface instead. This is the
 primary API change — the calculation logic itself is unchanged.
 
-### Step 5: CellResolver + Context Adapter
+### ~~Step 5: CellResolver + Context Adapter~~ (DONE)
 
-Create `engine/cell-resolver.ts` with the `CellResolver` interface. Then create a Context adapter in
-`core/` that implements `CellResolver` by reading from Context's flowdata — this is what the UI layer uses.
+Created `engine/cell-resolver.ts` with the `CellResolver` interface and `createArrayResolver()`. The UI
+layer uses Context's flowdata; the server creates a resolver from Yjs snapshot data.
 
-The server creates its own resolver from Yjs snapshot data (see server-side integration above).
-
-### Step 6: Wire into Document Content Layer
+### Step 6: Wire into Document Content Layer (TODO)
 
 With `FormulaEngine` available, update `readSheetContent()` in the Document Content Layer to optionally
 recalculate formulas before returning. This is transparent to all consumers — scripting, export, and
@@ -368,11 +249,9 @@ import all get accurate formula values.
 - **Fortune-sheet's formula parser is derived from hot-formula-parser** (Handsontable's older parser).
   It covers 200+ functions via `@formulajs/formulajs`. This is sufficient for most spreadsheets but not
   the full 400+ that Excel/Google Sheets support
-- **No server-side formula recalculation exists today.** Formulas with volatile functions (RAND, NOW,
-  TODAY) will return new values on each server evaluation — this is correct behavior but differs from
-  the cached client-side snapshot
-- **Circular references** need cycle detection added to the dependency graph. The current client-side
-  code doesn't handle this
+- **Volatile functions** (`RAND`, `NOW`, `TODAY`) return new values on each server evaluation — this is
+  correct behavior but differs from the cached client-side snapshot
+- **Circular references** are detected by `detectCycle()` in `engine/dependency-graph.ts`
 - **INDIRECT/OFFSET/INDEX** create dynamic references that can't be statically analyzed for the dependency
   graph. The current code handles these specially in `isFunctionRange()` — this logic must be preserved
   in the extraction

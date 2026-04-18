@@ -2,8 +2,21 @@ import path from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
 import { tanstackRouter } from '@tanstack/router-plugin/vite';
 import react from '@vitejs/plugin-react';
-import { defineConfig, mergeConfig, type UserConfig } from 'vite';
+import { defineConfig, mergeConfig, type Plugin, type UserConfig } from 'vite';
 import viteTsConfigPaths from 'vite-tsconfig-paths';
+
+// Keep in sync with applyTheme/getCachedTheme in theme-provider.tsx
+function themeFlashPlugin(): Plugin {
+    return {
+        name: 'eigen-theme-flash',
+        transformIndexHtml(html) {
+            return html.replace(
+                '<head>',
+                `<head><script>try{var t=localStorage.getItem("eigen-theme");var d=t==="dark"||(t==="system"&&matchMedia("(prefers-color-scheme:dark)").matches);if(d)document.documentElement.classList.add("dark")}catch{}</script>`,
+            );
+        },
+    };
+}
 
 const APP_PORTS: Record<string, number> = {
     index: 3000,
@@ -28,6 +41,7 @@ export function createAppConfig(appName: string, extraConfig?: UserConfig) {
         base: basePath,
         envDir: './../../',
         plugins: [
+            themeFlashPlugin(),
             tanstackRouter({
                 target: 'react',
                 autoCodeSplitting: true,

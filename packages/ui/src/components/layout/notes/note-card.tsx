@@ -1,8 +1,7 @@
-import { lightenColor } from '@workspace/lib/constants';
+import { isLightColor, lightenColor } from '@workspace/lib/constants';
 import type { HTMLAttributes, ReactNode } from 'react';
 import { cn } from '../../../lib/utils';
 import { Card, CardContent } from '../../card';
-import { isLightColor } from '../media/color-picker';
 
 type NoteCardProps = Omit<HTMLAttributes<HTMLDivElement>, 'title' | 'color'> & {
     title: string;
@@ -39,7 +38,7 @@ export function NoteCard({
             )}
             style={{
                 backgroundColor: color ? lightenColor(color, 0.25) : undefined,
-                color: color ? (isLightColor(color) ? '#000' : '#fff') : undefined,
+                color: color ? (isLightColor(lightenColor(color, 0.25)) ? '#000' : '#fff') : undefined,
                 ...style,
             }}
             onClick={onClick}

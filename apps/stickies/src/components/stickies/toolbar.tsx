@@ -1,5 +1,5 @@
 import { formatForDisplay } from '@tanstack/react-hotkeys';
-import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
+import { EIGEN_STICKIES_COLORS, isLightColor } from '@workspace/lib/constants';
 import { useMediaQuery } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { TooltipButton } from '@workspace/ui';
@@ -12,7 +12,6 @@ import {
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { DriveCreateStickies } from '@workspace/ui/components/layout/drive/drive-create-stickies';
-import { isLightColor } from '@workspace/ui/components/layout/media/color-picker';
 import { DocumentModeButton } from '@workspace/ui/components/layout/toolbar/document-mode-button';
 import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
 import { Toolbar as ToolbarWrapper } from '@workspace/ui/components/layout/toolbar/toolbar';

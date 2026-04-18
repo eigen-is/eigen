@@ -1,6 +1,7 @@
 import type { Email, EmailDraft, EmailSummary, NewDraft } from '@workspace/lib/types/mail';
 import type { User } from 'better-auth/types';
 import { processInboundImip } from '../calendar/imip';
+import { getMailUploadMaxSize } from '../config/enforcement';
 import { ApiError } from '../core/errors';
 import { getHome } from '../home';
 import { getUserByEmail } from '../user/';
@@ -111,6 +112,7 @@ export async function messageCopy(user: User, messageId: string, targetMailbox: 
 export type DraftUpdateOptions = {
     tempAttachmentIds?: string[];
     keepAttachmentIndexes?: number[];
+    forceFullSave?: boolean;
 };
 
 export async function messageHandleDraft(user: User, mail: NewDraft | EmailDraft, options?: DraftUpdateOptions) {
@@ -119,8 +121,9 @@ export async function messageHandleDraft(user: User, mail: NewDraft | EmailDraft
 }
 
 export async function uploadDraftAttachment(user: User, request: Request) {
+    const maxSize = await getMailUploadMaxSize(user.id);
     const mailClient = await getMailClient(user);
-    return await mailClient.uploadDraftAttachment(request);
+    return await mailClient.uploadDraftAttachment(request, maxSize);
 }
 
 export async function messageSend(user: User, mail: NewDraft | EmailDraft) {

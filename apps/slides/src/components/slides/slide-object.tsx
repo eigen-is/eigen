@@ -1,3 +1,4 @@
+import { isLightColor } from '@workspace/lib/constants';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants/colors';
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import { useMediaResolver } from '@workspace/lib/drive';
@@ -11,7 +12,6 @@ import {
     ContextMenuSubTrigger,
     ContextMenuTrigger,
 } from '@workspace/ui/components/context-menu';
-import { isLightColor } from '@workspace/ui/components/layout/media/color-picker';
 import {
     ArrowDownToLine,
     ArrowUpToLine,

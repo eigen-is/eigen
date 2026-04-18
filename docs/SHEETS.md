@@ -44,9 +44,43 @@ Eigen comment infrastructure.
 
 See [COMMENTS.md](COMMENTS.md) for the full shared comment architecture.
 
+## Headless Formula Engine
+
+A DOM-free formula engine lives in `packages/fortune-sheet/src/engine/`. It evaluates formulas using a
+`CellResolver` interface — the same engine powers both the UI (resolver reads from Context) and server-side
+evaluation (resolver reads from Yjs snapshot).
+
+```
+engine/
+├── formula-engine.ts       # FormulaEngine class (evaluate, evaluateAll, recalculateAll, getDependencies)
+├── formula-utils.ts        # Pure utilities (iscelldata, checkBracketNum, calPostfixExpression)
+├── dependency-graph.ts     # Topological sort + cycle detection
+├── cell-resolver.ts        # CellResolver interface + createArrayResolver
+├── ssf.ts                  # Number formatting (SSF.format)
+├── format.ts               # Format type inference
+├── a1-notation.ts          # A1 ↔ row/col parsing
+├── types.ts                # CellResolver, EvaluationResult, FormulaEngineState
+└── index.ts                # Barrel exports
+```
+
+**Key capabilities:**
+- `evaluate(formula, sheetId, row, col, resolver)` — single formula evaluation
+- `recalculateAll(resolver)` — batch recalculation of all formulas in dependency order (server-side)
+- `getDependencies(formula, sheetId)` — extract cell references from a formula
+- `format(value, pattern)` — SSF number/date formatting
+
+**Architecture boundary:** Context-coupled orchestration functions (`execFunctionGroup`, `groupValuesRefresh`,
+etc.) live in `state/modules/formula-exec.ts`. The `formula-ui.ts` barrel re-exports from both, so UI consumers
+don't see the split.
+
+**Next step:** Wire `recalculateAll()` into the Document Content Layer's `readSheetContent()` for accurate
+formula values in export, search indexing, and scripting.
+
+See [PROPOSAL_SHEETS_REFACTORING.md](PROPOSAL_SHEETS_REFACTORING.md) for the full design and remaining work.
+
 ## Fortune-Sheet Integration
 
 The entire fortune-sheet library (UI components, core engine, formula parser) is forked into `packages/fortune-sheet/`.
 There is no external `@fortune-sheet/core` dependency — everything lives in-repo under full source control.
 
-See [TODO-FORTUNE-SHEETS.md](TODO-FORTUNE-SHEETS.md) for the refactoring audit.
+See [TODO-FORTUNE-SHEETS.md](TODO-FORTUNE-SHEETS.md) for the UI refactoring audit (CSS migration, shadcn adoption).

@@ -32,7 +32,7 @@ import {
     DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu";
 import {EIGEN_STICKIES_COLORS} from "@workspace/lib/constants/colors";
-import {isLightColor} from "@workspace/ui/components/layout/media/color-picker";
+import {isLightColor} from "@workspace/lib/constants";
 import {Check, CircleOff} from "lucide-react";
 import {CustomSort} from "../CustomSort";
 

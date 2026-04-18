@@ -1,12 +1,14 @@
 import type { EmailDraft, NewDraft } from '@workspace/lib/types/mail';
 import { useCallback, useEffect, useRef } from 'react';
 
+type SaveOptions = { forceFullSave?: boolean };
+
 type AutoSaveOptions = {
     toDraft: () => NewDraft;
     attachmentsFingerprint: () => string;
     isSaveable: boolean;
     draftId?: string;
-    onSave?: (draft: NewDraft) => Promise<EmailDraft | null | undefined | unknown>;
+    onSave?: (draft: NewDraft, options?: SaveOptions) => Promise<EmailDraft | null | undefined | unknown>;
     onIdAssigned?: (id: string) => void;
     debounceMs?: number;
 };
@@ -39,6 +41,7 @@ export function useDraftAutoSave({
     const lastSavedRef = useRef<string>(buildSnapshot(toDraft(), attachmentsFingerprint()));
     const inFlightRef = useRef<Promise<unknown> | null>(null);
     const disabledRef = useRef(false);
+    const everSavedRef = useRef(false);
 
     const toDraftRef = useRef(toDraft);
     toDraftRef.current = toDraft;
@@ -53,7 +56,7 @@ export function useDraftAutoSave({
     const draftIdRef = useRef(draftId);
     draftIdRef.current = draftId;
 
-    const doSave = useCallback(async (): Promise<unknown> => {
+    const doSave = useCallback(async (options?: SaveOptions): Promise<unknown> => {
         if (disabledRef.current) return null;
         // Serialize saves: if one is already running, await it before starting a new one.
         // This lets saveNow() from the send path flush any racing auto-save.
@@ -63,11 +66,12 @@ export function useDraftAutoSave({
         }
         const draft = toDraftRef.current();
         const snapshot = buildSnapshot(draft, fingerprintRef.current());
-        if (snapshot === lastSavedRef.current) return null;
+        if (snapshot === lastSavedRef.current && !options?.forceFullSave) return null;
 
         const promise = (async () => {
-            const result = await onSaveRef.current(draft);
+            const result = await onSaveRef.current(draft, options);
             lastSavedRef.current = snapshot;
+            everSavedRef.current = true;
             if (!draftIdRef.current && result && typeof result === 'object' && 'id' in result) {
                 onIdAssignedRef.current?.(result.id as string);
             }
@@ -94,15 +98,19 @@ export function useDraftAutoSave({
         if (timerRef.current) clearTimeout(timerRef.current);
     }, []);
 
-    // Save on unmount — refs ensure we use latest state/handlers, not stale mount-time closure.
+    // Save on unmount — force a full EML rebuild so Dovecot IMAP clients see fresh content.
+    // Only fires when the draft was actually modified during this session.
     useEffect(() => {
         return () => {
             if (timerRef.current) clearTimeout(timerRef.current);
             if (disabledRef.current || !isSaveableRef.current) return;
             const draft = toDraftRef.current();
             const snapshot = buildSnapshot(draft, fingerprintRef.current());
-            if (snapshot !== lastSavedRef.current) {
-                onSaveRef.current(draft).catch((err) => console.warn('draft unmount save failed', err));
+            const dirty = snapshot !== lastSavedRef.current;
+            if (dirty || everSavedRef.current) {
+                onSaveRef
+                    .current(draft, { forceFullSave: true })
+                    .catch((err) => console.warn('draft unmount save failed', err));
             }
         };
     }, []);
