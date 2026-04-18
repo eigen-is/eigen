@@ -1,3 +1,4 @@
+import { useImportDocument } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { CountBadge, TooltipButton } from '@workspace/ui';
 import { DriveCreateSheets } from '@workspace/ui/components/layout/drive/drive-create-sheets';
@@ -21,12 +22,27 @@ type ToolbarRightProps = {
 };
 
 export function ToolbarLeftItems({ path, onAccessDialogOpen, onRestore, canWrite }: ToolbarLeftProps) {
+    const importMutation = useImportDocument(path.ownerId, path.mountId);
+
+    const handleImport = () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.xlsx';
+        input.onchange = () => {
+            const file = input.files?.[0];
+            if (file) importMutation.mutate({ pathId: path.id, file });
+        };
+        input.click();
+    };
+
     return (
         <FileMenu
             path={path}
             canWrite={canWrite}
             onAccessDialogOpen={onAccessDialogOpen}
             onRestore={onRestore}
+            onImport={handleImport}
+            importLabel="Import xlsx file…"
             createLabel="New sheet"
             CreateDialog={DriveCreateSheets}
         />
