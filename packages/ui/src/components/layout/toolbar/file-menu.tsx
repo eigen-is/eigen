@@ -17,7 +17,7 @@ import {
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { ConfirmDialog } from '@workspace/ui/components/layout/delete/confirm-dialog';
-import { Download, FileText, Folder, History, Mail, Pencil, Trash2, UserRoundPlus } from 'lucide-react';
+import { Download, FileText, Folder, History, Mail, Pencil, Trash2, Upload, UserRoundPlus } from 'lucide-react';
 import { type ComponentType, type ReactNode, useState } from 'react';
 import { DriveDeleteItem } from '../drive/drive-delete-item';
 import { DriveEmailCollaborators } from '../drive/drive-email-collaborators';
@@ -28,6 +28,8 @@ type FileMenuProps = {
     canWrite: boolean;
     onAccessDialogOpen: () => void;
     onRestore?: (state: Uint8Array) => void;
+    onImport?: () => void;
+    importLabel?: string;
     onExport?: (format: string) => void;
     exportFormats?: string[];
     createLabel: string;
@@ -40,6 +42,8 @@ export function FileMenu({
     canWrite,
     onAccessDialogOpen,
     onRestore,
+    onImport,
+    importLabel,
     onExport,
     exportFormats,
     createLabel,
@@ -88,8 +92,13 @@ export function FileMenu({
                         <Folder className="h-4 w-4 mr-2" /> Open
                     </DropdownMenuItem>
 
-                    {/* Section 2: Export & Rename */}
+                    {/* Section 2: Import, Export & Rename */}
                     <DropdownMenuSeparator />
+                    {canWrite && onImport && (
+                        <DropdownMenuItem onClick={onImport}>
+                            <Upload className="h-4 w-4 mr-2" /> {importLabel ?? 'Import…'}
+                        </DropdownMenuItem>
+                    )}
                     {onExport && (
                         <DropdownMenuSub>
                             <DropdownMenuSubTrigger>
