@@ -1,4 +1,4 @@
-import { formatDate } from '@workspace/lib/date';
+import { formatDateTime } from '@workspace/lib/date';
 import { useResolvedUser } from '@workspace/lib/public';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import { Check, RotateCcw } from 'lucide-react';
@@ -8,7 +8,7 @@ import { CommentThread } from './comment-thread';
 export function useCreatedByMeta(email: string | undefined, createdAt: Date | number) {
     const { displayName } = useResolvedUser({ email });
     const name = displayName || email?.split('@')[0] || 'unknown';
-    return `Created by ${name} on ${formatDate(createdAt)}`;
+    return `Created by ${name} on ${formatDateTime(createdAt)}`;
 }
 
 type CommentDialogProps = {
