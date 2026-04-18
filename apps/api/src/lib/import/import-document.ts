@@ -18,17 +18,12 @@ export async function convertToDocument(
         throw new ApiError(400, 'Only .xlsx files can be converted to sheets');
     }
 
-    if (sourcePath.parentId === null) {
-        throw new ApiError(400, 'Cannot convert root-level file');
-    }
-
     const file = await mount.readFile(sourcePath.id);
-    if (!file) throw new ApiError(404, 'File not found');
-    const buffer = Buffer.from(await file.arrayBuffer());
+    const buffer = Buffer.from(await file!.arrayBuffer());
     const sheets = await xlsxToSheets(buffer);
 
     const name = sourcePath.name.replace(/\.xlsx$/i, '');
-    const newPath = await drive.createSheets(sourcePath.mountId, sourcePath.parentId, name);
+    const newPath = await drive.createSheets(sourcePath.mountId, sourcePath.parentId!, name);
 
     const collabDoc = await drive.getCollabDocument(sourcePath.mountId, newPath.id);
     writeSheetsToDoc(collabDoc.doc, sheets);
