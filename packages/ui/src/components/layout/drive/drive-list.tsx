@@ -171,6 +171,7 @@ type DriveListProps = CreateCallbacks & {
     onDelete?: (paths: DrivePath[]) => void;
     onShareClick?: (item: DrivePath) => void;
     onEmailCollaborators?: (item: DrivePath) => void;
+    onConvert?: (item: DrivePath, targetType: string) => void;
     onDownload?: (path: DrivePath) => void;
     onExport?: (item: DrivePath, format: string) => void;
     getItemHref?: (item: DrivePath) => string | undefined;
@@ -206,6 +207,7 @@ export function DriveList({
     onCreateChat,
     onCreateSlides,
     onCreateSheets,
+    onConvert,
     onDownload,
     onExport,
     getItemHref,
@@ -342,6 +344,7 @@ export function DriveList({
                 onEmailCollaborators={onEmailCollaborators}
                 getFileIcon={getFileIcon}
                 getItemHref={getItemHref}
+                onConvert={onConvert}
                 onDownload={onDownload}
                 onExport={onExport}
                 onDelete={onDelete}

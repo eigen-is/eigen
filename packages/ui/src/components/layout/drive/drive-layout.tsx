@@ -1,5 +1,5 @@
-import { getDriveDownloadUrl } from '@workspace/lib/api';
-import { useDeletePaths, useExportDocument, useMovePath } from '@workspace/lib/drive';
+import { getDriveDownloadUrl, openDocument } from '@workspace/lib/api';
+import { useConvertDocument, useDeletePaths, useExportDocument, useMovePath } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { useCallback, useMemo } from 'react';
 import { Column, ColumnLayout } from '../app/column-layout.tsx';
@@ -88,6 +88,7 @@ export function DriveLayout({
     const dialogs = useDriveDialogs();
     const movePath = useMovePath(ownerId, mountId, currentPath?.id);
     const deletePathsMutation = useDeletePaths(ownerId, mountId);
+    const convertMutation = useConvertDocument(ownerId, mountId);
 
     const handleFileUpload = () => {
         if (allowUpload && currentPath) {
@@ -138,6 +139,18 @@ export function DriveLayout({
     const handleExportPath = (path: DrivePath, format: string) =>
         exportDocument(path.ownerId, path.mountId, path.id, format);
 
+    const handleConvertPath = (path: DrivePath, targetType: string) => {
+        if (!path.parentId) return;
+        convertMutation.mutate(
+            { pathId: path.id, targetType, parentId: path.parentId },
+            {
+                onSuccess: (newPath) => {
+                    openDocument(newPath);
+                },
+            },
+        );
+    };
+
     const handleShareClick = (path: DrivePath) => {
         if (allowShare) {
             dialogs.share.openDialog(path);
@@ -186,6 +199,7 @@ export function DriveLayout({
         mountId,
         pathId,
         showBreadcrumb,
+        onConvert: handleConvertPath,
         onDownload: handleDownloadPath,
         onExport: handleExportPath,
         getItemHref,

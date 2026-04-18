@@ -27,6 +27,7 @@ import {
     Link,
     Mail,
     Pencil,
+    Sheet,
     Trash2,
     UserRoundPlus,
 } from 'lucide-react';
@@ -58,6 +59,7 @@ export type DriveTableProps = {
     onDelete?: (items: DrivePath[]) => void;
     onRename?: (item: DrivePath) => void;
     onMove?: (item: DrivePath, targetItemId: string) => void;
+    onConvert?: (item: DrivePath, targetType: string) => void;
     onExport?: (item: DrivePath, format: string) => void;
     onQuickLook?: (item: DrivePath) => void;
     onEmailCollaborators?: (item: DrivePath) => void;
@@ -81,6 +83,7 @@ export function DriveTable({
     onDelete,
     onRename,
     onMove,
+    onConvert,
     onExport,
     onQuickLook,
     onEmailCollaborators,
@@ -369,9 +372,12 @@ export function DriveTable({
                     </DropdownMenuItem>
                 )}
 
-                {/* Section 2: Download, Export, Rename */}
+                {/* Section 2: Download, Convert, Export, Rename */}
                 {isSingleSelect &&
                     ((onDownload && contextMenu.item?.type === 'file') ||
+                        (onConvert &&
+                            contextMenu.item?.type === 'file' &&
+                            contextMenu.item.name.toLowerCase().endsWith('.xlsx')) ||
                         ((contextMenu.item?.type === 'doc' || contextMenu.item?.type === 'slides') && onExport) ||
                         onRename) && <DropdownMenuSeparator />}
                 {isSingleSelect && onDownload && contextMenu.item?.type === 'file' && (
@@ -386,6 +392,21 @@ export function DriveTable({
                         Download
                     </DropdownMenuItem>
                 )}
+                {isSingleSelect &&
+                    onConvert &&
+                    contextMenu.item?.type === 'file' &&
+                    contextMenu.item.name.toLowerCase().endsWith('.xlsx') && (
+                        <DropdownMenuItem
+                            onClick={() => {
+                                onConvert(contextMenu.item!, 'eigensheets');
+                                contextMenu.close();
+                            }}
+                            className="flex items-center"
+                        >
+                            <Sheet className="h-4 w-4 mr-2" />
+                            Convert to Sheet
+                        </DropdownMenuItem>
+                    )}
                 {isSingleSelect &&
                     (contextMenu.item?.type === 'doc' || contextMenu.item?.type === 'slides') &&
                     onExport && (
