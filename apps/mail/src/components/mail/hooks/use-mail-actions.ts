@@ -36,7 +36,7 @@ export function useMailActions() {
         navigate({
             to: Route.fullPath,
             params: { filterType, filterId },
-            search: (prev) => ({ ...prev, mailId: emailId }),
+            search: (prev) => ({ ...prev, mailId: emailId, mode: undefined, to: undefined }),
         });
     };
 
