@@ -109,6 +109,14 @@ export default class MailDB {
             .run();
     }
 
+    updateDraftContent(id: string, subject: string, textShort: string): void {
+        this.db
+            .update(schema.emails)
+            .set({ subject, textShort, updatedAt: new Date() })
+            .where(eq(schema.emails.id, id))
+            .run();
+    }
+
     getAllEmails(mailbox: string) {
         return this.db.select().from(schema.emails).where(eq(schema.emails.mailbox, mailbox)).all();
     }

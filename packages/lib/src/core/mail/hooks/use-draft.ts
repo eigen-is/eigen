@@ -22,6 +22,7 @@ export function createDraftEmail(input: DraftInput): NewDraft {
 type DraftUpdateOptions = {
     tempAttachmentIds?: string[];
     keepAttachmentIndexes?: number[];
+    forceFullSave?: boolean;
 };
 
 export async function updateDraftEmail(
@@ -33,6 +34,7 @@ export async function updateDraftEmail(
         mail: draft,
         tempAttachmentIds: options.tempAttachmentIds,
         keepAttachmentIndexes: options.keepAttachmentIndexes,
+        forceFullSave: options.forceFullSave,
     });
     if (response.error) throw new AppError(response);
     return response.data || null;
@@ -70,6 +72,7 @@ export function useUpdateDraft() {
             updateDraftEmail(input.draft, ownerId, {
                 tempAttachmentIds: input.tempAttachmentIds,
                 keepAttachmentIndexes: input.keepAttachmentIndexes,
+                forceFullSave: input.forceFullSave,
             }),
         onSuccess: (data) => {
             queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, 'Drafts') });

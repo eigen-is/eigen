@@ -9,6 +9,7 @@ type DraftState = {
     bcc: string;
     subject: string;
     body: string;
+    bodyText: string;
     attachments: AttachmentMeta[];
     inReplyTo?: string;
     references?: string[] | string;
@@ -39,6 +40,7 @@ function initState(email: EmailDraft | null, prefillTo?: string): DraftState {
             bcc: addressObjectToString(email.bcc),
             subject: email.subject ? String(email.subject) : '',
             body: email.html || email.text || '',
+            bodyText: email.text || '',
             attachments: (email.attachments || []).map((a, i) => ({
                 key: `saved-${i}-${a.filename ?? ''}-${a.size}`,
                 filename: a.filename || `Attachment ${i + 1}`,
@@ -57,6 +59,7 @@ function initState(email: EmailDraft | null, prefillTo?: string): DraftState {
         bcc: '',
         subject: '',
         body: '',
+        bodyText: '',
         attachments: [],
     };
 }
@@ -75,10 +78,6 @@ export function useDraftState(email: EmailDraft | null, prefillTo?: string) {
     }, []);
 
     const setId = useCallback((id: string) => {
-        // Sync the ref synchronously so toDraft() sees the new id immediately, without
-        // waiting for React to re-render and rebind stateRef. This matters when the composer
-        // calls saveNow() and then sendDraft(toDraft()) back-to-back.
-        stateRef.current = { ...stateRef.current, id };
         setState((prev) => ({ ...prev, id }));
     }, []);
 
@@ -129,10 +128,7 @@ export function useDraftState(email: EmailDraft | null, prefillTo?: string) {
             cc: stringToAddressObject(s.cc),
             bcc: stringToAddressObject(s.bcc),
             subject: s.subject,
-            text: s.body
-                .replace(/<[^>]+>/g, ' ')
-                .replace(/\s+/g, ' ')
-                .trim(),
+            text: s.bodyText,
             html: s.body,
             inReplyTo: s.inReplyTo,
             references: s.references,
@@ -146,9 +142,14 @@ export function useDraftState(email: EmailDraft | null, prefillTo?: string) {
         return stateRef.current.attachments.map((a) => `${a.key}:${a.tempId ?? ''}:${a.index ?? ''}`).join('|');
     }, []);
 
-    const bodyText = state.body.replace(/<[^>]+>/g, '').trim();
     const isSendable = !!state.to.trim();
-    const isSaveable = !!(state.to.trim() || state.subject.trim() || state.cc.trim() || state.bcc.trim() || bodyText);
+    const isSaveable = !!(
+        state.to.trim() ||
+        state.subject.trim() ||
+        state.cc.trim() ||
+        state.bcc.trim() ||
+        state.bodyText.trim()
+    );
 
     return {
         state,

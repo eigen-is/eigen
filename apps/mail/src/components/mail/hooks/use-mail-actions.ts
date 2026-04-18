@@ -227,12 +227,13 @@ export function useMailActions() {
         handleToggleMailRead,
         saveDraft: (
             draft: NewDraft,
-            options: { tempAttachmentIds?: string[]; keepAttachmentIndexes?: number[] } = {},
+            options: { tempAttachmentIds?: string[]; keepAttachmentIndexes?: number[]; forceFullSave?: boolean } = {},
         ) =>
             updateDraft.mutateAsync({
                 draft,
                 tempAttachmentIds: options.tempAttachmentIds,
                 keepAttachmentIndexes: options.keepAttachmentIndexes,
+                forceFullSave: options.forceFullSave,
             }),
         handleDraftIdAssigned,
         isSendPending: sendDraftMutation.isPending,

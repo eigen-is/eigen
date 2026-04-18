@@ -55,7 +55,7 @@ type EmailDraftProps = {
     sendDraft: (mail: NewDraft) => Promise<unknown>;
     onAutoSave?: (
         mail: NewDraft,
-        options?: { tempAttachmentIds?: string[]; keepAttachmentIndexes?: number[] },
+        options?: { tempAttachmentIds?: string[]; keepAttachmentIndexes?: number[]; forceFullSave?: boolean },
     ) => Promise<EmailDraftType | null | undefined>;
     onDraftIdAssigned?: (id: string) => void;
     isSending: boolean;
@@ -96,7 +96,7 @@ export const EmailDraft = forwardRef<EmailDraftHandle, EmailDraftProps>(function
         isSaveable,
         draftId: state.id,
         onSave: onAutoSave
-            ? async (draft) => {
+            ? async (draft, options) => {
                   const tempAttachmentIds = state.attachments.map((a) => a.tempId).filter((id): id is string => !!id);
                   const keepAttachmentIndexes = state.attachments
                       .map((a) => a.index)
@@ -106,6 +106,7 @@ export const EmailDraft = forwardRef<EmailDraftHandle, EmailDraftProps>(function
                       // Always send the keep list when the draft has an id — an empty array means
                       // "user removed all original attachments", which we must respect.
                       keepAttachmentIndexes: state.id ? keepAttachmentIndexes : undefined,
+                      forceFullSave: options?.forceFullSave,
                   });
                   if (result) setAttachmentsFromServer(result.attachments ?? []);
                   return result;
@@ -150,15 +151,18 @@ export const EmailDraft = forwardRef<EmailDraftHandle, EmailDraftProps>(function
 
     useEffect(() => {
         scheduleSave();
-    }, [state.to, state.cc, state.bcc, state.subject, state.body, scheduleSave]);
+    }, [state.to, state.cc, state.bcc, state.subject, state.body, state.bodyText, scheduleSave]);
 
     const sendWithFreshDraft = useCallback(async () => {
-        // Flush pending save first. setId inside useDraftState updates its stateRef synchronously,
-        // so toDraft() after saveNow() includes the server-assigned id and the send path sees
-        // isNew=false and re-extracts attachments from the EML on disk.
-        await saveNow();
+        // Flush pending save to ensure the draft is persisted. The returned result carries the
+        // server-assigned id (React state may not have updated yet after setId).
+        const saveResult = await saveNow();
         disableAutoSave();
-        await sendDraft(toDraft());
+        const draft = toDraft();
+        if (!draft.id && saveResult && typeof saveResult === 'object' && 'id' in saveResult) {
+            draft.id = saveResult.id as string;
+        }
+        await sendDraft(draft);
     }, [saveNow, disableAutoSave, toDraft, sendDraft]);
 
     const handleSendEmail = async () => {
@@ -166,7 +170,7 @@ export const EmailDraft = forwardRef<EmailDraftHandle, EmailDraftProps>(function
             setAlertMessage('Please specify at least one recipient.');
             return;
         }
-        if (!state.subject.trim() && !state.body.trim()) {
+        if (!state.subject.trim() && !state.bodyText.trim()) {
             setAlertMessage('Please add a subject or message.');
             return;
         }
@@ -315,6 +319,7 @@ export const EmailDraft = forwardRef<EmailDraftHandle, EmailDraftProps>(function
                         <LightEditor
                             content={state.body}
                             onChange={(html) => setField('body', html)}
+                            onChangeText={(text) => setField('bodyText', text)}
                             placeholder="Write your message here..."
                             toolbar="floating"
                             className="w-full h-full"

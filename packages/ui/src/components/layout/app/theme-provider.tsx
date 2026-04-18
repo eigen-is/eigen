@@ -1,16 +1,28 @@
 import { useSpaceSettings } from '@workspace/lib/space';
 import { useEffect } from 'react';
 
+// Keep in sync with themeFlashPlugin() in vite.shared.config.ts
 function applyTheme(theme: 'light' | 'dark' | 'system') {
     const isDark =
         theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
 
     document.documentElement.classList.toggle('dark', isDark);
+    try {
+        localStorage.setItem('eigen-theme', theme);
+    } catch {}
+}
+
+function getCachedTheme(): 'light' | 'dark' | 'system' {
+    try {
+        const v = localStorage.getItem('eigen-theme');
+        if (v === 'light' || v === 'dark' || v === 'system') return v;
+    } catch {}
+    return 'light';
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const { data: settings } = useSpaceSettings();
-    const theme = settings?.theme ?? 'light';
+    const theme = settings?.theme ?? getCachedTheme();
 
     useEffect(() => {
         applyTheme(theme);

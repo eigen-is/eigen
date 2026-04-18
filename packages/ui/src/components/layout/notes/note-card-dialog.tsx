@@ -1,4 +1,4 @@
-import { lightenColor } from '@workspace/lib/constants';
+import { isLightColor, lightenColor } from '@workspace/lib/constants';
 import type { LucideIcon } from 'lucide-react';
 import { Pencil } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -56,7 +56,10 @@ export function NoteCardDialog({
                 <div>
                     <DialogHeader
                         className="flex flex-row items-center gap-2 px-4 pt-4 pb-2 rounded-t-lg"
-                        style={{ backgroundColor: color ? lightenColor(color, 0.5) : undefined }}
+                        style={{
+                            backgroundColor: color ? lightenColor(color, 0.5) : undefined,
+                            color: color ? (isLightColor(lightenColor(color, 0.5)) ? '#000' : '#fff') : undefined,
+                        }}
                     >
                         <DialogTitle className="flex-1">{title}</DialogTitle>
                     </DialogHeader>

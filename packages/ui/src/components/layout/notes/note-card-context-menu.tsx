@@ -1,4 +1,4 @@
-import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants';
+import { EIGEN_STICKIES_COLORS, isLightColor } from '@workspace/lib/constants';
 import { Check, CircleOff, Palette, Pencil, RotateCcw, Trash2 } from 'lucide-react';
 import {
     DropdownMenuItem,
@@ -7,7 +7,6 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '../../dropdown-menu';
-import { isLightColor } from '../media/color-picker';
 
 type NoteCardContextMenuProps = {
     currentColor?: string | null;

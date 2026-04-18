@@ -8,38 +8,39 @@ signatures feature originally scoped with the composer refactor.
 
 ## Part 1 — Code-quality follow-ups
 
-Items surfaced by code review but deferred from the composer merge. None are blockers.
+Items surfaced by code review but deferred from the composer merge.
 
-### High priority
+### Completed (2026-04-18)
 
-**Quota enforcement on draft attachment uploads** — the hardcoded 25 MB limit in
-`apps/api/src/lib/mail/maildir.ts::uploadDraftAttachment` doesn't consult a per-user or
-per-server quota. AGENTS.md references `resolveUserQuotas` and `getUploadMaxSize` in
-`apps/api/src/lib/config/` but those files don't exist yet. When the quota system lands,
-replace the hardcoded cap with `getUploadMaxSize(ownerId, userId, 'mail')`.
+**Quota enforcement on draft attachment uploads** — ~~hardcoded 25 MB limit~~ → now uses
+`getMailUploadMaxSize(userId)` from `enforcement.ts`, which consults `mailAndContactsMax`
+quota (server default + team overrides) and `maxUploadSizeMB`. Error message shows actual limit.
 
-**Plain-text body extraction** — `useDraftState.toDraft()` computes the plain-text body via
-`s.body.replace(/<[^>]+>/g, ' ')` which loses HTML entity decoding (`&amp;` → `&`, `&nbsp;`
-→ space) and block-level newlines. Tiptap exposes `editor.getText()` which handles both. To
-fix, `LightEditor` would need to pass both `html` and `text` (or a `getText()` getter) up on
-every change. Visible to recipients using plain-text clients.
+**Plain-text body extraction** — ~~regex stripping~~ → `LightEditor` now emits plain text via
+`onChangeText` callback using Tiptap's `editor.getText()`. `useDraftState` stores `bodyText`
+separately, used by `toDraft()` and `isSaveable`. Proper entity decoding and newlines.
 
-### Medium priority
+**Autosave heaviness under a large attachment** — draft-meta sidecar (`draft-meta/<id>.json`)
+stores mutable fields (subject, body, recipients, attachment metadata). Body-only saves write
+only the ~1 KB JSON file + update the DB record. Full EML rebuild only on attachment changes
+or send. `messageGet` overlays sidecar values on the stale EML.
 
-**Autosave heaviness under a large attachment** — every 2.5s save reads the full previous
-EML, buffers all existing attachment bytes, rebuilds MIME via nodemailer, writes the new EML,
-and re-parses it. With a 10 MB attachment that's a 10 MB memory spike + 2× 10 MB disk I/O per
-idle typing window. Acceptable for now; if it becomes an issue, consider sidecar storage for
-the attachment list and only re-composing on send.
+**`setId`'s synchronous `stateRef` mutation** — removed. `sendWithFreshDraft` now reads the
+id from `saveNow()`'s return value instead of relying on the stateRef side-channel.
 
-**`setId`'s synchronous `stateRef` mutation in `useDraftState`** — pragmatic but non-idiomatic.
-Removing it requires routing `saveNow`'s return value (the persisted `EmailDraft`) through
-`sendWithFreshDraft` instead of relying on `toDraft()` reading the freshly-written ref. A ~20
-line refactor; defer until touched again.
+**Test coverage gaps** — `mail-attachments.test.ts` expanded from 7 to 13 tests:
+- Empty `tempAttachmentIds: []` vs `undefined` equivalence
+- Concurrent uploads on the same draft, single save with both tempIds
+- Default `contentType` for files with no MIME → `application/octet-stream`
+- `cleanupStaleDraftTemps` correctness under mixed-age files
+- Body-only re-save uses fast path and preserves attachments
+- Send after fast-path saves includes attachments
+
+### Remaining
 
 **Manual regression testing of the composer flow** — backend integration tests cover the
 round-trips but the race fixes (saveNow serialization, mode+mailId coexistence, remount key)
-would benefit from an end-to-end test. Playwright or a headless browser test covering:
+would benefit from an end-to-end Playwright test covering:
 attach → save → edit → re-save → remove → send.
 
 ### Low priority
@@ -49,12 +50,6 @@ content</blockquote>` via string concatenation. Works (header fields are escaped
 either already-sanitized html or escaped text) but a safer pattern is to build a DOM fragment
 and extract its innerHTML. Only matters if we start embedding user-controlled strings beyond
 the current two fields.
-
-**Test coverage gaps** — `apps/api/src/test/mail-attachments.test.ts` has 7 tests. Add:
-- Empty `tempAttachmentIds: []` vs `undefined` equivalence
-- Concurrent uploads on the same draft, single save with both tempIds
-- Default `contentType` for files with no MIME (should fall back to `application/octet-stream`)
-- `cleanupStaleDraftTemps` correctness under mixed-age files
 
 ---
 

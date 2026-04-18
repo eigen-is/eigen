@@ -1,4 +1,4 @@
-import { EIGEN_ACCENT_COLOR_ROW, EIGEN_COLORS, type EigenColor } from '@workspace/lib/constants';
+import { EIGEN_ACCENT_COLOR_ROW, EIGEN_COLORS, type EigenColor, isLightColor } from '@workspace/lib/constants';
 import { cn } from '@workspace/ui/lib/utils';
 import { Check, RotateCcw } from 'lucide-react';
 
@@ -87,13 +87,5 @@ export function ColorPicker({
     );
 }
 
-function isLightColor(hex: string): boolean {
-    const r = parseInt(hex.slice(1, 3), 16);
-    const g = parseInt(hex.slice(3, 5), 16);
-    const b = parseInt(hex.slice(5, 7), 16);
-    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-    return luminance > 0.5;
-}
-
 export type { ColorPickerProps };
-export { DEFAULT_COLORS, isLightColor };
+export { DEFAULT_COLORS };

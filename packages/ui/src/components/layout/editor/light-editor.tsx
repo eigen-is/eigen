@@ -7,6 +7,7 @@ import { LightEditorToolbar } from './light-editor-toolbar';
 type LightEditorProps = {
     content: string;
     onChange: (html: string) => void;
+    onChangeText?: (text: string) => void;
     placeholder?: string;
     toolbar?: 'floating' | 'fixed' | 'none';
     className?: string;
@@ -30,6 +31,7 @@ const LIGHT_EXTENSIONS = [
 export function LightEditor({
     content,
     onChange,
+    onChangeText,
     placeholder,
     toolbar = 'floating',
     className,
@@ -47,6 +49,7 @@ export function LightEditor({
         },
         onUpdate: ({ editor: e }) => {
             onChange(e.getHTML());
+            onChangeText?.(e.getText());
         },
     });
 

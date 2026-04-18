@@ -118,6 +118,44 @@ export class MaildirStore {
         }
     }
 
+    // -- Draft meta sidecar (lightweight body-only saves) --
+
+    getDraftMetaPath(draftId: string): string {
+        return this.storage.pathJoin('draft-meta', `${this.sanitizeTempId(draftId)}.json`);
+    }
+
+    async ensureDraftMetaDir(): Promise<void> {
+        if (!(await this.storage.dirExists('draft-meta'))) {
+            await this.storage.mkdir('draft-meta');
+        }
+    }
+
+    async writeDraftMeta(draftId: string, meta: Record<string, unknown>): Promise<void> {
+        await this.ensureDraftMetaDir();
+        await this.storage.write(this.getDraftMetaPath(draftId), JSON.stringify(meta));
+    }
+
+    async readDraftMeta<T = Record<string, unknown>>(draftId: string): Promise<T | null> {
+        const path = this.getDraftMetaPath(draftId);
+        if (!(await this.storage.fileExists(path))) return null;
+        return (await this.storage.file(path).json()) as T;
+    }
+
+    async deleteDraftMeta(draftId: string): Promise<void> {
+        const path = this.getDraftMetaPath(draftId);
+        try {
+            if (await this.storage.fileExists(path)) {
+                await this.storage.unlink(path);
+            }
+        } catch {}
+    }
+
+    async listDraftMetaIds(): Promise<string[]> {
+        if (!(await this.storage.dirExists('draft-meta'))) return [];
+        const files = await this.storage.readdir('draft-meta');
+        return files.filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -5));
+    }
+
     async mailboxDirExists(mailbox: string): Promise<boolean> {
         return this.storage.dirExists(this.mailboxDir(mailbox));
     }
