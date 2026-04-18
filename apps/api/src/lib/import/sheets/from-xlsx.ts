@@ -90,11 +90,13 @@ function buildMergeMap(
         const { top, left, bottom, right } = parsed;
         const rs = bottom - top + 1;
         const cs = right - left + 1;
-        const anchor = { r: top, c: left, rs, cs };
-        merge[toA1(top, left)] = anchor;
+        merge[`${top}_${left}`] = { r: top, c: left, rs, cs };
         for (let rr = top; rr <= bottom; rr++) {
             for (let cc = left; cc <= right; cc++) {
-                map.set(`${rr}:${cc}`, anchor);
+                // Anchor carries rs/cs; non-anchors carry only {r,c} pointing back to anchor.
+                // Fortune-sheet uses `"rs" in cell.mc` as the anchor discriminator.
+                const mc = rr === top && cc === left ? { r: top, c: left, rs, cs } : { r: top, c: left };
+                map.set(`${rr}:${cc}`, mc);
             }
         }
     }
@@ -118,17 +120,6 @@ function parseA1(addr: string): { r: number; c: number } | null {
         col = col * 26 + (ch.charCodeAt(0) - 64);
     }
     return { r: Number(match[2]) - 1, c: col - 1 };
-}
-
-function toA1(r: number, c: number): string {
-    let letters = '';
-    let n = c + 1;
-    while (n > 0) {
-        const rem = (n - 1) % 26;
-        letters = String.fromCharCode(65 + rem) + letters;
-        n = Math.floor((n - 1) / 26);
-    }
-    return `${letters}${r + 1}`;
 }
 
 function convertCell(cell: XlsxCell): FortuneCell {

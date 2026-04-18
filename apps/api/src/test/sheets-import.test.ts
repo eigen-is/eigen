@@ -9,13 +9,17 @@ import { getHome } from '../lib/home/get-home';
 import { assertJson, authedRequest, driveGet, driveUpload, getTestContext } from './setup';
 
 async function buildXlsxBuffer(
-    cells: { a1: string; value: string | number }[],
+    cells: { a1: string; value: string | number | { formula: string; result?: string | number } }[],
     sheetName = 'Sheet1',
+    merges: string[] = [],
 ): Promise<ArrayBuffer> {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet(sheetName);
     for (const { a1, value } of cells) {
         worksheet.getCell(a1).value = value;
+    }
+    for (const range of merges) {
+        worksheet.mergeCells(range);
     }
     const buffer = await workbook.xlsx.writeBuffer();
     const view = new Uint8Array(buffer);
@@ -186,5 +190,98 @@ describe('Sheets xlsx import/convert', () => {
             { method: 'POST', body: buffer },
         );
         expect(res.status).toBe(400);
+    });
+
+    test('convert preserves merged cells with correct anchor/non-anchor shape', async () => {
+        const buffer = await buildXlsxBuffer(
+            [
+                { a1: 'A1', value: 'Merged' },
+                { a1: 'C1', value: 'Solo' },
+            ],
+            'Sheet1',
+            ['A1:B2'],
+        );
+        const xlsxFile = new File([buffer], 'merged.xlsx', {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+        const uploaded = await driveUpload<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            rootId,
+            xlsxFile,
+        );
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
+            { method: 'POST' },
+        );
+        const converted = await assertJson<DrivePath>(res);
+
+        const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+        expect(sheets[0].config?.merge).toEqual({ '0_0': { r: 0, c: 0, rs: 2, cs: 2 } });
+
+        const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
+        expect(byCoord.get('0:0')?.mc).toEqual({ r: 0, c: 0, rs: 2, cs: 2 });
+        expect(byCoord.get('0:1')?.mc).toEqual({ r: 0, c: 0 });
+        expect(byCoord.get('1:0')?.mc).toEqual({ r: 0, c: 0 });
+        expect(byCoord.get('1:1')?.mc).toEqual({ r: 0, c: 0 });
+    });
+
+    test('convert preserves formulas in celldata', async () => {
+        const buffer = await buildXlsxBuffer([
+            { a1: 'A1', value: 1 },
+            { a1: 'A2', value: 2 },
+            { a1: 'A3', value: 3 },
+            { a1: 'A4', value: { formula: 'SUM(A1:A3)', result: 6 } },
+        ]);
+        const xlsxFile = new File([buffer], 'formula.xlsx', {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+        const uploaded = await driveUpload<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            rootId,
+            xlsxFile,
+        );
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
+            { method: 'POST' },
+        );
+        const converted = await assertJson<DrivePath>(res);
+
+        const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+        const formulaCell = (sheets[0].celldata ?? []).find((c) => c.r === 3 && c.c === 0);
+        expect(formulaCell?.v?.f).toBe('=SUM(A1:A3)');
+    });
+
+    test('import into another user document without write permission returns 403', async () => {
+        const initial = await buildXlsxBuffer([{ a1: 'A1', value: 'Alice' }]);
+        const initialFile = new File([initial], 'alice.xlsx', {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+        const uploaded = await driveUpload<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            rootId,
+            initialFile,
+        );
+        const convertRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
+            { method: 'POST' },
+        );
+        const sheetsDoc = await assertJson<DrivePath>(convertRes);
+
+        const replacement = await buildXlsxBuffer([{ a1: 'A1', value: 'Bob was here' }]);
+        const res = await authedRequest(
+            ctx.bob.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${sheetsDoc.id}/import`,
+            { method: 'POST', body: replacement },
+        );
+        expect(res.status).toBe(403);
     });
 });
