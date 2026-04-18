@@ -255,19 +255,18 @@ the scripting side as a thin wrapper over Layer 2 — not inside this layer.
 ## File layout
 
 ```
-apps/api/src/lib/document/
-  sheets.ts                 # readSheets, writeSheets, pushSheetOps (Phase 2)
-  doc.ts                    # readDoc, writeDoc
-  slides.ts                 # readSlides, writeSlides
-  convert/
-    xlsx.ts                 # xlsxToSheets, sheetsToXlsx
-    docx.ts                 # docxToPmJson, pmJsonToDocx (future)
-    pptx.ts                 # pptxToDeck, deckToPptx (future)
+apps/api/src/lib/import/
+  import-document.ts        # dispatcher — convertToDocument, importIntoDocument
+  sheets/
+    from-xlsx.ts            # xlsxToSheets(buffer): Sheet[]
+    writer.ts               # writeSheetsToDoc(doc, sheets)
 ```
 
-`apps/api/src/lib/export/` stays where it is. Once the `document/` folder proves out we
-can merge `export/doc/content.ts` and `export/slides/content.ts` in as `readDoc` /
-`readSlides`, but that's cleanup — not a blocker.
+`apps/api/src/lib/export/` stays where it is; `lib/import/` mirrors its shape (dispatcher
+at the top, per-type subdirectories). Future additions go next to the existing ones:
+`lib/import/doc/from-docx.ts`, `lib/import/slides/from-pptx.ts`. Read-side helpers
+(`readSheets`, `readDoc`, `readSlides`) remain in `lib/export/*/content.ts` for now and
+can be hoisted into a shared `lib/document/` folder later — not a blocker.
 
 ## Frontend integration
 
@@ -285,17 +284,18 @@ not in app components.
 
 Start with just enough to ship xlsx → sheets for both flows:
 
-1. **`document/convert/xlsx.ts`** — `xlsxToSheets(buffer)`. Add `exceljs` dep.
-2. **`document/sheets.ts`** — `writeSheets(doc, sheets)`. Snapshot replace only.
-3. **Convert route** — `POST /drive/.../file/:pathId/convert/:targetType`. Wire through.
-4. **Drive "Convert to Sheet"** context menu + `useConvertDocument` hook.
-5. **Import route** — `POST /drive/.../file/:pathId/import`.
+1. **`import/sheets/from-xlsx.ts`** — `xlsxToSheets(buffer)`. Add `exceljs` dep.
+2. **`import/sheets/writer.ts`** — `writeSheetsToDoc(doc, sheets)`. Snapshot replace only.
+3. **`import/import-document.ts`** — dispatcher `convertToDocument` / `importIntoDocument`.
+4. **Convert + import routes** in `apps/api/src/routes/drive.ts` — thin handlers that
+   delegate to the dispatcher.
+5. **Drive "Convert to Sheet"** context menu + `useConvertDocument` hook.
 6. **Sheets "Import xlsx"** toolbar item + `useImportDocument` hook.
 
 Then only when needed:
 
 7. `readSheets(doc)` + `sheetsToXlsx(sheets)` → wire into `exportDocument()` for `xlsx`.
-8. `readDoc` / `writeDoc` + docx converters → DOCX import.
+8. `writeDocFromDocx` / `writeSlidesFromPptx` converters → DOCX/PPTX import.
 9. `pushSheetOps` + scripting SDK granular writes.
 
 Steps 1–6 are a few hundred lines total. No refactoring required, no new abstractions on

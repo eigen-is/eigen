@@ -132,7 +132,7 @@ class DbProvider {
 export default class CollabDocument {
     private drive: Drive;
     private path: DrivePath;
-    private doc!: Y.Doc;
+    public doc!: Y.Doc;
     private provider!: DbProvider;
     private awareness!: awarenessProtocol.Awareness;
     private connections: Set<ServerWebSocket<undefined>> = new Set();

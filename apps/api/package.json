@@ -38,6 +38,7 @@
     "elysia": "^1.4.28",
     "elysia-rate-limit": "^4.5.1",
     "encoding-japanese": "^2.2.0",
+    "exceljs": "^4.4.0",
     "exiftool-vendored": "^35.14.0",
     "fast-xml-parser": "^5.5.9",
     "he": "^1.2.0",
