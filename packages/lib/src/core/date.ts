@@ -12,15 +12,23 @@ export function formatDate(date: Date | string | number): string {
     return new Date(date).toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
+export function formatDateWithYear(date: Date | string | number): string {
+    return new Date(date).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
 export function formatDateTime(date: Date | string | number): string {
     const d = new Date(date);
     const isToday = d.toDateString() === new Date().toDateString();
+    const isSameYear = d.getFullYear() === new Date().getFullYear();
 
     if (isToday) {
         return formatTime(d);
     }
+    if (isSameYear) {
+        return `${formatDate(d)}, ${formatTime(d)}`;
+    }
 
-    return `${formatDate(d)}, ${formatTime(d)}`;
+    return `${formatDateWithYear(d)}, ${formatTime(d)}`;
 }
 
 export function formatTimeAgo(date: Date | string | number): string {
