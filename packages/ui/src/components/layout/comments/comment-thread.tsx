@@ -1,8 +1,9 @@
-import { useChatRoom } from '@workspace/lib/chat';
+import { useChatEditing, useChatRoom } from '@workspace/lib/chat';
 import { useMediaResolver } from '@workspace/lib/drive';
 import { cn } from '../../../lib/utils';
 import { ChatMessageInput } from '../chat/chat-message-input';
 import { ChatMessageList } from '../chat/chat-message-list';
+import { DeleteDialog } from '../delete/delete-dialog';
 
 type CommentThreadProps = {
     ownerId: string;
@@ -18,6 +19,7 @@ function CommentThreadInner({
     className,
 }: { chatId: string } & Omit<CommentThreadProps, 'chatName'>) {
     const chat = useChatRoom(ownerId, mountId, chatId);
+    const editing = useChatEditing(chat);
 
     return (
         <div className={cn('flex flex-col flex-1 min-h-0 overflow-hidden', className)}>
@@ -30,6 +32,11 @@ function CommentThreadInner({
                 mediaFolderId={chat.mediaFolderId}
                 emptyMessage=""
                 className="flex-1 min-h-0"
+                onEditMessage={(msg) => editing.setEditingMessageId(msg.id)}
+                onDeleteMessage={editing.setDeleteTarget}
+                editingMessageId={editing.editingMessageId}
+                onSaveEdit={editing.handleSaveEdit}
+                onCancelEdit={editing.endEditing}
             />
             <ChatMessageInput
                 onSend={chat.handleSendMessage}
@@ -38,7 +45,15 @@ function CommentThreadInner({
                 placeholder="Reply..."
                 roomMembers={chat.roomMembers}
                 currentUserEmail={chat.currentUserEmail}
-                messageCount={chat.messages.length}
+                messageCount={chat.messages.length + editing.focusTrigger}
+                onKeyDown={editing.onKeyDown}
+            />
+            <DeleteDialog
+                open={!!editing.deleteTarget}
+                onOpenChange={(open) => !open && editing.setDeleteTarget(null)}
+                title="Delete Message"
+                description="Are you sure you want to delete this message? This cannot be undone."
+                onDelete={editing.handleDeleteConfirm}
             />
         </div>
     );
