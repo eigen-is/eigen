@@ -1,7 +1,10 @@
 import {Freezen} from "..";
-import {Context} from "../context";
+import {Context, getFlowdata} from "../context";
+import {getSheetIndex} from "../utils";
 import {cancelActiveImgItem, israngeseleciton} from "../modules";
 import {colLocation, rowLocation} from "../modules/location";
+import {getFontSet} from "../modules/text";
+import {isInlineStringCell} from "../modules/inline-string";
 import {GlobalCache} from "../types";
 
 /**
@@ -240,4 +243,60 @@ export function handleRowFreezeHandleMouseDown(
         ele.style.height = "1px";
     }
     e.stopPropagation();
+}
+
+export function autoFitColumnWidth(
+    ctx: Context,
+    colIndex: number,
+    canvas: HTMLCanvasElement
+) {
+    const flowdata = getFlowdata(ctx);
+    if (!flowdata) return;
+
+    const renderCtx = canvas.getContext("2d");
+    if (!renderCtx) return;
+
+    const padding = 14;
+    let maxWidth = 10;
+
+    for (let r = 0; r < flowdata.length; r += 1) {
+        const cell = flowdata[r]?.[colIndex];
+        if (!cell) continue;
+
+        if (cell.mc) {
+            if (cell.mc.cs != null && cell.mc.cs > 1) continue;
+            if (cell.mc.c !== colIndex) continue;
+        }
+
+        let text: string;
+        if (isInlineStringCell(cell)) {
+            text = cell.ct!.s
+                .map((seg: any) => seg.v ?? "")
+                .join("");
+        } else {
+            const display = cell.m ?? cell.v;
+            if (display == null) continue;
+            text = String(display);
+        }
+        if (!text) continue;
+
+        const fontset = getFontSet(cell, ctx.defaultFontSize, ctx);
+        renderCtx.font = fontset;
+        const measured = renderCtx.measureText(text);
+        const width = measured.width + padding;
+        if (width > maxWidth) maxWidth = width;
+    }
+
+    maxWidth = Math.ceil(maxWidth);
+
+    const cfg = ctx.config;
+    cfg.columnlen ||= {};
+    cfg.customWidth ||= {};
+    cfg.columnlen[colIndex] = maxWidth;
+    cfg.customWidth[colIndex] = 1;
+    ctx.config = cfg;
+
+    const idx = getSheetIndex(ctx, ctx.currentSheetId);
+    if (idx == null) return;
+    ctx.luckysheetfile[idx].config = ctx.config;
 }
