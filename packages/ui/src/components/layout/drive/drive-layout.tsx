@@ -139,7 +139,7 @@ export function DriveLayout({
     const handleExportPath = (path: DrivePath, format: string) =>
         exportDocument(path.ownerId, path.mountId, path.id, format);
 
-    const handleConvertPath = (path: DrivePath, targetType: 'eigensheets') => {
+    const handleConvertPath = (path: DrivePath, targetType: 'eigensheets' | 'eigendoc') => {
         if (!path.parentId) return;
         convertMutation.mutate(
             { pathId: path.id, targetType, parentId: path.parentId },
