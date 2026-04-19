@@ -114,7 +114,7 @@ New document > Open > Rename > Export > [separator] > Share > ... > Print > Dele
 
 ### Drive Context Menu (`packages/ui/src/components/layout/drive/drive-table.tsx`)
 
-Export submenu for eigendoc files, driven by `onExport` callback.
+Export submenu for eigendoc, eigenslides, and eigensheets files, driven by `onExport` callback.
 
 ## Dependencies
 
@@ -161,4 +161,24 @@ apps/api/src/lib/export/slides/
   render.ts      # Slide/object → HTML strings (SizeUnit abstraction)
   html.ts        # Standalone HTML export
   pdf.ts         # PDF via WeasyPrint
+```
+
+## Sheets Export
+
+Eigensheets (`.eigensheets`) support XLSX export via the same route:
+
+| Format | Pipeline |
+|--------|----------|
+| `xlsx`  | Yjs snapshot → `Sheet[]` → ExcelJS workbook |
+
+The conversion reverses the XLSX import pipeline (`apps/api/src/lib/import/sheets/from-xlsx.ts`), using the
+same ExcelJS library. Cell values, formulas, styles (font, fill, alignment), borders, merged cells, column
+widths, and row heights are all round-tripped.
+
+### File Structure
+
+```
+apps/api/src/lib/export/sheets/
+  content.ts     # Yjs snapshot → Sheet[]
+  xlsx.ts        # Sheet[] → XLSX buffer via ExcelJS
 ```
