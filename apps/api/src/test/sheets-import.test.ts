@@ -9,17 +9,29 @@ import { getHome } from '../lib/home/get-home';
 import { assertJson, authedRequest, driveGet, driveUpload, getTestContext } from './setup';
 
 async function buildXlsxBuffer(
-    cells: { a1: string; value: string | number | { formula: string; result?: string | number } }[],
+    cells: {
+        a1: string;
+        value: string | number | { formula: string; result?: string | number };
+        fontSize?: number;
+    }[],
     sheetName = 'Sheet1',
     merges: string[] = [],
+    columnWidths?: { col: number; width: number }[],
 ): Promise<ArrayBuffer> {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet(sheetName);
-    for (const { a1, value } of cells) {
-        worksheet.getCell(a1).value = value;
+    for (const { a1, value, fontSize } of cells) {
+        const cell = worksheet.getCell(a1);
+        cell.value = value;
+        if (fontSize) cell.font = { size: fontSize };
     }
     for (const range of merges) {
         worksheet.mergeCells(range);
+    }
+    if (columnWidths) {
+        for (const { col, width } of columnWidths) {
+            worksheet.getColumn(col).width = width;
+        }
     }
     const buffer = await workbook.xlsx.writeBuffer();
     const view = new Uint8Array(buffer);
@@ -284,6 +296,57 @@ describe('Sheets xlsx import/convert', () => {
             { method: 'POST', body: notXlsx },
         );
         expect(res.status).toBe(400);
+    });
+
+    test('convert scales column widths from character units to pixels', async () => {
+        const buffer = await buildXlsxBuffer([{ a1: 'A1', value: 'wide' }], 'Sheet1', [], [{ col: 1, width: 15 }]);
+        const xlsxFile = new File([buffer], 'colwidth.xlsx', {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+        const uploaded = await driveUpload<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            rootId,
+            xlsxFile,
+        );
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
+            { method: 'POST' },
+        );
+        const converted = await assertJson<DrivePath>(res);
+        const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+        expect(sheets[0].config?.columnlen?.['0']).toBe(Math.round(15 * 8));
+    });
+
+    test('convert preserves font sizes in points', async () => {
+        const buffer = await buildXlsxBuffer([
+            { a1: 'A1', value: 'big', fontSize: 24 },
+            { a1: 'B1', value: 'small', fontSize: 8 },
+            { a1: 'C1', value: 'default' },
+        ]);
+        const xlsxFile = new File([buffer], 'fontsizes.xlsx', {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+        const uploaded = await driveUpload<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            rootId,
+            xlsxFile,
+        );
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
+            { method: 'POST' },
+        );
+        const converted = await assertJson<DrivePath>(res);
+        const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+        const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
+        expect(byCoord.get('0:0')?.fs).toBe(24);
+        expect(byCoord.get('0:1')?.fs).toBe(8);
+        expect(byCoord.get('0:2')?.fs).toBeUndefined();
     });
 
     test('import into another user document without write permission returns 403', async () => {
