@@ -233,14 +233,24 @@ function formatDateForDisplay(date: Date, numFmt?: string): string {
     const y = date.getUTCFullYear();
     const M = date.getUTCMonth() + 1;
     const d = date.getUTCDate();
+    const H = date.getUTCHours();
+    const m = date.getUTCMinutes();
+    const s = date.getUTCSeconds();
     if (!numFmt || numFmt === 'General') return `${M}/${d}/${y}`;
+    const h12 = H === 0 ? 12 : H > 12 ? H - 12 : H;
+    const ampm = H >= 12 ? 'PM' : 'AM';
     return numFmt
         .replace('yyyy', String(y))
         .replace('yy', String(y).slice(-2))
         .replace(/MM(?!M)/, String(M).padStart(2, '0'))
         .replace(/M(?!M)/, String(M))
         .replace('dd', String(d).padStart(2, '0'))
-        .replace(/\bd\b/, String(d));
+        .replace(/\bd\b/, String(d))
+        .replace('hh', String(numFmt.includes('AM/PM') ? h12 : H).padStart(2, '0'))
+        .replace(/\bh\b/, String(numFmt.includes('AM/PM') ? h12 : H))
+        .replace('ss', String(s).padStart(2, '0'))
+        .replace('mm', String(m).padStart(2, '0'))
+        .replace('AM/PM', ampm);
 }
 
 function buildCellType(cell: XlsxCell, value: string | number | boolean | undefined): FortuneCell['ct'] {
@@ -335,7 +345,7 @@ function isFormulaValue(value: CellValue): value is Extract<CellValue, { formula
     return typeof value === 'object' && value !== null && 'formula' in value;
 }
 
-function isSharedFormula(value: CellValue): value is CellValue & { sharedFormula: string; result?: CellValue } {
+function isSharedFormula(value: CellValue): value is Extract<CellValue, { sharedFormula: string }> {
     return typeof value === 'object' && value !== null && 'sharedFormula' in value;
 }
 

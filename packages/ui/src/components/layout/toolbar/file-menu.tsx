@@ -23,6 +23,18 @@ import { DriveDeleteItem } from '../drive/drive-delete-item';
 import { DriveEmailCollaborators } from '../drive/drive-email-collaborators';
 import { DriveRenameItem } from '../drive/drive-rename-item';
 
+const DOWNLOAD_LABELS: Record<string, string> = {
+    docx: 'Microsoft Word (.docx)',
+    pdf: 'PDF (.pdf)',
+    html: 'Web Page (.html)',
+    xlsx: 'Microsoft Excel (.xlsx)',
+    csv: 'Comma Separated Values (.csv)',
+};
+
+export function formatDownloadLabel(format: string): string {
+    return DOWNLOAD_LABELS[format] ?? `${format.toUpperCase()} (.${format})`;
+}
+
 type FileMenuProps = {
     path: DrivePath;
     canWrite: boolean;
@@ -91,23 +103,23 @@ export function FileMenu({
                     <DropdownMenuItem onClick={() => navigate({ to: `/` })}>
                         <Folder className="h-4 w-4 mr-2" /> Open
                     </DropdownMenuItem>
-
-                    {/* Section 2: Import, Export & Rename */}
-                    <DropdownMenuSeparator />
                     {canWrite && onImport && (
                         <DropdownMenuItem onClick={onImport}>
                             <Upload className="h-4 w-4 mr-2" /> {importLabel ?? 'Import…'}
                         </DropdownMenuItem>
                     )}
+
+                    {/* Section 2: Export & Rename */}
+                    <DropdownMenuSeparator />
                     {onExport && (
                         <DropdownMenuSub>
                             <DropdownMenuSubTrigger>
-                                <Download className="h-4 w-4 mr-2" /> Export
+                                <Download className="h-4 w-4 mr-2" /> Download
                             </DropdownMenuSubTrigger>
                             <DropdownMenuSubContent>
                                 {(exportFormats ?? ['docx', 'pdf', 'html']).map((format) => (
                                     <DropdownMenuItem key={format} onClick={() => onExport(format)}>
-                                        Export as {format.toUpperCase()}
+                                        {formatDownloadLabel(format)}
                                     </DropdownMenuItem>
                                 ))}
                             </DropdownMenuSubContent>

@@ -865,7 +865,7 @@ export function Toolbar({
             merge, border, freezen, screenshot, sort, textWrap, rotation, filter,
             splitText, findAndReplace, fontarray,
             context.defaultFontSize, context.allowEdit,
-            customColor, customStyle, toolbarFormat.moreCurrency, toolbarFormat.moreNumber,
+            customColor, customStyle, toolbarFormat.moreCurrency, toolbarFormat.moreNumber, toolbarFormat.moreDateTime,
         ]
     );
 
