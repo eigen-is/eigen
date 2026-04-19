@@ -68,7 +68,7 @@ export function SheetEditor({
     const workbookRef = useRef<WorkbookInstance>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
 
-    const { initialData, synced, handleOp, onDataChange, handleRestore } = useSheet(
+    const { initialData, snapshotVersion, synced, handleOp, onDataChange, handleRestore } = useSheet(
         ownerId,
         path.mountId,
         path.id,
@@ -179,6 +179,7 @@ export function SheetEditor({
             <div className="flex flex-col h-full w-full relative">
                 <div className="flex-1 overflow-hidden">
                     <Workbook
+                        key={snapshotVersion}
                         ref={workbookRef}
                         data={initialData}
                         onChange={(data) => {

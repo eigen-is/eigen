@@ -7,7 +7,7 @@ import type {
     Sheet,
     SheetConfig,
 } from '@workspace/lib/sheets';
-import type { Alignment, Border, CellValue, Worksheet, Cell as XlsxCell } from 'exceljs';
+import type { Alignment, Border, CellValue, Workbook, Worksheet, Cell as XlsxCell } from 'exceljs';
 
 // Excel's date epoch is 1899-12-30 (not 1900-01-01 — Lotus 1-2-3 1900 leap-year bug).
 const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);
@@ -47,19 +47,23 @@ const BORDER_STYLE_MAP: Record<string, number> = {
     thick: 13,
 };
 
+type ThemePalette = string[];
+
 export async function xlsxToSheets(buffer: Buffer): Promise<Sheet[]> {
     const ExcelJS = (await import('exceljs')).default;
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(buffer);
 
+    const theme = extractThemePalette(workbook);
+
     const sheets: Sheet[] = [];
     workbook.worksheets.forEach((worksheet, index) => {
-        sheets.push(worksheetToSheet(worksheet, index));
+        sheets.push(worksheetToSheet(worksheet, index, theme));
     });
     return sheets;
 }
 
-function worksheetToSheet(worksheet: Worksheet, index: number): Sheet {
+function worksheetToSheet(worksheet: Worksheet, index: number, theme: ThemePalette): Sheet {
     const celldata: { r: number; c: number; v: FortuneCell }[] = [];
     const columnlen: NonNullable<SheetConfig['columnlen']> = {};
     const rowlen: NonNullable<SheetConfig['rowlen']> = {};
@@ -67,28 +71,42 @@ function worksheetToSheet(worksheet: Worksheet, index: number): Sheet {
 
     const { merge, anchorByCell } = buildMergeStructures(worksheet.model.merges ?? []);
 
+    // Compute column widths first (needed for auto-fit height estimation).
+    const colWidthPx: Record<number, number> = {};
+    (worksheet.columns ?? []).forEach((col, i) => {
+        if (col && typeof col.width === 'number' && col.width > 0) {
+            const px = Math.round(col.width * 8);
+            colWidthPx[i] = px;
+            columnlen[String(i)] = px;
+        }
+    });
+
+    const DEFAULT_ROW_HEIGHT_PT = 15.75;
+    const DEFAULT_ROW_HEIGHT_PX = 20;
+
     worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
         const r = rowNumber - 1;
-        row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+        let maxCellHeight = 0;
+
+        row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
             const c = colNumber - 1;
-            const converted = convertCell(cell);
+            const converted = convertCell(cell, theme);
+            if (isEmptyCell(converted)) return;
             const mergeAnchor = anchorByCell.get(`${r}:${c}`);
             if (mergeAnchor) converted.mc = mergeAnchor;
             celldata.push({ r, c, v: converted });
 
-            const border = convertBorder(cell, r, c);
+            const border = convertBorder(cell, r, c, theme);
             if (border) borderInfo.push(border);
-        });
-        if (typeof row.height === 'number' && row.height > 0) {
-            // ExcelJS row height is in points; fortune-sheet expects pixels (1pt ≈ 4/3 px at 96 DPI).
-            rowlen[String(r)] = Math.round(row.height * (4 / 3));
-        }
-    });
 
-    (worksheet.columns ?? []).forEach((col, i) => {
-        if (col && typeof col.width === 'number' && col.width > 0) {
-            // ExcelJS column width is in "character units"; fortune-sheet expects pixels.
-            columnlen[String(i)] = Math.round(col.width * 8);
+            maxCellHeight = Math.max(maxCellHeight, estimateCellHeight(cell, c, r, merge, colWidthPx));
+        });
+
+        const isDefaultHeight = row.height === DEFAULT_ROW_HEIGHT_PT;
+        if (!isDefaultHeight && typeof row.height === 'number' && row.height > 0) {
+            rowlen[String(r)] = Math.round(row.height * (4 / 3));
+        } else if (maxCellHeight > DEFAULT_ROW_HEIGHT_PX) {
+            rowlen[String(r)] = Math.round(maxCellHeight);
         }
     });
 
@@ -98,13 +116,20 @@ function worksheetToSheet(worksheet: Worksheet, index: number): Sheet {
     if (Object.keys(rowlen).length > 0) config.rowlen = rowlen;
     if (borderInfo.length > 0) config.borderInfo = borderInfo;
 
-    return {
+    const sheet: Sheet = {
         name: worksheet.name,
         id: `sheet-${index}`,
         order: index,
         celldata,
         config,
     };
+
+    const view = worksheet.views?.[0];
+    if (view && view.showGridLines === false) {
+        sheet.showGridLines = false;
+    }
+
+    return sheet;
 }
 
 function buildMergeStructures(merges: string[]): {
@@ -151,7 +176,63 @@ function parseA1(addr: string): { r: number; c: number } | null {
     return { r: Number(match[2]) - 1, c: col - 1 };
 }
 
-function convertCell(cell: XlsxCell): FortuneCell {
+const DEFAULT_FONT_SIZE = 11;
+const DEFAULT_COL_WIDTH_PX = 100;
+const PT_TO_PX = 4 / 3;
+const LINE_HEIGHT_FACTOR = 1.35;
+
+function estimateCellHeight(
+    cell: XlsxCell,
+    c: number,
+    r: number,
+    merge: NonNullable<SheetConfig['merge']>,
+    colWidthPx: Record<number, number>,
+): number {
+    const fontSize = cell.style?.font?.size ?? DEFAULT_FONT_SIZE;
+    const lineHeightPx = fontSize * PT_TO_PX * LINE_HEIGHT_FACTOR;
+    const wrapText = cell.style?.alignment?.wrapText === true;
+
+    if (!wrapText) {
+        return fontSize > DEFAULT_FONT_SIZE ? lineHeightPx + 6 : 0;
+    }
+
+    const text = getCellTextContent(cell);
+    if (!text) return lineHeightPx + 6;
+
+    let cellWidth = colWidthPx[c] ?? DEFAULT_COL_WIDTH_PX;
+    const mergeKey = `${r}_${c}`;
+    const mergeInfo = merge[mergeKey];
+    if (mergeInfo?.cs && mergeInfo.cs > 1) {
+        cellWidth = 0;
+        for (let ci = mergeInfo.c; ci < mergeInfo.c + mergeInfo.cs; ci++) {
+            cellWidth += colWidthPx[ci] ?? DEFAULT_COL_WIDTH_PX;
+        }
+    }
+
+    const charsPerLine = Math.max(1, cellWidth / (fontSize * 0.6));
+    let totalLines = 0;
+    for (const line of text.split('\n')) {
+        totalLines += Math.max(1, Math.ceil(line.length / charsPerLine));
+    }
+    return totalLines * lineHeightPx + 6;
+}
+
+function getCellTextContent(cell: XlsxCell): string | null {
+    const raw = cell.value;
+    if (raw === null || raw === undefined) return null;
+    if (typeof raw === 'string') return raw;
+    if (typeof raw === 'number' || typeof raw === 'boolean') return String(raw);
+    if (isRichText(raw)) return raw.richText.map((r) => r.text).join('');
+    if (isHyperlink(raw)) return raw.text;
+    if (isFormulaValue(raw) || isSharedFormula(raw)) {
+        const result = raw.result;
+        if (typeof result === 'string') return result;
+        if (typeof result === 'number') return String(result);
+    }
+    return null;
+}
+
+function convertCell(cell: XlsxCell, theme: ThemePalette): FortuneCell {
     const result: FortuneCell = {};
 
     const { value, display } = extractValueAndDisplay(cell);
@@ -165,9 +246,13 @@ function convertCell(cell: XlsxCell): FortuneCell {
     const ct = buildCellType(cell, value);
     if (ct) result.ct = ct;
 
-    applyStyle(cell, result);
+    applyStyle(cell, result, theme);
 
     return result;
+}
+
+function isEmptyCell(cell: FortuneCell): boolean {
+    return cell.v === undefined && cell.f === undefined && cell.bg === undefined && cell.fc === undefined;
 }
 
 function extractValueAndDisplay(cell: XlsxCell): { value?: string | number | boolean; display?: string } {
@@ -274,7 +359,7 @@ function resolveType(cell: XlsxCell, value: string | number | boolean | undefine
     return undefined;
 }
 
-function applyStyle(cell: XlsxCell, target: FortuneCell): void {
+function applyStyle(cell: XlsxCell, target: FortuneCell, theme: ThemePalette): void {
     const style = cell.style;
 
     const hasExplicitAlignment = style?.alignment?.horizontal != null;
@@ -289,12 +374,14 @@ function applyStyle(cell: XlsxCell, target: FortuneCell): void {
         if (font.bold) target.bl = 1;
         if (font.italic) target.it = 1;
         if (typeof font.size === 'number') target.fs = font.size;
-        if (font.color?.argb) target.fc = argbToHex(font.color.argb);
+        const fc = resolveColor(font.color, theme);
+        if (fc) target.fc = fc;
     }
 
     const fill = style.fill;
-    if (fill && fill.type === 'pattern' && fill.fgColor?.argb) {
-        target.bg = argbToHex(fill.fgColor.argb);
+    if (fill && fill.type === 'pattern' && fill.pattern !== 'none') {
+        const bg = resolveColor(fill.fgColor, theme);
+        if (bg) target.bg = bg;
     }
 
     const alignment = style.alignment;
@@ -310,6 +397,9 @@ function applyAlignment(alignment: Partial<Alignment>, target: CellStyle): void 
     if (alignment.vertical && alignment.vertical in VERTICAL_MAP) {
         target.vt = VERTICAL_MAP[alignment.vertical];
     }
+    if (alignment.wrapText) {
+        target.tb = '2';
+    }
 }
 
 function argbToHex(argb: string): string {
@@ -317,14 +407,92 @@ function argbToHex(argb: string): string {
     return `#${rgb.toUpperCase()}`;
 }
 
-function convertBorder(cell: XlsxCell, r: number, c: number): CellBorderInfo | null {
+function resolveColor(
+    color: { argb?: string; theme?: number; tint?: number } | undefined,
+    theme: ThemePalette,
+): string | null {
+    if (!color) return null;
+    if (color.argb) {
+        const hex = argbToHex(color.argb);
+        return color.tint != null ? applyTint(hex, color.tint) : hex;
+    }
+    if (color.theme != null && color.theme < theme.length) {
+        const hex = theme[color.theme];
+        return color.tint != null ? applyTint(hex, color.tint) : hex;
+    }
+    return null;
+}
+
+function applyTint(hex: string, tint: number): string {
+    const raw = hex.replace('#', '');
+    let r = Number.parseInt(raw.substring(0, 2), 16);
+    let g = Number.parseInt(raw.substring(2, 4), 16);
+    let b = Number.parseInt(raw.substring(4, 6), 16);
+    if (tint > 0) {
+        r = Math.round(r + (255 - r) * tint);
+        g = Math.round(g + (255 - g) * tint);
+        b = Math.round(b + (255 - b) * tint);
+    } else {
+        r = Math.round(r * (1 + tint));
+        g = Math.round(g * (1 + tint));
+        b = Math.round(b * (1 + tint));
+    }
+    const clamp = (v: number) => Math.max(0, Math.min(255, v));
+    return `#${clamp(r).toString(16).padStart(2, '0').toUpperCase()}${clamp(g).toString(16).padStart(2, '0').toUpperCase()}${clamp(b).toString(16).padStart(2, '0').toUpperCase()}`;
+}
+
+// SpreadsheetML theme indices: 0=lt1, 1=dk1, 2=lt2, 3=dk2, 4-9=accent1-6, 10=hlink, 11=folHlink.
+// The clrScheme XML lists them as dk1,lt1,dk2,lt2,accent1-6,hlink,folHlink — reorder to match.
+const CLR_SCHEME_ELEMENTS = [
+    'dk1',
+    'lt1',
+    'dk2',
+    'lt2',
+    'accent1',
+    'accent2',
+    'accent3',
+    'accent4',
+    'accent5',
+    'accent6',
+    'hlink',
+    'folHlink',
+] as const;
+const THEME_INDEX_ORDER = [1, 0, 3, 2, 4, 5, 6, 7, 8, 9, 10, 11] as const;
+
+function extractThemePalette(workbook: Workbook): ThemePalette {
+    const themeXml = (workbook as unknown as { _themes?: Record<string, string> })._themes?.['theme1'];
+    if (!themeXml) return [];
+    const schemeMatch = themeXml.match(/<a:clrScheme[^>]*>([\s\S]*?)<\/a:clrScheme>/);
+    if (!schemeMatch) return [];
+    const scheme = schemeMatch[1];
+
+    const xmlColors: string[] = [];
+    for (const el of CLR_SCHEME_ELEMENTS) {
+        const block = scheme.match(new RegExp(`<a:${el}>([\\s\\S]*?)</a:${el}>`));
+        if (!block) {
+            xmlColors.push('#000000');
+            continue;
+        }
+        const srgb = block[1].match(/srgbClr\s+val="([A-Fa-f0-9]{6})"/);
+        const sys = block[1].match(/sysClr[^>]*lastClr="([A-Fa-f0-9]{6})"/);
+        xmlColors.push(srgb ? `#${srgb[1].toUpperCase()}` : sys ? `#${sys[1].toUpperCase()}` : '#000000');
+    }
+
+    const palette: ThemePalette = [];
+    for (const xmlIndex of THEME_INDEX_ORDER) {
+        palette.push(xmlColors[xmlIndex]);
+    }
+    return palette;
+}
+
+function convertBorder(cell: XlsxCell, r: number, c: number, theme: ThemePalette): CellBorderInfo | null {
     const border = cell.style?.border;
     if (!border) return null;
 
-    const l = convertBorderSide(border.left);
-    const r_ = convertBorderSide(border.right);
-    const t = convertBorderSide(border.top);
-    const b = convertBorderSide(border.bottom);
+    const l = convertBorderSide(border.left, theme);
+    const r_ = convertBorderSide(border.right, theme);
+    const t = convertBorderSide(border.top, theme);
+    const b = convertBorderSide(border.bottom, theme);
     if (!l && !r_ && !t && !b) return null;
 
     const value: CellBorderInfo['value'] = { row_index: r, col_index: c };
@@ -335,9 +503,9 @@ function convertBorder(cell: XlsxCell, r: number, c: number): CellBorderInfo | n
     return { rangeType: 'cell', value };
 }
 
-function convertBorderSide(side: Partial<Border> | undefined): BorderSide | null {
+function convertBorderSide(side: Partial<Border> | undefined, theme: ThemePalette): BorderSide | null {
     if (!side?.style || !(side.style in BORDER_STYLE_MAP)) return null;
-    const color = side.color?.argb ? argbToHex(side.color.argb) : '#000000';
+    const color = resolveColor(side.color, theme) ?? '#000000';
     return { style: BORDER_STYLE_MAP[side.style], color };
 }
 

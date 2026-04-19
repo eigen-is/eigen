@@ -23,6 +23,7 @@ export function useSheet(
 ) {
     const [initialData, setInitialData] = useState<Sheet[] | null>(null);
     const [synced, setSynced] = useState(false);
+    const [snapshotVersion, setSnapshotVersion] = useState(0);
 
     const docRef = useRef<Y.Doc | null>(null);
     const providerRef = useRef<WebsocketProvider | null>(null);
@@ -100,8 +101,8 @@ export function useSheet(
             try {
                 const data = JSON.parse(snapshot) as Sheet[];
                 latestDataRef.current = data;
-                setInitialData(null);
-                queueMicrotask(() => setInitialData(data));
+                setInitialData(data);
+                setSnapshotVersion((v) => v + 1);
             } catch (e) {
                 console.error('[sheet] Failed to apply remote snapshot:', e);
             }
@@ -193,8 +194,8 @@ export function useSheet(
             try {
                 const data = JSON.parse(snapshot) as Sheet[];
                 latestDataRef.current = data;
-                setInitialData(null);
-                queueMicrotask(() => setInitialData(data));
+                setInitialData(data);
+                setSnapshotVersion((v) => v + 1);
             } catch (e) {
                 console.error('[sheet] handleRestore: failed:', e);
             }
@@ -203,6 +204,7 @@ export function useSheet(
 
     return {
         initialData,
+        snapshotVersion,
         synced,
         handleOp,
         onDataChange,
