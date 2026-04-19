@@ -22,27 +22,24 @@ and structural improvements.
 All remaining `.css` files should be converted to Tailwind utilities and then deleted. The `css.d.ts` module declaration
 can be removed once no `.css` imports remain.
 
-| File                               | Lines  | Priority | Notes                                                                                                                                                                                     |
-|------------------------------------|--------|----------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `ContextMenu/index.css`            | 283    | **High** | Largest CSS file. Styles for context menu, filter menu, filter-by-color submenu, buttons. Many hardcoded colors (`#fff`, `#ccc`, `#0188fb`). Replace with Tailwind + shadcn theme tokens. |
-| `SheetTab/index.css`               | 281    | **High** | Sheet tab area, active/hover states, scroll buttons, boundaries. Hardcoded colors.                                                                                                        |
-| `SheetOverlay/index.css`           | 957    | **High** | Massive file. Cell selection, drag, resize handles, frozen panes, cell editor, formula bar, data verification, bottom add-row. Most complex migration.                                    |
-| `SheetOverlay/ScrollBar/index.css` | ~small | Medium   | Custom scrollbar styling.                                                                                                                                                                 |
-| `LinkEidtCard/index.css`           | 183    | Medium   | Link edit modal, buttons, inputs. Replace with shadcn `Dialog`/`Input`/`Button`.                                                                                                          |
-| `Workbook/index.css`               | 56     | Low      | Container layout, popover backdrop, stat area. Mostly layout — easy Tailwind migration.                                                                                                   |
-| `DataVerification/index.css`       | 193    | **DONE** | CSS import removed, Tailwind applied. **Delete this file.**                                                                                                                               |
-| `SearchReplace/index.css`          | 162    | **DONE** | CSS import removed, shadcn used. **Delete this file if not already.**                                                                                                                     |
+| File                               | Lines  | Status   | Notes                                                                                     |
+|------------------------------------|--------|----------|-------------------------------------------------------------------------------------------|
+| `SheetTab/index.css`               | 280    | TODO     | Sheet tab area, active/hover states, scroll buttons. Hardcoded colors.                    |
+| `SheetOverlay/index.css`           | 882    | TODO     | Largest file. Cell selection, drag, resize, frozen panes, cell editor, formula bar.        |
+| `SheetOverlay/ScrollBar/index.css` | 40     | TODO     | Custom scrollbar styling.                                                                 |
+| `LinkEidtCard/index.css`           | 182    | TODO     | Link edit modal. Replace with shadcn `Dialog`/`Input`/`Button`.                           |
+| `ContextMenu/index.css`            | —      | **DONE** | Deleted.                                                                                  |
+| `Workbook/index.css`               | —      | **DONE** | Deleted.                                                                                  |
+| `DataVerification/index.css`       | —      | **DONE** | Deleted.                                                                                  |
+| `SearchReplace/index.css`          | —      | **DONE** | Deleted.                                                                                  |
+| `ConditionFormat/index.css`        | —      | **DONE** | Deleted.                                                                                  |
 
 ### Action items
 
-- [ ] Migrate `ContextMenu/index.css` → Tailwind classes on components
 - [ ] Migrate `SheetTab/index.css` → Tailwind classes
 - [ ] Migrate `SheetOverlay/index.css` → Tailwind classes (break into multiple PRs)
-- [ ] Migrate `LinkEidtCard/index.css` → Tailwind + shadcn components
-- [ ] Migrate `Workbook/index.css` → Tailwind classes
 - [ ] Migrate `SheetOverlay/ScrollBar/index.css` → Tailwind
-- [ ] Delete `DataVerification/index.css` (no longer imported)
-- [ ] Delete `SearchReplace/index.css` (no longer imported)
+- [ ] Migrate `LinkEidtCard/index.css` → Tailwind + shadcn components
 - [ ] Delete `css.d.ts` once all CSS imports are removed
 
 ---
@@ -51,26 +48,9 @@ can be removed once no `.css` imports remain.
 
 Components using styled `<div>` elements as buttons instead of shadcn `Button`:
 
-| Component                          | Location                        | Count | Status                                                       |
-|------------------------------------|---------------------------------|-------|--------------------------------------------------------------|
-| `DataVerification/index.tsx`       | Bottom actions                  | 3     | **DONE**                                                     |
-| `FormulaSearch/index.tsx`          | Confirm/Cancel                  | 2     | **DONE**                                                     |
-| `LocationCondition/index.tsx`      | Confirm/Cancel                  | 2     | **DONE**                                                     |
-| `SplitColumn/index.tsx`            | Confirm/Cancel                  | 2     | **DONE**                                                     |
-| `SearchReplace/index.tsx`          | All buttons                     | ~4    | **DONE**                                                     |
-| `ContextMenu/FilterMenu.tsx`       | Confirm/Cancel/Clear (L664-719) | 3     | **TODO** — `button-basic button-primary/default/danger` divs |
-| `ContextMenu/FilterMenu.tsx`       | By-color submenu confirm (L756) | 1     | **TODO**                                                     |
-| `CustomSort/index.tsx`             | Confirm button (L155-168)       | 1     | **TODO** — `button-basic button-primary` div                 |
-| `DataVerification/RangeDialog.tsx` | Confirm/Close (L83-104)         | 2     | **TODO** — `button-basic button-primary/close` divs          |
-| `LinkEidtCard/index.tsx`           | renderBottomButton (L88-107)    | 2     | **TODO** — `button-basic button-default/primary` divs        |
-| `LinkEidtCard/index.tsx`           | renderToolbarButton (L110-116)  | N/A   | Icon buttons — consider `TooltipButton` from shared UI       |
-
-### Action items
-
-- [ ] `FilterMenu.tsx`: Replace 4 `button-basic` divs with `<Button>` (primary, outline, destructive variants)
-- [ ] `CustomSort/index.tsx`: Replace `button-basic button-primary` div with `<Button>`
-- [ ] `RangeDialog.tsx`: Replace 2 `button-basic` divs with `<Button>`
-- [ ] `LinkEidtCard/index.tsx`: Replace `renderBottomButton` divs with `<Button>`, toolbar buttons with `TooltipButton`
+All `button-basic` div buttons have been migrated to shadcn `Button` across all components
+(DataVerification, FormulaSearch, LocationCondition, SplitColumn, SearchReplace, FilterMenu,
+CustomSort, RangeDialog, LinkEditCard). **DONE.**
 
 ---
 
@@ -335,34 +315,26 @@ implementations:
 
 ## 9. Priority Order
 
-### Phase 1 — Quick wins (low risk)
+### Done
 
-1. Delete dead CSS files (`DataVerification/index.css`, `SearchReplace/index.css`)
-2. Replace remaining `button-basic` divs with shadcn `Button` (FilterMenu, CustomSort, RangeDialog, LinkEditCard)
-3. Fix `NameBox.tsx` export name (`LocationBox` → `NameBox`)
-4. Fix `LinkEidtCard` directory typo → `LinkEditCard`
-5. Replace hardcoded colors with theme tokens in SheetList, FormulaSearch, FxEditor
+- ~~Delete dead CSS files~~ — 5 of 9 CSS files deleted (ContextMenu, Workbook, DataVerification, SearchReplace, ConditionFormat)
+- ~~Replace `button-basic` divs with shadcn `Button`~~ — all migrated
+- ~~Fix `NameBox.tsx` export name~~ — done
+- ~~Replace hardcoded colors in components~~ — done in .tsx files (still present in remaining .css)
 
-### Phase 2 — Medium effort
+### Next — Medium effort
 
-6. Migrate `Workbook/index.css` to Tailwind (56 lines)
-7. Migrate `LinkEidtCard/index.css` to Tailwind + shadcn (183 lines)
-8. Migrate `ContextMenu/index.css` to Tailwind (283 lines)
-9. Replace native `<input>`, `<select>`, `<checkbox>` with shadcn equivalents in CustomSort, FilterMenu
-10. Convert `export default` → named exports across all components
-11. Translate Chinese comments to English
+1. Fix `LinkEidtCard` directory typo → `LinkEditCard`
+2. Migrate `LinkEidtCard/index.css` to Tailwind + shadcn (182 lines)
+3. Replace native `<input>`, `<select>`, `<checkbox>` with shadcn equivalents in CustomSort, FilterMenu
+4. Convert remaining `export default` → named exports (~4 components)
+5. Translate Chinese comments to English
 
-### Phase 3 — Major effort
+### Later — Major effort
 
-12. Migrate `SheetTab/index.css` to Tailwind (281 lines)
-13. Migrate `SheetOverlay/index.css` to Tailwind (957 lines) — split into sub-tasks
-14. Migrate `SheetOverlay/ScrollBar/index.css` to Tailwind
-15. Localize hardcoded Chinese strings in `ImgBoxs`
-16. Evaluate replacing Font Awesome icons with Lucide
-17. Evaluate extracting `SVGDefines.tsx` SVG sprites
-
-### Phase 4 — Optional improvements
-
-18. Use shadcn `Popover` for ZoomControl preset menu
-19. Evaluate shadcn `ContextMenu` for right-click menus (complex)
-20. Remove `css.d.ts` once all CSS imports eliminated
+6. Migrate `SheetTab/index.css` to Tailwind (280 lines)
+7. Migrate `SheetOverlay/index.css` to Tailwind (882 lines) — split into sub-tasks
+8. Migrate `SheetOverlay/ScrollBar/index.css` to Tailwind (40 lines)
+9. Localize hardcoded Chinese strings in `ImgBoxs`
+10. Evaluate replacing Font Awesome icons with Lucide
+11. Remove `css.d.ts` once all CSS imports eliminated

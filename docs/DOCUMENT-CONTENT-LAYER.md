@@ -1,5 +1,12 @@
 # Document Content Layer
 
+> **Status (2026-04-19):** Export is implemented for eigendoc (DOCX/PDF/HTML) and slides
+> (HTML/PDF) — see [EXPORT.md](EXPORT.md) for the authoritative export docs. Import is
+> implemented for XLSX → eigensheets only (`lib/import/sheets/`). The unified
+> `lib/document/` folder proposed below was not created — read/write functions live in
+> `lib/export/` and `lib/import/` respectively. The architecture below remains the design
+> target for when scripting or additional import formats are added.
+
 One mechanism for reading and writing Eigen document content (docs, sheets, slides) on the
 server, shared by **export**, **import**, and the future **scripting engine**. No new
 persistence layer, no new broadcast layer, no duplicated code.
