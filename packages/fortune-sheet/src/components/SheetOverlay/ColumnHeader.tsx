@@ -1,4 +1,5 @@
 import {
+    autoFitColumnWidth,
     colLocation,
     colLocationByIndex,
     fixColumnStyleOverflowInFreeze,
@@ -132,6 +133,21 @@ export const ColumnHeader: React.FC = () => {
         [refs.cellArea, refs.globalCache, refs.workbookContainer, setContext]
     );
 
+    const onColSizeHandleDoubleClick = useCallback(
+        (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
+            if (!refs.canvas.current) return;
+            setContext((draftCtx) => {
+                autoFitColumnWidth(
+                    draftCtx,
+                    hoverLocation.col_index,
+                    refs.canvas.current!
+                );
+            });
+            e.stopPropagation();
+        },
+        [hoverLocation.col_index, refs.canvas, setContext]
+    );
+
     const onColFreezeHandleMouseDown = useCallback(
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
             const {nativeEvent} = e;
@@ -233,6 +249,7 @@ export const ColumnHeader: React.FC = () => {
                 ref={colChangeSizeRef}
                 id="fortune-cols-change-size"
                 onMouseDown={onColSizeHandleMouseDown}
+                onDoubleClick={onColSizeHandleDoubleClick}
                 style={{
                     left:
                         hoverLocation.col - 5 + (hoverInFreeze ? context.scrollLeft : 0),
