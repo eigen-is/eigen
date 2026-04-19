@@ -381,7 +381,10 @@ export function DriveTable({
                             contextMenu.item?.type === 'file' &&
                             (contextMenu.item.name.toLowerCase().endsWith('.xlsx') ||
                                 contextMenu.item.name.toLowerCase().endsWith('.docx'))) ||
-                        ((contextMenu.item?.type === 'doc' || contextMenu.item?.type === 'slides') && onExport) ||
+                        ((contextMenu.item?.type === 'doc' ||
+                            contextMenu.item?.type === 'slides' ||
+                            contextMenu.item?.type === 'sheets') &&
+                            onExport) ||
                         onRename) && <DropdownMenuSeparator />}
                 {isSingleSelect && onDownload && contextMenu.item?.type === 'file' && (
                     <DropdownMenuItem
@@ -426,7 +429,9 @@ export function DriveTable({
                         </DropdownMenuItem>
                     )}
                 {isSingleSelect &&
-                    (contextMenu.item?.type === 'doc' || contextMenu.item?.type === 'slides') &&
+                    (contextMenu.item?.type === 'doc' ||
+                        contextMenu.item?.type === 'slides' ||
+                        contextMenu.item?.type === 'sheets') &&
                     onExport && (
                         <DropdownMenuSub>
                             <DropdownMenuSubTrigger>
@@ -434,19 +439,22 @@ export function DriveTable({
                                 Download
                             </DropdownMenuSubTrigger>
                             <DropdownMenuSubContent>
-                                {(contextMenu.item?.type === 'doc' ? ['docx', 'pdf', 'html'] : ['pdf', 'html']).map(
-                                    (format) => (
-                                        <DropdownMenuItem
-                                            key={format}
-                                            onClick={() => {
-                                                onExport(contextMenu.item!, format);
-                                                contextMenu.close();
-                                            }}
-                                        >
-                                            {formatDownloadLabel(format)}
-                                        </DropdownMenuItem>
-                                    ),
-                                )}
+                                {(contextMenu.item?.type === 'doc'
+                                    ? ['docx', 'pdf', 'html']
+                                    : contextMenu.item?.type === 'sheets'
+                                      ? ['xlsx']
+                                      : ['pdf', 'html']
+                                ).map((format) => (
+                                    <DropdownMenuItem
+                                        key={format}
+                                        onClick={() => {
+                                            onExport(contextMenu.item!, format);
+                                            contextMenu.close();
+                                        }}
+                                    >
+                                        {formatDownloadLabel(format)}
+                                    </DropdownMenuItem>
+                                ))}
                             </DropdownMenuSubContent>
                         </DropdownMenuSub>
                     )}
