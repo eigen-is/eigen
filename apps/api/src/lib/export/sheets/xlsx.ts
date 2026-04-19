@@ -21,7 +21,7 @@ const REVERSE_VERTICAL: Record<number, 'top' | 'middle' | 'bottom'> = {
     2: 'bottom',
 };
 
-const REVERSE_BORDER_STYLE: Record<number, string> = {
+const REVERSE_BORDER_STYLE: Record<number, NonNullable<Border['style']>> = {
     1: 'thin',
     2: 'hair',
     3: 'dotted',
@@ -161,7 +161,7 @@ function applyCellStyle(cell: XlsxCell, v: FortuneCell): void {
 
 function toBorderSide(side: BorderSide): Partial<Border> {
     return {
-        style: (REVERSE_BORDER_STYLE[side.style] ?? 'thin') as Border['style'],
+        style: REVERSE_BORDER_STYLE[side.style] ?? 'thin',
         color: { argb: hexToArgb(side.color) },
     };
 }
