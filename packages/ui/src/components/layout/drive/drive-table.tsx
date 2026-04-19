@@ -24,6 +24,7 @@ import {
     ExternalLink,
     Eye,
     FileDown,
+    FileText,
     Link,
     Mail,
     Pencil,
@@ -60,7 +61,7 @@ export type DriveTableProps = {
     onDelete?: (items: DrivePath[]) => void;
     onRename?: (item: DrivePath) => void;
     onMove?: (item: DrivePath, targetItemId: string) => void;
-    onConvert?: (item: DrivePath, targetType: 'eigensheets') => void;
+    onConvert?: (item: DrivePath, targetType: 'eigensheets' | 'eigendoc') => void;
     onExport?: (item: DrivePath, format: string) => void;
     onQuickLook?: (item: DrivePath) => void;
     onEmailCollaborators?: (item: DrivePath) => void;
@@ -378,7 +379,8 @@ export function DriveTable({
                     ((onDownload && contextMenu.item?.type === 'file') ||
                         (onConvert &&
                             contextMenu.item?.type === 'file' &&
-                            contextMenu.item.name.toLowerCase().endsWith('.xlsx')) ||
+                            (contextMenu.item.name.toLowerCase().endsWith('.xlsx') ||
+                                contextMenu.item.name.toLowerCase().endsWith('.docx'))) ||
                         ((contextMenu.item?.type === 'doc' || contextMenu.item?.type === 'slides') && onExport) ||
                         onRename) && <DropdownMenuSeparator />}
                 {isSingleSelect && onDownload && contextMenu.item?.type === 'file' && (
@@ -406,6 +408,21 @@ export function DriveTable({
                         >
                             <Sheet className="h-4 w-4 mr-2" />
                             Convert to Sheet
+                        </DropdownMenuItem>
+                    )}
+                {isSingleSelect &&
+                    onConvert &&
+                    contextMenu.item?.type === 'file' &&
+                    contextMenu.item.name.toLowerCase().endsWith('.docx') && (
+                        <DropdownMenuItem
+                            onClick={() => {
+                                onConvert(contextMenu.item!, 'eigendoc');
+                                contextMenu.close();
+                            }}
+                            className="flex items-center"
+                        >
+                            <FileText className="h-4 w-4 mr-2" />
+                            Convert to Document
                         </DropdownMenuItem>
                     )}
                 {isSingleSelect &&

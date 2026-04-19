@@ -174,7 +174,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
     .post(
         '/drive/:ownerId/:mountId/file/:pathId/convert/:targetType',
         async ({ params, user }) => {
-            if (params.targetType !== 'eigensheets') {
+            if (params.targetType !== 'eigensheets' && params.targetType !== 'eigendoc') {
                 throw new ApiError(400, `Conversion to "${params.targetType}" is not supported`);
             }
             const drive = await getSharedDrive(params.ownerId, user);
@@ -187,7 +187,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
         '/drive/:ownerId/:mountId/file/:pathId/import',
         async ({ params, request, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
-            const { path } = await drive.resolveFile(params.mountId, params.pathId);
+            const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             if (!(await drive.canWrite(params.mountId, params.pathId, user))) {
                 throw new ApiError(403, 'No write permission');
             }
@@ -200,7 +200,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             }
             const buffer = Buffer.from(await request.arrayBuffer());
             if (buffer.byteLength > maxSize) throw new ApiError(413, 'Upload too large');
-            await importIntoDocument(drive, path, buffer);
+            await importIntoDocument(drive, mount, path, buffer);
             return { success: true };
         },
         { auth: true, parse: 'none' },
