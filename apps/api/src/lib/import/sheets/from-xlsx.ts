@@ -59,7 +59,8 @@ function worksheetToSheet(worksheet: Worksheet, index: number): Sheet {
 
     (worksheet.columns ?? []).forEach((col, i) => {
         if (col && typeof col.width === 'number' && col.width > 0) {
-            columnlen[String(i)] = col.width;
+            // ExcelJS column width is in "character units"; fortune-sheet expects pixels.
+            columnlen[String(i)] = Math.round(col.width * 8);
         }
     });
 
