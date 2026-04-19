@@ -1,7 +1,14 @@
+import { formatTime } from '@workspace/lib/date';
 import { Input } from '@workspace/ui/components/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
 import { cn } from '@workspace/ui/lib/utils';
 import { useEffect, useRef, useState } from 'react';
+
+function formatTimeSlot(time: string): string {
+    const [h, m] = time.split(':').map(Number);
+    const d = new Date(2000, 0, 1, h, m);
+    return formatTime(d);
+}
 
 function generateTimeSlots(): string[] {
     const slots: string[] = [];
@@ -166,7 +173,7 @@ export function TimeSelect({ value, onChange, referenceTime, minTime }: TimeSele
                                 setOpen(false);
                             }}
                         >
-                            {slot.time}
+                            {formatTimeSlot(slot.time)}
                             {refMinutes != null && (
                                 <span className="text-muted-foreground ml-2 text-xs">
                                     {formatDuration(refMinutes, timeToMinutes(slot.time) + slot.dayOffset * 24 * 60)}
