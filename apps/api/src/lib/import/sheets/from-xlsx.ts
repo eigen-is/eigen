@@ -38,19 +38,17 @@ export async function xlsxToSheets(buffer: Buffer): Promise<Sheet[]> {
 
 function worksheetToSheet(worksheet: Worksheet, index: number): Sheet {
     const celldata: { r: number; c: number; v: FortuneCell }[] = [];
-    const merge: NonNullable<SheetConfig['merge']> = {};
     const columnlen: NonNullable<SheetConfig['columnlen']> = {};
     const rowlen: NonNullable<SheetConfig['rowlen']> = {};
 
-    const merges = worksheet.model.merges ?? [];
-    const mergeMap = buildMergeMap(merges, merge);
+    const { merge, anchorByCell } = buildMergeStructures(worksheet.model.merges ?? []);
 
     worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
         const r = rowNumber - 1;
         row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
             const c = colNumber - 1;
             const converted = convertCell(cell);
-            const mergeAnchor = mergeMap.get(`${r}:${c}`);
+            const mergeAnchor = anchorByCell.get(`${r}:${c}`);
             if (mergeAnchor) converted.mc = mergeAnchor;
             celldata.push({ r, c, v: converted });
         });
@@ -79,11 +77,12 @@ function worksheetToSheet(worksheet: Worksheet, index: number): Sheet {
     };
 }
 
-function buildMergeMap(
-    merges: string[],
-    merge: NonNullable<SheetConfig['merge']>,
-): Map<string, { r: number; c: number; rs?: number; cs?: number }> {
-    const map = new Map<string, { r: number; c: number; rs?: number; cs?: number }>();
+function buildMergeStructures(merges: string[]): {
+    merge: NonNullable<SheetConfig['merge']>;
+    anchorByCell: Map<string, { r: number; c: number; rs?: number; cs?: number }>;
+} {
+    const merge: NonNullable<SheetConfig['merge']> = {};
+    const anchorByCell = new Map<string, { r: number; c: number; rs?: number; cs?: number }>();
     for (const range of merges) {
         const parsed = parseRange(range);
         if (!parsed) continue;
@@ -96,11 +95,11 @@ function buildMergeMap(
                 // Anchor carries rs/cs; non-anchors carry only {r,c} pointing back to anchor.
                 // Fortune-sheet uses `"rs" in cell.mc` as the anchor discriminator.
                 const mc = rr === top && cc === left ? { r: top, c: left, rs, cs } : { r: top, c: left };
-                map.set(`${rr}:${cc}`, mc);
+                anchorByCell.set(`${rr}:${cc}`, mc);
             }
         }
     }
-    return map;
+    return { merge, anchorByCell };
 }
 
 function parseRange(range: string): { top: number; left: number; bottom: number; right: number } | null {

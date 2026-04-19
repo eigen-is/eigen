@@ -132,6 +132,8 @@ class DbProvider {
 export default class CollabDocument {
     private drive: Drive;
     private path: DrivePath;
+    // Exposed for server-side import/export dispatchers that write directly into the Yjs doc.
+    // See docs/DOCUMENT-CONTENT-LAYER.md.
     public doc!: Y.Doc;
     private provider!: DbProvider;
     private awareness!: awarenessProtocol.Awareness;

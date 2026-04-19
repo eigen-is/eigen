@@ -257,6 +257,35 @@ describe('Sheets xlsx import/convert', () => {
         expect(formulaCell?.v?.f).toBe('=SUM(A1:A3)');
     });
 
+    test('import with a non-xlsx body returns 400, not 500', async () => {
+        // Create a target sheet to import into
+        const buffer = await buildXlsxBuffer([{ a1: 'A1', value: 'seed' }]);
+        const xlsxFile = new File([buffer], 'target.xlsx', {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+        const uploaded = await driveUpload<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            rootId,
+            xlsxFile,
+        );
+        const convertRes = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
+            { method: 'POST' },
+        );
+        const sheetsDoc = await assertJson<DrivePath>(convertRes);
+
+        const notXlsx = new TextEncoder().encode('this is not a valid xlsx file');
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${sheetsDoc.id}/import`,
+            { method: 'POST', body: notXlsx },
+        );
+        expect(res.status).toBe(400);
+    });
+
     test('import into another user document without write permission returns 403', async () => {
         const initial = await buildXlsxBuffer([{ a1: 'A1', value: 'Alice' }]);
         const initialFile = new File([initial], 'alice.xlsx', {
