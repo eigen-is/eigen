@@ -91,9 +91,9 @@ function worksheetToSheet(worksheet: Worksheet, index: number, theme: ThemePalet
         row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
             const c = colNumber - 1;
             const converted = convertCell(cell, theme);
-            if (isEmptyCell(converted)) return;
             const mergeAnchor = anchorByCell.get(`${r}:${c}`);
             if (mergeAnchor) converted.mc = mergeAnchor;
+            if (!mergeAnchor && isEmptyCell(converted)) return;
             celldata.push({ r, c, v: converted });
 
             const border = convertBorder(cell, r, c, theme);
@@ -437,8 +437,8 @@ function applyTint(hex: string, tint: number): string {
         g = Math.round(g * (1 + tint));
         b = Math.round(b * (1 + tint));
     }
-    const clamp = (v: number) => Math.max(0, Math.min(255, v));
-    return `#${clamp(r).toString(16).padStart(2, '0').toUpperCase()}${clamp(g).toString(16).padStart(2, '0').toUpperCase()}${clamp(b).toString(16).padStart(2, '0').toUpperCase()}`;
+    const toHex = (v: number) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, '0').toUpperCase();
+    return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
 // SpreadsheetML theme indices: 0=lt1, 1=dk1, 2=lt2, 3=dk2, 4-9=accent1-6, 10=hlink, 11=folHlink.

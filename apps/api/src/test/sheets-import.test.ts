@@ -416,7 +416,7 @@ describe('Sheets xlsx import/convert', () => {
         expect(byCoord.get('0:1')?.ht).toBe(2);
     });
 
-    test('convert resolves theme colors for font and fill', async () => {
+    test('convert resolves ARGB colors for font and fill and skips pattern none', async () => {
         const workbook = new ExcelJS.Workbook();
         const ws = workbook.addWorksheet('Themed');
         const cell = ws.getCell('A1');
