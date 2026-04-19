@@ -1,6 +1,7 @@
-// Shared sheets types used across the backend import/export pipeline and the frontend
-// editor. The fortune-sheet workspace package has its own, richer types for the editor's
-// internal needs; these are the structural subset that flows over workspace boundaries.
+// Structural subset of fortune-sheet's types. Lives in @workspace/lib so the backend
+// import pipeline can reference sheet shapes without pulling in fortune-sheet (React).
+// The frontend editor keeps fortune-sheet's richer internal types; this subset is the
+// API shape used at the backend/frontend contract.
 
 export type CellStyle = {
     bl?: number;

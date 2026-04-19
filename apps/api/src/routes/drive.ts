@@ -174,6 +174,9 @@ export const driveRouter = new Elysia({ name: 'drive' })
     .post(
         '/drive/:ownerId/:mountId/file/:pathId/convert/:targetType',
         async ({ params, user }) => {
+            if (params.targetType !== 'eigensheets') {
+                throw new ApiError(400, `Conversion to "${params.targetType}" is not supported`);
+            }
             const drive = await getSharedDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
             return await convertToDocument(drive, mount, path, params.targetType);
@@ -189,6 +192,12 @@ export const driveRouter = new Elysia({ name: 'drive' })
                 throw new ApiError(403, 'No write permission');
             }
             const maxSize = await getUploadMaxSize(params.ownerId, user.id, params.mountId);
+            // Early Content-Length check guards against large allocations before the body is buffered.
+            // Header can be missing or lying, so the post-buffer check below is a belt-and-suspenders guard.
+            const contentLength = request.headers.get('content-length');
+            if (contentLength && Number(contentLength) > maxSize) {
+                throw new ApiError(413, 'Upload too large');
+            }
             const buffer = Buffer.from(await request.arrayBuffer());
             if (buffer.byteLength > maxSize) throw new ApiError(413, 'Upload too large');
             await importIntoDocument(drive, path, buffer);

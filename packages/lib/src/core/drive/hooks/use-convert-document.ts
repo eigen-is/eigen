@@ -7,7 +7,7 @@ import { invalidateItemCreated } from './use-drive';
 export function useConvertDocument(ownerId: string, mountId: string) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({ pathId, targetType }: { pathId: string; targetType: string; parentId: string }) => {
+        mutationFn: async ({ pathId, targetType }: { pathId: string; targetType: 'eigensheets'; parentId: string }) => {
             const response = await driveApi({ ownerId })({ mountId }).file({ pathId }).convert({ targetType }).post({});
             if (response.error) throw new AppError(response);
             return response.data;
