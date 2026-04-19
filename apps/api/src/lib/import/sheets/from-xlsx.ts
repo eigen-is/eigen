@@ -1,6 +1,13 @@
 /// <reference path="../modules.d.ts" />
-import type { CellStyle, Cell as FortuneCell, Sheet, SheetConfig } from '@workspace/lib/sheets';
-import type { Alignment, CellValue, Worksheet, Cell as XlsxCell } from 'exceljs';
+import type {
+    BorderSide,
+    CellBorderInfo,
+    CellStyle,
+    Cell as FortuneCell,
+    Sheet,
+    SheetConfig,
+} from '@workspace/lib/sheets';
+import type { Alignment, Border, CellValue, Worksheet, Cell as XlsxCell } from 'exceljs';
 
 // Excel's date epoch is 1899-12-30 (not 1900-01-01 — Lotus 1-2-3 1900 leap-year bug).
 const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);
@@ -24,6 +31,22 @@ const VERTICAL_MAP: Record<NonNullable<Alignment['vertical']>, 0 | 1 | 2> = {
     justify: 0,
 };
 
+const BORDER_STYLE_MAP: Record<string, number> = {
+    thin: 1,
+    hair: 2,
+    dotted: 3,
+    dashed: 4,
+    dashDot: 5,
+    dashDotDot: 6,
+    double: 7,
+    medium: 8,
+    mediumDashed: 9,
+    mediumDashDot: 10,
+    mediumDashDotDot: 11,
+    slantDashDot: 12,
+    thick: 13,
+};
+
 export async function xlsxToSheets(buffer: Buffer): Promise<Sheet[]> {
     const ExcelJS = (await import('exceljs')).default;
     const workbook = new ExcelJS.Workbook();
@@ -40,6 +63,7 @@ function worksheetToSheet(worksheet: Worksheet, index: number): Sheet {
     const celldata: { r: number; c: number; v: FortuneCell }[] = [];
     const columnlen: NonNullable<SheetConfig['columnlen']> = {};
     const rowlen: NonNullable<SheetConfig['rowlen']> = {};
+    const borderInfo: CellBorderInfo[] = [];
 
     const { merge, anchorByCell } = buildMergeStructures(worksheet.model.merges ?? []);
 
@@ -51,6 +75,9 @@ function worksheetToSheet(worksheet: Worksheet, index: number): Sheet {
             const mergeAnchor = anchorByCell.get(`${r}:${c}`);
             if (mergeAnchor) converted.mc = mergeAnchor;
             celldata.push({ r, c, v: converted });
+
+            const border = convertBorder(cell, r, c);
+            if (border) borderInfo.push(border);
         });
         if (typeof row.height === 'number' && row.height > 0) {
             rowlen[String(r)] = row.height;
@@ -68,6 +95,7 @@ function worksheetToSheet(worksheet: Worksheet, index: number): Sheet {
     if (Object.keys(merge).length > 0) config.merge = merge;
     if (Object.keys(columnlen).length > 0) config.columnlen = columnlen;
     if (Object.keys(rowlen).length > 0) config.rowlen = rowlen;
+    if (borderInfo.length > 0) config.borderInfo = borderInfo;
 
     return {
         name: worksheet.name,
@@ -211,6 +239,12 @@ function resolveType(cell: XlsxCell, value: string | number | boolean | undefine
 
 function applyStyle(cell: XlsxCell, target: FortuneCell): void {
     const style = cell.style;
+
+    const hasExplicitAlignment = style?.alignment?.horizontal != null;
+    if (!hasExplicitAlignment && typeof target.v === 'number') {
+        target.ht = 2;
+    }
+
     if (!style) return;
 
     const font = style.font;
@@ -244,6 +278,30 @@ function applyAlignment(alignment: Partial<Alignment>, target: CellStyle): void 
 function argbToHex(argb: string): string {
     const rgb = argb.length === 8 ? argb.slice(2) : argb;
     return `#${rgb.toUpperCase()}`;
+}
+
+function convertBorder(cell: XlsxCell, r: number, c: number): CellBorderInfo | null {
+    const border = cell.style?.border;
+    if (!border) return null;
+
+    const l = convertBorderSide(border.left);
+    const r_ = convertBorderSide(border.right);
+    const t = convertBorderSide(border.top);
+    const b = convertBorderSide(border.bottom);
+    if (!l && !r_ && !t && !b) return null;
+
+    const value: CellBorderInfo['value'] = { row_index: r, col_index: c };
+    if (l) value.l = l;
+    if (r_) value.r = r_;
+    if (t) value.t = t;
+    if (b) value.b = b;
+    return { rangeType: 'cell', value };
+}
+
+function convertBorderSide(side: Partial<Border> | undefined): BorderSide | null {
+    if (!side?.style || !(side.style in BORDER_STYLE_MAP)) return null;
+    const color = side.color?.argb ? argbToHex(side.color.argb) : '#000000';
+    return { style: BORDER_STYLE_MAP[side.style], color };
 }
 
 function isFormulaValue(value: CellValue): value is Extract<CellValue, { formula: string }> {

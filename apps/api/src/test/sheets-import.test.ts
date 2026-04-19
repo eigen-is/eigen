@@ -13,6 +13,7 @@ async function buildXlsxBuffer(
         a1: string;
         value: string | number | { formula: string; result?: string | number };
         fontSize?: number;
+        border?: Partial<ExcelJS.Borders>;
     }[],
     sheetName = 'Sheet1',
     merges: string[] = [],
@@ -20,10 +21,11 @@ async function buildXlsxBuffer(
 ): Promise<ArrayBuffer> {
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet(sheetName);
-    for (const { a1, value, fontSize } of cells) {
+    for (const { a1, value, fontSize, border } of cells) {
         const cell = worksheet.getCell(a1);
         cell.value = value;
         if (fontSize) cell.font = { size: fontSize };
+        if (border) cell.border = border;
     }
     for (const range of merges) {
         worksheet.mergeCells(range);
@@ -347,6 +349,71 @@ describe('Sheets xlsx import/convert', () => {
         expect(byCoord.get('0:0')?.fs).toBe(24);
         expect(byCoord.get('0:1')?.fs).toBe(8);
         expect(byCoord.get('0:2')?.fs).toBeUndefined();
+    });
+
+    test('convert imports cell borders', async () => {
+        const thinBorder = { style: 'thin' as const, color: { argb: 'FF000000' } };
+        const buffer = await buildXlsxBuffer([
+            {
+                a1: 'A1',
+                value: 'bordered',
+                border: { top: thinBorder, bottom: thinBorder, left: thinBorder, right: thinBorder },
+            },
+            { a1: 'B1', value: 'no border' },
+        ]);
+        const xlsxFile = new File([buffer], 'borders.xlsx', {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+        const uploaded = await driveUpload<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            rootId,
+            xlsxFile,
+        );
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
+            { method: 'POST' },
+        );
+        const converted = await assertJson<DrivePath>(res);
+        const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+        const bi = sheets[0].config?.borderInfo;
+        expect(bi).toBeDefined();
+        const a1Border = bi?.find((b) => b.value.row_index === 0 && b.value.col_index === 0);
+        expect(a1Border).toBeDefined();
+        expect(a1Border?.value.l).toEqual({ style: 1, color: '#000000' });
+        expect(a1Border?.value.r).toEqual({ style: 1, color: '#000000' });
+        expect(a1Border?.value.t).toEqual({ style: 1, color: '#000000' });
+        expect(a1Border?.value.b).toEqual({ style: 1, color: '#000000' });
+        expect(bi?.find((b) => b.value.row_index === 0 && b.value.col_index === 1)).toBeUndefined();
+    });
+
+    test('convert right-aligns numbers without explicit alignment', async () => {
+        const buffer = await buildXlsxBuffer([
+            { a1: 'A1', value: 'text' },
+            { a1: 'B1', value: 42 },
+        ]);
+        const xlsxFile = new File([buffer], 'align.xlsx', {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+        const uploaded = await driveUpload<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            rootId,
+            xlsxFile,
+        );
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
+            { method: 'POST' },
+        );
+        const converted = await assertJson<DrivePath>(res);
+        const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+        const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
+        expect(byCoord.get('0:0')?.ht).toBeUndefined();
+        expect(byCoord.get('0:1')?.ht).toBe(2);
     });
 
     test('import into another user document without write permission returns 403', async () => {

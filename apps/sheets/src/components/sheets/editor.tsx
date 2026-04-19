@@ -194,7 +194,8 @@ export function SheetEditor({
                         toolbarLeftItems={leftItems}
                         toolbarRightItems={rightItems}
                         defaultRowHeight={25}
-                        defaultFontSize={11}
+                        defaultFontSize={10}
+                        defaultColWidth={100}
                         column={26}
                         row={100}
                         hooks={{

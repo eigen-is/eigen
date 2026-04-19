@@ -37,12 +37,26 @@ export type CellWithRowAndCol = {
     v: Cell | null;
 };
 
+export type BorderSide = { style: number; color: string };
+export type CellBorderInfo = {
+    rangeType: 'cell';
+    value: {
+        row_index: number;
+        col_index: number;
+        l?: BorderSide;
+        r?: BorderSide;
+        t?: BorderSide;
+        b?: BorderSide;
+    };
+};
+
 export type SheetConfig = {
     merge?: Record<string, { r: number; c: number; rs: number; cs: number }>;
     rowlen?: Record<string, number>;
     columnlen?: Record<string, number>;
     rowhidden?: Record<string, number>;
     colhidden?: Record<string, number>;
+    borderInfo?: CellBorderInfo[];
 };
 
 export type Sheet = {
