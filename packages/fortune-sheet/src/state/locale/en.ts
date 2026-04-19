@@ -9495,6 +9495,10 @@ export default {
             value: "yyyy/MM/dd",
         },
         {
+            name: "8/5/1930",
+            value: "M/d/yyyy",
+        },
+        {
             name: "08-05",
             value: "MM-dd",
         },

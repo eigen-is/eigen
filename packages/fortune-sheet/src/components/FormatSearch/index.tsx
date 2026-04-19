@@ -37,10 +37,10 @@ export function FormatSearch({
         });
     }, [type, currencyDetail, dateFmtList, numberFmtList]);
 
-    const title = type === "currency" ? format.titleCurrency : format.titleNumber;
+    const title = type === "currency" ? format.titleCurrency : type === "date" ? format.titleDateTime : format.titleNumber;
 
     const onConfirm = useCallback(() => {
-        if (decimalPlace < 0 || decimalPlace > 9) {
+        if (type !== "date" && (decimalPlace < 0 || decimalPlace > 9)) {
             _onCancel();
             showDialog(format.tipDecimalPlaces, "ok");
             return;
@@ -50,32 +50,36 @@ export function FormatSearch({
             if (index == null) return;
             const selectedFormatVal = toolbarFormat[selectedFormatIndex].value;
 
-            let selectedFormatPos: string;
-            if ("pos" in toolbarFormat[selectedFormatIndex])
-                selectedFormatPos = toolbarFormat[selectedFormatIndex].pos || "before";
-
             for (const selection of ctx.luckysheet_select_save ?? []) {
                 for (let r = selection.row[0]; r <= selection.row[1]; r += 1) {
                     for (let c = selection.column[0]; c <= selection.column[1]; c += 1) {
-                        if (
-                            ctx.luckysheetfile[index].data?.[r][c] &&
-                            ctx.luckysheetfile[index].data?.[r][c]?.ct?.t === "n"
-                        ) {
+                        const cell = ctx.luckysheetfile[index].data?.[r][c];
+                        if (!cell) continue;
+
+                        if (type === "date") {
+                            if (!cell.ct) cell.ct = {};
+                            cell.ct.fa = selectedFormatVal;
+                            cell.ct.t = "d";
+                            cell.m = update(selectedFormatVal, cell.v);
+                        } else if (cell.ct?.t === "n") {
+                            let selectedFormatPos: string = "before";
+                            if ("pos" in toolbarFormat[selectedFormatIndex])
+                                selectedFormatPos = toolbarFormat[selectedFormatIndex].pos || "before";
                             const zero = 0;
-                            if (selectedFormatPos! === "after") {
-                                ctx.luckysheetfile[index].data![r][c]!.ct!.fa = zero
+                            if (selectedFormatPos === "after") {
+                                cell.ct!.fa = zero
                                     .toFixed(decimalPlace)
                                     .concat(`${selectedFormatVal}`);
-                                ctx.luckysheetfile[index].data![r][c]!.m = update(
+                                cell.m = update(
                                     zero.toFixed(decimalPlace).concat(`${selectedFormatVal}`),
-                                    ctx.luckysheetfile[index].data![r][c]!.v
+                                    cell.v
                                 );
                             } else {
-                                ctx.luckysheetfile[index].data![r][c]!.ct!.fa =
+                                cell.ct!.fa =
                                     `${selectedFormatVal}`.concat(zero.toFixed(decimalPlace));
-                                ctx.luckysheetfile[index].data![r][c]!.m = update(
+                                cell.m = update(
                                     `${selectedFormatVal}`.concat(zero.toFixed(decimalPlace)),
-                                    ctx.luckysheetfile[index].data![r][c]!.v
+                                    cell.v
                                 );
                             }
                         }
@@ -86,6 +90,7 @@ export function FormatSearch({
         });
     }, [
         _onCancel,
+        type,
         decimalPlace,
         format.tipDecimalPlaces,
         selectedFormatIndex,
@@ -109,17 +114,19 @@ export function FormatSearch({
             <DialogHeader>
                 <DialogTitle>{title}</DialogTitle>
             </DialogHeader>
-            <div className="flex items-center gap-2 shrink-0">
-                <Label className="text-sm whitespace-nowrap">{format.decimalPlaces}:</Label>
-                <Input
-                    type="number"
-                    min={0}
-                    max={9}
-                    defaultValue={2}
-                    className="w-20 h-8"
-                    onChange={(e) => setDecimalPlace(parseInt(e.target.value, 10))}
-                />
-            </div>
+            {type !== "date" && (
+                <div className="flex items-center gap-2 shrink-0">
+                    <Label className="text-sm whitespace-nowrap">{format.decimalPlaces}:</Label>
+                    <Input
+                        type="number"
+                        min={0}
+                        max={9}
+                        defaultValue={2}
+                        className="w-20 h-8"
+                        onChange={(e) => setDecimalPlace(parseInt(e.target.value, 10))}
+                    />
+                </div>
+            )}
             <div className="flex-1 min-h-0 border border-border rounded-md overflow-y-auto">
                 {toolbarFormat.map((v: ToolbarFormatType, index: number) => (
                     <div
