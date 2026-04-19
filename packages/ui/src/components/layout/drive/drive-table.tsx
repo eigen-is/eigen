@@ -37,6 +37,7 @@ import { useKeyboardListNavigation } from '../../../hooks/use-keyboard-list-navi
 import { useListDrag } from '../../../hooks/use-list-drag';
 import { useListSelection } from '../../../hooks/use-list-selection';
 import { ContextMenuAnchor, useContextMenu } from '../context-menu';
+import { formatDownloadLabel } from '../toolbar/file-menu';
 import { UnreadDot } from '../unread-dot';
 import { DriveShareSummary } from './drive-share-summary';
 
@@ -413,7 +414,7 @@ export function DriveTable({
                         <DropdownMenuSub>
                             <DropdownMenuSubTrigger>
                                 <FileDown className="h-4 w-4 mr-2" />
-                                Export
+                                Download
                             </DropdownMenuSubTrigger>
                             <DropdownMenuSubContent>
                                 {(contextMenu.item?.type === 'doc' ? ['docx', 'pdf', 'html'] : ['pdf', 'html']).map(
@@ -425,7 +426,7 @@ export function DriveTable({
                                                 contextMenu.close();
                                             }}
                                         >
-                                            Export as {format.toUpperCase()}
+                                            {formatDownloadLabel(format)}
                                         </DropdownMenuItem>
                                     ),
                                 )}

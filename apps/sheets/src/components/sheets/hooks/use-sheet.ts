@@ -180,29 +180,26 @@ export function useSheet(
         latestDataRef.current = data;
     }, []);
 
-    const handleRestore = useCallback(
-        (state: Uint8Array) => {
-            const doc = docRef.current;
-            if (!doc) return;
+    const handleRestore = useCallback((state: Uint8Array) => {
+        const doc = docRef.current;
+        if (!doc) return;
 
-            isLocalSnapshotRef.current = true;
-            restoreYjsDoc(doc, state, (v) => v);
+        isLocalSnapshotRef.current = true;
+        restoreYjsDoc(doc, state, (v) => v);
 
-            const stateMap = doc.getMap('state');
-            const snapshot = stateMap.get('snapshot') as string | undefined;
-            if (snapshot) {
-                try {
-                    const data = JSON.parse(snapshot) as Sheet[];
-                    latestDataRef.current = data;
-                    setInitialData(null);
-                    queueMicrotask(() => setInitialData(data));
-                } catch (e) {
-                    console.error('[sheet] handleRestore: failed:', e);
-                }
+        const stateMap = doc.getMap('state');
+        const snapshot = stateMap.get('snapshot') as string | undefined;
+        if (snapshot) {
+            try {
+                const data = JSON.parse(snapshot) as Sheet[];
+                latestDataRef.current = data;
+                setInitialData(null);
+                queueMicrotask(() => setInitialData(data));
+            } catch (e) {
+                console.error('[sheet] handleRestore: failed:', e);
             }
-        },
-        [workbookRef],
-    );
+        }
+    }, []);
 
     return {
         initialData,
