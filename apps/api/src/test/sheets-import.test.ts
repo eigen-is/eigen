@@ -416,6 +416,79 @@ describe('Sheets xlsx import/convert', () => {
         expect(byCoord.get('0:1')?.ht).toBe(2);
     });
 
+    test('convert resolves theme colors for font and fill', async () => {
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Themed');
+        const cell = ws.getCell('A1');
+        cell.value = 'Hello';
+        cell.font = { bold: true, color: { argb: 'FFFF0000' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0000FF' } };
+        const cell2 = ws.getCell('B1');
+        cell2.value = 'World';
+        cell2.fill = { type: 'pattern', pattern: 'none' };
+        const buf = await workbook.xlsx.writeBuffer();
+        const view = new Uint8Array(buf);
+        const out = new ArrayBuffer(view.byteLength);
+        new Uint8Array(out).set(view);
+        const xlsxFile = new File([out], 'themed.xlsx', {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+        const uploaded = await driveUpload<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            rootId,
+            xlsxFile,
+        );
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
+            { method: 'POST' },
+        );
+        const converted = await assertJson<DrivePath>(res);
+        const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+        const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
+        expect(byCoord.get('0:0')?.fc).toBe('#FF0000');
+        expect(byCoord.get('0:0')?.bg).toBe('#0000FF');
+        expect(byCoord.get('0:1')?.bg).toBeUndefined();
+    });
+
+    test('convert handles multi-sheet workbooks', async () => {
+        const workbook = new ExcelJS.Workbook();
+        workbook.addWorksheet('Sheet A').getCell('A1').value = 'Alpha';
+        workbook.addWorksheet('Sheet B').getCell('A1').value = 'Beta';
+        workbook.addWorksheet('Sheet C').getCell('A1').value = 'Gamma';
+        const buf = await workbook.xlsx.writeBuffer();
+        const view = new Uint8Array(buf);
+        const out = new ArrayBuffer(view.byteLength);
+        new Uint8Array(out).set(view);
+        const xlsxFile = new File([out], 'multi.xlsx', {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+        const uploaded = await driveUpload<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            rootId,
+            xlsxFile,
+        );
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
+            { method: 'POST' },
+        );
+        const converted = await assertJson<DrivePath>(res);
+        const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+        expect(sheets).toHaveLength(3);
+        expect(sheets[0].name).toBe('Sheet A');
+        expect(sheets[1].name).toBe('Sheet B');
+        expect(sheets[2].name).toBe('Sheet C');
+        const getVal = (s: Sheet) => (s.celldata ?? []).find((c) => c.r === 0 && c.c === 0)?.v?.v;
+        expect(getVal(sheets[0])).toBe('Alpha');
+        expect(getVal(sheets[1])).toBe('Beta');
+        expect(getVal(sheets[2])).toBe('Gamma');
+    });
+
     test('import into another user document without write permission returns 403', async () => {
         const initial = await buildXlsxBuffer([{ a1: 'A1', value: 'Alice' }]);
         const initialFile = new File([initial], 'alice.xlsx', {

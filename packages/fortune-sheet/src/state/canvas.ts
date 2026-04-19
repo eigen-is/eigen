@@ -10,7 +10,7 @@ import {checkCF, getComputeMap, validateCellData} from "./modules";
 export const defaultStyle = {
     fillStyle: "#000000",
     textBaseline: "middle",
-    strokeStyle: "#dfdfdf",
+    strokeStyle: "rgba(0, 0, 0, 0.1)",
     rowFillStyle: "#5e5e5e",
     textAlign: "center",
 };
