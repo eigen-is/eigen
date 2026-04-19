@@ -193,7 +193,7 @@ export function SheetEditor({
                         toolbarItems={TOOLBAR_ITEMS}
                         toolbarLeftItems={leftItems}
                         toolbarRightItems={rightItems}
-                        defaultRowHeight={25}
+                        defaultRowHeight={20}
                         defaultFontSize={10}
                         defaultColWidth={100}
                         column={26}

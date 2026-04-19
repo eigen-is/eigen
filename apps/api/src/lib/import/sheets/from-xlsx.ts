@@ -80,7 +80,8 @@ function worksheetToSheet(worksheet: Worksheet, index: number): Sheet {
             if (border) borderInfo.push(border);
         });
         if (typeof row.height === 'number' && row.height > 0) {
-            rowlen[String(r)] = row.height;
+            // ExcelJS row height is in points; fortune-sheet expects pixels (1pt ≈ 4/3 px at 96 DPI).
+            rowlen[String(r)] = Math.round(row.height * (4 / 3));
         }
     });
 
@@ -178,12 +179,15 @@ function extractValueAndDisplay(cell: XlsxCell): { value?: string | number | boo
     }
 
     if (raw instanceof Date) {
-        const serial = (raw.getTime() - EXCEL_EPOCH_MS) / DAY_MS;
-        return { value: serial, display: raw.toISOString() };
+        return dateToSerialAndDisplay(raw, cell.numFmt);
     }
 
     if (isFormulaValue(raw)) {
-        return resolveFormulaResult(raw.result);
+        return resolveFormulaResult(raw.result, cell.numFmt);
+    }
+
+    if (isSharedFormula(raw)) {
+        return resolveFormulaResult(raw.result, cell.numFmt);
     }
 
     if (isRichText(raw)) {
@@ -202,19 +206,41 @@ function extractValueAndDisplay(cell: XlsxCell): { value?: string | number | boo
     return {};
 }
 
-function resolveFormulaResult(result: unknown): { value?: string | number | boolean; display?: string } {
+function resolveFormulaResult(
+    result: unknown,
+    numFmt?: string,
+): { value?: string | number | boolean; display?: string } {
     if (result === null || result === undefined) return {};
     if (typeof result === 'number' || typeof result === 'string' || typeof result === 'boolean') {
         return { value: result, display: String(result) };
     }
     if (result instanceof Date) {
-        const serial = (result.getTime() - EXCEL_EPOCH_MS) / DAY_MS;
-        return { value: serial, display: result.toISOString() };
+        return dateToSerialAndDisplay(result, numFmt);
     }
     if (isError(result)) {
         return { value: result.error, display: result.error };
     }
     return {};
+}
+
+function dateToSerialAndDisplay(date: Date, numFmt?: string): { value: number; display: string } {
+    const serial = (date.getTime() - EXCEL_EPOCH_MS) / DAY_MS;
+    const display = formatDateForDisplay(date, numFmt);
+    return { value: serial, display };
+}
+
+function formatDateForDisplay(date: Date, numFmt?: string): string {
+    const y = date.getUTCFullYear();
+    const M = date.getUTCMonth() + 1;
+    const d = date.getUTCDate();
+    if (!numFmt || numFmt === 'General') return `${M}/${d}/${y}`;
+    return numFmt
+        .replace('yyyy', String(y))
+        .replace('yy', String(y).slice(-2))
+        .replace(/MM(?!M)/, String(M).padStart(2, '0'))
+        .replace(/M(?!M)/, String(M))
+        .replace('dd', String(d).padStart(2, '0'))
+        .replace(/\bd\b/, String(d));
 }
 
 function buildCellType(cell: XlsxCell, value: string | number | boolean | undefined): FortuneCell['ct'] {
@@ -231,6 +257,7 @@ function resolveType(cell: XlsxCell, value: string | number | boolean | undefine
     const raw = cell.value;
     if (raw instanceof Date) return 'd';
     if (isFormulaValue(raw) && raw.result instanceof Date) return 'd';
+    if (isSharedFormula(raw) && raw.result instanceof Date) return 'd';
     if (typeof value === 'number') return 'n';
     if (typeof value === 'boolean') return 'b';
     if (typeof value === 'string') return 's';
@@ -306,6 +333,10 @@ function convertBorderSide(side: Partial<Border> | undefined): BorderSide | null
 
 function isFormulaValue(value: CellValue): value is Extract<CellValue, { formula: string }> {
     return typeof value === 'object' && value !== null && 'formula' in value;
+}
+
+function isSharedFormula(value: CellValue): value is CellValue & { sharedFormula: string; result?: CellValue } {
+    return typeof value === 'object' && value !== null && 'sharedFormula' in value;
 }
 
 function isRichText(value: CellValue): value is Extract<CellValue, { richText: unknown }> {

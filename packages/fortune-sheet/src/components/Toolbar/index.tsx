@@ -184,6 +184,18 @@ export function Toolbar({
                                             >
                                                 {toolbarFormat.moreNumber}
                                             </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                onClick={() => {
+                                                    showDialog(
+                                                        <FormatSearch
+                                                            onCancel={hideDialog}
+                                                            type="date"
+                                                        />
+                                                    );
+                                                }}
+                                            >
+                                                {toolbarFormat.moreDateTime}
+                                            </DropdownMenuItem>
                                         </DropdownMenuSubContent>
                                     </DropdownMenuSub>
                                 );

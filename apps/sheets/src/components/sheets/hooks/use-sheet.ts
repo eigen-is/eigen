@@ -100,7 +100,8 @@ export function useSheet(
             try {
                 const data = JSON.parse(snapshot) as Sheet[];
                 latestDataRef.current = data;
-                if (workbookRef.current) workbookRef.current.updateSheet(data);
+                setInitialData(null);
+                queueMicrotask(() => setInitialData(data));
             } catch (e) {
                 console.error('[sheet] Failed to apply remote snapshot:', e);
             }
@@ -193,10 +194,8 @@ export function useSheet(
                 try {
                     const data = JSON.parse(snapshot) as Sheet[];
                     latestDataRef.current = data;
-                    setInitialData(data);
-                    if (workbookRef.current) {
-                        workbookRef.current.updateSheet(data);
-                    }
+                    setInitialData(null);
+                    queueMicrotask(() => setInitialData(data));
                 } catch (e) {
                     console.error('[sheet] handleRestore: failed:', e);
                 }

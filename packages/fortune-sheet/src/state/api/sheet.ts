@@ -44,6 +44,9 @@ export function initSheetData(
         } else {
             draftCtx.luckysheetfile[index].data = expandedData;
             delete draftCtx.luckysheetfile[index].celldata;
+            if (newData.config) {
+                draftCtx.luckysheetfile[index].config = newData.config;
+            }
         }
         return expandedData;
     }

@@ -233,6 +233,10 @@ export function updateSheet(ctx: Context, newData: Sheet[]) {
             });
         }
     });
+    const currentIdx = getSheetIndex(ctx, ctx.currentSheetId);
+    if (currentIdx != null) {
+        ctx.config = ctx.luckysheetfile[currentIdx].config ?? {};
+    }
 }
 
 export function editSheetName(ctx: Context, editable: HTMLSpanElement) {
