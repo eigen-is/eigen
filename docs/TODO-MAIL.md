@@ -1,59 +1,16 @@
-# Mail — Follow-ups and Signature Plan
+# Mail — Signature Plan
 
-Follow-up work tracked after the mail composer modernization (`feat/mail-composer` merged
-2026-04-17). Two parts: (1) code-quality items deferred from the code review, (2) the
-signatures feature originally scoped with the composer refactor.
+## Status
 
----
-
-## Part 1 — Code-quality follow-ups
-
-Items surfaced by code review but deferred from the composer merge.
-
-### Completed (2026-04-18)
-
-**Quota enforcement on draft attachment uploads** — ~~hardcoded 25 MB limit~~ → now uses
-`getMailUploadMaxSize(userId)` from `enforcement.ts`, which consults `mailAndContactsMax`
-quota (server default + team overrides) and `maxUploadSizeMB`. Error message shows actual limit.
-
-**Plain-text body extraction** — ~~regex stripping~~ → `LightEditor` now emits plain text via
-`onChangeText` callback using Tiptap's `editor.getText()`. `useDraftState` stores `bodyText`
-separately, used by `toDraft()` and `isSaveable`. Proper entity decoding and newlines.
-
-**Autosave heaviness under a large attachment** — draft-meta sidecar (`draft-meta/<id>.json`)
-stores mutable fields (subject, body, recipients, attachment metadata). Body-only saves write
-only the ~1 KB JSON file + update the DB record. Full EML rebuild only on attachment changes
-or send. `messageGet` overlays sidecar values on the stale EML.
-
-**`setId`'s synchronous `stateRef` mutation** — removed. `sendWithFreshDraft` now reads the
-id from `saveNow()`'s return value instead of relying on the stateRef side-channel.
-
-**Test coverage gaps** — `mail-attachments.test.ts` expanded from 7 to 13 tests:
-- Empty `tempAttachmentIds: []` vs `undefined` equivalence
-- Concurrent uploads on the same draft, single save with both tempIds
-- Default `contentType` for files with no MIME → `application/octet-stream`
-- `cleanupStaleDraftTemps` correctness under mixed-age files
-- Body-only re-save uses fast path and preserves attachments
-- Send after fast-path saves includes attachments
-
-### Remaining
-
-**Manual regression testing of the composer flow** — backend integration tests cover the
-round-trips but the race fixes (saveNow serialization, mode+mailId coexistence, remount key)
-would benefit from an end-to-end Playwright test covering:
-attach → save → edit → re-save → remove → send.
-
-### Low priority
-
-**`formatEmailQuote` signed-string HTML** — currently builds `<br><br><p>header</p><blockquote>
-content</blockquote>` via string concatenation. Works (header fields are escaped, content is
-either already-sanitized html or escaped text) but a safer pattern is to build a DOM fragment
-and extract its innerHTML. Only matters if we start embedding user-controlled strings beyond
-the current two fields.
+Code-quality follow-ups from the composer refactor (`feat/mail-composer`, merged 2026-04-17)
+are all complete. Remaining deferred items:
+- E2E Playwright test for compose flow (attach → save → edit → re-save → remove → send)
+- `formatEmailQuote` could use DOM fragments instead of string concatenation (low priority,
+  current approach is safe)
 
 ---
 
-## Part 2 — Signatures
+## Signatures (not started)
 
 Planned but deferred from the composer refactor. Design was approved during brainstorming
 (spec at `docs/superpowers/specs/2026-04-17-mail-composer-design.md` section D); only the
