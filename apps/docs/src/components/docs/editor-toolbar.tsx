@@ -2,7 +2,7 @@ import { formatForDisplay } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
 import { yDocToProsemirrorJSON } from '@tiptap/y-tiptap';
 import { EIGEN_FONTS, getFontFamily } from '@workspace/lib/constants/fonts';
-import { useExportDocument } from '@workspace/lib/drive';
+import { useExportDocument, useImportDocument } from '@workspace/lib/drive';
 import { useMediaQuery } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { CountBadge, Toolbar, TooltipButton } from '@workspace/ui';
@@ -103,6 +103,7 @@ export const EditorToolbar = ({
     const [textColorOpen, setTextColorOpen] = useState(false);
     const [highlightColorOpen, setHighlightColorOpen] = useState(false);
     const { exportDocument, isExporting } = useExportDocument();
+    const importMutation = useImportDocument(path.ownerId, path.mountId);
     const imageInputRef = useRef<HTMLInputElement>(null);
     const isMobile = useMediaQuery('(max-width: 1200px)');
 
@@ -144,6 +145,17 @@ export const EditorToolbar = ({
 
     const handleExport = (format: string) => exportDocument(path.ownerId, path.mountId, path.id, format);
 
+    const handleImport = () => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.docx';
+        input.onchange = () => {
+            const file = input.files?.[0];
+            if (file) importMutation.mutate({ pathId: path.id, file });
+        };
+        input.click();
+    };
+
     const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file && onImageUpload) {
@@ -171,6 +183,8 @@ export const EditorToolbar = ({
                     onAccessDialogOpen={onAccessDialogOpen}
                     onRestore={handleRestore}
                     onExport={handleExport}
+                    onImport={handleImport}
+                    importLabel="Import docx file…"
                     createLabel="New document"
                     CreateDialog={DriveCreateDoc}
                 >
