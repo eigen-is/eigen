@@ -1,54 +1,49 @@
-import { useCreateFolder } from '@workspace/lib/drive';
+import { useCreateFolderItem } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DriveLocationPicker } from './drive-location-picker';
 
 export type DriveCreateFolderProps = {
-    path: DrivePath;
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    onSave?: (newPath: string) => void;
-    onCancel?: () => void;
-    onAfterAction?: (actionType: string, data: Record<string, unknown>) => void;
+    defaultOwnerId?: string;
+    defaultMountId?: string;
+    defaultFolderId?: string;
+    onAfterCreate?: (path: DrivePath) => void;
 };
 
 export function DriveCreateFolder({
-    path,
     open,
     onOpenChange,
-    onSave,
-    onCancel,
-    onAfterAction,
+    defaultOwnerId,
+    defaultMountId,
+    defaultFolderId,
+    onAfterCreate,
 }: DriveCreateFolderProps) {
-    const createFolderMutation = useCreateFolder(path.ownerId, path.mountId);
+    const createMutation = useCreateFolderItem();
 
     const handleConfirm = async (location: { ownerId: string; mountId: string; folderId: string; name?: string }) => {
         if (!location.name?.trim()) return;
-        const newFolder = await createFolderMutation.mutateAsync({
+        const newFolder = await createMutation.mutateAsync({
+            ownerId: location.ownerId,
+            mountId: location.mountId,
             parentId: location.folderId,
             folderName: location.name.trim(),
         });
-        onOpenChange(false);
-        onAfterAction?.('create', { name: location.name.trim() });
-        onSave?.(newFolder?.id || '');
-    };
-
-    const handleOpenChange = (nextOpen: boolean) => {
-        onOpenChange(nextOpen);
-        if (!nextOpen) onCancel?.();
+        if (newFolder) onAfterCreate?.(newFolder);
     };
 
     return (
         <DriveLocationPicker
             open={open}
-            onOpenChange={handleOpenChange}
+            onOpenChange={onOpenChange}
             mode="create"
             onConfirm={handleConfirm}
             title="New folder"
             nameLabel="Folder name"
             confirmLabel="Create"
-            defaultOwnerId={path.ownerId}
-            defaultMountId={path.mountId}
-            defaultFolderId={path.id}
+            defaultOwnerId={defaultOwnerId}
+            defaultMountId={defaultMountId}
+            defaultFolderId={defaultFolderId}
         />
     );
 }

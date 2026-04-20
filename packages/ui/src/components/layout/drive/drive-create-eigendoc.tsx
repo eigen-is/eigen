@@ -1,9 +1,7 @@
 import { getDriveItemUrl } from '@workspace/lib/api';
 import { useCreateDriveItem } from '@workspace/lib/drive';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
 import { DriveLocationPicker } from './drive-location-picker';
-
-type EigenDocType = 'doc' | 'stickies' | 'slides' | 'sheets' | 'chat';
 
 const LABELS: Record<EigenDocType, { title: string; nameLabel: string }> = {
     doc: { title: 'New doc', nameLabel: 'Doc name' },
@@ -45,7 +43,6 @@ export function DriveCreateEigenDoc({
             parentId: location.folderId,
             fileName: location.name.trim(),
         });
-        onOpenChange(false);
         if (openInNewTab) {
             const url = getDriveItemUrl(newPath);
             if (url) window.open(url, '_blank');

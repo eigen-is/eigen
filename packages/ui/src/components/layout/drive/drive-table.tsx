@@ -203,9 +203,7 @@ export function DriveTable({
                 <TableHeader>
                     <TableRow>
                         <TableHead className={hideModified ? 'w-[90%]' : 'w-[75%]'}>Name</TableHead>
-                        <TableHead className={cn('hidden sm:table-cell', hideModified ? 'w-[10%]' : 'w-[10%]')}>
-                            Share
-                        </TableHead>
+                        <TableHead className="w-[10%] hidden sm:table-cell">Share</TableHead>
                         {!hideModified && <TableHead className="w-[15%] hidden sm:table-cell">Modified</TableHead>}
                     </TableRow>
                 </TableHeader>

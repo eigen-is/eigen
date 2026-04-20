@@ -18,8 +18,6 @@ import { Fragment, useCallback, useEffect, useState } from 'react';
 import { DriveBrowser } from './drive-browser';
 import { useMountLabel } from './drive-mount-list';
 
-const noop = () => {};
-
 type DriveLocationPickerProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
@@ -164,7 +162,6 @@ export function DriveLocationPicker({
                         <DriveBrowser
                             ownerId={resolvedOwnerId}
                             mode="folder"
-                            onSelect={noop}
                             onFolderChange={handleFolderChange}
                             defaultMountId={activeMountId}
                             defaultFolderId={folderId ?? undefined}

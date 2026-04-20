@@ -13,7 +13,6 @@ type DriveFilePickerProps = {
     onUploadFromDevice?: () => void;
     mimeFilter?: string[];
     title?: string;
-    multiple?: boolean;
 };
 
 export function DriveFilePicker({
@@ -23,7 +22,6 @@ export function DriveFilePicker({
     onUploadFromDevice,
     mimeFilter,
     title = 'Attach file',
-    multiple: _multiple = false,
 }: DriveFilePickerProps) {
     const { user } = useAuth();
     const [selected, setSelected] = useState<DrivePath | null>(null);
