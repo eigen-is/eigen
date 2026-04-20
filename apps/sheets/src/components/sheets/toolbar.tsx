@@ -49,7 +49,7 @@ export function ToolbarLeftItems({ path, onAccessDialogOpen, onRestore, canWrite
                 onImport={handleImport}
                 importLabel="Import xlsx file…"
                 onExport={handleExport}
-                exportFormats={['xlsx', 'html']}
+                exportFormats={['xlsx', 'pdf', 'html']}
                 createLabel="New sheet"
                 CreateDialog={DriveCreateSheets}
             />
