@@ -133,10 +133,12 @@ function applyCellValue(cell: XlsxCell, v: FortuneCell): void {
 }
 
 function applyCellStyle(cell: XlsxCell, v: FortuneCell): void {
-    if (v.bl === 1 || v.it === 1 || typeof v.fs === 'number' || v.fc) {
+    if (v.bl === 1 || v.it === 1 || v.un === 1 || v.cl === 1 || typeof v.fs === 'number' || v.fc) {
         cell.font = {
             ...(v.bl === 1 && { bold: true }),
             ...(v.it === 1 && { italic: true }),
+            ...(v.un === 1 && { underline: true as const }),
+            ...(v.cl === 1 && { strike: true }),
             ...(typeof v.fs === 'number' && { size: v.fs }),
             ...(v.fc && { color: { argb: hexToArgb(v.fc) } }),
         };

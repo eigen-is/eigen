@@ -373,6 +373,8 @@ function applyStyle(cell: XlsxCell, target: FortuneCell, theme: ThemePalette): v
     if (font) {
         if (font.bold) target.bl = 1;
         if (font.italic) target.it = 1;
+        if (font.underline) target.un = 1;
+        if (font.strike) target.cl = 1;
         if (typeof font.size === 'number') target.fs = font.size;
         const fc = resolveColor(font.color, theme);
         if (fc) target.fc = fc;

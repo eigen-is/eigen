@@ -10,6 +10,9 @@ import { loadSheetsContent } from './content';
 const DEFAULT_COL_WIDTH = 73;
 const DEFAULT_ROW_HEIGHT = 25;
 
+// Matches fortune-sheet locale fontarray — index maps to font family name.
+const FONT_ARRAY = ['Inter', 'Source Serif 4', 'JetBrains Mono', 'Excalifont'];
+
 const HORIZONTAL_ALIGN: Record<number, string> = {
     0: 'center',
     1: 'left',
@@ -67,8 +70,8 @@ function renderSheet(sheet: Sheet, isLast: boolean): string {
     // Build a border lookup from borderInfo: "r,c" -> { l?, r?, t?, b? }
     const borderMap = buildBorderMap(config.borderInfo);
 
-    // Find the grid dimensions from celldata + merges
-    const { maxRow, maxCol } = getGridBounds(sheet);
+    // Find the minimal bounding box containing all visible content
+    const { minRow, minCol, maxRow, maxCol } = getGridBounds(sheet, borderMap);
     if (maxRow < 0 || maxCol < 0) {
         return `<div class="sheet"><h2>${escapeHtml(sheet.name)}</h2></div>`;
     }
@@ -98,7 +101,7 @@ function renderSheet(sheet: Sheet, isLast: boolean): string {
 
     // Colgroup
     const cols: string[] = [];
-    for (let c = 0; c <= maxCol; c++) {
+    for (let c = minCol; c <= maxCol; c++) {
         if (config.colhidden?.[c]) continue;
         const w = config.columnlen?.[c] ?? DEFAULT_COL_WIDTH;
         cols.push(`<col style="width:${w}px">`);
@@ -107,12 +110,12 @@ function renderSheet(sheet: Sheet, isLast: boolean): string {
 
     // Rows
     const rows: string[] = [];
-    for (let r = 0; r <= maxRow; r++) {
+    for (let r = minRow; r <= maxRow; r++) {
         if (config.rowhidden?.[r]) continue;
         const h = config.rowlen?.[r] ?? DEFAULT_ROW_HEIGHT;
         const cells: string[] = [];
 
-        for (let c = 0; c <= maxCol; c++) {
+        for (let c = minCol; c <= maxCol; c++) {
             if (config.colhidden?.[c]) continue;
             const key = `${r},${c}`;
 
@@ -149,10 +152,10 @@ function renderSheet(sheet: Sheet, isLast: boolean): string {
 
 function getCellDisplay(v: Cell | null): string {
     if (!v) return '';
-    // Display value: m (formatted) takes priority over v (raw)
-    const display = v.m ?? v.v;
-    if (display == null) return '';
-    return escapeHtml(String(display));
+    if (v.m != null) return escapeHtml(String(v.m));
+    if (v.v == null) return '';
+    if (typeof v.v === 'boolean') return v.v ? 'TRUE' : 'FALSE';
+    return escapeHtml(String(v.v));
 }
 
 function buildCellStyle(
@@ -163,6 +166,10 @@ function buildCellStyle(
     const parts: string[] = [];
 
     if (v) {
+        if (v.ff != null) {
+            const family = typeof v.ff === 'number' ? FONT_ARRAY[v.ff] : v.ff;
+            if (family) parts.push(`font-family:"${family}",sans-serif`);
+        }
         if (v.bl === 1) parts.push('font-weight:bold');
         if (v.it === 1) parts.push('font-style:italic');
         if (typeof v.fs === 'number') parts.push(`font-size:${v.fs}pt`);
@@ -186,7 +193,7 @@ function buildCellStyle(
         if (borders.t) parts.push(`border-top:${borders.t}`);
         if (borders.b) parts.push(`border-bottom:${borders.b}`);
     } else if (showGrid) {
-        parts.push('border:1px solid #e2e2e2');
+        parts.push('border:1px solid #d4d4d4');
     }
 
     return parts.join(';');
@@ -218,20 +225,48 @@ function borderSideToCSS(side: { style: number; color: string }): string {
     return `${css} ${side.color}`;
 }
 
-function getGridBounds(sheet: Sheet): { maxRow: number; maxCol: number } {
+function hasVisibleContent(v: Cell | null): boolean {
+    if (!v) return false;
+    if (v.v != null || v.m != null) return true;
+    if (v.bg || v.fc) return true;
+    if (v.bl === 1 || v.it === 1 || v.un === 1 || v.cl === 1) return true;
+    if (v.mc && 'rs' in v.mc) return true; // merge anchor
+    return false;
+}
+
+function getGridBounds(
+    sheet: Sheet,
+    borderMap: Map<string, { l?: string; r?: string; t?: string; b?: string }>,
+): { minRow: number; minCol: number; maxRow: number; maxCol: number } {
+    let minRow = Number.MAX_SAFE_INTEGER;
+    let minCol = Number.MAX_SAFE_INTEGER;
     let maxRow = -1;
     let maxCol = -1;
 
     if (sheet.celldata) {
-        for (const { r, c } of sheet.celldata) {
+        for (const { r, c, v } of sheet.celldata) {
+            if (!hasVisibleContent(v) && !borderMap.has(`${r},${c}`)) continue;
+            if (r < minRow) minRow = r;
+            if (c < minCol) minCol = c;
             if (r > maxRow) maxRow = r;
             if (c > maxCol) maxCol = c;
         }
     }
 
+    // Extend bounds to cover border cells
+    for (const key of borderMap.keys()) {
+        const [r, c] = key.split(',').map(Number);
+        if (r < minRow) minRow = r;
+        if (c < minCol) minCol = c;
+        if (r > maxRow) maxRow = r;
+        if (c > maxCol) maxCol = c;
+    }
+
     // Extend bounds to cover merge ranges
     if (sheet.config?.merge) {
         for (const m of Object.values(sheet.config.merge)) {
+            if (m.r < minRow) minRow = m.r;
+            if (m.c < minCol) minCol = m.c;
             const endRow = m.r + m.rs - 1;
             const endCol = m.c + m.cs - 1;
             if (endRow > maxRow) maxRow = endRow;
@@ -239,7 +274,8 @@ function getGridBounds(sheet: Sheet): { maxRow: number; maxCol: number } {
         }
     }
 
-    return { maxRow, maxCol };
+    if (maxRow < 0) return { minRow: 0, minCol: 0, maxRow: -1, maxCol: -1 };
+    return { minRow, minCol, maxRow, maxCol };
 }
 
 function wrapInDocument(title: string, bodyHtml: string): string {
@@ -263,6 +299,7 @@ body {
     font-family: "Inter", system-ui, -apple-system, sans-serif;
     font-size: 10pt;
     color: #1a1a2e;
+    background: #fff;
     margin: 0;
     padding: 2rem;
 }
@@ -272,14 +309,17 @@ body {
 }
 
 .sheet h2 {
-    font-size: 14pt;
+    font-size: 13pt;
     font-weight: 600;
-    margin-bottom: 0.5rem;
+    color: #333;
+    margin-bottom: 0.75rem;
 }
 
 table {
     border-collapse: collapse;
     table-layout: fixed;
+    width: max-content;
+    background: #fff;
 }
 
 td {
@@ -287,6 +327,7 @@ td {
     overflow: hidden;
     text-overflow: ellipsis;
     vertical-align: middle;
+    white-space: nowrap;
 }
 
 @page {
@@ -295,8 +336,8 @@ td {
 }
 
 @media print {
-    body { padding: 0; }
+    body { padding: 0; background: #fff; }
     .sheet { margin-bottom: 0; }
-    .sheet h2 { font-size: 12pt; }
+    .sheet h2 { font-size: 11pt; }
 }
 `;
