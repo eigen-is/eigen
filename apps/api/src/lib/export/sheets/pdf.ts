@@ -1,12 +1,33 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
+import DOMPurify from 'isomorphic-dompurify';
 import type { Mount } from '../../mount';
 import type { ExportResult } from '../export-document';
 import { htmlToPdf } from '../weasyprint';
-import { generateSheetsExportHtml } from './html';
+import { loadSheetsContent } from './content';
+import { getSheetContentSize, renderSheetsHtml, wrapInDocument } from './html';
+
+const PAGE_MARGIN = 40;
+const HEADING_HEIGHT = 30;
 
 export async function exportSheetsToPdf(mount: Mount, drivePath: DrivePath): Promise<ExportResult> {
-    const html = await generateSheetsExportHtml(mount, drivePath);
     const title = drivePath.name.replace(/\.eigensheets$/, '');
+    const sheets = await loadSheetsContent(mount, drivePath);
+
+    let maxW = 0;
+    let maxH = 0;
+    for (const sheet of sheets) {
+        const size = getSheetContentSize(sheet);
+        if (size.width > maxW) maxW = size.width;
+        if (size.height > maxH) maxH = size.height;
+    }
+
+    const bodyHtml = renderSheetsHtml(sheets);
+    const sanitized = DOMPurify.sanitize(bodyHtml, { FORCE_BODY: true });
+    const pageSize = {
+        width: maxW + 2 * PAGE_MARGIN,
+        height: maxH + 2 * PAGE_MARGIN + HEADING_HEIGHT,
+    };
+    const html = wrapInDocument(title, sanitized, pageSize);
 
     return {
         data: await htmlToPdf(html),
