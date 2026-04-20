@@ -26,8 +26,10 @@ export function DriveFilePicker({
     multiple: _multiple = false,
 }: DriveFilePickerProps) {
     const { user } = useAuth();
-    const ownerId = user?.id || '';
     const [selected, setSelected] = useState<DrivePath | null>(null);
+
+    if (!user) return null;
+    const ownerId = user.id;
 
     const handleSelect = useCallback((path: DrivePath) => {
         setSelected(path);
@@ -43,11 +45,7 @@ export function DriveFilePicker({
     );
 
     const handleSubmit = () => {
-        if (selected) {
-            onSelect([selected]);
-            onOpenChange(false);
-            setSelected(null);
-        }
+        if (selected) handleConfirm(selected);
     };
 
     const handleOpenChange = (nextOpen: boolean) => {
