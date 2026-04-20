@@ -1,9 +1,17 @@
 import { type CommandProps, Node } from '@tiptap/core';
 
+export type FigureLayout = 'block' | 'wrap-left' | 'wrap-right';
+
 declare module '@tiptap/core' {
     interface Commands<ReturnType> {
         figure: {
-            setFigure: (options: { mediaName: string; alt?: string; width?: number; caption?: string }) => ReturnType;
+            setFigure: (options: {
+                mediaName: string;
+                alt?: string;
+                width?: number;
+                caption?: string;
+                layout?: FigureLayout;
+            }) => ReturnType;
         };
     }
 }
@@ -11,7 +19,9 @@ declare module '@tiptap/core' {
 export const FigureNode = Node.create({
     name: 'figure',
 
-    group: 'block',
+    group: 'inline',
+
+    inline: true,
 
     atom: true,
 
@@ -35,6 +45,17 @@ export const FigureNode = Node.create({
                 },
             },
             alignment: { default: 'center' },
+            layout: {
+                default: 'block' as FigureLayout,
+                parseHTML: (element: HTMLElement) => {
+                    const attr = element.getAttribute('data-layout');
+                    if (attr) return attr;
+                    const float = element.style?.float;
+                    if (float === 'left') return 'wrap-left';
+                    if (float === 'right') return 'wrap-right';
+                    return 'block';
+                },
+            },
         };
     },
 
@@ -47,12 +68,22 @@ export const FigureNode = Node.create({
                     const img = el.querySelector('img');
                     if (!img) return false;
                     const figcaption = el.querySelector('figcaption');
+                    const layoutAttr = el.getAttribute('data-layout');
+                    let layout: FigureLayout = 'block';
+                    if (layoutAttr) {
+                        layout = layoutAttr as FigureLayout;
+                    } else {
+                        const float = el.style?.float;
+                        if (float === 'left') layout = 'wrap-left';
+                        else if (float === 'right') layout = 'wrap-right';
+                    }
                     return {
                         src: img.getAttribute('src'),
                         alt: img.getAttribute('alt'),
                         mediaName: img.getAttribute('data-media-name'),
                         caption: figcaption?.textContent || null,
                         alignment: el.getAttribute('data-alignment') || 'center',
+                        layout,
                     };
                 },
                 priority: 60,
@@ -87,6 +118,9 @@ export const FigureNode = Node.create({
         const figureAttrs: Record<string, unknown> = {};
         if (HTMLAttributes['alignment'] && HTMLAttributes['alignment'] !== 'center') {
             figureAttrs['data-alignment'] = HTMLAttributes['alignment'];
+        }
+        if (HTMLAttributes['layout'] && HTMLAttributes['layout'] !== 'block') {
+            figureAttrs['data-layout'] = HTMLAttributes['layout'];
         }
         const imgAttrs: Record<string, unknown> = {
             src: HTMLAttributes['src'],
