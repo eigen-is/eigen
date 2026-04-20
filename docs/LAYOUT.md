@@ -255,11 +255,7 @@ DriveLayout (orchestrator)
 | `DriveTable`          | `drive-table.tsx`            | Table with sorting, keyboard, drag-drop, context menu |
 | `DriveDetail`         | `drive-detail.tsx`           | Metadata, preview (image/video/audio), access list    |
 | `DriveCreateFolder`   | `drive-create-folder.tsx`    | Create folder dialog                                  |
-| `DriveCreateDoc`      | `drive-create-doc.tsx`       | Create document dialog                                |
-| `DriveCreateStickies` | `drive-create-stickies.tsx`  | Create stickies board dialog                          |
-| `DriveCreateChat`     | `drive-create-chat.tsx`      | Create chat dialog                                    |
-| `DriveCreateSlides`   | `drive-create-slides.tsx`    | Create slides dialog                                  |
-| `DriveCreateSheets`   | `drive-create-sheets.tsx`    | Create sheets dialog                                  |
+| `DriveCreateEigenDoc` | `drive-create-eigendoc.tsx`  | Unified create dialog (doc/stickies/chat/slides/sheets) |
 | `DriveDeleteItem`     | `drive-delete-item.tsx`      | Delete confirmation                                   |
 | `DriveRenameItem`     | `drive-rename-item.tsx`      | Rename dialog                                         |
 | `DriveAccessDialog`   | `drive-access-dialog.tsx`    | Share/ACL management                                  |
