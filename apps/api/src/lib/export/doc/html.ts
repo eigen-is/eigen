@@ -192,6 +192,9 @@ body {
 /* Page break avoidance */
 figure, table, pre, blockquote { page-break-inside: avoid; }
 
+/* Clear floats before structural elements */
+h1, h2, h3, h4, h5, h6, hr, blockquote, pre, table { clear: both; }
+
 /* Text alignment (tiptap output classes) */
 .has-text-align-center { text-align: center; }
 .has-text-align-right { text-align: right; }
