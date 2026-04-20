@@ -95,7 +95,7 @@ function renderSheet(sheet: Sheet, isLast: boolean): string {
     // Find the minimal bounding box containing all visible content
     const { minRow, minCol, maxRow, maxCol } = getGridBounds(sheet, borderMap);
     if (maxRow < 0 || maxCol < 0) {
-        return `<div class="sheet"><h2>${escapeHtml(sheet.name)}</h2></div>`;
+        return `<div class="sheet"></div>`;
     }
 
     // Build merge lookup: "r,c" -> { rs, cs } for anchor cells
@@ -170,7 +170,6 @@ function renderSheet(sheet: Sheet, isLast: boolean): string {
 
     const pageBreak = isLast ? '' : ' style="page-break-after:always"';
     return `<div class="sheet"${pageBreak}>
-<h2>${escapeHtml(sheet.name)}</h2>
 <table style="border-collapse:collapse;table-layout:fixed;font-family:&quot;Inter&quot;,system-ui,sans-serif;font-size:11px;color:#1a1a2e;background:#fff;width:${tableWidth}px">${colgroup}<tbody>${rows.join('')}</tbody></table>
 </div>`;
 }
@@ -336,13 +335,6 @@ body {
     margin-bottom: 2rem;
 }
 
-.sheet h2 {
-    font-size: 13px;
-    font-weight: 600;
-    color: #333;
-    margin-bottom: 0.5rem;
-}
-
 td {
     padding: 1px 2px;
     overflow: hidden;
@@ -355,6 +347,5 @@ const SHEET_CSS_PRINT = `
 @media print {
     body { padding: 0; background: #fff; }
     .sheet { margin-bottom: 0; }
-    .sheet h2 { font-size: 11px; }
 }
 `;
