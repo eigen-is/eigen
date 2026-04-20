@@ -1,4 +1,5 @@
 import type { Editor } from '@tiptap/react';
+import type { FigureLayout } from '@workspace/lib/docs/eigendoc';
 import { useMediaResolver } from '@workspace/lib/drive';
 import { Button } from '@workspace/ui/components/button';
 import { Input } from '@workspace/ui/components/input';
@@ -8,7 +9,8 @@ import {
     PropertyRow,
     PropertySection,
 } from '@workspace/ui/components/layout/properties-panel';
-import { ImagePlus } from 'lucide-react';
+import { Toggle } from '@workspace/ui/components/toggle';
+import { ImagePlus, PanelLeft, PanelRight, Rows3 } from 'lucide-react';
 import { useRef } from 'react';
 
 type FigurePropertiesPanelProps = {
@@ -20,6 +22,7 @@ export function FigurePropertiesPanel({ editor, onReplaceImage }: FigureProperti
     const { resolveMediaUrl } = useMediaResolver();
     const fileInputRef = useRef<HTMLInputElement>(null);
     const attrs = editor.getAttributes('figure');
+    const layout = (attrs.layout as FigureLayout) || 'block';
     const alignment = (attrs.alignment as 'left' | 'center' | 'right') || 'center';
     const alt = (attrs.alt as string) || '';
     const caption = (attrs.caption as string) || '';
@@ -41,12 +44,39 @@ export function FigurePropertiesPanel({ editor, onReplaceImage }: FigureProperti
             )}
 
             <PropertySection title="Layout">
-                <PropertyRow label="Align">
-                    <AlignmentPicker
-                        value={alignment}
-                        onChange={(a) => editor.commands.updateAttributes('figure', { alignment: a })}
-                    />
+                <PropertyRow label="Style">
+                    <div className="flex items-center gap-1">
+                        <Toggle
+                            size="sm"
+                            pressed={layout === 'block'}
+                            onPressedChange={() => editor.commands.updateAttributes('figure', { layout: 'block' })}
+                        >
+                            <Rows3 className="h-4 w-4" />
+                        </Toggle>
+                        <Toggle
+                            size="sm"
+                            pressed={layout === 'wrap-left'}
+                            onPressedChange={() => editor.commands.updateAttributes('figure', { layout: 'wrap-left' })}
+                        >
+                            <PanelLeft className="h-4 w-4" />
+                        </Toggle>
+                        <Toggle
+                            size="sm"
+                            pressed={layout === 'wrap-right'}
+                            onPressedChange={() => editor.commands.updateAttributes('figure', { layout: 'wrap-right' })}
+                        >
+                            <PanelRight className="h-4 w-4" />
+                        </Toggle>
+                    </div>
                 </PropertyRow>
+                {layout === 'block' && (
+                    <PropertyRow label="Align">
+                        <AlignmentPicker
+                            value={alignment}
+                            onChange={(a) => editor.commands.updateAttributes('figure', { alignment: a })}
+                        />
+                    </PropertyRow>
+                )}
             </PropertySection>
 
             <PropertySection title="Image">
