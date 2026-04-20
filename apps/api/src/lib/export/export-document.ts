@@ -6,6 +6,7 @@ import { exportEigendocToDocx } from './doc/docx';
 import { exportEigendocToHtml } from './doc/html';
 import { exportEigendocToPdf } from './doc/pdf';
 import { exportSheetsToHtml } from './sheets/html';
+import { exportSheetsToPdf } from './sheets/pdf';
 import { exportSheetsToXlsx } from './sheets/xlsx';
 import { exportSlidesToHtml } from './slides/html';
 import { exportSlidesToPdf } from './slides/pdf';
@@ -24,6 +25,7 @@ export async function exportDocument(mount: Mount, path: DrivePath, format: stri
     }
     if (path.mimeType === DRIVE_MIME_SHEETS) {
         if (format === 'xlsx') return exportSheetsToXlsx(mount, path);
+        if (format === 'pdf') return exportSheetsToPdf(mount, path);
         if (format === 'html') return exportSheetsToHtml(mount, path);
     }
     if (path.mimeType === DRIVE_MIME_SLIDES) {

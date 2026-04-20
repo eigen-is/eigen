@@ -442,7 +442,7 @@ export function DriveTable({
                                 {(contextMenu.item?.type === 'doc'
                                     ? ['docx', 'pdf', 'html']
                                     : contextMenu.item?.type === 'sheets'
-                                      ? ['xlsx']
+                                      ? ['xlsx', 'pdf', 'html']
                                       : ['pdf', 'html']
                                 ).map((format) => (
                                     <DropdownMenuItem
