@@ -4,6 +4,7 @@ import type { FigureLayout } from '@workspace/lib/docs/eigendoc';
 import { FigureNode } from '@workspace/lib/docs/eigendoc';
 import { useMediaResolver } from '@workspace/lib/drive';
 import { ImageResizeHandles } from '@workspace/ui/components/layout/media/image-resize-handles';
+import { cn } from '@workspace/ui/lib/utils';
 import { useCallback, useRef, useState } from 'react';
 
 function FigureView({ node, updateAttributes, selected, editor }: NodeViewProps) {
@@ -68,17 +69,19 @@ function FigureView({ node, updateAttributes, selected, editor }: NodeViewProps)
             ? 'items-end'
             : 'items-start';
 
-    const wrapperStyle =
-        layout === 'wrap-left'
-            ? { float: 'left' as const, margin: '0.25em 1em 0.5em 0' }
+    const wrapperStyle: React.CSSProperties = {
+        cursor: isEditable ? 'grab' : undefined,
+        ...(layout === 'wrap-left'
+            ? { float: 'left', margin: '0.25em 1em 0.5em 0' }
             : layout === 'wrap-right'
-              ? { float: 'right' as const, margin: '0.25em 0 0.5em 1em' }
-              : { display: 'block' as const };
+              ? { float: 'right', margin: '0.25em 0 0.5em 1em' }
+              : undefined),
+    };
 
     return (
         <NodeViewWrapper
             as="span"
-            className={`flex flex-col ${alignmentClass}`}
+            className={cn('flex flex-col', alignmentClass)}
             data-drag-handle=""
             draggable={isEditable}
             style={wrapperStyle}
@@ -97,7 +100,7 @@ function FigureView({ node, updateAttributes, selected, editor }: NodeViewProps)
                             ref={imageRef}
                             src={src}
                             alt={alt}
-                            className={`max-w-full block ${selected ? 'ring-2 ring-ring rounded-sm' : ''}`}
+                            className={cn('max-w-full block', selected && 'ring-2 ring-ring rounded-sm')}
                             style={{
                                 width: width ? `${width}px` : undefined,
                                 aspectRatio: aspectRatio ?? undefined,
