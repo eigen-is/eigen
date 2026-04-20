@@ -70,6 +70,8 @@ export type DriveTableProps = {
     ancestorBreadcrumb?: DrivePath[];
     showParentRow?: boolean;
     unreadPathIds?: Set<string>;
+    hideModified?: boolean;
+    hideShareClick?: boolean;
 };
 
 export function DriveTable({
@@ -94,6 +96,8 @@ export function DriveTable({
     ancestorBreadcrumb,
     showParentRow,
     unreadPathIds,
+    hideModified = false,
+    hideShareClick = false,
 }: DriveTableProps) {
     const tableRef = useRef<HTMLTableElement>(null);
     const [hasFocus, setHasFocus] = useState(false);
@@ -198,9 +202,11 @@ export function DriveTable({
             >
                 <TableHeader>
                     <TableRow>
-                        <TableHead className="w-[75%]">Name</TableHead>
-                        <TableHead className="w-[10%] hidden sm:table-cell">Share</TableHead>
-                        <TableHead className="w-[15%] hidden sm:table-cell">Modified</TableHead>
+                        <TableHead className={hideModified ? 'w-[90%]' : 'w-[75%]'}>Name</TableHead>
+                        <TableHead className={cn('hidden sm:table-cell', hideModified ? 'w-[10%]' : 'w-[10%]')}>
+                            Share
+                        </TableHead>
+                        {!hideModified && <TableHead className="w-[15%] hidden sm:table-cell">Modified</TableHead>}
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -317,14 +323,16 @@ export function DriveTable({
                                 <TableCell className="hidden sm:table-cell group">
                                     <DriveShareSummary
                                         path={item}
-                                        onClick={() => onShareClick?.(item)}
-                                        showIconOnHover={true}
+                                        onClick={hideShareClick ? undefined : () => onShareClick?.(item)}
+                                        showIconOnHover={!hideShareClick}
                                         ancestorBreadcrumb={ancestorBreadcrumb}
                                     />
                                 </TableCell>
-                                <TableCell className="hidden sm:table-cell">
-                                    {item.updatedAt ? formatDateTime(item.updatedAt) : 'Unknown'}
-                                </TableCell>
+                                {!hideModified && (
+                                    <TableCell className="hidden sm:table-cell">
+                                        {item.updatedAt ? formatDateTime(item.updatedAt) : 'Unknown'}
+                                    </TableCell>
+                                )}
                             </TableRow>
                         );
                     })}

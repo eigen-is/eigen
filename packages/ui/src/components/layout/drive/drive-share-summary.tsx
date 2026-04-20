@@ -26,11 +26,15 @@ export function DriveShareSummary({
 
     return (
         <div
-            className={cn('flex items-center gap-1 cursor-pointer')}
-            onClick={(e) => {
-                e.stopPropagation();
-                onClick?.();
-            }}
+            className={cn('flex items-center gap-1', onClick && 'cursor-pointer')}
+            onClick={
+                onClick
+                    ? (e) => {
+                          e.stopPropagation();
+                          onClick();
+                      }
+                    : undefined
+            }
         >
             {isShared ? (
                 <div className="flex items-center gap-1">

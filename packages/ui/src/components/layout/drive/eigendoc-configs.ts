@@ -7,7 +7,7 @@ export const DOCS_CONFIG: EigenDocAppConfig = {
     mimeType: 'application-eigendoc',
     driveType: DRIVE_TYPE_DOC,
     icon: FileText,
-    newLabel: 'New document',
+    newLabel: 'New doc',
     allLabel: 'All docs',
     createType: 'doc',
 };
@@ -37,7 +37,7 @@ export const SHEETS_CONFIG: EigenDocAppConfig = {
     mimeType: 'application-eigensheets',
     driveType: DRIVE_TYPE_SHEETS,
     icon: Sheet,
-    newLabel: 'New sheet',
+    newLabel: 'New sheets',
     allLabel: 'All sheets',
     createType: 'sheets',
 };

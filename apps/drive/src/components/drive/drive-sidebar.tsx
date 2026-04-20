@@ -161,27 +161,27 @@ export function DriveSidebar({ condensed = false, onClose, isMobile = false, roo
                     <DropdownMenuContent align={condensed ? 'center' : 'start'}>
                         <DropdownMenuItem onClick={() => setCreateFolderOpen(true)}>
                             <FolderPlus className="h-4 w-4 mr-2" />
-                            Create folder
+                            New folder
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setCreateType('doc')}>
                             <FileText className="h-4 w-4 mr-2" />
-                            Create doc
+                            New doc
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setCreateType('stickies')}>
                             <SquareKanban className="h-4 w-4 mr-2" />
-                            Create stickies
+                            New stickies
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setCreateType('chat')}>
                             <MessageSquare className="h-4 w-4 mr-2" />
-                            Create chat
+                            New chat
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setCreateType('slides')}>
                             <Presentation className="h-4 w-4 mr-2" />
-                            Create slides
+                            New slides
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setCreateType('sheets')}>
                             <Sheet className="h-4 w-4 mr-2" />
-                            Create sheets
+                            New sheets
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setUploadOpen(true)}>
                             <UploadIcon className="h-4 w-4 mr-2" />
@@ -306,6 +306,7 @@ export function DriveSidebar({ condensed = false, onClose, isMobile = false, roo
                     onOpenChange={(open) => {
                         if (!open) setCreateType(null);
                     }}
+                    defaultOwnerId={targetPath?.ownerId}
                     defaultFolderId={targetPath?.id}
                     defaultMountId={targetPath?.mountId}
                 />

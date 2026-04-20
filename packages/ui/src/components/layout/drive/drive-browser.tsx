@@ -20,7 +20,7 @@ import { cn } from '@workspace/ui/lib/utils';
 import { FolderPlus } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import { DriveCreateItemDialog } from './drive-create-folder-item';
-import { DriveMountList } from './drive-mount-list';
+import { DriveMountList, useMountLabel } from './drive-mount-list';
 import { DriveTable, defaultDriveSort } from './drive-table';
 import { getFileIcon } from './file-icon-helper';
 
@@ -64,6 +64,7 @@ export function DriveBrowser({
     const [createFolderOpen, setCreateFolderOpen] = useState(false);
 
     const { data: rootFolder } = useRootFolder(activeOwnerId, activeMountId);
+    const mountLabel = useMountLabel(activeOwnerId, activeMountId);
     const folderId = currentFolderId ?? rootFolder?.id ?? '';
     const { data: folderContents = [] } = useFolderContent(activeOwnerId, activeMountId, folderId);
     const { data: breadcrumbPaths = [] } = useBreadcrumb(activeOwnerId, activeMountId, folderId);
@@ -162,23 +163,26 @@ export function DriveBrowser({
             <div className="flex items-center gap-2 h-10 px-3 border-b shrink-0">
                 <Breadcrumb className="overflow-hidden flex-1">
                     <BreadcrumbList>
-                        {breadcrumbPaths.map((path, index) => (
-                            <Fragment key={path.id}>
-                                {index > 0 && <BreadcrumbSeparator />}
-                                <BreadcrumbItem>
-                                    {index === breadcrumbPaths.length - 1 ? (
-                                        <BreadcrumbPage>{path.name}</BreadcrumbPage>
-                                    ) : (
-                                        <BreadcrumbLink
-                                            onClick={() => handleBreadcrumbClick(path)}
-                                            className="cursor-pointer"
-                                        >
-                                            {path.name}
-                                        </BreadcrumbLink>
-                                    )}
-                                </BreadcrumbItem>
-                            </Fragment>
-                        ))}
+                        {breadcrumbPaths.map((path, index) => {
+                            const label = index === 0 ? mountLabel : path.name;
+                            return (
+                                <Fragment key={path.id}>
+                                    {index > 0 && <BreadcrumbSeparator />}
+                                    <BreadcrumbItem>
+                                        {index === breadcrumbPaths.length - 1 ? (
+                                            <BreadcrumbPage>{label}</BreadcrumbPage>
+                                        ) : (
+                                            <BreadcrumbLink
+                                                onClick={() => handleBreadcrumbClick(path)}
+                                                className="cursor-pointer"
+                                            >
+                                                {label}
+                                            </BreadcrumbLink>
+                                        )}
+                                    </BreadcrumbItem>
+                                </Fragment>
+                            );
+                        })}
                     </BreadcrumbList>
                 </Breadcrumb>
                 {showNewFolder && (
@@ -197,6 +201,8 @@ export function DriveBrowser({
                 getFileIcon={fileIcon}
                 sortFn={defaultDriveSort}
                 showParentRow={breadcrumbPaths.length > 1}
+                hideModified
+                hideShareClick
             />
         </div>
     );
