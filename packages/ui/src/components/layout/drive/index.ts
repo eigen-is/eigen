@@ -1,5 +1,6 @@
 export * from './drive-access-list';
 export * from './drive-browser';
+export * from './drive-create-eigendoc';
 export * from './drive-file-picker';
 export * from './drive-location-picker';
 export * from './drive-mount-list';
