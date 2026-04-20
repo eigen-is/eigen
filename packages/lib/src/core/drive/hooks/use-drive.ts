@@ -431,6 +431,54 @@ export function useCreateSheets(ownerId: string, mountId: string = DEFAULT_MOUNT
     });
 }
 
+type EigenDocType = 'doc' | 'stickies' | 'slides' | 'sheets' | 'chat';
+
+const EIGENDOC_MIME: Record<EigenDocType, string> = {
+    doc: 'DRIVE_MIME_DOC',
+    stickies: 'DRIVE_MIME_STICKIES',
+    slides: 'DRIVE_MIME_SLIDES',
+    sheets: 'DRIVE_MIME_SHEETS',
+    chat: 'DRIVE_MIME_CHAT',
+};
+
+export function useCreateDriveItem(type: EigenDocType) {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async ({
+            ownerId,
+            mountId,
+            parentId,
+            fileName,
+        }: {
+            ownerId: string;
+            mountId: string;
+            parentId: string;
+            fileName: string;
+        }): Promise<DrivePath> => {
+            const folder = driveApi({ ownerId })({ mountId }).folder({ pathId: parentId });
+            const endpoints = {
+                doc: folder.doc,
+                stickies: folder.stickies,
+                slides: folder.slides,
+                sheets: folder.sheets,
+                chat: folder.chat,
+            };
+            const response = await endpoints[type].post({ fileName });
+            if (response.error) throw new AppError(response);
+            return response.data;
+        },
+        onSuccess: (_data, variables) =>
+            invalidateItemCreated(
+                queryClient,
+                variables.ownerId,
+                variables.mountId,
+                variables.parentId,
+                EIGENDOC_MIME[type],
+            ),
+        onError: onMutationError,
+    });
+}
+
 export function useSharedPaths(ownerId: string, to: 'by-me' | 'with-me') {
     return useQuery<DrivePath[]>({
         queryKey: driveKeys.shared(ownerId, to),
