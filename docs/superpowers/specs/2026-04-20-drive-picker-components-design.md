@@ -85,7 +85,7 @@ type DriveLocationPickerProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
   mode: 'create' | 'save-as' | 'folder'
-  onConfirm: (location: { mountId: string; folderId: string; name?: string }) => void
+  onConfirm: (location: { ownerId: string; mountId: string; folderId: string; name?: string }) => void
   onDownloadInstead?: () => void
   title?: string
   defaultName?: string
