@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { DRIVE_MIME_DOC, DRIVE_MIME_SLIDES } from '@workspace/lib/types/drive';
+import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, DRIVE_MIME_SLIDES } from '@workspace/lib/types/drive';
 import type { Mount } from '../mount';
 import { generateImagePreview } from '../shared/thumbnails';
 import { generateEigendocPreview } from './eigendoc-preview';
@@ -81,7 +81,8 @@ export async function getScreenPreview(mount: Mount, drivePath: DrivePath, embed
 }
 
 export async function getTextPreview(mount: Mount, drivePath: DrivePath): Promise<TextPreviewResult | null> {
-    if (drivePath.type === 'doc' || drivePath.type === 'slides') return getCollabPreviewData(mount, drivePath);
+    if (drivePath.type === 'doc' || drivePath.type === 'slides' || drivePath.type === 'sheets')
+        return getCollabPreviewData(mount, drivePath);
     return getTextPreviewData(mount, drivePath);
 }
 
@@ -151,6 +152,13 @@ async function getCollabPreviewData(mount: Mount, drivePath: DrivePath): Promise
             // globals at module level. --splitting keeps it in a separate chunk loaded on demand.
             const { generateEigenslidesPreview } = await import('./eigenslides-preview');
             return generateEigenslidesPreview(mount, drivePath);
+        });
+    }
+
+    if (mime === DRIVE_MIME_SHEETS) {
+        return getOrCachePreview(mount, drivePath, 'eigensheets', async () => {
+            const { generateEigensheetsPreview } = await import('./eigensheets-preview');
+            return generateEigensheetsPreview(mount, drivePath);
         });
     }
 
