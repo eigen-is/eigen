@@ -72,7 +72,11 @@ export function DriveLocationPicker({
         setActiveOwnerId(folder.ownerId);
     }, []);
 
-    const handleSubmit = useCallback(() => {
+    if (!user) return null;
+
+    const hasName = mode === 'create' || mode === 'save-as';
+
+    const handleSubmit = () => {
         if (hasName && !name.trim()) return;
         onConfirm({
             ownerId: activeOwnerId || ownerId,
@@ -81,12 +85,8 @@ export function DriveLocationPicker({
             name: hasName ? name.trim() : undefined,
         });
         onOpenChange(false);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [activeOwnerId, ownerId, activeMountId, currentFolderId, name, onConfirm, onOpenChange]);
+    };
 
-    if (!user) return null;
-
-    const hasName = mode === 'create' || mode === 'save-as';
     const resolvedTitle =
         title ?? (mode === 'create' ? 'New item' : mode === 'save-as' ? 'Save to Drive' : 'Choose destination');
     const resolvedConfirmLabel =
@@ -146,6 +146,7 @@ export function DriveLocationPicker({
                                     ))}
                                 </BreadcrumbList>
                             </Breadcrumb>
+                            <span className="text-xs text-muted-foreground">Change</span>
                             <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                         </button>
                     </div>

@@ -72,8 +72,9 @@ export function DriveBrowser({
     useEffect(() => {
         if (!currentFolderId && rootFolder) {
             setCurrentFolderId(rootFolder.id);
+            onFolderChange?.(rootFolder, activeMountId);
         }
-    }, [currentFolderId, rootFolder]);
+    }, [currentFolderId, rootFolder, activeMountId, onFolderChange]);
 
     const currentPath = breadcrumbPaths[breadcrumbPaths.length - 1] ?? null;
 
