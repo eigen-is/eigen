@@ -109,6 +109,9 @@ function DriveRoute() {
             allowUpload={false}
             allowCreateDoc={false}
             allowCreateStickies={false}
+            allowCreateChat={false}
+            allowCreateSlides={false}
+            allowCreateSheets={false}
             showBreadcrumb={false}
             allowRename={to === 'by-me'}
             onQuickLook={onQuickLook}
