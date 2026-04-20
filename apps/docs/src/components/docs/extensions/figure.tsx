@@ -1,5 +1,6 @@
 import type { NodeViewProps } from '@tiptap/react';
 import { NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react';
+import type { FigureLayout } from '@workspace/lib/docs/eigendoc';
 import { FigureNode } from '@workspace/lib/docs/eigendoc';
 import { useMediaResolver } from '@workspace/lib/drive';
 import { ImageResizeHandles } from '@workspace/ui/components/layout/media/image-resize-handles';
@@ -19,13 +20,16 @@ function FigureView({ node, updateAttributes, selected, editor }: NodeViewProps)
     const src = resolveMediaUrl(node.attrs.mediaName) || node.attrs.src || '';
     const alt = node.attrs.alt || '';
     const isEditable = editor.isEditable;
+    const layout = (node.attrs.layout || 'block') as FigureLayout;
+    const isWrapping = layout === 'wrap-left' || layout === 'wrap-right';
 
     const getMaxWidth = useCallback(() => {
         const container = containerRef.current?.closest('[data-document]');
         if (!container) return Infinity;
         const style = getComputedStyle(container);
-        return container.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
-    }, []);
+        const fullWidth = container.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+        return isWrapping ? fullWidth * 0.5 : fullWidth;
+    }, [isWrapping]);
 
     const handleImageLoad = useCallback(() => {
         if (!imageRef.current || imageProcessed.current) return;
@@ -56,41 +60,55 @@ function FigureView({ node, updateAttributes, selected, editor }: NodeViewProps)
         });
     }, [getMaxWidth, node.attrs.width, updateAttributes]);
 
-    const alignmentClass =
-        alignment === 'center' ? 'items-center' : alignment === 'right' ? 'items-end' : 'items-start';
+    const alignmentClass = isWrapping
+        ? ''
+        : alignment === 'center'
+          ? 'items-center'
+          : alignment === 'right'
+            ? 'items-end'
+            : 'items-start';
+
+    const wrapperStyle =
+        layout === 'wrap-left'
+            ? { float: 'left' as const, margin: '0.25em 1em 0.5em 0' }
+            : layout === 'wrap-right'
+              ? { float: 'right' as const, margin: '0.25em 0 0.5em 1em' }
+              : { display: 'block' as const };
 
     return (
         <NodeViewWrapper
-            as="figure"
+            as="span"
             className={`flex flex-col ${alignmentClass}`}
             data-drag-handle=""
             draggable={isEditable}
-            style={{ cursor: isEditable ? 'grab' : undefined }}
+            style={wrapperStyle}
         >
-            <div ref={containerRef}>
-                <ImageResizeHandles
-                    width={width}
-                    aspectRatio={aspectRatio}
-                    maxWidth={getMaxWidth()}
-                    onResize={(w) => updateAttributes({ width: w })}
-                    selected={selected}
-                    editable={isEditable}
-                >
-                    <img
-                        ref={imageRef}
-                        src={src}
-                        alt={alt}
-                        className={`max-w-full block ${selected ? 'ring-2 ring-ring rounded-sm' : ''}`}
-                        style={{
-                            width: width ? `${width}px` : undefined,
-                            aspectRatio: aspectRatio ?? undefined,
-                        }}
-                        onLoad={handleImageLoad}
-                        draggable={false}
-                    />
-                </ImageResizeHandles>
-                {caption && <figcaption>{caption}</figcaption>}
-            </div>
+            <figure className="m-0">
+                <div ref={containerRef}>
+                    <ImageResizeHandles
+                        width={width}
+                        aspectRatio={aspectRatio}
+                        maxWidth={getMaxWidth()}
+                        onResize={(w) => updateAttributes({ width: w })}
+                        selected={selected}
+                        editable={isEditable}
+                    >
+                        <img
+                            ref={imageRef}
+                            src={src}
+                            alt={alt}
+                            className={`max-w-full block ${selected ? 'ring-2 ring-ring rounded-sm' : ''}`}
+                            style={{
+                                width: width ? `${width}px` : undefined,
+                                aspectRatio: aspectRatio ?? undefined,
+                            }}
+                            onLoad={handleImageLoad}
+                            draggable={false}
+                        />
+                    </ImageResizeHandles>
+                    {caption && <figcaption>{caption}</figcaption>}
+                </div>
+            </figure>
         </NodeViewWrapper>
     );
 }
