@@ -13,12 +13,8 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { DriveCreateChat } from '@workspace/ui/components/layout/drive/drive-create-chat';
-import { DriveCreateDoc } from '@workspace/ui/components/layout/drive/drive-create-doc';
+import { DriveCreateEigenDoc } from '@workspace/ui/components/layout/drive/drive-create-eigendoc';
 import { DriveCreateFolder } from '@workspace/ui/components/layout/drive/drive-create-folder';
-import { DriveCreateSheets } from '@workspace/ui/components/layout/drive/drive-create-sheets';
-import { DriveCreateSlides } from '@workspace/ui/components/layout/drive/drive-create-slides';
-import { DriveCreateStickies } from '@workspace/ui/components/layout/drive/drive-create-stickies';
 import { DriveUploadFiles } from '@workspace/ui/components/layout/drive/drive-upload-files';
 import { SidebarHeader } from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
@@ -94,13 +90,8 @@ export function DriveSidebar({ condensed = false, onClose, isMobile = false, roo
     const { data: trashedItems } = useListTrash(currentUserId, DEFAULT_MOUNT_ID);
     const trashCount = trashedItems?.length ?? 0;
 
-    // Dialog open states
     const [createFolderOpen, setCreateFolderOpen] = useState(false);
-    const [createDocOpen, setCreateDocOpen] = useState(false);
-    const [createStickiesOpen, setCreateStickiesOpen] = useState(false);
-    const [createChatOpen, setCreateChatOpen] = useState(false);
-    const [createSlidesOpen, setCreateSlidesOpen] = useState(false);
-    const [createSheetsOpen, setCreateSheetsOpen] = useState(false);
+    const [createType, setCreateType] = useState<'doc' | 'stickies' | 'slides' | 'sheets' | 'chat' | null>(null);
     const [uploadOpen, setUploadOpen] = useState(false);
     const [uploadFiles, setUploadFiles] = useState<File[]>([]);
     const navigate = useNavigate();
@@ -172,23 +163,23 @@ export function DriveSidebar({ condensed = false, onClose, isMobile = false, roo
                             <FolderPlus className="h-4 w-4 mr-2" />
                             Create folder
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setCreateDocOpen(true)}>
+                        <DropdownMenuItem onClick={() => setCreateType('doc')}>
                             <FileText className="h-4 w-4 mr-2" />
                             Create doc
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setCreateStickiesOpen(true)}>
+                        <DropdownMenuItem onClick={() => setCreateType('stickies')}>
                             <SquareKanban className="h-4 w-4 mr-2" />
                             Create stickies
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setCreateChatOpen(true)}>
+                        <DropdownMenuItem onClick={() => setCreateType('chat')}>
                             <MessageSquare className="h-4 w-4 mr-2" />
                             Create chat
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setCreateSlidesOpen(true)}>
+                        <DropdownMenuItem onClick={() => setCreateType('slides')}>
                             <Presentation className="h-4 w-4 mr-2" />
                             Create slides
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setCreateSheetsOpen(true)}>
+                        <DropdownMenuItem onClick={() => setCreateType('sheets')}>
                             <Sheet className="h-4 w-4 mr-2" />
                             Create sheets
                         </DropdownMenuItem>
@@ -308,60 +299,15 @@ export function DriveSidebar({ condensed = false, onClose, isMobile = false, roo
                 />
             )}
 
-            {/* Create Doc Dialog */}
-            {targetPath && (
-                <DriveCreateDoc
-                    path={targetPath}
-                    open={createDocOpen}
-                    onOpenChange={setCreateDocOpen}
-                    onSave={() => {}}
-                    onCancel={() => setCreateDocOpen(false)}
-                    onAfterAction={handleAfterAction}
-                />
-            )}
-
-            {/* Create Stickies Dialog */}
-            {targetPath && (
-                <DriveCreateStickies
-                    path={targetPath}
-                    open={createStickiesOpen}
-                    onOpenChange={setCreateStickiesOpen}
-                    onSave={() => {}}
-                    onAfterAction={handleAfterAction}
-                />
-            )}
-
-            {/* Create Chat Dialog */}
-            {targetPath && (
-                <DriveCreateChat
-                    path={targetPath}
-                    open={createChatOpen}
-                    onOpenChange={setCreateChatOpen}
-                    onSave={() => {}}
-                    onCancel={() => setCreateChatOpen(false)}
-                    onAfterAction={handleAfterAction}
-                />
-            )}
-
-            {/* Create Slides Dialog */}
-            {targetPath && (
-                <DriveCreateSlides
-                    path={targetPath}
-                    open={createSlidesOpen}
-                    onOpenChange={setCreateSlidesOpen}
-                    onSave={() => {}}
-                    onAfterAction={handleAfterAction}
-                />
-            )}
-
-            {/* Create Sheets Dialog */}
-            {targetPath && (
-                <DriveCreateSheets
-                    path={targetPath}
-                    open={createSheetsOpen}
-                    onOpenChange={setCreateSheetsOpen}
-                    onSave={() => {}}
-                    onAfterAction={handleAfterAction}
+            {createType && (
+                <DriveCreateEigenDoc
+                    type={createType}
+                    open={true}
+                    onOpenChange={(open) => {
+                        if (!open) setCreateType(null);
+                    }}
+                    defaultFolderId={targetPath?.id}
+                    defaultMountId={targetPath?.mountId}
                 />
             )}
 

@@ -19,6 +19,7 @@ type DriveCreateEigenDocProps = {
     type: EigenDocType;
     defaultFolderId?: string;
     defaultMountId?: string;
+    openInNewTab?: boolean;
     onAfterCreate?: (path: DrivePath) => void;
 };
 
@@ -28,6 +29,7 @@ export function DriveCreateEigenDoc({
     type,
     defaultFolderId,
     defaultMountId,
+    openInNewTab = true,
     onAfterCreate,
 }: DriveCreateEigenDocProps) {
     const createMutation = useCreateDriveItem(type);
@@ -42,8 +44,10 @@ export function DriveCreateEigenDoc({
             fileName: location.name.trim(),
         });
         onOpenChange(false);
-        const url = getDriveItemUrl(newPath);
-        if (url) window.open(url, '_blank');
+        if (openInNewTab) {
+            const url = getDriveItemUrl(newPath);
+            if (url) window.open(url, '_blank');
+        }
         onAfterCreate?.(newPath);
     };
 

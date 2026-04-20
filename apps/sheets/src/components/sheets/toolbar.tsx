@@ -1,7 +1,7 @@
 import { useExportDocument, useImportDocument } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { CountBadge, TooltipButton } from '@workspace/ui';
-import { DriveCreateSheets } from '@workspace/ui/components/layout/drive/drive-create-sheets';
+
 import { ExportProgressDialog } from '@workspace/ui/components/layout/drive/export-progress-dialog';
 import { DocumentModeButton } from '@workspace/ui/components/layout/toolbar/document-mode-button';
 import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
@@ -52,7 +52,7 @@ export function ToolbarLeftItems({ path, onAccessDialogOpen, onRestore, canWrite
                 exportFormats={['xlsx', 'pdf', 'html']}
                 createLabel="New sheet"
                 createIcon={Sheet}
-                CreateDialog={DriveCreateSheets}
+                createType="sheets"
             />
             <ExportProgressDialog open={isExporting} />
         </>

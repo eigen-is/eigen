@@ -6,12 +6,8 @@ import { Column, ColumnLayout } from '../app/column-layout.tsx';
 import { useLayout } from '../app/layout-context.tsx';
 import { LoadingState } from '../app/loading-state';
 import { DriveAccessDialog } from './drive-access-dialog';
-import { DriveCreateChat } from './drive-create-chat';
-import { DriveCreateDoc } from './drive-create-doc';
+import { DriveCreateEigenDoc } from './drive-create-eigendoc';
 import { DriveCreateFolder } from './drive-create-folder';
-import { DriveCreateSheets } from './drive-create-sheets';
-import { DriveCreateSlides } from './drive-create-slides';
-import { DriveCreateStickies } from './drive-create-stickies';
 import { DriveDetail, DriveDetailToolbar } from './drive-detail';
 import { DriveEmailCollaborators } from './drive-email-collaborators';
 import { DriveList, DriveListToolbar } from './drive-list';
@@ -291,58 +287,49 @@ export function DriveLayout({
                 />
             )}
 
-            {allowCreateDoc && currentPath && (
-                <DriveCreateDoc
-                    path={currentPath}
+            {allowCreateDoc && (
+                <DriveCreateEigenDoc
+                    type="doc"
                     open={dialogs.createDoc.open}
                     onOpenChange={dialogs.createDoc.setOpen}
-                    onSave={dialogs.createDoc.closeDialog}
-                    onCancel={dialogs.createDoc.closeDialog}
-                    onAfterAction={onAfterAction}
+                    defaultFolderId={currentPath?.id}
+                    defaultMountId={currentPath?.mountId}
                 />
             )}
-
-            {allowCreateStickies && currentPath && (
-                <DriveCreateStickies
-                    path={currentPath}
+            {allowCreateStickies && (
+                <DriveCreateEigenDoc
+                    type="stickies"
                     open={dialogs.createStickies.open}
                     onOpenChange={dialogs.createStickies.setOpen}
-                    onSave={dialogs.createStickies.closeDialog}
-                    onCancel={dialogs.createStickies.closeDialog}
-                    onAfterAction={onAfterAction}
+                    defaultFolderId={currentPath?.id}
+                    defaultMountId={currentPath?.mountId}
                 />
             )}
-
-            {allowCreateChat && currentPath && (
-                <DriveCreateChat
-                    path={currentPath}
+            {allowCreateChat && (
+                <DriveCreateEigenDoc
+                    type="chat"
                     open={dialogs.createChat.open}
                     onOpenChange={dialogs.createChat.setOpen}
-                    onSave={dialogs.createChat.closeDialog}
-                    onCancel={dialogs.createChat.closeDialog}
-                    onAfterAction={onAfterAction}
+                    defaultFolderId={currentPath?.id}
+                    defaultMountId={currentPath?.mountId}
                 />
             )}
-
-            {allowCreateSlides && currentPath && (
-                <DriveCreateSlides
-                    path={currentPath}
+            {allowCreateSlides && (
+                <DriveCreateEigenDoc
+                    type="slides"
                     open={dialogs.createSlides.open}
                     onOpenChange={dialogs.createSlides.setOpen}
-                    onSave={dialogs.createSlides.closeDialog}
-                    onCancel={dialogs.createSlides.closeDialog}
-                    onAfterAction={onAfterAction}
+                    defaultFolderId={currentPath?.id}
+                    defaultMountId={currentPath?.mountId}
                 />
             )}
-
-            {allowCreateSheets && currentPath && (
-                <DriveCreateSheets
-                    path={currentPath}
+            {allowCreateSheets && (
+                <DriveCreateEigenDoc
+                    type="sheets"
                     open={dialogs.createSheets.open}
                     onOpenChange={dialogs.createSheets.setOpen}
-                    onSave={dialogs.createSheets.closeDialog}
-                    onCancel={dialogs.createSheets.closeDialog}
-                    onAfterAction={onAfterAction}
+                    defaultFolderId={currentPath?.id}
+                    defaultMountId={currentPath?.mountId}
                 />
             )}
 

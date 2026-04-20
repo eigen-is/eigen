@@ -20,7 +20,7 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
-import { DriveCreateDoc } from '@workspace/ui/components/layout/drive/drive-create-doc';
+
 import { ExportProgressDialog } from '@workspace/ui/components/layout/drive/export-progress-dialog';
 import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker';
 import { FontPicker } from '@workspace/ui/components/layout/media/font-picker';
@@ -186,7 +186,7 @@ export const EditorToolbar = ({
                     onImport={handleImport}
                     importLabel="Import docx file…"
                     createLabel="New document"
-                    CreateDialog={DriveCreateDoc}
+                    createType="doc"
                 >
                     <DropdownMenuItem onClick={printDocument}>
                         <Printer className="h-4 w-4 mr-2" /> Print
