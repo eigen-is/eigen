@@ -1,6 +1,6 @@
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { driveApi, getDriveFileUploadUrl } from '@workspace/lib/api';
-import type { DriveACL, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
+import type { DriveACL, DrivePath, DriveVisibility, EigenDocType } from '@workspace/lib/types/drive';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -156,6 +156,30 @@ export function useCreateFolder(ownerId: string, mountId: string = DEFAULT_MOUNT
             return response.data;
         },
         onSuccess: (_data, variables) => invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId),
+        onError: onMutationError,
+    });
+}
+
+export function useCreateFolderItem() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async ({
+            ownerId,
+            mountId,
+            parentId,
+            folderName,
+        }: {
+            ownerId: string;
+            mountId: string;
+            parentId: string;
+            folderName: string;
+        }) => {
+            const response = await driveApi({ ownerId })({ mountId }).folder({ pathId: parentId }).post({ folderName });
+            if (response.error) throw new AppError(response);
+            return response.data;
+        },
+        onSuccess: (_, variables) =>
+            invalidateItemCreated(queryClient, variables.ownerId, variables.mountId, variables.parentId),
         onError: onMutationError,
     });
 }
@@ -362,8 +386,6 @@ export function useBreadcrumb(ownerId: string, mountId: string, pathId: string |
         staleTime: 1000 * 60 * 5, // 5 minutes
     });
 }
-
-type EigenDocType = 'doc' | 'stickies' | 'slides' | 'sheets' | 'chat';
 
 const EIGENDOC_MIME: Record<EigenDocType, string> = {
     doc: 'DRIVE_MIME_DOC',

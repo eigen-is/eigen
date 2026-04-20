@@ -159,6 +159,7 @@ export function ChatSidebar({
                 open={createChatOpen}
                 onOpenChange={setCreateChatOpen}
                 type="chat"
+                defaultOwnerId={ownerId}
                 defaultFolderId={rootPath?.id}
                 defaultMountId={rootPath?.mountId ?? mountId}
                 openInNewTab={false}

@@ -287,17 +287,14 @@ export function DriveSidebar({ condensed = false, onClose, isMobile = false, roo
             {/* Storage usage indicator at the bottom of sidebar */}
             <StorageUsage className="mt-auto" condensed={condensed} />
 
-            {/* Create Folder Dialog */}
-            {targetPath && (
-                <DriveCreateFolder
-                    path={targetPath}
-                    open={createFolderOpen}
-                    onOpenChange={setCreateFolderOpen}
-                    onSave={() => {}}
-                    onCancel={() => setCreateFolderOpen(false)}
-                    onAfterAction={handleAfterAction}
-                />
-            )}
+            <DriveCreateFolder
+                open={createFolderOpen}
+                onOpenChange={setCreateFolderOpen}
+                defaultOwnerId={targetPath?.ownerId}
+                defaultFolderId={targetPath?.id}
+                defaultMountId={targetPath?.mountId}
+                onAfterCreate={() => handleAfterAction()}
+            />
 
             {createType && (
                 <DriveCreateEigenDoc

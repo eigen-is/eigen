@@ -36,7 +36,7 @@ type DriveBrowserProps = {
     mode: 'file' | 'folder';
     mimeFilter?: string[];
     selectedId?: string | null;
-    onSelect: (path: DrivePath) => void;
+    onSelect?: (path: DrivePath) => void;
     onConfirm?: (path: DrivePath) => void;
     onFolderChange?: (folder: DrivePath, mountId: string) => void;
     defaultMountId?: string;
@@ -100,11 +100,11 @@ export function DriveBrowser({
             if (isFolderType(item.type)) {
                 navigateToFolder(item);
                 if (mode === 'folder') {
-                    onSelect(item);
+                    onSelect?.(item);
                 }
             } else if (mode === 'file') {
                 if (!mimeFilter || matchesMimeFilter(item.mimeType, mimeFilter)) {
-                    onSelect(item);
+                    onSelect?.(item);
                 }
             }
         },
@@ -138,7 +138,7 @@ export function DriveBrowser({
                     if (newFolder) {
                         navigateToFolder(newFolder);
                         if (mode === 'folder') {
-                            onSelect(newFolder);
+                            onSelect?.(newFolder);
                         }
                     }
                 },

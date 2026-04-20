@@ -276,14 +276,14 @@ export function DriveLayout({
                 )}
             </ColumnLayout>
 
-            {allowCreateFolder && currentPath && (
+            {allowCreateFolder && (
                 <DriveCreateFolder
-                    path={currentPath}
                     open={dialogs.createFolder.open}
                     onOpenChange={dialogs.createFolder.setOpen}
-                    onSave={dialogs.createFolder.closeDialog}
-                    onCancel={dialogs.createFolder.closeDialog}
-                    onAfterAction={onAfterAction}
+                    defaultOwnerId={currentPath?.ownerId}
+                    defaultFolderId={currentPath?.id}
+                    defaultMountId={currentPath?.mountId}
+                    onAfterCreate={(newPath) => onAfterAction?.('create', { name: newPath.name })}
                 />
             )}
 
