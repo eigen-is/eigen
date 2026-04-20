@@ -17,6 +17,8 @@ import { ChevronDown, Download } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import { DriveBrowser } from './drive-browser';
 
+const noop = () => {};
+
 type DriveLocationPickerProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
@@ -51,11 +53,11 @@ export function DriveLocationPicker({
     const [activeOwnerId, setActiveOwnerId] = useState(user?.id ?? '');
     const [folderId, setFolderId] = useState<string | null>(defaultFolderId ?? null);
 
-    const ownerId = user?.id ?? '';
+    const resolvedOwnerId = activeOwnerId || user?.id || '';
 
-    const { data: rootFolder } = useRootFolder(activeOwnerId || ownerId, activeMountId);
+    const { data: rootFolder } = useRootFolder(resolvedOwnerId, activeMountId);
     const currentFolderId = folderId ?? rootFolder?.id ?? '';
-    const { data: breadcrumbPaths = [] } = useBreadcrumb(activeOwnerId || ownerId, activeMountId, currentFolderId);
+    const { data: breadcrumbPaths = [] } = useBreadcrumb(resolvedOwnerId, activeMountId, currentFolderId);
 
     useEffect(() => {
         if (!user) return;
@@ -79,7 +81,7 @@ export function DriveLocationPicker({
     const handleSubmit = () => {
         if (hasName && !name.trim()) return;
         onConfirm({
-            ownerId: activeOwnerId || ownerId,
+            ownerId: resolvedOwnerId,
             mountId: activeMountId,
             folderId: currentFolderId,
             name: hasName ? name.trim() : undefined,
@@ -155,13 +157,9 @@ export function DriveLocationPicker({
                 {expanded && (
                     <div className="flex-1 overflow-hidden border-t">
                         <DriveBrowser
-                            ownerId={activeOwnerId || ownerId}
+                            ownerId={resolvedOwnerId}
                             mode="folder"
-                            selectedId={folderId}
-                            onSelect={(path) => {
-                                setFolderId(path.id);
-                                setActiveOwnerId(path.ownerId);
-                            }}
+                            onSelect={noop}
                             onFolderChange={handleFolderChange}
                             defaultMountId={activeMountId}
                             defaultFolderId={folderId ?? undefined}
