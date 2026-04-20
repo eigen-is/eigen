@@ -181,6 +181,10 @@ function TextPreviewContent({ path }: { path: DrivePath }) {
                         dangerouslySetInnerHTML={{ __html: data.body }}
                     />
                 </div>
+            ) : data.mode === 'eigensheets' ? (
+                <div className="p-8 min-h-full">
+                    <div className="eigensheets-preview mx-auto" dangerouslySetInnerHTML={{ __html: data.body }} />
+                </div>
             ) : (
                 <div
                     className="eigen-prose p-8 max-w-[52rem] mx-auto"
