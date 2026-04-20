@@ -3,7 +3,7 @@ import { useExportDocument } from '@workspace/lib/drive';
 import { useMediaQuery } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { CountBadge, Toolbar as SharedToolbar, TooltipButton } from '@workspace/ui';
-import { DriveCreateSlides } from '@workspace/ui/components/layout/drive/drive-create-slides';
+
 import { ExportProgressDialog } from '@workspace/ui/components/layout/drive/export-progress-dialog';
 import { DocumentModeButton } from '@workspace/ui/components/layout/toolbar/document-mode-button';
 import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
@@ -80,7 +80,7 @@ export function Toolbar({
                         exportFormats={['pdf', 'html']}
                         createLabel="New slides"
                         createIcon={Presentation}
-                        CreateDialog={DriveCreateSlides}
+                        createType="slides"
                     />
 
                     {canWrite && !isMobile && (

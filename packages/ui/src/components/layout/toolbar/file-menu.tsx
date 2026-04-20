@@ -1,9 +1,7 @@
 import { formatForDisplay } from '@tanstack/react-hotkeys';
 import { useNavigate } from '@tanstack/react-router';
-import { useAuth } from '@workspace/lib/auth';
 import { fetchRevisionState, useCollabRevisions } from '@workspace/lib/collab';
 import { formatDateTime } from '@workspace/lib/date';
-import { useRootFolder } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import {
@@ -29,7 +27,8 @@ import {
     Upload,
     UserRoundPlus,
 } from 'lucide-react';
-import { type ComponentType, type ReactNode, useState } from 'react';
+import { type ReactNode, useState } from 'react';
+import { DriveCreateEigenDoc } from '../drive/drive-create-eigendoc';
 import { DriveDeleteItem } from '../drive/drive-delete-item';
 import { DriveEmailCollaborators } from '../drive/drive-email-collaborators';
 import { DriveRenameItem } from '../drive/drive-rename-item';
@@ -57,7 +56,7 @@ type FileMenuProps = {
     exportFormats?: string[];
     createLabel: string;
     createIcon?: LucideIcon;
-    CreateDialog: ComponentType<{ path: DrivePath; open: boolean; onOpenChange: (open: boolean) => void }>;
+    createType: 'doc' | 'stickies' | 'slides' | 'sheets' | 'chat';
     children?: ReactNode;
 };
 
@@ -72,7 +71,7 @@ export function FileMenu({
     exportFormats,
     createLabel,
     createIcon: CreateIcon = FileText,
-    CreateDialog,
+    createType,
     children,
 }: FileMenuProps) {
     const [createOpen, setCreateOpen] = useState(false);
@@ -82,8 +81,6 @@ export function FileMenu({
     const [menuOpen, setMenuOpen] = useState(false);
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [pendingRevisionId, setPendingRevisionId] = useState<number | null>(null);
-    const { user } = useAuth();
-    const { data: rootFolder } = useRootFolder(user?.id || '');
     const { data: revisions } = useCollabRevisions(path.ownerId, path.mountId, path.id, menuOpen && !!onRestore);
     const navigate = useNavigate();
 
@@ -110,7 +107,7 @@ export function FileMenu({
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start">
                     {/* Section 1: Create & Open */}
-                    <DropdownMenuItem onClick={() => rootFolder && setCreateOpen(true)}>
+                    <DropdownMenuItem onClick={() => setCreateOpen(true)}>
                         <CreateIcon className="h-4 w-4 mr-2" /> {createLabel}
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => navigate({ to: `/` })}>
@@ -196,7 +193,13 @@ export function FileMenu({
                 </DropdownMenuContent>
             </DropdownMenu>
 
-            {rootFolder && <CreateDialog path={rootFolder} open={createOpen} onOpenChange={setCreateOpen} />}
+            <DriveCreateEigenDoc
+                open={createOpen}
+                onOpenChange={setCreateOpen}
+                type={createType}
+                defaultFolderId={path.parentId ?? undefined}
+                defaultMountId={path.mountId}
+            />
             <DriveRenameItem path={path} open={renameOpen} onOpenChange={setRenameOpen} />
             <DriveEmailCollaborators path={path} open={emailOpen} onOpenChange={setEmailOpen} />
             <DriveDeleteItem

@@ -1,9 +1,5 @@
 import { DRIVE_TYPE_DOC, DRIVE_TYPE_SHEETS, DRIVE_TYPE_SLIDES, DRIVE_TYPE_STICKIES } from '@workspace/lib/types/drive';
 import { FileText, Presentation, Sheet, SquareKanban } from 'lucide-react';
-import { DriveCreateDoc } from './drive-create-doc';
-import { DriveCreateSheets } from './drive-create-sheets';
-import { DriveCreateSlides } from './drive-create-slides';
-import { DriveCreateStickies } from './drive-create-stickies';
 import type { EigenDocAppConfig } from './eigendoc-config';
 
 export const DOCS_CONFIG: EigenDocAppConfig = {
@@ -13,7 +9,7 @@ export const DOCS_CONFIG: EigenDocAppConfig = {
     icon: FileText,
     newLabel: 'New document',
     allLabel: 'All docs',
-    createDialog: DriveCreateDoc,
+    createType: 'doc',
 };
 
 export const STICKIES_CONFIG: EigenDocAppConfig = {
@@ -23,7 +19,7 @@ export const STICKIES_CONFIG: EigenDocAppConfig = {
     icon: SquareKanban,
     newLabel: 'New stickies',
     allLabel: 'All stickies',
-    createDialog: DriveCreateStickies,
+    createType: 'stickies',
 };
 
 export const SLIDES_CONFIG: EigenDocAppConfig = {
@@ -33,7 +29,7 @@ export const SLIDES_CONFIG: EigenDocAppConfig = {
     icon: Presentation,
     newLabel: 'New slides',
     allLabel: 'All slides',
-    createDialog: DriveCreateSlides,
+    createType: 'slides',
 };
 
 export const SHEETS_CONFIG: EigenDocAppConfig = {
@@ -43,5 +39,5 @@ export const SHEETS_CONFIG: EigenDocAppConfig = {
     icon: Sheet,
     newLabel: 'New sheet',
     allLabel: 'All sheets',
-    createDialog: DriveCreateSheets,
+    createType: 'sheets',
 };

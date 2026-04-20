@@ -1,21 +1,18 @@
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
-import { useChats, useCreateChat } from '@workspace/lib/chat';
-import { DEFAULT_MOUNT_ID, useRootFolder } from '@workspace/lib/drive';
+import { useChats } from '@workspace/lib/chat';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { EmptyState } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
-import { DriveCreateItemDialog } from '@workspace/ui/components/layout/drive/drive-create-folder-item';
+import { DriveCreateEigenDoc } from '@workspace/ui/components/layout/drive/drive-create-eigendoc';
 import { MessageSquare, Plus } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 function ChatIndex() {
     const { user } = useAuth();
     const navigate = useNavigate();
-    const mountId = DEFAULT_MOUNT_ID;
     const { data } = useChats(user?.id || '');
-    const { data: root } = useRootFolder(user?.id || '', mountId);
     const [createChatOpen, setCreateChatOpen] = useState(false);
-    const createChatMutation = useCreateChat(user?.id || '', mountId);
 
     useEffect(() => {
         if (data && data.length > 0) {
@@ -31,24 +28,15 @@ function ChatIndex() {
         }
     }, [data, navigate]);
 
-    const handleCreateChat = async (fileName: string) => {
-        if (!root) return;
-        const newPath = await createChatMutation.mutateAsync({
-            parentId: root.id,
-            fileName,
-        });
-        setCreateChatOpen(false);
-        if (newPath) {
+    const handleAfterCreate = useCallback(
+        (newPath: DrivePath) => {
             navigate({
                 to: '/$ownerId/$mountId/$chatId',
-                params: {
-                    ownerId: user?.id || '',
-                    mountId: mountId,
-                    chatId: newPath.id,
-                },
+                params: { ownerId: newPath.ownerId, mountId: newPath.mountId, chatId: newPath.id },
             });
-        }
-    };
+        },
+        [navigate],
+    );
 
     if (data && data.length === 0) {
         return (
@@ -63,16 +51,13 @@ function ChatIndex() {
                         </Button>
                     }
                 />
-                {root && (
-                    <DriveCreateItemDialog
-                        open={createChatOpen}
-                        onOpenChange={setCreateChatOpen}
-                        onCreateItem={handleCreateChat}
-                        isPending={createChatMutation.isPending}
-                        type="Chat"
-                        path={root}
-                    />
-                )}
+                <DriveCreateEigenDoc
+                    open={createChatOpen}
+                    onOpenChange={setCreateChatOpen}
+                    type="chat"
+                    openInNewTab={false}
+                    onAfterCreate={handleAfterCreate}
+                />
             </>
         );
     }

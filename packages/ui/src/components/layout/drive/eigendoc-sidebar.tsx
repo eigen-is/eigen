@@ -1,4 +1,3 @@
-import { useNavigate } from '@tanstack/react-router';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { SidebarItem, StorageUsage } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
@@ -6,6 +5,7 @@ import { SidebarHeader } from '@workspace/ui/components/layout/sidebar/sidebar-h
 import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import { Download, Plus, UsersRound } from 'lucide-react';
 import { useState } from 'react';
+import { DriveCreateEigenDoc } from './drive-create-eigendoc';
 import type { EigenDocAppConfig } from './eigendoc-config';
 
 type EigenDocSidebarProps = {
@@ -51,8 +51,6 @@ export function EigenDocSidebar({
     rootPath = null,
 }: EigenDocSidebarProps) {
     const [createOpen, setCreateOpen] = useState(false);
-    const navigate = useNavigate();
-    const CreateDialog = config.createDialog;
 
     return (
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
@@ -92,15 +90,13 @@ export function EigenDocSidebar({
 
             <StorageUsage className="mt-auto" condensed={condensed} />
 
-            {rootPath && (
-                <CreateDialog
-                    path={rootPath}
-                    open={createOpen}
-                    onOpenChange={setCreateOpen}
-                    onCancel={() => setCreateOpen(false)}
-                    onAfterAction={() => navigate({ to: '/' })}
-                />
-            )}
+            <DriveCreateEigenDoc
+                open={createOpen}
+                onOpenChange={setCreateOpen}
+                type={config.createType}
+                defaultFolderId={rootPath?.id}
+                defaultMountId={rootPath?.mountId}
+            />
         </div>
     );
 }

@@ -11,7 +11,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { DriveCreateStickies } from '@workspace/ui/components/layout/drive/drive-create-stickies';
+
 import { DocumentModeButton } from '@workspace/ui/components/layout/toolbar/document-mode-button';
 import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
 import { Toolbar as ToolbarWrapper } from '@workspace/ui/components/layout/toolbar/toolbar';
@@ -77,7 +77,7 @@ export function Toolbar({
                     onRestore={onRestore}
                     createLabel="New stickies"
                     createIcon={SquareKanban}
-                    CreateDialog={DriveCreateStickies}
+                    createType="stickies"
                 />
                 {canWrite && isMobile && (
                     <DropdownMenu>

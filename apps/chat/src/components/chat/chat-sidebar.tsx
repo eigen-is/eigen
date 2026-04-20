@@ -1,18 +1,18 @@
 import { useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
-import { useChats, useCreateChat, useUnreadChatIds } from '@workspace/lib/chat';
+import { useChats, useUnreadChatIds } from '@workspace/lib/chat';
 import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { EigenLoader, UnreadDot, UserAvatar } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
-import { DriveCreateItemDialog } from '@workspace/ui/components/layout/drive/drive-create-folder-item';
+import { DriveCreateEigenDoc } from '@workspace/ui/components/layout/drive/drive-create-eigendoc';
 import { SidebarHeader } from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import { SidebarItem } from '@workspace/ui/components/layout/sidebar/sidebar-item';
 import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import { Separator } from '@workspace/ui/components/separator';
 import { MessageSquare, Plus } from 'lucide-react';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 
 type ChatSidebarProps = {
     condensed?: boolean;
@@ -88,25 +88,19 @@ export function ChatSidebar({
     const unreadChatIds = useUnreadChatIds(user?.id ?? '');
     const { data: chats, isLoading } = useChats(ownerId);
     const [createChatOpen, setCreateChatOpen] = useState(false);
-    const createChatMutation = useCreateChat(ownerId, mountId);
     const navigate = useNavigate();
 
     const { data: myTeams } = useMyTeams();
 
-    const handleCreateChat = async (fileName: string) => {
-        if (!rootPath) return;
-        const newPath = await createChatMutation.mutateAsync({
-            parentId: rootPath.id,
-            fileName,
-        });
-        setCreateChatOpen(false);
-        if (newPath) {
+    const handleAfterCreate = useCallback(
+        (newPath: DrivePath) => {
             navigate({
                 to: '/$ownerId/$mountId/$chatId',
-                params: { ownerId, mountId, chatId: newPath.id },
+                params: { ownerId: newPath.ownerId, mountId: newPath.mountId, chatId: newPath.id },
             });
-        }
-    };
+        },
+        [navigate],
+    );
 
     return (
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
@@ -161,16 +155,15 @@ export function ChatSidebar({
                 </>
             )}
 
-            {rootPath && (
-                <DriveCreateItemDialog
-                    open={createChatOpen}
-                    onOpenChange={setCreateChatOpen}
-                    onCreateItem={handleCreateChat}
-                    isPending={createChatMutation.isPending}
-                    type="Chat"
-                    path={rootPath}
-                />
-            )}
+            <DriveCreateEigenDoc
+                open={createChatOpen}
+                onOpenChange={setCreateChatOpen}
+                type="chat"
+                defaultFolderId={rootPath?.id}
+                defaultMountId={rootPath?.mountId ?? mountId}
+                openInNewTab={false}
+                onAfterCreate={handleAfterCreate}
+            />
         </div>
     );
 }

@@ -1,14 +1,7 @@
-import type { DrivePath, DriveSearchParams } from '@workspace/lib/types/drive';
+import type { DriveSearchParams } from '@workspace/lib/types/drive';
 import type { LucideIcon } from 'lucide-react';
-import type { ComponentType } from 'react';
 
-export type EigenDocCreateDialogProps = {
-    path: DrivePath;
-    open: boolean;
-    onOpenChange: (open: boolean) => void;
-    onCancel?: () => void;
-    onAfterAction?: (actionType: string, data: Record<string, unknown>) => void;
-};
+export type EigenDocType = 'doc' | 'stickies' | 'slides' | 'sheets' | 'chat';
 
 export type EigenDocAppConfig = {
     appName: string;
@@ -17,7 +10,7 @@ export type EigenDocAppConfig = {
     icon: LucideIcon;
     newLabel: string;
     allLabel: string;
-    createDialog: ComponentType<EigenDocCreateDialogProps>;
+    createType: EigenDocType;
 };
 
 export function eigenDocValidateSearch(search: Record<string, unknown>): DriveSearchParams {
