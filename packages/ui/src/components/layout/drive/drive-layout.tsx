@@ -292,6 +292,7 @@ export function DriveLayout({
                     type="doc"
                     open={dialogs.createDoc.open}
                     onOpenChange={dialogs.createDoc.setOpen}
+                    defaultOwnerId={currentPath?.ownerId}
                     defaultFolderId={currentPath?.id}
                     defaultMountId={currentPath?.mountId}
                 />
@@ -301,6 +302,7 @@ export function DriveLayout({
                     type="stickies"
                     open={dialogs.createStickies.open}
                     onOpenChange={dialogs.createStickies.setOpen}
+                    defaultOwnerId={currentPath?.ownerId}
                     defaultFolderId={currentPath?.id}
                     defaultMountId={currentPath?.mountId}
                 />
@@ -310,6 +312,7 @@ export function DriveLayout({
                     type="chat"
                     open={dialogs.createChat.open}
                     onOpenChange={dialogs.createChat.setOpen}
+                    defaultOwnerId={currentPath?.ownerId}
                     defaultFolderId={currentPath?.id}
                     defaultMountId={currentPath?.mountId}
                 />
@@ -319,6 +322,7 @@ export function DriveLayout({
                     type="slides"
                     open={dialogs.createSlides.open}
                     onOpenChange={dialogs.createSlides.setOpen}
+                    defaultOwnerId={currentPath?.ownerId}
                     defaultFolderId={currentPath?.id}
                     defaultMountId={currentPath?.mountId}
                 />
@@ -328,6 +332,7 @@ export function DriveLayout({
                     type="sheets"
                     open={dialogs.createSheets.open}
                     onOpenChange={dialogs.createSheets.setOpen}
+                    defaultOwnerId={currentPath?.ownerId}
                     defaultFolderId={currentPath?.id}
                     defaultMountId={currentPath?.mountId}
                 />

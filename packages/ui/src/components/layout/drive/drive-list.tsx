@@ -29,6 +29,7 @@ import { EmptyState } from '../app/empty-state';
 import { ErrorState } from '../app/error-state';
 import { useLayout } from '../app/layout-context.tsx';
 import { LoadingState } from '../app/loading-state';
+import { useMountLabel } from './drive-mount-list';
 
 type CreateCallbacks = {
     onCreateFolder?: () => void;
@@ -42,13 +43,13 @@ type CreateCallbacks = {
 
 const CREATE_MENU_DEFS: { key: keyof CreateCallbacks; icon: typeof FolderPlus; label: string; buttonLabel: string }[] =
     [
-        { key: 'onCreateFolder', icon: FolderPlus, label: 'Create folder', buttonLabel: 'New folder' },
+        { key: 'onCreateFolder', icon: FolderPlus, label: 'New folder', buttonLabel: 'New folder' },
+        { key: 'onCreateDoc', icon: FileText, label: 'New doc', buttonLabel: 'New doc' },
+        { key: 'onCreateStickies', icon: SquareKanban, label: 'New stickies', buttonLabel: 'New stickies' },
+        { key: 'onCreateChat', icon: MessageSquare, label: 'New chat', buttonLabel: 'New chat' },
+        { key: 'onCreateSlides', icon: Presentation, label: 'New slides', buttonLabel: 'New slides' },
+        { key: 'onCreateSheets', icon: Sheet, label: 'New sheets', buttonLabel: 'New sheets' },
         { key: 'onUploadFile', icon: UploadIcon, label: 'Upload file', buttonLabel: 'Upload' },
-        { key: 'onCreateDoc', icon: FileText, label: 'Create document', buttonLabel: 'New document' },
-        { key: 'onCreateStickies', icon: SquareKanban, label: 'Create stickies', buttonLabel: 'New stickies' },
-        { key: 'onCreateChat', icon: MessageSquare, label: 'Create chat', buttonLabel: 'New chat' },
-        { key: 'onCreateSlides', icon: Presentation, label: 'Create slides', buttonLabel: 'New slides' },
-        { key: 'onCreateSheets', icon: Sheet, label: 'Create sheets', buttonLabel: 'New sheets' },
     ];
 
 function getCreateMenuItems(cb: CreateCallbacks) {
@@ -82,6 +83,7 @@ export function DriveListToolbar({
     onCreateSheets,
 }: DriveListToolbarProps) {
     const { data: breadcrumbPaths = [] } = useBreadcrumb(ownerId, mountId, showBreadcrumb ? pathId : undefined);
+    const mountLabel = useMountLabel(ownerId, mountId);
     const { isMobile } = useLayout();
 
     const handleBreadcrumbClick = (path: DrivePath) => {
@@ -132,23 +134,26 @@ export function DriveListToolbar({
             {showBreadcrumb ? (
                 <Breadcrumb className="overflow-hidden">
                     <BreadcrumbList>
-                        {breadcrumbPaths.map((path, index) => (
-                            <Fragment key={path.id}>
-                                {index > 0 && <BreadcrumbSeparator />}
-                                <BreadcrumbItem>
-                                    {index === breadcrumbPaths.length - 1 ? (
-                                        <BreadcrumbPage className="flex items-center">{path.name}</BreadcrumbPage>
-                                    ) : (
-                                        <BreadcrumbLink
-                                            onClick={() => handleBreadcrumbClick(path)}
-                                            className="flex items-center cursor-pointer"
-                                        >
-                                            {path.name}
-                                        </BreadcrumbLink>
-                                    )}
-                                </BreadcrumbItem>
-                            </Fragment>
-                        ))}
+                        {breadcrumbPaths.map((path, index) => {
+                            const label = index === 0 ? mountLabel : path.name;
+                            return (
+                                <Fragment key={path.id}>
+                                    {index > 0 && <BreadcrumbSeparator />}
+                                    <BreadcrumbItem>
+                                        {index === breadcrumbPaths.length - 1 ? (
+                                            <BreadcrumbPage className="flex items-center">{label}</BreadcrumbPage>
+                                        ) : (
+                                            <BreadcrumbLink
+                                                onClick={() => handleBreadcrumbClick(path)}
+                                                className="flex items-center cursor-pointer"
+                                            >
+                                                {label}
+                                            </BreadcrumbLink>
+                                        )}
+                                    </BreadcrumbItem>
+                                </Fragment>
+                            );
+                        })}
                     </BreadcrumbList>
                 </Breadcrumb>
             ) : (

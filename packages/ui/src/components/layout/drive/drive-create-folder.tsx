@@ -1,6 +1,6 @@
 import { useCreateFolder } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { DriveCreateItemDialog } from './drive-create-folder-item';
+import { DriveLocationPicker } from './drive-location-picker';
 
 export type DriveCreateFolderProps = {
     path: DrivePath;
@@ -21,34 +21,34 @@ export function DriveCreateFolder({
 }: DriveCreateFolderProps) {
     const createFolderMutation = useCreateFolder(path.ownerId, path.mountId);
 
-    const handleOpenChange = (nextOpen: boolean) => {
-        onOpenChange(nextOpen);
-        if (!nextOpen && onCancel) onCancel();
-    };
-
-    const handleCreateFolder = async (folderName: string) => {
-        const newPath = await createFolderMutation.mutateAsync({
-            parentId: path.id,
-            folderName: folderName,
+    const handleConfirm = async (location: { ownerId: string; mountId: string; folderId: string; name?: string }) => {
+        if (!location.name?.trim()) return;
+        const newFolder = await createFolderMutation.mutateAsync({
+            parentId: location.folderId,
+            folderName: location.name.trim(),
         });
         onOpenChange(false);
+        onAfterAction?.('create', { name: location.name.trim() });
+        onSave?.(newFolder?.id || '');
+    };
 
-        // Call onAfterAction if provided
-        if (onAfterAction) {
-            onAfterAction('create', { name: folderName });
-        }
-
-        if (onSave) onSave(newPath?.id || '');
+    const handleOpenChange = (nextOpen: boolean) => {
+        onOpenChange(nextOpen);
+        if (!nextOpen) onCancel?.();
     };
 
     return (
-        <DriveCreateItemDialog
+        <DriveLocationPicker
             open={open}
             onOpenChange={handleOpenChange}
-            onCreateItem={handleCreateFolder}
-            isPending={createFolderMutation.isPending}
-            type="Folder"
-            path={path}
+            mode="create"
+            onConfirm={handleConfirm}
+            title="New folder"
+            nameLabel="Folder name"
+            confirmLabel="Create"
+            defaultOwnerId={path.ownerId}
+            defaultMountId={path.mountId}
+            defaultFolderId={path.id}
         />
     );
 }

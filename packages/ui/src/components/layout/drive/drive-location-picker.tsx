@@ -16,6 +16,7 @@ import { cn } from '@workspace/ui/lib/utils';
 import { ChevronDown, Download } from 'lucide-react';
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import { DriveBrowser } from './drive-browser';
+import { useMountLabel } from './drive-mount-list';
 
 const noop = () => {};
 
@@ -27,6 +28,7 @@ type DriveLocationPickerProps = {
     onDownloadInstead?: () => void;
     title?: string;
     defaultName?: string;
+    defaultOwnerId?: string;
     defaultMountId?: string;
     defaultFolderId?: string;
     nameLabel?: string;
@@ -41,21 +43,24 @@ export function DriveLocationPicker({
     onDownloadInstead,
     title,
     defaultName = '',
+    defaultOwnerId,
     defaultMountId = 'default',
     defaultFolderId,
     nameLabel,
     confirmLabel,
 }: DriveLocationPickerProps) {
     const { user } = useAuth();
+    const initialOwnerId = defaultOwnerId || user?.id || '';
     const [name, setName] = useState(defaultName);
     const [expanded, setExpanded] = useState(mode !== 'create');
     const [activeMountId, setActiveMountId] = useState(defaultMountId);
-    const [activeOwnerId, setActiveOwnerId] = useState(user?.id ?? '');
+    const [activeOwnerId, setActiveOwnerId] = useState(initialOwnerId);
     const [folderId, setFolderId] = useState<string | null>(defaultFolderId ?? null);
 
     const resolvedOwnerId = activeOwnerId || user?.id || '';
 
     const { data: rootFolder } = useRootFolder(resolvedOwnerId, activeMountId);
+    const mountLabel = useMountLabel(resolvedOwnerId, activeMountId);
     const currentFolderId = folderId ?? rootFolder?.id ?? '';
     const { data: breadcrumbPaths = [] } = useBreadcrumb(resolvedOwnerId, activeMountId, currentFolderId);
 
@@ -64,9 +69,9 @@ export function DriveLocationPicker({
         setName(defaultName);
         setExpanded(mode !== 'create');
         setActiveMountId(defaultMountId);
-        setActiveOwnerId(user.id);
+        setActiveOwnerId(defaultOwnerId || user.id);
         setFolderId(defaultFolderId ?? null);
-    }, [open, defaultName, mode, defaultMountId, defaultFolderId, user]);
+    }, [open, defaultName, mode, defaultOwnerId, defaultMountId, defaultFolderId, user]);
 
     const handleFolderChange = useCallback((folder: DrivePath, mountId: string) => {
         setFolderId(folder.id);
@@ -99,7 +104,7 @@ export function DriveLocationPicker({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
                 size={expanded ? undefined : 'sm'}
-                className={cn('flex flex-col p-0 gap-0', expanded && 'h-[450px]')}
+                className={cn('flex flex-col p-0 gap-0 w-[688px] max-w-[90vw]', expanded && 'h-[450px]')}
             >
                 <DialogHeader className="px-6 py-4 border-b">
                     <DialogTitle>{resolvedTitle}</DialogTitle>
@@ -141,7 +146,7 @@ export function DriveLocationPicker({
                                             {index > 0 && <BreadcrumbSeparator />}
                                             <BreadcrumbItem>
                                                 <BreadcrumbPage className="text-xs">
-                                                    {path.name || 'Drive'}
+                                                    {index === 0 ? mountLabel : path.name}
                                                 </BreadcrumbPage>
                                             </BreadcrumbItem>
                                         </Fragment>

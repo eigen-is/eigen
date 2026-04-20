@@ -197,6 +197,7 @@ export function FileMenu({
                 open={createOpen}
                 onOpenChange={setCreateOpen}
                 type={createType}
+                defaultOwnerId={path.ownerId}
                 defaultFolderId={path.parentId ?? undefined}
                 defaultMountId={path.mountId}
             />

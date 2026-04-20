@@ -94,6 +94,7 @@ export function EigenDocSidebar({
                 open={createOpen}
                 onOpenChange={setCreateOpen}
                 type={config.createType}
+                defaultOwnerId={rootPath?.ownerId}
                 defaultFolderId={rootPath?.id}
                 defaultMountId={rootPath?.mountId}
             />

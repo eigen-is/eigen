@@ -6,10 +6,10 @@ import { DriveLocationPicker } from './drive-location-picker';
 type EigenDocType = 'doc' | 'stickies' | 'slides' | 'sheets' | 'chat';
 
 const LABELS: Record<EigenDocType, { title: string; nameLabel: string }> = {
-    doc: { title: 'New document', nameLabel: 'Document name' },
+    doc: { title: 'New doc', nameLabel: 'Doc name' },
     stickies: { title: 'New stickies', nameLabel: 'Stickies name' },
     slides: { title: 'New slides', nameLabel: 'Slides name' },
-    sheets: { title: 'New sheet', nameLabel: 'Sheet name' },
+    sheets: { title: 'New sheets', nameLabel: 'Sheets name' },
     chat: { title: 'New chat', nameLabel: 'Chat name' },
 };
 
@@ -17,6 +17,7 @@ type DriveCreateEigenDocProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     type: EigenDocType;
+    defaultOwnerId?: string;
     defaultFolderId?: string;
     defaultMountId?: string;
     openInNewTab?: boolean;
@@ -27,6 +28,7 @@ export function DriveCreateEigenDoc({
     open,
     onOpenChange,
     type,
+    defaultOwnerId,
     defaultFolderId,
     defaultMountId,
     openInNewTab = true,
@@ -60,6 +62,7 @@ export function DriveCreateEigenDoc({
             title={labels.title}
             nameLabel={labels.nameLabel}
             confirmLabel="Create"
+            defaultOwnerId={defaultOwnerId}
             defaultMountId={defaultMountId}
             defaultFolderId={defaultFolderId}
         />

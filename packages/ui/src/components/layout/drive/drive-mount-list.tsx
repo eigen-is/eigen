@@ -1,7 +1,17 @@
 import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
+import { UserAvatar } from '@workspace/ui';
 import { cn } from '@workspace/ui/lib/utils';
-import { HardDrive, UsersRound } from 'lucide-react';
+import { Home } from 'lucide-react';
+
+export function useMountLabel(activeOwnerId: string, activeMountId: string): string {
+    const { data: myTeams } = useMyTeams();
+    if (activeMountId === 'default') return 'Drive';
+    const mount = myTeams
+        ?.flatMap((t) => t.mounts.map((m) => ({ ...m, ownerId: teamOwnerId(t.id) })))
+        .find((m) => m.id === activeMountId && m.ownerId === activeOwnerId);
+    return mount?.name || 'Drive';
+}
 
 type DriveMountListProps = {
     ownerId: string;
@@ -26,7 +36,7 @@ export function DriveMountList({ ownerId, activeMountId, activeOwnerId, onMountS
                 )}
                 onClick={() => onMountSelect(ownerId, 'default')}
             >
-                <HardDrive className="h-4 w-4 shrink-0" />
+                <Home className="h-4 w-4 shrink-0" />
                 <span className="truncate">Drive</span>
             </button>
 
@@ -46,7 +56,7 @@ export function DriveMountList({ ownerId, activeMountId, activeOwnerId, onMountS
                                 )}
                                 onClick={() => onMountSelect(teamOwnerId(team.id), mount.id)}
                             >
-                                <UsersRound className="h-4 w-4 shrink-0" />
+                                <UserAvatar email={teamOwnerId(team.id)} className="h-4 w-4 shrink-0" />
                                 <span className="truncate">{mount.name}</span>
                             </button>
                         )),
