@@ -95,6 +95,13 @@ export function renderFigureNode(
         ? `<img src="${escapeHtml(imgSrc)}" alt="${alt}"${lazy} style="${imgStyle}max-width: 100%" />`
         : '';
     const cap = caption ? `<figcaption>${escapeHtml(caption)}</figcaption>` : '';
+
+    const layout = (attrs['layout'] as string) || 'block';
+
+    if (layout === 'wrap-left') return `<figure style="float: left; margin: 0.25em 1em 0.5em 0">${img}${cap}</figure>`;
+    if (layout === 'wrap-right')
+        return `<figure style="float: right; margin: 0.25em 0 0.5em 1em">${img}${cap}</figure>`;
+
     const align = alignment || 'center';
     const justify = align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start';
     return `<figure style="display: flex; flex-direction: column; align-items: ${justify}">${img}${cap}</figure>`;
