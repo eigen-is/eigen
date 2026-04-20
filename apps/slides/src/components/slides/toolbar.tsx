@@ -7,7 +7,7 @@ import { DriveCreateSlides } from '@workspace/ui/components/layout/drive/drive-c
 import { ExportProgressDialog } from '@workspace/ui/components/layout/drive/export-progress-dialog';
 import { DocumentModeButton } from '@workspace/ui/components/layout/toolbar/document-mode-button';
 import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
-import { ImagePlus, MessageSquare, Play, Plus, Redo, Type, Undo, UserRoundPlus } from 'lucide-react';
+import { ImagePlus, MessageSquare, Play, Plus, Presentation, Redo, Type, Undo, UserRoundPlus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type * as Y from 'yjs';
 
@@ -79,6 +79,7 @@ export function Toolbar({
                         onExport={handleExport}
                         exportFormats={['pdf', 'html']}
                         createLabel="New slides"
+                        createIcon={Presentation}
                         CreateDialog={DriveCreateSlides}
                     />
 

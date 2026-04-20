@@ -17,7 +17,18 @@ import {
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { ConfirmDialog } from '@workspace/ui/components/layout/delete/confirm-dialog';
-import { Download, FileText, Folder, History, Mail, Pencil, Trash2, Upload, UserRoundPlus } from 'lucide-react';
+import {
+    Download,
+    FileText,
+    Folder,
+    History,
+    type LucideIcon,
+    Mail,
+    Pencil,
+    Trash2,
+    Upload,
+    UserRoundPlus,
+} from 'lucide-react';
 import { type ComponentType, type ReactNode, useState } from 'react';
 import { DriveDeleteItem } from '../drive/drive-delete-item';
 import { DriveEmailCollaborators } from '../drive/drive-email-collaborators';
@@ -45,6 +56,7 @@ type FileMenuProps = {
     onExport?: (format: string) => void;
     exportFormats?: string[];
     createLabel: string;
+    createIcon?: LucideIcon;
     CreateDialog: ComponentType<{ path: DrivePath; open: boolean; onOpenChange: (open: boolean) => void }>;
     children?: ReactNode;
 };
@@ -59,6 +71,7 @@ export function FileMenu({
     onExport,
     exportFormats,
     createLabel,
+    createIcon: CreateIcon = FileText,
     CreateDialog,
     children,
 }: FileMenuProps) {
@@ -98,7 +111,7 @@ export function FileMenu({
                 <DropdownMenuContent align="start">
                     {/* Section 1: Create & Open */}
                     <DropdownMenuItem onClick={() => rootFolder && setCreateOpen(true)}>
-                        <FileText className="h-4 w-4 mr-2" /> {createLabel}
+                        <CreateIcon className="h-4 w-4 mr-2" /> {createLabel}
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => navigate({ to: `/` })}>
                         <Folder className="h-4 w-4 mr-2" /> Open

@@ -5,7 +5,7 @@ import { DriveCreateSheets } from '@workspace/ui/components/layout/drive/drive-c
 import { ExportProgressDialog } from '@workspace/ui/components/layout/drive/export-progress-dialog';
 import { DocumentModeButton } from '@workspace/ui/components/layout/toolbar/document-mode-button';
 import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
-import { MessageSquare, UserRoundPlus } from 'lucide-react';
+import { MessageSquare, Sheet, UserRoundPlus } from 'lucide-react';
 
 type ToolbarLeftProps = {
     canWrite: boolean;
@@ -51,6 +51,7 @@ export function ToolbarLeftItems({ path, onAccessDialogOpen, onRestore, canWrite
                 onExport={handleExport}
                 exportFormats={['xlsx', 'pdf', 'html']}
                 createLabel="New sheet"
+                createIcon={Sheet}
                 CreateDialog={DriveCreateSheets}
             />
             <ExportProgressDialog open={isExporting} />

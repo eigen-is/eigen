@@ -19,7 +19,7 @@ import {
     MessageSquare,
     Presentation,
     Sheet,
-    StickyNote,
+    SquareKanban,
     UsersRound,
 } from 'lucide-react';
 
@@ -77,7 +77,7 @@ const apps = [
         name: 'Stickies',
         color: 'var(--app-stickies-color)',
         href: getStickiesAppUrl(),
-        icon: StickyNote,
+        icon: SquareKanban,
         description: 'Organize your tasks and ideas',
     },
     {
