@@ -1,20 +1,14 @@
 import { useAuth } from '@workspace/lib/auth';
 import { useBreadcrumb, useRootFolder } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import {
-    Breadcrumb,
-    BreadcrumbItem,
-    BreadcrumbList,
-    BreadcrumbPage,
-    BreadcrumbSeparator,
-} from '@workspace/ui/components/breadcrumb';
 import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { cn } from '@workspace/ui/lib/utils';
 import { ChevronDown, Download } from 'lucide-react';
-import { Fragment, useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { DriveBreadcrumb } from './drive-breadcrumb';
 import { DriveBrowser } from './drive-browser';
 import { useMountLabel } from './drive-mount-list';
 
@@ -102,7 +96,7 @@ export function DriveLocationPicker({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
                 size={expanded ? undefined : 'sm'}
-                className={cn('flex flex-col p-0 gap-0 w-[688px] max-w-[90vw]', expanded && 'h-[450px]')}
+                className={cn('flex flex-col p-0 gap-0 w-[860px] max-w-[90vw]', expanded && 'h-[450px]')}
             >
                 <DialogHeader className="px-6 py-4 border-b">
                     <DialogTitle>{resolvedTitle}</DialogTitle>
@@ -137,20 +131,12 @@ export function DriveLocationPicker({
                             className="mt-1.5 flex w-full items-center gap-1.5 rounded-md border px-3 py-2 text-sm hover:bg-accent"
                             onClick={() => setExpanded(true)}
                         >
-                            <Breadcrumb className="overflow-hidden flex-1">
-                                <BreadcrumbList>
-                                    {breadcrumbPaths.map((path, index) => (
-                                        <Fragment key={path.id}>
-                                            {index > 0 && <BreadcrumbSeparator />}
-                                            <BreadcrumbItem>
-                                                <BreadcrumbPage className="text-xs">
-                                                    {index === 0 ? mountLabel : path.name}
-                                                </BreadcrumbPage>
-                                            </BreadcrumbItem>
-                                        </Fragment>
-                                    ))}
-                                </BreadcrumbList>
-                            </Breadcrumb>
+                            <DriveBreadcrumb
+                                paths={breadcrumbPaths}
+                                mountLabel={mountLabel}
+                                className="flex-1"
+                                itemClassName="text-xs"
+                            />
                             <span className="text-xs text-muted-foreground">Change</span>
                             <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                         </button>
