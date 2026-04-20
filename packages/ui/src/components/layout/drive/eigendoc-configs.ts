@@ -1,5 +1,5 @@
 import { DRIVE_TYPE_DOC, DRIVE_TYPE_SHEETS, DRIVE_TYPE_SLIDES, DRIVE_TYPE_STICKIES } from '@workspace/lib/types/drive';
-import { FileText, Presentation, Sheet, StickyNote } from 'lucide-react';
+import { FileText, Presentation, Sheet, SquareKanban } from 'lucide-react';
 import { DriveCreateDoc } from './drive-create-doc';
 import { DriveCreateSheets } from './drive-create-sheets';
 import { DriveCreateSlides } from './drive-create-slides';
@@ -20,7 +20,7 @@ export const STICKIES_CONFIG: EigenDocAppConfig = {
     appName: 'stickies',
     mimeType: 'application-eigenstickies',
     driveType: DRIVE_TYPE_STICKIES,
-    icon: StickyNote,
+    icon: SquareKanban,
     newLabel: 'New stickies',
     allLabel: 'All stickies',
     createDialog: DriveCreateStickies,

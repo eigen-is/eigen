@@ -17,7 +17,7 @@ import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
 import { Toolbar as ToolbarWrapper } from '@workspace/ui/components/layout/toolbar/toolbar';
 import { Separator } from '@workspace/ui/components/separator';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
-import { Check, Plus, Redo, Undo, UserRoundPlus } from 'lucide-react';
+import { Check, Plus, Redo, SquareKanban, Undo, UserRoundPlus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type * as Y from 'yjs';
 
@@ -76,6 +76,7 @@ export function Toolbar({
                     onAccessDialogOpen={onAccessDialogOpen}
                     onRestore={onRestore}
                     createLabel="New stickies"
+                    createIcon={SquareKanban}
                     CreateDialog={DriveCreateStickies}
                 />
                 {canWrite && isMobile && (

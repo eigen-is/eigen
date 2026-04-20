@@ -23,7 +23,7 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import { DriveTable, getFileIcon } from '@workspace/ui/components/layout/drive';
 import { cn } from '@workspace/ui/lib/utils';
-import { FileText, FolderPlus, MessageSquare, Plus, Presentation, Sheet, StickyNote, UploadIcon } from 'lucide-react';
+import { FileText, FolderPlus, MessageSquare, Plus, Presentation, Sheet, SquareKanban, UploadIcon } from 'lucide-react';
 import { Fragment, useRef, useState } from 'react';
 import { EmptyState } from '../app/empty-state';
 import { ErrorState } from '../app/error-state';
@@ -45,7 +45,7 @@ const CREATE_MENU_DEFS: { key: keyof CreateCallbacks; icon: typeof FolderPlus; l
         { key: 'onCreateFolder', icon: FolderPlus, label: 'Create folder', buttonLabel: 'New folder' },
         { key: 'onUploadFile', icon: UploadIcon, label: 'Upload file', buttonLabel: 'Upload' },
         { key: 'onCreateDoc', icon: FileText, label: 'Create document', buttonLabel: 'New document' },
-        { key: 'onCreateStickies', icon: StickyNote, label: 'Create stickies', buttonLabel: 'New stickies' },
+        { key: 'onCreateStickies', icon: SquareKanban, label: 'Create stickies', buttonLabel: 'New stickies' },
         { key: 'onCreateChat', icon: MessageSquare, label: 'Create chat', buttonLabel: 'New chat' },
         { key: 'onCreateSlides', icon: Presentation, label: 'Create slides', buttonLabel: 'New slides' },
         { key: 'onCreateSheets', icon: Sheet, label: 'Create sheets', buttonLabel: 'New sheets' },

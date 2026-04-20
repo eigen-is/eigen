@@ -33,7 +33,7 @@ import {
     Plus,
     Presentation,
     Sheet,
-    StickyNote,
+    SquareKanban,
     Trash2,
     Upload as UploadIcon,
     UsersRound,
@@ -177,7 +177,7 @@ export function DriveSidebar({ condensed = false, onClose, isMobile = false, roo
                             Create doc
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setCreateStickiesOpen(true)}>
-                            <StickyNote className="h-4 w-4 mr-2" />
+                            <SquareKanban className="h-4 w-4 mr-2" />
                             Create stickies
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setCreateChatOpen(true)}>
@@ -222,7 +222,7 @@ export function DriveSidebar({ condensed = false, onClose, isMobile = false, roo
                     condensed={condensed}
                 />
                 <SidebarItem
-                    icon={<StickyNote className="h-4 w-4" />}
+                    icon={<SquareKanban className="h-4 w-4" />}
                     to="/mime/application-eigenstickies"
                     label="All stickies"
                     condensed={condensed}

@@ -21,7 +21,7 @@ import {
     MessageSquare,
     Presentation,
     Sheet,
-    StickyNote,
+    SquareKanban,
 } from 'lucide-react';
 import type React from 'react';
 
@@ -36,7 +36,7 @@ export function getFileIcon(mimeType: string, type: string, props?: FileIconProp
         return <FileText {...props} />;
     }
     if (mimeType === DRIVE_MIME_STICKIES) {
-        return <StickyNote {...props} />;
+        return <SquareKanban {...props} />;
     }
     if (mimeType === DRIVE_MIME_CHAT) {
         return <MessageSquare {...props} />;
