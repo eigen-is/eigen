@@ -64,6 +64,27 @@ export function renderSheetsHtml(sheets: Sheet[]): string {
     return sheets.map((sheet, i) => renderSheet(sheet, i === sheets.length - 1)).join('\n');
 }
 
+export function getSheetContentSize(sheet: Sheet): { width: number; height: number } {
+    const config = sheet.config ?? {};
+    const borderMap = buildBorderMap(config.borderInfo);
+    const { minRow, minCol, maxRow, maxCol } = getGridBounds(sheet, borderMap);
+    if (maxRow < 0 || maxCol < 0) return { width: 0, height: 0 };
+
+    let width = 0;
+    for (let c = minCol; c <= maxCol; c++) {
+        if (config.colhidden?.[c]) continue;
+        width += config.columnlen?.[c] ?? DEFAULT_COL_WIDTH;
+    }
+
+    let height = 0;
+    for (let r = minRow; r <= maxRow; r++) {
+        if (config.rowhidden?.[r]) continue;
+        height += config.rowlen?.[r] ?? DEFAULT_ROW_HEIGHT;
+    }
+
+    return { width, height };
+}
+
 function renderSheet(sheet: Sheet, isLast: boolean): string {
     const config = sheet.config ?? {};
     const showGrid = sheet.showGridLines !== false && sheet.showGridLines !== 0;
@@ -282,13 +303,16 @@ function getGridBounds(
     return { minRow, minCol, maxRow, maxCol };
 }
 
-function wrapInDocument(title: string, bodyHtml: string): string {
+export function wrapInDocument(title: string, bodyHtml: string, pageSize?: { width: number; height: number }): string {
+    const pageCSS = pageSize
+        ? `@page { size: ${pageSize.width}px ${pageSize.height}px; margin: 40px; }`
+        : '@page { size: landscape; margin: 1.5cm; }';
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
     <title>${escapeHtml(title)}</title>
-    <style>${getFontCSS()}${SHEET_CSS}</style>
+    <style>${getFontCSS()}${SHEET_CSS_BASE}${pageCSS}${SHEET_CSS_PRINT}</style>
 </head>
 <body>
     ${bodyHtml}
@@ -296,7 +320,7 @@ function wrapInDocument(title: string, bodyHtml: string): string {
 </html>`;
 }
 
-const SHEET_CSS = `
+const SHEET_CSS_BASE = `
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
@@ -325,12 +349,9 @@ td {
     vertical-align: middle;
     white-space: nowrap;
 }
+`;
 
-@page {
-    size: landscape;
-    margin: 1.5cm;
-}
-
+const SHEET_CSS_PRINT = `
 @media print {
     body { padding: 0; background: #fff; }
     .sheet { margin-bottom: 0; }
