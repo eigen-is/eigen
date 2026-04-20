@@ -1,14 +1,6 @@
 import { useBreadcrumb, useCreateFolder, useFolderContent, useRootFolder } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isFolderType } from '@workspace/lib/types/drive';
-import {
-    Breadcrumb,
-    BreadcrumbItem,
-    BreadcrumbLink,
-    BreadcrumbList,
-    BreadcrumbPage,
-    BreadcrumbSeparator,
-} from '@workspace/ui/components/breadcrumb';
 import { Button } from '@workspace/ui/components/button';
 import {
     ContextMenu,
@@ -18,7 +10,8 @@ import {
 } from '@workspace/ui/components/context-menu';
 import { cn } from '@workspace/ui/lib/utils';
 import { FolderPlus } from 'lucide-react';
-import { Fragment, useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { DriveBreadcrumb } from './drive-breadcrumb';
 import { DriveCreateItemDialog } from './drive-create-folder-item';
 import { DriveMountList, useMountLabel } from './drive-mount-list';
 import { DriveTable, defaultDriveSort } from './drive-table';
@@ -161,30 +154,12 @@ export function DriveBrowser({
     const contentArea = (
         <div className="flex-1 flex flex-col min-w-0">
             <div className="flex items-center gap-2 h-10 px-3 border-b shrink-0">
-                <Breadcrumb className="overflow-hidden flex-1">
-                    <BreadcrumbList>
-                        {breadcrumbPaths.map((path, index) => {
-                            const label = index === 0 ? mountLabel : path.name;
-                            return (
-                                <Fragment key={path.id}>
-                                    {index > 0 && <BreadcrumbSeparator />}
-                                    <BreadcrumbItem>
-                                        {index === breadcrumbPaths.length - 1 ? (
-                                            <BreadcrumbPage>{label}</BreadcrumbPage>
-                                        ) : (
-                                            <BreadcrumbLink
-                                                onClick={() => handleBreadcrumbClick(path)}
-                                                className="cursor-pointer"
-                                            >
-                                                {label}
-                                            </BreadcrumbLink>
-                                        )}
-                                    </BreadcrumbItem>
-                                </Fragment>
-                            );
-                        })}
-                    </BreadcrumbList>
-                </Breadcrumb>
+                <DriveBreadcrumb
+                    paths={breadcrumbPaths}
+                    mountLabel={mountLabel}
+                    onNavigate={handleBreadcrumbClick}
+                    className="flex-1"
+                />
                 {showNewFolder && (
                     <Button variant="ghost" size="sm" onClick={() => setCreateFolderOpen(true)}>
                         <FolderPlus className="h-4 w-4 mr-1" />
@@ -209,7 +184,7 @@ export function DriveBrowser({
 
     return (
         <div className={cn('flex h-full', className)}>
-            <div className="w-44 border-r p-2 overflow-y-auto shrink-0">
+            <div className="hidden sm:block w-44 border-r p-2 overflow-y-auto shrink-0">
                 <DriveMountList
                     ownerId={ownerId}
                     activeMountId={activeMountId}

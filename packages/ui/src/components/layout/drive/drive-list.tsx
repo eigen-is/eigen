@@ -1,13 +1,5 @@
 import { useBreadcrumb } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import {
-    Breadcrumb,
-    BreadcrumbItem,
-    BreadcrumbLink,
-    BreadcrumbList,
-    BreadcrumbPage,
-    BreadcrumbSeparator,
-} from '@workspace/ui/components/breadcrumb';
 import { Button } from '@workspace/ui/components/button';
 import {
     ContextMenu,
@@ -24,11 +16,12 @@ import {
 import { DriveTable, getFileIcon } from '@workspace/ui/components/layout/drive';
 import { cn } from '@workspace/ui/lib/utils';
 import { FileText, FolderPlus, MessageSquare, Plus, Presentation, Sheet, SquareKanban, UploadIcon } from 'lucide-react';
-import { Fragment, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { EmptyState } from '../app/empty-state';
 import { ErrorState } from '../app/error-state';
 import { useLayout } from '../app/layout-context.tsx';
 import { LoadingState } from '../app/loading-state';
+import { DriveBreadcrumb } from './drive-breadcrumb';
 import { useMountLabel } from './drive-mount-list';
 
 type CreateCallbacks = {
@@ -132,30 +125,12 @@ export function DriveListToolbar({
     return (
         <div className="flex items-center justify-between w-full">
             {showBreadcrumb ? (
-                <Breadcrumb className="overflow-hidden">
-                    <BreadcrumbList>
-                        {breadcrumbPaths.map((path, index) => {
-                            const label = index === 0 ? mountLabel : path.name;
-                            return (
-                                <Fragment key={path.id}>
-                                    {index > 0 && <BreadcrumbSeparator />}
-                                    <BreadcrumbItem>
-                                        {index === breadcrumbPaths.length - 1 ? (
-                                            <BreadcrumbPage className="flex items-center">{label}</BreadcrumbPage>
-                                        ) : (
-                                            <BreadcrumbLink
-                                                onClick={() => handleBreadcrumbClick(path)}
-                                                className="flex items-center cursor-pointer"
-                                            >
-                                                {label}
-                                            </BreadcrumbLink>
-                                        )}
-                                    </BreadcrumbItem>
-                                </Fragment>
-                            );
-                        })}
-                    </BreadcrumbList>
-                </Breadcrumb>
+                <DriveBreadcrumb
+                    paths={breadcrumbPaths}
+                    mountLabel={mountLabel}
+                    onNavigate={handleBreadcrumbClick}
+                    itemClassName="flex items-center"
+                />
             ) : (
                 <div className="flex-1" />
             )}
