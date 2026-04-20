@@ -7,6 +7,7 @@ import { loadSheetsContent } from './content';
 import { getSheetContentSize, renderSheetsHtml, wrapInDocument } from './html';
 
 const PAGE_MARGIN = 40;
+const PAGE_SLACK = 20;
 
 export async function exportSheetsToPdf(mount: Mount, drivePath: DrivePath): Promise<ExportResult> {
     const title = drivePath.name.replace(/\.eigensheets$/, '');
@@ -23,8 +24,8 @@ export async function exportSheetsToPdf(mount: Mount, drivePath: DrivePath): Pro
     const bodyHtml = renderSheetsHtml(sheets);
     const sanitized = DOMPurify.sanitize(bodyHtml, { FORCE_BODY: true });
     const pageSize = {
-        width: maxW + 2 * PAGE_MARGIN,
-        height: maxH + 2 * PAGE_MARGIN,
+        width: maxW + 2 * PAGE_MARGIN + PAGE_SLACK,
+        height: maxH + 2 * PAGE_MARGIN + PAGE_SLACK,
     };
     const html = wrapInDocument(title, sanitized, pageSize);
 
