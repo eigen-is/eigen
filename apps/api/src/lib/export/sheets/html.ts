@@ -102,9 +102,11 @@ function renderSheet(sheet: Sheet, isLast: boolean): string {
 
     // Colgroup
     const cols: string[] = [];
+    let tableWidth = 0;
     for (let c = minCol; c <= maxCol; c++) {
         if (config.colhidden?.[c]) continue;
         const w = config.columnlen?.[c] ?? DEFAULT_COL_WIDTH;
+        tableWidth += w;
         cols.push(`<col style="width:${w}px">`);
     }
     const colgroup = `<colgroup>${cols.join('')}</colgroup>`;
@@ -148,7 +150,7 @@ function renderSheet(sheet: Sheet, isLast: boolean): string {
     const pageBreak = isLast ? '' : ' style="page-break-after:always"';
     return `<div class="sheet"${pageBreak}>
 <h2>${escapeHtml(sheet.name)}</h2>
-<table style="border-collapse:collapse;table-layout:fixed;font-family:&quot;Inter&quot;,system-ui,sans-serif;font-size:11px;color:#1a1a2e;background:#fff;width:max-content">${colgroup}<tbody>${rows.join('')}</tbody></table>
+<table style="border-collapse:collapse;table-layout:fixed;font-family:&quot;Inter&quot;,system-ui,sans-serif;font-size:11px;color:#1a1a2e;background:#fff;width:${tableWidth}px">${colgroup}<tbody>${rows.join('')}</tbody></table>
 </div>`;
 }
 
