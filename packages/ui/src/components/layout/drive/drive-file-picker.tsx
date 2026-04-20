@@ -23,7 +23,7 @@ export function DriveFilePicker({
     onUploadFromDevice,
     mimeFilter,
     title = 'Attach file',
-    multiple = false,
+    multiple: _multiple = false,
 }: DriveFilePickerProps) {
     const { user } = useAuth();
     const ownerId = user?.id || '';
