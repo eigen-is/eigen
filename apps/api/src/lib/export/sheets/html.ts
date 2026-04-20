@@ -8,7 +8,7 @@ import { escapeHtml } from '../media';
 import { loadSheetsContent } from './content';
 
 const DEFAULT_COL_WIDTH = 73;
-const DEFAULT_ROW_HEIGHT = 25;
+const DEFAULT_ROW_HEIGHT = 19;
 
 // Matches fortune-sheet locale fontarray — index maps to font family name.
 const FONT_ARRAY = ['Inter', 'Source Serif 4', 'JetBrains Mono', 'Excalifont'];
@@ -146,7 +146,7 @@ function renderSheet(sheet: Sheet, isLast: boolean): string {
     const pageBreak = isLast ? '' : ' style="page-break-after:always"';
     return `<div class="sheet"${pageBreak}>
 <h2>${escapeHtml(sheet.name)}</h2>
-<table>${colgroup}<tbody>${rows.join('')}</tbody></table>
+<table style="border-collapse:collapse;table-layout:fixed;font-family:&quot;Inter&quot;,system-ui,sans-serif;font-size:11px;color:#1a1a2e;background:#fff;width:max-content">${colgroup}<tbody>${rows.join('')}</tbody></table>
 </div>`;
 }
 
@@ -297,7 +297,7 @@ const SHEET_CSS = `
 
 body {
     font-family: "Inter", system-ui, -apple-system, sans-serif;
-    font-size: 10pt;
+    font-size: 11px;
     color: #1a1a2e;
     background: #fff;
     margin: 0;
@@ -309,23 +309,15 @@ body {
 }
 
 .sheet h2 {
-    font-size: 13pt;
+    font-size: 13px;
     font-weight: 600;
     color: #333;
-    margin-bottom: 0.75rem;
-}
-
-table {
-    border-collapse: collapse;
-    table-layout: fixed;
-    width: max-content;
-    background: #fff;
+    margin-bottom: 0.5rem;
 }
 
 td {
-    padding: 2px 4px;
+    padding: 1px 2px;
     overflow: hidden;
-    text-overflow: ellipsis;
     vertical-align: middle;
     white-space: nowrap;
 }
@@ -338,6 +330,6 @@ td {
 @media print {
     body { padding: 0; background: #fff; }
     .sheet { margin-bottom: 0; }
-    .sheet h2 { font-size: 11pt; }
+    .sheet h2 { font-size: 11px; }
 }
 `;
