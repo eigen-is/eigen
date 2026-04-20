@@ -65,5 +65,6 @@ export type Sheet = {
     order?: number;
     config?: SheetConfig;
     celldata?: CellWithRowAndCol[];
+    data?: (Cell | null)[][] | null;
     showGridLines?: boolean | number;
 };
