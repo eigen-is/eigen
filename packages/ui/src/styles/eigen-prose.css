@@ -102,6 +102,22 @@
         outline: none;
     }
 
+    /* Clear floats before structural elements */
+
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6,
+    hr,
+    blockquote,
+    pre,
+    table,
+    ul[data-type="taskList"] {
+        clear: both;
+    }
+
     /* Lists */
 
     ul {
