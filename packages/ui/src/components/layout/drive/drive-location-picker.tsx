@@ -96,7 +96,7 @@ export function DriveLocationPicker({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
                 size={expanded ? undefined : 'sm'}
-                className={cn('flex flex-col p-0 gap-0 w-[860px] max-w-[90vw]', expanded && 'h-[450px]')}
+                className={cn('flex flex-col p-0 gap-0 max-w-[90vw]', expanded ? 'h-[450px] sm:max-w-[688px]' : '')}
             >
                 <DialogHeader className="px-6 py-4 border-b">
                     <DialogTitle>{resolvedTitle}</DialogTitle>
