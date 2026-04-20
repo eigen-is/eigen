@@ -9,6 +9,7 @@ import { loadSheetsContent } from './content';
 
 const DEFAULT_COL_WIDTH = 73;
 const DEFAULT_ROW_HEIGHT = 19;
+const BASE_TD_STYLE = 'overflow:hidden;white-space:nowrap;padding:1px 2px;vertical-align:middle';
 
 // Matches fortune-sheet locale fontarray — index maps to font family name.
 const FONT_ARRAY = ['Inter', 'Source Serif 4', 'JetBrains Mono', 'Excalifont'];
@@ -132,8 +133,9 @@ function renderSheet(sheet: Sheet, isLast: boolean): string {
                 if (merge.rs > 1) attrs.push(`rowspan="${merge.rs}"`);
             }
 
-            const style = buildCellStyle(v, borderMap.get(key), showGrid);
-            if (style) attrs.push(`style="${style}"`);
+            const cellStyle = buildCellStyle(v, borderMap.get(key), showGrid);
+            const style = cellStyle ? `${BASE_TD_STYLE};${cellStyle}` : BASE_TD_STYLE;
+            attrs.push(`style="${style}"`);
 
             const display = getCellDisplay(v);
             const attrStr = attrs.length > 0 ? ` ${attrs.join(' ')}` : '';
