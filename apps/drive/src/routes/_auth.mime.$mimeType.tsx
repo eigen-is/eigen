@@ -100,11 +100,11 @@ function DriveRoute() {
             allowShare={true}
             allowCreateFolder={false}
             allowUpload={false}
-            allowCreateDoc={false}
-            allowCreateStickies={false}
-            allowCreateChat={false}
-            allowCreateSlides={false}
-            allowCreateSheets={false}
+            allowCreateDoc={mimeType === 'application-eigendoc'}
+            allowCreateStickies={mimeType === 'application-eigenstickies'}
+            allowCreateChat={mimeType === 'application-eigenchat'}
+            allowCreateSlides={mimeType === 'application-eigenslides'}
+            allowCreateSheets={mimeType === 'application-eigensheets'}
             showBreadcrumb={false}
             onQuickLook={onQuickLook}
             getItemHref={getDriveItemUrl}
