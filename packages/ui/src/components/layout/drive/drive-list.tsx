@@ -54,9 +54,7 @@ type DriveListToolbarProps = CreateCallbacks & {
     mountId: string;
     pathId?: string;
     showBreadcrumb?: boolean;
-    onRowSelect?: (path: DrivePath) => void;
     onRowActivate?: (path: DrivePath) => void;
-    activeRowId?: string;
 };
 
 export function DriveListToolbar({
@@ -64,9 +62,7 @@ export function DriveListToolbar({
     mountId,
     pathId,
     showBreadcrumb = true,
-    onRowSelect,
     onRowActivate,
-    activeRowId,
     onCreateFolder,
     onUploadFile,
     onCreateDoc,

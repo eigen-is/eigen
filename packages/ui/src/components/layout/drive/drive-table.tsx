@@ -101,7 +101,6 @@ export function DriveTable({
     hideHeader = false,
 }: DriveTableProps) {
     const containerRef = useRef<HTMLDivElement>(null);
-    const [hasFocus, setHasFocus] = useState(false);
     const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
 
     const hasParentItem = showParentRow ?? Boolean(currentPath?.parentId);
@@ -198,13 +197,8 @@ export function DriveTable({
         <div
             ref={containerRef}
             tabIndex={0}
-            onFocus={() => setHasFocus(true)}
-            onBlur={() => setHasFocus(false)}
             onKeyDown={handleKeyDown}
-            className={cn(
-                'flex-1 overflow-auto relative w-full text-sm focus:outline-none',
-                hasFocus && 'eigen-table-focused',
-            )}
+            className="flex-1 overflow-auto relative w-full text-sm focus:outline-none"
         >
             {!hideHeader && (
                 <div className={cn('grid border-b', gridCols)}>
