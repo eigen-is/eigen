@@ -15,7 +15,6 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@workspace/ui/components/table';
 import { cn } from '@workspace/ui/lib/utils';
 import {
     ArrowRight,
@@ -72,6 +71,7 @@ export type DriveTableProps = {
     unreadPathIds?: Set<string>;
     hideModified?: boolean;
     hideShareClick?: boolean;
+    hideHeader?: boolean;
 };
 
 export function DriveTable({
@@ -98,8 +98,9 @@ export function DriveTable({
     unreadPathIds,
     hideModified = false,
     hideShareClick = false,
+    hideHeader = false,
 }: DriveTableProps) {
-    const tableRef = useRef<HTMLTableElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
     const [hasFocus, setHasFocus] = useState(false);
     const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
 
@@ -160,8 +161,7 @@ export function DriveTable({
         getId: (item) => item.id,
         onSelect: handleItemSelect,
         onQuickLook: onQuickLook ? handleQuickLook : undefined,
-        containerRef: tableRef,
-        itemSelector: 'tbody tr',
+        containerRef,
         shouldNotify: (_item, index) => (!hasParentItem || index > 0) && !!activeItemId,
         selection,
     });
@@ -190,152 +190,154 @@ export function DriveTable({
         return !drag.draggedItems.some((d) => d.id === targetItem.id);
     };
 
+    const gridCols = hideModified
+        ? 'grid-cols-[minmax(0,1fr)] sm:grid-cols-[minmax(0,1fr)_10%]'
+        : 'grid-cols-[minmax(0,1fr)] sm:grid-cols-[minmax(0,1fr)_10%_15%]';
+
     return (
-        <div className="flex-1 overflow-auto">
-            <Table
-                ref={tableRef}
-                tabIndex={0}
-                onFocus={() => setHasFocus(true)}
-                onBlur={() => setHasFocus(false)}
-                onKeyDown={handleKeyDown}
-                className={cn('eigen-table focus:outline-none', hasFocus && 'eigen-table-focused')}
-            >
-                <TableHeader>
-                    <TableRow>
-                        <TableHead className={hideModified ? 'w-[90%]' : 'w-[75%]'}>Name</TableHead>
-                        <TableHead className="w-[10%] hidden sm:table-cell">Share</TableHead>
-                        {!hideModified && <TableHead className="w-[15%] hidden sm:table-cell">Modified</TableHead>}
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {hasParentItem && currentPath && (
-                        <TableRow
-                            className={cn(
-                                'eigen-list-item',
-                                (activeItemId === currentPath.parentId || selectedIndex === 0) &&
-                                    'eigen-list-item-active',
-                                currentPath.parentId &&
-                                    selection.isSelected(currentPath.parentId) &&
-                                    'eigen-list-item-selected',
-                            )}
-                            onClick={(e) => {
-                                const parentId = currentPath.parentId || '';
-                                selection.handleItemClick(parentId, e);
-                                if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
-                                    onItemClick?.(allItems[0]);
-                                }
-                            }}
-                        >
-                            <TableCell className="font-medium">
-                                <div className="flex items-center">
-                                    <ChevronLeft className="h-4 w-4 mr-2 text-muted-foreground" />
-                                    <span>..</span>
-                                </div>
-                            </TableCell>
-                            <TableCell className="hidden sm:table-cell"></TableCell>
-                            <TableCell className="hidden sm:table-cell">-</TableCell>
-                        </TableRow>
+        <div
+            ref={containerRef}
+            tabIndex={0}
+            onFocus={() => setHasFocus(true)}
+            onBlur={() => setHasFocus(false)}
+            onKeyDown={handleKeyDown}
+            className={cn(
+                'flex-1 overflow-auto relative w-full text-sm focus:outline-none',
+                hasFocus && 'eigen-table-focused',
+            )}
+        >
+            {!hideHeader && (
+                <div className={cn('grid border-b', gridCols)}>
+                    <div className="text-muted-foreground h-10 px-2 flex items-center font-medium">Name</div>
+                    <div className="text-muted-foreground h-10 px-2 hidden sm:flex items-center font-medium">Share</div>
+                    {!hideModified && (
+                        <div className="text-muted-foreground h-10 px-2 hidden sm:flex items-center font-medium">
+                            Modified
+                        </div>
                     )}
+                </div>
+            )}
 
-                    {sortedItems.map((item, index) => {
-                        const adjustedIndex = hasParentItem ? index + 1 : index;
-                        const itemHref = getItemHref?.(item);
+            {hasParentItem && currentPath && (
+                <div
+                    className={cn(
+                        'grid border-b transition-colors eigen-list-item',
+                        gridCols,
+                        (activeItemId === currentPath.parentId || selectedIndex === 0) && 'eigen-list-item-active',
+                        currentPath.parentId &&
+                            selection.isSelected(currentPath.parentId) &&
+                            'eigen-list-item-selected',
+                    )}
+                    onClick={(e) => {
+                        const parentId = currentPath.parentId || '';
+                        selection.handleItemClick(parentId, e);
+                        if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
+                            onItemClick?.(allItems[0]);
+                        }
+                    }}
+                >
+                    <div className="px-2 py-1.5 flex items-center font-medium">
+                        <ChevronLeft className="h-4 w-4 mr-2 text-muted-foreground" />
+                        <span>..</span>
+                    </div>
+                    <div className="hidden sm:block px-2 py-1.5" />
+                    {!hideModified && <div className="hidden sm:block px-2 py-1.5">-</div>}
+                </div>
+            )}
 
-                        return (
-                            <TableRow
-                                key={item.id}
-                                className={cn(
-                                    'eigen-list-item',
-                                    (activeItemId === item.id || selectedIndex === adjustedIndex) &&
-                                        'eigen-list-item-active',
-                                    selection.isSelected(item.id) && 'eigen-list-item-selected',
-                                    dragOverItemId === item.id && isValidFolderDrop(item) && 'bg-accent',
-                                )}
-                                onClick={(e) => {
-                                    selection.handleItemClick(item.id, e);
-                                    if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
-                                        onItemClick?.(item);
-                                    }
-                                }}
-                                onContextMenu={(e) => handleContextMenu(e, item)}
-                                {...drag.getDragProps(item)}
-                                onDragOver={(e) => {
-                                    e.preventDefault();
-                                    if (drag.isDragging && isValidFolderDrop(item)) {
-                                        e.dataTransfer.dropEffect = 'move';
-                                    }
-                                }}
-                                onDragEnter={() => {
-                                    if (drag.isDragging) setDragOverItemId(item.id);
-                                }}
-                                onDragLeave={() => {}}
-                                onDrop={(e) => {
-                                    e.preventDefault();
-                                    setDragOverItemId(null);
-                                    if (isValidFolderDrop(item) && onMove) {
-                                        drag.draggedItems.forEach((d) => {
-                                            onMove(d, item.id);
-                                        });
-                                    }
-                                }}
-                            >
-                                <TableCell>
-                                    <div className="flex items-center max-w-full">
-                                        <div className="relative mr-2 flex-shrink-0">
-                                            {getFileIcon?.(item.mimeType, item.type, {
-                                                className: 'h-4 w-4 text-muted-foreground',
-                                                ...(isFolderType(item.type)
-                                                    ? {
-                                                          fill: 'var(--app-drive-light-color)',
-                                                      }
-                                                    : {}),
-                                            })}
-                                            {unreadPathIds?.has(item.id) && <UnreadDot />}
-                                        </div>
-                                        {itemHref ? (
-                                            <a
-                                                href={itemHref}
-                                                className="truncate max-w-[calc(100%-1.5rem)]"
-                                                draggable={false}
-                                                tabIndex={-1}
-                                                onClick={(e) => {
-                                                    if (e.metaKey || e.ctrlKey) {
-                                                        e.stopPropagation();
-                                                        return;
-                                                    }
-                                                    e.preventDefault();
-                                                }}
-                                                onAuxClick={(e) => {
-                                                    if (e.button === 1) e.stopPropagation();
-                                                }}
-                                            >
-                                                {stripEigenExtension(item.name)}
-                                            </a>
-                                        ) : (
-                                            <span className="truncate max-w-[calc(100%-1.5rem)]">
-                                                {stripEigenExtension(item.name)}
-                                            </span>
-                                        )}
-                                    </div>
-                                </TableCell>
-                                <TableCell className="hidden sm:table-cell group">
-                                    <DriveShareSummary
-                                        path={item}
-                                        onClick={hideShareClick ? undefined : () => onShareClick?.(item)}
-                                        showIconOnHover={!hideShareClick}
-                                        ancestorBreadcrumb={ancestorBreadcrumb}
-                                    />
-                                </TableCell>
-                                {!hideModified && (
-                                    <TableCell className="hidden sm:table-cell">
-                                        {item.updatedAt ? formatDateTime(item.updatedAt) : 'Unknown'}
-                                    </TableCell>
-                                )}
-                            </TableRow>
-                        );
-                    })}
-                </TableBody>
-            </Table>
+            {sortedItems.map((item, index) => {
+                const adjustedIndex = hasParentItem ? index + 1 : index;
+                const itemHref = getItemHref?.(item);
+
+                return (
+                    <div
+                        key={item.id}
+                        className={cn(
+                            'grid border-b transition-colors eigen-list-item',
+                            gridCols,
+                            (activeItemId === item.id || selectedIndex === adjustedIndex) && 'eigen-list-item-active',
+                            selection.isSelected(item.id) && 'eigen-list-item-selected',
+                            dragOverItemId === item.id && isValidFolderDrop(item) && 'bg-accent',
+                        )}
+                        onClick={(e) => {
+                            selection.handleItemClick(item.id, e);
+                            if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
+                                onItemClick?.(item);
+                            }
+                        }}
+                        onContextMenu={(e) => handleContextMenu(e, item)}
+                        {...drag.getDragProps(item)}
+                        onDragOver={(e) => {
+                            e.preventDefault();
+                            if (drag.isDragging && isValidFolderDrop(item)) {
+                                e.dataTransfer.dropEffect = 'move';
+                            }
+                        }}
+                        onDragEnter={() => {
+                            if (drag.isDragging) setDragOverItemId(item.id);
+                        }}
+                        onDragLeave={() => {}}
+                        onDrop={(e) => {
+                            e.preventDefault();
+                            setDragOverItemId(null);
+                            if (isValidFolderDrop(item) && onMove) {
+                                drag.draggedItems.forEach((d) => {
+                                    onMove(d, item.id);
+                                });
+                            }
+                        }}
+                    >
+                        <div className="px-2 py-1.5 flex items-center min-w-0">
+                            <div className="relative mr-2 flex-shrink-0">
+                                {getFileIcon?.(item.mimeType, item.type, {
+                                    className: 'h-4 w-4 text-muted-foreground',
+                                    ...(isFolderType(item.type)
+                                        ? {
+                                              fill: 'var(--app-drive-light-color)',
+                                          }
+                                        : {}),
+                                })}
+                                {unreadPathIds?.has(item.id) && <UnreadDot />}
+                            </div>
+                            {itemHref ? (
+                                <a
+                                    href={itemHref}
+                                    className="truncate"
+                                    draggable={false}
+                                    tabIndex={-1}
+                                    onClick={(e) => {
+                                        if (e.metaKey || e.ctrlKey) {
+                                            e.stopPropagation();
+                                            return;
+                                        }
+                                        e.preventDefault();
+                                    }}
+                                    onAuxClick={(e) => {
+                                        if (e.button === 1) e.stopPropagation();
+                                    }}
+                                >
+                                    {stripEigenExtension(item.name)}
+                                </a>
+                            ) : (
+                                <span className="truncate">{stripEigenExtension(item.name)}</span>
+                            )}
+                        </div>
+                        <div className="hidden sm:flex items-center px-2 py-1.5 group">
+                            <DriveShareSummary
+                                path={item}
+                                onClick={hideShareClick ? undefined : () => onShareClick?.(item)}
+                                showIconOnHover={!hideShareClick}
+                                ancestorBreadcrumb={ancestorBreadcrumb}
+                            />
+                        </div>
+                        {!hideModified && (
+                            <div className="hidden sm:flex items-center px-2 py-1.5 whitespace-nowrap">
+                                {item.updatedAt ? formatDateTime(item.updatedAt) : 'Unknown'}
+                            </div>
+                        )}
+                    </div>
+                );
+            })}
 
             <ContextMenuAnchor contextMenu={contextMenu} className="w-48">
                 {/* Section 1: Open actions */}

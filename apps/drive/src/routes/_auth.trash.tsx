@@ -19,7 +19,7 @@ import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layo
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
 import { getFileIcon } from '@workspace/ui/components/layout/drive';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@workspace/ui/components/table';
+import { cn } from '@workspace/ui/lib/utils';
 import { RotateCcw, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -79,55 +79,51 @@ function TrashRoute() {
                     {trashedItems.length === 0 ? (
                         <EmptyState message="Trash is empty" icon={<Trash2 className="h-10 w-10" />} />
                     ) : (
-                        <div className="flex-1 overflow-auto">
-                            <Table className="eigen-table">
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead className="w-[85%]">Name</TableHead>
-                                        <TableHead className="w-[15%] hidden sm:table-cell">Trashed</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {trashedItems.map((item) => (
-                                        <TableRow
-                                            key={item.id}
-                                            className="eigen-list-item group"
-                                            onContextMenu={(e) => contextMenu.handleContextMenu(e, item)}
-                                        >
-                                            <TableCell className="relative">
-                                                <div className="flex items-center max-w-full overflow-hidden">
-                                                    {getFileIcon(item.mimeType, item.type, {
-                                                        className: 'h-4 w-4 mr-2 text-muted-foreground flex-shrink-0',
-                                                        ...(isFolderType(item.type)
-                                                            ? { fill: 'var(--app-drive-light-color)' }
-                                                            : {}),
-                                                    })}
-                                                    <span className="truncate max-w-[calc(100%-1.5rem)]">
-                                                        {stripEigenExtension(item.name)}
-                                                    </span>
-                                                </div>
-                                                <div className="invisible group-hover:visible absolute right-2 top-1/2 -translate-y-1/2 flex items-center bg-inherit">
-                                                    <TooltipButton
-                                                        icon={RotateCcw}
-                                                        tooltipText="Restore"
-                                                        className="h-7 w-7"
-                                                        onClick={() => restorePath.mutate(item.id)}
-                                                    />
-                                                    <TooltipButton
-                                                        icon={Trash2}
-                                                        tooltipText="Delete permanently"
-                                                        className="h-7 w-7 text-destructive hover:text-destructive"
-                                                        onClick={() => openPermanentDelete(item.id, item.name)}
-                                                    />
-                                                </div>
-                                            </TableCell>
-                                            <TableCell className="hidden sm:table-cell text-muted-foreground">
-                                                {item.trashedAt ? formatDateTime(item.trashedAt) : '-'}
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
+                        <div className="flex-1 overflow-auto text-sm">
+                            <div className="grid grid-cols-[minmax(0,1fr)] sm:grid-cols-[minmax(0,1fr)_15%] border-b">
+                                <div className="text-muted-foreground h-10 px-2 flex items-center font-medium">
+                                    Name
+                                </div>
+                                <div className="text-muted-foreground h-10 px-2 hidden sm:flex items-center font-medium">
+                                    Trashed
+                                </div>
+                            </div>
+                            {trashedItems.map((item) => (
+                                <div
+                                    key={item.id}
+                                    className={cn(
+                                        'grid grid-cols-[minmax(0,1fr)] sm:grid-cols-[minmax(0,1fr)_15%] border-b transition-colors eigen-list-item group',
+                                    )}
+                                    onContextMenu={(e) => contextMenu.handleContextMenu(e, item)}
+                                >
+                                    <div className="px-2 py-1.5 flex items-center min-w-0 relative">
+                                        {getFileIcon(item.mimeType, item.type, {
+                                            className: 'h-4 w-4 mr-2 text-muted-foreground flex-shrink-0',
+                                            ...(isFolderType(item.type)
+                                                ? { fill: 'var(--app-drive-light-color)' }
+                                                : {}),
+                                        })}
+                                        <span className="truncate">{stripEigenExtension(item.name)}</span>
+                                        <div className="invisible group-hover:visible absolute right-2 top-1/2 -translate-y-1/2 flex items-center bg-inherit">
+                                            <TooltipButton
+                                                icon={RotateCcw}
+                                                tooltipText="Restore"
+                                                className="h-7 w-7"
+                                                onClick={() => restorePath.mutate(item.id)}
+                                            />
+                                            <TooltipButton
+                                                icon={Trash2}
+                                                tooltipText="Delete permanently"
+                                                className="h-7 w-7 text-destructive hover:text-destructive"
+                                                onClick={() => openPermanentDelete(item.id, item.name)}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="hidden sm:flex items-center px-2 py-1.5 text-muted-foreground whitespace-nowrap">
+                                        {item.trashedAt ? formatDateTime(item.trashedAt) : '-'}
+                                    </div>
+                                </div>
+                            ))}
 
                             <ContextMenuAnchor contextMenu={contextMenu} className="w-48">
                                 <DropdownMenuItem

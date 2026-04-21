@@ -35,6 +35,10 @@ type DriveBrowserProps = {
     defaultMountId?: string;
     defaultFolderId?: string;
     showNewFolder?: boolean;
+    hideToolbar?: boolean;
+    hideHeader?: boolean;
+    createFolderOpen?: boolean;
+    onCreateFolderOpenChange?: (open: boolean) => void;
     className?: string;
 };
 
@@ -49,12 +53,18 @@ export function DriveBrowser({
     defaultMountId = 'default',
     defaultFolderId,
     showNewFolder = mode === 'folder',
+    hideToolbar = false,
+    hideHeader = false,
+    createFolderOpen: controlledCreateFolderOpen,
+    onCreateFolderOpenChange,
     className,
 }: DriveBrowserProps) {
     const [activeMountId, setActiveMountId] = useState(defaultMountId);
     const [activeOwnerId, setActiveOwnerId] = useState(ownerId);
     const [currentFolderId, setCurrentFolderId] = useState<string | null>(defaultFolderId ?? null);
-    const [createFolderOpen, setCreateFolderOpen] = useState(false);
+    const [internalCreateFolderOpen, setInternalCreateFolderOpen] = useState(false);
+    const createFolderOpen = controlledCreateFolderOpen ?? internalCreateFolderOpen;
+    const setCreateFolderOpen = onCreateFolderOpenChange ?? setInternalCreateFolderOpen;
 
     const { data: rootFolder } = useRootFolder(activeOwnerId, activeMountId);
     const mountLabel = useMountLabel(activeOwnerId, activeMountId);
@@ -153,20 +163,22 @@ export function DriveBrowser({
 
     const contentArea = (
         <div className="flex-1 flex flex-col min-w-0">
-            <div className="flex items-center gap-2 h-10 px-3 border-b shrink-0">
-                <DriveBreadcrumb
-                    paths={breadcrumbPaths}
-                    mountLabel={mountLabel}
-                    onNavigate={handleBreadcrumbClick}
-                    className="flex-1"
-                />
-                {showNewFolder && (
-                    <Button variant="ghost" size="sm" onClick={() => setCreateFolderOpen(true)}>
-                        <FolderPlus className="h-4 w-4 mr-1" />
-                        New folder
-                    </Button>
-                )}
-            </div>
+            {!hideToolbar && (
+                <div className="flex items-center gap-2 h-10 px-3 border-b shrink-0">
+                    <DriveBreadcrumb
+                        paths={breadcrumbPaths}
+                        mountLabel={mountLabel}
+                        onNavigate={handleBreadcrumbClick}
+                        className="flex-1"
+                    />
+                    {showNewFolder && (
+                        <Button variant="ghost" size="sm" onClick={() => setCreateFolderOpen(true)}>
+                            <FolderPlus className="h-4 w-4 mr-1" />
+                            New folder
+                        </Button>
+                    )}
+                </div>
+            )}
             <DriveTable
                 items={visibleItems}
                 currentPath={currentPath}
@@ -178,6 +190,7 @@ export function DriveBrowser({
                 showParentRow={breadcrumbPaths.length > 1}
                 hideModified
                 hideShareClick
+                hideHeader={hideHeader}
             />
         </div>
     );

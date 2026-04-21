@@ -6,8 +6,10 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { cn } from '@workspace/ui/lib/utils';
-import { ChevronDown, Download } from 'lucide-react';
+import { ChevronDown, Download, FolderPlus } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
+import { InfoBlock } from '../info-block';
+import { TooltipButton } from '../toolbar/tooltip-button';
 import { DriveBreadcrumb } from './drive-breadcrumb';
 import { DriveBrowser } from './drive-browser';
 import { useMountLabel } from './drive-mount-list';
@@ -45,6 +47,7 @@ export function DriveLocationPicker({
     const initialOwnerId = defaultOwnerId || user?.id || '';
     const [name, setName] = useState(defaultName);
     const [expanded, setExpanded] = useState(mode !== 'create');
+    const [createFolderOpen, setCreateFolderOpen] = useState(false);
     const [activeMountId, setActiveMountId] = useState(defaultMountId);
     const [activeOwnerId, setActiveOwnerId] = useState(initialOwnerId);
     const [folderId, setFolderId] = useState<string | null>(defaultFolderId ?? null);
@@ -122,23 +125,40 @@ export function DriveLocationPicker({
                     </div>
                 )}
 
-                {mode === 'create' && !expanded && (
+                {mode === 'create' && (
                     <div className="px-6 pb-2">
                         <Label className="text-sm text-muted-foreground">Location</Label>
-                        <button
-                            type="button"
-                            className="mt-1.5 flex w-full items-center gap-1.5 rounded-md border px-3 py-2 text-sm hover:bg-accent"
-                            onClick={() => setExpanded(true)}
+                        <InfoBlock
+                            className="mt-1.5 w-full cursor-pointer gap-1.5 text-sm hover:bg-muted"
+                            onClick={() => setExpanded(!expanded)}
                         >
                             <DriveBreadcrumb
                                 paths={breadcrumbPaths}
                                 mountLabel={mountLabel}
-                                className="flex-1"
+                                className="flex-1 min-w-0"
                                 itemClassName="text-xs"
                             />
-                            <span className="text-xs text-muted-foreground">Change</span>
-                            <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                        </button>
+                            <div className="flex items-center gap-0.5 flex-shrink-0">
+                                {expanded && (
+                                    <div onClick={(e) => e.stopPropagation()}>
+                                        <TooltipButton
+                                            icon={FolderPlus}
+                                            tooltipText="New folder"
+                                            variant="ghost"
+                                            className="h-7 w-7"
+                                            onClick={() => setCreateFolderOpen(true)}
+                                        />
+                                    </div>
+                                )}
+                                {!expanded && <span className="text-xs text-muted-foreground mr-1">Change</span>}
+                                <ChevronDown
+                                    className={cn(
+                                        'h-4 w-4 text-muted-foreground transition-transform duration-200',
+                                        expanded && 'rotate-180',
+                                    )}
+                                />
+                            </div>
+                        </InfoBlock>
                     </div>
                 )}
 
@@ -151,6 +171,10 @@ export function DriveLocationPicker({
                             defaultMountId={activeMountId}
                             defaultFolderId={folderId ?? undefined}
                             showNewFolder
+                            hideToolbar
+                            hideHeader
+                            createFolderOpen={createFolderOpen}
+                            onCreateFolderOpenChange={setCreateFolderOpen}
                             className="h-full"
                         />
                     </div>

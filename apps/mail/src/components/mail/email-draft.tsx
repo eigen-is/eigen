@@ -23,16 +23,24 @@ import { useDraftState } from './hooks/use-draft-state';
 
 export function EmailDraftToolbar({
     onDelete,
+    onAttach,
     isSending,
     hasId,
 }: {
     onDelete: () => void;
+    onAttach: () => void;
     isSending: boolean;
     hasId: boolean;
 }) {
     return (
         <Toolbar>
-            <div />
+            <div className="flex items-center gap-1">
+                <Button type="submit" form="draft-form" disabled={isSending} size="sm">
+                    <Send className="h-4 w-4" />
+                    Send
+                </Button>
+                <TooltipButton icon={Paperclip} tooltipText="Attach file" onClick={onAttach} disabled={isSending} />
+            </div>
             {hasId && <TooltipButton icon={Trash2} tooltipText="Delete" onClick={onDelete} disabled={isSending} />}
         </Toolbar>
     );
@@ -48,14 +56,24 @@ type EmailDraftProps = {
     ) => Promise<EmailDraftType | null | undefined>;
     onDraftIdAssigned?: (id: string) => void;
     isSending: boolean;
+    fileInputRef?: React.RefObject<HTMLInputElement | null>;
 };
 
-export function EmailDraft({ email, to, sendDraft, onAutoSave, onDraftIdAssigned, isSending }: EmailDraftProps) {
+export function EmailDraft({
+    email,
+    to,
+    sendDraft,
+    onAutoSave,
+    onDraftIdAssigned,
+    isSending,
+    fileInputRef: externalFileInputRef,
+}: EmailDraftProps) {
     const [alertMessage, setAlertMessage] = useState<string | null>(null);
     const [confirmNoSubject, setConfirmNoSubject] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
     const { user } = useAuth();
-    const fileInputRef = useRef<HTMLInputElement>(null);
+    const internalFileInputRef = useRef<HTMLInputElement>(null);
+    const fileInputRef = externalFileInputRef ?? internalFileInputRef;
     const dragCounterRef = useRef(0);
     const uploadMutation = useUploadDraftAttachment();
 
@@ -308,18 +326,6 @@ export function EmailDraft({ email, to, sendDraft, onAutoSave, onDraftIdAssigned
                     />
                 </div>
             </form>
-            <div className="flex items-center justify-end gap-2 px-4 py-3">
-                <TooltipButton
-                    icon={Paperclip}
-                    tooltipText="Attach file"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isSending}
-                />
-                <Button type="submit" form="draft-form" disabled={isSending} size="sm">
-                    <Send className="h-4 w-4" />
-                    Send
-                </Button>
-            </div>
             <div
                 className={cn(
                     'pointer-events-none absolute inset-0 rounded-lg border-2 border-dashed border-primary bg-primary/5 flex items-center justify-center transition-opacity',
