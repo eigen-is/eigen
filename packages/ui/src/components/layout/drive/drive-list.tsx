@@ -80,11 +80,7 @@ export function DriveListToolbar({
     const { isMobile } = useLayout();
 
     const handleBreadcrumbClick = (path: DrivePath) => {
-        if (path.id === activeRowId && onRowActivate) {
-            onRowActivate(path);
-        } else if (onRowSelect) {
-            onRowSelect(path);
-        }
+        onRowActivate?.(path);
     };
 
     const createItems = getCreateMenuItems({

@@ -98,7 +98,10 @@ export function DriveLocationPicker({
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
-                className={cn('flex flex-col p-0 gap-0 sm:max-w-[688px] max-w-[90vw]', expanded && 'h-[450px]')}
+                className={cn(
+                    'flex flex-col p-0 gap-0 sm:max-w-[688px] max-w-[90vw]',
+                    expanded && 'h-[600px] max-h-[85vh]',
+                )}
             >
                 <DialogHeader className="px-6 py-4 border-b">
                     <DialogTitle>{resolvedTitle}</DialogTitle>
@@ -132,12 +135,16 @@ export function DriveLocationPicker({
                             className="mt-1.5 w-full cursor-pointer gap-1.5 text-sm hover:bg-muted"
                             onClick={() => setExpanded(!expanded)}
                         >
-                            <DriveBreadcrumb
-                                paths={breadcrumbPaths}
-                                mountLabel={mountLabel}
-                                className="flex-1 min-w-0"
-                                itemClassName="text-xs"
-                            />
+                            <div className="flex-1 min-w-0" onClick={expanded ? (e) => e.stopPropagation() : undefined}>
+                                <DriveBreadcrumb
+                                    paths={breadcrumbPaths}
+                                    mountLabel={mountLabel}
+                                    onNavigate={
+                                        expanded ? (path) => handleFolderChange(path, activeMountId) : undefined
+                                    }
+                                    itemClassName="text-xs"
+                                />
+                            </div>
                             <div className="flex items-center gap-0.5 flex-shrink-0">
                                 {expanded && (
                                     <div onClick={(e) => e.stopPropagation()}>
@@ -163,9 +170,9 @@ export function DriveLocationPicker({
                 )}
 
                 {expanded && (
-                    <div className="flex-1 overflow-hidden border-t">
+                    <div className="flex-1 overflow-hidden border-t px-6 pb-2 pt-2">
                         <DriveBrowser
-                            ownerId={resolvedOwnerId}
+                            ownerId={initialOwnerId}
                             mode="folder"
                             onFolderChange={handleFolderChange}
                             defaultMountId={activeMountId}

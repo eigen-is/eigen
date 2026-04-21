@@ -10,7 +10,7 @@ import {
 } from '@workspace/ui/components/context-menu';
 import { cn } from '@workspace/ui/lib/utils';
 import { FolderPlus } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { DriveBreadcrumb } from './drive-breadcrumb';
 import { DriveCreateItemDialog } from './drive-create-folder-item';
 import { DriveMountList, useMountLabel } from './drive-mount-list';
@@ -65,6 +65,16 @@ export function DriveBrowser({
     const [internalCreateFolderOpen, setInternalCreateFolderOpen] = useState(false);
     const createFolderOpen = controlledCreateFolderOpen ?? internalCreateFolderOpen;
     const setCreateFolderOpen = onCreateFolderOpenChange ?? setInternalCreateFolderOpen;
+
+    const prevDefaultFolderId = useRef(defaultFolderId);
+    useEffect(() => {
+        if (defaultFolderId !== prevDefaultFolderId.current) {
+            prevDefaultFolderId.current = defaultFolderId;
+            if (defaultFolderId !== undefined) {
+                setCurrentFolderId(defaultFolderId);
+            }
+        }
+    }, [defaultFolderId]);
 
     const { data: rootFolder } = useRootFolder(activeOwnerId, activeMountId);
     const mountLabel = useMountLabel(activeOwnerId, activeMountId);
