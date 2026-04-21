@@ -296,6 +296,7 @@ export function ChatMessageList({
                         ownerId={ownerId}
                         mountId={mountId}
                         mediaFolderId={mediaFolderId}
+                        siblingFileNames={message.attachments ?? undefined}
                     />
                 ))}
             </div>
