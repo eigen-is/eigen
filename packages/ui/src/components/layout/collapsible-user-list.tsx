@@ -2,6 +2,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@workspace/
 import { cn } from '@workspace/ui/lib/utils';
 import { ChevronDown } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
+import { InfoBlock } from './info-block';
 
 type CollapsibleUserListProps = {
     title: string;
@@ -51,9 +52,9 @@ export function CollapsibleUserList({
     if (!collapsible) {
         return (
             <div className={cn('space-y-2', className)}>
-                <div className="flex items-center justify-between rounded-md bg-muted/50 px-2 py-1.5">
+                <InfoBlock className="px-2 py-1.5">
                     <Header title={title} summaryLines={summaryLines} actions={actions} />
-                </div>
+                </InfoBlock>
                 <div className="space-y-1">{children}</div>
             </div>
         );
@@ -62,7 +63,7 @@ export function CollapsibleUserList({
     return (
         <Collapsible open={open} onOpenChange={setOpen} className={className}>
             <CollapsibleTrigger asChild>
-                <div className="flex items-center justify-between w-full cursor-pointer text-left rounded-md bg-muted/50 px-2 py-1.5">
+                <InfoBlock className="w-full cursor-pointer text-left px-2 py-1.5">
                     <Header title={title} summaryLines={summaryLines} />
                     <div className="flex items-center gap-0.5">
                         {actions && <div onClick={(e) => e.stopPropagation()}>{actions}</div>}
@@ -73,7 +74,7 @@ export function CollapsibleUserList({
                             )}
                         />
                     </div>
-                </div>
+                </InfoBlock>
             </CollapsibleTrigger>
             <CollapsibleContent>
                 <div className="space-y-1 pt-2">{children}</div>
