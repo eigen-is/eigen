@@ -214,9 +214,7 @@ export function DriveLayout({
             mountId={mountId}
             pathId={pathId}
             showBreadcrumb={showBreadcrumb}
-            onRowSelect={onRowSelect}
             onRowActivate={onRowActivate}
-            activeRowId={pid}
             onCreateFolder={allowCreateFolder ? dialogs.createFolder.openDialog : undefined}
             onUploadFile={allowUpload ? handleFileUpload : undefined}
             onCreateDoc={allowCreateDoc ? dialogs.createDoc.openDialog : undefined}
