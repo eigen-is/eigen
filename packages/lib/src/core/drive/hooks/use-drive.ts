@@ -1,5 +1,5 @@
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { driveApi, getDriveFileUploadUrl } from '@workspace/lib/api';
+import { driveApi, getDriveAppUrl, getDriveFileUploadUrl } from '@workspace/lib/api';
 import type { DriveACL, DrivePath, DriveVisibility, EigenDocType } from '@workspace/lib/types/drive';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -248,6 +248,55 @@ export function useMovePath(ownerId: string, mountId: string = DEFAULT_MOUNT_ID,
                 variables.targetParentId,
                 currentParentId,
             ),
+        onError: onMutationError,
+    });
+}
+
+export function useCopyFiles(ownerId: string, mountId: string = DEFAULT_MOUNT_ID) {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async ({
+            pathIds,
+            targetOwnerId,
+            targetMountId,
+            targetParentId,
+        }: {
+            pathIds: string[];
+            targetOwnerId: string;
+            targetMountId: string;
+            targetParentId: string;
+        }) => {
+            const results = [];
+            for (const pathId of pathIds) {
+                const response = await driveApi({ ownerId })({ mountId }).file({ pathId }).copy.post({
+                    targetOwnerId,
+                    targetMountId,
+                    targetParentId,
+                });
+                if (response.error) throw new AppError(response);
+                results.push(response.data);
+            }
+            return results;
+        },
+        onSuccess: (_data, variables) => {
+            invalidateItemCreated(
+                queryClient,
+                variables.targetOwnerId,
+                variables.targetMountId,
+                variables.targetParentId,
+            );
+            const count = variables.pathIds.length;
+            toast.success(count === 1 ? 'File saved to Drive' : `${count} files saved to Drive`, {
+                action: {
+                    label: 'Open folder',
+                    onClick: () => {
+                        window.location.href = getDriveAppUrl(
+                            `fs/${variables.targetOwnerId}/${variables.targetMountId}/${variables.targetParentId}`,
+                        );
+                    },
+                },
+            });
+        },
         onError: onMutationError,
     });
 }

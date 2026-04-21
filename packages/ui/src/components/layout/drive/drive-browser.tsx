@@ -92,8 +92,6 @@ export function DriveBrowser({
 
     const currentPath = breadcrumbPaths[breadcrumbPaths.length - 1] ?? null;
 
-    const visibleItems = mode === 'folder' ? folderContents.filter((item) => isFolderType(item.type)) : folderContents;
-
     const handleMountSelect = useCallback((newOwnerId: string, mountId: string) => {
         setActiveOwnerId(newOwnerId);
         setActiveMountId(mountId);
@@ -159,14 +157,12 @@ export function DriveBrowser({
         );
     };
 
-    const fileIcon = useCallback(
-        (mimeType: string, type: string, props?: Record<string, unknown>) => {
-            const dimmed =
-                mode === 'file' &&
-                mimeFilter &&
-                !isFolderType(type as DrivePath['type']) &&
-                !matchesMimeFilter(mimeType, mimeFilter);
-            return <span className={cn(dimmed && 'opacity-35')}>{getFileIcon(mimeType, type, props)}</span>;
+    const isItemDisabled = useCallback(
+        (item: DrivePath) => {
+            if (mode === 'folder') return !isFolderType(item.type);
+            if (mode === 'file' && mimeFilter)
+                return !isFolderType(item.type) && !matchesMimeFilter(item.mimeType, mimeFilter);
+            return false;
         },
         [mode, mimeFilter],
     );
@@ -190,12 +186,13 @@ export function DriveBrowser({
                 </div>
             )}
             <DriveTable
-                items={visibleItems}
+                items={folderContents}
                 currentPath={currentPath}
                 activeItemId={selectedId ?? undefined}
                 onItemClick={handleItemClick}
                 onItemOpen={handleItemOpen}
-                getFileIcon={fileIcon}
+                getFileIcon={getFileIcon}
+                isItemDisabled={isItemDisabled}
                 sortFn={defaultDriveSort}
                 showParentRow={breadcrumbPaths.length > 1}
                 hideModified
@@ -209,7 +206,6 @@ export function DriveBrowser({
         <div className={cn('flex h-full', className)}>
             <div className="hidden sm:block w-44 border-r p-2 overflow-y-auto shrink-0">
                 <DriveMountList
-                    ownerId={ownerId}
                     activeMountId={activeMountId}
                     activeOwnerId={activeOwnerId}
                     onMountSelect={handleMountSelect}

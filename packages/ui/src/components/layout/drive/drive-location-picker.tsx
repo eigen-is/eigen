@@ -100,7 +100,7 @@ export function DriveLocationPicker({
             <DialogContent
                 className={cn(
                     'flex flex-col p-0 gap-0 sm:max-w-[688px] max-w-[90vw]',
-                    expanded && 'h-[600px] max-h-[85vh]',
+                    expanded && (hasName ? 'h-[600px] max-h-[85vh]' : 'h-[520px] max-h-[85vh]'),
                 )}
             >
                 <DialogHeader className="px-6 py-4 border-b">
@@ -128,7 +128,7 @@ export function DriveLocationPicker({
                     </div>
                 )}
 
-                {mode === 'create' && (
+                {mode !== 'save-as' && (
                     <div className="px-6 pb-2">
                         <Label className="text-sm text-muted-foreground">Location</Label>
                         <InfoBlock

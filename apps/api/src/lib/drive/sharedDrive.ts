@@ -7,6 +7,7 @@ import type CollabDocument from '../collab/collabDocument.ts';
 import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
 import { ApiError } from '../core';
 import type { Home } from '../home';
+import type { StorageFile } from '../storage';
 import { getMemberships, type Memberships } from '../user/';
 import { canReadFromAncestors } from './acl';
 import Drive from './drive';
@@ -139,6 +140,19 @@ export default class SharedDrive extends Drive {
     ): Promise<DrivePath[]> {
         return this.withWritePermission(mountId, parentId, () =>
             this.sharedDrive.uploadFiles(mountId, parentId, request, maxSize),
+        );
+    }
+
+    public async createFileFromData(
+        mountId: string,
+        parentId: string,
+        name: string,
+        mimeType: string,
+        data: Buffer | StorageFile,
+        originalName?: string,
+    ): Promise<DrivePath> {
+        return this.withWritePermission(mountId, parentId, () =>
+            this.sharedDrive.createFileFromData(mountId, parentId, name, mimeType, data, originalName),
         );
     }
 
