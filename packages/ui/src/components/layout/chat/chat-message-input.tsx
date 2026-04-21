@@ -20,6 +20,10 @@ type ChatMessageInputProps = {
     messageCount?: number;
     className?: string;
     onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>, content: string) => boolean | undefined;
+    onAttachClick?: () => void;
+    driveAttachments?: string[];
+    onRemoveDriveAttachment?: (name: string) => void;
+    fileInputTriggerRef?: React.MutableRefObject<(() => void) | undefined>;
 };
 
 export function ChatMessageInput({
@@ -33,6 +37,10 @@ export function ChatMessageInput({
     messageCount = 0,
     className,
     onKeyDown: onKeyDownProp,
+    onAttachClick,
+    driveAttachments,
+    onRemoveDriveAttachment,
+    fileInputTriggerRef,
 }: ChatMessageInputProps) {
     const [content, setContent] = useState('');
     const [files, setFiles] = useState<File[]>([]);
@@ -40,6 +48,14 @@ export function ChatMessageInput({
     const suggestCountRef = useRef(0);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    useEffect(() => {
+        if (fileInputTriggerRef) {
+            fileInputTriggerRef.current = () => fileInputRef.current?.click();
+        }
+    }, [fileInputTriggerRef]);
+
+    const hasDriveAttachments = !!driveAttachments && driveAttachments.length > 0;
 
     const focusTextarea = useCallback(() => {
         if (!readOnly) textareaRef.current?.focus();
@@ -53,7 +69,7 @@ export function ChatMessageInput({
     }, [messageCount, focusTextarea]);
 
     const handleSend = () => {
-        if ((!content.trim() && files.length === 0) || disabled) return;
+        if ((!content.trim() && files.length === 0 && !hasDriveAttachments) || disabled) return;
         onSend(content.trim(), files.length > 0 ? files : undefined);
         setContent('');
         setFiles([]);
@@ -291,8 +307,15 @@ export function ChatMessageInput({
 
     return (
         <div className={cn('border-t px-5 py-3', className)}>
-            {files.length > 0 && (
+            {(files.length > 0 || hasDriveAttachments) && (
                 <div className="flex flex-wrap gap-2 mb-2">
+                    {driveAttachments?.map((name) => (
+                        <SimpleAttachmentChip
+                            key={`drive-${name}`}
+                            filename={name}
+                            onRemove={onRemoveDriveAttachment ? () => onRemoveDriveAttachment(name) : undefined}
+                        />
+                    ))}
                     {files.map((file, i) => (
                         <SimpleAttachmentChip key={i} filename={file.name} onRemove={() => removeFile(i)} />
                     ))}
@@ -304,7 +327,7 @@ export function ChatMessageInput({
                     variant="ghost"
                     size="icon"
                     className="shrink-0 h-10 w-10 text-muted-foreground hover:text-foreground"
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={() => (onAttachClick ? onAttachClick() : fileInputRef.current?.click())}
                     disabled={disabled}
                 >
                     <Paperclip className="h-4 w-4" />
@@ -355,7 +378,7 @@ export function ChatMessageInput({
                 <Button
                     size="icon"
                     onClick={handleSend}
-                    disabled={(!content.trim() && files.length === 0) || disabled}
+                    disabled={(!content.trim() && files.length === 0 && !hasDriveAttachments) || disabled}
                     className="shrink-0 h-10 w-10"
                 >
                     <Send className="h-4 w-4" />
