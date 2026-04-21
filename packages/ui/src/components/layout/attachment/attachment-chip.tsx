@@ -1,5 +1,6 @@
 import { getDriveDownloadUrl, getDriveThumbnailUrl } from '@workspace/lib/api';
 import { useFolderLookup } from '@workspace/lib/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { usePreview } from '../preview-provider';
 import { SimpleAttachmentChip } from './simple-attachment-chip';
 
@@ -8,12 +9,20 @@ type AttachmentChipProps = {
     ownerId: string;
     mountId: string;
     mediaFolderId: string;
+    siblingFileNames?: string[];
     onRemove?: () => void;
 };
 
 // Drive-backed chip: resolves the filename to a drive item and renders the shared chip with
 // its thumbnail. Clicking opens the preview overlay instead of triggering a browser download.
-export function AttachmentChip({ fileName, ownerId, mountId, mediaFolderId, onRemove }: AttachmentChipProps) {
+export function AttachmentChip({
+    fileName,
+    ownerId,
+    mountId,
+    mediaFolderId,
+    siblingFileNames,
+    onRemove,
+}: AttachmentChipProps) {
     const { findByName } = useFolderLookup(ownerId, mountId, mediaFolderId);
     const fileInfo = findByName(fileName);
     const { openPreview } = usePreview();
@@ -34,7 +43,10 @@ export function AttachmentChip({ fileName, ownerId, mountId, mediaFolderId, onRe
             onClick={(e) => {
                 if (fileInfo) {
                     e.preventDefault();
-                    openPreview(fileInfo);
+                    const siblings = siblingFileNames
+                        ?.map((n) => findByName(n))
+                        .filter((p): p is DrivePath => p !== undefined);
+                    openPreview(fileInfo, siblings);
                 }
             }}
         />
