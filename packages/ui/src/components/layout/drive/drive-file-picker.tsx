@@ -53,7 +53,7 @@ export function DriveFilePicker({
 
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>
-            <DialogContent size="lg" className="flex flex-col p-0 gap-0 h-[480px] max-w-[90vw]">
+            <DialogContent className="flex flex-col p-0 gap-0 sm:max-w-[688px] max-w-[90vw] h-[520px] max-h-[85vh]">
                 <DialogHeader className="px-6 py-4 border-b">
                     <DialogTitle>{title}</DialogTitle>
                 </DialogHeader>
