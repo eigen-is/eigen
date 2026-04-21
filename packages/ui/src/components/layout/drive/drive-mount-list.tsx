@@ -1,3 +1,4 @@
+import { useAuth } from '@workspace/lib/auth';
 import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
 import { UserAvatar } from '@workspace/ui';
@@ -14,14 +15,15 @@ export function useMountLabel(activeOwnerId: string, activeMountId: string): str
 }
 
 type DriveMountListProps = {
-    ownerId: string;
     activeMountId: string;
     activeOwnerId: string;
     onMountSelect: (ownerId: string, mountId: string) => void;
 };
 
-export function DriveMountList({ ownerId, activeMountId, activeOwnerId, onMountSelect }: DriveMountListProps) {
+export function DriveMountList({ activeMountId, activeOwnerId, onMountSelect }: DriveMountListProps) {
+    const { user } = useAuth();
     const { data: myTeams } = useMyTeams();
+    const myDriveOwnerId = user?.id ?? '';
 
     const teamsWithMounts = myTeams?.filter((t) => t.mounts.length > 0) ?? [];
 
@@ -32,9 +34,9 @@ export function DriveMountList({ ownerId, activeMountId, activeOwnerId, onMountS
                 type="button"
                 className={cn(
                     'flex items-center gap-2 rounded-md px-2 py-1.5 text-sm w-full text-left',
-                    activeOwnerId === ownerId && activeMountId === 'default' && 'bg-accent font-medium',
+                    activeOwnerId === myDriveOwnerId && activeMountId === 'default' && 'bg-accent font-medium',
                 )}
-                onClick={() => onMountSelect(ownerId, 'default')}
+                onClick={() => onMountSelect(myDriveOwnerId, 'default')}
             >
                 <Home className="h-4 w-4 shrink-0" />
                 <span className="truncate">Drive</span>

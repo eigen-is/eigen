@@ -54,6 +54,7 @@ export type DriveTableProps = {
     onItemClick?: (item: DrivePath) => void;
     onItemOpen?: (item: DrivePath) => void;
     getFileIcon?: (mimeType: string, type: string, props?: Record<string, unknown>) => React.ReactNode;
+    isItemDisabled?: (item: DrivePath) => boolean;
     getItemHref?: (item: DrivePath) => string | undefined;
     onShareClick?: (item: DrivePath) => void;
     onDownload?: (item: DrivePath) => void;
@@ -81,6 +82,7 @@ export function DriveTable({
     onItemClick,
     onItemOpen,
     getFileIcon,
+    isItemDisabled,
     getItemHref,
     onShareClick,
     onDownload,
@@ -242,6 +244,7 @@ export function DriveTable({
             {sortedItems.map((item, index) => {
                 const adjustedIndex = hasParentItem ? index + 1 : index;
                 const itemHref = getItemHref?.(item);
+                const disabled = isItemDisabled?.(item) ?? false;
 
                 return (
                     <div
@@ -252,6 +255,7 @@ export function DriveTable({
                             (activeItemId === item.id || selectedIndex === adjustedIndex) && 'eigen-list-item-active',
                             selection.isSelected(item.id) && 'eigen-list-item-selected',
                             dragOverItemId === item.id && isValidFolderDrop(item) && 'bg-accent',
+                            disabled && 'opacity-40 pointer-events-none',
                         )}
                         onClick={(e) => {
                             selection.handleItemClick(item.id, e);

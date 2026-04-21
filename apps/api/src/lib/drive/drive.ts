@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import {
     DRIVE_TYPE_CHAT,
     DRIVE_TYPE_DOC,
@@ -37,6 +38,7 @@ import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
 import { createDefaultMountConfig, createMountConfig, Mount } from '../mount';
 import { saveThumbnail } from '../shared/thumbnails';
+import type { StorageFile } from '../storage';
 import { getTeamMembers } from '../team';
 import { getMemberships, type Memberships } from '../user/';
 import {
@@ -270,6 +272,48 @@ export default class Drive {
         }
 
         return uploaded;
+    }
+
+    async createFileFromData(
+        mountId: string,
+        parentId: string,
+        name: string,
+        mimeType: string,
+        data: Buffer | StorageFile,
+        originalName?: string,
+    ): Promise<DrivePath> {
+        const mount = this.getMount(mountId);
+        const parent = await mount.getActivePath(parentId);
+        if (parent.type !== DRIVE_TYPE_FOLDER) throw new ApiError(400, 'Target is not a folder');
+
+        if (!(await this.canWrite(mountId, parentId, this.owner))) {
+            throw new ApiError(403, 'No write permission');
+        }
+
+        const tempId = randomUUID();
+        try {
+            const tempPath = mount.getTempPath(tempId);
+            await Bun.write(tempPath, data);
+            const tempFile = Bun.file(tempPath);
+            const size = tempFile.size;
+            const hash = new Bun.CryptoHasher('sha256').update(await tempFile.arrayBuffer()).digest('hex');
+
+            let safeName = name.replace(/[/\\]/g, '_');
+            const resolvedOriginalName = originalName || safeName;
+
+            const existing = await mount.getChildByName(parentId, safeName);
+            if (existing) {
+                const siblings = await mount.listFolder(parentId);
+                const usedNames = new Set(siblings.map((s) => s.name.toLowerCase()));
+                safeName = getUniqueFileName(safeName, usedNames);
+            }
+
+            const pathId = await mount.createFileFromTemp(parentId, safeName, mimeType, size, hash, tempId);
+            return await this.finalizeUpload(mount, pathId, resolvedOriginalName, safeName, mimeType, tempId);
+        } catch (e) {
+            await mount.cleanupTemp(tempId);
+            throw e;
+        }
     }
 
     async deletePath(mountId: string, pathId: string): Promise<void> {

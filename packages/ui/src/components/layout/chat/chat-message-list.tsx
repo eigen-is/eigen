@@ -1,18 +1,21 @@
+import { getDriveDownloadUrl } from '@workspace/lib/api';
 import { useContacts } from '@workspace/lib/contacts';
 import { formatDateTime } from '@workspace/lib/date';
+import { useCopyFiles, useFolderLookup } from '@workspace/lib/drive';
 import { usePublicUser } from '@workspace/lib/public';
 import type { ChatMessage } from '@workspace/lib/types/chat';
 import type { Contact } from '@workspace/lib/types/contact';
 import { EMAIL_FIND_REGEX } from '@workspace/lib/validation';
 import { URL_REGEX } from '@workspace/ui/components/layout/linked-text';
 import { UserItem } from '@workspace/ui/components/layout/user-item';
-import { Check, Pencil, Trash2, X } from 'lucide-react';
+import { Check, Download, Pencil, Trash2, X } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '../../../components/hover-card';
 import { cn } from '../../../lib/utils';
 import { LoadingState } from '../app/loading-state';
 import { AttachmentChip } from '../attachment/attachment-chip';
 import { EigenLoader } from '../braket/eigen-loader.tsx';
+import { DriveLocationPicker } from '../drive/drive-location-picker';
 import { TooltipButton } from '../toolbar/tooltip-button';
 import { UserAvatar } from '../user-avatar';
 
@@ -216,18 +219,48 @@ export function ChatMessageList({
     const scrollRef = useRef<HTMLDivElement>(null);
     const lastMessageIdRef = useRef('');
     const isInitialLoadRef = useRef(true);
+    const { findByName } = useFolderLookup(ownerId ?? '', mountId ?? '', mediaFolderId ?? '');
+    const copyFiles = useCopyFiles(ownerId ?? '', mountId ?? '');
 
     // Single floating action bar — tracks which message is hovered
     const [hoveredMsg, setHoveredMsg] = useState<{ message: ChatMessage; top: number } | null>(null);
+    const [saveAttachmentsMsg, setSaveAttachmentsMsg] = useState<ChatMessage | null>(null);
 
     const handleMsgMouseEnter = useCallback(
         (message: ChatMessage, el: HTMLElement) => {
-            if (message.authorId !== currentUserId) return;
             if (message.type === 'system') return;
+            const isOwn = message.authorId === currentUserId;
+            const hasAttachments = !!message.attachments?.length;
+            if (!isOwn && !hasAttachments) return;
             setHoveredMsg({ message, top: el.offsetTop });
         },
         [currentUserId],
     );
+
+    const downloadTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+    useEffect(() => () => downloadTimers.current.forEach(clearTimeout), []);
+
+    const handleDownloadLocally = useCallback(() => {
+        if (!saveAttachmentsMsg?.attachments || !ownerId || !mountId) return;
+        downloadTimers.current.forEach(clearTimeout);
+        downloadTimers.current = [];
+        saveAttachmentsMsg.attachments.forEach((name, i) => {
+            const fileInfo = findByName(name);
+            if (fileInfo) {
+                downloadTimers.current.push(
+                    setTimeout(() => {
+                        const a = document.createElement('a');
+                        a.href = getDriveDownloadUrl(ownerId, mountId, fileInfo.id);
+                        a.download = '';
+                        document.body.appendChild(a);
+                        a.click();
+                        a.remove();
+                    }, i * 300),
+                );
+            }
+        });
+        setSaveAttachmentsMsg(null);
+    }, [saveAttachmentsMsg, ownerId, mountId, findByName]);
 
     const scrollToBottom = useCallback(() => {
         requestAnimationFrame(() => {
@@ -311,19 +344,32 @@ export function ChatMessageList({
         );
     }
 
+    const hoveredIsOwn = hoveredMsg?.message.authorId === currentUserId;
+    const hoveredHasAttachments = !!hoveredMsg?.message.attachments?.length;
+    const showActionBar = hoveredMsg && (hoveredHasAttachments || (hoveredIsOwn && (onEditMessage || onDeleteMessage)));
+
     return (
         <div
             ref={scrollRef}
             className={cn('flex-1 overflow-y-auto relative', className)}
             onMouseLeave={() => setHoveredMsg(null)}
         >
-            {hoveredMsg && (onEditMessage || onDeleteMessage) && (
+            {showActionBar && hoveredMsg && (
                 <div
                     className="absolute right-3 z-10 flex items-center rounded-md border bg-background shadow-sm"
                     style={{ top: hoveredMsg.top + 4 }}
                     onMouseEnter={() => setHoveredMsg(hoveredMsg)}
                 >
-                    {onEditMessage && (
+                    {hoveredHasAttachments && ownerId && mountId && (
+                        <TooltipButton
+                            icon={Download}
+                            tooltipText="Save attachments"
+                            className="h-7 w-7"
+                            preventFocusLoss
+                            onClick={() => setSaveAttachmentsMsg(hoveredMsg.message)}
+                        />
+                    )}
+                    {hoveredIsOwn && onEditMessage && (
                         <TooltipButton
                             icon={Pencil}
                             tooltipText="Edit"
@@ -332,7 +378,7 @@ export function ChatMessageList({
                             onClick={() => onEditMessage(hoveredMsg.message)}
                         />
                     )}
-                    {onDeleteMessage && (
+                    {hoveredIsOwn && onDeleteMessage && (
                         <TooltipButton
                             icon={Trash2}
                             tooltipText="Delete"
@@ -522,6 +568,34 @@ export function ChatMessageList({
                 );
             })}
             <div className="h-3" />
+            {ownerId && (
+                <DriveLocationPicker
+                    open={!!saveAttachmentsMsg}
+                    onOpenChange={(open) => {
+                        if (!open) setSaveAttachmentsMsg(null);
+                    }}
+                    mode="folder"
+                    title="Save attachments"
+                    confirmLabel="Save here"
+                    defaultOwnerId={ownerId}
+                    defaultMountId={mountId}
+                    onConfirm={(location) => {
+                        if (!saveAttachmentsMsg?.attachments) return;
+                        const pathIds = saveAttachmentsMsg.attachments
+                            .map((name) => findByName(name)?.id)
+                            .filter((id): id is string => !!id);
+                        if (pathIds.length > 0) {
+                            copyFiles.mutate({
+                                pathIds,
+                                targetOwnerId: location.ownerId,
+                                targetMountId: location.mountId,
+                                targetParentId: location.folderId,
+                            });
+                        }
+                    }}
+                    onDownloadInstead={handleDownloadLocally}
+                />
+            )}
         </div>
     );
 }

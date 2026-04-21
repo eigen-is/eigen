@@ -159,6 +159,34 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
         { auth: true },
     )
+    .post(
+        '/drive/:ownerId/:mountId/file/:pathId/copy',
+        async ({ params, body, user }) => {
+            const sourceDrive = await getSharedDrive(params.ownerId, user);
+            const sourcePath = await sourceDrive.getPath(params.mountId, params.pathId);
+            if (!sourcePath) throw new ApiError(404, 'Source file not found');
+            const file = await sourceDrive.downloadFile(params.mountId, params.pathId);
+            if (!file) throw new ApiError(404, 'Source file data not found');
+
+            const targetDrive = await getSharedDrive(body.targetOwnerId, user);
+            return await targetDrive.createFileFromData(
+                body.targetMountId,
+                body.targetParentId,
+                sourcePath.details?.originalName || sourcePath.name,
+                sourcePath.mimeType,
+                file,
+                sourcePath.details?.originalName ?? undefined,
+            );
+        },
+        {
+            body: t.Object({
+                targetOwnerId: t.String(),
+                targetMountId: t.String(),
+                targetParentId: t.String(),
+            }),
+            auth: true,
+        },
+    )
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/export/:format',
         async ({ params, user, set }) => {
