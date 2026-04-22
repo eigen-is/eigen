@@ -1,4 +1,5 @@
 import { useAuth } from '@workspace/lib/auth';
+import type { AttachmentReference } from '@workspace/lib/types/chat';
 import type { AddressObject, Attachment, AttachmentMeta, EmailDraft, NewDraft } from '@workspace/lib/types/mail';
 import { useCallback, useRef, useState } from 'react';
 
@@ -11,6 +12,7 @@ type DraftState = {
     body: string;
     bodyText: string;
     attachments: AttachmentMeta[];
+    driveReferences: AttachmentReference[];
     inReplyTo?: string;
     references?: string[] | string;
     messageId?: string;
@@ -48,6 +50,7 @@ function initState(email: EmailDraft | null, prefillTo?: string): DraftState {
                 contentType: a.contentType,
                 index: i,
             })),
+            driveReferences: [],
             inReplyTo: email.inReplyTo,
             references: email.references,
             messageId: email.messageId,
@@ -61,6 +64,7 @@ function initState(email: EmailDraft | null, prefillTo?: string): DraftState {
         body: '',
         bodyText: '',
         attachments: [],
+        driveReferences: [],
     };
 }
 
@@ -89,6 +93,17 @@ export function useDraftState(email: EmailDraft | null, prefillTo?: string) {
         setState((prev) => ({
             ...prev,
             attachments: prev.attachments.filter((_, i) => i !== index),
+        }));
+    }, []);
+
+    const addDriveReference = useCallback((ref: AttachmentReference) => {
+        setState((prev) => ({ ...prev, driveReferences: [...prev.driveReferences, ref] }));
+    }, []);
+
+    const removeDriveReference = useCallback((id: string) => {
+        setState((prev) => ({
+            ...prev,
+            driveReferences: prev.driveReferences.filter((r) => r.id !== id),
         }));
     }, []);
 
@@ -157,6 +172,8 @@ export function useDraftState(email: EmailDraft | null, prefillTo?: string) {
         setId,
         addAttachment,
         removeAttachment,
+        addDriveReference,
+        removeDriveReference,
         setAttachmentsFromServer,
         toDraft,
         attachmentsFingerprint,

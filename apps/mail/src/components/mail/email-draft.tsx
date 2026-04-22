@@ -1,5 +1,7 @@
 import { useAuth } from '@workspace/lib/auth';
-import { useUploadDraftAttachment } from '@workspace/lib/mail';
+import { useAttachFromDrive, useUploadDraftAttachment } from '@workspace/lib/mail';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import { isContainerType } from '@workspace/lib/types/drive';
 import type { EmailDraft as EmailDraftType, NewDraft } from '@workspace/lib/types/mail';
 import { ContactAutosuggest, Toolbar, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
@@ -13,6 +15,7 @@ import {
 } from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
 import { ConfirmDialog } from '@workspace/ui/components/layout/delete/confirm-dialog';
+import { DriveFilePicker } from '@workspace/ui/components/layout/drive/drive-file-picker';
 import { LightEditor } from '@workspace/ui/components/layout/editor';
 import { cn } from '@workspace/ui/lib/utils';
 import { Paperclip, Send, Trash2 } from 'lucide-react';
@@ -57,6 +60,7 @@ type EmailDraftProps = {
     onDraftIdAssigned?: (id: string) => void;
     isSending: boolean;
     fileInputRef?: React.RefObject<HTMLInputElement | null>;
+    filePickerTriggerRef?: React.RefObject<(() => void) | undefined>;
 };
 
 export function EmailDraft({
@@ -67,6 +71,7 @@ export function EmailDraft({
     onDraftIdAssigned,
     isSending,
     fileInputRef: externalFileInputRef,
+    filePickerTriggerRef,
 }: EmailDraftProps) {
     const [alertMessage, setAlertMessage] = useState<string | null>(null);
     const [confirmNoSubject, setConfirmNoSubject] = useState(false);
@@ -76,6 +81,13 @@ export function EmailDraft({
     const fileInputRef = externalFileInputRef ?? internalFileInputRef;
     const dragCounterRef = useRef(0);
     const uploadMutation = useUploadDraftAttachment();
+    const attachFromDriveMutation = useAttachFromDrive();
+    const [filePickerOpen, setFilePickerOpen] = useState(false);
+
+    // Expose file picker trigger to parent (toolbar lives outside this component)
+    if (filePickerTriggerRef) {
+        filePickerTriggerRef.current = () => setFilePickerOpen(true);
+    }
 
     const {
         state,
@@ -83,6 +95,8 @@ export function EmailDraft({
         setId,
         addAttachment,
         removeAttachment,
+        addDriveReference,
+        removeDriveReference,
         setAttachmentsFromServer,
         toDraft,
         attachmentsFingerprint,
@@ -145,6 +159,40 @@ export function EmailDraft({
                 contentType: result.contentType,
                 localUrl,
             });
+        }
+        scheduleSave();
+    };
+
+    const handleDriveAttach = async (paths: DrivePath[]) => {
+        for (const path of paths) {
+            if (isContainerType(path.type)) {
+                addDriveReference({
+                    type: 'reference',
+                    ownerId: path.ownerId,
+                    mountId: path.mountId,
+                    id: path.id,
+                    name: path.name,
+                    driveType: path.type,
+                    mimeType: path.mimeType,
+                });
+            } else {
+                const result = await attachFromDriveMutation
+                    .mutateAsync({
+                        sourceOwnerId: path.ownerId,
+                        sourceMountId: path.mountId,
+                        sourcePathId: path.id,
+                    })
+                    .catch(() => null);
+                if (result) {
+                    addAttachment({
+                        key: `drive-${result.tempId}`,
+                        tempId: result.tempId,
+                        filename: result.filename,
+                        size: result.size,
+                        contentType: result.contentType,
+                    });
+                }
+            }
         }
         scheduleSave();
     };
@@ -301,10 +349,12 @@ export function EmailDraft({
                 </div>
                 <DraftAttachments
                     attachments={state.attachments}
+                    driveReferences={state.driveReferences}
                     onRemove={(i) => {
                         removeAttachment(i);
                         scheduleSave();
                     }}
+                    onRemoveReference={(id) => removeDriveReference(id)}
                 />
                 <div
                     className="flex-1 overflow-auto p-4 cursor-text"
@@ -326,6 +376,17 @@ export function EmailDraft({
                     />
                 </div>
             </form>
+            <DriveFilePicker
+                open={filePickerOpen}
+                onOpenChange={setFilePickerOpen}
+                title="Attach file"
+                multiSelect
+                onSelect={handleDriveAttach}
+                onUploadFromDevice={() => {
+                    setFilePickerOpen(false);
+                    setTimeout(() => fileInputRef.current?.click(), 0);
+                }}
+            />
             <div
                 className={cn(
                     'pointer-events-none absolute inset-0 rounded-lg border-2 border-dashed border-primary bg-primary/5 flex items-center justify-center transition-opacity',
