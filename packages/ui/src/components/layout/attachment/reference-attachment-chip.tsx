@@ -1,6 +1,5 @@
 import { getDriveItemUrl } from '@workspace/lib/api';
 import type { AttachmentReference } from '@workspace/lib/types/chat';
-import type { DrivePath } from '@workspace/lib/types/drive';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { ExternalLink, X } from 'lucide-react';
 import { cn } from '../../../lib/utils';
@@ -25,17 +24,14 @@ export function ReferenceAttachmentChip({ reference, onRemove, className }: Refe
     );
 
     function handleClick() {
-        // Cast as DrivePath — only the fields getDriveItemUrl reads are populated.
-        const path = {
+        const url = getDriveItemUrl({
             id: reference.id,
             mountId: reference.mountId,
             ownerId: reference.ownerId,
             name: reference.name,
             type: reference.driveType,
             mimeType: reference.mimeType,
-        } as DrivePath;
-
-        const url = getDriveItemUrl(path);
+        });
         if (url) {
             window.open(url, '_blank');
         }

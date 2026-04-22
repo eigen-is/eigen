@@ -360,9 +360,9 @@ export function ChatMessageList({
     }
 
     const hoveredIsOwn = hoveredMsg?.message.authorId === currentUserId;
-    const hoveredHasAttachments = !!hoveredMsg?.message.attachments?.length;
     const hoveredHasFileAttachments = !!hoveredMsg?.message.attachments?.some((a) => typeof a === 'string');
-    const showActionBar = hoveredMsg && (hoveredHasAttachments || (hoveredIsOwn && (onEditMessage || onDeleteMessage)));
+    const showActionBar =
+        hoveredMsg && (hoveredHasFileAttachments || (hoveredIsOwn && (onEditMessage || onDeleteMessage)));
 
     return (
         <div
