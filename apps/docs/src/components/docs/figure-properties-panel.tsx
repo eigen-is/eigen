@@ -109,10 +109,7 @@ export function FigurePropertiesPanel({ editor, onReplaceImage, onReplaceImageFr
                     onOpenChange={setReplacePickerOpen}
                     title="Replace image"
                     mimeFilter={['image/*']}
-                    onSelect={(paths) => {
-                        onReplaceImageFromDrive?.(paths);
-                        setReplacePickerOpen(false);
-                    }}
+                    onSelect={(paths) => onReplaceImageFromDrive?.(paths)}
                     onUploadFromDevice={() => {
                         setReplacePickerOpen(false);
                         setTimeout(() => fileInputRef.current?.click(), 0);

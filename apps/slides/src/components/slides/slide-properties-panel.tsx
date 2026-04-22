@@ -586,10 +586,7 @@ export function SlideBackgroundPanel({
                     onOpenChange={setBgPickerOpen}
                     title="Background image"
                     mimeFilter={['image/*']}
-                    onSelect={(paths) => {
-                        onPickImageFromDrive?.(paths);
-                        setBgPickerOpen(false);
-                    }}
+                    onSelect={(paths) => onPickImageFromDrive?.(paths)}
                     onUploadFromDevice={() => {
                         setBgPickerOpen(false);
                         setTimeout(() => bgImageInputRef.current?.click(), 0);

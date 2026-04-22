@@ -302,6 +302,7 @@ export function useCopyFiles(ownerId: string, mountId: string = DEFAULT_MOUNT_ID
 }
 
 export function useCopyToMediaFolder(ownerId: string, mountId: string) {
+    const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async ({ paths, mediaFolderId }: { paths: DrivePath[]; mediaFolderId: string }) => {
             const results: DrivePath[] = [];
@@ -318,6 +319,7 @@ export function useCopyToMediaFolder(ownerId: string, mountId: string) {
             }
             return results;
         },
+        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, ownerId, mountId, variables.mediaFolderId),
         onError: onMutationError,
     });
 }

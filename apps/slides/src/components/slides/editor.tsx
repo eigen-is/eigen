@@ -307,7 +307,8 @@ function SlideEditorInner({
     const handleImagePickFromDrive = useCallback(
         async (paths: DrivePath[]) => {
             if (!activeSlideId || !mediaFolderId) return;
-            const results = await copyToMediaFolder.mutateAsync({ paths, mediaFolderId });
+            const results = await copyToMediaFolder.mutateAsync({ paths, mediaFolderId }).catch(() => null);
+            if (!results) return;
             for (const result of results) {
                 addObject(activeSlideId, {
                     ...DEFAULT_IMAGE_OBJECT,
@@ -536,9 +537,9 @@ function SlideEditorInner({
     const handleBackgroundImagePickFromDrive = useCallback(
         async (paths: DrivePath[]) => {
             if (!mediaFolderId || !activeSlideId || paths.length === 0) return;
-            const results = await copyToMediaFolder.mutateAsync({ paths: [paths[0]], mediaFolderId });
-            if (results[0]) {
-                updateSlideBackgroundImage(activeSlideId, results[0].name, 'this');
+            const result = await copyToMediaFolder.mutateAsync({ paths: [paths[0]], mediaFolderId }).catch(() => null);
+            if (result?.[0]) {
+                updateSlideBackgroundImage(activeSlideId, result[0].name, 'this');
             }
         },
         [mediaFolderId, activeSlideId, copyToMediaFolder, updateSlideBackgroundImage],
@@ -777,10 +778,7 @@ function SlideEditorInner({
                         onOpenChange={setImagePickerOpen}
                         title="Add image"
                         mimeFilter={['image/*']}
-                        onSelect={(paths) => {
-                            handleImagePickFromDrive(paths);
-                            setImagePickerOpen(false);
-                        }}
+                        onSelect={handleImagePickFromDrive}
                         onUploadFromDevice={() => {
                             setImagePickerOpen(false);
                             setTimeout(() => imageInputRef.current?.click(), 0);

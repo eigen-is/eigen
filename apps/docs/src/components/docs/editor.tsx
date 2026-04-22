@@ -403,10 +403,10 @@ const TiptapEditor = ({
 
     const handleImagePickFromDrive = async (paths: DrivePath[]) => {
         if (!mediaFolderIdRef.current || !editorRef.current) return;
-        const results = await copyToMediaFolder.mutateAsync({
-            paths,
-            mediaFolderId: mediaFolderIdRef.current,
-        });
+        const results = await copyToMediaFolder
+            .mutateAsync({ paths, mediaFolderId: mediaFolderIdRef.current })
+            .catch(() => null);
+        if (!results) return;
         for (const result of results) {
             editorRef.current.chain().focus().setFigure({ mediaName: result.name }).run();
         }
@@ -414,15 +414,14 @@ const TiptapEditor = ({
 
     const handleReplaceImageFromDrive = async (paths: DrivePath[]) => {
         if (!mediaFolderIdRef.current || !editorRef.current || paths.length === 0) return;
-        const results = await copyToMediaFolder.mutateAsync({
-            paths: [paths[0]],
-            mediaFolderId: mediaFolderIdRef.current,
-        });
-        if (results[0]) {
+        const result = await copyToMediaFolder
+            .mutateAsync({ paths: [paths[0]], mediaFolderId: mediaFolderIdRef.current })
+            .catch(() => null);
+        if (result?.[0]) {
             editorRef.current
                 .chain()
                 .focus()
-                .updateAttributes('figure', { mediaName: results[0].name, width: null })
+                .updateAttributes('figure', { mediaName: result[0].name, width: null })
                 .run();
         }
     };
