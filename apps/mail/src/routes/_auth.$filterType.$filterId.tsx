@@ -74,6 +74,7 @@ function MailRoute() {
     };
 
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const filePickerTriggerRef = useRef<(() => void) | undefined>(undefined);
     const listWidth = isTablet ? '320px' : '400px';
     const showDetail = !!(selectedEmail || mode === 'compose');
     const isDraft = mode === 'compose' || selectedEmail?.isDraft;
@@ -83,7 +84,7 @@ function MailRoute() {
     const detailToolbar = isDraft ? (
         <EmailDraftToolbar
             onDelete={() => handleDeleteEmail(selectedEmail as EmailDraftType)}
-            onAttach={() => fileInputRef.current?.click()}
+            onAttach={() => filePickerTriggerRef.current?.()}
             isSending={actions.isSendPending}
             hasId={!!selectedEmail?.id}
         />
@@ -164,6 +165,7 @@ function MailRoute() {
                                 to={to}
                                 isSending={actions.isSendPending}
                                 fileInputRef={fileInputRef}
+                                filePickerTriggerRef={filePickerTriggerRef}
                             />
                         ) : (
                             <EmailDetail email={selectedEmail} toggleMailRead={actions.handleToggleMailRead} />
