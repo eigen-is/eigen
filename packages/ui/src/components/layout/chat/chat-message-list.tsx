@@ -4,6 +4,7 @@ import { formatDateTime } from '@workspace/lib/date';
 import { useCopyFiles, useFolderLookup } from '@workspace/lib/drive';
 import { usePublicUser } from '@workspace/lib/public';
 import type { ChatMessage } from '@workspace/lib/types/chat';
+import { isAttachmentReference } from '@workspace/lib/types/chat';
 import type { Contact } from '@workspace/lib/types/contact';
 import { EMAIL_FIND_REGEX } from '@workspace/lib/validation';
 import { URL_REGEX } from '@workspace/ui/components/layout/linked-text';
@@ -14,6 +15,7 @@ import { HoverCard, HoverCardContent, HoverCardTrigger } from '../../../componen
 import { cn } from '../../../lib/utils';
 import { LoadingState } from '../app/loading-state';
 import { AttachmentChip } from '../attachment/attachment-chip';
+import { ReferenceAttachmentChip } from '../attachment/reference-attachment-chip';
 import { EigenLoader } from '../braket/eigen-loader.tsx';
 import { DriveLocationPicker } from '../drive/drive-location-picker';
 import { TooltipButton } from '../toolbar/tooltip-button';
@@ -321,20 +323,29 @@ export function ChatMessageList({
 
     const renderAttachments = (message: ChatMessage) => {
         if (!message.attachments || message.attachments.length === 0) return null;
-        if (!ownerId || !mountId || !mediaFolderId) return null;
+
         const fileNames = message.attachments.filter((a): a is string => typeof a === 'string');
-        if (fileNames.length === 0) return null;
+        const references = message.attachments.filter(isAttachmentReference);
+
+        if (fileNames.length === 0 && references.length === 0) return null;
+
         return (
             <div className="flex flex-wrap gap-2 mt-1">
-                {fileNames.map((name) => (
-                    <AttachmentChip
-                        key={name}
-                        fileName={name}
-                        ownerId={ownerId}
-                        mountId={mountId}
-                        mediaFolderId={mediaFolderId}
-                        siblingFileNames={fileNames}
-                    />
+                {ownerId &&
+                    mountId &&
+                    mediaFolderId &&
+                    fileNames.map((name) => (
+                        <AttachmentChip
+                            key={name}
+                            fileName={name}
+                            ownerId={ownerId}
+                            mountId={mountId}
+                            mediaFolderId={mediaFolderId}
+                            siblingFileNames={fileNames}
+                        />
+                    ))}
+                {references.map((ref) => (
+                    <ReferenceAttachmentChip key={ref.id} reference={ref} />
                 ))}
             </div>
         );
@@ -350,6 +361,7 @@ export function ChatMessageList({
 
     const hoveredIsOwn = hoveredMsg?.message.authorId === currentUserId;
     const hoveredHasAttachments = !!hoveredMsg?.message.attachments?.length;
+    const hoveredHasFileAttachments = !!hoveredMsg?.message.attachments?.some((a) => typeof a === 'string');
     const showActionBar = hoveredMsg && (hoveredHasAttachments || (hoveredIsOwn && (onEditMessage || onDeleteMessage)));
 
     return (
@@ -364,7 +376,7 @@ export function ChatMessageList({
                     style={{ top: hoveredMsg.top + 4 }}
                     onMouseEnter={() => setHoveredMsg(hoveredMsg)}
                 >
-                    {hoveredHasAttachments && ownerId && mountId && (
+                    {hoveredHasFileAttachments && ownerId && mountId && (
                         <TooltipButton
                             icon={Download}
                             tooltipText="Save attachments"
