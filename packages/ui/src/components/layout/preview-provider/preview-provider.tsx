@@ -6,14 +6,16 @@ import type React from 'react';
 import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { FilePreview } from '../drive/file-preview';
 
+export type DownloadMode = 'direct' | 'save-to-drive';
+
 export type PreviewOptions = {
-    downloadMode?: 'direct' | 'save-to-drive';
+    downloadMode?: DownloadMode;
 };
 
 type PreviewState = {
     path: DrivePath;
     siblings: DrivePath[];
-    downloadMode: 'direct' | 'save-to-drive';
+    downloadMode: DownloadMode;
 };
 
 type PreviewContextValue = {

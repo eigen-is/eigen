@@ -68,17 +68,23 @@ FilePreview (fixed, z-[100])
     pdf:      <iframe src={embedUrl}>
     text:     TextPreviewContent (useTextPreview → eigen-prose div)
     fallback: file icon + "No preview available" + Download button
-  Footer   — Open, Download buttons
+  Footer   — Open, Download/Save to Drive, Download all/Save all to Drive
 ```
 
 **Keyboard:** Escape = close, ArrowLeft/ArrowRight = prev/next sibling.
+
+**Download modes:** `openPreview(path, siblings?, options?)` accepts a `downloadMode` option (`'direct'` | `'save-to-drive'`).
+Direct mode (default) shows a browser download link. Save-to-drive mode (used by chat attachments) shows a
+`DriveLocationPicker` dialog to copy the file into the user's drive. Both modes offer a bulk action when there are 2+
+siblings (Download all / Save all to Drive). The save-to-drive dialog renders above the preview overlay via the
+`abovePreview` prop on `DialogContent`.
 
 **Progressive image loading:** For images with thumbnails, `ProgressiveImage` stacks two `<img>` elements — the 512px
 thumbnail renders instantly while the screen-resolution preview (max 2560px) loads on top. Both use `object-contain`
 within a fixed-size container so there's no size change when the preview loads. Images without thumbnails load the
 preview directly.
 
-**PreviewProvider** stores `DrivePath` + `siblings[]`, exposes `openPreview(path, siblings?)`.
+**PreviewProvider** stores `DrivePath` + `siblings[]` + `downloadMode`, exposes `openPreview(path, siblings?, options?)`.
 
 `previewMode` determined client-side from `DrivePath.mimeType` + `DrivePath.name` via `getPreviewMode()`.
 
