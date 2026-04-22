@@ -164,3 +164,36 @@ export async function messageGetAttachment(user: User, messageId: string, index:
     const mail = await getMailClient(user);
     return await mail.messageGetAttachment(messageId, index);
 }
+
+export async function saveAttachmentsToDrive(
+    user: User,
+    messageId: string,
+    indexes: number[],
+    targetOwnerId: string,
+    targetMountId: string,
+    targetParentId: string,
+) {
+    const mail = await getMailClient(user);
+    const parsed = await mail.messageGetParsed(messageId);
+
+    const { getSharedDrive } = await import('../drive');
+    const drive = await getSharedDrive(targetOwnerId, user);
+
+    const results = [];
+    for (const index of indexes) {
+        const att = parsed?.attachments[index];
+        if (!att) throw new ApiError(404, `Attachment at index ${index} not found`);
+        const filename = att.filename || `attachment-${index}`;
+        if (!(att.content instanceof Uint8Array)) throw new ApiError(400, `Attachment ${index} has no content`);
+        const content = Buffer.isBuffer(att.content) ? att.content : Buffer.from(att.content);
+        const result = await drive.createFileFromData(
+            targetMountId,
+            targetParentId,
+            filename,
+            att.contentType,
+            content,
+        );
+        results.push(result);
+    }
+    return results;
+}

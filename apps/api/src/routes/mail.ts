@@ -22,6 +22,7 @@ import {
     messageSend,
     messageSetFlagged,
     messageSetRead,
+    saveAttachmentsToDrive,
     uploadDraftAttachment,
 } from '../lib/mail/mail';
 import { betterAuth } from './auth';
@@ -312,6 +313,30 @@ export const mailRouter = new Elysia({ name: 'mail' })
         {
             auth: true,
             body: t.Object({ flagged: t.Boolean() }),
+        },
+    )
+    .post(
+        '/mail/:ownerId/message/:id/attachments/save-to-drive',
+        async ({ params, body, user }) => {
+            requireNonGuest(user);
+            requireSelf(params.ownerId, user.id);
+            return await saveAttachmentsToDrive(
+                user,
+                params.id,
+                body.indexes,
+                body.targetOwnerId,
+                body.targetMountId,
+                body.targetParentId,
+            );
+        },
+        {
+            auth: true,
+            body: t.Object({
+                indexes: t.Array(t.Number()),
+                targetOwnerId: t.String(),
+                targetMountId: t.String(),
+                targetParentId: t.String(),
+            }),
         },
     )
     .get(
