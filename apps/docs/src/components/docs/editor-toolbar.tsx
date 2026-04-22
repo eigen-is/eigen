@@ -732,10 +732,7 @@ export const EditorToolbar = ({
                     onOpenChange={setImagePickerOpen}
                     title="Insert image"
                     mimeFilter={['image/*']}
-                    onSelect={(paths) => {
-                        onImagePickFromDrive?.(paths);
-                        setImagePickerOpen(false);
-                    }}
+                    onSelect={(paths) => onImagePickFromDrive?.(paths)}
                     onUploadFromDevice={() => {
                         setImagePickerOpen(false);
                         setTimeout(() => imageInputRef.current?.click(), 0);

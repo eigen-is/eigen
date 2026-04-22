@@ -135,9 +135,9 @@ export function SheetEditor({
     const handleImagePickFromDrive = useCallback(
         async (paths: DrivePath[]) => {
             if (!mediaFolderId || paths.length === 0) return;
-            const results = await copyToMediaFolder.mutateAsync({ paths: [paths[0]], mediaFolderId });
-            if (!results[0]) return;
-            const mediaName = results[0].name;
+            const result = await copyToMediaFolder.mutateAsync({ paths: [paths[0]], mediaFolderId }).catch(() => null);
+            if (!result?.[0]) return;
+            const mediaName = result[0].name;
             const previewUrl = resolveMediaUrl(mediaName);
             if (!previewUrl) {
                 workbookRef.current?.insertImage(mediaName, 200, 200);
@@ -204,10 +204,7 @@ export function SheetEditor({
                     onOpenChange={setImagePickerOpen}
                     title="Insert image"
                     mimeFilter={['image/*']}
-                    onSelect={(paths) => {
-                        handleImagePickFromDrive(paths);
-                        setImagePickerOpen(false);
-                    }}
+                    onSelect={handleImagePickFromDrive}
                     onUploadFromDevice={() => {
                         setImagePickerOpen(false);
                         setTimeout(() => imageInputRef.current?.click(), 0);
