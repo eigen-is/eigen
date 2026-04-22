@@ -2,6 +2,7 @@ import { Elysia, t } from 'elysia';
 import { contentDisposition, setCacheHeaders } from '../lib/core';
 import { requireLocalhost, requireNonGuest, requireSelf } from '../lib/core/access';
 import {
+    attachFromDrive,
     mailboxCreate,
     mailboxDeliver,
     mailboxExists,
@@ -240,6 +241,22 @@ export const mailRouter = new Elysia({ name: 'mail' })
         {
             auth: true,
             parse: 'none',
+        },
+    )
+    .post(
+        '/mail/:ownerId/message/draft/attachment-from-drive',
+        async ({ params, body, user }) => {
+            requireNonGuest(user);
+            requireSelf(params.ownerId, user.id);
+            return await attachFromDrive(user, body.sourceOwnerId, body.sourceMountId, body.sourcePathId);
+        },
+        {
+            auth: true,
+            body: t.Object({
+                sourceOwnerId: t.String(),
+                sourceMountId: t.String(),
+                sourcePathId: t.String(),
+            }),
         },
     )
     .post(
