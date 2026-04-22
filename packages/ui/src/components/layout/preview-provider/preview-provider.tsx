@@ -6,13 +6,18 @@ import type React from 'react';
 import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { FilePreview } from '../drive/file-preview';
 
+export type PreviewOptions = {
+    downloadMode?: 'direct' | 'save-to-drive';
+};
+
 type PreviewState = {
     path: DrivePath;
     siblings: DrivePath[];
+    downloadMode: 'direct' | 'save-to-drive';
 };
 
 type PreviewContextValue = {
-    openPreview: (path: DrivePath, siblings?: DrivePath[]) => void;
+    openPreview: (path: DrivePath, siblings?: DrivePath[], options?: PreviewOptions) => void;
     updatePreview: (path: DrivePath) => void;
     closePreview: () => void;
     isPreviewOpen: boolean;
@@ -36,8 +41,8 @@ function getPreviewMode(path: DrivePath): PreviewMode {
 export function PreviewProvider({ children }: { children: React.ReactNode }) {
     const [preview, setPreview] = useState<PreviewState | null>(null);
 
-    const openPreview = useCallback((path: DrivePath, siblings?: DrivePath[]) => {
-        setPreview({ path, siblings: siblings || [] });
+    const openPreview = useCallback((path: DrivePath, siblings?: DrivePath[], options?: PreviewOptions) => {
+        setPreview({ path, siblings: siblings || [], downloadMode: options?.downloadMode ?? 'direct' });
     }, []);
 
     const updatePreview = useCallback((path: DrivePath) => {
@@ -94,6 +99,8 @@ export function PreviewProvider({ children }: { children: React.ReactNode }) {
             hasPrev,
             hasNext,
             path,
+            downloadMode: preview.downloadMode,
+            siblings: preview.siblings,
         };
     }, [preview]);
 
