@@ -27,6 +27,7 @@ type DriveLocationPickerProps = {
     defaultFolderId?: string;
     nameLabel?: string;
     confirmLabel?: string;
+    abovePreview?: boolean;
 };
 
 export function DriveLocationPicker({
@@ -42,6 +43,7 @@ export function DriveLocationPicker({
     defaultFolderId,
     nameLabel,
     confirmLabel,
+    abovePreview,
 }: DriveLocationPickerProps) {
     const { user } = useAuth();
     const initialOwnerId = defaultOwnerId || user?.id || '';
@@ -98,6 +100,7 @@ export function DriveLocationPicker({
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent
+                abovePreview={abovePreview}
                 className={cn(
                     'flex flex-col p-0 gap-0 sm:max-w-[688px] max-w-[90vw]',
                     expanded && (hasName ? 'h-[600px] max-h-[85vh]' : 'h-[520px] max-h-[85vh]'),
