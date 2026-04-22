@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { getMailDraftAttachmentUploadUrl, mailApi } from '@workspace/lib/api';
+import { getMailDraftAttachmentFromDriveUrl, getMailDraftAttachmentUploadUrl, mailApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import type { DraftAttachmentUpload, DraftInput, EmailDraft, NewDraft } from '@workspace/lib/types/mail';
 import { toast } from 'sonner';
@@ -107,6 +107,26 @@ export function useUploadDraftAttachment() {
 
     return useMutation({
         mutationFn: (file: File) => uploadDraftAttachmentRequest(ownerId, file),
+        onError: onMutationError,
+    });
+}
+
+export function useAttachFromDrive() {
+    const { user } = useAuth();
+    const ownerId = user?.id || '';
+
+    return useMutation({
+        mutationFn: async (source: { sourceOwnerId: string; sourceMountId: string; sourcePathId: string }) => {
+            const res = await fetch(getMailDraftAttachmentFromDriveUrl(ownerId), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(source),
+                credentials: 'include',
+            });
+            if (!res.ok)
+                throw new AppError({ status: res.status, error: { status: res.status, value: await res.text() } });
+            return (await res.json()) as DraftAttachmentUpload;
+        },
         onError: onMutationError,
     });
 }
