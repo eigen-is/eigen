@@ -11,7 +11,7 @@ import { useComments, useResolveComment, useUpdateCommentColor } from '@workspac
 import { needsReUpload, readEigenClipboard, reUploadImage, writeEigenClipboard } from '@workspace/lib/clipboard';
 import { EIGEN_ACCENT_COLORS_SHUFFLED, EIGEN_STICKIES_COLORS } from '@workspace/lib/constants/colors';
 import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
-import { MediaResolverProvider, useMediaResolver, useUploadFile } from '@workspace/lib/drive';
+import { MediaResolverProvider, useCopyToMediaFolder, useMediaResolver, useUploadFile } from '@workspace/lib/drive';
 import { useMediaQuery } from '@workspace/lib/media';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardData, EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
@@ -185,6 +185,7 @@ const TiptapEditor = ({
 }) => {
     const auth = useAuth();
     const uploadFile = useUploadFile(path.ownerId, path.mountId);
+    const copyToMediaFolder = useCopyToMediaFolder(path.ownerId, path.mountId);
     const { resolveMediaPath } = useMediaResolver();
     const [commentDialogOpen, setCommentDialogOpen] = useState(false);
     const [commentSelectedText, setCommentSelectedText] = useState('');
@@ -400,6 +401,17 @@ const TiptapEditor = ({
         }
     };
 
+    const handleImagePickFromDrive = async (paths: DrivePath[]) => {
+        if (!mediaFolderIdRef.current || !editorRef.current) return;
+        const results = await copyToMediaFolder.mutateAsync({
+            paths,
+            mediaFolderId: mediaFolderIdRef.current,
+        });
+        for (const result of results) {
+            editorRef.current.chain().focus().setFigure({ mediaName: result.name }).run();
+        }
+    };
+
     const handleEigenImagePaste = async (item: EigenClipboardImageItem, width?: number) => {
         const currentMediaFolderId = mediaFolderIdRef.current;
         if (needsReUpload(item.sourceParentId, currentMediaFolderId) && currentMediaFolderId) {
@@ -562,6 +574,7 @@ const TiptapEditor = ({
                         commentPanelOpen={commentPanelOpen}
                         unresolvedCommentCount={unresolvedCount}
                         onImageUpload={mediaFolderId ? handleImageUpload : undefined}
+                        onImagePickFromDrive={mediaFolderId ? handleImagePickFromDrive : undefined}
                     />
                 }
             >
