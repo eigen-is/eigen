@@ -2,11 +2,12 @@ import { Workbook, type WorkbookInstance } from '@workspace/fortune-sheet';
 import { useAuth } from '@workspace/lib/auth';
 import { useComments, useResolveComment, useUpdateCommentColor } from '@workspace/lib/chat';
 import { EIGEN_STICKIES_COLORS, EIGEN_STICKIES_INDICATOR_MAP } from '@workspace/lib/constants/colors';
-import { useMediaResolver, useUploadFile } from '@workspace/lib/drive';
+import { useCopyToMediaFolder, useMediaResolver, useUploadFile } from '@workspace/lib/drive';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { CommentDialog, CommentPanel, CreateCommentDialog, LoadingState, NoteCardContextMenu } from '@workspace/ui';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
+import { DriveFilePicker } from '@workspace/ui/components/layout/drive/drive-file-picker';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { columnToLetter, useActiveComments } from './hooks/use-active-comments';
 import { useSheet } from './hooks/use-sheet';
@@ -67,6 +68,7 @@ export function SheetEditor({
 }: SheetEditorProps) {
     const workbookRef = useRef<WorkbookInstance>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
+    const [imagePickerOpen, setImagePickerOpen] = useState(false);
 
     const { initialData, snapshotVersion, synced, handleOp, onDataChange, handleRestore } = useSheet(
         ownerId,
@@ -77,6 +79,7 @@ export function SheetEditor({
 
     const auth = useAuth();
     const uploadFile = useUploadFile(ownerId, path.mountId);
+    const copyToMediaFolder = useCopyToMediaFolder(ownerId, path.mountId);
     const { resolveMediaUrl } = useMediaResolver();
     const [commentPanelOpen, setCommentPanelOpen] = useState(false);
     const [commentDialogOpen, setCommentDialogOpen] = useState(false);
@@ -129,6 +132,25 @@ export function SheetEditor({
         [handleImageFile],
     );
 
+    const handleImagePickFromDrive = useCallback(
+        async (paths: DrivePath[]) => {
+            if (!mediaFolderId || paths.length === 0) return;
+            const results = await copyToMediaFolder.mutateAsync({ paths: [paths[0]], mediaFolderId });
+            if (!results[0]) return;
+            const mediaName = results[0].name;
+            const previewUrl = resolveMediaUrl(mediaName);
+            if (!previewUrl) {
+                workbookRef.current?.insertImage(mediaName, 200, 200);
+                return;
+            }
+            const img = new window.Image();
+            img.onload = () => workbookRef.current?.insertImage(mediaName, img.naturalWidth, img.naturalHeight);
+            img.onerror = () => workbookRef.current?.insertImage(mediaName, 200, 200);
+            img.src = previewUrl;
+        },
+        [mediaFolderId, copyToMediaFolder, resolveMediaUrl],
+    );
+
     const handleCommentCreated = useCallback(
         (chatName: string) => {
             if (!commentCellRef || !workbookRef.current) return;
@@ -176,6 +198,22 @@ export function SheetEditor({
     return (
         <>
             <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
+            {mediaFolderId && (
+                <DriveFilePicker
+                    open={imagePickerOpen}
+                    onOpenChange={setImagePickerOpen}
+                    title="Insert image"
+                    mimeFilter={['image/*']}
+                    onSelect={(paths) => {
+                        handleImagePickFromDrive(paths);
+                        setImagePickerOpen(false);
+                    }}
+                    onUploadFromDevice={() => {
+                        setImagePickerOpen(false);
+                        setTimeout(() => imageInputRef.current?.click(), 0);
+                    }}
+                />
+            )}
             <div className="flex flex-col h-full w-full relative">
                 <div className="flex-1 overflow-hidden">
                     <Workbook
@@ -200,9 +238,7 @@ export function SheetEditor({
                         column={26}
                         row={100}
                         hooks={{
-                            ...(canWrite && mediaFolderId
-                                ? { onInsertImage: () => imageInputRef.current?.click() }
-                                : {}),
+                            ...(canWrite && mediaFolderId ? { onInsertImage: () => setImagePickerOpen(true) } : {}),
                             resolveImageUrl: resolveMediaUrl,
                             ...(canWrite && chatFolderId
                                 ? {
