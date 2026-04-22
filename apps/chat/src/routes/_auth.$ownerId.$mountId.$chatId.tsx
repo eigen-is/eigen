@@ -129,6 +129,7 @@ function ChatView() {
                 open={filePickerOpen}
                 onOpenChange={setFilePickerOpen}
                 title="Attach file"
+                multiSelect
                 onSelect={chat.addDriveAttachments}
                 onUploadFromDevice={() => {
                     setFilePickerOpen(false);
