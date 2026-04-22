@@ -1,6 +1,6 @@
 import { type QueryClient, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { chatApi, driveApi } from '@workspace/lib/api';
-import type { ChatMessage } from '@workspace/lib/types/chat';
+import type { ChatAttachment, ChatMessage } from '@workspace/lib/types/chat';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { AppError, onMutationError } from '../../api-error';
 import { driveKeys, invalidateItemCreated } from '../../drive/hooks/use-drive';
@@ -51,7 +51,7 @@ export function usePostMessage(ownerId: string, mountId: string, chatId: string)
             type?: 'message' | 'emote' | 'whisper';
             whisperTo?: string;
             replyTo?: string;
-            attachments?: string[];
+            attachments?: ChatAttachment[];
         }) => {
             const response = await chatApi({ ownerId })({ mountId })({ chatId }).messages.post(body);
             if (response.error) throw new AppError(response);
