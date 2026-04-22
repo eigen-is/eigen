@@ -67,15 +67,17 @@ export function FilePreview({
     const openUrl = getDriveItemUrl(path);
 
     const downloadAll = () => {
-        for (const sibling of siblings) {
-            if (isFolderType(sibling.type)) continue;
-            const url = getDriveDownloadUrl(sibling.ownerId, sibling.mountId, sibling.id);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = '';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
+        const downloadable = siblings.filter((s) => !isFolderType(s.type));
+        for (let i = 0; i < downloadable.length; i++) {
+            const s = downloadable[i];
+            setTimeout(() => {
+                const a = document.createElement('a');
+                a.href = getDriveDownloadUrl(s.ownerId, s.mountId, s.id);
+                a.download = '';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+            }, i * 300);
         }
     };
 
@@ -227,7 +229,7 @@ export function FilePreview({
                             a.download = '';
                             document.body.appendChild(a);
                             a.click();
-                            document.body.removeChild(a);
+                            a.remove();
                         }
                     }}
                 />

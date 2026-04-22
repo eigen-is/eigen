@@ -46,7 +46,7 @@ export function AttachmentChip({
                     const siblings = siblingFileNames
                         ?.map((n) => findByName(n))
                         .filter((p): p is DrivePath => p !== undefined);
-                    openPreview(fileInfo, siblings);
+                    openPreview(fileInfo, siblings, { downloadMode: 'save-to-drive' });
                 }
             }}
         />
