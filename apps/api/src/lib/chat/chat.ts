@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { ChatMessage } from '@workspace/lib/types/chat';
+import type { ChatAttachment, ChatMessage } from '@workspace/lib/types/chat';
 import { type DrivePath, stripEigenExtension } from '@workspace/lib/types/drive';
 import { type SSEvent, SSEventType } from '@workspace/lib/types/sse';
 import { validateEmailAddress } from '@workspace/lib/validation';
@@ -68,7 +68,7 @@ export class ChatRoom {
         type: ChatMessage['type'] = 'message',
         whisperTo?: string,
         replyTo?: string,
-        attachments?: string[],
+        attachments?: ChatAttachment[],
     ): Promise<ChatMessage> {
         if (content.startsWith('/') && type === 'message') {
             const cmd = parseCommand(content);
@@ -347,10 +347,10 @@ export class ChatRoom {
             .where(eq(schema.messages.id, messageId));
 
         if (existing.attachments) {
-            const attachmentIds = existing.attachments as string[];
-            for (const attachmentId of attachmentIds) {
+            for (const attachment of existing.attachments) {
+                if (typeof attachment !== 'string') continue;
                 try {
-                    await this.drive.deletePath(this.path.mountId, attachmentId);
+                    await this.drive.deletePath(this.path.mountId, attachment);
                 } catch {
                     // attachment may already be deleted
                 }

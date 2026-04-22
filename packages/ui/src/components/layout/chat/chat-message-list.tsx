@@ -244,21 +244,23 @@ export function ChatMessageList({
         if (!saveAttachmentsMsg?.attachments || !ownerId || !mountId) return;
         downloadTimers.current.forEach(clearTimeout);
         downloadTimers.current = [];
-        saveAttachmentsMsg.attachments.forEach((name, i) => {
-            const fileInfo = findByName(name);
-            if (fileInfo) {
-                downloadTimers.current.push(
-                    setTimeout(() => {
-                        const a = document.createElement('a');
-                        a.href = getDriveDownloadUrl(ownerId, mountId, fileInfo.id);
-                        a.download = '';
-                        document.body.appendChild(a);
-                        a.click();
-                        a.remove();
-                    }, i * 300),
-                );
-            }
-        });
+        saveAttachmentsMsg.attachments
+            .filter((a): a is string => typeof a === 'string')
+            .forEach((name, i) => {
+                const fileInfo = findByName(name);
+                if (fileInfo) {
+                    downloadTimers.current.push(
+                        setTimeout(() => {
+                            const a = document.createElement('a');
+                            a.href = getDriveDownloadUrl(ownerId, mountId, fileInfo.id);
+                            a.download = '';
+                            document.body.appendChild(a);
+                            a.click();
+                            a.remove();
+                        }, i * 300),
+                    );
+                }
+            });
         setSaveAttachmentsMsg(null);
     }, [saveAttachmentsMsg, ownerId, mountId, findByName]);
 
@@ -320,16 +322,18 @@ export function ChatMessageList({
     const renderAttachments = (message: ChatMessage) => {
         if (!message.attachments || message.attachments.length === 0) return null;
         if (!ownerId || !mountId || !mediaFolderId) return null;
+        const fileNames = message.attachments.filter((a): a is string => typeof a === 'string');
+        if (fileNames.length === 0) return null;
         return (
             <div className="flex flex-wrap gap-2 mt-1">
-                {message.attachments.map((name) => (
+                {fileNames.map((name) => (
                     <AttachmentChip
                         key={name}
                         fileName={name}
                         ownerId={ownerId}
                         mountId={mountId}
                         mediaFolderId={mediaFolderId}
-                        siblingFileNames={message.attachments ?? undefined}
+                        siblingFileNames={fileNames}
                     />
                 ))}
             </div>
@@ -582,6 +586,7 @@ export function ChatMessageList({
                     onConfirm={(location) => {
                         if (!saveAttachmentsMsg?.attachments) return;
                         const pathIds = saveAttachmentsMsg.attachments
+                            .filter((a): a is string => typeof a === 'string')
                             .map((name) => findByName(name)?.id)
                             .filter((id): id is string => !!id);
                         if (pathIds.length > 0) {
