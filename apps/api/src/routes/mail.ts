@@ -38,6 +38,24 @@ const AddressObjectSchema = t.Object({
     text: t.String(),
 });
 
+const AttachmentReferenceSchema = t.Object({
+    type: t.Literal('reference'),
+    ownerId: t.String(),
+    mountId: t.String(),
+    id: t.String(),
+    name: t.String(),
+    driveType: t.Union([
+        t.Literal('doc'),
+        t.Literal('stickies'),
+        t.Literal('slides'),
+        t.Literal('sheets'),
+        t.Literal('chat'),
+        t.Literal('folder'),
+        t.Literal('file'),
+    ]),
+    mimeType: t.String(),
+});
+
 const MailDraftSchema = t.Object({
     id: t.Optional(t.String()),
     subject: t.Optional(t.String()),
@@ -50,6 +68,7 @@ const MailDraftSchema = t.Object({
     messageId: t.Optional(t.String()),
     inReplyTo: t.Optional(t.String()),
     references: t.Optional(t.Union([t.Array(t.String()), t.String()])),
+    driveReferences: t.Optional(t.Array(AttachmentReferenceSchema)),
 });
 
 export const mailRouter = new Elysia({ name: 'mail' })

@@ -15,7 +15,7 @@ import type { Home } from '../home';
 import { parseEml } from './mail-parse';
 import MailDB from './maildb';
 import { MaildirStore } from './maildir-store';
-import { createEmlContent, type EmlAttachment } from './mailfile';
+import { createEmlContent, type EmlAttachment, renderReferenceLinksHtml } from './mailfile';
 import {
     applyFlagsFromFilename,
     createUniqueMessageId,
@@ -575,6 +575,18 @@ export default class Maildir {
         // Always do a full EML rebuild so attachment content is available for SMTP.
         const mail = await this.draftFullSave(mailToSend, (mailToSend as EmailDraft).id?.trim(), {});
         const message = draftToOutboundMail(mail, this.home.user.email);
+
+        const refs = 'driveReferences' in mailToSend ? (mailToSend as NewDraft).driveReferences : undefined;
+        if (refs?.length) {
+            const baseUrl = process.env['VITE_APP_DRIVE_URL'] || 'http://localhost:3004';
+            const refHtml = renderReferenceLinksHtml(refs, `${baseUrl}/fs`);
+            if (message.html) {
+                const replaced = message.html.replace(/<\/body>/i, `${refHtml}</body>`);
+                message.html = replaced !== message.html ? replaced : message.html + refHtml;
+            } else {
+                message.html = refHtml;
+            }
+        }
 
         if (!message.subject.trim() && !message.text.trim() && !message.html) {
             throw new ApiError(400, 'Cannot send email with empty subject and body');
