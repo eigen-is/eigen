@@ -1,10 +1,12 @@
 import { useHotkey } from '@tanstack/react-hotkeys';
-import { getDriveItemUrl } from '@workspace/lib/api';
-import { useTextPreview } from '@workspace/lib/drive';
+import { getDriveDownloadUrl, getDriveItemUrl } from '@workspace/lib/api';
+import { useCopyFiles, useTextPreview } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { ChevronLeft, ChevronRight, Download, ExternalLink, Loader2, X } from 'lucide-react';
+import { isFolderType } from '@workspace/lib/types/drive';
+import { ChevronLeft, ChevronRight, Download, ExternalLink, FolderDown, Loader2, X } from 'lucide-react';
 import { useState } from 'react';
 import type { PreviewMode } from '../preview-provider/preview-provider';
+import { DriveLocationPicker } from './drive-location-picker';
 import { getFileIcon } from './file-icon-helper';
 
 type FilePreviewProps = {
@@ -18,6 +20,8 @@ type FilePreviewProps = {
     hasPrev: boolean;
     hasNext: boolean;
     path: DrivePath;
+    downloadMode: 'direct' | 'save-to-drive';
+    siblings: DrivePath[];
     onClose: () => void;
     onPrev: () => void;
     onNext: () => void;
@@ -34,6 +38,8 @@ export function FilePreview({
     hasPrev,
     hasNext,
     path,
+    downloadMode,
+    siblings,
     onClose,
     onPrev,
     onNext,
@@ -54,7 +60,24 @@ export function FilePreview({
         { enabled: true },
     );
 
+    const [locationPickerOpen, setLocationPickerOpen] = useState(false);
+    const [locationPickerMode, setLocationPickerMode] = useState<'single' | 'all'>('single');
+    const copyFiles = useCopyFiles(path.ownerId, path.mountId);
+
     const openUrl = getDriveItemUrl(path);
+
+    const downloadAll = () => {
+        for (const sibling of siblings) {
+            if (isFolderType(sibling.type)) continue;
+            const url = getDriveDownloadUrl(sibling.ownerId, sibling.mountId, sibling.id);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = '';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+    };
 
     return (
         <div className="fixed inset-0 z-[100] bg-black/80 flex flex-col animate-in fade-in" onClick={onClose}>
@@ -138,13 +161,77 @@ export function FilePreview({
                         Open
                     </FooterButton>
                 )}
-                {downloadUrl && (
+                {downloadUrl && downloadMode === 'direct' && (
                     <FooterButton href={downloadUrl} download>
                         <Download className="size-3.5" />
                         Download
                     </FooterButton>
                 )}
+                {downloadUrl && downloadMode === 'save-to-drive' && (
+                    <FooterActionButton
+                        onClick={() => {
+                            setLocationPickerMode('single');
+                            setLocationPickerOpen(true);
+                        }}
+                    >
+                        <Download className="size-3.5" />
+                        Save to Drive
+                    </FooterActionButton>
+                )}
+                {siblings.length >= 2 && downloadMode === 'direct' && (
+                    <FooterActionButton onClick={downloadAll}>
+                        <FolderDown className="size-3.5" />
+                        Download all ({siblings.filter((s) => !isFolderType(s.type)).length})
+                    </FooterActionButton>
+                )}
+                {siblings.length >= 2 && downloadMode === 'save-to-drive' && (
+                    <FooterActionButton
+                        onClick={() => {
+                            setLocationPickerMode('all');
+                            setLocationPickerOpen(true);
+                        }}
+                    >
+                        <FolderDown className="size-3.5" />
+                        Save all to Drive ({siblings.filter((s) => !isFolderType(s.type)).length})
+                    </FooterActionButton>
+                )}
             </div>
+            {downloadMode === 'save-to-drive' && (
+                <DriveLocationPicker
+                    open={locationPickerOpen}
+                    onOpenChange={setLocationPickerOpen}
+                    mode="folder"
+                    title={locationPickerMode === 'all' ? 'Save all to Drive' : 'Save to Drive'}
+                    confirmLabel="Save here"
+                    defaultOwnerId={path.ownerId}
+                    defaultMountId={path.mountId}
+                    onConfirm={(location) => {
+                        const pathIds =
+                            locationPickerMode === 'all'
+                                ? siblings.filter((s) => !isFolderType(s.type)).map((s) => s.id)
+                                : [path.id];
+                        copyFiles.mutate({
+                            pathIds,
+                            targetOwnerId: location.ownerId,
+                            targetMountId: location.mountId,
+                            targetParentId: location.folderId,
+                        });
+                    }}
+                    onDownloadInstead={() => {
+                        setLocationPickerOpen(false);
+                        if (locationPickerMode === 'all') {
+                            downloadAll();
+                        } else if (downloadUrl) {
+                            const a = document.createElement('a');
+                            a.href = downloadUrl;
+                            a.download = '';
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                        }
+                    }}
+                />
+            )}
         </div>
     );
 }
@@ -268,5 +355,16 @@ function FooterButton({ href, download, children }: { href: string; download?: b
         >
             {children}
         </a>
+    );
+}
+
+function FooterActionButton({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+    return (
+        <button
+            onClick={onClick}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/20 text-white text-sm transition-colors"
+        >
+            {children}
+        </button>
     );
 }
