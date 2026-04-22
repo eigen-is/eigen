@@ -4,8 +4,8 @@ import { useCopyFiles, useTextPreview } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isFolderType } from '@workspace/lib/types/drive';
 import { ChevronLeft, ChevronRight, Download, ExternalLink, FolderDown, Loader2, X } from 'lucide-react';
-import { useState } from 'react';
-import type { PreviewMode } from '../preview-provider/preview-provider';
+import { useEffect, useRef, useState } from 'react';
+import type { DownloadMode, PreviewMode } from '../preview-provider/preview-provider';
 import { DriveLocationPicker } from './drive-location-picker';
 import { getFileIcon } from './file-icon-helper';
 
@@ -20,7 +20,7 @@ type FilePreviewProps = {
     hasPrev: boolean;
     hasNext: boolean;
     path: DrivePath;
-    downloadMode: 'direct' | 'save-to-drive';
+    downloadMode: DownloadMode;
     siblings: DrivePath[];
     onClose: () => void;
     onPrev: () => void;
@@ -63,21 +63,29 @@ export function FilePreview({
     const [locationPickerOpen, setLocationPickerOpen] = useState(false);
     const [locationPickerMode, setLocationPickerMode] = useState<'single' | 'all'>('single');
     const copyFiles = useCopyFiles(path.ownerId, path.mountId);
+    const downloadTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+    useEffect(() => () => downloadTimers.current.forEach(clearTimeout), []);
 
     const openUrl = getDriveItemUrl(path);
+    const downloadableSiblings = siblings.filter((s) => !isFolderType(s.type));
+
+    const triggerDownload = (url: string) => {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = '';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    };
 
     const downloadAll = () => {
-        const downloadable = siblings.filter((s) => !isFolderType(s.type));
-        for (let i = 0; i < downloadable.length; i++) {
-            const s = downloadable[i];
-            setTimeout(() => {
-                const a = document.createElement('a');
-                a.href = getDriveDownloadUrl(s.ownerId, s.mountId, s.id);
-                a.download = '';
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-            }, i * 300);
+        downloadTimers.current.forEach(clearTimeout);
+        downloadTimers.current = [];
+        for (let i = 0; i < downloadableSiblings.length; i++) {
+            const s = downloadableSiblings[i];
+            downloadTimers.current.push(
+                setTimeout(() => triggerDownload(getDriveDownloadUrl(s.ownerId, s.mountId, s.id)), i * 300),
+            );
         }
     };
 
@@ -185,13 +193,13 @@ export function FilePreview({
                         Save to Drive
                     </FooterActionButton>
                 )}
-                {siblings.length >= 2 && downloadMode === 'direct' && (
+                {downloadableSiblings.length >= 2 && downloadMode === 'direct' && (
                     <FooterActionButton onClick={downloadAll}>
                         <FolderDown className="size-3.5" />
-                        Download all ({siblings.filter((s) => !isFolderType(s.type)).length})
+                        Download all ({downloadableSiblings.length})
                     </FooterActionButton>
                 )}
-                {siblings.length >= 2 && downloadMode === 'save-to-drive' && (
+                {downloadableSiblings.length >= 2 && downloadMode === 'save-to-drive' && (
                     <FooterActionButton
                         onClick={() => {
                             setLocationPickerMode('all');
@@ -199,7 +207,7 @@ export function FilePreview({
                         }}
                     >
                         <FolderDown className="size-3.5" />
-                        Save all to Drive ({siblings.filter((s) => !isFolderType(s.type)).length})
+                        Save all to Drive ({downloadableSiblings.length})
                     </FooterActionButton>
                 )}
             </div>
@@ -215,9 +223,7 @@ export function FilePreview({
                     defaultMountId={path.mountId}
                     onConfirm={(location) => {
                         const pathIds =
-                            locationPickerMode === 'all'
-                                ? siblings.filter((s) => !isFolderType(s.type)).map((s) => s.id)
-                                : [path.id];
+                            locationPickerMode === 'all' ? downloadableSiblings.map((s) => s.id) : [path.id];
                         copyFiles.mutate({
                             pathIds,
                             targetOwnerId: location.ownerId,
@@ -230,12 +236,7 @@ export function FilePreview({
                         if (locationPickerMode === 'all') {
                             downloadAll();
                         } else if (downloadUrl) {
-                            const a = document.createElement('a');
-                            a.href = downloadUrl;
-                            a.download = '';
-                            document.body.appendChild(a);
-                            a.click();
-                            a.remove();
+                            triggerDownload(downloadUrl);
                         }
                     }}
                 />
