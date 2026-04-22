@@ -21,6 +21,7 @@ import {
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 
+import { DriveFilePicker } from '@workspace/ui/components/layout/drive/drive-file-picker';
 import { ExportProgressDialog } from '@workspace/ui/components/layout/drive/export-progress-dialog';
 import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker';
 import { FontPicker } from '@workspace/ui/components/layout/media/font-picker';
@@ -82,6 +83,7 @@ type EditorToolbarProps = {
     commentPanelOpen?: boolean;
     unresolvedCommentCount?: number;
     onImageUpload?: (file: File) => void;
+    onImagePickFromDrive?: (paths: DrivePath[]) => void;
 };
 
 const ToolbarSeparator = () => <Separator orientation="vertical" className="h-6 mx-1" />;
@@ -97,9 +99,11 @@ export const EditorToolbar = ({
     commentPanelOpen,
     unresolvedCommentCount,
     onImageUpload,
+    onImagePickFromDrive,
 }: EditorToolbarProps) => {
     const [linkUrl, setLinkUrl] = useState('');
     const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+    const [imagePickerOpen, setImagePickerOpen] = useState(false);
     const [textColorOpen, setTextColorOpen] = useState(false);
     const [highlightColorOpen, setHighlightColorOpen] = useState(false);
     const { exportDocument, isExporting } = useExportDocument();
@@ -331,7 +335,7 @@ export const EditorToolbar = ({
                                     <Link className="h-4 w-4 mr-2" /> Link
                                 </DropdownMenuItem>
                                 {onImageUpload && (
-                                    <DropdownMenuItem onClick={() => imageInputRef.current?.click()}>
+                                    <DropdownMenuItem onClick={() => setImagePickerOpen(true)}>
                                         <ImagePlus className="h-4 w-4 mr-2" /> Image
                                     </DropdownMenuItem>
                                 )}
@@ -690,7 +694,7 @@ export const EditorToolbar = ({
                             <TooltipButton
                                 icon={ImagePlus}
                                 tooltipText="Insert image"
-                                onClick={() => imageInputRef.current?.click()}
+                                onClick={() => setImagePickerOpen(true)}
                             />
                         )}
 
@@ -722,6 +726,22 @@ export const EditorToolbar = ({
                 )}
             </div>
             {/* Hidden file input for image uploads */}
+            {onImageUpload && (
+                <DriveFilePicker
+                    open={imagePickerOpen}
+                    onOpenChange={setImagePickerOpen}
+                    title="Insert image"
+                    mimeFilter={['image/*']}
+                    onSelect={(paths) => {
+                        onImagePickFromDrive?.(paths);
+                        setImagePickerOpen(false);
+                    }}
+                    onUploadFromDevice={() => {
+                        setImagePickerOpen(false);
+                        setTimeout(() => imageInputRef.current?.click(), 0);
+                    }}
+                />
+            )}
             <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
 
             <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
