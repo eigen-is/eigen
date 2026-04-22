@@ -533,6 +533,17 @@ function SlideEditorInner({
         [mediaFolderId, uploadFile],
     );
 
+    const handleBackgroundImagePickFromDrive = useCallback(
+        async (paths: DrivePath[]) => {
+            if (!mediaFolderId || !activeSlideId || paths.length === 0) return;
+            const results = await copyToMediaFolder.mutateAsync({ paths: [paths[0]], mediaFolderId });
+            if (results[0]) {
+                updateSlideBackgroundImage(activeSlideId, results[0].name, 'this');
+            }
+        },
+        [mediaFolderId, activeSlideId, copyToMediaFolder, updateSlideBackgroundImage],
+    );
+
     const handlePresent = useCallback(() => {
         const el = document.documentElement;
         if (el.requestFullscreen) {
@@ -751,6 +762,7 @@ function SlideEditorInner({
                                             applyTo: 'this' | 'this-and-following' | 'all',
                                         ) => updateSlideBackgroundImage(activeSlideId!, mediaName, applyTo)}
                                         onUploadImage={handleBackgroundImageUpload}
+                                        onPickImageFromDrive={handleBackgroundImagePickFromDrive}
                                     />
                                 ) : null}
                             </div>
