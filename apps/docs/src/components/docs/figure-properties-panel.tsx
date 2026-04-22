@@ -1,8 +1,10 @@
 import type { Editor } from '@tiptap/react';
 import type { FigureLayout } from '@workspace/lib/docs/eigendoc';
 import { useMediaResolver } from '@workspace/lib/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import { Input } from '@workspace/ui/components/input';
+import { DriveFilePicker } from '@workspace/ui/components/layout/drive/drive-file-picker';
 import {
     AlignmentPicker,
     PropertiesPanel,
@@ -11,16 +13,18 @@ import {
 } from '@workspace/ui/components/layout/properties-panel';
 import { Toggle } from '@workspace/ui/components/toggle';
 import { ImagePlus, PanelLeft, PanelRight, Rows3 } from 'lucide-react';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 
 type FigurePropertiesPanelProps = {
     editor: Editor;
     onReplaceImage: (file: File) => void;
+    onReplaceImageFromDrive?: (paths: DrivePath[]) => void;
 };
 
-export function FigurePropertiesPanel({ editor, onReplaceImage }: FigurePropertiesPanelProps) {
+export function FigurePropertiesPanel({ editor, onReplaceImage, onReplaceImageFromDrive }: FigurePropertiesPanelProps) {
     const { resolveMediaUrl } = useMediaResolver();
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [replacePickerOpen, setReplacePickerOpen] = useState(false);
     const attrs = editor.getAttributes('figure');
     const layout = (attrs.layout as FigureLayout) || 'block';
     const alignment = (attrs.alignment as 'left' | 'center' | 'right') || 'center';
@@ -96,15 +100,24 @@ export function FigurePropertiesPanel({ editor, onReplaceImage }: FigureProperti
                         onBlur={(e) => editor.commands.updateAttributes('figure', { caption: e.target.value || null })}
                     />
                 </PropertyRow>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full mt-1"
-                    onClick={() => fileInputRef.current?.click()}
-                >
+                <Button variant="outline" size="sm" className="w-full mt-1" onClick={() => setReplacePickerOpen(true)}>
                     <ImagePlus className="h-3.5 w-3.5 mr-1.5" />
                     Replace image
                 </Button>
+                <DriveFilePicker
+                    open={replacePickerOpen}
+                    onOpenChange={setReplacePickerOpen}
+                    title="Replace image"
+                    mimeFilter={['image/*']}
+                    onSelect={(paths) => {
+                        onReplaceImageFromDrive?.(paths);
+                        setReplacePickerOpen(false);
+                    }}
+                    onUploadFromDevice={() => {
+                        setReplacePickerOpen(false);
+                        setTimeout(() => fileInputRef.current?.click(), 0);
+                    }}
+                />
                 <input
                     ref={fileInputRef}
                     type="file"

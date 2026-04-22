@@ -412,6 +412,21 @@ const TiptapEditor = ({
         }
     };
 
+    const handleReplaceImageFromDrive = async (paths: DrivePath[]) => {
+        if (!mediaFolderIdRef.current || !editorRef.current || paths.length === 0) return;
+        const results = await copyToMediaFolder.mutateAsync({
+            paths: [paths[0]],
+            mediaFolderId: mediaFolderIdRef.current,
+        });
+        if (results[0]) {
+            editorRef.current
+                .chain()
+                .focus()
+                .updateAttributes('figure', { mediaName: results[0].name, width: null })
+                .run();
+        }
+    };
+
     const handleEigenImagePaste = async (item: EigenClipboardImageItem, width?: number) => {
         const currentMediaFolderId = mediaFolderIdRef.current;
         if (needsReUpload(item.sourceParentId, currentMediaFolderId) && currentMediaFolderId) {
@@ -629,6 +644,7 @@ const TiptapEditor = ({
                                     key={editor.state.selection.from}
                                     editor={editor}
                                     onReplaceImage={handleReplaceImage}
+                                    onReplaceImageFromDrive={handleReplaceImageFromDrive}
                                 />
                             ) : (
                                 <TablePropertiesPanel editor={editor} />
