@@ -520,6 +520,43 @@ export default class Maildir {
         throw new ApiError(400, 'No file in request');
     }
 
+    async stageDriveAttachment(
+        content: Buffer,
+        filename: string,
+        contentType: string,
+        maxSize: number,
+    ): Promise<DraftAttachmentUpload> {
+        if (content.byteLength > maxSize) {
+            const limitMB = Math.floor(maxSize / (1024 * 1024));
+            throw new ApiError(413, `Attachment exceeds ${limitMB}MB limit`);
+        }
+
+        await this.store.ensureDraftTempDir();
+
+        const tempId = crypto.randomUUID();
+        const writer = this.store.openDraftTempWriter(tempId);
+
+        try {
+            writer.write(content);
+            await writer.end();
+        } catch (e) {
+            await writer.end();
+            await this.store.cleanupDraftTemp(tempId);
+            throw e;
+        }
+
+        const meta = { filename, size: content.byteLength, contentType };
+
+        try {
+            await this.store.writeDraftTempMeta(tempId, meta);
+        } catch (e) {
+            await this.store.cleanupDraftTemp(tempId);
+            throw e;
+        }
+
+        return { tempId, ...meta };
+    }
+
     async getDraftTempFile(tempId: string): Promise<{
         content: Buffer;
         filename: string;
