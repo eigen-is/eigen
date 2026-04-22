@@ -82,7 +82,12 @@ export function FilePreview({
     };
 
     return (
-        <div className="fixed inset-0 z-[100] bg-black/80 flex flex-col animate-in fade-in" onClick={onClose}>
+        <div
+            data-preview-overlay
+            className="fixed inset-0 z-[100] bg-black/80 flex flex-col animate-in fade-in"
+            style={{ pointerEvents: 'auto' }}
+            onClick={onClose}
+        >
             {/* Header */}
             <div
                 className="flex items-center justify-between px-4 py-2 bg-black/40 text-white shrink-0"
