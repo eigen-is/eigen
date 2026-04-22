@@ -1,9 +1,10 @@
 import { useAuth } from '@workspace/lib/auth';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { isFolderType } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Upload } from 'lucide-react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { DriveBrowser } from './drive-browser';
 
 type DriveFilePickerProps = {
@@ -27,28 +28,19 @@ export function DriveFilePicker({
 }: DriveFilePickerProps) {
     const { user } = useAuth();
     const [selected, setSelected] = useState<DrivePath | null>(null);
-    const [multiSelected, setMultiSelected] = useState<Map<string, DrivePath>>(new Map());
+    // In multi-select mode the DriveTable owns modifier-aware selection (shift/ctrl range +
+    // toggle). We mirror its current selection here so the submit button reads what the user
+    // actually sees highlighted.
+    const [multiSelected, setMultiSelected] = useState<DrivePath[]>([]);
 
     const reset = useCallback(() => {
         setSelected(null);
-        setMultiSelected(new Map());
+        setMultiSelected([]);
     }, []);
 
     const handleSelect = useCallback(
         (path: DrivePath) => {
-            if (multiSelect) {
-                setMultiSelected((prev) => {
-                    const next = new Map(prev);
-                    if (next.has(path.id)) {
-                        next.delete(path.id);
-                    } else {
-                        next.set(path.id, path);
-                    }
-                    return next;
-                });
-            } else {
-                setSelected(path);
-            }
+            if (!multiSelect) setSelected(path);
         },
         [multiSelect],
     );
@@ -62,14 +54,14 @@ export function DriveFilePicker({
         [onSelect, onOpenChange, reset],
     );
 
-    const externalSelectedIds = useMemo(() => new Set(multiSelected.keys()), [multiSelected]);
-
     if (!user) return null;
     const ownerId = user.id;
 
     const handleSubmit = () => {
         if (multiSelect) {
-            onSelect([...multiSelected.values()]);
+            const files = multiSelected.filter((p) => !isFolderType(p.type));
+            if (files.length === 0) return;
+            onSelect(files);
             onOpenChange(false);
             reset();
         } else if (selected) {
@@ -82,8 +74,9 @@ export function DriveFilePicker({
         onOpenChange(nextOpen);
     };
 
-    const hasSelection = multiSelect ? multiSelected.size > 0 : !!selected;
-    const submitLabel = multiSelect && multiSelected.size > 0 ? `Select (${multiSelected.size})` : 'Select';
+    const selectedFileCount = multiSelected.filter((p) => !isFolderType(p.type)).length;
+    const hasSelection = multiSelect ? selectedFileCount > 0 : !!selected;
+    const submitLabel = multiSelect && selectedFileCount > 0 ? `Select (${selectedFileCount})` : 'Select';
 
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -101,7 +94,7 @@ export function DriveFilePicker({
                         onSelect={handleSelect}
                         onConfirm={multiSelect ? undefined : handleConfirm}
                         showNewFolder={false}
-                        externalSelectedIds={multiSelect ? externalSelectedIds : undefined}
+                        onSelectionChange={multiSelect ? setMultiSelected : undefined}
                         className="h-full"
                     />
                 </div>

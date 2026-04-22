@@ -1,4 +1,4 @@
-import type { AttachmentReference } from '@workspace/lib/types/chat';
+import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import type { AttachmentMeta } from '@workspace/lib/types/mail';
 import { SimpleAttachmentChip } from '@workspace/ui/components/layout/attachment';
 import { ReferenceAttachmentChip } from '@workspace/ui/components/layout/attachment/reference-attachment-chip';

@@ -2,15 +2,6 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Mount } from '../mount';
 import { getScreenPreview } from '../preview/preview-cache';
 
-export function escapeHtml(text: string): string {
-    return text
-        .replace(/&/g, '&amp;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-}
-
 export async function buildDataUriMap(mount: Mount, mediaByName: Map<string, DrivePath>): Promise<Map<string, string>> {
     const map = new Map<string, string>();
     await Promise.all(

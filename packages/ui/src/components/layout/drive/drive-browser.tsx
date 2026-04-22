@@ -40,6 +40,7 @@ type DriveBrowserProps = {
     createFolderOpen?: boolean;
     onCreateFolderOpenChange?: (open: boolean) => void;
     externalSelectedIds?: Set<string>;
+    onSelectionChange?: (items: DrivePath[]) => void;
     className?: string;
 };
 
@@ -59,6 +60,7 @@ export function DriveBrowser({
     createFolderOpen: controlledCreateFolderOpen,
     onCreateFolderOpenChange,
     externalSelectedIds,
+    onSelectionChange,
     className,
 }: DriveBrowserProps) {
     const [activeMountId, setActiveMountId] = useState(defaultMountId);
@@ -77,6 +79,27 @@ export function DriveBrowser({
             }
         }
     }, [defaultFolderId]);
+
+    // When the parent swaps ownerId/defaultMountId (e.g. the picker's auth loaded after
+    // first render, or the user's settings changed) mirror it into local state so the
+    // mount list reflects the new default instead of the stale initial prop.
+    const prevOwnerIdRef = useRef(ownerId);
+    useEffect(() => {
+        if (ownerId !== prevOwnerIdRef.current) {
+            prevOwnerIdRef.current = ownerId;
+            setActiveOwnerId(ownerId);
+            setCurrentFolderId(null);
+        }
+    }, [ownerId]);
+
+    const prevDefaultMountIdRef = useRef(defaultMountId);
+    useEffect(() => {
+        if (defaultMountId !== prevDefaultMountIdRef.current) {
+            prevDefaultMountIdRef.current = defaultMountId;
+            setActiveMountId(defaultMountId);
+            setCurrentFolderId(null);
+        }
+    }, [defaultMountId]);
 
     const { data: rootFolder } = useRootFolder(activeOwnerId, activeMountId);
     const mountLabel = useMountLabel(activeOwnerId, activeMountId);
@@ -201,6 +224,7 @@ export function DriveBrowser({
                 hideShareClick
                 hideHeader={hideHeader}
                 externalSelectedIds={externalSelectedIds}
+                onSelectionChange={onSelectionChange}
             />
         </div>
     );

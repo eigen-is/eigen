@@ -1,8 +1,10 @@
-import type { Email, EmailDraft, EmailSummary, NewDraft } from '@workspace/lib/types/mail';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DraftAttachmentUpload, Email, EmailDraft, EmailSummary, NewDraft } from '@workspace/lib/types/mail';
 import type { User } from 'better-auth/types';
 import { processInboundImip } from '../calendar/imip';
 import { getMailUploadMaxSize } from '../config/enforcement';
 import { ApiError } from '../core/errors';
+import { getSharedDrive } from '../drive';
 import { getHome } from '../home';
 import { getUserByEmail } from '../user/';
 import { simpleParser } from './mail-parser';
@@ -126,23 +128,25 @@ export async function uploadDraftAttachment(user: User, request: Request) {
     return await mailClient.uploadDraftAttachment(request, maxSize);
 }
 
-export async function attachFromDrive(user: User, sourceOwnerId: string, sourceMountId: string, sourcePathId: string) {
+export async function attachFromDrive(
+    user: User,
+    sourceOwnerId: string,
+    sourceMountId: string,
+    sourcePathId: string,
+): Promise<DraftAttachmentUpload> {
     const maxSize = await getMailUploadMaxSize(user.id);
     const mailClient = await getMailClient(user);
 
-    // Dynamic import to avoid circular dependency (mail.ts doesn't normally import drive)
-    const { getSharedDrive } = await import('../drive');
     const drive = await getSharedDrive(sourceOwnerId, user);
+    const sourcePath = await drive.getPath(sourceMountId, sourcePathId);
+    if (!sourcePath) throw new ApiError(404, 'Source file not found');
 
     const sourceFile = await drive.downloadFile(sourceMountId, sourcePathId);
-    if (!sourceFile) throw new ApiError(404, 'Source file not found');
+    if (!sourceFile) throw new ApiError(404, 'Source file missing on disk');
     const buffer = Buffer.from(await sourceFile.arrayBuffer());
 
-    const sourcePath = await drive.getPath(sourceMountId, sourcePathId);
-    const filename = sourcePath?.details?.originalName || sourcePath?.name || 'attachment';
-    const contentType = sourcePath?.mimeType || 'application/octet-stream';
-
-    return await mailClient.stageDriveAttachment(buffer, filename, contentType, maxSize);
+    const filename = sourcePath.details?.originalName || sourcePath.name;
+    return await mailClient.stageDriveAttachment(buffer, filename, sourcePath.mimeType, maxSize);
 }
 
 export async function messageSend(user: User, mail: NewDraft | EmailDraft) {
@@ -172,17 +176,18 @@ export async function saveAttachmentsToDrive(
     targetOwnerId: string,
     targetMountId: string,
     targetParentId: string,
-) {
-    const mail = await getMailClient(user);
-    const parsed = await mail.messageGetParsed(messageId);
+): Promise<DrivePath[]> {
+    if (indexes.length === 0) throw new ApiError(400, 'No attachments selected');
+    if (new Set(indexes).size !== indexes.length) throw new ApiError(400, 'Duplicate attachment indexes');
+    if (indexes.some((i) => !Number.isInteger(i) || i < 0)) throw new ApiError(400, 'Invalid attachment index');
 
-    const { getSharedDrive } = await import('../drive');
+    const mail = await getMailClient(user);
     const drive = await getSharedDrive(targetOwnerId, user);
 
-    const results = [];
+    const results: DrivePath[] = [];
+    // Indexes refer to positions in the raw parsed EML attachment list (including calendar parts).
     for (const index of indexes) {
-        const att = parsed?.attachments[index];
-        if (!att) throw new ApiError(404, `Attachment at index ${index} not found`);
+        const att = await mail.messageGetAttachment(messageId, index);
         const filename = att.filename || `attachment-${index}`;
         if (!(att.content instanceof Uint8Array)) throw new ApiError(400, `Attachment ${index} has no content`);
         const content = Buffer.isBuffer(att.content) ? att.content : Buffer.from(att.content);

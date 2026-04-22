@@ -1,16 +1,6 @@
-import type { DrivePathType } from './drive';
+import type { AttachmentReference } from './drive-reference';
 
 export type ChatMessageType = 'message' | 'emote' | 'whisper' | 'system';
-
-export type AttachmentReference = {
-    type: 'reference';
-    ownerId: string;
-    mountId: string;
-    id: string;
-    name: string;
-    driveType: DrivePathType;
-    mimeType: string;
-};
 
 export type ChatAttachment = string | AttachmentReference;
 

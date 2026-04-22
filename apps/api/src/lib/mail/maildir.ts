@@ -1,4 +1,5 @@
 import { MaxFileSizeExceededError, parseMultipartRequest } from '@mjackson/multipart-parser';
+import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import type {
     AddressObject,
     DraftAttachmentUpload,
@@ -34,8 +35,12 @@ type DraftMeta = {
     cc?: AddressObject;
     bcc?: AddressObject;
     text: string;
+    // "Clean" body as typed by the user — without the reference-card HTML that the EML
+    // on disk has baked in. Overlaid on messageGet so the compose view shows what the
+    // user typed, not the rendered card block at the bottom.
     html: string;
     attachments: Array<{ filename: string; contentType: string; size: number }>;
+    driveReferences?: AttachmentReference[];
     lastFullSaveAt?: number;
 };
 
@@ -44,6 +49,18 @@ const FULL_SAVE_INTERVAL_MS = 5 * 60 * 1000;
 function canonicalMailbox(name: string): string {
     if (name === '' || name.toLowerCase() === 'inbox') return '';
     return STANDARD_MAILBOXES.find((m) => m.toLowerCase() === name.toLowerCase()) ?? name;
+}
+
+function appendReferenceLinks(html: string, refs: AttachmentReference[]): string {
+    const refHtml = renderReferenceLinksHtml(refs);
+    if (!refHtml) return html;
+    if (!html) return refHtml;
+    const replaced = html.replace(/<\/body>/i, `${refHtml}</body>`);
+    return replaced !== html ? replaced : html + refHtml;
+}
+
+function extractRefs(email: NewDraft | EmailDraft): AttachmentReference[] | undefined {
+    return 'driveReferences' in email ? email.driveReferences : undefined;
 }
 
 export default class Maildir {
@@ -151,6 +168,7 @@ export default class Maildir {
                     if (meta.to) result.to = meta.to;
                     if (meta.cc) result.cc = meta.cc;
                     if (meta.bcc) result.bcc = meta.bcc;
+                    result.driveReferences = meta.driveReferences ?? [];
                 }
             }
 
@@ -176,12 +194,6 @@ export default class Maildir {
         }
 
         return parsed.attachments[index];
-    }
-
-    async messageGetParsed(messageId: string): Promise<Email | null> {
-        const email = this.db.getEmail(messageId);
-        if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
-        return this.readAndParse(messageId, email.mailbox, email.filename);
     }
 
     async messageDelete(messageId: string): Promise<void> {
@@ -296,6 +308,7 @@ export default class Maildir {
         prevMeta: DraftMeta,
         dbRecord: EmailSummary,
     ): Promise<EmailDraft> {
+        const driveReferences = extractRefs(email) ?? prevMeta.driveReferences;
         const meta: DraftMeta = {
             subject: email.subject || '',
             to: email.to,
@@ -304,6 +317,7 @@ export default class Maildir {
             text: email.text || '',
             html: email.html || '',
             attachments: prevMeta.attachments,
+            driveReferences,
             lastFullSaveAt: prevMeta.lastFullSaveAt,
         };
         await this.store.writeDraftMeta(existingId, meta);
@@ -348,6 +362,7 @@ export default class Maildir {
             messageId: 'messageId' in email ? email.messageId : undefined,
             inReplyTo: 'inReplyTo' in email ? email.inReplyTo : undefined,
             references: 'references' in email ? email.references : undefined,
+            driveReferences: driveReferences ?? [],
         } as EmailDraft;
     }
 
@@ -357,6 +372,9 @@ export default class Maildir {
         options: { tempAttachmentIds?: string[]; keepAttachmentIndexes?: number[] },
     ): Promise<EmailDraft> {
         const user = this.home.user;
+
+        // Caller-supplied refs win; otherwise carry forward whatever was last persisted.
+        let driveReferences = extractRefs(email);
 
         // When a draft-meta sidecar exists, prefer its header/body values (they may be newer
         // than the stale EML on disk from a previous fast-path save).
@@ -372,6 +390,7 @@ export default class Maildir {
                     cc: email.cc ?? meta.cc,
                     bcc: email.bcc ?? meta.bcc,
                 };
+                driveReferences = driveReferences ?? meta.driveReferences;
             }
         }
 
@@ -418,6 +437,11 @@ export default class Maildir {
         };
 
         const newId = existingId ?? createUniqueMessageId();
+        const cleanHtml = email.html || '';
+        // Bake ref links into the EML body so both the Sent copy and the outbound SMTP
+        // message carry them. DraftMeta stores the *clean* html so the compose view shows
+        // what the user typed, not the rendered card block.
+        const bakedHtml = driveReferences?.length ? appendReferenceLinks(cleanHtml, driveReferences) : cleanHtml;
         const emlContent = await createEmlContent({
             id: newId,
             subject: email.subject || '',
@@ -426,7 +450,7 @@ export default class Maildir {
             cc: email.cc,
             bcc: email.bcc,
             text: email.text || '',
-            html: email.html || '',
+            html: bakedHtml,
             date: new Date(),
             attachments: allAttachments.length ? allAttachments : undefined,
         });
@@ -463,17 +487,22 @@ export default class Maildir {
             cc: email.cc,
             bcc: email.bcc,
             text: email.text || '',
-            html: email.html || '',
+            html: cleanHtml,
             attachments: visibleAttachments.map((a) => ({
                 filename: a.filename!,
                 contentType: a.contentType,
                 size: a.size,
             })),
+            driveReferences,
             lastFullSaveAt: Date.now(),
         } satisfies DraftMeta);
 
         this.emit(SSEventType.MAIL_DRAFT_UPDATED, { messageId: uniqueId, mailbox: 'Drafts' });
 
+        // Overlay the clean html so the client's compose view doesn't re-render the
+        // baked card block that's in the parsed EML.
+        parsed.html = cleanHtml;
+        (parsed as EmailDraft).driveReferences = driveReferences ?? [];
         return parsed as EmailDraft;
     }
 
@@ -578,20 +607,13 @@ export default class Maildir {
     }
 
     async messageSend(mailToSend: NewDraft | EmailDraft): Promise<EmailDraft> {
-        // Always do a full EML rebuild so attachment content is available for SMTP.
+        // Full EML rebuild so attachment content is available for SMTP. draftFullSave bakes
+        // ref cards into the Sent-folder EML and returns `mail` with the *clean* html
+        // (for the frontend). Re-bake here so the outbound SMTP body matches the Sent copy.
         const mail = await this.draftFullSave(mailToSend, (mailToSend as EmailDraft).id?.trim(), {});
         const message = draftToOutboundMail(mail, this.home.user.email);
-
-        const refs = 'driveReferences' in mailToSend ? (mailToSend as NewDraft).driveReferences : undefined;
-        if (refs?.length) {
-            const baseUrl = process.env['VITE_APP_DRIVE_URL'] || 'http://localhost:3004';
-            const refHtml = renderReferenceLinksHtml(refs, `${baseUrl}/fs`);
-            if (message.html) {
-                const replaced = message.html.replace(/<\/body>/i, `${refHtml}</body>`);
-                message.html = replaced !== message.html ? replaced : message.html + refHtml;
-            } else {
-                message.html = refHtml;
-            }
+        if (mail.driveReferences?.length) {
+            message.html = appendReferenceLinks(message.html || '', mail.driveReferences);
         }
 
         if (!message.subject.trim() && !message.text.trim() && !message.html) {
@@ -767,6 +789,7 @@ export default class Maildir {
                         to: meta.to,
                         cc: meta.cc,
                         bcc: meta.bcc,
+                        driveReferences: meta.driveReferences,
                     },
                     id,
                     {},

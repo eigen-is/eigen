@@ -5,10 +5,11 @@ import DOMPurify from 'isomorphic-dompurify';
 import { common, createLowlight } from 'lowlight';
 // CSS embedded as string at build time by Bun's bundler — no runtime file resolution needed
 import eigenProseCSSRaw from '../../../../../../packages/ui/src/styles/eigen-prose.css' with { type: 'text' };
+import { escapeHtml } from '../../core';
 import type { Mount } from '../../mount';
 import type { ExportResult } from '../export-document';
 import { getFontCSS } from '../fonts';
-import { buildDataUriMap, escapeHtml } from '../media';
+import { buildDataUriMap } from '../media';
 import { loadEigendocContent } from './content';
 import { renderCodeBlockNode, renderFigureNode, renderTaskItemNode, stripEigendocExtension } from './render';
 

@@ -22,6 +22,11 @@ export function DriveBreadcrumb({ paths, mountLabel, onNavigate, className, item
     return (
         <Breadcrumb className={cn('overflow-hidden', className)}>
             <BreadcrumbList>
+                {paths.length === 0 && (
+                    <BreadcrumbItem>
+                        <BreadcrumbPage className={itemClassName}>{mountLabel}</BreadcrumbPage>
+                    </BreadcrumbItem>
+                )}
                 {paths.map((path, index) => {
                     const label = index === 0 ? mountLabel : path.name;
                     return (

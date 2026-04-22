@@ -1,6 +1,6 @@
 import { getDriveItemUrl } from '@workspace/lib/api';
-import type { AttachmentReference } from '@workspace/lib/types/chat';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
+import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import { ExternalLink, X } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { getFileIcon } from '../drive/file-icon-helper';
