@@ -301,6 +301,27 @@ export function useCopyFiles(ownerId: string, mountId: string = DEFAULT_MOUNT_ID
     });
 }
 
+export function useCopyToMediaFolder(ownerId: string, mountId: string) {
+    return useMutation({
+        mutationFn: async ({ paths, mediaFolderId }: { paths: DrivePath[]; mediaFolderId: string }) => {
+            const results: DrivePath[] = [];
+            for (const path of paths) {
+                const response = await driveApi({ ownerId: path.ownerId })({ mountId: path.mountId })
+                    .file({ pathId: path.id })
+                    .copy.post({
+                        targetOwnerId: ownerId,
+                        targetMountId: mountId,
+                        targetParentId: mediaFolderId,
+                    });
+                if (response.error) throw new AppError(response);
+                results.push(response.data);
+            }
+            return results;
+        },
+        onError: onMutationError,
+    });
+}
+
 export function useRenamePath(
     ownerId: string,
     mountId: string = DEFAULT_MOUNT_ID,
