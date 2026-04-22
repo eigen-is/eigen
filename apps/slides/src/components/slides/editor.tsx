@@ -10,13 +10,14 @@ import {
 } from '@workspace/lib/clipboard';
 import { restoreYjsDoc } from '@workspace/lib/collab';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants/colors';
-import { MediaResolverProvider, useMediaResolver, useUploadFile } from '@workspace/lib/drive';
+import { MediaResolverProvider, useCopyToMediaFolder, useMediaResolver, useUploadFile } from '@workspace/lib/drive';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { CommentDialog, CommentPanel, CreateCommentDialog, NoteCardContextMenu } from '@workspace/ui';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
+import { DriveFilePicker } from '@workspace/ui/components/layout/drive/drive-file-picker';
 import { Column, ColumnLayout, EmptyState, LoadingState } from '@workspace/ui/index';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useActiveComments } from './hooks/use-active-comments';
@@ -151,6 +152,7 @@ function SlideEditorInner({
     const [editingObjectId, setEditingObjectId] = useState<string | null>(null);
     const [isPresenting, setIsPresenting] = useState(false);
     const imageInputRef = useRef<HTMLInputElement>(null);
+    const [imagePickerOpen, setImagePickerOpen] = useState(false);
 
     const auth = useAuth();
     const [commentPanelOpen, setCommentPanelOpen] = useState(false);
@@ -172,6 +174,7 @@ function SlideEditorInner({
     const viewCommentEntry = viewCommentChatName ? allComments.find((c) => c.chatName === viewCommentChatName) : null;
 
     const uploadFile = useUploadFile(ownerId, path.mountId);
+    const copyToMediaFolder = useCopyToMediaFolder(ownerId, path.mountId);
 
     const hasSelection = selectedObjectIds.length > 0;
     const isEditing = editingObjectId !== null;
@@ -299,6 +302,20 @@ function SlideEditorInner({
             e.target.value = '';
         },
         [handleImageFile],
+    );
+
+    const handleImagePickFromDrive = useCallback(
+        async (paths: DrivePath[]) => {
+            if (!activeSlideId || !mediaFolderId) return;
+            const results = await copyToMediaFolder.mutateAsync({ paths, mediaFolderId });
+            for (const result of results) {
+                addObject(activeSlideId, {
+                    ...DEFAULT_IMAGE_OBJECT,
+                    mediaName: result.name,
+                } as Omit<SlideObject, 'id' | 'slideId'>);
+            }
+        },
+        [activeSlideId, mediaFolderId, copyToMediaFolder, addObject],
     );
 
     useEffect(() => {
@@ -625,7 +642,7 @@ function SlideEditorInner({
                         onAccessDialogOpen={onAccessDialogOpen}
                         onRestore={handleRestore}
                         onAddText={handleAddText}
-                        onAddImage={() => imageInputRef.current?.click()}
+                        onAddImage={() => setImagePickerOpen(true)}
                         onAddSlide={() => addSlide()}
                         onPresent={handlePresent}
                         onToggleCommentPanel={() => setCommentPanelOpen((v) => !v)}
@@ -742,6 +759,22 @@ function SlideEditorInner({
                         ))}
                 </div>
 
+                {mediaFolderId && (
+                    <DriveFilePicker
+                        open={imagePickerOpen}
+                        onOpenChange={setImagePickerOpen}
+                        title="Add image"
+                        mimeFilter={['image/*']}
+                        onSelect={(paths) => {
+                            handleImagePickFromDrive(paths);
+                            setImagePickerOpen(false);
+                        }}
+                        onUploadFromDevice={() => {
+                            setImagePickerOpen(false);
+                            setTimeout(() => imageInputRef.current?.click(), 0);
+                        }}
+                    />
+                )}
                 <input
                     ref={imageInputRef}
                     type="file"
