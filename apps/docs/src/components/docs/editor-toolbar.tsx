@@ -2,7 +2,7 @@ import { formatForDisplay } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
 import { yDocToProsemirrorJSON } from '@tiptap/y-tiptap';
 import { EIGEN_FONTS, getFontFamily } from '@workspace/lib/constants/fonts';
-import { useExportDocument, useImportDocument } from '@workspace/lib/drive';
+import { useExportDocument, useImportDocument, useImportFromDrive } from '@workspace/lib/drive';
 import { useMediaQuery } from '@workspace/lib/media';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { CountBadge, Toolbar, TooltipButton } from '@workspace/ui';
@@ -86,6 +86,7 @@ type EditorToolbarProps = {
     onImagePickFromDrive?: (paths: DrivePath[]) => void;
 };
 
+const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 const ToolbarSeparator = () => <Separator orientation="vertical" className="h-6 mx-1" />;
 
 export const EditorToolbar = ({
@@ -104,11 +105,14 @@ export const EditorToolbar = ({
     const [linkUrl, setLinkUrl] = useState('');
     const [linkDialogOpen, setLinkDialogOpen] = useState(false);
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
+    const [importPickerOpen, setImportPickerOpen] = useState(false);
     const [textColorOpen, setTextColorOpen] = useState(false);
     const [highlightColorOpen, setHighlightColorOpen] = useState(false);
     const { exportDocument, isExporting } = useExportDocument();
     const importMutation = useImportDocument(path.ownerId, path.mountId);
+    const importFromDriveMutation = useImportFromDrive(path.ownerId, path.mountId);
     const imageInputRef = useRef<HTMLInputElement>(null);
+    const importFileInputRef = useRef<HTMLInputElement>(null);
     const isMobile = useMediaQuery('(max-width: 1200px)');
 
     const handleRestore = (state: Uint8Array) => {
@@ -149,15 +153,28 @@ export const EditorToolbar = ({
 
     const handleExport = (format: string) => exportDocument(path.ownerId, path.mountId, path.id, format);
 
-    const handleImport = () => {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = '.docx';
-        input.onchange = () => {
-            const file = input.files?.[0];
-            if (file) importMutation.mutate({ pathId: path.id, file });
-        };
-        input.click();
+    const handleImport = () => setImportPickerOpen(true);
+
+    const handleImportFromDrive = (paths: DrivePath[]) => {
+        const source = paths[0];
+        if (!source) return;
+        importFromDriveMutation.mutate({
+            pathId: path.id,
+            sourceOwnerId: source.ownerId,
+            sourceMountId: source.mountId,
+            sourcePathId: source.id,
+        });
+    };
+
+    const handleImportFromDevice = () => {
+        setImportPickerOpen(false);
+        setTimeout(() => importFileInputRef.current?.click(), 0);
+    };
+
+    const handleImportFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) importMutation.mutate({ pathId: path.id, file });
+        e.target.value = '';
     };
 
     const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -776,6 +793,22 @@ export const EditorToolbar = ({
             </Dialog>
 
             <ExportProgressDialog open={isExporting} />
+
+            <DriveFilePicker
+                open={importPickerOpen}
+                onOpenChange={setImportPickerOpen}
+                title="Import docx file"
+                mimeFilter={[DOCX_MIME]}
+                onSelect={handleImportFromDrive}
+                onUploadFromDevice={handleImportFromDevice}
+            />
+            <input
+                ref={importFileInputRef}
+                type="file"
+                accept=".docx"
+                className="hidden"
+                onChange={handleImportFileChange}
+            />
         </Toolbar>
     );
 };

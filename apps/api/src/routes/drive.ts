@@ -233,6 +233,32 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
         { auth: true, parse: 'none' },
     )
+    .post(
+        '/drive/:ownerId/:mountId/file/:pathId/import-from-drive',
+        async ({ params, body, user }) => {
+            const drive = await getSharedDrive(params.ownerId, user);
+            const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
+            if (!(await drive.canWrite(params.mountId, params.pathId, user))) {
+                throw new ApiError(403, 'No write permission');
+            }
+            const sourceDrive = await getSharedDrive(body.sourceOwnerId, user);
+            const sourceFile = await sourceDrive.downloadFile(body.sourceMountId, body.sourcePathId);
+            if (!sourceFile) throw new ApiError(404, 'Source file not found');
+            const maxSize = await getUploadMaxSize(params.ownerId, user.id, params.mountId);
+            const buffer = Buffer.from(await sourceFile.arrayBuffer());
+            if (buffer.byteLength > maxSize) throw new ApiError(413, 'Source file too large');
+            await importIntoDocument(drive, mount, path, buffer);
+            return { success: true };
+        },
+        {
+            body: t.Object({
+                sourceOwnerId: t.String(),
+                sourceMountId: t.String(),
+                sourcePathId: t.String(),
+            }),
+            auth: true,
+        },
+    )
     .get(
         '/drive/:ownerId/:mountId/file/:pathId/embed/:fileName',
         async ({ params, user }) => {

@@ -111,6 +111,8 @@ export const getDriveExportUrl = (ownerId: string, mountId: string, pathId: stri
     `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/export/${format}`;
 export const getDriveImportUrl = (ownerId: string, mountId: string, pathId: string) =>
     `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/import`;
+export const getDriveImportFromDriveUrl = (ownerId: string, mountId: string, pathId: string) =>
+    `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/import-from-drive`;
 
 export const getDriveEmbedUrl = (ownerId: string, mountId: string, pathId: string, fileName: string) =>
     `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/embed/${fileName}`;
