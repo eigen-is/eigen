@@ -202,6 +202,7 @@ export function FilePreview({
                 <DriveLocationPicker
                     open={locationPickerOpen}
                     onOpenChange={setLocationPickerOpen}
+                    abovePreview
                     mode="folder"
                     title={locationPickerMode === 'all' ? 'Save all to Drive' : 'Save to Drive'}
                     confirmLabel="Save here"
