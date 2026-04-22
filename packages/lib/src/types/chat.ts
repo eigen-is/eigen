@@ -1,4 +1,22 @@
+import type { DrivePathType } from './drive';
+
 export type ChatMessageType = 'message' | 'emote' | 'whisper' | 'system';
+
+export type AttachmentReference = {
+    type: 'reference';
+    ownerId: string;
+    mountId: string;
+    id: string;
+    name: string;
+    driveType: DrivePathType;
+    mimeType: string;
+};
+
+export type ChatAttachment = string | AttachmentReference;
+
+export function isAttachmentReference(a: ChatAttachment): a is AttachmentReference {
+    return typeof a === 'object' && a.type === 'reference';
+}
 
 export type ChatMessage = {
     id: string;
@@ -6,7 +24,7 @@ export type ChatMessage = {
     authorEmail: string;
     type: ChatMessageType;
     content: string;
-    attachments: string[] | null;
+    attachments: ChatAttachment[] | null;
     whisperTo: string | null;
     replyTo: string | null;
     editedAt: Date | null;
