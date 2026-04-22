@@ -105,8 +105,6 @@ export const getDriveFileUploadUrl = (ownerId: string, mountId: string, pathId: 
     `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}`;
 export const getMailDraftAttachmentUploadUrl = (ownerId: string) =>
     `${API_HOST}/mail/${ownerId}/message/draft/attachment`;
-export const getMailDraftAttachmentFromDriveUrl = (ownerId: string) =>
-    `${API_HOST}/mail/${ownerId}/message/draft/attachment-from-drive`;
 export const getDriveDownloadUrl = (ownerId: string, mountId: string, pathId: string) =>
     `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/download`;
 export const getDriveExportUrl = (ownerId: string, mountId: string, pathId: string, format: string) =>
@@ -130,8 +128,6 @@ export const getMailMessageDownloadUrl = (ownerId: string, messageId: string) =>
     `${API_HOST}/mail/${ownerId}/message/${messageId}/download`;
 export const getMailAttachmentUrl = (ownerId: string, messageId: string, attachmentIndex: number, fileName: string) =>
     `${API_HOST}/mail/${ownerId}/message/${messageId}/attachment/${attachmentIndex}/${encodeURIComponent(fileName)}`;
-export const getMailSaveAttachmentsToDriveUrl = (ownerId: string, messageId: string) =>
-    `${API_HOST}/mail/${ownerId}/message/${messageId}/attachments/save-to-drive`;
 export const getCollabAccessUrl = (ownerId: string, mountId: string, pathId: string) =>
     `${API_HOST}/collab/${ownerId}/${mountId}/${pathId}/access`;
 export const getCollabRevisionUrl = (ownerId: string, mountId: string, pathId: string, revisionId: number) =>

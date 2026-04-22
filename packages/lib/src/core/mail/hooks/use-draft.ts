@@ -1,15 +1,10 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-    getDriveAppUrl,
-    getMailDraftAttachmentFromDriveUrl,
-    getMailDraftAttachmentUploadUrl,
-    getMailSaveAttachmentsToDriveUrl,
-    mailApi,
-} from '@workspace/lib/api';
+import { getDriveAppUrl, getMailDraftAttachmentUploadUrl, mailApi } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import type { DraftAttachmentUpload, DraftInput, EmailDraft, NewDraft } from '@workspace/lib/types/mail';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
+import { invalidateItemCreated } from '../../drive/hooks/use-drive';
 import { invalidateHomeSize } from '../../home';
 import { emailKeys } from './use-emails';
 import { invalidateMailboxes } from './use-mailboxes';
@@ -123,15 +118,9 @@ export function useAttachFromDrive() {
 
     return useMutation({
         mutationFn: async (source: { sourceOwnerId: string; sourceMountId: string; sourcePathId: string }) => {
-            const res = await fetch(getMailDraftAttachmentFromDriveUrl(ownerId), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(source),
-                credentials: 'include',
-            });
-            if (!res.ok)
-                throw new AppError({ status: res.status, error: { status: res.status, value: await res.text() } });
-            return (await res.json()) as DraftAttachmentUpload;
+            const response = await mailApi({ ownerId }).message.draft['attachment-from-drive'].post(source);
+            if (response.error) throw new AppError(response);
+            return response.data;
         },
         onError: onMutationError,
     });
@@ -140,6 +129,7 @@ export function useAttachFromDrive() {
 export function useSaveMailAttachmentsToDrive() {
     const { user } = useAuth();
     const ownerId = user?.id || '';
+    const queryClient = useQueryClient();
 
     return useMutation({
         mutationFn: async ({
@@ -155,17 +145,22 @@ export function useSaveMailAttachmentsToDrive() {
             targetMountId: string;
             targetParentId: string;
         }) => {
-            const res = await fetch(getMailSaveAttachmentsToDriveUrl(ownerId, messageId), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ indexes, targetOwnerId, targetMountId, targetParentId }),
-                credentials: 'include',
+            const response = await mailApi({ ownerId }).message({ id: messageId }).attachments['save-to-drive'].post({
+                indexes,
+                targetOwnerId,
+                targetMountId,
+                targetParentId,
             });
-            if (!res.ok)
-                throw new AppError({ status: res.status, error: { status: res.status, value: await res.text() } });
-            return res.json();
+            if (response.error) throw new AppError(response);
+            return response.data;
         },
         onSuccess: (_data, variables) => {
+            invalidateItemCreated(
+                queryClient,
+                variables.targetOwnerId,
+                variables.targetMountId,
+                variables.targetParentId,
+            );
             const count = variables.indexes.length;
             toast.success(count === 1 ? 'Attachment saved to Drive' : `${count} attachments saved to Drive`, {
                 action: {

@@ -1,5 +1,5 @@
 import { useAuth } from '@workspace/lib/auth';
-import type { AttachmentReference } from '@workspace/lib/types/chat';
+import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import type { AddressObject, Attachment, AttachmentMeta, EmailDraft, NewDraft } from '@workspace/lib/types/mail';
 import { useCallback, useRef, useState } from 'react';
 
@@ -50,7 +50,7 @@ function initState(email: EmailDraft | null, prefillTo?: string): DraftState {
                 contentType: a.contentType,
                 index: i,
             })),
-            driveReferences: [],
+            driveReferences: email.driveReferences ?? [],
             inReplyTo: email.inReplyTo,
             references: email.references,
             messageId: email.messageId,
@@ -97,7 +97,11 @@ export function useDraftState(email: EmailDraft | null, prefillTo?: string) {
     }, []);
 
     const addDriveReference = useCallback((ref: AttachmentReference) => {
-        setState((prev) => ({ ...prev, driveReferences: [...prev.driveReferences, ref] }));
+        setState((prev) =>
+            prev.driveReferences.some((r) => r.id === ref.id)
+                ? prev
+                : { ...prev, driveReferences: [...prev.driveReferences, ref] },
+        );
     }, []);
 
     const removeDriveReference = useCallback((id: string) => {
@@ -148,14 +152,18 @@ export function useDraftState(email: EmailDraft | null, prefillTo?: string) {
             inReplyTo: s.inReplyTo,
             references: s.references,
             messageId: s.messageId,
-            driveReferences: s.driveReferences.length > 0 ? s.driveReferences : undefined,
+            driveReferences: s.driveReferences,
         };
     }, []);
 
-    // Stable serialization of the attachment list for dirty tracking. Covers adds, removes, and
-    // the transition from tempId → indexed (after a successful save consumes the temp file).
+    // Stable serialization of the attachment list for dirty tracking. Covers adds, removes,
+    // drive-reference changes, and the transition from tempId → indexed (after a successful
+    // save consumes the temp file).
     const attachmentsFingerprint = useCallback(() => {
-        return stateRef.current.attachments.map((a) => `${a.key}:${a.tempId ?? ''}:${a.index ?? ''}`).join('|');
+        const s = stateRef.current;
+        const files = s.attachments.map((a) => `${a.key}:${a.tempId ?? ''}:${a.index ?? ''}`).join('|');
+        const refs = s.driveReferences.map((r) => r.id).join(',');
+        return `${files}#${refs}`;
     }, []);
 
     const isSendable = !!state.to.trim();

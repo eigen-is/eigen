@@ -32,7 +32,7 @@ import {
     UserRoundPlus,
 } from 'lucide-react';
 import type React from 'react';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useKeyboardListNavigation } from '../../../hooks/use-keyboard-list-navigation';
 import { useListDrag } from '../../../hooks/use-list-drag';
 import { useListSelection } from '../../../hooks/use-list-selection';
@@ -74,6 +74,9 @@ export type DriveTableProps = {
     hideShareClick?: boolean;
     hideHeader?: boolean;
     externalSelectedIds?: Set<string>;
+    // Fires whenever the internal shift/ctrl-aware selection changes — used by file pickers
+    // in multi-select mode to mirror the selection without reimplementing modifier handling.
+    onSelectionChange?: (items: DrivePath[]) => void;
 };
 
 export function DriveTable({
@@ -103,6 +106,7 @@ export function DriveTable({
     hideShareClick = false,
     hideHeader = false,
     externalSelectedIds,
+    onSelectionChange,
 }: DriveTableProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
@@ -157,6 +161,10 @@ export function DriveTable({
     );
 
     const selection = useListSelection({ items: allItems, getId: (item) => item.id });
+
+    useEffect(() => {
+        onSelectionChange?.(selection.selectedItems);
+    }, [selection.selectedItems, onSelectionChange]);
 
     const { selectedIndex, handleKeyDown } = useKeyboardListNavigation<DrivePath>({
         items: allItems,

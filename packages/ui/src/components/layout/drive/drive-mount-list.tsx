@@ -27,14 +27,17 @@ export function DriveMountList({ activeMountId, activeOwnerId, onMountSelect }: 
 
     const teamsWithMounts = myTeams?.filter((t) => t.mounts.length > 0) ?? [];
 
+    const activeClass = 'bg-muted text-primary font-medium';
+    const baseClass = 'flex items-center gap-2 rounded-md px-2 py-1.5 text-sm w-full text-left hover:bg-muted';
+
     return (
         <div className="flex flex-col gap-1">
             <div className="px-2 py-1 text-xs font-medium text-muted-foreground">My Drive</div>
             <button
                 type="button"
                 className={cn(
-                    'flex items-center gap-2 rounded-md px-2 py-1.5 text-sm w-full text-left',
-                    activeOwnerId === myDriveOwnerId && activeMountId === 'default' && 'bg-accent font-medium',
+                    baseClass,
+                    activeOwnerId === myDriveOwnerId && activeMountId === 'default' && activeClass,
                 )}
                 onClick={() => onMountSelect(myDriveOwnerId, 'default')}
             >
@@ -51,10 +54,8 @@ export function DriveMountList({ activeMountId, activeOwnerId, onMountSelect }: 
                                 key={`${team.id}-${mount.id}`}
                                 type="button"
                                 className={cn(
-                                    'flex items-center gap-2 rounded-md px-2 py-1.5 text-sm w-full text-left',
-                                    activeOwnerId === teamOwnerId(team.id) &&
-                                        activeMountId === mount.id &&
-                                        'bg-accent font-medium',
+                                    baseClass,
+                                    activeOwnerId === teamOwnerId(team.id) && activeMountId === mount.id && activeClass,
                                 )}
                                 onClick={() => onMountSelect(teamOwnerId(team.id), mount.id)}
                             >

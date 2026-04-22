@@ -8,7 +8,7 @@ import {
     type SlideItem,
     type SlideObject,
 } from '@workspace/lib/slides';
-import { escapeHtml } from '../media';
+import { escapeHtml } from '../../core';
 
 export type SizeUnit = (px: number, axis: 'x' | 'y') => string;
 export type ImgSrcResolver = (mediaName: string) => string | null;

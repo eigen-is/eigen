@@ -84,10 +84,12 @@ export function EmailDraft({
     const attachFromDriveMutation = useAttachFromDrive();
     const [filePickerOpen, setFilePickerOpen] = useState(false);
 
-    // Expose file picker trigger to parent (toolbar lives outside this component)
-    if (filePickerTriggerRef) {
-        filePickerTriggerRef.current = () => setFilePickerOpen(true);
-    }
+    // Expose file picker trigger to parent (toolbar lives outside this component).
+    useEffect(() => {
+        if (filePickerTriggerRef) {
+            filePickerTriggerRef.current = () => setFilePickerOpen(true);
+        }
+    }, [filePickerTriggerRef]);
 
     const {
         state,

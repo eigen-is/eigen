@@ -1,4 +1,4 @@
-import { escapeHtml } from '../media';
+import { escapeHtml } from '../../core';
 
 export function stripEigendocExtension(name: string): string {
     return name.replace(/\.eigendoc$/, '');

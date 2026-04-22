@@ -1,5 +1,5 @@
 import type { ImipMethod } from './calendar';
-import type { AttachmentReference } from './chat';
+import type { AttachmentReference } from './drive-reference';
 
 export type StructuredHeader = {
     value: string;
@@ -79,7 +79,12 @@ export type EmailSummary = {
     size: number;
 };
 
-export type Email = ParsedMail & EmailSummary;
+export type Email = ParsedMail &
+    EmailSummary & {
+        // Populated only on drafts (read from the sidecar). Absent on sent/received mail —
+        // for those, references are baked into the HTML body when the draft was finalized.
+        driveReferences?: AttachmentReference[];
+    };
 
 export type MaildirMailbox = {
     path: string;
