@@ -7,9 +7,19 @@ import {
     DRIVE_TYPE_SLIDES,
     DRIVE_TYPE_STICKIES,
     type DrivePath,
+    type DrivePathType,
     isFolderType,
     isInlineEditable,
 } from '../types/drive';
+
+type DriveItemRef = {
+    id: string;
+    ownerId: string;
+    mountId: string;
+    name: string;
+    type: DrivePathType;
+    mimeType: string;
+};
 
 export const API_HOST = import.meta.env.VITE_API_HOST as string;
 
@@ -121,7 +131,7 @@ export const getCollabAccessUrl = (ownerId: string, mountId: string, pathId: str
 export const getCollabRevisionUrl = (ownerId: string, mountId: string, pathId: string, revisionId: number) =>
     `${API_HOST}/collab/${ownerId}/${mountId}/${pathId}/revisions/${revisionId}`;
 
-function getDocumentUrl(path: DrivePath): string | undefined {
+function getDocumentUrl(path: DriveItemRef): string | undefined {
     if (path.type === DRIVE_TYPE_DOC) return getDocUrl(path.ownerId, path.mountId, path.id);
     if (path.type === DRIVE_TYPE_STICKIES) return getStickiesBoardUrl(path.ownerId, path.mountId, path.id);
     if (path.type === DRIVE_TYPE_SHEETS) return getSheetUrl(path.ownerId, path.mountId, path.id);
@@ -144,7 +154,7 @@ export function openDocument(path: DrivePath, newTab: boolean = false) {
     return true;
 }
 
-export function getDriveItemUrl(path: DrivePath): string | undefined {
+export function getDriveItemUrl(path: DriveItemRef): string | undefined {
     const docUrl = getDocumentUrl(path);
     if (docUrl) return docUrl;
     if (isFolderType(path.type)) {

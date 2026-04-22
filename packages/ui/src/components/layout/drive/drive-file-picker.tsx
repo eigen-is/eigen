@@ -29,13 +29,10 @@ export function DriveFilePicker({
     const [selected, setSelected] = useState<DrivePath | null>(null);
     const [multiSelected, setMultiSelected] = useState<Map<string, DrivePath>>(new Map());
 
-    if (!user) return null;
-    const ownerId = user.id;
-
-    const reset = () => {
+    const reset = useCallback(() => {
         setSelected(null);
         setMultiSelected(new Map());
-    };
+    }, []);
 
     const handleSelect = useCallback(
         (path: DrivePath) => {
@@ -62,8 +59,13 @@ export function DriveFilePicker({
             onOpenChange(false);
             reset();
         },
-        [onSelect, onOpenChange],
+        [onSelect, onOpenChange, reset],
     );
+
+    const externalSelectedIds = useMemo(() => new Set(multiSelected.keys()), [multiSelected]);
+
+    if (!user) return null;
+    const ownerId = user.id;
 
     const handleSubmit = () => {
         if (multiSelect) {
@@ -80,9 +82,8 @@ export function DriveFilePicker({
         onOpenChange(nextOpen);
     };
 
-    const externalSelectedIds = useMemo(() => new Set(multiSelected.keys()), [multiSelected]);
     const hasSelection = multiSelect ? multiSelected.size > 0 : !!selected;
-    const submitLabel = multiSelect && multiSelected.size > 1 ? `Select (${multiSelected.size})` : 'Select';
+    const submitLabel = multiSelect && multiSelected.size > 0 ? `Select (${multiSelected.size})` : 'Select';
 
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>

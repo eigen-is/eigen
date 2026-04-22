@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import type { ChatAttachment, ChatMessage, RoomMember } from '../../../types/chat';
 import { isAttachmentReference } from '../../../types/chat';
 import type { DrivePath } from '../../../types/drive';
-import { isContainerType, isFolderType } from '../../../types/drive';
+import { isContainerType } from '../../../types/drive';
 import { validateEmailTarget } from '../../../validation';
 import { driveApi } from '../../api';
 import { useAuth } from '../../auth';
@@ -103,7 +103,7 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
             const filesToCopy: DrivePath[] = [];
 
             for (const path of paths) {
-                if (isContainerType(path.type) || isFolderType(path.type)) {
+                if (isContainerType(path.type)) {
                     refs.push({
                         type: 'reference',
                         ownerId: path.ownerId,
