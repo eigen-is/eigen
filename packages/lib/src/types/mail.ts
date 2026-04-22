@@ -1,4 +1,5 @@
 import type { ImipMethod } from './calendar';
+import type { AttachmentReference } from './chat';
 
 export type StructuredHeader = {
     value: string;
@@ -107,6 +108,7 @@ export type NewDraft = {
     messageId?: string;
     inReplyTo?: string;
     references?: string[] | string;
+    driveReferences?: AttachmentReference[];
 };
 
 export type DraftInput = {

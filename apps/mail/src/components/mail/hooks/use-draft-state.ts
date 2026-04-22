@@ -148,6 +148,7 @@ export function useDraftState(email: EmailDraft | null, prefillTo?: string) {
             inReplyTo: s.inReplyTo,
             references: s.references,
             messageId: s.messageId,
+            driveReferences: s.driveReferences.length > 0 ? s.driveReferences : undefined,
         };
     }, []);
 
