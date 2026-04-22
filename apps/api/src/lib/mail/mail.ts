@@ -126,6 +126,25 @@ export async function uploadDraftAttachment(user: User, request: Request) {
     return await mailClient.uploadDraftAttachment(request, maxSize);
 }
 
+export async function attachFromDrive(user: User, sourceOwnerId: string, sourceMountId: string, sourcePathId: string) {
+    const maxSize = await getMailUploadMaxSize(user.id);
+    const mailClient = await getMailClient(user);
+
+    // Dynamic import to avoid circular dependency (mail.ts doesn't normally import drive)
+    const { getSharedDrive } = await import('../drive');
+    const drive = await getSharedDrive(sourceOwnerId, user);
+
+    const sourceFile = await drive.downloadFile(sourceMountId, sourcePathId);
+    if (!sourceFile) throw new ApiError(404, 'Source file not found');
+    const buffer = Buffer.from(await sourceFile.arrayBuffer());
+
+    const sourcePath = await drive.getPath(sourceMountId, sourcePathId);
+    const filename = sourcePath?.details?.originalName || sourcePath?.name || 'attachment';
+    const contentType = sourcePath?.mimeType || 'application/octet-stream';
+
+    return await mailClient.stageDriveAttachment(buffer, filename, contentType, maxSize);
+}
+
 export async function messageSend(user: User, mail: NewDraft | EmailDraft) {
     const mailClient = await getMailClient(user);
     return await mailClient.messageSend(mail);
