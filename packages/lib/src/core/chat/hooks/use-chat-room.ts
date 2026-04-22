@@ -1,8 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import type { ChatMessage, RoomMember } from '../../../types/chat';
+import type { ChatAttachment, ChatMessage, RoomMember } from '../../../types/chat';
+import { isAttachmentReference } from '../../../types/chat';
 import type { DrivePath } from '../../../types/drive';
+import { isContainerType, isFolderType } from '../../../types/drive';
 import { validateEmailTarget } from '../../../validation';
 import { driveApi } from '../../api';
 import { useAuth } from '../../auth';
@@ -42,7 +44,7 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
 
     const queryClient = useQueryClient();
     const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
-    const [pendingDriveAttachments, setPendingDriveAttachments] = useState<string[]>([]);
+    const [pendingDriveAttachments, setPendingDriveAttachments] = useState<ChatAttachment[]>([]);
     const lastWhisperFromRef = useRef<string | null>(null);
 
     useEffect(() => {
@@ -97,42 +99,73 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
             const mediaFolder = chatContents.find((item) => item.name === 'media');
             if (!mediaFolder) return;
 
-            const results = await Promise.allSettled(
-                paths.map(async (path) => {
-                    const response = await driveApi({ ownerId: path.ownerId })({ mountId: path.mountId })
-                        .file({ pathId: path.id })
-                        .copy.post({
-                            targetOwnerId: ownerId,
-                            targetMountId: mountId,
-                            targetParentId: mediaFolder.id,
-                        });
-                    if (response.error) throw response.error;
-                    return path.name;
-                }),
-            );
-            const names = results
-                .filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled')
-                .map((r) => r.value);
-            if (names.length > 0) {
-                setPendingDriveAttachments((prev) => [...prev, ...names]);
-                invalidateItemCreated(queryClient, ownerId, mountId, mediaFolder.id);
+            const refs: ChatAttachment[] = [];
+            const filesToCopy: DrivePath[] = [];
+
+            for (const path of paths) {
+                if (isContainerType(path.type) || isFolderType(path.type)) {
+                    refs.push({
+                        type: 'reference',
+                        ownerId: path.ownerId,
+                        mountId: path.mountId,
+                        id: path.id,
+                        name: path.name,
+                        driveType: path.type,
+                        mimeType: path.mimeType,
+                    });
+                } else {
+                    filesToCopy.push(path);
+                }
             }
-            if (names.length < paths.length) {
-                toast.error('Some files could not be attached');
+
+            if (refs.length > 0) {
+                setPendingDriveAttachments((prev) => [...prev, ...refs]);
+            }
+
+            if (filesToCopy.length > 0) {
+                const results = await Promise.allSettled(
+                    filesToCopy.map(async (path) => {
+                        const response = await driveApi({ ownerId: path.ownerId })({ mountId: path.mountId })
+                            .file({ pathId: path.id })
+                            .copy.post({
+                                targetOwnerId: ownerId,
+                                targetMountId: mountId,
+                                targetParentId: mediaFolder.id,
+                            });
+                        if (response.error) throw response.error;
+                        return path.name;
+                    }),
+                );
+                const names = results
+                    .filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled')
+                    .map((r) => r.value);
+                if (names.length > 0) {
+                    setPendingDriveAttachments((prev) => [...prev, ...names]);
+                    invalidateItemCreated(queryClient, ownerId, mountId, mediaFolder.id);
+                }
+                if (names.length < filesToCopy.length) {
+                    toast.error('Some files could not be attached');
+                }
             }
         },
         [ownerId, mountId, chatContents, queryClient],
     );
 
-    const removeDriveAttachment = useCallback((name: string) => {
-        setPendingDriveAttachments((prev) => prev.filter((n) => n !== name));
+    const removeDriveAttachment = useCallback((attachment: ChatAttachment) => {
+        setPendingDriveAttachments((prev) =>
+            prev.filter((a) => {
+                if (typeof a === 'string' && typeof attachment === 'string') return a !== attachment;
+                if (isAttachmentReference(a) && isAttachmentReference(attachment)) return a.id !== attachment.id;
+                return true;
+            }),
+        );
     }, []);
 
     const handleSendMessage = useCallback(
         async (rawContent: string, files?: File[]) => {
             if (!rawContent.trim() && (!files || files.length === 0) && pendingDriveAttachments.length === 0) return;
 
-            let attachments: string[] | undefined;
+            let attachments: ChatAttachment[] | undefined;
 
             if (pendingDriveAttachments.length > 0) {
                 attachments = [...pendingDriveAttachments];

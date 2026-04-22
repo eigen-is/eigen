@@ -1,9 +1,11 @@
 import { COMMANDS_HELP, commandNeedsSpace, SLASH_COMMANDS } from '@workspace/lib/chat';
-import type { RoomMember } from '@workspace/lib/types/chat';
+import type { ChatAttachment, RoomMember } from '@workspace/lib/types/chat';
+import { isAttachmentReference } from '@workspace/lib/types/chat';
 import { Paperclip, Send } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { cn } from '../../../lib/utils';
 import { Button } from '../../button';
+import { ReferenceAttachmentChip } from '../attachment/reference-attachment-chip';
 import { SimpleAttachmentChip } from '../attachment/simple-attachment-chip';
 import { ChatPlayerSuggest } from './chat-player-suggest';
 import { ChatSlashSuggest } from './chat-slash-suggest';
@@ -21,8 +23,8 @@ type ChatMessageInputProps = {
     className?: string;
     onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>, content: string) => boolean | undefined;
     onAttachClick?: () => void;
-    driveAttachments?: string[];
-    onRemoveDriveAttachment?: (name: string) => void;
+    driveAttachments?: ChatAttachment[];
+    onRemoveDriveAttachment?: (attachment: ChatAttachment) => void;
     fileInputTriggerRef?: React.MutableRefObject<(() => void) | undefined>;
 };
 
@@ -309,13 +311,25 @@ export function ChatMessageInput({
         <div className={cn('border-t px-5 py-3', className)}>
             {(files.length > 0 || hasDriveAttachments) && (
                 <div className="flex flex-wrap gap-2 mb-2">
-                    {driveAttachments?.map((name) => (
-                        <SimpleAttachmentChip
-                            key={`drive-${name}`}
-                            filename={name}
-                            onRemove={onRemoveDriveAttachment ? () => onRemoveDriveAttachment(name) : undefined}
-                        />
-                    ))}
+                    {driveAttachments?.map((attachment) =>
+                        isAttachmentReference(attachment) ? (
+                            <ReferenceAttachmentChip
+                                key={`ref-${attachment.id}`}
+                                reference={attachment}
+                                onRemove={
+                                    onRemoveDriveAttachment ? () => onRemoveDriveAttachment(attachment) : undefined
+                                }
+                            />
+                        ) : (
+                            <SimpleAttachmentChip
+                                key={`drive-${attachment}`}
+                                filename={attachment}
+                                onRemove={
+                                    onRemoveDriveAttachment ? () => onRemoveDriveAttachment(attachment) : undefined
+                                }
+                            />
+                        ),
+                    )}
                     {files.map((file, i) => (
                         <SimpleAttachmentChip key={i} filename={file.name} onRemove={() => removeFile(i)} />
                     ))}
