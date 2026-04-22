@@ -69,12 +69,15 @@ function DialogContent({
                     size ? dialogSizeMap[size] : 'sm:max-w-xl',
                     className,
                 )}
-                // Preview renders behind the dialog overlay and can't receive pointer events,
-                // so we intercept the dismiss and close the preview instead of the dialog
+                // When a dialog is open and the user clicks outside it, check if they
+                // clicked within the preview overlay — if so, don't dismiss either
                 onPointerDownOutside={(e) => {
                     if (preview?.isPreviewOpen) {
                         e.preventDefault();
-                        preview.closePreview();
+                        const target = e.target as HTMLElement;
+                        if (!target.closest('[data-preview-overlay]')) {
+                            preview.closePreview();
+                        }
                     }
                     onPointerDownOutside?.(e);
                 }}
