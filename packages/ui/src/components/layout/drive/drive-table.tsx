@@ -73,6 +73,7 @@ export type DriveTableProps = {
     hideModified?: boolean;
     hideShareClick?: boolean;
     hideHeader?: boolean;
+    externalSelectedIds?: Set<string>;
 };
 
 export function DriveTable({
@@ -101,6 +102,7 @@ export function DriveTable({
     hideModified = false,
     hideShareClick = false,
     hideHeader = false,
+    externalSelectedIds,
 }: DriveTableProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
@@ -253,7 +255,8 @@ export function DriveTable({
                             'grid border-b transition-colors eigen-list-item',
                             gridCols,
                             (activeItemId === item.id || selectedIndex === adjustedIndex) && 'eigen-list-item-active',
-                            selection.isSelected(item.id) && 'eigen-list-item-selected',
+                            (selection.isSelected(item.id) || externalSelectedIds?.has(item.id)) &&
+                                'eigen-list-item-selected',
                             dragOverItemId === item.id && isValidFolderDrop(item) && 'bg-accent',
                             disabled && 'opacity-40 pointer-events-none',
                         )}

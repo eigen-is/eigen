@@ -39,6 +39,7 @@ type DriveBrowserProps = {
     hideHeader?: boolean;
     createFolderOpen?: boolean;
     onCreateFolderOpenChange?: (open: boolean) => void;
+    externalSelectedIds?: Set<string>;
     className?: string;
 };
 
@@ -57,6 +58,7 @@ export function DriveBrowser({
     hideHeader = false,
     createFolderOpen: controlledCreateFolderOpen,
     onCreateFolderOpenChange,
+    externalSelectedIds,
     className,
 }: DriveBrowserProps) {
     const [activeMountId, setActiveMountId] = useState(defaultMountId);
@@ -198,6 +200,7 @@ export function DriveBrowser({
                 hideModified
                 hideShareClick
                 hideHeader={hideHeader}
+                externalSelectedIds={externalSelectedIds}
             />
         </div>
     );
