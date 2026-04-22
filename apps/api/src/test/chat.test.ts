@@ -441,6 +441,99 @@ describe('Chat', () => {
             const deletedFile = mediaContents.find((item: DrivePath) => item.id === attachmentId);
             expect(deletedFile).toBeUndefined();
         });
+
+        test('post message with reference attachment', async () => {
+            const ref = {
+                type: 'reference' as const,
+                ownerId: ctx.alice.user.id,
+                mountId: aliceMountId,
+                id: 'fake-eigendoc-id',
+                name: 'My Notes.eigendoc',
+                driveType: 'doc',
+                mimeType: 'application/eigendoc',
+            };
+
+            const msg = await chatPost<ChatMessage>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `${chatId}/messages`,
+                { content: 'Message with reference', attachments: [ref] },
+            );
+            expect(msg.id).toBeDefined();
+            expect(msg.content).toBe('Message with reference');
+            expect(msg.attachments).toHaveLength(1);
+            expect(msg.attachments![0]).toMatchObject(ref);
+        });
+
+        test('deleting message with reference attachment does not error', async () => {
+            const ref = {
+                type: 'reference' as const,
+                ownerId: ctx.alice.user.id,
+                mountId: aliceMountId,
+                id: 'fake-eigendoc-id',
+                name: 'My Notes.eigendoc',
+                driveType: 'doc',
+                mimeType: 'application/eigendoc',
+            };
+
+            const msg = await chatPost<ChatMessage>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `${chatId}/messages`,
+                { content: 'Will be deleted with ref', attachments: [ref] },
+            );
+
+            const deleteRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/chat/${ctx.alice.user.id}/${aliceMountId}/${chatId}/messages/${msg.id}`,
+                {
+                    method: 'DELETE',
+                },
+            );
+            const deleteData = (await deleteRes.json()) as { success: boolean };
+            expect(deleteData.success).toBe(true);
+        });
+
+        test('post message with mixed file and reference attachments', async () => {
+            const file = new File(['mixed content'], 'mixed-attachment.txt', { type: 'text/plain' });
+            const formData = new FormData();
+            formData.append('file', file);
+            const uploadRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/file/${mediaFolderId}`,
+                {
+                    method: 'POST',
+                    body: formData,
+                },
+            );
+            const uploadedArr = (await uploadRes.json()) as DrivePath[];
+            const fileId = uploadedArr[0].id;
+
+            const ref = {
+                type: 'reference' as const,
+                ownerId: ctx.alice.user.id,
+                mountId: aliceMountId,
+                id: 'fake-eigendoc-id',
+                name: 'My Notes.eigendoc',
+                driveType: 'doc',
+                mimeType: 'application/eigendoc',
+            };
+
+            const msg = await chatPost<ChatMessage>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `${chatId}/messages`,
+                { content: 'Message with mixed attachments', attachments: [fileId, ref] },
+            );
+            expect(msg.id).toBeDefined();
+            expect(msg.content).toBe('Message with mixed attachments');
+            expect(msg.attachments).toHaveLength(2);
+            expect(msg.attachments![0]).toBe(fileId);
+            expect(msg.attachments![1]).toMatchObject(ref);
+        });
     });
 
     describe('Slash Commands', () => {
