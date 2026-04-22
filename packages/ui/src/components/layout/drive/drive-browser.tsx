@@ -80,26 +80,31 @@ export function DriveBrowser({
         }
     }, [defaultFolderId]);
 
-    // When the parent swaps ownerId/defaultMountId (e.g. the picker's auth loaded after
-    // first render, or the user's settings changed) mirror it into local state so the
-    // mount list reflects the new default instead of the stale initial prop.
+    // Sync external owner/mount changes into local state — but only when the prop truly
+    // disagrees with internal state. When the parent re-renders with props that match our
+    // own handleMountSelect result (the parent catching up via onFolderChange), we skip to
+    // avoid bouncing the user's in-progress navigation back to the mount root.
     const prevOwnerIdRef = useRef(ownerId);
     useEffect(() => {
         if (ownerId !== prevOwnerIdRef.current) {
             prevOwnerIdRef.current = ownerId;
-            setActiveOwnerId(ownerId);
-            setCurrentFolderId(null);
+            if (ownerId && ownerId !== activeOwnerId) {
+                setActiveOwnerId(ownerId);
+                setCurrentFolderId(null);
+            }
         }
-    }, [ownerId]);
+    }, [ownerId, activeOwnerId]);
 
     const prevDefaultMountIdRef = useRef(defaultMountId);
     useEffect(() => {
         if (defaultMountId !== prevDefaultMountIdRef.current) {
             prevDefaultMountIdRef.current = defaultMountId;
-            setActiveMountId(defaultMountId);
-            setCurrentFolderId(null);
+            if (defaultMountId !== activeMountId) {
+                setActiveMountId(defaultMountId);
+                setCurrentFolderId(null);
+            }
         }
-    }, [defaultMountId]);
+    }, [defaultMountId, activeMountId]);
 
     const { data: rootFolder } = useRootFolder(activeOwnerId, activeMountId);
     const mountLabel = useMountLabel(activeOwnerId, activeMountId);
