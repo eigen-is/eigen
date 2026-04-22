@@ -1,5 +1,11 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { getMailDraftAttachmentFromDriveUrl, getMailDraftAttachmentUploadUrl, mailApi } from '@workspace/lib/api';
+import {
+    getDriveAppUrl,
+    getMailDraftAttachmentFromDriveUrl,
+    getMailDraftAttachmentUploadUrl,
+    getMailSaveAttachmentsToDriveUrl,
+    mailApi,
+} from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import type { DraftAttachmentUpload, DraftInput, EmailDraft, NewDraft } from '@workspace/lib/types/mail';
 import { toast } from 'sonner';
@@ -126,6 +132,51 @@ export function useAttachFromDrive() {
             if (!res.ok)
                 throw new AppError({ status: res.status, error: { status: res.status, value: await res.text() } });
             return (await res.json()) as DraftAttachmentUpload;
+        },
+        onError: onMutationError,
+    });
+}
+
+export function useSaveMailAttachmentsToDrive() {
+    const { user } = useAuth();
+    const ownerId = user?.id || '';
+
+    return useMutation({
+        mutationFn: async ({
+            messageId,
+            indexes,
+            targetOwnerId,
+            targetMountId,
+            targetParentId,
+        }: {
+            messageId: string;
+            indexes: number[];
+            targetOwnerId: string;
+            targetMountId: string;
+            targetParentId: string;
+        }) => {
+            const res = await fetch(getMailSaveAttachmentsToDriveUrl(ownerId, messageId), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ indexes, targetOwnerId, targetMountId, targetParentId }),
+                credentials: 'include',
+            });
+            if (!res.ok)
+                throw new AppError({ status: res.status, error: { status: res.status, value: await res.text() } });
+            return res.json();
+        },
+        onSuccess: (_data, variables) => {
+            const count = variables.indexes.length;
+            toast.success(count === 1 ? 'Attachment saved to Drive' : `${count} attachments saved to Drive`, {
+                action: {
+                    label: 'Open folder',
+                    onClick: () => {
+                        window.location.href = getDriveAppUrl(
+                            `fs/${variables.targetOwnerId}/${variables.targetMountId}/${variables.targetParentId}`,
+                        );
+                    },
+                },
+            });
         },
         onError: onMutationError,
     });
