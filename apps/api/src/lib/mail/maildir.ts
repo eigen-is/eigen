@@ -178,6 +178,12 @@ export default class Maildir {
         return parsed.attachments[index];
     }
 
+    async messageGetParsed(messageId: string): Promise<Email | null> {
+        const email = this.db.getEmail(messageId);
+        if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
+        return this.readAndParse(messageId, email.mailbox, email.filename);
+    }
+
     async messageDelete(messageId: string): Promise<void> {
         const email = this.db.getEmail(messageId);
         if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
