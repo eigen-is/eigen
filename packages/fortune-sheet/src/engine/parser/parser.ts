@@ -1,5 +1,6 @@
 import { TinyEmitter } from 'tiny-emitter';
 import type {
+    CellInfo,
     FormulaArg,
     FormulaFunction,
     FormulaOutput,
@@ -7,27 +8,14 @@ import type {
     ParseResult,
     ParserEventListener,
     ParserOptions,
+    RangeCell,
 } from '../types.ts';
 import errorParser, { ERROR, ERROR_NAME, ERROR_VALUE, isValidStrict as isErrorValid } from './error.ts';
 import evaluateByOperator from './evaluate-by-operator/evaluate-by-operator.ts';
 import { Parser as GrammarParser } from './grammar-parser/grammar-parser.ts';
-import { type CellCoordinate, extractLabel, toLabel } from './helper/cell.ts';
+import { extractLabel, toLabel } from './helper/cell.ts';
 import { invertNumber, toNumber } from './helper/number.ts';
 import { trimEdges } from './helper/string.ts';
-
-export type CellInfo = {
-    label: string;
-    row: CellCoordinate;
-    column: CellCoordinate;
-    sheetName: string | null;
-};
-
-export type RangeCell = {
-    row: CellCoordinate;
-    column: CellCoordinate;
-    label: string;
-    sheetName?: string | null;
-};
 
 type GrammarParserInstance = { parse: (expression: string) => unknown; yy: Record<string, unknown> };
 
@@ -113,7 +101,10 @@ class Parser {
         this.emitter.emit(event, ...args);
     }
 
-    private _callVariable(name: string): unknown {
+    // Returns `FormulaArg` because variables registered via `setVariable` feed directly
+    // into the grammar's arithmetic/comparison pipelines, which expect scalars or arrays
+    // (e.g. `setVariable('range', [1, 2, 3])` for CORREL-style formulas).
+    private _callVariable(name: string): FormulaArg {
         let value = this.getVariable(name);
 
         this.emit('callVariable', name, (newValue: unknown) => {
@@ -126,7 +117,7 @@ class Parser {
             throw Error(ERROR_NAME);
         }
 
-        return value;
+        return value as FormulaArg;
     }
 
     private _callFunction(name: string, params: FormulaArg[] = []): FormulaOutput {
@@ -146,8 +137,10 @@ class Parser {
         return value === undefined ? evaluateByOperator(name, params) : value;
     }
 
-    // Retrieve value by its label (`B3`, `B$3`, `B$3`, `$B$3`).
-    private _callCellValue(label: string): FormulaValue {
+    // Retrieve value by its label (`B3`, `B$3`, `B$3`, `$B$3`). Returns `FormulaArg`
+    // because a user-defined variable (set via `setVariable`) may hold an array for
+    // array-aware formulas like CORREL / LINEST.
+    private _callCellValue(label: string): FormulaArg {
         const [row, column, sheetName] = extractLabel(label);
         if (column?.index === -1) {
             if (row?.isAbsolute || column?.isAbsolute) {
@@ -156,16 +149,16 @@ class Parser {
             return (row?.index ?? 0) + 1;
         }
         if (row?.index === -1) {
-            return this._callVariable(label) as FormulaValue;
+            return this._callVariable(label);
         }
-        let value: FormulaValue;
 
+        let value: FormulaValue;
         const cell: CellInfo = { label: toLabel(row!, column!), row: row!, column: column!, sheetName };
         this.emit('callCellValue', cell, this.options, (_value: FormulaValue) => {
             value = _value;
         });
 
-        return value!;
+        return value;
     }
 
     // Retrieve values by range label (`B3:A1`, `B$3:A1`, `B$3:$A1`, `$B$3:A$1`).

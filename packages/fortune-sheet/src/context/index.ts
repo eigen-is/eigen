@@ -4,7 +4,6 @@ import {
     defaultContext,
     defaultSettings,
     type GlobalCache,
-    type History,
     type PatchOptions,
     type Settings,
 } from '../state';
@@ -27,8 +26,8 @@ export type SetContextOptions = {
 
 const defaultScrollListeners = new Set<() => void>();
 const defaultGlobalCache: GlobalCache = {
-    undoList: [] as History[],
-    redoList: [] as History[],
+    undoList: [],
+    redoList: [],
     scrollLeft: 0,
     scrollTop: 0,
     scrollListeners: defaultScrollListeners,
