@@ -19,10 +19,9 @@ import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/dri
 import { LightEditor } from '@workspace/ui/components/layout/editor';
 import { cn } from '@workspace/ui/lib/utils';
 import { Paperclip, Send, Trash2 } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { DraftAttachments } from './draft-attachments';
-import { useDraftAutoSave } from './hooks/use-draft-auto-save';
-import { useDraftState } from './hooks/use-draft-state';
+import { useDraft } from './hooks/use-draft';
 
 export function EmailDraftToolbar({
     onDelete,
@@ -86,48 +85,17 @@ export function EmailDraft({
     const {
         state,
         setField,
-        setId,
         addAttachment,
-        removeAttachment,
         addDriveReference,
+        removeAttachment,
         removeDriveReference,
-        setAttachmentsFromServer,
-        toDraft,
-        attachmentsFingerprint,
         isSendable,
-        isSaveable,
-    } = useDraftState(email, to);
-
-    const {
-        scheduleSave,
-        saveNow,
-        disable: disableAutoSave,
-    } = useDraftAutoSave({
-        toDraft,
-        attachmentsFingerprint,
-        isSaveable,
-        draftId: state.id,
-        onSave: onAutoSave
-            ? async (draft, options) => {
-                  const tempAttachmentIds = state.attachments.map((a) => a.tempId).filter((id): id is string => !!id);
-                  const keepAttachmentIndexes = state.attachments
-                      .map((a) => a.index)
-                      .filter((i): i is number => typeof i === 'number');
-                  const result = await onAutoSave(draft, {
-                      tempAttachmentIds: tempAttachmentIds.length ? tempAttachmentIds : undefined,
-                      // Always send the keep list when the draft has an id — an empty array means
-                      // "user removed all original attachments", which we must respect.
-                      keepAttachmentIndexes: state.id ? keepAttachmentIndexes : undefined,
-                      forceFullSave: options?.forceFullSave,
-                  });
-                  if (result) setAttachmentsFromServer(result.attachments ?? []);
-                  return result;
-              }
-            : undefined,
-        onIdAssigned: (id) => {
-            setId(id);
-            onDraftIdAssigned?.(id);
-        },
+        flushAndGetDraft,
+    } = useDraft({
+        email,
+        prefillTo: to,
+        onSave: onAutoSave,
+        onDraftIdAssigned,
     });
 
     const uploadFiles = async (files: FileList | File[] | null) => {
@@ -154,7 +122,6 @@ export function EmailDraft({
                 localUrl,
             });
         }
-        scheduleSave();
     };
 
     const handleDriveAttach = async (paths: DrivePath[]) => {
@@ -193,24 +160,11 @@ export function EmailDraft({
                 contentType: result.contentType,
             });
         }
-        scheduleSave();
     };
 
-    useEffect(() => {
-        scheduleSave();
-    }, [state.to, state.cc, state.bcc, state.subject, state.body, state.bodyText, scheduleSave]);
-
-    const sendWithFreshDraft = useCallback(async () => {
-        // Flush pending save to ensure the draft is persisted. The returned result carries the
-        // server-assigned id (React state may not have updated yet after setId).
-        const saveResult = await saveNow();
-        disableAutoSave();
-        const draft = toDraft();
-        if (!draft.id && saveResult && typeof saveResult === 'object' && 'id' in saveResult) {
-            draft.id = saveResult.id as string;
-        }
-        await sendDraft(draft);
-    }, [saveNow, disableAutoSave, toDraft, sendDraft]);
+    const sendWithFreshDraft = async () => {
+        await sendDraft(await flushAndGetDraft());
+    };
 
     const handleSendEmail = async () => {
         if (!isSendable) {
@@ -338,14 +292,8 @@ export function EmailDraft({
                 <DraftAttachments
                     attachments={state.attachments}
                     driveReferences={state.driveReferences}
-                    onRemove={(i) => {
-                        removeAttachment(i);
-                        scheduleSave();
-                    }}
-                    onRemoveReference={(id) => {
-                        removeDriveReference(id);
-                        scheduleSave();
-                    }}
+                    onRemove={removeAttachment}
+                    onRemoveReference={removeDriveReference}
                 />
                 <div
                     className="flex-1 overflow-auto p-4 cursor-text"
