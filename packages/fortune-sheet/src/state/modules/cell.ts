@@ -270,8 +270,6 @@ export function setCellValue(
                         const mask = update(cell.ct.fa, v_p);
                         cell.m = mask.toString();
                     }
-
-                    // cell.m = mask[0].toString();
                 }
             }
         } else if (!_.isNil(cell.ct) && cell.ct.fa === "@") {

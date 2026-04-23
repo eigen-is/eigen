@@ -36,13 +36,11 @@ On first mount, the Workbook (`packages/fortune-sheet/src/components/Workbook/in
 incoming `Sheet[]` before rendering:
 
 1. **Materialize `data`** — expand sparse `celldata` into a 2D `data` matrix.
-2. **Derive `calcChain`** — walk the matrix for cells where `isFormula(cell.f)` and assign
-   `sheet.calcChain = [{r,c,id}]`. Without this, `execFunctionGroup` has no formula list on edit, so edits
-   don't propagate to dependent cells.
-3. **Recompute formulas** — `api.calculateFormula(draftCtx)` evaluates every formula cell so displayed
-   values reflect current inputs (not stale cached results from xlsx import or a previous save). Requires
-   `ctx.currentSheetId` to be set first (via `initSheetIndex`), otherwise `setCellValue` throws
-   `SHEET_NOT_FOUND`.
+2. **Recompute formulas** — `api.calculateFormula(draftCtx)` walks each sheet's `data` matrix, evaluates
+   every cell with `f`, and writes the result back. This refreshes displayed values (not stale cached
+   results from xlsx import or a previous save) and populates `sheet.calcChain` as a side-effect via
+   `insertUpdateFunctionGroup`. `ctx.formulaCache.formulaCellInfoMap` lazy-primes on the first edit via
+   `execFunctionGroup`, so no eager priming is needed at mount.
 
 This lets importers (xlsx, seed data, migrations) emit `Sheet[]` with just `celldata + f` fields — the
 Workbook handles the rest. Two invariants importers still must uphold:

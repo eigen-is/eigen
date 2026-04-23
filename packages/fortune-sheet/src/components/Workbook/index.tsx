@@ -18,12 +18,10 @@ import {
     locale,
     Op,
     patchToOp,
-    setFormulaCellInfoMap,
     Settings,
     Sheet as SheetType,
 } from "../../state";
 import type {CellMatrix} from "../../engine/types";
-import {isFormula} from "../../engine/formula-engine";
 import React, {useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState,} from "react";
 import {applyPatches, enablePatches, Patch, produce, produceWithPatches,} from "immer";
 import _ from "lodash";
@@ -141,41 +139,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             }
             // eslint-disable-next-line react-hooks/exhaustive-deps
         }, [context.luckysheet_select_save]);
-
-        const initSheetData = useCallback(
-            (
-                draftCtx: Context,
-                newData: SheetType,
-                index: number
-            ): CellMatrix | null => {
-                const {celldata, row, column} = newData;
-                const lastRowR = celldata?.reduce((max, cell) => Math.max(max, cell.r), 0) ?? 0;
-                const lastColC = celldata?.reduce((max, cell) => Math.max(max, cell.c), 0) ?? 0;
-                let lastRowNum = lastRowR + 1;
-                let lastColNum = lastColC + 1;
-                if (row != null && column != null && row > 0 && column > 0) {
-                    lastRowNum = Math.max(lastRowNum, row);
-                    lastColNum = Math.max(lastColNum, column);
-                } else {
-                    lastRowNum = Math.max(lastRowNum, draftCtx.defaultrowNum);
-                    lastColNum = Math.max(lastColNum, draftCtx.defaultcolumnNum);
-                }
-                if (lastRowNum && lastColNum) {
-                    const expandedData: SheetType["data"] = Array.from({length: lastRowNum}, () =>
-                        Array.from({length: lastColNum}, () => null)
-                    );
-                    for (const d of celldata ?? []) {
-                        // TODO setCellValue(draftCtx, d.r, d.c, expandedData, d.v);
-                        expandedData[d.r][d.c] = d.v;
-                    }
-                    draftCtx.luckysheetfile[index].data = expandedData;
-                    delete draftCtx.luckysheetfile[index].celldata;
-                    return expandedData;
-                }
-                return null;
-            },
-            []
-        );
 
         const emitOp = useCallback(
             (
@@ -493,40 +456,15 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         );
                         for (const newDatum of draftCtx.luckysheetfile) {
                             const index = getSheetIndex(draftCtx, newDatum.id!) as number;
-                            const sheet = draftCtx.luckysheetfile?.[index];
-                            const data =
-                                sheet.data && sheet.data.length > 0
-                                    ? sheet.data
-                                    : initSheetData(draftCtx, sheet, index);
-                            // Derive calcChain from data when missing. Imported sheets
-                            // (e.g. from xlsx) arrive with `f` on cells but no calcChain,
-                            // which leaves the recalc pipeline empty on edit.
-                            if (data && (sheet.calcChain == null || sheet.calcChain.length === 0)) {
-                                const chain: {r: number; c: number; id: string}[] = [];
-                                for (let r = 0; r < data.length; r++) {
-                                    const row = data[r];
-                                    if (!row) continue;
-                                    for (let c = 0; c < row.length; c++) {
-                                        if (isFormula(row[c]?.f)) {
-                                            chain.push({r, c, id: sheet.id!});
-                                        }
-                                    }
-                                }
-                                if (chain.length > 0) sheet.calcChain = chain;
+                            const sheet = draftCtx.luckysheetfile[index];
+                            if (!sheet.data || sheet.data.length === 0) {
+                                api.initSheetData(draftCtx, index, sheet);
                             }
-                            setFormulaCellInfoMap(
-                                draftCtx,
-                                sheet.calcChain,
-                                data || undefined
-                            );
                         }
-                        // Recompute formulas on load so displayed values reflect current inputs
-                        // (not stale cached results from a previous save or xlsx import).
-                        // calculateFormula -> setCellValue falls back on ctx.currentSheetId,
-                        // so initialize it first; the later guarded call below becomes a no-op.
-                        if (!draftCtx.currentSheetId && draftCtx.luckysheetfile.length > 0) {
-                            initSheetIndex(draftCtx);
-                        }
+                        // Recompute formulas so displayed values reflect current inputs
+                        // (imported sheets may arrive with stale cached results).
+                        // calcChain is populated as a side-effect, and formulaCellInfoMap
+                        // lazy-primes on the first edit via execFunctionGroup.
                         api.calculateFormula(draftCtx);
                     }
                     if (mergedSettings.devicePixelRatio > 0) {
@@ -554,7 +492,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     let {data} = sheet;
                     // expand cell data
                     if (!data || data.length === 0) {
-                        const temp = initSheetData(draftCtx, sheet, sheetIdx);
+                        const temp = api.initSheetData(draftCtx, sheetIdx, sheet);
                         if (temp !== null) {
                             data = temp;
                         }
@@ -652,7 +590,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             mergedSettings.hooks,
             mergedSettings.generateSheetId,
             setContextWithProduce,
-            initSheetData,
             mergedSettings.rowHeaderWidth,
             mergedSettings.columnHeaderHeight,
             mergedSettings.addRows,

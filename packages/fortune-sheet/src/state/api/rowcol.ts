@@ -2,7 +2,7 @@ import _ from "lodash";
 import {Context} from "../context";
 import {deleteRowCol, insertRowCol} from "../modules";
 import {CommonOptions, getSheet} from "./common";
-import {INVALID_PARAMS} from "./errors";
+import {invalidParams} from "./errors";
 import {getSheetIndex} from "../utils";
 
 export function freeze(
@@ -44,7 +44,7 @@ export function insertRowOrColumn(
         !_.isNumber(count) ||
         !["lefttop", "rightbottom"].includes(direction)
     ) {
-        throw INVALID_PARAMS;
+        throw invalidParams();
     }
 
     const sheet = getSheet(ctx, options);
@@ -74,7 +74,7 @@ export function deleteRowOrColumn(
         !_.isNumber(start) ||
         !_.isNumber(end)
     ) {
-        throw INVALID_PARAMS;
+        throw invalidParams();
     }
 
     const sheet = getSheet(ctx, options);
@@ -88,7 +88,7 @@ export function hideRowOrColumn(
     type: "row" | "column"
 ) {
     if (!["row", "column"].includes(type)) {
-        throw INVALID_PARAMS;
+        throw invalidParams();
     }
 
     if (!ctx || !ctx.config) return;
@@ -146,7 +146,7 @@ export function showRowOrColumn(
     type: "row" | "column"
 ) {
     if (!["row", "column"].includes(type)) {
-        throw INVALID_PARAMS;
+        throw invalidParams();
     }
 
     if (!ctx || !ctx.config) return;
@@ -205,7 +205,7 @@ export function setRowHeight(
     custom: boolean = false
 ) {
     if (!_.isPlainObject(rowInfo)) {
-        throw INVALID_PARAMS;
+        throw invalidParams();
     }
 
     const sheet = getSheet(ctx, options);
@@ -244,7 +244,7 @@ export function setColumnWidth(
     custom: boolean = false
 ) {
     if (!_.isPlainObject(columnInfo)) {
-        throw INVALID_PARAMS;
+        throw invalidParams();
     }
 
     const sheet = getSheet(ctx, options);
@@ -282,7 +282,7 @@ export function getRowHeight(
     options: CommonOptions = {}
 ) {
     if (!_.isArray(rows) || rows.length === 0) {
-        throw INVALID_PARAMS;
+        throw invalidParams();
     }
 
     const sheet = getSheet(ctx, options);
@@ -308,7 +308,7 @@ export function getColumnWidth(
     options: CommonOptions = {}
 ) {
     if (!_.isArray(columns) || columns.length === 0) {
-        throw INVALID_PARAMS;
+        throw invalidParams();
     }
 
     const sheet = getSheet(ctx, options);
