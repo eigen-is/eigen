@@ -159,7 +159,7 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 mountId,
-                `folder/${aliceRootId}/doc`,
+                `folder/${aliceRootId}/create/doc`,
                 { fileName: 'Target doc' },
             );
             targetDocId = doc.id;

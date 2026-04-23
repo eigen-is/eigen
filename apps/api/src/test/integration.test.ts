@@ -32,7 +32,7 @@ describe('Cross-Domain Integration', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `folder/${aliceRootId}/chat`,
+                `folder/${aliceRootId}/create/chat`,
                 { fileName: 'Integration Chat' },
             );
             chatId = chat.id;
@@ -166,7 +166,7 @@ describe('Cross-Domain Integration', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `folder/${aliceRootId}/doc`,
+                `folder/${aliceRootId}/create/doc`,
                 { fileName: 'Collaboration Test' },
             );
             docId = doc.id;

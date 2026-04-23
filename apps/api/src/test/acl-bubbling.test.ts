@@ -44,7 +44,7 @@ describe('ACL Bubbling', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `folder/${aliceRootId}/chat`,
+                `folder/${aliceRootId}/create/chat`,
                 { fileName: 'standalone-room' },
             );
             chatId = chat.id;
@@ -106,7 +106,7 @@ describe('ACL Bubbling', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `folder/${aliceRootId}/doc`,
+                `folder/${aliceRootId}/create/doc`,
                 { fileName: 'acl-bubble-doc' },
             );
             docId = doc.id;
@@ -116,7 +116,7 @@ describe('ACL Bubbling', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `folder/${docId}/chat`,
+                `folder/${docId}/create/chat`,
                 { fileName: 'discussion' },
             );
             chatId = chat.id;
@@ -195,7 +195,7 @@ describe('ACL Bubbling', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `folder/${aliceRootId}/doc`,
+                `folder/${aliceRootId}/create/doc`,
                 { fileName: 'nested-container-doc' },
             );
             docId = doc.id;
@@ -214,7 +214,7 @@ describe('ACL Bubbling', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `folder/${chatFolder.id}/chat`,
+                `folder/${chatFolder.id}/create/chat`,
                 { fileName: 'nested-discussion' },
             );
             chatId = chat.id;
@@ -243,7 +243,7 @@ describe('ACL Bubbling', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `folder/${aliceRootId}/chat`,
+                `folder/${aliceRootId}/create/chat`,
                 { fileName: 'perm-test-room' },
             );
             chatId = chat.id;
@@ -323,7 +323,7 @@ describe('ACL Bubbling', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `folder/${aliceRootId}/doc`,
+                `folder/${aliceRootId}/create/doc`,
                 { fileName: 'no-doc-write-test' },
             );
 
@@ -331,7 +331,7 @@ describe('ACL Bubbling', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `folder/${doc.id}/chat`,
+                `folder/${doc.id}/create/chat`,
                 { fileName: 'restricted-chat' },
             );
             chatId = chat.id;
@@ -357,7 +357,7 @@ describe('ACL Bubbling', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `folder/${aliceRootId}/doc`,
+                `folder/${aliceRootId}/create/doc`,
                 { fileName: 'restricted-container-doc' },
             );
             docId = doc.id;
@@ -366,7 +366,7 @@ describe('ACL Bubbling', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `folder/${docId}/chat`,
+                `folder/${docId}/create/chat`,
                 { fileName: 'restricted-container-chat' },
             );
             chatId = chat.id;

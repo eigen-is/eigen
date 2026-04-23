@@ -1085,7 +1085,7 @@ describe('Drive', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `folder/${aliceRootId}/doc`,
+                `folder/${aliceRootId}/create/doc`,
                 { fileName: 'Test Document' },
             );
             expect(data.name).toBe('Test Document.eigendoc');
@@ -1097,7 +1097,7 @@ describe('Drive', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `folder/${aliceRootId}/stickies`,
+                `folder/${aliceRootId}/create/stickies`,
                 { fileName: 'Test Board' },
             );
             expect(data.name).toBe('Test Board.eigenstickies');
@@ -1109,7 +1109,7 @@ describe('Drive', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `folder/${aliceRootId}/slides`,
+                `folder/${aliceRootId}/create/slides`,
                 { fileName: 'Test Slides' },
             );
             expect(data.name).toBe('Test Slides.eigenslides');
@@ -1121,7 +1121,7 @@ describe('Drive', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `folder/${aliceRootId}/sheets`,
+                `folder/${aliceRootId}/create/sheets`,
                 { fileName: 'Test Sheet' },
             );
             expect(data.name).toBe('Test Sheet.eigensheets');
@@ -2638,7 +2638,7 @@ describe('Drive', () => {
 
             const res = await authedRequest(
                 ctx.alice.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${aliceMountId}/folder/${uniqueRoot}/doc`,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/folder/${uniqueRoot}/create/doc`,
                 {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -2697,7 +2697,7 @@ describe('Drive', () => {
         test('create slides on team drive returns 200', async () => {
             const res = await authedRequest(
                 ctx.alice.user.sessionToken,
-                `/drive/${teamOwner}/${teamMountId}/folder/${teamRootId}/slides`,
+                `/drive/${teamOwner}/${teamMountId}/folder/${teamRootId}/create/slides`,
                 {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -2713,7 +2713,7 @@ describe('Drive', () => {
         test('create sheets on team drive returns 200', async () => {
             const res = await authedRequest(
                 ctx.alice.user.sessionToken,
-                `/drive/${teamOwner}/${teamMountId}/folder/${teamRootId}/sheets`,
+                `/drive/${teamOwner}/${teamMountId}/folder/${teamRootId}/create/sheets`,
                 {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -2735,7 +2735,7 @@ describe('Drive', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `folder/${aliceRootId}/stickies`,
+                `folder/${aliceRootId}/create/stickies`,
                 { fileName: 'ACL Self Downgrade Test' },
             );
             stickiesId = data.id;

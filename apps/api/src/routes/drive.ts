@@ -83,57 +83,38 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
     )
     .post(
-        '/drive/:ownerId/:mountId/folder/:pathId/doc',
+        '/drive/:ownerId/:mountId/folder/:pathId/create/:type',
         async ({ params, body, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
-            return await drive.createDoc(params.mountId, params.pathId, body.fileName);
+            const { mountId, pathId, type } = params;
+            const { fileName } = body;
+            switch (type) {
+                case 'doc':
+                    return await drive.createDoc(mountId, pathId, fileName);
+                case 'stickies':
+                    return await drive.createStickies(mountId, pathId, fileName);
+                case 'slides':
+                    return await drive.createSlides(mountId, pathId, fileName);
+                case 'sheets':
+                    return await drive.createSheets(mountId, pathId, fileName);
+                case 'chat':
+                    return await drive.createChat(mountId, pathId, fileName);
+            }
         },
         {
             body: t.Object({ fileName: t.String() }),
-            auth: true,
-        },
-    )
-    .post(
-        '/drive/:ownerId/:mountId/folder/:pathId/stickies',
-        async ({ params, body, user }) => {
-            const drive = await getSharedDrive(params.ownerId, user);
-            return await drive.createStickies(params.mountId, params.pathId, body.fileName);
-        },
-        {
-            body: t.Object({ fileName: t.String() }),
-            auth: true,
-        },
-    )
-    .post(
-        '/drive/:ownerId/:mountId/folder/:pathId/slides',
-        async ({ params, body, user }) => {
-            const drive = await getSharedDrive(params.ownerId, user);
-            return await drive.createSlides(params.mountId, params.pathId, body.fileName);
-        },
-        {
-            body: t.Object({ fileName: t.String() }),
-            auth: true,
-        },
-    )
-    .post(
-        '/drive/:ownerId/:mountId/folder/:pathId/sheets',
-        async ({ params, body, user }) => {
-            const drive = await getSharedDrive(params.ownerId, user);
-            return await drive.createSheets(params.mountId, params.pathId, body.fileName);
-        },
-        {
-            body: t.Object({ fileName: t.String() }),
-            auth: true,
-        },
-    )
-    .post(
-        '/drive/:ownerId/:mountId/folder/:pathId/chat',
-        async ({ params, body, user }) => {
-            const drive = await getSharedDrive(params.ownerId, user);
-            return await drive.createChat(params.mountId, params.pathId, body.fileName);
-        },
-        {
-            body: t.Object({ fileName: t.String() }),
+            params: t.Object({
+                ownerId: t.String(),
+                mountId: t.String(),
+                pathId: t.String(),
+                type: t.Union([
+                    t.Literal('doc'),
+                    t.Literal('stickies'),
+                    t.Literal('slides'),
+                    t.Literal('sheets'),
+                    t.Literal('chat'),
+                ]),
+            }),
             auth: true,
         },
     )

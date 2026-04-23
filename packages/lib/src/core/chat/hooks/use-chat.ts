@@ -1,7 +1,7 @@
 import { type QueryClient, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { chatApi, driveApi } from '@workspace/lib/api';
 import type { ChatAttachment, ChatMessage } from '@workspace/lib/types/chat';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import { DRIVE_MIME_CHAT, type DrivePath } from '@workspace/lib/types/drive';
 import { AppError, onMutationError } from '../../api-error';
 import { driveKeys, invalidateItemCreated } from '../../drive/hooks/use-drive';
 
@@ -70,12 +70,13 @@ export function useCreateChat(ownerId: string, mountId: string) {
         mutationFn: async ({ parentId, fileName }: { parentId: string; fileName: string }): Promise<DrivePath> => {
             const response = await driveApi({ ownerId })({ mountId })
                 .folder({ pathId: parentId })
-                .chat.post({ fileName });
+                .create({ type: 'chat' })
+                .post({ fileName });
             if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: (_data, variables) =>
-            invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId, 'DRIVE_MIME_CHAT'),
+            invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId, DRIVE_MIME_CHAT),
         onError: onMutationError,
     });
 }

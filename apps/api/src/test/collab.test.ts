@@ -28,7 +28,7 @@ describe('Collab', () => {
             ctx.alice.user.sessionToken,
             ctx.alice.user.id,
             aliceMountId,
-            `folder/${aliceRootId}/doc`,
+            `folder/${aliceRootId}/create/doc`,
             { fileName: 'Collab Test Doc' },
         );
         expect(doc.id).toBeDefined();
