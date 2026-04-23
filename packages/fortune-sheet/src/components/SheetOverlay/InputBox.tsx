@@ -91,10 +91,8 @@ export const InputBox: React.FC = () => {
                         createRangeHightlight(ctx, value);
                     });
                 } else {
-                    value = valueShowEs(row_index, col_index, flowdata);
-                    if (Number(cell.qp) === 1) {
-                        value = value ? `${value}` : value;
-                    }
+                    const shown = valueShowEs(row_index, col_index, flowdata);
+                    value = shown == null ? "" : String(shown);
                 }
             }
             refs.globalCache.overwriteCell = false;

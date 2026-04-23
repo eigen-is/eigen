@@ -1,8 +1,8 @@
-import type {CalculationChainEntry, Cell, CellMatrix, CellResolver, SheetInfo} from "./types";
+import type { CalculationChainEntry, Cell, CellMatrix, CellResolver, SheetInfo } from './types';
 
-export type { CellResolver } from "./types";
+export type { CellResolver } from './types';
 
-type SheetData = {
+export type SheetData = {
     id: string;
     name: string;
     data: CellMatrix | null;
@@ -13,11 +13,11 @@ type SheetData = {
 export function createArrayResolver(sheets: SheetData[]): CellResolver {
     return {
         getCell(sheetId, row, col) {
-            const sheet = sheets.find(s => s.id === sheetId);
+            const sheet = sheets.find((s) => s.id === sheetId);
             return sheet?.data?.[row]?.[col] ?? null;
         },
         getRange(sheetId, startRow, startCol, endRow, endCol) {
-            const sheet = sheets.find(s => s.id === sheetId);
+            const sheet = sheets.find((s) => s.id === sheetId);
             const result: (Cell | null)[][] = [];
             for (let r = startRow; r <= endRow; r++) {
                 const row: (Cell | null)[] = [];
@@ -29,14 +29,14 @@ export function createArrayResolver(sheets: SheetData[]): CellResolver {
             return result;
         },
         getSheetIdByName(name) {
-            return sheets.find(s => s.name === name)?.id ?? null;
+            return sheets.find((s) => s.name === name)?.id ?? null;
         },
         getSheetData(sheetId) {
-            return sheets.find(s => s.id === sheetId)?.data ?? null;
+            return sheets.find((s) => s.id === sheetId)?.data ?? null;
         },
         getSheets(): SheetInfo[] {
-            return sheets.map(s => ({
-                id: s.id ?? "",
+            return sheets.map((s) => ({
+                id: s.id ?? '',
                 name: s.name,
                 calculationChain: s.calculationChain ?? [],
                 dynamicArrayCompute: s.dynamicArrayCompute ?? [],

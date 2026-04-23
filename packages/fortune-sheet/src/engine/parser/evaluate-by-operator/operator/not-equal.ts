@@ -1,6 +1,8 @@
-export const SYMBOL = "<>";
+import type { FormulaArg } from '../../../types.ts';
 
-function func(exp1: any, exp2: any): boolean {
+export const SYMBOL = '<>';
+
+function func(exp1: FormulaArg, exp2: FormulaArg): boolean {
     return exp1 !== exp2;
 }
 

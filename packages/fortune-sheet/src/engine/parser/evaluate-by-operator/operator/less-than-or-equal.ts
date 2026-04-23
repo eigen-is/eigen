@@ -1,7 +1,9 @@
-export const SYMBOL = "<=";
+import type { FormulaValue } from '../../../types.ts';
 
-function func(exp1: any, exp2: any): boolean {
-    return exp1 <= exp2;
+export const SYMBOL = '<=';
+
+function func(exp1: FormulaValue, exp2: FormulaValue): boolean {
+    return (exp1 ?? 0) <= (exp2 ?? 0);
 }
 
 func.SYMBOL = SYMBOL;

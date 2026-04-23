@@ -652,7 +652,7 @@ function fillDays(
                 .format("YYYY-MM-DD");
 
             // TODO: is this genarate() call handled correctly?
-            d.v = genarate(date)?.[2];
+            d.v = genarate(date)[2];
             if (d.ct != null && d.ct.fa != null) {
                 d.m = update(d.ct.fa, d.v);
             }
@@ -679,7 +679,7 @@ function fillMonths(
                 .add(step * i, "months")
                 .format("YYYY-MM-DD");
 
-            d.v = genarate(date)?.[2];
+            d.v = genarate(date)[2];
             if (d.ct != null && d.ct.fa != null) {
                 d.m = update(d.ct.fa, d.v);
             }
@@ -706,7 +706,7 @@ function fillYears(
                 .add(step * i, "years")
                 .format("YYYY-MM-DD");
 
-            d.v = genarate(date)?.[2];
+            d.v = genarate(date)[2];
             if (d.ct != null && d.ct.fa != null) {
                 d.m = update(d.ct.fa, d.v);
             }
@@ -1307,7 +1307,7 @@ function getDataByType(
                         }
 
                         d.m = date;
-                        d.v = genarate(date)?.[2];
+                        d.v = genarate(date)[2];
                         applyData.push(d);
                     }
                 }
@@ -1352,7 +1352,7 @@ function getDataByType(
                             }
 
                             d.m = date;
-                            d.v = genarate(date)?.[2];
+                            d.v = genarate(date)[2];
                             applyData.push(d);
                         }
                     }
@@ -1395,7 +1395,7 @@ function getDataByType(
                             }
 
                             d.m = date;
-                            d.v = genarate(date)?.[2];
+                            d.v = genarate(date)[2];
                             applyData.push(d);
                         }
                     }
@@ -1437,7 +1437,7 @@ function getDataByType(
                         }
 
                         d.m = date;
-                        d.v = genarate(date)?.[2];
+                        d.v = genarate(date)[2];
                         applyData.push(d);
                     }
                 }
@@ -1482,7 +1482,7 @@ function getDataByType(
                             }
 
                             d.m = date;
-                            d.v = genarate(date)?.[2];
+                            d.v = genarate(date)[2];
                             applyData.push(d);
                         }
                     }
@@ -1525,7 +1525,7 @@ function getDataByType(
                             }
 
                             d.m = date;
-                            d.v = genarate(date)?.[2];
+                            d.v = genarate(date)[2];
                             applyData.push(d);
                         }
                     }
@@ -1577,7 +1577,7 @@ function getDataByType(
 
                         const date = dayjs(d.m).add(step!, "days").format("YYYY-MM-DD");
                         d.m = date;
-                        d.v = genarate(date)?.[2];
+                        d.v = genarate(date)[2];
                         applyData.push(d);
                     }
                 }
@@ -1616,7 +1616,7 @@ function getDataByType(
 
                         const date = dayjs(d.m).add(step!, "days").format("YYYY-MM-DD");
                         d.m = date;
-                        d.v = genarate(date)?.[2];
+                        d.v = genarate(date)[2];
                         applyData.push(d);
                     }
                 }
@@ -1668,7 +1668,7 @@ function getDataByType(
 
                         const date = dayjs(d.m).add(step!, "days").format("YYYY-MM-DD");
                         d.m = date;
-                        d.v = genarate(date)?.[2];
+                        d.v = genarate(date)[2];
                         applyData.push(d);
                     }
                 }
@@ -1707,7 +1707,7 @@ function getDataByType(
 
                         const date = dayjs(d.m).add(step!, "days").format("YYYY-MM-DD");
                         d.m = date;
-                        d.v = genarate(date)?.[2];
+                        d.v = genarate(date)[2];
                         applyData.push(d);
                     }
                 }

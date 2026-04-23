@@ -290,11 +290,8 @@ export function searchAll(
     }
 
     for (let i = 0; i < searchIndexArr.length; i += 1) {
-        const value_ShowEs = valueShowEs(
-            searchIndexArr[i].r,
-            searchIndexArr[i].c,
-            flowdata
-        ).toString();
+        const shown = valueShowEs(searchIndexArr[i].r, searchIndexArr[i].c, flowdata);
+        const value_ShowEs = shown == null ? "" : String(shown);
 
         // if (value_ShowEs.indexOf("</") > -1 && value_ShowEs.indexOf(">") > -1) {
         searchResult.push({
@@ -477,7 +474,8 @@ export function replace(
         //   return;
         // }
 
-        const v = valueShowEs(r, c, d).toString().replace(reg, replaceText);
+        const shown = valueShowEs(r, c, d);
+        const v = (shown == null ? "" : String(shown)).replace(reg, replaceText);
 
         setCellValue(ctx, r, c, d, v);
     }
@@ -578,7 +576,8 @@ export function replaceAll(
             //   continue;
             // }
 
-            const v = valueShowEs(r, c, d).toString().replace(reg, replaceText);
+            const shown = valueShowEs(r, c, d);
+            const v = (shown == null ? "" : String(shown)).replace(reg, replaceText);
 
             setCellValue(ctx, r, c, d, v);
 

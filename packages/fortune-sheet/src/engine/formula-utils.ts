@@ -1,17 +1,17 @@
 // Pure utility functions for formula parsing and evaluation.
 // Zero dependencies on Context or any state module.
-import { columnLabelToIndex } from "./a1-notation";
+import { columnLabelToIndex } from './a1-notation';
 
 export const operatorPriority: Readonly<Record<string, number>> = {
-    "^": 0,
-    "%": 1,
-    "*": 1,
-    "/": 1,
-    "+": 2,
-    "-": 2,
+    '^': 0,
+    '%': 1,
+    '*': 1,
+    '/': 1,
+    '+': 2,
+    '-': 2,
 };
 
-const operatorArr = "==|!=|<>|<=|>=|=|+|-|>|<|/|*|%|&|^".split("|");
+const operatorArr = '==|!=|<>|<=|>=|=|+|-|>|<|/|*|%|&|^'.split('|');
 
 export const operatorjson: Readonly<Record<string, number>> = (() => {
     const map: Record<string, number> = {};
@@ -25,7 +25,7 @@ export const operatorjson: Readonly<Record<string, number>> = (() => {
 // and sheet-qualified references (Sheet1!A1). Differs from `isCellReference`
 // in formula-engine.ts which requires digits in every part.
 export function iscelldata(txt: string) {
-    const val = txt.split("!");
+    const val = txt.split('!');
     let rangetxt: string;
 
     if (val.length > 1) {
@@ -35,18 +35,13 @@ export function iscelldata(txt: string) {
     }
 
     const reg_cell = /^(([a-zA-Z]+)|([$][a-zA-Z]+))(([0-9]+)|([$][0-9]+))$/g;
-    let reg_cellRange =
-        /^(((([a-zA-Z]+)|([$][a-zA-Z]+))(([0-9]+)|([$][0-9]+)))|((([a-zA-Z]+)|([$][a-zA-Z]+))))$/g;
+    let reg_cellRange = /^(((([a-zA-Z]+)|([$][a-zA-Z]+))(([0-9]+)|([$][0-9]+)))|((([a-zA-Z]+)|([$][a-zA-Z]+))))$/g;
 
-    if (rangetxt.indexOf(":") === -1) {
-        const row = parseInt(rangetxt.replace(/[^0-9]/g, ""), 10) - 1;
-        const col = columnLabelToIndex(rangetxt.replace(/[^A-Za-z]/g, ""));
+    if (rangetxt.indexOf(':') === -1) {
+        const row = parseInt(rangetxt.replace(/[^0-9]/g, ''), 10) - 1;
+        const col = columnLabelToIndex(rangetxt.replace(/[^A-Za-z]/g, ''));
 
-        if (
-            !Number.isNaN(row) &&
-            col >= 0 &&
-            rangetxt.toString().match(reg_cell)
-        ) {
+        if (!Number.isNaN(row) && col >= 0 && rangetxt.toString().match(reg_cell)) {
             return true;
         }
         if (!Number.isNaN(row)) {
@@ -62,26 +57,23 @@ export function iscelldata(txt: string) {
     reg_cellRange =
         /^(((([a-zA-Z]+)|([$][a-zA-Z]+))(([0-9]+)|([$][0-9]+)))|((([a-zA-Z]+)|([$][a-zA-Z]+)))|((([0-9]+)|([$][0-9]+s))))$/g;
 
-    const rangetxtArr = rangetxt.split(":");
+    const rangetxtArr = rangetxt.split(':');
 
     const row: number[] = [];
     const col: number[] = [];
-    row[0] = parseInt(rangetxtArr[0].replace(/[^0-9]/g, ""), 10) - 1;
-    row[1] = parseInt(rangetxtArr[1].replace(/[^0-9]/g, ""), 10) - 1;
+    row[0] = parseInt(rangetxtArr[0].replace(/[^0-9]/g, ''), 10) - 1;
+    row[1] = parseInt(rangetxtArr[1].replace(/[^0-9]/g, ''), 10) - 1;
     if (row[0] > row[1]) {
         return false;
     }
 
-    col[0] = columnLabelToIndex(rangetxtArr[0].replace(/[^A-Za-z]/g, ""));
-    col[1] = columnLabelToIndex(rangetxtArr[1].replace(/[^A-Za-z]/g, ""));
+    col[0] = columnLabelToIndex(rangetxtArr[0].replace(/[^A-Za-z]/g, ''));
+    col[1] = columnLabelToIndex(rangetxtArr[1].replace(/[^A-Za-z]/g, ''));
     if (col[0] > col[1]) {
         return false;
     }
 
-    if (
-        rangetxtArr[0].toString().match(reg_cellRange) &&
-        rangetxtArr[1].toString().match(reg_cellRange)
-    ) {
+    if (rangetxtArr[0].toString().match(reg_cellRange) && rangetxtArr[1].toString().match(reg_cellRange)) {
         return true;
     }
 
@@ -92,7 +84,7 @@ export function iscelldata(txt: string) {
 // application in a luckysheet_compareWith(...) call.
 export function calPostfixExpression(cal: string[]): string {
     if (cal.length === 0) {
-        return "";
+        return '';
     }
     const stack: string[] = [];
     for (let i = cal.length - 1; i >= 0; i -= 1) {
@@ -111,7 +103,7 @@ export function calPostfixExpression(cal: string[]): string {
         return stack[0];
     }
 
-    return "";
+    return '';
 }
 
 // Checks parentheses are balanced, ignoring brackets inside quoted strings.

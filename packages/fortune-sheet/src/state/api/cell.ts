@@ -41,10 +41,7 @@ export function getCellValue(
         } else if (cellData.ct && cellData.ct.fa === "yyyy-MM-dd") {
             ret = cellData.m;
         } else if (cellData.ct?.t === "inlineStr") {
-            ret = cellData.ct.s.reduce(
-                (prev: string, cur: any) => prev + (cur.v ?? ""),
-                ""
-            );
+            ret = (cellData.ct.s ?? []).reduce((prev, cur) => prev + (cur.v ?? ""), "");
         } else {
             ret = cellData[type];
         }

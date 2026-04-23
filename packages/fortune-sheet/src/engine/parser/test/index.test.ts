@@ -1,11 +1,11 @@
-import {expect} from "bun:test";
+import { expect } from 'bun:test';
 
 function tolerance(precision?: number): number {
     if (precision === void 0 || precision === null) {
         precision = 7;
     }
 
-    return 0.5 * Math.pow(10, -precision);
+    return 0.5 * 10 ** -precision;
 }
 
 // Custom matcher for close-to comparison
@@ -17,13 +17,9 @@ expect.extend({
             const a = actual[key];
             const e = expected[key];
 
-            if (a === e || (isNaN(a) && isNaN(e))) {
+            if (a === e || (Number.isNaN(a) && Number.isNaN(e))) {
                 pass = true;
-            } else if (
-                typeof a === "number" &&
-                typeof e === "number" &&
-                Math.abs(a - e) < tolerance(precision)
-            ) {
+            } else if (typeof a === 'number' && typeof e === 'number' && Math.abs(a - e) < tolerance(precision)) {
                 pass = true;
             } else {
                 pass = false;
@@ -38,7 +34,7 @@ expect.extend({
 });
 
 // Type declaration for the custom matcher
-declare module "bun:test" {
+declare module 'bun:test' {
     interface Matchers<T> {
         toBeMatchCloseTo(expected: T, precision?: number): T;
     }
