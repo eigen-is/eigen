@@ -199,6 +199,6 @@ initial computed values are filled in by the Workbook's mount-time bootstrap —
 
 Invariants the importer must uphold:
 - **`ct.fa` paired with `ct.t`** — when setting cell type (`t`), always set format assignment (`fa`), defaulting
-  to `'General'` if Excel reports no explicit numFmt. `SSF.format(undefined, n) === ""` blanks the display on
-  recalc.
+  to `'General'` if Excel reports no explicit numFmt. Without an `fa`, numfmt falls through to the raw value —
+  date serials show as numbers, percents lose their `%` sign, etc.
 - **Formula cells use leading `=`** — `f: '=SUM(A1:A3)'`, not `f: 'SUM(A1:A3)'`.

@@ -343,7 +343,8 @@ function buildCellType(cell: XlsxCell, value: string | number | boolean | undefi
     const numFmt = cell.numFmt && cell.numFmt !== 'General' ? cell.numFmt : null;
     if (t == null && numFmt == null) return undefined;
     // Fortune-sheet always pairs `t` with `fa`. When Excel reports General (or no numFmt),
-    // persist 'General' so the display-format path (SSF.format) receives a valid format string.
+    // persist 'General' so numfmt receives a valid format string; otherwise date serials and
+    // percents render as raw numbers.
     const ct: NonNullable<FortuneCell['ct']> = { fa: numFmt ?? 'General' };
     if (t) ct.t = t;
     return ct;
