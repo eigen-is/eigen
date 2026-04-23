@@ -45,8 +45,9 @@ incoming `Sheet[]` before rendering:
 This lets importers (xlsx, seed data, migrations) emit `Sheet[]` with just `celldata + f` fields — the
 Workbook handles the rest. Two invariants importers still must uphold:
 - **Pair `ct.fa` with `ct.t`**: whenever a cell has `ct.t` (type), set `ct.fa` (format assignment). Default
-  to `'General'` when Excel reports no explicit format. `SSF.format(undefined, n)` returns `""`, which blanks
-  the display cell on recalc.
+  to `'General'` when Excel reports no explicit format. Without an `fa`, `format(undefined, n)` falls through
+  to the raw value — date serials display as numbers (e.g. `44927` instead of `1/1/2023`), percents lose
+  their `%` sign, etc.
 - **Formula cells carry `f` with leading `=`**: `isFormula()` checks `value[0] === '='`.
 
 ## Comments
@@ -75,8 +76,7 @@ engine/
 ├── formula-utils.ts        # Pure utilities (iscelldata, checkBracketNum, calPostfixExpression)
 ├── dependency-graph.ts     # Topological sort + cycle detection
 ├── cell-resolver.ts        # CellResolver interface + createArrayResolver
-├── ssf.ts                  # Number formatting (SSF.format)
-├── format.ts               # Format type inference
+├── format.ts               # Format type inference (uses numfmt for rendering)
 ├── a1-notation.ts          # A1 ↔ row/col parsing
 ├── types.ts                # CellResolver, EvaluationResult, FormulaEngineState
 └── index.ts                # Barrel exports
@@ -86,7 +86,7 @@ engine/
 - `evaluate(formula, sheetId, row, col, resolver)` — single formula evaluation
 - `recalculateAll(resolver)` — batch recalculation of all formulas in dependency order (server-side)
 - `getDependencies(formula, sheetId)` — extract cell references from a formula
-- `format(value, pattern)` — SSF number/date formatting
+- `format(value, pattern)` — numfmt-backed number/date formatting
 
 **Architecture boundary:** Context-coupled orchestration functions (`execFunctionGroup`, `groupValuesRefresh`,
 etc.) live in `state/modules/formula-exec.ts`. The `formula-ui.ts` barrel re-exports from both, so UI consumers
