@@ -1,0 +1,344 @@
+import { type AuthUser, useAuth } from '@workspace/lib/auth';
+import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
+import type { AddressObject, Attachment, AttachmentMeta, EmailDraft, NewDraft } from '@workspace/lib/types/mail';
+import { useEffect, useReducer, useRef } from 'react';
+
+const DEFAULT_DEBOUNCE_MS = 2500;
+
+type DraftFields = {
+    id?: string;
+    to: string;
+    cc: string;
+    bcc: string;
+    subject: string;
+    body: string;
+    bodyText: string;
+    attachments: AttachmentMeta[];
+    driveReferences: AttachmentReference[];
+    inReplyTo?: string;
+    references?: string[] | string;
+    messageId?: string;
+};
+
+type DraftEditableField = 'to' | 'cc' | 'bcc' | 'subject' | 'body' | 'bodyText';
+
+type DraftState = {
+    fields: DraftFields;
+    // Fingerprint of the fields the server actually has. Drift from this triggers an auto-save.
+    lastSavedFingerprint: string;
+};
+
+type SaveOptions = {
+    tempAttachmentIds?: string[];
+    keepAttachmentIndexes?: number[];
+    forceFullSave?: boolean;
+};
+
+type SaveFn = (draft: NewDraft, options?: SaveOptions) => Promise<EmailDraft | null | undefined>;
+
+type Action =
+    | { type: 'set-field'; field: DraftEditableField; value: string }
+    | { type: 'set-id'; id: string }
+    | { type: 'add-attachment'; meta: AttachmentMeta }
+    | { type: 'remove-attachment'; index: number }
+    | { type: 'add-drive-ref'; ref: AttachmentReference }
+    | { type: 'remove-drive-ref'; id: string }
+    | { type: 'save-completed'; sentFields: DraftFields; serverAttachments: Attachment[] };
+
+type UseDraftOptions = {
+    email: EmailDraft | null;
+    prefillTo?: string;
+    onSave?: SaveFn;
+    onDraftIdAssigned?: (id: string) => void;
+    debounceMs?: number;
+};
+
+function addressObjectToString(addr?: AddressObject): string {
+    return addr?.text || '';
+}
+
+function stringToAddressObject(text: string): AddressObject | undefined {
+    if (!text.trim()) return undefined;
+    const value = text.split(',').map((part) => {
+        const trimmed = part.trim();
+        const match = trimmed.match(/^(.*?)\s*<(.+?)>$/);
+        if (match) return { name: match[1].trim(), address: match[2].trim() };
+        return { name: '', address: trimmed };
+    });
+    return { value, html: text, text };
+}
+
+function initFields(email: EmailDraft | null, prefillTo?: string): DraftFields {
+    if (email) {
+        return {
+            id: email.id,
+            to: addressObjectToString(email.to),
+            cc: addressObjectToString(email.cc),
+            bcc: addressObjectToString(email.bcc),
+            subject: email.subject ? String(email.subject) : '',
+            body: email.html || email.text || '',
+            bodyText: email.text || '',
+            attachments: (email.attachments || []).map((a, i) => ({
+                key: `saved-${i}-${a.filename ?? ''}-${a.size}`,
+                filename: a.filename || `Attachment ${i + 1}`,
+                size: a.size,
+                contentType: a.contentType,
+                index: i,
+            })),
+            driveReferences: email.driveReferences ?? [],
+            inReplyTo: email.inReplyTo,
+            references: email.references,
+            messageId: email.messageId,
+        };
+    }
+    return {
+        to: prefillTo || '',
+        cc: '',
+        bcc: '',
+        subject: '',
+        body: '',
+        bodyText: '',
+        attachments: [],
+        driveReferences: [],
+    };
+}
+
+function fingerprintFields(f: DraftFields): string {
+    const attachments = f.attachments.map((a) => `${a.key}:${a.tempId ?? ''}:${a.index ?? ''}`).join('|');
+    const refs = f.driveReferences.map((r) => r.id).join(',');
+    return JSON.stringify({
+        to: f.to,
+        cc: f.cc,
+        bcc: f.bcc,
+        subject: f.subject,
+        body: f.body,
+        bodyText: f.bodyText,
+        attachments: `${attachments}#${refs}`,
+    });
+}
+
+function fieldsToDraft(f: DraftFields, user: AuthUser | null | undefined): NewDraft {
+    return {
+        id: f.id,
+        from: {
+            value: [{ name: user?.name || '', address: user?.email || '' }],
+            html: '',
+            text: '',
+        },
+        to: stringToAddressObject(f.to),
+        cc: stringToAddressObject(f.cc),
+        bcc: stringToAddressObject(f.bcc),
+        subject: f.subject,
+        text: f.bodyText,
+        html: f.body,
+        inReplyTo: f.inReplyTo,
+        references: f.references,
+        messageId: f.messageId,
+        driveReferences: f.driveReferences,
+    };
+}
+
+function buildSaveOptions(fields: DraftFields, forceFullSave: boolean): SaveOptions {
+    const tempIds = fields.attachments.map((a) => a.tempId).filter((id): id is string => !!id);
+    const keepIdx = fields.attachments.map((a) => a.index).filter((i): i is number => typeof i === 'number');
+    return {
+        tempAttachmentIds: tempIds.length ? tempIds : undefined,
+        // Always send the keep list when the draft has an id — an empty array means "user removed
+        // all original attachments", which we must respect.
+        keepAttachmentIndexes: fields.id ? keepIdx : undefined,
+        forceFullSave,
+    };
+}
+
+// Replace local attachment metas with the server's parsed list, preserving keys/localUrl by
+// filename+size match so React doesn't remount chips representing the same attachment.
+function mergeServerAttachments(local: AttachmentMeta[], parsed: Attachment[]): AttachmentMeta[] {
+    const visible = parsed.filter((a) => !a.contentType.startsWith('text/calendar'));
+    return visible.map((a, i) => {
+        const filename = a.filename || `Attachment ${i + 1}`;
+        const prevMatch = local.find((p) => p.filename === filename && p.size === a.size);
+        return {
+            key: prevMatch?.key ?? `server-${i}-${filename}-${a.size}`,
+            filename,
+            size: a.size,
+            contentType: a.contentType,
+            index: i,
+            localUrl: prevMatch?.localUrl,
+        };
+    });
+}
+
+function reducer(state: DraftState, action: Action): DraftState {
+    switch (action.type) {
+        case 'set-field':
+            return { ...state, fields: { ...state.fields, [action.field]: action.value } };
+        case 'set-id':
+            return { ...state, fields: { ...state.fields, id: action.id } };
+        case 'add-attachment':
+            return {
+                ...state,
+                fields: { ...state.fields, attachments: [...state.fields.attachments, action.meta] },
+            };
+        case 'remove-attachment':
+            return {
+                ...state,
+                fields: {
+                    ...state.fields,
+                    attachments: state.fields.attachments.filter((_, i) => i !== action.index),
+                },
+            };
+        case 'add-drive-ref':
+            if (state.fields.driveReferences.some((r) => r.id === action.ref.id)) return state;
+            return {
+                ...state,
+                fields: {
+                    ...state.fields,
+                    driveReferences: [...state.fields.driveReferences, action.ref],
+                },
+            };
+        case 'remove-drive-ref':
+            return {
+                ...state,
+                fields: {
+                    ...state.fields,
+                    driveReferences: state.fields.driveReferences.filter((r) => r.id !== action.id),
+                },
+            };
+        case 'save-completed': {
+            const merged = mergeServerAttachments(state.fields.attachments, action.serverAttachments);
+            // The fingerprint reflects what the server actually has: the fields we sent + the
+            // server's post-parse attachment list. Edits made during the save will diff against
+            // this and trigger another save automatically.
+            const serverHas = { ...action.sentFields, attachments: merged };
+            return {
+                ...state,
+                fields: { ...state.fields, attachments: merged },
+                lastSavedFingerprint: fingerprintFields(serverHas),
+            };
+        }
+    }
+}
+
+function isSaveable(f: DraftFields): boolean {
+    return !!(f.to.trim() || f.subject.trim() || f.cc.trim() || f.bcc.trim() || f.bodyText.trim());
+}
+
+const noopSave: SaveFn = () => Promise.resolve(null);
+
+export function useDraft({
+    email,
+    prefillTo,
+    onSave = noopSave,
+    onDraftIdAssigned,
+    debounceMs = DEFAULT_DEBOUNCE_MS,
+}: UseDraftOptions) {
+    const { user } = useAuth();
+    const [state, dispatch] = useReducer(reducer, undefined, () => {
+        const fields = initFields(email, prefillTo);
+        return { fields, lastSavedFingerprint: fingerprintFields(fields) };
+    });
+
+    // Non-reactive control flow: the in-flight save promise (for serialization), a kill switch
+    // for the send/delete path, and a "anything ever saved" flag (drives the unmount-save
+    // heuristic — we force a full EML rebuild even when the current state matches the server,
+    // so Dovecot IMAP clients see fresh content).
+    const inFlightRef = useRef<Promise<EmailDraft | null | undefined> | null>(null);
+    const disabledRef = useRef(false);
+    const everSavedRef = useRef(false);
+
+    // Latest-state mirror — used by code that runs after an `await` (auto-save timer firing,
+    // unmount cleanup, the send-path flush) where the captured closure may be stale by render
+    // count or many edits.
+    const latestRef = useRef({ state, user, onSave });
+    latestRef.current = { state, user, onSave };
+
+    const runSave = async (options: { forceFullSave?: boolean } = {}): Promise<EmailDraft | null | undefined> => {
+        if (disabledRef.current) return null;
+        // Serialize: if a save is already in flight, wait for it before starting a new one. This
+        // also lets the send path flush any racing auto-save.
+        if (inFlightRef.current) {
+            await inFlightRef.current.catch(() => {});
+            if (disabledRef.current) return null;
+        }
+        // Read latest fields here, not from closure — the timer that called us may have been
+        // queued at an earlier render.
+        const { state: s, user: u, onSave: cb } = latestRef.current;
+        const fields = s.fields;
+        const draft = fieldsToDraft(fields, u);
+        const promise = cb(draft, buildSaveOptions(fields, options.forceFullSave === true));
+        inFlightRef.current = promise;
+        try {
+            const result = await promise;
+            everSavedRef.current = true;
+            if (result) {
+                dispatch({
+                    type: 'save-completed',
+                    sentFields: fields,
+                    serverAttachments: result.attachments ?? [],
+                });
+                if (!fields.id && result.id) {
+                    dispatch({ type: 'set-id', id: result.id });
+                    onDraftIdAssigned?.(result.id);
+                }
+            }
+            return result;
+        } finally {
+            if (inFlightRef.current === promise) inFlightRef.current = null;
+        }
+    };
+
+    // Auto-save: schedule a debounced save whenever fields drift from the saved fingerprint.
+    // Each render either (a) nothing changed → the cleanup runs without setting a new timer, or
+    // (b) state changed → the cleanup clears the previous timer and we set a new one.
+    useEffect(() => {
+        if (disabledRef.current) return;
+        if (!isSaveable(state.fields)) return;
+        if (fingerprintFields(state.fields) === state.lastSavedFingerprint) return;
+        const timer = setTimeout(() => void runSave(), debounceMs);
+        return () => clearTimeout(timer);
+    }, [state, debounceMs]);
+
+    // Save on unmount — force a full EML rebuild so IMAP clients see fresh content. Fires when
+    // the current state is dirty OR anything was saved during this session.
+    useEffect(() => {
+        return () => {
+            if (disabledRef.current) return;
+            const { state: s, user: u, onSave: cb } = latestRef.current;
+            if (!isSaveable(s.fields)) return;
+            const dirty = fingerprintFields(s.fields) !== s.lastSavedFingerprint;
+            if (!dirty && !everSavedRef.current) return;
+            cb(fieldsToDraft(s.fields, u), buildSaveOptions(s.fields, true)).catch((err) =>
+                console.warn('draft unmount save failed', err),
+            );
+        };
+    }, []);
+
+    return {
+        state: state.fields,
+        setField: <K extends DraftEditableField>(field: K, value: string) =>
+            dispatch({ type: 'set-field', field, value }),
+        addAttachment: (meta: AttachmentMeta) => dispatch({ type: 'add-attachment', meta }),
+        removeAttachment: (index: number) => dispatch({ type: 'remove-attachment', index }),
+        addDriveReference: (ref: AttachmentReference) => dispatch({ type: 'add-drive-ref', ref }),
+        removeDriveReference: (id: string) => dispatch({ type: 'remove-drive-ref', id }),
+        isSendable: !!state.fields.to.trim(),
+
+        // Send path: flush any pending/in-flight save, disable further saves, and return a
+        // NewDraft with the server-assigned id spliced in (the dispatch from the first save may
+        // not have rendered yet — callers can't await React state propagation).
+        flushAndGetDraft: async (): Promise<NewDraft> => {
+            let result: EmailDraft | null | undefined = null;
+            if (fingerprintFields(state.fields) !== state.lastSavedFingerprint) {
+                result = await runSave();
+            } else if (inFlightRef.current) {
+                await inFlightRef.current.catch(() => {});
+            }
+            disabledRef.current = true;
+            // Read latest after the awaits — user may have edited during the in-flight save.
+            const { state: s, user: u } = latestRef.current;
+            const draft = fieldsToDraft(s.fields, u);
+            if (!draft.id && result?.id) draft.id = result.id;
+            return draft;
+        },
+    };
+}
