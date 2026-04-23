@@ -145,11 +145,17 @@ export function DriveBrowser({
                 }
             } else if (mode === 'file') {
                 if (!mimeFilter || matchesMimeFilter(item.mimeType, mimeFilter)) {
-                    onSelect?.(item);
+                    // Single-select mode (onConfirm + selectedId both set): clicking the
+                    // already-selected row confirms it, saving an extra trip to the Select button.
+                    if (onConfirm && selectedId === item.id) {
+                        onConfirm(item);
+                    } else {
+                        onSelect?.(item);
+                    }
                 }
             }
         },
-        [navigateToFolder, mode, mimeFilter, onSelect],
+        [navigateToFolder, mode, mimeFilter, onSelect, onConfirm, selectedId],
     );
 
     const handleItemOpen = useCallback(
