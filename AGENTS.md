@@ -117,7 +117,7 @@ bun run check          # lint + typecheck + test
 The Drive system has four layers. When adding new features, all four need changes:
 
 ```
-Route (thin handler)  →  SharedDrive (ACL proxy)  →  Drive (business logic)  →  Mount (storage + DB)
+Route (thin handler)  →  SharedDrive (ACL wrapper)  →  Drive (business logic)  →  Mount (storage + DB)
 ```
 
 - **Mount** (`apps/api/src/lib/mount/mount.ts`): Core storage operations on a single mount's `metadata.db`.
@@ -125,10 +125,12 @@ Route (thin handler)  →  SharedDrive (ACL proxy)  →  Drive (business logic) 
   paths), `local-key` (flat UUID keys), `s3` (S3-compatible)
 - **Drive** (`apps/api/src/lib/drive/drive.ts`): High-level API over multiple mounts. Handles ACL
   propagation, collab document lifecycle, SSE emission, sharing
-- **SharedDrive** (`apps/api/src/lib/drive/sharedDrive.ts`): ACL-enforcing proxy. **Every public Drive
-  method must have a corresponding SharedDrive wrapper** with permission checks. Routes always use
-  `getSharedDrive()`, never raw `Drive`
-- **Routes** (`apps/api/src/routes/drive.ts`): Thin Elysia handlers that delegate to SharedDrive
+- **SharedDrive** (`apps/api/src/lib/drive/sharedDrive.ts`): ACL-enforcing wrapper, composition over
+  inheritance — does NOT extend Drive. `getSharedDrive()` returns `Drive | SharedDrive`; routes can only
+  call methods present on both, so adding a public method to `Drive` without a matching `SharedDrive`
+  wrapper is a TS error at the callsite. Own-drive routes get raw Drive (no ACL overhead); cross-owner
+  routes get SharedDrive (ACL-checked)
+- **Routes** (`apps/api/src/routes/drive.ts`): Thin Elysia handlers that delegate via `getSharedDrive`
 
 ### Frontend
 
@@ -217,8 +219,10 @@ These patterns have caused bugs across multiple domains:
 
 - **Query keys must include `ownerId`** for any owner-scoped data. Without it, switching between personal and team
   contexts serves stale cached data from the wrong owner
-- **`SharedDrive` must wrap every public `Drive` method** — when adding new Drive methods (not just creation
-  methods), add a corresponding wrapper in `SharedDrive` with appropriate permission checks, or it will bypass ACL
+- **Add a `SharedDrive` wrapper for every route-callable `Drive` method** — `getSharedDrive` returns
+  `Drive | SharedDrive`, so a `Drive` method without a matching `SharedDrive` method is unreachable from
+  routes (TS error). Add the wrapper with the appropriate permission check (`withReadPermission`,
+  `withWritePermission`, or owner check)
 - **MIME type strings must match the Eigen File Types table exactly** — use the constants, don't type them by hand.
   `eigenslides` not `eigenslide`, `eigensheets` not `eigensheet`
 - **`validateSearch` in shared routes must extract all URL params the route uses** — missing params (like `uid`)

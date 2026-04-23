@@ -1,3 +1,4 @@
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { Elysia, t } from 'elysia';
 import { getUploadMaxSize } from '../lib/config/enforcement';
 import { ApiError } from '../lib/core';
@@ -84,7 +85,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
     )
     .post(
         '/drive/:ownerId/:mountId/folder/:pathId/create/:type',
-        async ({ params, body, user }) => {
+        async ({ params, body, user }): Promise<DrivePath> => {
             const drive = await getSharedDrive(params.ownerId, user);
             const { mountId, pathId, type } = params;
             const { fileName } = body;
@@ -103,6 +104,9 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
         {
             body: t.Object({ fileName: t.String() }),
+            // Literal list mirrors EIGEN_DOC_TYPES — kept explicit so Elysia can preserve the
+            // tuple in `params.type`'s inferred type, which makes the handler's switch
+            // exhaustive at compile time.
             params: t.Object({
                 ownerId: t.String(),
                 mountId: t.String(),

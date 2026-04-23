@@ -78,7 +78,10 @@ export function useUpdateDraft() {
         // Optimistically merge the user's edits into the cached detail. This matters for
         // fire-and-forget unmount saves: if the user navigates away then immediately back, the
         // detail query is observed before the network save completes, and useEmail's
-        // staleTime: Infinity would otherwise serve the pre-edit copy.
+        // staleTime: Infinity would otherwise serve the pre-edit copy. Fields are assigned
+        // directly (no `?? previous` fallback) so that *clearing* a field — e.g. removing the
+        // sole recipient, where draft.to becomes undefined — propagates to the cache rather
+        // than silently reverting to the previous value.
         onMutate: ({ draft }) => {
             if (!draft.id) return;
             const key = emailKeys.detail(ownerId, draft.id);
@@ -86,12 +89,14 @@ export function useUpdateDraft() {
             if (!previous) return;
             queryClient.setQueryData<EmailDraft | null>(key, {
                 ...previous,
-                subject: draft.subject ?? previous.subject,
-                to: draft.to ?? previous.to,
-                cc: draft.cc ?? previous.cc,
-                bcc: draft.bcc ?? previous.bcc,
-                text: draft.text ?? previous.text,
-                html: draft.html ?? previous.html,
+                subject: draft.subject ?? '',
+                // to/cc/bcc are direct assignments — undefined means the user cleared the
+                // field (stringToAddressObject returns undefined for empty input).
+                to: draft.to,
+                cc: draft.cc,
+                bcc: draft.bcc,
+                text: draft.text ?? '',
+                html: draft.html ?? '',
                 driveReferences: draft.driveReferences ?? previous.driveReferences,
             });
         },

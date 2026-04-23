@@ -127,10 +127,6 @@ export default class SharedDrive {
         return this.withReadPermission(mountId, pathId, () => this.sharedDrive.getCollabDocument(mountId, pathId));
     }
 
-    public async closeCollabDocument(mountId: string, pathId: string) {
-        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.closeCollabDocument(mountId, pathId));
-    }
-
     public async createFolder(mountId: string, parentId: string, folderName: string): Promise<DrivePath> {
         return this.withWritePermission(mountId, parentId, () =>
             this.sharedDrive.createFolder(mountId, parentId, folderName),
@@ -228,10 +224,6 @@ export default class SharedDrive {
         );
     }
 
-    public async findContainerPath(mountId: string, pathId: string): Promise<DrivePath | null> {
-        return this.sharedDrive.findContainerPath(mountId, pathId);
-    }
-
     public async inviteToChat(mountId: string, chatId: string, email: string) {
         const memberships = await this.getUserMemberships();
 
@@ -300,6 +292,12 @@ export default class SharedDrive {
     }
 
     public async listTrash(mountId: string) {
+        // Trash is owner-only — match restorePath / permanentlyDelete / emptyTrash so a
+        // non-owner can't enumerate items the owner deleted.
+        const memberships = await this.getUserMemberships();
+        if (!this.isEffectiveOwnerSync(this.owner.id, memberships)) {
+            throw new ApiError(403, 'Only the drive owner can view trash');
+        }
         return this.sharedDrive.listTrash(mountId);
     }
 
