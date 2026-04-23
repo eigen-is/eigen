@@ -5,7 +5,7 @@ import { EmptyState } from '@workspace/ui';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context.tsx';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { EmailDetail, EmailDetailToolbar } from '../components/mail/email-detail';
 import { EmailDraft, EmailDraftToolbar } from '../components/mail/email-draft';
 import { EmailList, EmailListToolbar } from '../components/mail/email-list';
@@ -73,8 +73,7 @@ function MailRoute() {
         }
     };
 
-    const fileInputRef = useRef<HTMLInputElement>(null);
-    const filePickerTriggerRef = useRef<(() => void) | undefined>(undefined);
+    const [filePickerOpen, setFilePickerOpen] = useState(false);
     const listWidth = isTablet ? '320px' : '400px';
     const showDetail = !!(selectedEmail || mode === 'compose');
     const isDraft = mode === 'compose' || selectedEmail?.isDraft;
@@ -84,7 +83,7 @@ function MailRoute() {
     const detailToolbar = isDraft ? (
         <EmailDraftToolbar
             onDelete={() => handleDeleteEmail(selectedEmail as EmailDraftType)}
-            onAttach={() => filePickerTriggerRef.current?.()}
+            onAttach={() => setFilePickerOpen(true)}
             isSending={actions.isSendPending}
             hasId={!!selectedEmail?.id}
         />
@@ -164,8 +163,8 @@ function MailRoute() {
                                 onDraftIdAssigned={actions.handleDraftIdAssigned}
                                 to={to}
                                 isSending={actions.isSendPending}
-                                fileInputRef={fileInputRef}
-                                filePickerTriggerRef={filePickerTriggerRef}
+                                filePickerOpen={filePickerOpen}
+                                onFilePickerOpenChange={setFilePickerOpen}
                             />
                         ) : (
                             <EmailDetail email={selectedEmail} toggleMailRead={actions.handleToggleMailRead} />

@@ -1,5 +1,33 @@
 import type { S3Config } from '@workspace/lib/types';
-import { t } from 'elysia';
+import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
+import { type Static, t } from 'elysia';
+
+export const attachmentReferenceSchema = t.Object({
+    type: t.Literal('reference'),
+    ownerId: t.String(),
+    mountId: t.String(),
+    id: t.String(),
+    name: t.String(),
+    driveType: t.Union([
+        t.Literal('doc'),
+        t.Literal('stickies'),
+        t.Literal('slides'),
+        t.Literal('sheets'),
+        t.Literal('chat'),
+        t.Literal('folder'),
+        t.Literal('file'),
+    ]),
+    mimeType: t.String(),
+});
+
+// Compile-time guard that the Elysia schema stays in sync with the shared TS type. Adding
+// a field to drive-reference.ts without mirroring it here (or vice-versa) fails the check.
+type TypesEqual<X, Y> = (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2 ? true : false;
+const _attachmentReferenceSchemaMatchesType: TypesEqual<
+    Static<typeof attachmentReferenceSchema>,
+    AttachmentReference
+> = true;
+void _attachmentReferenceSchemaMatchesType;
 
 export const s3ConfigBody = t.Object({
     endpoint: t.String({ minLength: 1 }),

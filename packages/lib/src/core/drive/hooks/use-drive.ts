@@ -1,6 +1,16 @@
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { driveApi, getDriveAppUrl, getDriveFileUploadUrl } from '@workspace/lib/api';
-import type { DriveACL, DrivePath, DriveVisibility, EigenDocType } from '@workspace/lib/types/drive';
+import {
+    DRIVE_MIME_CHAT,
+    DRIVE_MIME_DOC,
+    DRIVE_MIME_SHEETS,
+    DRIVE_MIME_SLIDES,
+    DRIVE_MIME_STICKIES,
+    type DriveACL,
+    type DrivePath,
+    type DriveVisibility,
+    type EigenDocType,
+} from '@workspace/lib/types/drive';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -305,21 +315,35 @@ export function useCopyToMediaFolder(ownerId: string, mountId: string) {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async ({ paths, mediaFolderId }: { paths: DrivePath[]; mediaFolderId: string }) => {
-            const results: DrivePath[] = [];
-            for (const path of paths) {
-                const response = await driveApi({ ownerId: path.ownerId })({ mountId: path.mountId })
-                    .file({ pathId: path.id })
-                    .copy.post({
-                        targetOwnerId: ownerId,
-                        targetMountId: mountId,
-                        targetParentId: mediaFolderId,
-                    });
-                if (response.error) throw new AppError(response);
-                results.push(response.data);
+            const results = await Promise.allSettled(
+                paths.map(async (path) => {
+                    const response = await driveApi({ ownerId: path.ownerId })({ mountId: path.mountId })
+                        .file({ pathId: path.id })
+                        .copy.post({
+                            targetOwnerId: ownerId,
+                            targetMountId: mountId,
+                            targetParentId: mediaFolderId,
+                        });
+                    if (response.error) throw new AppError(response);
+                    return response.data;
+                }),
+            );
+            const succeeded = results
+                .filter((r): r is PromiseFulfilledResult<DrivePath> => r.status === 'fulfilled')
+                .map((r) => r.value);
+            if (succeeded.length > 0) {
+                invalidateItemCreated(queryClient, ownerId, mountId, mediaFolderId);
             }
-            return results;
+            const failedCount = results.length - succeeded.length;
+            if (failedCount > 0) {
+                throw new Error(
+                    failedCount === results.length
+                        ? 'Failed to copy files'
+                        : `Failed to copy ${failedCount} of ${results.length} files`,
+                );
+            }
+            return succeeded;
         },
-        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, ownerId, mountId, variables.mediaFolderId),
         onError: onMutationError,
     });
 }
@@ -460,11 +484,11 @@ export function useBreadcrumb(ownerId: string, mountId: string, pathId: string |
 }
 
 const EIGENDOC_MIME: Record<EigenDocType, string> = {
-    doc: 'DRIVE_MIME_DOC',
-    stickies: 'DRIVE_MIME_STICKIES',
-    slides: 'DRIVE_MIME_SLIDES',
-    sheets: 'DRIVE_MIME_SHEETS',
-    chat: 'DRIVE_MIME_CHAT',
+    doc: DRIVE_MIME_DOC,
+    stickies: DRIVE_MIME_STICKIES,
+    slides: DRIVE_MIME_SLIDES,
+    sheets: DRIVE_MIME_SHEETS,
+    chat: DRIVE_MIME_CHAT,
 };
 
 export function useCreateDriveItem(type: EigenDocType) {

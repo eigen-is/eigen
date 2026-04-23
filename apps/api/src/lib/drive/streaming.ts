@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { MaxFileSizeExceededError, parseMultipartRequest } from '@mjackson/multipart-parser';
 import { ApiError } from '../core';
 import type { Mount } from '../mount';
+import type { StorageFile } from '../storage';
 
 export type StreamResult = {
     tempId: string;
@@ -61,4 +62,37 @@ export async function streamFilesToTemp(
     }
 
     return results;
+}
+
+// Stream a Buffer or StorageFile (BunFile / S3File) into a temp path while computing the
+// sha256 hash in a single pass. Avoids holding the full payload in memory twice.
+export async function writeTempWithHash(
+    tempPath: string,
+    data: Buffer | Uint8Array | StorageFile,
+): Promise<{ size: number; hash: string }> {
+    const hasher = new Bun.CryptoHasher('sha256');
+
+    if (data instanceof Uint8Array) {
+        await Bun.write(tempPath, data);
+        hasher.update(data);
+        return { size: data.byteLength, hash: hasher.digest('hex') };
+    }
+
+    const writer = Bun.file(tempPath).writer({ highWaterMark: 256 * 1024 });
+    const reader = data.stream().getReader();
+    let size = 0;
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            hasher.update(value);
+            writer.write(value);
+            size += value.byteLength;
+        }
+        await writer.end();
+    } catch (e) {
+        await writer.end();
+        throw e;
+    }
+    return { size, hash: hasher.digest('hex') };
 }

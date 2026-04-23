@@ -1,16 +1,13 @@
-import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { toast } from 'sonner';
 import type { ChatAttachment, ChatMessage, RoomMember } from '../../../types/chat';
 import { isAttachmentReference } from '../../../types/chat';
 import type { DrivePath } from '../../../types/drive';
 import { isContainerType } from '../../../types/drive';
 import { validateEmailTarget } from '../../../validation';
-import { driveApi } from '../../api';
 import { useAuth } from '../../auth';
 import {
-    invalidateItemCreated,
     useCheckPermissions,
+    useCopyToMediaFolder,
     useEffectiveMembers,
     useFolderContent,
     usePathInfo,
@@ -34,6 +31,7 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
     const isLoading = messagesQuery.isLoading;
     const postMessage = usePostMessage(ownerId, mountId, chatId);
     const uploadFile = useUploadFile(ownerId, mountId);
+    const copyToMediaFolder = useCopyToMediaFolder(ownerId, mountId);
     const { data: chatPath } = usePathInfo(ownerId, mountId, chatId);
     const inviteToChat = useInviteToChat(ownerId, mountId, chatId);
     const deleteMessage = useDeleteMessage(ownerId, mountId, chatId);
@@ -42,7 +40,6 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
     const readOnly = permissions ? !permissions.canWrite : false;
     const { data: chatContents = [] } = useFolderContent(ownerId, mountId, chatId);
 
-    const queryClient = useQueryClient();
     const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
     const [pendingDriveAttachments, setPendingDriveAttachments] = useState<ChatAttachment[]>([]);
     const lastWhisperFromRef = useRef<string | null>(null);
@@ -94,9 +91,10 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
         return null;
     }, [messages, user?.email]);
 
+    const mediaFolder = useMemo(() => chatContents.find((item) => item.name === 'media') ?? null, [chatContents]);
+
     const addDriveAttachments = useCallback(
         async (paths: DrivePath[]) => {
-            const mediaFolder = chatContents.find((item) => item.name === 'media');
             if (!mediaFolder) return;
 
             const refs: ChatAttachment[] = [];
@@ -123,32 +121,15 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
             }
 
             if (filesToCopy.length > 0) {
-                const results = await Promise.allSettled(
-                    filesToCopy.map(async (path) => {
-                        const response = await driveApi({ ownerId: path.ownerId })({ mountId: path.mountId })
-                            .file({ pathId: path.id })
-                            .copy.post({
-                                targetOwnerId: ownerId,
-                                targetMountId: mountId,
-                                targetParentId: mediaFolder.id,
-                            });
-                        if (response.error) throw response.error;
-                        return path.name;
-                    }),
-                );
-                const names = results
-                    .filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled')
-                    .map((r) => r.value);
-                if (names.length > 0) {
-                    setPendingDriveAttachments((prev) => [...prev, ...names]);
-                    invalidateItemCreated(queryClient, ownerId, mountId, mediaFolder.id);
-                }
-                if (names.length < filesToCopy.length) {
-                    toast.error('Some files could not be attached');
+                const copied = await copyToMediaFolder
+                    .mutateAsync({ paths: filesToCopy, mediaFolderId: mediaFolder.id })
+                    .catch(() => [] as DrivePath[]);
+                if (copied.length > 0) {
+                    setPendingDriveAttachments((prev) => [...prev, ...copied.map((p) => p.name)]);
                 }
             }
         },
-        [ownerId, mountId, chatContents, queryClient],
+        [mediaFolder, copyToMediaFolder],
     );
 
     const removeDriveAttachment = useCallback((attachment: ChatAttachment) => {
@@ -172,15 +153,12 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
                 setPendingDriveAttachments([]);
             }
 
-            if (files && files.length > 0 && chatPath) {
-                const mediaFolder = chatContents.find((item) => item.name === 'media');
-                if (mediaFolder) {
-                    const uploaded = await Promise.all(
-                        files.map((file) => uploadFile.mutateAsync({ parentId: mediaFolder.id, file })),
-                    );
-                    const uploadedNames = uploaded.filter(Boolean).map((u) => u.name);
-                    attachments = [...(attachments ?? []), ...uploadedNames];
-                }
+            if (files && files.length > 0 && chatPath && mediaFolder) {
+                const uploaded = await Promise.all(
+                    files.map((file) => uploadFile.mutateAsync({ parentId: mediaFolder.id, file })),
+                );
+                const uploadedNames = uploaded.filter(Boolean).map((u) => u.name);
+                attachments = [...(attachments ?? []), ...uploadedNames];
             }
 
             if (isUnknownCommand(rawContent)) {
@@ -244,11 +222,8 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
             await postMessage.mutateAsync({ content: rawContent, attachments });
         },
         [
-            ownerId,
-            mountId,
-            chatId,
             chatPath,
-            chatContents,
+            mediaFolder,
             pendingDriveAttachments,
             uploadFile,
             postMessage,
@@ -264,7 +239,7 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
         );
     }, [messages, localMessages]);
 
-    const mediaFolderId = chatContents.find((item) => item.name === 'media')?.id ?? null;
+    const mediaFolderId = mediaFolder?.id ?? null;
 
     const handleDeleteMessage = useCallback(
         (messageId: string) => deleteMessage.mutateAsync(messageId),

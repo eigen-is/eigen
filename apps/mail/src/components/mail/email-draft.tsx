@@ -15,7 +15,7 @@ import {
 } from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
 import { ConfirmDialog } from '@workspace/ui/components/layout/delete/confirm-dialog';
-import { DriveFilePicker } from '@workspace/ui/components/layout/drive/drive-file-picker';
+import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
 import { LightEditor } from '@workspace/ui/components/layout/editor';
 import { cn } from '@workspace/ui/lib/utils';
 import { Paperclip, Send, Trash2 } from 'lucide-react';
@@ -59,8 +59,10 @@ type EmailDraftProps = {
     ) => Promise<EmailDraftType | null | undefined>;
     onDraftIdAssigned?: (id: string) => void;
     isSending: boolean;
-    fileInputRef?: React.RefObject<HTMLInputElement | null>;
-    filePickerTriggerRef?: React.RefObject<(() => void) | undefined>;
+    // File picker state lives in the route (the toolbar's attach button sits outside this
+    // component), so open/close is controlled via props.
+    filePickerOpen: boolean;
+    onFilePickerOpenChange: (open: boolean) => void;
 };
 
 export function EmailDraft({
@@ -70,26 +72,16 @@ export function EmailDraft({
     onAutoSave,
     onDraftIdAssigned,
     isSending,
-    fileInputRef: externalFileInputRef,
-    filePickerTriggerRef,
+    filePickerOpen,
+    onFilePickerOpenChange,
 }: EmailDraftProps) {
     const [alertMessage, setAlertMessage] = useState<string | null>(null);
     const [confirmNoSubject, setConfirmNoSubject] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
     const { user } = useAuth();
-    const internalFileInputRef = useRef<HTMLInputElement>(null);
-    const fileInputRef = externalFileInputRef ?? internalFileInputRef;
     const dragCounterRef = useRef(0);
     const uploadMutation = useUploadDraftAttachment();
     const attachFromDriveMutation = useAttachFromDrive();
-    const [filePickerOpen, setFilePickerOpen] = useState(false);
-
-    // Expose file picker trigger to parent (toolbar lives outside this component).
-    useEffect(() => {
-        if (filePickerTriggerRef) {
-            filePickerTriggerRef.current = () => setFilePickerOpen(true);
-        }
-    }, [filePickerTriggerRef]);
 
     const {
         state,
@@ -177,24 +169,29 @@ export function EmailDraft({
                     driveType: path.type,
                     mimeType: path.mimeType,
                 });
-            } else {
-                const result = await attachFromDriveMutation
+            }
+        }
+        const files = paths.filter((p) => !isContainerType(p.type));
+        const results = await Promise.all(
+            files.map((path) =>
+                attachFromDriveMutation
                     .mutateAsync({
                         sourceOwnerId: path.ownerId,
                         sourceMountId: path.mountId,
                         sourcePathId: path.id,
                     })
-                    .catch(() => null);
-                if (result) {
-                    addAttachment({
-                        key: `drive-${result.tempId}`,
-                        tempId: result.tempId,
-                        filename: result.filename,
-                        size: result.size,
-                        contentType: result.contentType,
-                    });
-                }
-            }
+                    .catch(() => null),
+            ),
+        );
+        for (const result of results) {
+            if (!result) continue;
+            addAttachment({
+                key: `drive-${result.tempId}`,
+                tempId: result.tempId,
+                filename: result.filename,
+                size: result.size,
+                contentType: result.contentType,
+            });
         }
         scheduleSave();
     };
@@ -270,17 +267,6 @@ export function EmailDraft({
             onDragOver={handleDragOver}
             onDrop={handleDrop}
         >
-            <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                className="hidden"
-                onChange={(e) => {
-                    void uploadFiles(e.target.files);
-                    e.target.value = '';
-                }}
-                disabled={isSending}
-            />
             <form
                 id="draft-form"
                 className="flex flex-col flex-1 min-h-0"
@@ -356,7 +342,10 @@ export function EmailDraft({
                         removeAttachment(i);
                         scheduleSave();
                     }}
-                    onRemoveReference={(id) => removeDriveReference(id)}
+                    onRemoveReference={(id) => {
+                        removeDriveReference(id);
+                        scheduleSave();
+                    }}
                 />
                 <div
                     className="flex-1 overflow-auto p-4 cursor-text"
@@ -378,16 +367,14 @@ export function EmailDraft({
                     />
                 </div>
             </form>
-            <DriveFilePicker
+            <DrivePickerWithUpload
                 open={filePickerOpen}
-                onOpenChange={setFilePickerOpen}
+                onOpenChange={onFilePickerOpenChange}
                 title="Attach file"
                 multiSelect
-                onSelect={handleDriveAttach}
-                onUploadFromDevice={() => {
-                    setFilePickerOpen(false);
-                    setTimeout(() => fileInputRef.current?.click(), 0);
-                }}
+                onPickFromDrive={handleDriveAttach}
+                onPickFromDevice={(files) => void uploadFiles(files)}
+                multiple
             />
             <div
                 className={cn(

@@ -54,7 +54,7 @@ import { getUniqueFileName } from './naming';
 import { getSharedDatabase } from './shared';
 import * as sharedSchema from './sharedschema';
 import { buildDriveEvent } from './sse-events';
-import { streamFilesToTemp } from './streaming';
+import { streamFilesToTemp, writeTempWithHash } from './streaming';
 
 const COLLAB_EXTENSIONS: Record<string, string> = {
     doc: '.eigendoc',
@@ -280,7 +280,6 @@ export default class Drive {
         name: string,
         mimeType: string,
         data: Buffer | StorageFile,
-        originalName?: string,
     ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         const parent = await mount.getActivePath(parentId);
@@ -292,14 +291,10 @@ export default class Drive {
 
         const tempId = randomUUID();
         try {
-            const tempPath = mount.getTempPath(tempId);
-            await Bun.write(tempPath, data);
-            const tempFile = Bun.file(tempPath);
-            const size = tempFile.size;
-            const hash = new Bun.CryptoHasher('sha256').update(await tempFile.arrayBuffer()).digest('hex');
+            const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), data);
 
             let safeName = name.replace(/[/\\]/g, '_');
-            const resolvedOriginalName = originalName || safeName;
+            const originalName = safeName;
 
             const existing = await mount.getChildByName(parentId, safeName);
             if (existing) {
@@ -309,7 +304,7 @@ export default class Drive {
             }
 
             const pathId = await mount.createFileFromTemp(parentId, safeName, mimeType, size, hash, tempId);
-            return await this.finalizeUpload(mount, pathId, resolvedOriginalName, safeName, mimeType, tempId);
+            return await this.finalizeUpload(mount, pathId, originalName, safeName, mimeType, tempId);
         } catch (e) {
             await mount.cleanupTemp(tempId);
             throw e;

@@ -126,6 +126,39 @@ describe.skipIf(isWindows)('Mail — Drive Attachment Integration', () => {
             });
             expect(res.status).toBe(404);
         });
+
+        test('returns 413 when the source file exceeds the mail attachment limit', async () => {
+            const content = 'x'.repeat(2 * 1024 * 1024);
+            const file = new File([content], 'too-big.txt', { type: 'text/plain' });
+            const source = await driveUpload<DrivePath>(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                mountId,
+                aliceRootId,
+                file,
+            );
+
+            const setQuota = async (mb: number) => {
+                const r = await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ quotas: { maxUploadSizeMB: mb } }),
+                });
+                expect(r.status).toBe(200);
+            };
+
+            await setQuota(1);
+            try {
+                const res = await attachFromDrive(ctx.alice.user.sessionToken, ctx.alice.user.id, {
+                    sourceOwnerId: source.ownerId,
+                    sourceMountId: source.mountId,
+                    sourcePathId: source.id,
+                });
+                expect(res.status).toBe(413);
+            } finally {
+                await setQuota(35);
+            }
+        });
     });
 
     describe('save-attachments-to-drive', () => {
@@ -207,6 +240,43 @@ describe.skipIf(isWindows)('Mail — Drive Attachment Integration', () => {
                 targetParentId: aliceRootId,
             });
             expect(res.status).toBe(404);
+        });
+
+        test('returns 413 when an attachment exceeds the target drive quota', async () => {
+            const bigContent = 'x'.repeat(2 * 1024 * 1024);
+            const eml = buildEmlWithAttachment(ctx.alice.user.email, 'Big-attachment', bigContent, 'big.bin');
+            const deliverRes = await deliverEml(ctx, ctx.alice.user.email, eml);
+            expect(deliverRes.status).toBe(200);
+
+            const inboxRes = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/mail/${ctx.alice.user.id}/mailbox/inbox`,
+            );
+            const inbox = await assertJson<Array<{ id: string; subject: string }>>(inboxRes);
+            const bigMsg = inbox.find((m) => m.subject === 'Big-attachment');
+            expect(bigMsg).toBeDefined();
+
+            const setQuota = async (mb: number) => {
+                const r = await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ quotas: { maxUploadSizeMB: mb } }),
+                });
+                expect(r.status).toBe(200);
+            };
+
+            await setQuota(1);
+            try {
+                const res = await saveAttachmentsToDrive(ctx.alice.user.sessionToken, ctx.alice.user.id, bigMsg!.id, {
+                    indexes: [0],
+                    targetOwnerId: ctx.alice.user.id,
+                    targetMountId: mountId,
+                    targetParentId: aliceRootId,
+                });
+                expect(res.status).toBe(413);
+            } finally {
+                await setQuota(35);
+            }
         });
     });
 

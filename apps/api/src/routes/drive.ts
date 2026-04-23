@@ -165,6 +165,10 @@ export const driveRouter = new Elysia({ name: 'drive' })
             const sourceDrive = await getSharedDrive(params.ownerId, user);
             const sourcePath = await sourceDrive.getPath(params.mountId, params.pathId);
             if (!sourcePath) throw new ApiError(404, 'Source file not found');
+
+            const maxSize = await getUploadMaxSize(body.targetOwnerId, user.id, body.targetMountId);
+            if (sourcePath.size > maxSize) throw new ApiError(413, 'Source file too large');
+
             const file = await sourceDrive.downloadFile(params.mountId, params.pathId);
             if (!file) throw new ApiError(404, 'Source file data not found');
 
@@ -175,7 +179,6 @@ export const driveRouter = new Elysia({ name: 'drive' })
                 sourcePath.details?.originalName || sourcePath.name,
                 sourcePath.mimeType,
                 file,
-                sourcePath.details?.originalName ?? undefined,
             );
         },
         {
@@ -242,11 +245,13 @@ export const driveRouter = new Elysia({ name: 'drive' })
                 throw new ApiError(403, 'No write permission');
             }
             const sourceDrive = await getSharedDrive(body.sourceOwnerId, user);
+            const sourcePath = await sourceDrive.getPath(body.sourceMountId, body.sourcePathId);
+            if (!sourcePath) throw new ApiError(404, 'Source file not found');
+            const maxSize = await getUploadMaxSize(params.ownerId, user.id, params.mountId);
+            if (sourcePath.size > maxSize) throw new ApiError(413, 'Source file too large');
             const sourceFile = await sourceDrive.downloadFile(body.sourceMountId, body.sourcePathId);
             if (!sourceFile) throw new ApiError(404, 'Source file not found');
-            const maxSize = await getUploadMaxSize(params.ownerId, user.id, params.mountId);
             const buffer = Buffer.from(await sourceFile.arrayBuffer());
-            if (buffer.byteLength > maxSize) throw new ApiError(413, 'Source file too large');
             await importIntoDocument(drive, mount, path, buffer);
             return { success: true };
         },

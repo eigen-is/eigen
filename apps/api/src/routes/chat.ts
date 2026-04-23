@@ -3,6 +3,7 @@ import { Elysia, t } from 'elysia';
 import { ApiError } from '../lib/core/errors';
 import { getSharedDrive } from '../lib/drive';
 import { betterAuth } from './auth';
+import { attachmentReferenceSchema } from './shared-schemas';
 
 // Chat routes allow cross-owner access (chats live inside shared/team drives).
 // Access control is enforced by getSharedDrive() → SharedDrive ACL checks.
@@ -50,30 +51,7 @@ export const chatRouter = new Elysia({ name: 'chat' })
                 type: t.Optional(t.Union([t.Literal('message'), t.Literal('emote'), t.Literal('whisper')])),
                 whisperTo: t.Optional(t.String()),
                 replyTo: t.Optional(t.String()),
-                attachments: t.Optional(
-                    t.Array(
-                        t.Union([
-                            t.String(),
-                            t.Object({
-                                type: t.Literal('reference'),
-                                ownerId: t.String(),
-                                mountId: t.String(),
-                                id: t.String(),
-                                name: t.String(),
-                                driveType: t.Union([
-                                    t.Literal('doc'),
-                                    t.Literal('stickies'),
-                                    t.Literal('slides'),
-                                    t.Literal('sheets'),
-                                    t.Literal('chat'),
-                                    t.Literal('folder'),
-                                    t.Literal('file'),
-                                ]),
-                                mimeType: t.String(),
-                            }),
-                        ]),
-                    ),
-                ),
+                attachments: t.Optional(t.Array(t.Union([t.String(), attachmentReferenceSchema]))),
             }),
             auth: true,
         },

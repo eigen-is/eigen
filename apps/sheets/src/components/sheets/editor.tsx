@@ -7,7 +7,7 @@ import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { CommentDialog, CommentPanel, CreateCommentDialog, LoadingState, NoteCardContextMenu } from '@workspace/ui';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
-import { DriveFilePicker } from '@workspace/ui/components/layout/drive/drive-file-picker';
+import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { columnToLetter, useActiveComments } from './hooks/use-active-comments';
 import { useSheet } from './hooks/use-sheet';
@@ -67,7 +67,6 @@ export function SheetEditor({
     initialChatName,
 }: SheetEditorProps) {
     const workbookRef = useRef<WorkbookInstance>(null);
-    const imageInputRef = useRef<HTMLInputElement>(null);
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
 
     const { initialData, snapshotVersion, synced, handleOp, onDataChange, handleRestore } = useSheet(
@@ -123,11 +122,10 @@ export function SheetEditor({
         [mediaFolderId, uploadFile],
     );
 
-    const handleImageSelect = useCallback(
-        (e: React.ChangeEvent<HTMLInputElement>) => {
-            const file = e.target.files?.[0];
+    const handleImageFromDevice = useCallback(
+        (files: File[]) => {
+            const file = files[0];
             if (file) handleImageFile(file);
-            e.target.value = '';
         },
         [handleImageFile],
     );
@@ -197,18 +195,15 @@ export function SheetEditor({
 
     return (
         <>
-            <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageSelect} />
             {mediaFolderId && (
-                <DriveFilePicker
+                <DrivePickerWithUpload
                     open={imagePickerOpen}
                     onOpenChange={setImagePickerOpen}
                     title="Insert image"
                     mimeFilter={['image/*']}
-                    onSelect={handleImagePickFromDrive}
-                    onUploadFromDevice={() => {
-                        setImagePickerOpen(false);
-                        setTimeout(() => imageInputRef.current?.click(), 0);
-                    }}
+                    onPickFromDrive={handleImagePickFromDrive}
+                    onPickFromDevice={handleImageFromDevice}
+                    accept="image/*"
                 />
             )}
             <div className="flex flex-col h-full w-full relative">

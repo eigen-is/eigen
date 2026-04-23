@@ -1,7 +1,7 @@
 import { useMediaResolver } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
-import { DriveFilePicker } from '@workspace/ui/components/layout/drive/drive-file-picker';
+import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
 import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker';
 import { FontPicker } from '@workspace/ui/components/layout/media/font-picker';
 import {
@@ -25,7 +25,7 @@ import {
     Trash2,
     Underline,
 } from 'lucide-react';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { ImageObject, SlideObject, TextObject } from './types';
 import { BORDER_RADIUS_ROUND } from './types';
 
@@ -509,16 +509,14 @@ export function SlideBackgroundPanel({
 }: SlideBackgroundPanelProps) {
     const [colorOpen, setColorOpen] = useState(false);
     const [applyTo, setApplyTo] = useState<ApplyTo>('this');
-    const bgImageInputRef = useRef<HTMLInputElement>(null);
     const [bgPickerOpen, setBgPickerOpen] = useState(false);
 
-    const handleImageSelect = useCallback(
-        async (e: React.ChangeEvent<HTMLInputElement>) => {
-            const file = e.target.files?.[0];
+    const handleImageFromDevice = useCallback(
+        async (files: File[]) => {
+            const file = files[0];
             if (!file) return;
             const mediaName = await onUploadImage(file);
             if (mediaName) onUpdateBackgroundImage(mediaName, applyTo);
-            e.target.value = '';
         },
         [onUploadImage, onUpdateBackgroundImage, applyTo],
     );
@@ -581,23 +579,14 @@ export function SlideBackgroundPanel({
                         Choose image
                     </Button>
                 )}
-                <DriveFilePicker
+                <DrivePickerWithUpload
                     open={bgPickerOpen}
                     onOpenChange={setBgPickerOpen}
                     title="Background image"
                     mimeFilter={['image/*']}
-                    onSelect={(paths) => onPickImageFromDrive?.(paths)}
-                    onUploadFromDevice={() => {
-                        setBgPickerOpen(false);
-                        setTimeout(() => bgImageInputRef.current?.click(), 0);
-                    }}
-                />
-                <input
-                    ref={bgImageInputRef}
-                    type="file"
+                    onPickFromDrive={(paths) => onPickImageFromDrive?.(paths)}
+                    onPickFromDevice={handleImageFromDevice}
                     accept="image/*"
-                    className="hidden"
-                    onChange={handleImageSelect}
                 />
             </PropertySection>
 

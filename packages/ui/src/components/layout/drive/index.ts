@@ -4,6 +4,7 @@ export * from './drive-create-eigendoc';
 export * from './drive-file-picker';
 export * from './drive-location-picker';
 export * from './drive-mount-list';
+export * from './drive-picker-with-upload';
 export * from './drive-table';
 export * from './eigendoc-config';
 export * from './eigendoc-configs';
