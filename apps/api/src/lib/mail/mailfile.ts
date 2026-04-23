@@ -93,6 +93,13 @@ function buildReferenceUrl(ref: AttachmentReference): string | undefined {
     return undefined;
 }
 
+// Lucide paperclip — inlined as SVG (rather than the unicode glyph) so the rendered card
+// matches the in-app icon. Matches the path data in lucide-react's `paperclip.js`.
+const PAPERCLIP_SVG =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;">' +
+    '<path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"/>' +
+    '</svg>';
+
 export function renderReferenceLinksHtml(references: AttachmentReference[]): string {
     const cards: string[] = [];
     for (const ref of references) {
@@ -101,7 +108,7 @@ export function renderReferenceLinksHtml(references: AttachmentReference[]): str
         const name = escapeHtml(stripEigenExtension(ref.name));
         cards.push(
             '<div style="display:inline-block;border:1px solid #e0e0e0;border-radius:6px;padding:6px 10px;margin:4px 4px 4px 0;font-size:13px;font-family:sans-serif;color:#333;text-decoration:none;">' +
-                `<a href="${escapeHtml(href)}" style="color:#333;text-decoration:none;">&#128206; ${name}</a>` +
+                `<a href="${escapeHtml(href)}" style="color:#333;text-decoration:none;">${PAPERCLIP_SVG}${name}</a>` +
                 '</div>',
         );
     }
