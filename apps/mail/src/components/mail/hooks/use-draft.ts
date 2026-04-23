@@ -179,7 +179,7 @@ function mergeServerAttachments(
     parsed: Attachment[],
 ): { serverActual: AttachmentMeta[]; localNext: AttachmentMeta[] } {
     const visible = parsed.filter((a) => !a.contentType.startsWith('text/calendar'));
-    const serverActual: AttachmentMeta[] = visible.map((a, i) => {
+    const serverActual = visible.map((a, i) => {
         const filename = a.filename || `Attachment ${i + 1}`;
         const prevMatch = local.find((p) => p.filename === filename && p.size === a.size);
         return {

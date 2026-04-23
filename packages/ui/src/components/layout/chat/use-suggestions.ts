@@ -1,9 +1,9 @@
 import type React from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-type UseSuggestionsOptions<T> = {
+type UseSuggestionsOptions = {
     visible: boolean;
-    onSelect: (item: T) => void;
+    onSelect: (item: string) => void;
     onEscape: () => void;
     // Fires on commit (Enter/Tab) when the list is empty. Use when a "commit nothing" should
     // still dismiss the suggest — @-mention uses this to strip the trailing `@query` text.
@@ -17,26 +17,26 @@ type UseSuggestionsOptions<T> = {
     acceptShiftEnter?: boolean;
 };
 
-type UseSuggestionsResult<T> = {
+type UseSuggestionsResult = {
     selectedIndex: number;
-    onItemsChange: (count: number, items: T[]) => void;
+    onItemsChange: (count: number, items: string[]) => void;
     // Returns true when the key was consumed; callers should early-return in that case.
     handleKeyDown: (e: React.KeyboardEvent) => boolean;
 };
 
-export function useSuggestions<T>({
+export function useSuggestions({
     visible,
     onSelect,
     onEscape,
     onCommitEmpty,
     passthroughWhenEmpty = false,
     acceptShiftEnter = false,
-}: UseSuggestionsOptions<T>): UseSuggestionsResult<T> {
+}: UseSuggestionsOptions): UseSuggestionsResult {
     const [selectedIndex, setSelectedIndex] = useState(0);
     const countRef = useRef(0);
-    const itemsRef = useRef<T[]>([]);
+    const itemsRef = useRef<string[]>([]);
 
-    const onItemsChange = useCallback((count: number, items: T[]) => {
+    const onItemsChange = useCallback((count: number, items: string[]) => {
         countRef.current = count;
         itemsRef.current = items;
         if (count > 0) setSelectedIndex((prev) => Math.min(prev, count - 1));

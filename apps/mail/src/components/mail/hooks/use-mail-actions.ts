@@ -13,15 +13,6 @@ import {
 import type { Email, NewDraft } from '@workspace/lib/types/mail';
 import { Route } from '../../../routes/_auth.$filterType.$filterId';
 
-// Reply/forward stash the prefilled draft in the router's history state so the composer
-// can read it at mount without a round-trip to the server. Both navigate() and
-// useLocation() are typed against this shape.
-declare module '@tanstack/history' {
-    interface HistoryState {
-        prefillDraft?: NewDraft;
-    }
-}
-
 export function useMailActions() {
     const { filterType, filterId } = Route.useParams();
     const navigate = useNavigate();
@@ -61,24 +52,27 @@ export function useMailActions() {
 
     // Navigate to the compose view with a prefilled draft in history state. No API call —
     // the composer reads the state at mount, seeds its fingerprint from it, and the first
-    // POST only fires once the user actually edits (triggering the auto-save).
+    // POST only fires once the user actually edits (triggering the auto-save). The fresh
+    // composeSessionKey remounts any composer that was already open (so clicking Reply
+    // while typing a different message gives a clean composer with the new quoted body).
     const openPrefilledCompose = (prefillDraft: NewDraft) => {
         navigate({
             to: Route.fullPath,
             params: { filterType, filterId },
             search: { mode: 'compose' },
-            state: { prefillDraft },
+            state: { prefillDraft, composeSessionKey: crypto.randomUUID() },
         });
     };
 
     // After the first auto-save of a fresh compose, add ?mailId=... to the URL so a reload lands
-    // back on the same draft. Keep mode='compose' so the composer session key stays stable and
-    // the composer isn't remounted mid-typing.
+    // back on the same draft. Keep mode='compose' and preserve history state so composeSessionKey
+    // survives — otherwise the EmailDraft remount key would flip and nuke the in-progress typing.
     const handleDraftIdAssigned = (id: string) => {
         navigate({
             to: Route.fullPath,
             params: { filterType, filterId },
             search: (prev) => ({ ...prev, mailId: id, mode: 'compose' }),
+            state: true,
             replace: true,
         });
     };

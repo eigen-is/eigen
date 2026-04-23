@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@tanstack/history": "1.161.6",
     "@tiptap/core": "^3.21.0",
     "@tiptap/pm": "^3.21.0",
     "@tiptap/react": "^3.21.0",

@@ -20,11 +20,14 @@ export function EmailComposeButton({ condensed }: EmailComposeButtonProps) {
 
     const navigate = useNavigate();
 
+    // Fresh composeSessionKey remounts any composer that happened to be open (e.g. the user
+    // was in the middle of a reply) — matches the session-key contract in use-mail-actions.ts.
     const handleComposeClick = async () => {
         navigate({
             to: FilterRoute.fullPath,
             params: { filterType, filterId },
             search: { mode: 'compose' },
+            state: { composeSessionKey: crypto.randomUUID() },
         });
     };
 
