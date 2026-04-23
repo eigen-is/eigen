@@ -1,122 +1,34 @@
 # Code Quality Follow-ups (2026-04-23)
 
 Follow-ups identified during the drive-picker / save-to-drive review session.
-Ordered by priority. Do them in this order unless the user overrides.
+Sections 1–3 shipped on 2026-04-23. Three items remain.
 
-## Priority order
+## Status
 
-1. **Mail-draft hook trio refactor** — biggest bug surface, smallest audit, user-facing impact
-2. **Drive + SharedDrive wrapper pattern** — eliminate a recurring architectural pitfall
-3. **routes/drive.ts eigendoc-create consolidation** — lines-of-code cleanup
-4. **ChatMessageInput suggest state machines** — complexity reduction
+| # | Title | Status |
+|---|-------|--------|
+| 1 | Mail-draft hook trio refactor | ✅ shipped (`180d6014`, `b45af345`, `ed2de47e`) |
+| 2 | Drive + SharedDrive wrapper pattern | ✅ shipped (`6483ed81`, `ed2de47e`) |
+| 3 | routes/drive.ts eigendoc-create consolidation | ✅ shipped (`74924e55`, `ed2de47e`) |
+| 4 | ChatMessageInput suggest state machines | ⏳ pending |
+| 5 | Reply/Forward should not persist a draft on click | ⏳ pending |
+| 6 | Mail draft attachment merge drops in-flight tempId attachments | ⏳ pending (uncovered during §1 review) |
 
-Each item ends with an acceptance bar. After each section, check in with the user before
-moving to the next.
+## Notes on shipped sections
 
----
-
-## 1. Mail-draft hook trio refactor
-
-### Files
-- `packages/lib/src/core/mail/hooks/use-draft.ts`
-- `apps/mail/src/components/mail/hooks/use-draft-state.ts`
-- `apps/mail/src/components/mail/hooks/use-draft-auto-save.ts`
-- `apps/mail/src/components/mail/email-draft.tsx` — callsite, especially
-  `sendWithFreshDraft` around L206–216
-
-### Current smells
-- Auto-save with fingerprint dirty-detection + debounced scheduling + explicit flush
-  + disable-on-send + server-id-assignment
-- Four interlocking concerns coordinated via refs and callbacks across three files
-- `sendWithFreshDraft` reads like it was shaped by race-condition bugs:
-  `saveNow()` → `disableAutoSave()` → `toDraft()` → splice server-id into draft
-- I patched symptoms here last session (scheduleSave on ref removal, parallelize
-  handleDriveAttach); the underlying state machine is untouched
-
-### Approach
-Consolidate into a single reducer-style state machine with explicit states:
-`idle | dirty | saving | sent`. Transitions:
-- `user-edits` → `dirty`
-- `debounce-fires` → `saving`
-- `save-succeeds` → `idle` (or `dirty` if edits arrived during save)
-- `user-sends` → flush-then-send → `sent`
-
-Preserve the fingerprint-based dirty detection but move it into the reducer.
-Kill the ref-mutation patterns — pure state + pure transitions.
-
-### Audit steps (do BEFORE touching code)
-1. Read all three files + `email-draft.tsx` end-to-end
-2. Diagram the current state transitions and refs
-3. List latent races: what happens if user types during save? Sends before first
-   save completes? Auto-save fires after send is already in flight?
-4. Sketch the new state machine
-5. Get user approval before implementing
-
-### Acceptance
-- Three files merge into at most one hook file (or state machine + thin public hook)
-- Existing mail tests still pass (`bun test apps/api/src/test/mail*.test.ts`)
-- `sendWithFreshDraft` becomes a straight-line call — no splice-server-id dance
-- New unit tests cover each transition, including sending-while-saving and
-  editing-while-saving
-
----
-
-## 2. Drive + SharedDrive wrapper pattern
-
-### Files
-- `apps/api/src/lib/drive/drive.ts`
-- `apps/api/src/lib/drive/sharedDrive.ts`
-- `apps/api/src/routes/drive.ts` and any route that calls `getSharedDrive`
-
-### Problem
-Every time a new method is added to `Drive`, a matching ACL-wrapped method must be
-added to `SharedDrive`. If forgotten, routes can accidentally bypass ACL. The review
-already flagged this as a recurring pitfall:
-*"`SharedDrive` must wrap every public `Drive` method"*.
-
-### Approach (branded types, compile-time enforcement)
-1. Add `type UnguardedDrive = Drive & { readonly __unguarded: unique symbol };`
-2. Make `getDrive()` / `getHome().drive` return `UnguardedDrive`
-3. `getSharedDrive()` is the only public factory consumers see — returns `SharedDrive`
-4. `SharedDrive` constructor takes `UnguardedDrive` internally; the brand is attached
-   only where we know the caller is trusted (inside `SharedDrive`)
-5. TypeScript refuses any route that tries to hold a raw `Drive`/`UnguardedDrive`
-
-### Optional defense-in-depth
-A Proxy-based runtime check: every `SharedDrive` method runs through a wrapper that
-requires an ACL predicate be declared in a central registry.
-
-### Acceptance
-- Every route typechecks after branding
-- Adding a new method to `Drive` without a matching `SharedDrive` method fails
-  the build (or throws at runtime if the proxy path is added)
-- No existing test regressions
-
----
-
-## 3. routes/drive.ts eigendoc-create consolidation
-
-### File
-`apps/api/src/routes/drive.ts` (510 lines)
-
-### Current
-Five near-identical eigendoc-creation endpoints:
-- `POST /folder/:pathId/doc`
-- `POST /folder/:pathId/stickies`
-- `POST /folder/:pathId/slides`
-- `POST /folder/:pathId/sheets`
-- `POST /folder/:pathId/chat`
-
-### Goal
-Consolidate into `POST /folder/:pathId/create/:type` where `:type` is an
-`EigenDocType`. Mirrors the unified `DriveCreateEigenDoc` frontend and
-`useCreateDriveItem(type)` hook that already exist.
-
-### Acceptance
-- Frontend `useCreateDriveItem` in `use-drive.ts` updated to call the new endpoint
-- Eden Treaty types flow correctly end-to-end
-- Existing create tests still pass
-- ~50 line reduction in routes/drive.ts
+- **§1** merged into one `useDraft` hook (`apps/mail/src/components/mail/hooks/use-draft.ts`).
+  Acceptance bar around "new unit tests for each transition" was deferred —
+  no React Testing Library infra exists and adding it just for one hook was
+  out of scope. See §6 for one race that survived the refactor.
+- **§2** deviated from the original plan's branded-type approach. Branding
+  alone wouldn't have closed the inheritance bypass (`SharedDrive extends
+  Drive` made every `Drive` method appear on `SharedDrive` for free). The
+  shipped solution drops `extends`, returns `Drive | SharedDrive` from
+  `getSharedDrive`, and lets the union's intersection enforce wrappers at
+  compile time. Owner perf is preserved (own-drive returns raw Drive).
+- **§3** straightforward consolidation — the literal-union validator in the
+  route is intentionally explicit so Elysia preserves the tuple in
+  `params.type` and the handler's switch stays exhaustive at compile time.
 
 ---
 
@@ -163,7 +75,7 @@ user has typed at least one character beyond the quoted body or the autosave
 debounce fires. Eigen persists eagerly, which clutters Drafts.
 
 ### Goal
-Defer the first save until the user actually edits the compose. The new
+Defer the first save until the user actually edits the compose. The
 `useDraft` hook in `email-draft.tsx` already has a fingerprint-based dirty
 detector — letting *it* decide when to first POST gives consistent behavior
 between fresh-compose and reply/forward.
@@ -184,10 +96,41 @@ between fresh-compose and reply/forward.
 
 ---
 
+## 6. Mail draft attachment merge drops in-flight tempId attachments
+
+### File
+`apps/mail/src/components/mail/hooks/use-draft.ts` — `mergeServerAttachments`
+
+### Problem
+When a save is in flight and the user attaches a *new* file during the
+network round-trip, the server's response only describes the attachments it
+saw. `mergeServerAttachments` replaces the local list with that response —
+silently dropping the new `tempId` attachment that was added mid-flight. The
+next auto-save then doesn't include it.
+
+This race existed before §1 and §1's refactor preserved the behavior. Worth
+fixing as its own change because the fix needs careful thought about
+ordering (what if the user *removes* an attachment during the save? it
+should stay removed).
+
+### Sketch
+- In `mergeServerAttachments`, keep any local entry that has a `tempId`
+  AND isn't represented in the server's response (matched by filename+size).
+- Test scenarios:
+  1. Attach A, save fires, attach B during save → both A and B end up persisted
+  2. Attach A and B together → both persisted
+  3. Attach A, remove A during save → A removed
+  4. Server returns extra attachments not in local → server is authoritative
+
+### Acceptance
+- Manually verify scenario 1 above
+- Existing mail integration tests still pass
+
+---
+
 ## How to resume
 
 1. Read this file
-2. Start with section 1 (mail-draft trio). Do the audit step first — do not touch
-   code until the state-machine sketch is approved by the user
+2. Pick the next pending section (4, 5, or 6 — independent of each other)
 3. Each section gets its own commit(s). Run `bun run check` before committing
 4. After each section, check in with the user before moving to the next
