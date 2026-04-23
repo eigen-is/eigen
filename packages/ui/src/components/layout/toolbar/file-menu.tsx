@@ -1,8 +1,16 @@
 import { formatForDisplay } from '@tanstack/react-hotkeys';
 import { useNavigate } from '@tanstack/react-router';
+import { openDocument } from '@workspace/lib/api';
 import { fetchRevisionState, useCollabRevisions } from '@workspace/lib/collab';
 import { formatDateTime } from '@workspace/lib/date';
 import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
+import {
+    DRIVE_MIME_CHAT,
+    DRIVE_MIME_DOC,
+    DRIVE_MIME_SHEETS,
+    DRIVE_MIME_SLIDES,
+    DRIVE_MIME_STICKIES,
+} from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import {
     DropdownMenu,
@@ -31,7 +39,16 @@ import { type ReactNode, useState } from 'react';
 import { DriveCreateEigenDoc } from '../drive/drive-create-eigendoc';
 import { DriveDeleteItem } from '../drive/drive-delete-item';
 import { DriveEmailCollaborators } from '../drive/drive-email-collaborators';
+import { DriveFilePicker } from '../drive/drive-file-picker';
 import { DriveRenameItem } from '../drive/drive-rename-item';
+
+const OPEN_LABELS: Record<EigenDocType, { mime: string; title: string }> = {
+    doc: { mime: DRIVE_MIME_DOC, title: 'Open doc' },
+    stickies: { mime: DRIVE_MIME_STICKIES, title: 'Open stickies' },
+    slides: { mime: DRIVE_MIME_SLIDES, title: 'Open slides' },
+    sheets: { mime: DRIVE_MIME_SHEETS, title: 'Open sheet' },
+    chat: { mime: DRIVE_MIME_CHAT, title: 'Open chat' },
+};
 
 const DOWNLOAD_LABELS: Record<string, string> = {
     docx: 'Microsoft Word (.docx)',
@@ -75,12 +92,14 @@ export function FileMenu({
     children,
 }: FileMenuProps) {
     const [createOpen, setCreateOpen] = useState(false);
+    const [openPickerOpen, setOpenPickerOpen] = useState(false);
     const [renameOpen, setRenameOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [emailOpen, setEmailOpen] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [pendingRevisionId, setPendingRevisionId] = useState<number | null>(null);
+    const openConfig = OPEN_LABELS[createType];
     const { data: revisions } = useCollabRevisions(path.ownerId, path.mountId, path.id, menuOpen && !!onRestore);
     const navigate = useNavigate();
 
@@ -110,8 +129,8 @@ export function FileMenu({
                     <DropdownMenuItem onClick={() => setCreateOpen(true)}>
                         <CreateIcon className="h-4 w-4 mr-2" /> {createLabel}
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => navigate({ to: `/` })}>
-                        <Folder className="h-4 w-4 mr-2" /> Open
+                    <DropdownMenuItem onClick={() => setOpenPickerOpen(true)}>
+                        <Folder className="h-4 w-4 mr-2" /> Open…
                     </DropdownMenuItem>
                     {canWrite && onImport && (
                         <DropdownMenuItem onClick={onImport}>
@@ -200,6 +219,16 @@ export function FileMenu({
                 defaultOwnerId={path.ownerId}
                 defaultFolderId={path.parentId ?? undefined}
                 defaultMountId={path.mountId}
+            />
+            <DriveFilePicker
+                open={openPickerOpen}
+                onOpenChange={setOpenPickerOpen}
+                title={openConfig.title}
+                mimeFilter={[openConfig.mime]}
+                onSelect={(paths) => {
+                    const picked = paths[0];
+                    if (picked) openDocument(picked);
+                }}
             />
             <DriveRenameItem path={path} open={renameOpen} onOpenChange={setRenameOpen} />
             <DriveEmailCollaborators path={path} open={emailOpen} onOpenChange={setEmailOpen} />

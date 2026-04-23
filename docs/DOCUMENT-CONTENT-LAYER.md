@@ -312,8 +312,8 @@ top of what `CollabDocument` and `drive.getCollabDocument()` already give us.
 
 - **Sheets ops are not replayed on read.** Fortune-sheet's formula engine and op application
   are client-side. Snapshots are flushed on save and `beforeunload`, so Phase 1 reads the
-  last flushed state — slightly stale under active editing. Server-side op replay is part
-  of the fortune-sheet refactoring effort (`PROPOSAL_SHEETS_REFACTORING.md`).
+  last flushed state — slightly stale under active editing. Server-side op replay + recalc
+  via `FormulaEngine.recalculateAll()` is tracked in [SHEETS.md](SHEETS.md#remaining-work--server-side-recalc).
 - **Write permission must be checked explicitly.** `SharedDrive.getCollabDocument()` only
   checks read permission; the WebSocket path's per-message `canWrite` gate doesn't apply to
   direct writes. Add an explicit `drive.canWrite(...)` before any direct write.

@@ -78,7 +78,9 @@ engine/
 ├── cell-resolver.ts        # CellResolver interface + createArrayResolver
 ├── format.ts               # Format type inference (uses numfmt for rendering)
 ├── a1-notation.ts          # A1 ↔ row/col parsing
+├── validation.ts           # Data validation helpers
 ├── types.ts                # CellResolver, EvaluationResult, FormulaEngineState
+├── parser/                 # Pure formula parser (JISON + @formulajs/formulajs, zero DOM)
 └── index.ts                # Barrel exports
 ```
 
@@ -92,14 +94,33 @@ engine/
 etc.) live in `state/modules/formula-exec.ts`. The `formula-ui.ts` barrel re-exports from both, so UI consumers
 don't see the split.
 
-**Next step:** Wire `recalculateAll()` into the Document Content Layer's `readSheetContent()` for accurate
-formula values in export, search indexing, and scripting.
+### Remaining Work — Server-side recalc
 
-See [PROPOSAL_SHEETS_REFACTORING.md](PROPOSAL_SHEETS_REFACTORING.md) for the full design and remaining work.
+The engine is extracted, but `readSheetContent()` (see [DOCUMENT-CONTENT-LAYER.md](DOCUMENT-CONTENT-LAYER.md))
+still returns the last-saved `cell.v` from the snapshot. To get fresh values, load the snapshot + replay
+pending ops, build a `CellResolver` over the resulting `Sheet[]`, and call `engine.recalculateAll(resolver)`
+before mapping to `SheetContent`. Consumers (export, search indexing, scripting) pick this up transparently.
+
+### Constraints
+
+- **Parser origin**: fortune-sheet's parser is derived from hot-formula-parser (Handsontable's older
+  parser); `@formulajs/formulajs` covers ~200 functions, not Excel's full ~400.
+- **Volatile functions** (`RAND`, `NOW`, `TODAY`) return new values on each server evaluation — correct
+  behavior, but differs from the cached snapshot.
+- **Circular references** are detected by `detectCycle()` in `engine/dependency-graph.ts`.
+- **INDIRECT/OFFSET/INDEX** produce dynamic references the dependency graph can't analyze statically;
+  `isFunctionRange()` handles these specially — preserve that logic when touching the graph.
+
+### Not in scope
+
+Replacing fortune-sheet, adding formula functions beyond formulajs, server-side UI rendering, real-time
+formula recalc push (formulas are evaluated on read, not on write).
 
 ## Fortune-Sheet Integration
 
-The entire fortune-sheet library (UI components, core engine, formula parser) is forked into `packages/fortune-sheet/`.
-There is no external `@fortune-sheet/core` dependency — everything lives in-repo under full source control.
+The entire fortune-sheet library (UI components, state runtime, formula parser, engine) is forked into
+`packages/fortune-sheet/`. There is no external `@fortune-sheet/core` dependency — everything lives
+in-repo under full source control.
 
-See [TODO-FORTUNE-SHEETS.md](TODO-FORTUNE-SHEETS.md) for the UI refactoring audit (CSS migration, shadcn adoption).
+See [TODO-FORTUNE-SHEETS.md](TODO-FORTUNE-SHEETS.md) for all outstanding cleanup work (biome coverage,
+lodash removal, CSS migration, shadcn adoption, typing debt).

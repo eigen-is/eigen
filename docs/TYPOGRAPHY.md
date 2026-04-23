@@ -72,7 +72,7 @@ The `FontPicker` automatically picks up new entries from `EIGEN_FONTS`.
 | `packages/ui/src/styles/eigen-prose.css`                      | Prose typography (body, headings)     |
 | `packages/lib/src/constants/fonts.ts`                         | `EIGEN_FONTS` registry, `getFontFamily()` |
 | `packages/ui/src/components/layout/media/font-picker.tsx`     | Shared font picker component         |
-| `packages/fortune-sheet/src/core/locale/en.ts` (+ locales)   | Sheets font list                     |
+| `packages/fortune-sheet/src/state/locale/en.ts` (+ locales)  | Sheets font list                     |
 
 ## Future: CJK Support
 

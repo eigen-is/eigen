@@ -1393,11 +1393,10 @@ async function readSlidesContent(ownerId: string, mountId: string, pathId: strin
 contains last-saved computed values (`cell.v`), which are synced whenever fortune-sheet flushes its
 snapshot (on save, on `beforeunload`, periodically during editing). For Phase 1, this is sufficient.
 
-Server-side formula recalculation is planned as part of a broader fortune-sheet refactoring effort (see
-`docs/PROPOSAL_SHEETS_REFACTORING.md`). Fortune-sheet's formula parser (`formula-parser/`) is already
-headless-ready with zero browser dependencies. The plan is to extract it into a headless `FormulaEngine`
-alongside the number formatting engine (`ssf.ts`). When ready, `readSheetContent()` will optionally
-recalculate before returning — transparently to all consumers (scripting, export, import).
+Server-side formula recalculation is tracked in [SHEETS.md](SHEETS.md#remaining-work--server-side-recalc).
+The headless `FormulaEngine` (`packages/fortune-sheet/src/engine/`) and its `CellResolver` interface are
+in place, and number formatting runs on `numfmt`. What remains is wiring `engine.recalculateAll()` into
+`readSheetContent()` — transparent to all consumers (scripting, export, import).
 
 **Sheets A1 notation:** The SDK handler parses A1 notation (e.g., `"A1"`, `"B2:D10"`, `"Sheet2!A1:C5"`)
 into numeric row/col/range and delegates to `readSheetContent()`. Parsing is trivial
@@ -1647,9 +1646,9 @@ The minimum that proves the full pipeline end-to-end:
 - Sheets export (HTML, XLSX) via `readSheetContent()` + format-specific serializers
 - Custom sheet functions (batch evaluation of `=EIGEN_FUNC()` cells via scripting engine)
 
-Note: server-side formula recalculation is tracked separately in `docs/PROPOSAL_SHEETS_REFACTORING.md` as
-part of the fortune-sheet cleanup effort. When that work lands, `readSheetContent()` gains accurate formula
-values automatically — no scripting-side changes needed.
+Note: server-side formula recalculation is tracked separately in [SHEETS.md](SHEETS.md#remaining-work--server-side-recalc)
+as part of the fortune-sheet cleanup effort. When that work lands, `readSheetContent()` gains accurate
+formula values automatically — no scripting-side changes needed.
 
 ## Google Apps Script Comparison
 
