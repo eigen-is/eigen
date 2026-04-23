@@ -48,6 +48,10 @@ type Action =
 type UseDraftOptions = {
     email: EmailDraft | null;
     prefillTo?: string;
+    // Seed the composer with quoted body / subject / recipients for reply/forward, without
+    // persisting a draft until the user actually edits. lastSavedFingerprint is computed from
+    // these fields so no save fires on mount.
+    prefillDraft?: NewDraft;
     onSave?: SaveFn;
     onDraftIdAssigned?: (id: string) => void;
 };
@@ -67,7 +71,7 @@ function stringToAddressObject(text: string): AddressObject | undefined {
     return { value, html: text, text };
 }
 
-function initFields(email: EmailDraft | null, prefillTo?: string): DraftFields {
+function initFields(email: EmailDraft | null, prefillTo?: string, prefillDraft?: NewDraft): DraftFields {
     if (email) {
         return {
             id: email.id,
@@ -88,6 +92,21 @@ function initFields(email: EmailDraft | null, prefillTo?: string): DraftFields {
             inReplyTo: email.inReplyTo,
             references: email.references,
             messageId: email.messageId,
+        };
+    }
+    if (prefillDraft) {
+        return {
+            to: addressObjectToString(prefillDraft.to),
+            cc: addressObjectToString(prefillDraft.cc),
+            bcc: addressObjectToString(prefillDraft.bcc),
+            subject: prefillDraft.subject || '',
+            body: prefillDraft.html || '',
+            bodyText: prefillDraft.text || '',
+            attachments: [],
+            driveReferences: prefillDraft.driveReferences ?? [],
+            inReplyTo: prefillDraft.inReplyTo,
+            references: prefillDraft.references,
+            messageId: prefillDraft.messageId,
         };
     }
     return {
@@ -245,10 +264,10 @@ function isSaveable(f: DraftFields): boolean {
 
 const noopSave: SaveFn = () => Promise.resolve(null);
 
-export function useDraft({ email, prefillTo, onSave = noopSave, onDraftIdAssigned }: UseDraftOptions) {
+export function useDraft({ email, prefillTo, prefillDraft, onSave = noopSave, onDraftIdAssigned }: UseDraftOptions) {
     const { user } = useAuth();
     const [state, dispatch] = useReducer(reducer, undefined, () => {
-        const fields = initFields(email, prefillTo);
+        const fields = initFields(email, prefillTo, prefillDraft);
         return { fields, lastSavedFingerprint: fingerprintFields(fields) };
     });
 
