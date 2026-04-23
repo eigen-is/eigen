@@ -51,7 +51,7 @@ describe('Comment Index', () => {
             ctx.alice.user.sessionToken,
             ctx.alice.user.id,
             mountId,
-            `folder/${root.id}/doc`,
+            `folder/${root.id}/create/doc`,
             {
                 fileName: 'comment-test-doc',
             },
@@ -85,7 +85,7 @@ describe('Comment Index', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 mountId,
-                `folder/${chatFolderId}/chat`,
+                `folder/${chatFolderId}/create/chat`,
                 { fileName: 'discussion-1' },
             );
             chatId = chat.id;
@@ -125,7 +125,7 @@ describe('Comment Index', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 mountId,
-                `folder/${chatFolderId}/chat`,
+                `folder/${chatFolderId}/create/chat`,
                 { fileName: 'mention-test' },
             );
 
@@ -195,7 +195,7 @@ describe('Comment Index', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 mountId,
-                `folder/${chatFolderId}/chat`,
+                `folder/${chatFolderId}/create/chat`,
                 { fileName: 'resolve-test' },
             );
             chatName = 'resolve-test.eigenchat';
@@ -260,7 +260,7 @@ describe('Comment Index', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 mountId,
-                `folder/${root.id}/doc`,
+                `folder/${root.id}/create/doc`,
                 { fileName: 'edit-delete-doc' },
             );
             editDocId = doc.id;
@@ -277,7 +277,7 @@ describe('Comment Index', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 mountId,
-                `folder/${chatFolder.id}/chat`,
+                `folder/${chatFolder.id}/create/chat`,
                 { fileName: 'edit-chat' },
             );
             editChatId = chat.id;
@@ -377,7 +377,7 @@ describe('Comment Index', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 mountId,
-                `folder/${root.id}/doc`,
+                `folder/${root.id}/create/doc`,
                 { fileName: 'multi-comment-doc' },
             );
             doc2Id = doc2.id;
@@ -396,7 +396,7 @@ describe('Comment Index', () => {
                     ctx.alice.user.sessionToken,
                     ctx.alice.user.id,
                     mountId,
-                    `folder/${chatFolder.id}/chat`,
+                    `folder/${chatFolder.id}/create/chat`,
                     { fileName: name },
                 );
                 await chatPost<ChatMessage>(
@@ -432,7 +432,7 @@ describe('Comment Index', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 mountId,
-                `folder/${root.id}/doc`,
+                `folder/${root.id}/create/doc`,
                 { fileName: 'whisper-doc' },
             );
             doc3Id = doc3.id;
@@ -449,7 +449,7 @@ describe('Comment Index', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 mountId,
-                `folder/${chatFolder.id}/chat`,
+                `folder/${chatFolder.id}/create/chat`,
                 { fileName: 'whisper-chat' },
             );
 
@@ -487,7 +487,7 @@ describe('Comment Index', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 mountId,
-                `folder/${root.id}/chat`,
+                `folder/${root.id}/create/chat`,
                 { fileName: 'standalone-chat' },
             );
 
@@ -521,7 +521,7 @@ describe('Comment Index', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 mountId,
-                `folder/${root.id}/doc`,
+                `folder/${root.id}/create/doc`,
                 { fileName: 'truncation-doc' },
             );
             doc4Id = doc4.id;
@@ -538,7 +538,7 @@ describe('Comment Index', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 mountId,
-                `folder/${chatFolder.id}/chat`,
+                `folder/${chatFolder.id}/create/chat`,
                 { fileName: 'long-msg' },
             );
 
@@ -571,7 +571,7 @@ describe('Comment Index', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 mountId,
-                `folder/${root.id}/doc`,
+                `folder/${root.id}/create/doc`,
                 { fileName: 'perm-doc' },
             );
             permDocId = doc.id;
@@ -588,7 +588,7 @@ describe('Comment Index', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 mountId,
-                `folder/${chatFolder.id}/chat`,
+                `folder/${chatFolder.id}/create/chat`,
                 { fileName: 'perm-chat' },
             );
             await chatPost<ChatMessage>(
@@ -679,7 +679,7 @@ describe('Comment Index', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 mountId,
-                `folder/${root.id}/doc`,
+                `folder/${root.id}/create/doc`,
                 { fileName: 'multi-mention-doc' },
             );
             mentionDocId = doc.id;
@@ -704,7 +704,7 @@ describe('Comment Index', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 mountId,
-                `folder/${chatFolder.id}/chat`,
+                `folder/${chatFolder.id}/create/chat`,
                 { fileName: 'multi-mention' },
             );
 
@@ -745,7 +745,7 @@ describe('Comment Index', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 mountId,
-                `folder/${root.id}/doc`,
+                `folder/${root.id}/create/doc`,
                 { fileName: 'case-mention-doc' },
             );
             caseDocId = doc.id;
@@ -766,7 +766,7 @@ describe('Comment Index', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 mountId,
-                `folder/${chatFolder.id}/chat`,
+                `folder/${chatFolder.id}/create/chat`,
                 { fileName: 'case-mention' },
             );
 
@@ -798,7 +798,7 @@ describe('Comment Index', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 mountId,
-                `folder/${root.id}/doc`,
+                `folder/${root.id}/create/doc`,
                 { fileName: 'check-comments-db' },
             );
 

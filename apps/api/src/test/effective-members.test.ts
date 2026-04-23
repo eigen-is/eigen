@@ -153,7 +153,7 @@ describe('Effective Members', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 mountId,
-                `folder/${rootId}/doc`,
+                `folder/${rootId}/create/doc`,
                 { fileName: 'members-doc' },
             );
             docId = doc.id;
@@ -176,7 +176,7 @@ describe('Effective Members', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 mountId,
-                `folder/${chatFolder.id}/chat`,
+                `folder/${chatFolder.id}/create/chat`,
                 { fileName: 'embedded-chat' },
             );
             chatId = chat.id;

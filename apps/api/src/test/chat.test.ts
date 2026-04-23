@@ -43,7 +43,7 @@ describe('Chat', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `folder/${aliceRootId}/chat`,
+                `folder/${aliceRootId}/create/chat`,
                 { fileName: 'Team Chat' },
             );
             expect(data.name).toBe('Team Chat.eigenchat');
@@ -85,7 +85,7 @@ describe('Chat', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `folder/${aliceRootId}/doc`,
+                `folder/${aliceRootId}/create/doc`,
                 { fileName: 'Test Doc' },
             );
             docId = doc.id;
@@ -110,7 +110,7 @@ describe('Chat', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `folder/${aliceRootId}/chat`,
+                `folder/${aliceRootId}/create/chat`,
                 { fileName: 'Message Test Chat' },
             );
             chatId = chat.id;
@@ -231,7 +231,7 @@ describe('Chat', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `folder/${aliceRootId}/chat`,
+                `folder/${aliceRootId}/create/chat`,
                 { fileName: 'Whisper Test Chat' },
             );
             chatId = chat.id;
@@ -341,7 +341,7 @@ describe('Chat', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `folder/${aliceRootId}/chat`,
+                `folder/${aliceRootId}/create/chat`,
                 { fileName: 'Attachment Test Chat' },
             );
             chatId = chat.id;
@@ -544,7 +544,7 @@ describe('Chat', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `folder/${aliceRootId}/chat`,
+                `folder/${aliceRootId}/create/chat`,
                 { fileName: 'Slash Command Chat' },
             );
             chatId = chat.id;
@@ -739,7 +739,7 @@ describe('Chat', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `folder/${aliceRootId}/chat`,
+                `folder/${aliceRootId}/create/chat`,
                 { fileName: 'Read Only Chat' },
             );
             chatId = chat.id;
@@ -912,7 +912,7 @@ describe('Chat', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `folder/${aliceRootId}/chat`,
+                `folder/${aliceRootId}/create/chat`,
                 { fileName: 'Emote Chat' },
             );
             chatId = chat.id;
@@ -977,7 +977,7 @@ describe('Chat', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `folder/${aliceRootId}/chat`,
+                `folder/${aliceRootId}/create/chat`,
                 { fileName: 'Validation Chat' },
             );
             chatId = chat.id;
@@ -1115,7 +1115,7 @@ describe('Chat', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `folder/${aliceRootId}/chat`,
+                `folder/${aliceRootId}/create/chat`,
                 { fileName: 'Deletable Chat' },
             );
 
@@ -1146,7 +1146,7 @@ describe('Chat', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `folder/${aliceRootId}/chat`,
+                `folder/${aliceRootId}/create/chat`,
                 { fileName: 'Notification Chat' },
             );
             chatId = chat.id;
@@ -1276,7 +1276,7 @@ describe('Chat', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `folder/${aliceRootId}/doc`,
+                `folder/${aliceRootId}/create/doc`,
                 { fileName: 'Comment Notify Doc' },
             );
             const docContents = await driveGet<DrivePath[]>(
@@ -1290,7 +1290,7 @@ describe('Chat', () => {
                 ctx.alice.user.sessionToken,
                 ctx.alice.user.id,
                 aliceMountId,
-                `folder/${chatFolder.id}/chat`,
+                `folder/${chatFolder.id}/create/chat`,
                 { fileName: 'General' },
             );
 

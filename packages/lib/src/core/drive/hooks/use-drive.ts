@@ -505,15 +505,10 @@ export function useCreateDriveItem(type: EigenDocType) {
             parentId: string;
             fileName: string;
         }): Promise<DrivePath> => {
-            const folder = driveApi({ ownerId })({ mountId }).folder({ pathId: parentId });
-            const endpoints = {
-                doc: folder.doc,
-                stickies: folder.stickies,
-                slides: folder.slides,
-                sheets: folder.sheets,
-                chat: folder.chat,
-            };
-            const response = await endpoints[type].post({ fileName });
+            const response = await driveApi({ ownerId })({ mountId })
+                .folder({ pathId: parentId })
+                .create({ type })
+                .post({ fileName });
             if (response.error) throw new AppError(response);
             return response.data;
         },
