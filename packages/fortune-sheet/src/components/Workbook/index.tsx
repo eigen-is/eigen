@@ -1,4 +1,5 @@
 import {
+    api,
     calcSelectionInfo,
     CellWithRowAndCol,
     Context,
@@ -22,6 +23,7 @@ import {
     Sheet as SheetType,
 } from "../../state";
 import type {CellMatrix} from "../../engine/types";
+import {isFormula} from "../../engine/formula-engine";
 import React, {useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState,} from "react";
 import {applyPatches, enablePatches, Patch, produce, produceWithPatches,} from "immer";
 import _ from "lodash";
@@ -492,21 +494,40 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         for (const newDatum of draftCtx.luckysheetfile) {
                             const index = getSheetIndex(draftCtx, newDatum.id!) as number;
                             const sheet = draftCtx.luckysheetfile?.[index];
-                            if (sheet.data && sheet.data.length > 0) {
-                                setFormulaCellInfoMap(
-                                    draftCtx,
-                                    sheet.calcChain,
-                                    sheet.data
-                                );
-                            } else {
-                                const cellMatrixData = initSheetData(draftCtx, sheet, index);
-                                setFormulaCellInfoMap(
-                                    draftCtx,
-                                    sheet.calcChain,
-                                    cellMatrixData || undefined
-                                );
+                            const data =
+                                sheet.data && sheet.data.length > 0
+                                    ? sheet.data
+                                    : initSheetData(draftCtx, sheet, index);
+                            // Derive calcChain from data when missing. Imported sheets
+                            // (e.g. from xlsx) arrive with `f` on cells but no calcChain,
+                            // which leaves the recalc pipeline empty on edit.
+                            if (data && (sheet.calcChain == null || sheet.calcChain.length === 0)) {
+                                const chain: {r: number; c: number; id: string}[] = [];
+                                for (let r = 0; r < data.length; r++) {
+                                    const row = data[r];
+                                    if (!row) continue;
+                                    for (let c = 0; c < row.length; c++) {
+                                        if (isFormula(row[c]?.f)) {
+                                            chain.push({r, c, id: sheet.id!});
+                                        }
+                                    }
+                                }
+                                if (chain.length > 0) sheet.calcChain = chain;
                             }
+                            setFormulaCellInfoMap(
+                                draftCtx,
+                                sheet.calcChain,
+                                data || undefined
+                            );
                         }
+                        // Recompute formulas on load so displayed values reflect current inputs
+                        // (not stale cached results from a previous save or xlsx import).
+                        // calculateFormula -> setCellValue falls back on ctx.currentSheetId,
+                        // so initialize it first; the later guarded call below becomes a no-op.
+                        if (!draftCtx.currentSheetId && draftCtx.luckysheetfile.length > 0) {
+                            initSheetIndex(draftCtx);
+                        }
+                        api.calculateFormula(draftCtx);
                     }
                     if (mergedSettings.devicePixelRatio > 0) {
                         draftCtx.devicePixelRatio = mergedSettings.devicePixelRatio;

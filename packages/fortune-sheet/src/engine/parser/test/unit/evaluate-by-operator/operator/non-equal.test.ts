@@ -1,15 +1,15 @@
-import {describe, expect, test} from 'bun:test';
-import func from "../../../../evaluate-by-operator/operator/not-equal.ts";
+import { describe, expect, test } from 'bun:test';
+import func from '../../../../evaluate-by-operator/operator/not-equal.ts';
 
-describe("not equal operator", () => {
-    test("should set SYMBOL const", () => {
-        expect(func.SYMBOL).toBe("<>");
+describe('not equal operator', () => {
+    test('should set SYMBOL const', () => {
+        expect(func.SYMBOL).toBe('<>');
     });
 
-    test("should correctly process values", () => {
+    test('should correctly process values', () => {
         expect(func(2, 8.8)).toBe(true);
-        expect(func("2", 8.8)).toBe(true);
-        expect(func(1, "1")).toBe(true);
+        expect(func('2', 8.8)).toBe(true);
+        expect(func(1, '1')).toBe(true);
         expect(func(void 0, null)).toBe(true);
         expect(func(0, null)).toBe(true);
         expect(func(0, void 0)).toBe(true);

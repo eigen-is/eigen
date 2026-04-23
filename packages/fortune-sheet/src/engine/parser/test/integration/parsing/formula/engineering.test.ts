@@ -1,7 +1,7 @@
-import {afterEach, beforeEach, describe, expect, it} from 'bun:test';
-import Parser from "../../../../parser.ts";
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import Parser from '../../../../parser.ts';
 
-describe(".parse() engineering formulas", () => {
+describe('.parse() engineering formulas', () => {
     let parser: Parser | null;
 
     beforeEach(() => {
@@ -11,252 +11,252 @@ describe(".parse() engineering formulas", () => {
         parser = null;
     });
 
-    it("BESSELI", () => {
-        expect(parser!.parse("BESSELI()")).toMatchObject({
+    it('BESSELI', () => {
+        expect(parser!.parse('BESSELI()')).toMatchObject({
             error: null,
             result: 1,
         });
-        expect(parser!.parse("BESSELI(1.4)")).toMatchObject({
+        expect(parser!.parse('BESSELI(1.4)')).toMatchObject({
             error: null,
             result: 1.5533951058461777,
         });
-        expect(parser!.parse("BESSELI(1.4, 1)")).toMatchObject({
+        expect(parser!.parse('BESSELI(1.4, 1)')).toMatchObject({
             error: null,
             result: 0.8860919793963105,
         });
     });
 
-    it("BESSELJ", () => {
-        expect(parser!.parse("BESSELJ()")).toMatchObject({
+    it('BESSELJ', () => {
+        expect(parser!.parse('BESSELJ()')).toMatchObject({
             error: null,
             result: 1.00000000283141,
         });
-        expect(parser!.parse("BESSELJ(1.4)")).toMatchObject({
+        expect(parser!.parse('BESSELJ(1.4)')).toMatchObject({
             error: null,
             result: 0.5668551190749975,
         });
-        expect(parser!.parse("BESSELJ(1.4, 1)")).toMatchObject({
+        expect(parser!.parse('BESSELJ(1.4, 1)')).toMatchObject({
             error: null,
             result: 0.5419477138848564,
         });
     });
 
-    it("BESSELK", () => {
-        expect(parser!.parse("BESSELK()")).toMatchObject({
+    it('BESSELK', () => {
+        expect(parser!.parse('BESSELK()')).toMatchObject({
             error: null,
             result: Infinity,
         });
-        expect(parser!.parse("BESSELK(1.4)")).toMatchObject({
+        expect(parser!.parse('BESSELK(1.4)')).toMatchObject({
             error: null,
             result: 0.2436550649012485,
         });
-        expect(parser!.parse("BESSELK(1.4, 1)")).toMatchObject({
+        expect(parser!.parse('BESSELK(1.4, 1)')).toMatchObject({
             error: null,
             result: 0.32083590550458985,
         });
     });
 
-    it("BESSELY", () => {
-        expect(parser!.parse("BESSELY()")).toMatchObject({
+    it('BESSELY', () => {
+        expect(parser!.parse('BESSELY()')).toMatchObject({
             error: null,
             result: -Infinity,
         });
-        expect(parser!.parse("BESSELY(1.4)")).toMatchObject({
+        expect(parser!.parse('BESSELY(1.4)')).toMatchObject({
             error: null,
             result: 0.33789513259016046,
         });
-        expect(parser!.parse("BESSELY(1.4, 1)")).toMatchObject({
+        expect(parser!.parse('BESSELY(1.4, 1)')).toMatchObject({
             error: null,
             result: -0.47914697411134044,
         });
     });
 
-    it("BIN2DEC", () => {
-        expect(parser!.parse("BIN2DEC()")).toMatchObject({
-            error: "#NUM!",
+    it('BIN2DEC', () => {
+        expect(parser!.parse('BIN2DEC()')).toMatchObject({
+            error: '#NUM!',
             result: null,
         });
-        expect(parser!.parse("BIN2DEC(1010)")).toMatchObject({
+        expect(parser!.parse('BIN2DEC(1010)')).toMatchObject({
             error: null,
             result: 10,
         });
-        expect(parser!.parse("BIN2DEC(0)")).toMatchObject({
+        expect(parser!.parse('BIN2DEC(0)')).toMatchObject({
             error: null,
             result: 0,
         });
-        expect(parser!.parse("BIN2DEC(1)")).toMatchObject({
+        expect(parser!.parse('BIN2DEC(1)')).toMatchObject({
             error: null,
             result: 1,
         });
     });
 
-    it("BIN2HEX", () => {
-        expect(parser!.parse("BIN2HEX()")).toMatchObject({
-            error: "#NUM!",
+    it('BIN2HEX', () => {
+        expect(parser!.parse('BIN2HEX()')).toMatchObject({
+            error: '#NUM!',
             result: null,
         });
-        expect(parser!.parse("BIN2HEX(1010)")).toMatchObject({
+        expect(parser!.parse('BIN2HEX(1010)')).toMatchObject({
             error: null,
-            result: "a",
+            result: 'a',
         });
-        expect(parser!.parse("BIN2HEX(1010, 4)")).toMatchObject({
+        expect(parser!.parse('BIN2HEX(1010, 4)')).toMatchObject({
             error: null,
-            result: "000a",
+            result: '000a',
         });
-        expect(parser!.parse("BIN2HEX(0, 3)")).toMatchObject({
+        expect(parser!.parse('BIN2HEX(0, 3)')).toMatchObject({
             error: null,
-            result: "000",
+            result: '000',
         });
-        expect(parser!.parse("BIN2HEX(1111)")).toMatchObject({
+        expect(parser!.parse('BIN2HEX(1111)')).toMatchObject({
             error: null,
-            result: "f",
+            result: 'f',
         });
     });
 
-    it("BIN2OCT", () => {
-        expect(parser!.parse("BIN2OCT()")).toMatchObject({
-            error: "#NUM!",
+    it('BIN2OCT', () => {
+        expect(parser!.parse('BIN2OCT()')).toMatchObject({
+            error: '#NUM!',
             result: null,
         });
-        expect(parser!.parse("BIN2OCT(1010)")).toMatchObject({
+        expect(parser!.parse('BIN2OCT(1010)')).toMatchObject({
             error: null,
-            result: "12",
+            result: '12',
         });
-        expect(parser!.parse("BIN2OCT(1010, 4)")).toMatchObject({
+        expect(parser!.parse('BIN2OCT(1010, 4)')).toMatchObject({
             error: null,
-            result: "0012",
+            result: '0012',
         });
-        expect(parser!.parse("BIN2OCT(0, 3)")).toMatchObject({
+        expect(parser!.parse('BIN2OCT(0, 3)')).toMatchObject({
             error: null,
-            result: "000",
+            result: '000',
         });
-        expect(parser!.parse("BIN2OCT(111)")).toMatchObject({
+        expect(parser!.parse('BIN2OCT(111)')).toMatchObject({
             error: null,
-            result: "7",
+            result: '7',
         });
     });
 
-    it("BITAND", () => {
-        expect(parser!.parse("BITAND()")).toMatchObject({
+    it('BITAND', () => {
+        expect(parser!.parse('BITAND()')).toMatchObject({
             error: null,
             result: 0,
         });
-        expect(parser!.parse("BITAND(2)")).toMatchObject({
+        expect(parser!.parse('BITAND(2)')).toMatchObject({
             error: null,
             result: 0,
         });
-        expect(parser!.parse("BITAND(2, 4)")).toMatchObject({
+        expect(parser!.parse('BITAND(2, 4)')).toMatchObject({
             error: null,
             result: 0,
         });
-        expect(parser!.parse("BITAND(1, 5)")).toMatchObject({
+        expect(parser!.parse('BITAND(1, 5)')).toMatchObject({
             error: null,
             result: 1,
         });
     });
 
-    it("BITLSHIFT", () => {
-        expect(parser!.parse("BITLSHIFT()")).toMatchObject({
+    it('BITLSHIFT', () => {
+        expect(parser!.parse('BITLSHIFT()')).toMatchObject({
             error: null,
             result: 0,
         });
-        expect(parser!.parse("BITLSHIFT(2)")).toMatchObject({
+        expect(parser!.parse('BITLSHIFT(2)')).toMatchObject({
             error: null,
             result: 2,
         });
-        expect(parser!.parse("BITLSHIFT(2, 4)")).toMatchObject({
+        expect(parser!.parse('BITLSHIFT(2, 4)')).toMatchObject({
             error: null,
             result: 32,
         });
-        expect(parser!.parse("BITLSHIFT(1, 5)")).toMatchObject({
+        expect(parser!.parse('BITLSHIFT(1, 5)')).toMatchObject({
             error: null,
             result: 32,
         });
     });
 
-    it("BITOR", () => {
-        expect(parser!.parse("BITOR()")).toMatchObject({
+    it('BITOR', () => {
+        expect(parser!.parse('BITOR()')).toMatchObject({
             error: null,
             result: 0,
         });
-        expect(parser!.parse("BITOR(2)")).toMatchObject({
+        expect(parser!.parse('BITOR(2)')).toMatchObject({
             error: null,
             result: 2,
         });
-        expect(parser!.parse("BITOR(2, 4)")).toMatchObject({
+        expect(parser!.parse('BITOR(2, 4)')).toMatchObject({
             error: null,
             result: 6,
         });
-        expect(parser!.parse("BITOR(1, 5)")).toMatchObject({
+        expect(parser!.parse('BITOR(1, 5)')).toMatchObject({
             error: null,
             result: 5,
         });
     });
 
-    it("BITRSHIFT", () => {
-        expect(parser!.parse("BITRSHIFT()")).toMatchObject({
+    it('BITRSHIFT', () => {
+        expect(parser!.parse('BITRSHIFT()')).toMatchObject({
             error: null,
             result: 0,
         });
-        expect(parser!.parse("BITRSHIFT(2)")).toMatchObject({
+        expect(parser!.parse('BITRSHIFT(2)')).toMatchObject({
             error: null,
             result: 2,
         });
-        expect(parser!.parse("BITRSHIFT(4, 2)")).toMatchObject({
+        expect(parser!.parse('BITRSHIFT(4, 2)')).toMatchObject({
             error: null,
             result: 1,
         });
-        expect(parser!.parse("BITRSHIFT(1, 5)")).toMatchObject({
+        expect(parser!.parse('BITRSHIFT(1, 5)')).toMatchObject({
             error: null,
             result: 0,
         });
     });
 
-    it("BITXOR", () => {
-        expect(parser!.parse("BITXOR()")).toMatchObject({
+    it('BITXOR', () => {
+        expect(parser!.parse('BITXOR()')).toMatchObject({
             error: null,
             result: 0,
         });
-        expect(parser!.parse("BITXOR(2)")).toMatchObject({
+        expect(parser!.parse('BITXOR(2)')).toMatchObject({
             error: null,
             result: 2,
         });
-        expect(parser!.parse("BITXOR(4, 2)")).toMatchObject({
+        expect(parser!.parse('BITXOR(4, 2)')).toMatchObject({
             error: null,
             result: 6,
         });
-        expect(parser!.parse("BITXOR(1, 5)")).toMatchObject({
+        expect(parser!.parse('BITXOR(1, 5)')).toMatchObject({
             error: null,
             result: 4,
         });
     });
 
-    it("COMPLEX", () => {
-        expect(parser!.parse("COMPLEX()")).toMatchObject({
+    it('COMPLEX', () => {
+        expect(parser!.parse('COMPLEX()')).toMatchObject({
             error: null,
             result: 0,
         });
-        expect(parser!.parse("COMPLEX(2, 0)")).toMatchObject({
+        expect(parser!.parse('COMPLEX(2, 0)')).toMatchObject({
             error: null,
-            result: "2",
+            result: '2',
         });
-        expect(parser!.parse("COMPLEX(4, 2)")).toMatchObject({
+        expect(parser!.parse('COMPLEX(4, 2)')).toMatchObject({
             error: null,
-            result: "4+2i",
+            result: '4+2i',
         });
-        expect(parser!.parse("COMPLEX(1, 5)")).toMatchObject({
+        expect(parser!.parse('COMPLEX(1, 5)')).toMatchObject({
             error: null,
-            result: "1+5i",
+            result: '1+5i',
         });
     });
 
-    it("CONVERT", () => {
-        expect(parser!.parse("CONVERT()")).toMatchObject({
-            error: "#ERROR!",
+    it('CONVERT', () => {
+        expect(parser!.parse('CONVERT()')).toMatchObject({
+            error: '#ERROR!',
             result: null,
         });
-        expect(parser!.parse("CONVERT(1)")).toMatchObject({
-            error: "#ERROR!",
+        expect(parser!.parse('CONVERT(1)')).toMatchObject({
+            error: '#ERROR!',
             result: null,
         });
         expect(parser!.parse('CONVERT(2, "lbm", "kg")')).toMatchObject({
@@ -272,193 +272,193 @@ describe(".parse() engineering formulas", () => {
             result: 100000,
         });
         expect(parser!.parse('CONVERT(2, "km/h", "mi")')).toMatchObject({
-            error: "#N/A",
+            error: '#N/A',
             result: null,
         });
     });
 
-    it("DEC2BIN", () => {
-        expect(parser!.parse("DEC2BIN()")).toMatchObject({
+    it('DEC2BIN', () => {
+        expect(parser!.parse('DEC2BIN()')).toMatchObject({
             error: null,
-            result: "0",
+            result: '0',
         });
-        expect(parser!.parse("DEC2BIN(10)")).toMatchObject({
+        expect(parser!.parse('DEC2BIN(10)')).toMatchObject({
             error: null,
-            result: "1010",
+            result: '1010',
         });
-        expect(parser!.parse("DEC2BIN(0, 4)")).toMatchObject({
+        expect(parser!.parse('DEC2BIN(0, 4)')).toMatchObject({
             error: null,
-            result: "0000",
+            result: '0000',
         });
-        expect(parser!.parse("DEC2BIN(1)")).toMatchObject({
+        expect(parser!.parse('DEC2BIN(1)')).toMatchObject({
             error: null,
-            result: "1",
-        });
-    });
-
-    it("DEC2HEX", () => {
-        expect(parser!.parse("DEC2HEX()")).toMatchObject({
-            error: null,
-            result: "0",
-        });
-        expect(parser!.parse("DEC2HEX(100)")).toMatchObject({
-            error: null,
-            result: "64",
-        });
-        expect(parser!.parse("DEC2HEX(100, 4)")).toMatchObject({
-            error: null,
-            result: "0064",
-        });
-        expect(parser!.parse("DEC2HEX(0)")).toMatchObject({
-            error: null,
-            result: "0",
-        });
-        expect(parser!.parse("DEC2HEX(1)")).toMatchObject({
-            error: null,
-            result: "1",
+            result: '1',
         });
     });
 
-    it("DEC2OCT", () => {
-        expect(parser!.parse("DEC2OCT()")).toMatchObject({
+    it('DEC2HEX', () => {
+        expect(parser!.parse('DEC2HEX()')).toMatchObject({
             error: null,
-            result: "0",
+            result: '0',
         });
-        expect(parser!.parse("DEC2OCT(58)")).toMatchObject({
+        expect(parser!.parse('DEC2HEX(100)')).toMatchObject({
             error: null,
-            result: "72",
+            result: '64',
         });
-        expect(parser!.parse("DEC2OCT(58, 4)")).toMatchObject({
+        expect(parser!.parse('DEC2HEX(100, 4)')).toMatchObject({
             error: null,
-            result: "0072",
+            result: '0064',
         });
-        expect(parser!.parse("DEC2OCT(0)")).toMatchObject({
+        expect(parser!.parse('DEC2HEX(0)')).toMatchObject({
             error: null,
-            result: "0",
+            result: '0',
         });
-        expect(parser!.parse("DEC2OCT(1)")).toMatchObject({
+        expect(parser!.parse('DEC2HEX(1)')).toMatchObject({
             error: null,
-            result: "1",
+            result: '1',
         });
     });
 
-    it("DELTA", () => {
-        expect(parser!.parse("DELTA()")).toMatchObject({
+    it('DEC2OCT', () => {
+        expect(parser!.parse('DEC2OCT()')).toMatchObject({
+            error: null,
+            result: '0',
+        });
+        expect(parser!.parse('DEC2OCT(58)')).toMatchObject({
+            error: null,
+            result: '72',
+        });
+        expect(parser!.parse('DEC2OCT(58, 4)')).toMatchObject({
+            error: null,
+            result: '0072',
+        });
+        expect(parser!.parse('DEC2OCT(0)')).toMatchObject({
+            error: null,
+            result: '0',
+        });
+        expect(parser!.parse('DEC2OCT(1)')).toMatchObject({
+            error: null,
+            result: '1',
+        });
+    });
+
+    it('DELTA', () => {
+        expect(parser!.parse('DELTA()')).toMatchObject({
             error: null,
             result: 1,
         });
-        expect(parser!.parse("DELTA(58)")).toMatchObject({error: null, result: 0});
-        expect(parser!.parse("DELTA(58, 4)")).toMatchObject({
+        expect(parser!.parse('DELTA(58)')).toMatchObject({ error: null, result: 0 });
+        expect(parser!.parse('DELTA(58, 4)')).toMatchObject({
             error: null,
             result: 0,
         });
-        expect(parser!.parse("DELTA(58, 58)")).toMatchObject({
+        expect(parser!.parse('DELTA(58, 58)')).toMatchObject({
             error: null,
             result: 1,
         });
     });
 
-    it("ERF", () => {
-        expect(parser!.parse("ERF()")).toMatchObject({
+    it('ERF', () => {
+        expect(parser!.parse('ERF()')).toMatchObject({
             error: null,
             result: 1.1102230246251565e-16,
         });
-        expect(parser!.parse("ERF(1)")).toMatchObject({
+        expect(parser!.parse('ERF(1)')).toMatchObject({
             error: null,
             result: 0.8427007929497149,
         });
-        expect(parser!.parse("ERF(2)")).toMatchObject({
+        expect(parser!.parse('ERF(2)')).toMatchObject({
             error: null,
             result: 0.9953222650189527,
         });
     });
 
-    it("ERFC", () => {
-        expect(parser!.parse("ERFC()")).toMatchObject({
-            error: "#VALUE!",
+    it('ERFC', () => {
+        expect(parser!.parse('ERFC()')).toMatchObject({
+            error: '#VALUE!',
             result: null,
         });
-        expect(parser!.parse("ERFC(0)")).toMatchObject({
+        expect(parser!.parse('ERFC(0)')).toMatchObject({
             error: null,
             result: 0.9999999999999999,
         });
-        expect(parser!.parse("ERFC(1)")).toMatchObject({
+        expect(parser!.parse('ERFC(1)')).toMatchObject({
             error: null,
             result: 0.1572992070502851,
         });
     });
 
-    it("GESTEP", () => {
-        expect(parser!.parse("GESTEP()")).toMatchObject({
+    it('GESTEP', () => {
+        expect(parser!.parse('GESTEP()')).toMatchObject({
             error: null,
             result: 1,
         });
-        expect(parser!.parse("GESTEP(1, 2)")).toMatchObject({
+        expect(parser!.parse('GESTEP(1, 2)')).toMatchObject({
             error: null,
             result: 0,
         });
-        expect(parser!.parse("GESTEP(-1, -2)")).toMatchObject({
+        expect(parser!.parse('GESTEP(-1, -2)')).toMatchObject({
             error: null,
             result: 1,
         });
     });
 
-    it("HEX2BIN", () => {
-        expect(parser!.parse("HEX2BIN()")).toMatchObject({
-            error: "#NUM!",
+    it('HEX2BIN', () => {
+        expect(parser!.parse('HEX2BIN()')).toMatchObject({
+            error: '#NUM!',
             result: null,
         });
         expect(parser!.parse('HEX2BIN("FA")')).toMatchObject({
             error: null,
-            result: "11111010",
+            result: '11111010',
         });
         expect(parser!.parse('HEX2BIN("FA", 10)')).toMatchObject({
             error: null,
-            result: "0011111010",
+            result: '0011111010',
         });
-        expect(parser!.parse("HEX2BIN(200)")).toMatchObject({
-            error: "#NUM!",
+        expect(parser!.parse('HEX2BIN(200)')).toMatchObject({
+            error: '#NUM!',
             result: null,
         });
     });
 
-    it("HEX2DEC", () => {
-        expect(parser!.parse("HEX2DEC()")).toMatchObject({
-            error: "#NUM!",
+    it('HEX2DEC', () => {
+        expect(parser!.parse('HEX2DEC()')).toMatchObject({
+            error: '#NUM!',
             result: null,
         });
         expect(parser!.parse('HEX2DEC("FA")')).toMatchObject({
             error: null,
             result: 250,
         });
-        expect(parser!.parse("HEX2DEC(200)")).toMatchObject({
+        expect(parser!.parse('HEX2DEC(200)')).toMatchObject({
             error: null,
             result: 512,
         });
     });
 
-    it("HEX2OCT", () => {
-        expect(parser!.parse("HEX2OCT()")).toMatchObject({
-            error: "#NUM!",
+    it('HEX2OCT', () => {
+        expect(parser!.parse('HEX2OCT()')).toMatchObject({
+            error: '#NUM!',
             result: null,
         });
         expect(parser!.parse('HEX2OCT("FA")')).toMatchObject({
             error: null,
-            result: "372",
+            result: '372',
         });
         expect(parser!.parse('HEX2OCT("FA", 6)')).toMatchObject({
             error: null,
-            result: "000372",
+            result: '000372',
         });
-        expect(parser!.parse("HEX2OCT(200)")).toMatchObject({
+        expect(parser!.parse('HEX2OCT(200)')).toMatchObject({
             error: null,
-            result: "1000",
+            result: '1000',
         });
     });
 
-    it("IMABS", () => {
-        expect(parser!.parse("IMABS()")).toMatchObject({
-            error: "#VALUE!",
+    it('IMABS', () => {
+        expect(parser!.parse('IMABS()')).toMatchObject({
+            error: '#VALUE!',
             result: null,
         });
         expect(parser!.parse('IMABS("5+12i")')).toMatchObject({
@@ -467,9 +467,9 @@ describe(".parse() engineering formulas", () => {
         });
     });
 
-    it("IMAGINARY", () => {
-        expect(parser!.parse("IMAGINARY()")).toMatchObject({
-            error: "#VALUE!",
+    it('IMAGINARY', () => {
+        expect(parser!.parse('IMAGINARY()')).toMatchObject({
+            error: '#VALUE!',
             result: null,
         });
         expect(parser!.parse('IMAGINARY("3+4i")')).toMatchObject({
@@ -478,21 +478,21 @@ describe(".parse() engineering formulas", () => {
         });
         expect(parser!.parse('IMAGINARY("+i")')).toMatchObject({
             error: null,
-            result: "+1",
+            result: '+1',
         });
     });
 
-    it("IMARGUMENT", () => {
-        expect(parser!.parse("IMARGUMENT()")).toMatchObject({
-            error: "#VALUE!",
+    it('IMARGUMENT', () => {
+        expect(parser!.parse('IMARGUMENT()')).toMatchObject({
+            error: '#VALUE!',
             result: null,
         });
-        expect(parser!.parse("IMARGUMENT(1)")).toMatchObject({
+        expect(parser!.parse('IMARGUMENT(1)')).toMatchObject({
             error: null,
             result: 0,
         });
-        expect(parser!.parse("IMARGUMENT(0)")).toMatchObject({
-            error: "#DIV/0!",
+        expect(parser!.parse('IMARGUMENT(0)')).toMatchObject({
+            error: '#DIV/0!',
             result: null,
         });
         expect(parser!.parse('IMARGUMENT("3+4i")')).toMatchObject({
@@ -501,46 +501,42 @@ describe(".parse() engineering formulas", () => {
         });
     });
 
-    it("IMCONJUGATE", () => {
-        expect(parser!.parse("IMCONJUGATE()")).toMatchObject({
-            error: "#VALUE!",
+    it('IMCONJUGATE', () => {
+        expect(parser!.parse('IMCONJUGATE()')).toMatchObject({
+            error: '#VALUE!',
             result: null,
         });
-        expect(parser!.parse("IMCONJUGATE(1)")).toMatchObject({
-            error: "#ERROR!",
+        expect(parser!.parse('IMCONJUGATE(1)')).toMatchObject({
+            error: '#ERROR!',
             result: null,
         });
         expect(parser!.parse('IMCONJUGATE("3+4i")')).toMatchObject({
             error: null,
-            result: "3-4i",
+            result: '3-4i',
         });
     });
 
-    it("IMCOS", () => {
-        expect(parser!.parse("IMCOS()")).toMatchObject({
-            error: "#VALUE!",
+    it('IMCOS', () => {
+        expect(parser!.parse('IMCOS()')).toMatchObject({
+            error: '#VALUE!',
             result: null,
         });
 
         const result = parser!.parse('IMCOS("3+4i")');
 
         expect(result.error).toBeNull();
-        expect(parseFloat(result.result.split("-")[1])).toBeCloseTo(
-            27.03494560307422
-        );
-        expect(parseFloat(result.result.split("-")[2])).toBeCloseTo(
-            3.8511533348117766
-        );
+        expect(parseFloat(result.result.split('-')[1])).toBeCloseTo(27.03494560307422);
+        expect(parseFloat(result.result.split('-')[2])).toBeCloseTo(3.8511533348117766);
     });
 
-    it("IMCOSH", () => {
-        expect(parser!.parse("IMCOSH()")).toMatchObject({
-            error: "#VALUE!",
+    it('IMCOSH', () => {
+        expect(parser!.parse('IMCOSH()')).toMatchObject({
+            error: '#VALUE!',
             result: null,
         });
         const result = parser!.parse('IMCOSH("3+4i")');
         expect(result.error).toBeNull();
-        // Parse complex number "a+bi" or "a-bi"  
+        // Parse complex number "a+bi" or "a-bi"
         const complexStr = result.result;
         // Handle negative real part
         const parts = complexStr.match(/(-?\d+\.?\d*)([+-]\d+\.?\d*)i/);
@@ -550,42 +546,38 @@ describe(".parse() engineering formulas", () => {
         expect(imagPart).toBeCloseTo(-7.5815527427465454);
     });
 
-    it("IMCOT", () => {
-        expect(parser!.parse("IMCOT()")).toMatchObject({
-            error: "#VALUE!",
+    it('IMCOT', () => {
+        expect(parser!.parse('IMCOT()')).toMatchObject({
+            error: '#VALUE!',
             result: null,
         });
 
         const result = parser!.parse('IMCOT("3+4i")');
 
         expect(result.error).toBeNull();
-        expect(parseFloat(result.result.split("-")[1])).toBeCloseTo(
-            -0.0001875877379836712
-        );
-        expect(parseFloat(result.result.split("-")[2])).toBeCloseTo(
-            1.0006443924715591
-        );
+        expect(parseFloat(result.result.split('-')[1])).toBeCloseTo(-0.0001875877379836712);
+        expect(parseFloat(result.result.split('-')[2])).toBeCloseTo(1.0006443924715591);
     });
 
-    it("IMCSC", () => {
-        expect(parser!.parse("IMCSC()")).toMatchObject({
-            error: "#NUM!",
+    it('IMCSC', () => {
+        expect(parser!.parse('IMCSC()')).toMatchObject({
+            error: '#NUM!',
             result: null,
         });
         expect(parser!.parse('IMCSC("3+4i")')).toMatchObject({
             error: null,
-            result: "0.005174473184019398+0.03627588962862602i",
+            result: '0.005174473184019398+0.03627588962862602i',
         });
     });
 
-    it("IMCSCH", () => {
-        expect(parser!.parse("IMCSCH()")).toMatchObject({
-            error: "#NUM!",
+    it('IMCSCH', () => {
+        expect(parser!.parse('IMCSCH()')).toMatchObject({
+            error: '#NUM!',
             result: null,
         });
         const result = parser!.parse('IMCSCH("3+4i")');
         expect(result.error).toBeNull();
-        // Parse complex number "a+bi" or "a-bi"  
+        // Parse complex number "a+bi" or "a-bi"
         const complexStr = result.result;
         // Handle negative real part
         const parts = complexStr.match(/(-?\d+\.?\d*)([+-]\d+\.?\d*)i/);
@@ -595,29 +587,29 @@ describe(".parse() engineering formulas", () => {
         expect(imagPart).toBeCloseTo(0.0754898329158637);
     });
 
-    it("IMDIV", () => {
-        expect(parser!.parse("IMDIV()")).toMatchObject({
-            error: "#VALUE!",
+    it('IMDIV', () => {
+        expect(parser!.parse('IMDIV()')).toMatchObject({
+            error: '#VALUE!',
             result: null,
         });
         expect(parser!.parse('IMDIV("3+4i")')).toMatchObject({
-            error: "#VALUE!",
+            error: '#VALUE!',
             result: null,
         });
         expect(parser!.parse('IMDIV("3+4i", "2+2i")')).toMatchObject({
             error: null,
-            result: "1.75+0.25i",
+            result: '1.75+0.25i',
         });
     });
 
-    it("IMEXP", () => {
-        expect(parser!.parse("IMEXP()")).toMatchObject({
-            error: "#VALUE!",
+    it('IMEXP', () => {
+        expect(parser!.parse('IMEXP()')).toMatchObject({
+            error: '#VALUE!',
             result: null,
         });
         const result = parser!.parse('IMEXP("3+4i")');
         expect(result.error).toBeNull();
-        // Parse complex number "a+bi" or "a-bi"  
+        // Parse complex number "a+bi" or "a-bi"
         const complexStr = result.result;
         // Handle negative real part
         const parts = complexStr.match(/(-?\d+\.?\d*)([+-]\d+\.?\d*)i/);
@@ -627,72 +619,72 @@ describe(".parse() engineering formulas", () => {
         expect(imagPart).toBeCloseTo(-15.200784463067956);
     });
 
-    it("IMLN", () => {
-        expect(parser!.parse("IMLN()")).toMatchObject({
-            error: "#VALUE!",
+    it('IMLN', () => {
+        expect(parser!.parse('IMLN()')).toMatchObject({
+            error: '#VALUE!',
             result: null,
         });
         expect(parser!.parse('IMLN("3+4i")')).toMatchObject({
             error: null,
-            result: "1.6094379124341003+0.9272952180016122i",
+            result: '1.6094379124341003+0.9272952180016122i',
         });
     });
 
-    it("IMLOG10", () => {
-        expect(parser!.parse("IMLOG10()")).toMatchObject({
-            error: "#VALUE!",
+    it('IMLOG10', () => {
+        expect(parser!.parse('IMLOG10()')).toMatchObject({
+            error: '#VALUE!',
             result: null,
         });
         expect(parser!.parse('IMLOG10("3+4i")')).toMatchObject({
             error: null,
-            result: "0.6989700043360187+0.4027191962733731i",
+            result: '0.6989700043360187+0.4027191962733731i',
         });
     });
 
-    it("IMLOG2", () => {
-        expect(parser!.parse("IMLOG2()")).toMatchObject({
-            error: "#VALUE!",
+    it('IMLOG2', () => {
+        expect(parser!.parse('IMLOG2()')).toMatchObject({
+            error: '#VALUE!',
             result: null,
         });
         expect(parser!.parse('IMLOG2("3+4i")')).toMatchObject({
             error: null,
-            result: "2.321928094887362+1.3378042124509761i",
+            result: '2.321928094887362+1.3378042124509761i',
         });
     });
 
-    it("IMPOWER", () => {
-        expect(parser!.parse("IMPOWER()")).toMatchObject({
-            error: "#VALUE!",
+    it('IMPOWER', () => {
+        expect(parser!.parse('IMPOWER()')).toMatchObject({
+            error: '#VALUE!',
             result: null,
         });
         expect(parser!.parse('IMPOWER("3+4i")')).toMatchObject({
             error: null,
-            result: "1",
+            result: '1',
         });
         expect(parser!.parse('IMPOWER("3+4i", 3)')).toMatchObject({
             error: null,
-            result: "-117+44.000000000000036i",
+            result: '-117+44.000000000000036i',
         });
     });
 
-    it("IMPRODUCT", () => {
-        expect(parser!.parse("IMPRODUCT()")).toMatchObject({
-            error: "#VALUE!",
+    it('IMPRODUCT', () => {
+        expect(parser!.parse('IMPRODUCT()')).toMatchObject({
+            error: '#VALUE!',
             result: null,
         });
         expect(parser!.parse('IMPRODUCT("3+4i")')).toMatchObject({
             error: null,
-            result: "3+4i",
+            result: '3+4i',
         });
         expect(parser!.parse('IMPRODUCT("3+4i", "1+2i")')).toMatchObject({
             error: null,
-            result: "-5+10i",
+            result: '-5+10i',
         });
     });
 
-    it("IMREAL", () => {
-        expect(parser!.parse("IMREAL()")).toMatchObject({
-            error: "#VALUE!",
+    it('IMREAL', () => {
+        expect(parser!.parse('IMREAL()')).toMatchObject({
+            error: '#VALUE!',
             result: null,
         });
         expect(parser!.parse('IMREAL("3+4i")')).toMatchObject({
@@ -701,31 +693,27 @@ describe(".parse() engineering formulas", () => {
         });
     });
 
-    it("IMSEC", () => {
-        expect(parser!.parse("IMSEC()")).toMatchObject({
-            error: "#VALUE!",
+    it('IMSEC', () => {
+        expect(parser!.parse('IMSEC()')).toMatchObject({
+            error: '#VALUE!',
             result: null,
         });
 
         const result = parser!.parse('IMSEC("3+4i")');
 
         expect(result.error).toBeNull();
-        expect(parseFloat(result.result.split("+")[0])).toBeCloseTo(
-            -0.03625349691586888
-        );
-        expect(parseFloat(result.result.split("+")[1])).toBeCloseTo(
-            0.005164344607753179
-        );
+        expect(parseFloat(result.result.split('+')[0])).toBeCloseTo(-0.03625349691586888);
+        expect(parseFloat(result.result.split('+')[1])).toBeCloseTo(0.005164344607753179);
     });
 
-    it("IMSECH", () => {
-        expect(parser!.parse("IMSECH()")).toMatchObject({
-            error: "#VALUE!",
+    it('IMSECH', () => {
+        expect(parser!.parse('IMSECH()')).toMatchObject({
+            error: '#VALUE!',
             result: null,
         });
         const result = parser!.parse('IMSECH("3+4i")');
         expect(result.error).toBeNull();
-        // Parse complex number "a+bi" or "a-bi"  
+        // Parse complex number "a+bi" or "a-bi"
         const complexStr = result.result;
         // Handle negative real part
         const parts = complexStr.match(/(-?\d+\.?\d*)([+-]\d+\.?\d*)i/);
@@ -735,31 +723,27 @@ describe(".parse() engineering formulas", () => {
         expect(imagPart).toBeCloseTo(0.07522496030277323);
     });
 
-    it("IMSIN", () => {
-        expect(parser!.parse("IMSIN()")).toMatchObject({
-            error: "#VALUE!",
+    it('IMSIN', () => {
+        expect(parser!.parse('IMSIN()')).toMatchObject({
+            error: '#VALUE!',
             result: null,
         });
 
         const result = parser!.parse('IMSIN("3+4i")');
 
         expect(result.error).toBeNull();
-        expect(parseFloat(result.result.split("-")[0])).toBeCloseTo(
-            3.8537380379193764
-        );
-        expect(parseFloat(result.result.split("-")[1])).toBeCloseTo(
-            27.01681325800393
-        );
+        expect(parseFloat(result.result.split('-')[0])).toBeCloseTo(3.8537380379193764);
+        expect(parseFloat(result.result.split('-')[1])).toBeCloseTo(27.01681325800393);
     });
 
-    it("IMSINH", () => {
-        expect(parser!.parse("IMSINH()")).toMatchObject({
-            error: "#VALUE!",
+    it('IMSINH', () => {
+        expect(parser!.parse('IMSINH()')).toMatchObject({
+            error: '#VALUE!',
             result: null,
         });
         const result = parser!.parse('IMSINH("3+4i")');
         expect(result.error).toBeNull();
-        // Parse complex number "a+bi" or "a-bi"  
+        // Parse complex number "a+bi" or "a-bi"
         const complexStr = result.result;
         // Handle negative real part
         const parts = complexStr.match(/(-?\d+\.?\d*)([+-]\d+\.?\d*)i/);
@@ -769,110 +753,106 @@ describe(".parse() engineering formulas", () => {
         expect(imagPart).toBeCloseTo(-7.619231720321411);
     });
 
-    it("IMSQRT", () => {
-        expect(parser!.parse("IMSQRT()")).toMatchObject({
-            error: "#VALUE!",
+    it('IMSQRT', () => {
+        expect(parser!.parse('IMSQRT()')).toMatchObject({
+            error: '#VALUE!',
             result: null,
         });
         expect(parser!.parse('IMSQRT("3+4i")')).toMatchObject({
             error: null,
-            result: "2+i",
+            result: '2+i',
         });
     });
 
-    it("IMSUB", () => {
-        expect(parser!.parse("IMSUB()")).toMatchObject({
-            error: "#VALUE!",
+    it('IMSUB', () => {
+        expect(parser!.parse('IMSUB()')).toMatchObject({
+            error: '#VALUE!',
             result: null,
         });
         expect(parser!.parse('IMSUB("3+4i")')).toMatchObject({
-            error: "#VALUE!",
+            error: '#VALUE!',
             result: null,
         });
         expect(parser!.parse('IMSUB("3+4i", "2+3i")')).toMatchObject({
             error: null,
-            result: "1+i",
+            result: '1+i',
         });
     });
 
-    it("IMSUM", () => {
-        expect(parser!.parse("IMSUM()")).toMatchObject({
-            error: "#VALUE!",
+    it('IMSUM', () => {
+        expect(parser!.parse('IMSUM()')).toMatchObject({
+            error: '#VALUE!',
             result: null,
         });
         expect(parser!.parse('IMSUM("3+4i")')).toMatchObject({
             error: null,
-            result: "3+4i",
+            result: '3+4i',
         });
         expect(parser!.parse('IMSUM("3+4i", "2+3i")')).toMatchObject({
             error: null,
-            result: "5+7i",
+            result: '5+7i',
         });
     });
 
-    it("IMTAN", () => {
-        expect(parser!.parse("IMTAN()")).toMatchObject({
-            error: "#VALUE!",
+    it('IMTAN', () => {
+        expect(parser!.parse('IMTAN()')).toMatchObject({
+            error: '#VALUE!',
             result: null,
         });
 
         const result = parser!.parse('IMTAN("3+4i")');
 
         expect(result.error).toBeNull();
-        expect(parseFloat(result.result.split("+")[0])).toBeCloseTo(
-            -0.00018734620462949037
-        );
-        expect(parseFloat(result.result.split("+")[1])).toBeCloseTo(
-            0.9993559873814729
-        );
+        expect(parseFloat(result.result.split('+')[0])).toBeCloseTo(-0.00018734620462949037);
+        expect(parseFloat(result.result.split('+')[1])).toBeCloseTo(0.9993559873814729);
     });
 
-    it("OCT2BIN", () => {
-        expect(parser!.parse("OCT2BIN()")).toMatchObject({
-            error: "#NUM!",
+    it('OCT2BIN', () => {
+        expect(parser!.parse('OCT2BIN()')).toMatchObject({
+            error: '#NUM!',
             result: null,
         });
-        expect(parser!.parse("OCT2BIN(3)")).toMatchObject({
+        expect(parser!.parse('OCT2BIN(3)')).toMatchObject({
             error: null,
-            result: "11",
+            result: '11',
         });
-        expect(parser!.parse("OCT2BIN(3, 4)")).toMatchObject({
+        expect(parser!.parse('OCT2BIN(3, 4)')).toMatchObject({
             error: null,
-            result: "0011",
+            result: '0011',
         });
     });
 
-    it("OCT2DEC", () => {
-        expect(parser!.parse("OCT2DEC()")).toMatchObject({
-            error: "#NUM!",
+    it('OCT2DEC', () => {
+        expect(parser!.parse('OCT2DEC()')).toMatchObject({
+            error: '#NUM!',
             result: null,
         });
-        expect(parser!.parse("OCT2DEC(3)")).toMatchObject({
+        expect(parser!.parse('OCT2DEC(3)')).toMatchObject({
             error: null,
             result: 3,
         });
-        expect(parser!.parse("OCT2DEC(33)")).toMatchObject({
+        expect(parser!.parse('OCT2DEC(33)')).toMatchObject({
             error: null,
             result: 27,
         });
     });
 
-    it("OCT2HEX", () => {
-        expect(parser!.parse("OCT2HEX()")).toMatchObject({
-            error: "#NUM!",
+    it('OCT2HEX', () => {
+        expect(parser!.parse('OCT2HEX()')).toMatchObject({
+            error: '#NUM!',
             result: null,
         });
-        expect(parser!.parse("OCT2HEX(3)")).toMatchObject({
+        expect(parser!.parse('OCT2HEX(3)')).toMatchObject({
             error: null,
-            result: "3",
+            result: '3',
         });
-        expect(parser!.parse("OCT2HEX(33)")).toMatchObject({
+        expect(parser!.parse('OCT2HEX(33)')).toMatchObject({
             error: null,
-            result: "1b",
+            result: '1b',
         });
-        expect(parser!.parse("OCT2HEX(33, 3)")).toMatchObject({
+        expect(parser!.parse('OCT2HEX(33, 3)')).toMatchObject({
             error: null,
-            result: "01b",
+            result: '01b',
         });
     });
 });

@@ -1,7 +1,7 @@
-import {afterEach, beforeEach, describe, expect, it} from 'bun:test';
-import Parser from "../../../../parser.ts";
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
+import Parser from '../../../../parser.ts';
 
-describe(".parse() lookup-reference formulas", () => {
+describe('.parse() lookup-reference formulas', () => {
     let parser: Parser | null;
 
     beforeEach(() => {
@@ -11,23 +11,23 @@ describe(".parse() lookup-reference formulas", () => {
         parser = null;
     });
 
-    it("MATCH", () => {
-        parser!.setVariable("foo", [0, 1, 2, 3, 4, 100, 7]);
-        parser!.setVariable("bar", ["jima", "jimb", "jimc", "bernie"]);
+    it('MATCH', () => {
+        parser!.setVariable('foo', [0, 1, 2, 3, 4, 100, 7]);
+        parser!.setVariable('bar', ['jima', 'jimb', 'jimc', 'bernie']);
 
-        expect(parser!.parse("MATCH()")).toMatchObject({
-            error: "#N/A",
+        expect(parser!.parse('MATCH()')).toMatchObject({
+            error: '#N/A',
             result: null,
         });
-        expect(parser!.parse("MATCH(1)")).toMatchObject({
-            error: "#N/A",
+        expect(parser!.parse('MATCH(1)')).toMatchObject({
+            error: '#N/A',
             result: null,
         });
-        expect(parser!.parse("MATCH(1, foo)")).toMatchObject({
+        expect(parser!.parse('MATCH(1, foo)')).toMatchObject({
             error: null,
             result: 2,
         });
-        expect(parser!.parse("MATCH(4, foo, 1)")).toMatchObject({
+        expect(parser!.parse('MATCH(4, foo, 1)')).toMatchObject({
             error: null,
             result: 5,
         });
@@ -36,7 +36,7 @@ describe(".parse() lookup-reference formulas", () => {
             result: 1,
         });
         expect(parser!.parse('MATCH("j?b", bar, 0)')).toMatchObject({
-            error: "#N/A",
+            error: '#N/A',
             result: null,
         });
         expect(parser!.parse('MATCH("jimc", bar, 0)')).toMatchObject({

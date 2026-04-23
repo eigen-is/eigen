@@ -339,13 +339,14 @@ function formatDateForDisplay(date: Date, numFmt?: string): string {
 }
 
 function buildCellType(cell: XlsxCell, value: string | number | boolean | undefined): FortuneCell['ct'] {
-    const ct: NonNullable<FortuneCell['ct']> = {};
-    if (cell.numFmt && cell.numFmt !== 'General') {
-        ct.fa = cell.numFmt;
-    }
     const t = resolveType(cell, value);
+    const numFmt = cell.numFmt && cell.numFmt !== 'General' ? cell.numFmt : null;
+    if (t == null && numFmt == null) return undefined;
+    // Fortune-sheet always pairs `t` with `fa`. When Excel reports General (or no numFmt),
+    // persist 'General' so the display-format path (SSF.format) receives a valid format string.
+    const ct: NonNullable<FortuneCell['ct']> = { fa: numFmt ?? 'General' };
     if (t) ct.t = t;
-    return Object.keys(ct).length > 0 ? ct : undefined;
+    return ct;
 }
 
 function resolveType(cell: XlsxCell, value: string | number | boolean | undefined): string | undefined {

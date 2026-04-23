@@ -1,12 +1,12 @@
 export const error: Record<string, string> = {
-    v: "#VALUE!", // Wrong argument or operator
-    n: "#NAME?", // Formula name error
-    na: "#N/A", // No value available in a function or formula
-    r: "#REF!", // A cell referenced by other formulas was deleted
-    d: "#DIV/0!", // Divisor is 0 or an empty cell
-    nm: "#NUM!", // A number in a formula or function is invalid
-    nl: "#NULL!", // The intersection operator (space) is used incorrectly
-    sp: "#SPILL!", // Array range contains other values
+    v: '#VALUE!', // Wrong argument or operator
+    n: '#NAME?', // Formula name error
+    na: '#N/A', // No value available in a function or formula
+    r: '#REF!', // A cell referenced by other formulas was deleted
+    d: '#DIV/0!', // Divisor is 0 or an empty cell
+    nm: '#NUM!', // A number in a formula or function is invalid
+    nl: '#NULL!', // The intersection operator (space) is used incorrectly
+    sp: '#SPILL!', // Array range contains other values
 };
 
 const errorValues = Object.values(error);
@@ -16,17 +16,17 @@ export function valueIsError(value: string): boolean {
 }
 
 // Whether the value is empty
-export function isRealNull(val: any): boolean {
-    return val == null || val.toString().replace(/\s/g, "") === "";
+export function isRealNull(val: unknown): boolean {
+    return val == null || String(val).replace(/\s/g, '') === '';
 }
 
 // Whether the value is a pure number
-export function isRealNum(val: any): boolean {
-    if (val == null || val.toString().replace(/\s/g, "") === "") {
+export function isRealNum(val: unknown): boolean {
+    if (val == null || String(val).replace(/\s/g, '') === '') {
         return false;
     }
 
-    if (typeof val === "boolean") {
+    if (typeof val === 'boolean') {
         return false;
     }
 
@@ -35,11 +35,11 @@ export function isRealNum(val: any): boolean {
 
 function checkDateTime(str: string, format: string): boolean {
     const reg1 =
-        format === "24"
+        format === '24'
             ? /^(\d{4})-(\d{1,2})-(\d{1,2})(\s(\d{1,2}):(\d{1,2})(:(\d{1,2}))?)?$/
             : /^(\d{4})-(\d{1,2})-(\d{1,2})(\s(\d{1,2}):(\d{1,2})(:(\d{1,2}))?)?\s?(AM|PM)?$/;
     const reg2 =
-        format === "24"
+        format === '24'
             ? /^(\d{4})\/(\d{1,2})\/(\d{1,2})(\s(\d{1,2}):(\d{1,2})(:(\d{1,2}))?)?$/
             : /^(\d{4})\/(\d{1,2})\/(\d{1,2})(\s(\d{1,2}):(\d{1,2})(:(\d{1,2}))?)?\s?(AM|PM)?$/;
 
@@ -74,12 +74,13 @@ function checkDateTime(str: string, format: string): boolean {
     return true;
 }
 
-export function isdatetime(s: any, format: string = "24"): boolean {
-    if (s === null || s.toString().length < 5) {
+export function isdatetime(s: unknown, format: string = '24'): boolean {
+    if (s == null) {
         return false;
     }
-    if (checkDateTime(s, format)) {
-        return true;
+    const str = String(s);
+    if (str.length < 5) {
+        return false;
     }
-    return false;
+    return checkDateTime(str, format);
 }

@@ -60,7 +60,8 @@ export function FxEditor() {
                 } else if (cell.f) {
                     value = getCellValue(r, c, d, "f");
                 } else {
-                    value = valueShowEs(r, c, d);
+                    const shown = valueShowEs(r, c, d);
+                    value = shown == null ? "" : String(shown);
                 }
             }
             refs.fxInput.current!.innerHTML = escapeHTMLTag(escapeScriptTag(value));

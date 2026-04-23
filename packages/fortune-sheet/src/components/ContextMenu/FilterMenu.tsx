@@ -195,7 +195,7 @@ export const FilterMenu: React.FC = () => {
         });
     }, [setContext]);
 
-    useOutsideClick(containerRef, close, [close]);
+    useOutsideClick(containerRef, close);
 
     const initialExpand = useCallback((key: string) => {
         const expand = dateTreeExpandState.current[key];

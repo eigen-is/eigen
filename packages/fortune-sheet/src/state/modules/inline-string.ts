@@ -1,8 +1,11 @@
 import _ from "lodash";
 import {Context} from "../context";
-import type {Cell, CellMatrix, CellStyle} from "../../engine/types";
+import type {Cell, CellMatrix, CellStyle, InlineStringSegment} from "../../engine/types";
 import {getCellValue, getFontStyleByCell} from "./cell";
 import {selectTextContent, selectTextContentCross} from "./cursor";
+
+type InlineStringCell = Cell & { ct: { t: "inlineStr"; s: InlineStringSegment[] } };
+type InlineStringCT = { t: "inlineStr"; s: InlineStringSegment[] };
 
 export const attrToCssName = {
     bl: "font-weight",
@@ -34,11 +37,11 @@ export const inlineStyleAffectCssName = {
     color: 1,
 };
 
-export function isInlineStringCell(cell: any): boolean {
+export function isInlineStringCell(cell: Cell | null | undefined): cell is InlineStringCell {
     return cell?.ct?.t === "inlineStr" && (cell?.ct?.s?.length ?? 0) > 0;
 }
 
-export function isInlineStringCT(ct: any): boolean {
+export function isInlineStringCT(ct: Cell["ct"] | null | undefined): ct is InlineStringCT {
     return ct?.t === "inlineStr" && (ct?.s?.length ?? 0) > 0;
 }
 
@@ -159,21 +162,16 @@ export function convertSpanToShareString(
     return styles;
 }
 
-export function updateInlineStringFormatOutside(
-    cell: Cell,
-    key: string,
-    value: any
-) {
-    if (_.isNil(cell.ct)) {
+export function updateInlineStringFormatOutside(cell: Cell, key: keyof Cell, value: unknown) {
+    if (cell.ct == null) {
         return;
     }
     const {s} = cell.ct;
-    if (_.isNil(s)) {
+    if (s == null) {
         return;
     }
-    for (let i = 0; i < s.length; i += 1) {
-        const item = s[i];
-        item[key] = value;
+    for (const item of s) {
+        (item as Record<string, unknown>)[key] = value;
     }
 }
 

@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-fallthrough */
 
-import numeral from "numeral";
+import numeral from 'numeral';
 
 const JAN_1_1900 = 1;
 const DEC_31_9999 = 2958465;
@@ -31,47 +31,47 @@ const SSF: SSFInterface = {} as SSFInterface;
 const make_ssf = function make_ssf(SSF: SSFInterface) {
     /* eslint-disable @typescript-eslint/no-fallthrough */
     /* @ts-nocheck */ // This file has many intentional fallthrough cases that are hard to fix individually
-    SSF.version = "0.11.2";
+    SSF.version = '0.11.2';
 
     function _strrev(x: string): string {
-        let o = "",
+        let o = '',
             i = x.length - 1;
         while (i >= 0) o += x.charAt(i--);
         return o;
     }
 
     function fill(c: string, l: number): string {
-        let o = "";
+        let o = '';
         while (o.length < l) o += c;
         return o;
     }
 
     function pad0(v: any, d: number): string {
-        const t = "" + v;
-        return t.length >= d ? t : fill("0", d - t.length) + t;
+        const t = `${v}`;
+        return t.length >= d ? t : fill('0', d - t.length) + t;
     }
 
     function pad_(v: any, d: number): string {
-        const t = "" + v;
-        return t.length >= d ? t : fill(" ", d - t.length) + t;
+        const t = `${v}`;
+        return t.length >= d ? t : fill(' ', d - t.length) + t;
     }
 
     function rpad_(v: any, d: number): string {
-        const t = "" + v;
-        return t.length >= d ? t : t + fill(" ", d - t.length);
+        const t = `${v}`;
+        return t.length >= d ? t : t + fill(' ', d - t.length);
     }
 
     function pad0r1(v: any, d: number): string {
-        const t = "" + Math.round(v);
-        return t.length >= d ? t : fill("0", d - t.length) + t;
+        const t = `${Math.round(v)}`;
+        return t.length >= d ? t : fill('0', d - t.length) + t;
     }
 
     function pad0r2(v: any, d: number): string {
-        const t = "" + v;
-        return t.length >= d ? t : fill("0", d - t.length) + t;
+        const t = `${v}`;
+        return t.length >= d ? t : fill('0', d - t.length) + t;
     }
 
-    const p2_32 = Math.pow(2, 32);
+    const p2_32 = 2 ** 32;
 
     function pad0r(v: any, d: number): string {
         if (v > p2_32 || v < -p2_32) return pad0r1(v, d);
@@ -94,60 +94,60 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
     }
 
     const days: [string, string][] = [
-        ["Sun", "Sunday"],
-        ["Mon", "Monday"],
-        ["Tue", "Tuesday"],
-        ["Wed", "Wednesday"],
-        ["Thu", "Thursday"],
-        ["Fri", "Friday"],
-        ["Sat", "Saturday"],
+        ['Sun', 'Sunday'],
+        ['Mon', 'Monday'],
+        ['Tue', 'Tuesday'],
+        ['Wed', 'Wednesday'],
+        ['Thu', 'Thursday'],
+        ['Fri', 'Friday'],
+        ['Sat', 'Saturday'],
     ];
     const months: [string, string, string][] = [
-        ["J", "Jan", "January"],
-        ["F", "Feb", "February"],
-        ["M", "Mar", "March"],
-        ["A", "Apr", "April"],
-        ["M", "May", "May"],
-        ["J", "Jun", "June"],
-        ["J", "Jul", "July"],
-        ["A", "Aug", "August"],
-        ["S", "Sep", "September"],
-        ["O", "Oct", "October"],
-        ["N", "Nov", "November"],
-        ["D", "Dec", "December"],
+        ['J', 'Jan', 'January'],
+        ['F', 'Feb', 'February'],
+        ['M', 'Mar', 'March'],
+        ['A', 'Apr', 'April'],
+        ['M', 'May', 'May'],
+        ['J', 'Jun', 'June'],
+        ['J', 'Jul', 'July'],
+        ['A', 'Aug', 'August'],
+        ['S', 'Sep', 'September'],
+        ['O', 'Oct', 'October'],
+        ['N', 'Nov', 'November'],
+        ['D', 'Dec', 'December'],
     ];
 
     function init_table(t: Record<number, string>): void {
-        t[0] = "General";
-        t[1] = "0";
-        t[2] = "0.00";
-        t[3] = "#,##0";
-        t[4] = "#,##0.00";
-        t[9] = "0%";
-        t[10] = "0.00%";
-        t[11] = "0.00E+00";
-        t[12] = "# ?/?";
-        t[13] = "# ??/??";
-        t[14] = "m/d/yy";
-        t[15] = "d-mmm-yy";
-        t[16] = "d-mmm";
-        t[17] = "mmm-yy";
-        t[18] = "h:mm AM/PM";
-        t[19] = "h:mm:ss AM/PM";
-        t[20] = "h:mm";
-        t[21] = "h:mm:ss";
-        t[22] = "m/d/yy h:mm";
-        t[37] = "#,##0 ;(#,##0)";
-        t[38] = "#,##0 ;[Red](#,##0)";
-        t[39] = "#,##0.00;(#,##0.00)";
-        t[40] = "#,##0.00;[Red](#,##0.00)";
-        t[45] = "mm:ss";
-        t[46] = "[h]:mm:ss";
-        t[47] = "mmss.0";
-        t[48] = "##0.0E+0";
-        t[49] = "@";
+        t[0] = 'General';
+        t[1] = '0';
+        t[2] = '0.00';
+        t[3] = '#,##0';
+        t[4] = '#,##0.00';
+        t[9] = '0%';
+        t[10] = '0.00%';
+        t[11] = '0.00E+00';
+        t[12] = '# ?/?';
+        t[13] = '# ??/??';
+        t[14] = 'm/d/yy';
+        t[15] = 'd-mmm-yy';
+        t[16] = 'd-mmm';
+        t[17] = 'mmm-yy';
+        t[18] = 'h:mm AM/PM';
+        t[19] = 'h:mm:ss AM/PM';
+        t[20] = 'h:mm';
+        t[21] = 'h:mm:ss';
+        t[22] = 'm/d/yy h:mm';
+        t[37] = '#,##0 ;(#,##0)';
+        t[38] = '#,##0 ;[Red](#,##0)';
+        t[39] = '#,##0.00;(#,##0.00)';
+        t[40] = '#,##0.00;[Red](#,##0.00)';
+        t[45] = 'mm:ss';
+        t[46] = '[h]:mm:ss';
+        t[47] = 'mmss.0';
+        t[48] = '##0.0E+0';
+        t[49] = '@';
         t[56] = '"上午/下午 "hh"時"mm"分"ss"秒 "';
-        t[65535] = "General";
+        t[65535] = 'General';
     }
 
     const table_fmt: Record<number, string> = {};
@@ -194,8 +194,7 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
     // 43 -- Accounting, 2 decimal, No Symbol
     default_str[43] = '_(* #,##0.00_);_(* \\(#,##0.00\\);_(* "-"??_);_(@_)';
     // 44 -- Accounting, 2 decimal, $  Symbol
-    default_str[44] =
-        '_("$"* #,##0.00_);_("$"* \\(#,##0.00\\);_("$"* "-"??_);_(@_)';
+    default_str[44] = '_("$"* #,##0.00_);_("$"* \\(#,##0.00\\);_("$"* "-"??_);_(@_)';
 
     function frac(x: any, D: any, mixed: any): any {
         var sgn = x < 0 ? -1 : 1;
@@ -235,7 +234,7 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
     function convert_to_seconds(timeStr: string): number {
         let hours, minutes;
 
-        if (timeStr.includes("AM") || timeStr.includes("PM")) {
+        if (timeStr.includes('AM') || timeStr.includes('PM')) {
             // Handle hh:mm AM/PM format
             const match = timeStr.match(/^(\d{1,2}):(\d{2})\s?(AM|PM)$/i);
             if (!match) return NaN;
@@ -249,21 +248,24 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
             }
 
             // Convert to 24-hour format
-            if (period === "PM" && hours !== 12) {
+            if (period === 'PM' && hours !== 12) {
                 hours += 12;
-            } else if (period === "AM" && hours === 12) {
+            } else if (period === 'AM' && hours === 12) {
                 hours = 0;
             }
         } else {
             // Handle hh:mm format
-            const [hourPart, minutePart] = timeStr.split(":").map(Number);
+            const [hourPart, minutePart] = timeStr.split(':').map(Number);
             hours = hourPart;
             minutes = minutePart;
 
             if (
-                isNaN(hours) || isNaN(minutes) ||
-                hours < 0 || hours > 23 ||
-                minutes < 0 || minutes >= 60
+                Number.isNaN(hours) ||
+                Number.isNaN(minutes) ||
+                hours < 0 ||
+                hours > 23 ||
+                minutes < 0 ||
+                minutes >= 60
             ) {
                 return NaN;
             }
@@ -292,10 +294,10 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
             q: 0,
         };
         if (Math.abs(out.u) < 1e-6) out.u = 0;
-        if (opts && opts.date1904) date += 1462;
+        if (opts?.date1904) date += 1462;
         if (out.u > 0.9999) {
             out.u = 0;
-            if (++time == 86400) {
+            if (++time === 86400) {
                 out.T = time = 0;
                 ++date;
                 ++out.D;
@@ -318,7 +320,7 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
             if (b2) dow = fix_hijri(d, dout);
         }
 
-        if (v?.includes?.(':') && isNaN(time)) {
+        if (v?.includes?.(':') && Number.isNaN(time)) {
             time = convert_to_seconds(v);
         }
 
@@ -344,9 +346,7 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
         if (date1904) epoch -= 1461 * 24 * 60 * 60 * 1000;
         else if (v >= base1904) epoch += 24 * 60 * 60 * 1000;
         return (
-            (epoch -
-                (dnthresh +
-                    (v.getTimezoneOffset() - basedate.getTimezoneOffset()) * 60000)) /
+            (epoch - (dnthresh + (v.getTimezoneOffset() - basedate.getTimezoneOffset()) * 60000)) /
             (24 * 60 * 60 * 1000)
         );
     }
@@ -363,9 +363,7 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
         var trailing_zeroes_and_decimal = /(?:\.0*|(\.\d*[1-9])0+)$/;
 
         function strip_decimal(o: string): string {
-            return o.indexOf(".") == -1
-                ? o
-                : o.replace(trailing_zeroes_and_decimal, "$1");
+            return o.indexOf('.') === -1 ? o : o.replace(trailing_zeroes_and_decimal, '$1');
         }
 
         /* General Exponential always shows 2 digits exp and trims the mantissa */
@@ -373,10 +371,8 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
         var exp_with_single_digit = /(E[+-])(\d)$/;
 
         function normalize_exp(o: string): string {
-            if (o.indexOf("E") == -1) return o;
-            return o
-                .replace(mantissa_zeroes_and_decimal, "$1E")
-                .replace(exp_with_single_digit, "$10$2");
+            if (o.indexOf('E') === -1) return o;
+            return o.replace(mantissa_zeroes_and_decimal, '$1E').replace(exp_with_single_digit, '$10$2');
         }
 
         /* exponent >= -9 and <= 9 */
@@ -392,9 +388,7 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
         /* exponent >= 11 or <= -10 likely exponential */
         function large_exp(v: number): string {
             var o = strip_decimal(v.toFixed(11));
-            return o.length > (v < 0 ? 12 : 11) || o === "0" || o === "-0"
-                ? v.toPrecision(6)
-                : o;
+            return o.length > (v < 0 ? 12 : 11) || o === '0' || o === '-0' ? v.toPrecision(6) : o;
         }
 
         function general_fmt_num_base(v: number): string {
@@ -421,20 +415,19 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
       */
     function general_fmt(v: any, opts?: any): string {
         switch (typeof v) {
-            case "string":
+            case 'string':
                 return v;
-            case "boolean":
-                return v ? "TRUE" : "FALSE";
-            case "number":
+            case 'boolean':
+                return v ? 'TRUE' : 'FALSE';
+            case 'number':
                 return (v | 0) === v ? v.toString(10) : general_fmt_num(v);
-            case "undefined":
-                return "";
-            case "object":
-                if (v == null) return "";
-                if (v instanceof Date)
-                    return format(14, datenum_local(v, opts && opts.date1904), opts);
+            case 'undefined':
+                return '';
+            case 'object':
+                if (v == null) return '';
+                if (v instanceof Date) return format(14, datenum_local(v, opts?.date1904), opts);
         }
-        throw new Error("unsupported value in General format: " + v);
+        throw new Error(`unsupported value in General format: ${v}`);
     }
 
     SSF._general = general_fmt;
@@ -449,7 +442,7 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
 
     /*jshint -W086 */
     function write_date(type: any, fmt: any, val: any, ss0: any): string {
-        var o = "",
+        var o = '',
             ss = 0,
             tt = 0,
             y = val.y,
@@ -512,7 +505,7 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
                         outl = fmt.length;
                         break;
                     default:
-                        throw "bad hour format: " + fmt;
+                        throw `bad hour format: ${fmt}`;
                 }
                 break;
             case 72:
@@ -524,7 +517,7 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
                         outl = fmt.length;
                         break;
                     default:
-                        throw "bad hour format: " + fmt;
+                        throw `bad hour format: ${fmt}`;
                 }
                 break;
             case 77:
@@ -536,48 +529,39 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
                         outl = fmt.length;
                         break;
                     default:
-                        throw "bad minute format: " + fmt;
+                        throw `bad minute format: ${fmt}`;
                 }
                 break;
             case 115:
                 /* 's' seconds */
-                if (
-                    fmt != "s" &&
-                    fmt != "ss" &&
-                    fmt != ".0" &&
-                    fmt != ".00" &&
-                    fmt != ".000"
-                )
-                    throw "bad second format: " + fmt;
-                if (val.u === 0 && (fmt == "s" || fmt == "ss"))
-                    return pad0(val.S, fmt.length);
+                if (fmt !== 's' && fmt !== 'ss' && fmt !== '.0' && fmt !== '.00' && fmt !== '.000')
+                    throw `bad second format: ${fmt}`;
+                if (val.u === 0 && (fmt === 's' || fmt === 'ss')) return pad0(val.S, fmt.length);
                 if (ss0 >= 2) tt = ss0 === 3 ? 1000 : 100;
                 else tt = ss0 === 1 ? 10 : 1;
                 ss = Math.round(tt * (val.S + val.u));
                 if (ss >= 60 * tt) ss = 0;
-                if (fmt === "s") return ss === 0 ? "0" : "" + ss / tt;
+                if (fmt === 's') return ss === 0 ? '0' : `${ss / tt}`;
                 o = pad0(ss, 2 + ss0);
-                if (fmt === "ss") return o.substr(0, 2);
-                return "." + o.substr(2, fmt.length - 1);
+                if (fmt === 'ss') return o.substr(0, 2);
+                return `.${o.substr(2, fmt.length - 1)}`;
             case 90:
                 /* 'Z' absolute time */
                 switch (fmt) {
-                    case "[h]":
-                    case "[hh]":
+                    case '[h]':
+                    case '[hh]':
                         out = val.D * 24 + val.H;
                         break;
-                    case "[m]":
-                    case "[mm]":
+                    case '[m]':
+                    case '[mm]':
                         out = (val.D * 24 + val.H) * 60 + val.M;
                         break;
-                    case "[s]":
-                    case "[ss]":
-                        out =
-                            ((val.D * 24 + val.H) * 60 + val.M) * 60 +
-                            Math.round(val.S + val.u);
+                    case '[s]':
+                    case '[ss]':
+                        out = ((val.D * 24 + val.H) * 60 + val.M) * 60 + Math.round(val.S + val.u);
                         break;
                     default:
-                        throw "bad abstime format: " + fmt;
+                        throw `bad abstime format: ${fmt}`;
                 }
                 outl = fmt.length === 3 ? 1 : 2;
                 break;
@@ -587,7 +571,7 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
                 outl = 1;
                 break;
         }
-        var outstr = outl > 0 ? pad0(out, outl) : "";
+        var outstr = outl > 0 ? pad0(out, outl) : '';
         return outstr;
     }
 
@@ -597,8 +581,7 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
         if (s.length <= w) return s;
         var j = s.length % w,
             o = s.substr(0, j);
-        for (; j != s.length; j += w)
-            o += (o.length > 0 ? "," : "") + s.substr(j, w);
+        for (; j !== s.length; j += w) o += (o.length > 0 ? ',' : '') + s.substr(j, w);
         return o;
     }
 
@@ -606,63 +589,47 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
         var pct1 = /%/g;
 
         function write_num_pct(type: any, fmt: any, val: any): string {
-            var sfmt = fmt.replace(pct1, ""),
+            var sfmt = fmt.replace(pct1, ''),
                 mul = fmt.length - sfmt.length;
-            return (
-                write_num(type, sfmt, val * Math.pow(10, 2 * mul)) + fill("%", mul)
-            );
+            return write_num(type, sfmt, val * 10 ** (2 * mul)) + fill('%', mul);
         }
 
         function write_num_cm(type: any, fmt: any, val: any): string {
             var idx = fmt.length - 1;
             while (fmt.charCodeAt(idx - 1) === 44) --idx;
-            return write_num(
-                type,
-                fmt.substr(0, idx),
-                val / Math.pow(10, 3 * (fmt.length - idx))
-            );
+            return write_num(type, fmt.substr(0, idx), val / 10 ** (3 * (fmt.length - idx)));
         }
 
         function write_num_exp(fmt: any, val: any): string {
             var o;
-            var idx = fmt.indexOf("E") - fmt.indexOf(".") - 1;
+            var idx = fmt.indexOf('E') - fmt.indexOf('.') - 1;
             if (fmt.match(/^#+0.0E\+0$/)) {
-                if (val == 0) return "0.0E+0";
-                else if (val < 0) return "-" + write_num_exp(fmt, -val);
-                var period = fmt.indexOf(".");
-                if (period === -1) period = fmt.indexOf("E");
+                if (val === 0) return '0.0E+0';
+                else if (val < 0) return `-${write_num_exp(fmt, -val)}`;
+                var period = fmt.indexOf('.');
+                if (period === -1) period = fmt.indexOf('E');
                 var ee = Math.floor(Math.log(val) * Math.LOG10E) % period;
                 if (ee < 0) ee += period;
-                o = (val / Math.pow(10, ee)).toPrecision(
-                    idx + 1 + ((period + ee) % period)
-                );
-                if (o.indexOf("e") === -1) {
+                o = (val / 10 ** ee).toPrecision(idx + 1 + ((period + ee) % period));
+                if (o.indexOf('e') === -1) {
                     var fakee = Math.floor(Math.log(val) * Math.LOG10E);
-                    if (o.indexOf(".") === -1)
-                        o =
-                            o.charAt(0) + "." + o.substr(1) + "E+" + (fakee - o.length + ee);
-                    else o += "E+" + (fakee - ee);
-                    while (o.substr(0, 2) === "0.") {
-                        o = o.charAt(0) + o.substr(2, period) + "." + o.substr(2 + period);
-                        o = o.replace(/^0+([1-9])/, "$1").replace(/^0+\./, "0.");
+                    if (o.indexOf('.') === -1) o = `${o.charAt(0)}.${o.substr(1)}E+${fakee - o.length + ee}`;
+                    else o += `E+${fakee - ee}`;
+                    while (o.substr(0, 2) === '0.') {
+                        o = `${o.charAt(0) + o.substr(2, period)}.${o.substr(2 + period)}`;
+                        o = o.replace(/^0+([1-9])/, '$1').replace(/^0+\./, '0.');
                     }
-                    o = o.replace(/\+-/, "-");
+                    o = o.replace(/\+-/, '-');
                 }
-                o = o.replace(/^([+-]?)(\d*)\.(\d*)[Ee]/, function ($$, $1, $2, $3) {
-                    return (
-                        $1 +
-                        $2 +
-                        $3.substr(0, (period + ee) % period) +
-                        "." +
-                        $3.substr(ee) +
-                        "E"
-                    );
-                });
+                o = o.replace(
+                    /^([+-]?)(\d*)\.(\d*)[Ee]/,
+                    (_$$, $1, $2, $3) => `${$1 + $2 + $3.substr(0, (period + ee) % period)}.${$3.substr(ee)}E`,
+                );
             } else o = Number(val).toExponential(idx);
             if (fmt.match(/E\+00$/) && o.match(/e[+-]\d$/))
-                o = o.substr(0, o.length - 1) + "0" + o.charAt(o.length - 1);
-            if (fmt.match(/E\-/) && o.match(/e\+/)) o = o.replace(/e\+/, "e");
-            return o.replace("e", "E");
+                o = `${o.substr(0, o.length - 1)}0${o.charAt(o.length - 1)}`;
+            if (fmt.match(/E-/) && o.match(/e\+/)) o = o.replace(/e\+/, 'e');
+            return o.replace('e', 'E');
         }
 
         var frac1 = /# (\?+)( ?)\/( ?)(\d+)/;
@@ -675,20 +642,16 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
                 myd = den;
             return (
                 sign +
-                (base === 0 ? "" : "" + base) +
-                " " +
+                (base === 0 ? '' : `${base}`) +
+                ' ' +
                 (myn === 0
-                    ? fill(" ", r[1].length + 1 + r[4].length)
-                    : pad_(myn, r[1].length) + r[2] + "/" + r[3] + pad0(myd, r[4].length))
+                    ? fill(' ', r[1].length + 1 + r[4].length)
+                    : `${pad_(myn, r[1].length) + r[2]}/${r[3]}${pad0(myd, r[4].length)}`)
             );
         }
 
         function write_num_f2(r: any, aval: any, sign: any): string {
-            return (
-                sign +
-                (aval === 0 ? "" : "" + aval) +
-                fill(" ", r[1].length + 2 + r[4].length)
-            );
+            return sign + (aval === 0 ? '' : `${aval}`) + fill(' ', r[1].length + 2 + r[4].length);
         }
 
         const dec1 = /^#*0*\.([0#]+)/;
@@ -696,17 +659,17 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
         const phone = /\(###\) ###\\?-####/;
 
         function hashq(str: string): string {
-            let o = "";
+            let o = '';
             let cc: number;
-            for (let i = 0; i != str.length; ++i)
+            for (let i = 0; i !== str.length; ++i)
                 switch ((cc = str.charCodeAt(i))) {
                     case 35:
                         break;
                     case 63:
-                        o += " ";
+                        o += ' ';
                         break;
                     case 48:
-                        o += "0";
+                        o += '0';
                         break;
                     default:
                         o += String.fromCharCode(cc);
@@ -715,132 +678,116 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
         }
 
         function rnd(val: number, d: number): string {
-            const dd = Math.pow(10, d);
-            return "" + Math.round(val * dd) / dd;
+            const dd = 10 ** d;
+            return `${Math.round(val * dd) / dd}`;
         }
 
         function dec(val: number, d: number): number {
             const _frac = val - Math.floor(val);
-            const dd = Math.pow(10, d);
-            if (d < ("" + Math.round(_frac * dd)).length) return 0;
+            const dd = 10 ** d;
+            if (d < `${Math.round(_frac * dd)}`.length) return 0;
             return Math.round(_frac * dd);
         }
 
         function carry(val: number, d: number): number {
-            if (
-                d < ("" + Math.round((val - Math.floor(val)) * Math.pow(10, d))).length
-            ) {
+            if (d < `${Math.round((val - Math.floor(val)) * 10 ** d)}`.length) {
                 return 1;
             }
             return 0;
         }
 
         function flr(val: number): string {
-            if (val < 2147483647 && val > -2147483648)
-                return "" + (val >= 0 ? val | 0 : (val - 1) | 0);
-            return "" + Math.floor(val);
+            if (val < 2147483647 && val > -2147483648) return `${val >= 0 ? val | 0 : (val - 1) | 0}`;
+            return `${Math.floor(val)}`;
         }
 
         function write_num_flt(type: any, fmt: any, val: any): string {
             if (type.charCodeAt(0) === 40 && !fmt.match(closeparen)) {
-                var ffmt = fmt.replace(/\( */, "").replace(/ \)/, "").replace(/\)/, "");
-                if (val >= 0) return write_num_flt("n", ffmt, val);
-                return "(" + write_num_flt("n", ffmt, -val) + ")";
+                var ffmt = fmt.replace(/\( */, '').replace(/ \)/, '').replace(/\)/, '');
+                if (val >= 0) return write_num_flt('n', ffmt, val);
+                return `(${write_num_flt('n', ffmt, -val)})`;
             }
-            if (fmt.charCodeAt(fmt.length - 1) === 44)
-                return write_num_cm(type, fmt, val);
-            if (fmt.indexOf("%") !== -1) return write_num_pct(type, fmt, val);
-            if (fmt.indexOf("E") !== -1) return write_num_exp(fmt, val);
+            if (fmt.charCodeAt(fmt.length - 1) === 44) return write_num_cm(type, fmt, val);
+            if (fmt.indexOf('%') !== -1) return write_num_pct(type, fmt, val);
+            if (fmt.indexOf('E') !== -1) return write_num_exp(fmt, val);
             if (fmt.charCodeAt(0) === 36)
-                return (
-                    "$" +
-                    write_num_flt(type, fmt.substr(fmt.charAt(1) == " " ? 2 : 1), val)
-                );
+                return `$${write_num_flt(type, fmt.substr(fmt.charAt(1) === ' ' ? 2 : 1), val)}`;
             let o: string;
             let r: any,
                 ri: any,
                 ff: any,
                 aval = Math.abs(val),
-                sign = val < 0 ? "-" : "";
+                sign = val < 0 ? '-' : '';
             if (fmt.match(/^00+$/)) return sign + pad0r(aval, fmt.length);
             if (fmt.match(/^[#?]+$/)) {
                 o = pad0r(val, 0);
-                if (o === "0") o = "";
-                return o.length > fmt.length
-                    ? o
-                    : hashq(fmt.substr(0, fmt.length - o.length)) + o;
+                if (o === '0') o = '';
+                return o.length > fmt.length ? o : hashq(fmt.substr(0, fmt.length - o.length)) + o;
             }
             if ((r = fmt.match(frac1))) return write_num_f1(r, aval, sign);
-            if (fmt.match(/^#+0+$/))
-                return sign + pad0r(aval, fmt.length - fmt.indexOf("0"));
+            if (fmt.match(/^#+0+$/)) return sign + pad0r(aval, fmt.length - fmt.indexOf('0'));
             if ((r = fmt.match(dec1))) {
                 o = rnd(val, r[1].length)
-                    .replace(/^([^\.]+)$/, "$1." + hashq(r[1]))
-                    .replace(/\.$/, "." + hashq(r[1]))
-                    .replace(/\.(\d*)$/, function ($$, $1) {
-                        return "." + $1 + fill("0", hashq(r[1]).length - $1.length);
-                    });
-                return fmt.indexOf("0.") !== -1 ? o : o.replace(/^0\./, ".");
+                    .replace(/^([^.]+)$/, `$1.${hashq(r[1])}`)
+                    .replace(/\.$/, `.${hashq(r[1])}`)
+                    .replace(/\.(\d*)$/, (_$$, $1) => `.${$1}${fill('0', hashq(r[1]).length - $1.length)}`);
+                return fmt.indexOf('0.') !== -1 ? o : o.replace(/^0\./, '.');
             }
-            fmt = fmt.replace(/^#+([0.])/, "$1");
+            fmt = fmt.replace(/^#+([0.])/, '$1');
             if ((r = fmt.match(/^(0*)\.(#*)$/))) {
                 return (
                     sign +
                     rnd(aval, r[2].length)
-                        .replace(/\.(\d*[1-9])0*$/, ".$1")
-                        .replace(/^(-?\d*)$/, "$1.")
-                        .replace(/^0\./, r[1].length ? "0." : ".")
+                        .replace(/\.(\d*[1-9])0*$/, '.$1')
+                        .replace(/^(-?\d*)$/, '$1.')
+                        .replace(/^0\./, r[1].length ? '0.' : '.')
                 );
             }
-            if ((r = fmt.match(/^#{1,3},##0(\.?)$/)))
-                return sign + commaify(pad0r(aval, 0));
+            if ((r = fmt.match(/^#{1,3},##0(\.?)$/))) return sign + commaify(pad0r(aval, 0));
             if ((r = fmt.match(/^#,##0\.([#0]*0)$/))) {
                 return val < 0
-                    ? "-" + write_num_flt(type, fmt, -val)
-                    : commaify("" + (Math.floor(val) + carry(val, r[1].length))) +
-                    "." +
-                    pad0(dec(val, r[1].length), r[1].length);
+                    ? `-${write_num_flt(type, fmt, -val)}`
+                    : commaify(`${Math.floor(val) + carry(val, r[1].length)}`) +
+                          '.' +
+                          pad0(dec(val, r[1].length), r[1].length);
             }
-            if ((r = fmt.match(/^#,#*,#0/)))
-                return write_num_flt(type, fmt.replace(/^#,#*,/, ""), val);
+            if ((r = fmt.match(/^#,#*,#0/))) return write_num_flt(type, fmt.replace(/^#,#*,/, ''), val);
             if ((r = fmt.match(/^([0#]+)(\\?-([0#]+))+$/))) {
-                o = _strrev(write_num_flt(type, fmt.replace(/[\\-]/g, ""), val));
+                o = _strrev(write_num_flt(type, fmt.replace(/[-]/g, ''), val));
                 ri = 0;
                 return _strrev(
-                    _strrev(fmt.replace(/\\/g, "")).replace(/[0#]/g, function (x) {
-                        return ri < o.length ? o.charAt(ri++) : x === "0" ? "0" : "";
-                    })
+                    _strrev(fmt.replace(/\\/g, '')).replace(/[0#]/g, (x) =>
+                        ri < o.length ? o.charAt(ri++) : x === '0' ? '0' : '',
+                    ),
                 );
             }
             if (fmt.match(phone)) {
-                o = write_num_flt(type, "##########", val);
-                return "(" + o.substr(0, 3) + ") " + o.substr(3, 3) + "-" + o.substr(6);
+                o = write_num_flt(type, '##########', val);
+                return `(${o.substr(0, 3)}) ${o.substr(3, 3)}-${o.substr(6)}`;
             }
-            var oa = "";
+            var oa = '';
             if ((r = fmt.match(/^([#0?]+)( ?)\/( ?)([#0?]+)/))) {
                 ri = Math.min(r[4].length, 7);
-                ff = frac(aval, Math.pow(10, ri) - 1, false);
-                o = "" + sign;
-                oa = write_num("n", r[1], ff[1]);
-                if (oa.charAt(oa.length - 1) == " ")
-                    oa = oa.substr(0, oa.length - 1) + "0";
-                o += oa + r[2] + "/" + r[3];
+                ff = frac(aval, 10 ** ri - 1, false);
+                o = `${sign}`;
+                oa = write_num('n', r[1], ff[1]);
+                if (oa.charAt(oa.length - 1) === ' ') oa = `${oa.substr(0, oa.length - 1)}0`;
+                o += `${oa + r[2]}/${r[3]}`;
                 oa = rpad_(ff[2], ri);
-                if (oa.length < r[4].length)
-                    oa = hashq(r[4].substr(r[4].length - oa.length)) + oa;
+                if (oa.length < r[4].length) oa = hashq(r[4].substr(r[4].length - oa.length)) + oa;
                 o += oa;
                 return o;
             }
             if ((r = fmt.match(/^# ([#0?]+)( ?)\/( ?)([#0?]+)/))) {
                 ri = Math.min(Math.max(r[1].length, r[4].length), 7);
-                ff = frac(aval, Math.pow(10, ri) - 1, true);
+                ff = frac(aval, 10 ** ri - 1, true);
                 return (
                     sign +
-                    (ff[0] || (ff[1] ? "" : "0")) +
-                    " " +
+                    (ff[0] || (ff[1] ? '' : '0')) +
+                    ' ' +
                     (ff[1]
-                        ? pad_(ff[1], ri) + r[2] + "/" + r[3] + rpad_(ff[2], ri)
-                        : fill(" ", 2 * ri + 1 + r[2].length + r[3].length))
+                        ? `${pad_(ff[1], ri) + r[2]}/${r[3]}${rpad_(ff[2], ri)}`
+                        : fill(' ', 2 * ri + 1 + r[2].length + r[3].length))
                 );
             }
             if ((r = fmt.match(/^[#0?]+$/))) {
@@ -849,248 +796,205 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
                 return hashq(fmt.substr(0, fmt.length - o.length)) + o;
             }
             if ((r = fmt.match(/^([#0?]+)\.([#0]+)$/))) {
-                o =
-                    "" +
-                    val.toFixed(Math.min(r[2].length, 10)).replace(/([^0])0+$/, "$1");
-                ri = o.indexOf(".");
-                var lres = fmt.indexOf(".") - ri,
+                o = `${val.toFixed(Math.min(r[2].length, 10)).replace(/([^0])0+$/, '$1')}`;
+                ri = o.indexOf('.');
+                var lres = fmt.indexOf('.') - ri,
                     rres = fmt.length - o.length - lres;
                 return hashq(fmt.substr(0, lres) + o + fmt.substr(fmt.length - rres));
             }
             if ((r = fmt.match(/^00,000\.([#0]*0)$/))) {
                 ri = dec(val, r[1].length);
                 return val < 0
-                    ? "-" + write_num_flt(type, fmt, -val)
+                    ? `-${write_num_flt(type, fmt, -val)}`
                     : commaify(flr(val))
-                        .replace(/^\d,\d{3}$/, "0$&")
-                        .replace(/^\d*$/, function ($$) {
-                            return (
-                                "00," + ($$.length < 3 ? pad0(0, 3 - $$.length) : "") + $$
-                            );
-                        }) +
-                    "." +
-                    pad0(ri, r[1].length);
+                          .replace(/^\d,\d{3}$/, '0$&')
+                          .replace(/^\d*$/, ($$) => `00,${$$.length < 3 ? pad0(0, 3 - $$.length) : ''}${$$}`) +
+                          '.' +
+                          pad0(ri, r[1].length);
             }
             switch (fmt) {
-                case "###,##0.00":
-                    return write_num_flt(type, "#,##0.00", val);
-                case "###,###":
-                case "##,###":
-                case "#,###":
+                case '###,##0.00':
+                    return write_num_flt(type, '#,##0.00', val);
+                case '###,###':
+                case '##,###':
+                case '#,###': {
                     var x = commaify(pad0r(aval, 0));
-                    return x !== "0" ? sign + x : "";
-                case "###,###.00":
-                    return write_num_flt(type, "###,##0.00", val).replace(/^0\./, ".");
-                case "#,###.00":
-                    return write_num_flt(type, "#,##0.00", val).replace(/^0\./, ".");
+                    return x !== '0' ? sign + x : '';
+                }
+                case '###,###.00':
+                    return write_num_flt(type, '###,##0.00', val).replace(/^0\./, '.');
+                case '#,###.00':
+                    return write_num_flt(type, '#,##0.00', val).replace(/^0\./, '.');
                 default:
             }
-            throw new Error("unsupported format |" + fmt + "|");
+            throw new Error(`unsupported format |${fmt}|`);
         }
 
         function write_num_cm2(type: any, fmt: any, val: any): string {
             let idx = fmt.length - 1;
             while (fmt.charCodeAt(idx - 1) === 44) --idx;
-            return write_num(
-                type,
-                fmt.substr(0, idx),
-                val / Math.pow(10, 3 * (fmt.length - idx))
-            );
+            return write_num(type, fmt.substr(0, idx), val / 10 ** (3 * (fmt.length - idx)));
         }
 
         function write_num_pct2(type: any, fmt: any, val: any): string {
-            const sfmt = fmt.replace(pct1, "");
+            const sfmt = fmt.replace(pct1, '');
             const mul = fmt.length - sfmt.length;
-            return (
-                write_num(type, sfmt, val * Math.pow(10, 2 * mul)) + fill("%", mul)
-            );
+            return write_num(type, sfmt, val * 10 ** (2 * mul)) + fill('%', mul);
         }
 
         function write_num_exp2(fmt: any, val: any): string {
             let o: string;
-            let idx = fmt.indexOf("E") - fmt.indexOf(".") - 1;
+            const idx = fmt.indexOf('E') - fmt.indexOf('.') - 1;
             if (fmt.match(/^#+0.0E\+0$/)) {
-                if (val == 0) return "0.0E+0";
-                else if (val < 0) return "-" + write_num_exp2(fmt, -val);
-                let period = fmt.indexOf(".");
-                if (period === -1) period = fmt.indexOf("E");
+                if (val === 0) return '0.0E+0';
+                else if (val < 0) return `-${write_num_exp2(fmt, -val)}`;
+                let period = fmt.indexOf('.');
+                if (period === -1) period = fmt.indexOf('E');
                 let ee = Math.floor(Math.log(val) * Math.LOG10E) % period;
                 if (ee < 0) ee += period;
-                o = (val / Math.pow(10, ee)).toPrecision(
-                    idx + 1 + ((period + ee) % period)
-                );
+                o = (val / 10 ** ee).toPrecision(idx + 1 + ((period + ee) % period));
                 if (!o.match(/[Ee]/)) {
                     const fakee = Math.floor(Math.log(val) * Math.LOG10E);
-                    if (o.indexOf(".") === -1)
-                        o =
-                            o.charAt(0) + "." + o.substr(1) + "E+" + (fakee - o.length + ee);
-                    else o += "E+" + (fakee - ee);
-                    o = o.replace(/\+-/, "-");
+                    if (o.indexOf('.') === -1) o = `${o.charAt(0)}.${o.substr(1)}E+${fakee - o.length + ee}`;
+                    else o += `E+${fakee - ee}`;
+                    o = o.replace(/\+-/, '-');
                 }
-                o = o.replace(/^([+-]?)(\d*)\.(\d*)[Ee]/, function ($$, $1, $2, $3) {
-                    return (
-                        $1 +
-                        $2 +
-                        $3.substr(0, (period + ee) % period) +
-                        "." +
-                        $3.substr(ee) +
-                        "E"
-                    );
-                });
+                o = o.replace(
+                    /^([+-]?)(\d*)\.(\d*)[Ee]/,
+                    (_$$, $1, $2, $3) => `${$1 + $2 + $3.substr(0, (period + ee) % period)}.${$3.substr(ee)}E`,
+                );
             } else o = Number(val).toExponential(idx);
             if (fmt.match(/E\+00$/) && o.match(/e[+-]\d$/))
-                o = o.substr(0, o.length - 1) + "0" + o.charAt(o.length - 1);
-            if (fmt.match(/E\-/) && o.match(/e\+/)) o = o.replace(/e\+/, "e");
-            return o.replace("e", "E");
+                o = `${o.substr(0, o.length - 1)}0${o.charAt(o.length - 1)}`;
+            if (fmt.match(/E-/) && o.match(/e\+/)) o = o.replace(/e\+/, 'e');
+            return o.replace('e', 'E');
         }
 
         function write_num_int(type: any, fmt: any, val: any): string {
             if (type.charCodeAt(0) === 40 && !fmt.match(closeparen)) {
-                const ffmt = fmt.replace(/\( */, "").replace(/ \)/, "").replace(/\)/, "");
-                if (val >= 0) return write_num_int("n", ffmt, val);
-                return "(" + write_num_int("n", ffmt, -val) + ")";
+                const ffmt = fmt.replace(/\( */, '').replace(/ \)/, '').replace(/\)/, '');
+                if (val >= 0) return write_num_int('n', ffmt, val);
+                return `(${write_num_int('n', ffmt, -val)})`;
             }
-            if (fmt.charCodeAt(fmt.length - 1) === 44)
-                return write_num_cm2(type, fmt, val);
-            if (fmt.indexOf("%") !== -1) return write_num_pct2(type, fmt, val);
-            if (fmt.indexOf("E") !== -1) return write_num_exp2(fmt, val);
+            if (fmt.charCodeAt(fmt.length - 1) === 44) return write_num_cm2(type, fmt, val);
+            if (fmt.indexOf('%') !== -1) return write_num_pct2(type, fmt, val);
+            if (fmt.indexOf('E') !== -1) return write_num_exp2(fmt, val);
             if (fmt.charCodeAt(0) === 36)
-                return (
-                    "$" +
-                    write_num_int(type, fmt.substr(fmt.charAt(1) == " " ? 2 : 1), val)
-                );
+                return `$${write_num_int(type, fmt.substr(fmt.charAt(1) === ' ' ? 2 : 1), val)}`;
             let o: string;
             let r: any,
                 ri: any,
                 ff: any,
                 aval = Math.abs(val),
-                sign = val < 0 ? "-" : "";
+                sign = val < 0 ? '-' : '';
             if (fmt.match(/^00+$/)) return sign + pad0(aval, fmt.length);
             if (fmt.match(/^[#?]+$/)) {
-                o = "" + val;
-                if (val === 0) o = "";
-                return o.length > fmt.length
-                    ? o
-                    : hashq(fmt.substr(0, fmt.length - o.length)) + o;
+                o = `${val}`;
+                if (val === 0) o = '';
+                return o.length > fmt.length ? o : hashq(fmt.substr(0, fmt.length - o.length)) + o;
             }
             if ((r = fmt.match(frac1))) return write_num_f2(r, aval, sign);
-            if (fmt.match(/^#+0+$/))
-                return sign + pad0(aval, fmt.length - fmt.indexOf("0"));
+            if (fmt.match(/^#+0+$/)) return sign + pad0(aval, fmt.length - fmt.indexOf('0'));
             if ((r = fmt.match(dec1))) {
-                o = ("" + val)
-                    .replace(/^([^\.]+)$/, "$1." + hashq(r[1]))
-                    .replace(/\.$/, "." + hashq(r[1]));
-                o = o.replace(/\.(\d*)$/, function ($$, $1) {
-                    return "." + $1 + fill("0", hashq(r[1]).length - $1.length);
-                });
-                return fmt.indexOf("0.") !== -1 ? o : o.replace(/^0\./, ".");
+                o = `${val}`.replace(/^([^.]+)$/, `$1.${hashq(r[1])}`).replace(/\.$/, `.${hashq(r[1])}`);
+                o = o.replace(/\.(\d*)$/, (_$$, $1) => `.${$1}${fill('0', hashq(r[1]).length - $1.length)}`);
+                return fmt.indexOf('0.') !== -1 ? o : o.replace(/^0\./, '.');
             }
-            fmt = fmt.replace(/^#+([0.])/, "$1");
+            fmt = fmt.replace(/^#+([0.])/, '$1');
             if ((r = fmt.match(/^(0*)\.(#*)$/))) {
                 return (
                     sign +
-                    ("" + aval)
-                        .replace(/\.(\d*[1-9])0*$/, ".$1")
-                        .replace(/^(-?\d*)$/, "$1.")
-                        .replace(/^0\./, r[1].length ? "0." : ".")
+                    `${aval}`
+                        .replace(/\.(\d*[1-9])0*$/, '.$1')
+                        .replace(/^(-?\d*)$/, '$1.')
+                        .replace(/^0\./, r[1].length ? '0.' : '.')
                 );
             }
-            if ((r = fmt.match(/^#{1,3},##0(\.?)$/)))
-                return sign + commaify("" + aval);
+            if ((r = fmt.match(/^#{1,3},##0(\.?)$/))) return sign + commaify(`${aval}`);
             if ((r = fmt.match(/^#,##0\.([#0]*0)$/))) {
                 return val < 0
-                    ? "-" + write_num_int(type, fmt, -val)
-                    : commaify("" + val) + "." + fill("0", r[1].length);
+                    ? `-${write_num_int(type, fmt, -val)}`
+                    : `${commaify(`${val}`)}.${fill('0', r[1].length)}`;
             }
-            if ((r = fmt.match(/^#,#*,#0/)))
-                return write_num_int(type, fmt.replace(/^#,#*,/, ""), val);
+            if ((r = fmt.match(/^#,#*,#0/))) return write_num_int(type, fmt.replace(/^#,#*,/, ''), val);
             if ((r = fmt.match(/^([0#]+)(\\?-([0#]+))+$/))) {
-                o = _strrev(write_num_int(type, fmt.replace(/[\\-]/g, ""), val));
+                o = _strrev(write_num_int(type, fmt.replace(/[-]/g, ''), val));
                 ri = 0;
                 return _strrev(
-                    _strrev(fmt.replace(/\\/g, "")).replace(/[0#]/g, function (x) {
-                        return ri < o.length ? o.charAt(ri++) : x === "0" ? "0" : "";
-                    })
+                    _strrev(fmt.replace(/\\/g, '')).replace(/[0#]/g, (x) =>
+                        ri < o.length ? o.charAt(ri++) : x === '0' ? '0' : '',
+                    ),
                 );
             }
             if (fmt.match(phone)) {
-                o = write_num_int(type, "##########", val);
-                return "(" + o.substr(0, 3) + ") " + o.substr(3, 3) + "-" + o.substr(6);
+                o = write_num_int(type, '##########', val);
+                return `(${o.substr(0, 3)}) ${o.substr(3, 3)}-${o.substr(6)}`;
             }
-            var oa = "";
+            var oa = '';
             if ((r = fmt.match(/^([#0?]+)( ?)\/( ?)([#0?]+)/))) {
                 ri = Math.min(r[4].length, 7);
-                ff = frac(aval, Math.pow(10, ri) - 1, false);
-                o = "" + sign;
-                oa = write_num("n", r[1], ff[1]);
-                if (oa.charAt(oa.length - 1) == " ")
-                    oa = oa.substr(0, oa.length - 1) + "0";
-                o += oa + r[2] + "/" + r[3];
+                ff = frac(aval, 10 ** ri - 1, false);
+                o = `${sign}`;
+                oa = write_num('n', r[1], ff[1]);
+                if (oa.charAt(oa.length - 1) === ' ') oa = `${oa.substr(0, oa.length - 1)}0`;
+                o += `${oa + r[2]}/${r[3]}`;
                 oa = rpad_(ff[2], ri);
-                if (oa.length < r[4].length)
-                    oa = hashq(r[4].substr(r[4].length - oa.length)) + oa;
+                if (oa.length < r[4].length) oa = hashq(r[4].substr(r[4].length - oa.length)) + oa;
                 o += oa;
                 return o;
             }
             if ((r = fmt.match(/^# ([#0?]+)( ?)\/( ?)([#0?]+)/))) {
                 ri = Math.min(Math.max(r[1].length, r[4].length), 7);
-                ff = frac(aval, Math.pow(10, ri) - 1, true);
+                ff = frac(aval, 10 ** ri - 1, true);
                 return (
                     sign +
-                    (ff[0] || (ff[1] ? "" : "0")) +
-                    " " +
+                    (ff[0] || (ff[1] ? '' : '0')) +
+                    ' ' +
                     (ff[1]
-                        ? pad_(ff[1], ri) + r[2] + "/" + r[3] + rpad_(ff[2], ri)
-                        : fill(" ", 2 * ri + 1 + r[2].length + r[3].length))
+                        ? `${pad_(ff[1], ri) + r[2]}/${r[3]}${rpad_(ff[2], ri)}`
+                        : fill(' ', 2 * ri + 1 + r[2].length + r[3].length))
                 );
             }
             if ((r = fmt.match(/^[#0?]+$/))) {
-                o = "" + val;
+                o = `${val}`;
                 if (fmt.length <= o.length) return o;
                 return hashq(fmt.substr(0, fmt.length - o.length)) + o;
             }
             if ((r = fmt.match(/^([#0]+)\.([#0]+)$/))) {
-                o =
-                    "" +
-                    val.toFixed(Math.min(r[2].length, 10)).replace(/([^0])0+$/, "$1");
-                ri = o.indexOf(".");
-                var lres = fmt.indexOf(".") - ri,
+                o = `${val.toFixed(Math.min(r[2].length, 10)).replace(/([^0])0+$/, '$1')}`;
+                ri = o.indexOf('.');
+                var lres = fmt.indexOf('.') - ri,
                     rres = fmt.length - o.length - lres;
                 return hashq(fmt.substr(0, lres) + o + fmt.substr(fmt.length - rres));
             }
             if ((r = fmt.match(/^00,000\.([#0]*0)$/))) {
                 return val < 0
-                    ? "-" + write_num_int(type, fmt, -val)
-                    : commaify("" + val)
-                        .replace(/^\d,\d{3}$/, "0$&")
-                        .replace(/^\d*$/, function ($$) {
-                            return (
-                                "00," + ($$.length < 3 ? pad0(0, 3 - $$.length) : "") + $$
-                            );
-                        }) +
-                    "." +
-                    pad0(0, r[1].length);
+                    ? `-${write_num_int(type, fmt, -val)}`
+                    : commaify(`${val}`)
+                          .replace(/^\d,\d{3}$/, '0$&')
+                          .replace(/^\d*$/, ($$) => `00,${$$.length < 3 ? pad0(0, 3 - $$.length) : ''}${$$}`) +
+                          '.' +
+                          pad0(0, r[1].length);
             }
             switch (fmt) {
-                case "###,###":
-                case "##,###":
-                case "#,###":
-                    var x = commaify("" + aval);
-                    return x !== "0" ? sign + x : "";
+                case '###,###':
+                case '##,###':
+                case '#,###': {
+                    var x = commaify(`${aval}`);
+                    return x !== '0' ? sign + x : '';
+                }
                 default:
                     if (fmt.match(/\.[0#?]*$/))
                         return (
-                            write_num_int(type, fmt.slice(0, fmt.lastIndexOf(".")), val) +
-                            hashq(fmt.slice(fmt.lastIndexOf(".")))
+                            write_num_int(type, fmt.slice(0, fmt.lastIndexOf('.')), val) +
+                            hashq(fmt.slice(fmt.lastIndexOf('.')))
                         );
             }
-            throw new Error("unsupported format |" + fmt + "|");
+            throw new Error(`unsupported format |${fmt}|`);
         }
 
         return function write_num(type: any, fmt: any, val: any): string {
-            return (val | 0) === val
-                ? write_num_int(type, fmt, val)
-                : write_num_flt(type, fmt, val);
+            return (val | 0) === val ? write_num_int(type, fmt, val) : write_num_flt(type, fmt, val);
         };
     })();
 
@@ -1116,8 +1020,7 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
                     j = i + 1;
             }
         out[out.length] = fmt.substr(j);
-        if (in_str === true)
-            throw new Error("Format |" + fmt + "| unterminated string ");
+        if (in_str === true) throw new Error(`Format |${fmt}| unterminated string `);
         return out;
     }
 
@@ -1127,91 +1030,90 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
     function fmt_is_date(fmt: number | string): boolean {
         const fmtStr = typeof fmt === 'string' ? fmt : fmt.toString();
         let i = 0,
-            c = "";
+            c = '';
         while (i < fmtStr.length) {
             c = fmtStr.charAt(i); // Assign c separately to avoid unused warning
             switch (c) {
-                case "G":
+                case 'G':
                     if (isgeneral(fmtStr, i)) i += 6;
                     i++;
                     break;
                 case '"':
-                    for (; /*cc=*/ fmtStr.charCodeAt(++i) !== 34 && i < fmtStr.length;) {
+                    for (; /*cc=*/ fmtStr.charCodeAt(++i) !== 34 && i < fmtStr.length; ) {
                         /*empty*/
                     }
                     i++;
                     break;
-                case "\\":
+                case '\\':
                     i += 2;
                     break;
-                case "_":
+                case '_':
                     i += 2;
                     break;
-                case "@":
+                case '@':
                     return true;
-                case "B":
-                case "b":
-                    if (fmtStr.charAt(i + 1) === "1" || fmtStr.charAt(i + 1) === "2") return true;
-                case "M":
-                case "D":
-                case "Y":
-                case "H":
-                case "S":
-                case "E":
+                case 'B':
+                case 'b':
+                    if (fmtStr.charAt(i + 1) === '1' || fmtStr.charAt(i + 1) === '2') return true;
+                case 'M':
+                case 'D':
+                case 'Y':
+                case 'H':
+                case 'S':
+                case 'E':
                     return true;
-                case "m":
-                case "d":
-                case "y":
-                case "h":
-                case "s":
-                case "e":
+                case 'm':
+                case 'd':
+                case 'y':
+                case 'h':
+                case 's':
+                case 'e':
                     return true;
-                case "A":
+                case 'A':
                     if (
-                        fmtStr.substr(i, 3) === "A/P" ||
-                        fmtStr.substr(i, 5) == "AM/PM" ||
-                        fmtStr.substr(i, 3) === "上午" ||
-                        fmtStr.substr(i, 3) === "下午"
+                        fmtStr.substr(i, 3) === 'A/P' ||
+                        fmtStr.substr(i, 5) === 'AM/PM' ||
+                        fmtStr.substr(i, 3) === '上午' ||
+                        fmtStr.substr(i, 3) === '下午'
                     )
                         return true;
                     i++;
                     break;
-                case "a":
-                    if (fmtStr.substr(i, 3) === "a/p" || fmtStr.substr(i, 5) == "am/pm")
-                        return true;
+                case 'a':
+                    if (fmtStr.substr(i, 3) === 'a/p' || fmtStr.substr(i, 5) === 'am/pm') return true;
                     i++;
                     break;
-                case "0":
-                case "#":
+                case '0':
+                case '#': {
                     const match = fmtStr.substr(i).match(/(#|0)[0-9]*/);
-                    if (match !== null)
-                        i += match[0].length;
+                    if (match !== null) i += match[0].length;
                     else i++;
                     break;
-                case ".":
-                case "%":
-                case "+":
-                case "-":
+                }
+                case '.':
+                case '%':
+                case '+':
+                case '-':
                     ++i;
                     break;
-                case "(":
-                case ")":
+                case '(':
+                case ')':
                     ++i;
                     break;
-                case "1":
-                case "2":
-                case "3":
-                case "4":
-                case "5":
-                case "6":
-                case "7":
-                case "8":
-                case "9":
-                    while (i < fmtStr.length && "0123456789".indexOf(fmtStr.charAt(++i)) > -1) {
+                case '1':
+                case '2':
+                case '3':
+                case '4':
+                case '5':
+                case '6':
+                case '7':
+                case '8':
+                case '9':
+                    while (i < fmtStr.length && '0123456789'.indexOf(fmtStr.charAt(++i)) > -1) {
                         /* empty */
                     }
                     break;
-                case " ":
+                case ' ':
                     ++i;
                     break;
                 default:
@@ -1226,73 +1128,69 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
 
     function eval_fmt(fmt: any, v: any, opts?: any, flen?: any): string {
         const out: any[] = [];
-        let o = "";
+        let o = '';
         let i = 0;
-        let c = "";
-        let lst = "t";
+        let c = '';
+        let lst = 't';
         let dt: any;
         let j: any;
         let cc: any;
-        let hr = "H";
+        let hr = 'H';
         /* Tokenize */
         while (i < fmt.length) {
             switch ((c = fmt.charAt(i))) {
-                case "G":
+                case 'G':
                     /* General */
-                    if (!isgeneral(fmt, i))
-                        throw new Error("unrecognized character " + c + " in " + fmt);
+                    if (!isgeneral(fmt, i)) throw new Error(`unrecognized character ${c} in ${fmt}`);
                     out[out.length] = {
-                        t: "G",
-                        v: "General",
+                        t: 'G',
+                        v: 'General',
                     };
                     i += 7;
                     break;
                 case '"':
                     /* Literal text */
-                    for (
-                        o = "";
-                        (cc = fmt.charCodeAt(++i)) !== 34 && i < fmt.length;
-                    )
-                        o += String.fromCharCode(cc);
+                    for (o = ''; (cc = fmt.charCodeAt(++i)) !== 34 && i < fmt.length; ) o += String.fromCharCode(cc);
                     out[out.length] = {
-                        t: "t",
+                        t: 't',
                         v: o,
                     };
                     ++i;
                     break;
-                case "\\":
+                case '\\': {
                     var w = fmt.charAt(++i),
-                        t = w === "(" || w === ")" ? w : "t";
+                        t = w === '(' || w === ')' ? w : 't';
                     out[out.length] = {
                         t: t,
                         v: w,
                     };
                     ++i;
                     break;
-                case "_":
+                }
+                case '_':
                     out[out.length] = {
-                        t: "t",
-                        v: " ",
+                        t: 't',
+                        v: ' ',
                     };
                     i += 2;
                     break;
-                case "@":
+                case '@':
                     /* Text Placeholder */
                     out[out.length] = {
-                        t: "T",
+                        t: 'T',
                         v: v,
                     };
                     ++i;
                     break;
-                case "B":
-                case "b":
-                    if (fmt.charAt(i + 1) === "1" || fmt.charAt(i + 1) === "2") {
+                case 'B':
+                case 'b':
+                    if (fmt.charAt(i + 1) === '1' || fmt.charAt(i + 1) === '2') {
                         if (dt == null) {
-                            dt = parse_date_code(v, opts, fmt.charAt(i + 1) === "2");
-                            if (dt == null) return "";
+                            dt = parse_date_code(v, opts, fmt.charAt(i + 1) === '2');
+                            if (dt == null) return '';
                         }
                         out[out.length] = {
-                            t: "X",
+                            t: 'X',
                             v: fmt.substr(i, 2),
                         };
                         lst = c;
@@ -1300,118 +1198,115 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
                         break;
                     }
                 /* falls through */
-                case "M":
-                case "D":
-                case "Y":
-                case "H":
-                case "S":
-                case "E":
+                case 'M':
+                case 'D':
+                case 'Y':
+                case 'H':
+                case 'S':
+                case 'E':
                     c = c.toLowerCase();
                 /* falls through */
-                case "m":
-                case "d":
-                case "y":
-                case "h":
-                case "s":
-                case "e":
-                case "g":
-                    if (v < 0) return "";
+                case 'm':
+                case 'd':
+                case 'y':
+                case 'h':
+                case 's':
+                case 'e':
+                case 'g':
+                    if (v < 0) return '';
                     if (dt == null) {
                         dt = parse_date_code(v, opts);
-                        if (dt == null) return "#####";
+                        if (dt == null) return '#####';
                     }
                     o = c;
                     while (++i < fmt.length && fmt.charAt(i).toLowerCase() === c) o += c;
-                    if (c === "m" && lst.toLowerCase() === "h") c = "M";
-                    if (c === "h") c = hr;
+                    if (c === 'm' && lst.toLowerCase() === 'h') c = 'M';
+                    if (c === 'h') c = hr;
                     out[out.length] = {
                         t: c,
                         v: o,
                     };
                     lst = c;
                     break;
-                case "A":
-                case "a":
-                case "上":
+                case 'A':
+                case 'a':
+                case '上': {
                     /* eslint-disable @typescript-eslint/no-fallthrough */
                     /* @ts-nocheck */
-                    let q: any = {
+                    const q: any = {
                         t: c,
                         v: c,
                     };
                     if (dt == null) dt = parse_date_code(v, opts);
-                    if (fmt.substr(i, 3).toUpperCase() === "A/P") {
-                        if (dt != null) q.v = dt.H >= 12 ? "P" : "A";
-                        q.t = "T";
-                        hr = "h";
+                    if (fmt.substr(i, 3).toUpperCase() === 'A/P') {
+                        if (dt != null) q.v = dt.H >= 12 ? 'P' : 'A';
+                        q.t = 'T';
+                        hr = 'h';
                         i += 3;
-                    } else if (fmt.substr(i, 5).toUpperCase() === "AM/PM") {
-                        if (dt != null) q.v = dt.H >= 12 ? "PM" : "AM";
-                        q.t = "T";
+                    } else if (fmt.substr(i, 5).toUpperCase() === 'AM/PM') {
+                        if (dt != null) q.v = dt.H >= 12 ? 'PM' : 'AM';
+                        q.t = 'T';
                         i += 5;
-                        hr = "h";
-                    } else if (fmt.substr(i, 5).toUpperCase() === "上午/下午") {
-                        if (dt != null) q.v = dt.H >= 12 ? "下午" : "上午";
-                        q.t = "T";
+                        hr = 'h';
+                    } else if (fmt.substr(i, 5).toUpperCase() === '上午/下午') {
+                        if (dt != null) q.v = dt.H >= 12 ? '下午' : '上午';
+                        q.t = 'T';
                         i += 5;
-                        hr = "h";
+                        hr = 'h';
                     } else {
-                        q.t = "t";
+                        q.t = 't';
                         ++i;
                     }
-                    if (dt == null && q.t === "T") return "";
+                    if (dt == null && q.t === 'T') return '';
                     out[out.length] = q;
                     lst = c;
                     break;
-                case "[":
+                }
+                case '[':
                     o = c;
-                    while (fmt.charAt(i++) !== "]" && i < fmt.length) o += fmt.charAt(i);
-                    if (o.slice(-1) !== "]") throw 'unterminated "[" block: |' + o + "|";
+                    while (fmt.charAt(i++) !== ']' && i < fmt.length) o += fmt.charAt(i);
+                    if (o.slice(-1) !== ']') throw `unterminated "[" block: |${o}|`;
                     if (o.match(abstime)) {
                         if (dt == null) {
                             dt = parse_date_code(v, opts);
-                            if (dt == null) return "";
+                            if (dt == null) return '';
                         }
                         out[out.length] = {
-                            t: "Z",
+                            t: 'Z',
                             v: o.toLowerCase(),
                         };
                         lst = o.charAt(1);
-                    } else if (o.indexOf("$") > -1) {
-                        o = (o.match(/\$([^-\[\]]*)/) || [])[1] || "$";
+                    } else if (o.indexOf('$') > -1) {
+                        o = (o.match(/\$([^-[\]]*)/) || [])[1] || '$';
                         if (!fmt_is_date(fmt))
                             out[out.length] = {
-                                t: "t",
+                                t: 't',
                                 v: o,
                             };
                     }
                     break;
                 /* Numbers */
-                case ".":
+                case '.':
                     if (dt != null) {
                         o = c;
-                        while (++i < fmt.length && (c = fmt.charAt(i)) === "0") o += c;
+                        while (++i < fmt.length && (c = fmt.charAt(i)) === '0') o += c;
                         out[out.length] = {
-                            t: "s",
+                            t: 's',
                             v: o,
                         };
                         break;
                     }
                 /* falls through */
-                case "0":
-                case "#":
+                case '0':
+                case '#':
                     o = c;
-                    while (
-                        ++i < fmt.length &&
-                        "0#?.,E+-%".indexOf((c = fmt.charAt(i))) > -1
-                        )
-                        o += c;
+                    while (++i < fmt.length && '0#?.,E+-%'.indexOf((c = fmt.charAt(i))) > -1) o += c;
                     out[out.length] = {
-                        t: "n",
+                        t: 'n',
                         v: o,
                     };
                     break;
-                case "?":
+                case '?':
                     o = c;
                     while (fmt.charAt(++i) === c) o += c;
                     out[out.length] = {
@@ -1420,46 +1315,45 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
                     };
                     lst = c;
                     break;
-                case "*":
+                case '*':
                     ++i;
-                    if (fmt.charAt(i) == " " || fmt.charAt(i) == "*") ++i;
+                    if (fmt.charAt(i) === ' ' || fmt.charAt(i) === '*') ++i;
                     break; // **
-                case "(":
-                case ")":
+                case '(':
+                case ')':
                     out[out.length] = {
-                        t: flen === 1 ? "t" : c,
+                        t: flen === 1 ? 't' : c,
                         v: c,
                     };
                     ++i;
                     break;
-                case "1":
-                case "2":
-                case "3":
-                case "4":
-                case "5":
-                case "6":
-                case "7":
-                case "8":
-                case "9":
+                case '1':
+                case '2':
+                case '3':
+                case '4':
+                case '5':
+                case '6':
+                case '7':
+                case '8':
+                case '9':
                     o = c;
-                    while (i < fmt.length && "0123456789".indexOf(fmt.charAt(++i)) > -1)
-                        o += fmt.charAt(i);
+                    while (i < fmt.length && '0123456789'.indexOf(fmt.charAt(++i)) > -1) o += fmt.charAt(i);
                     out[out.length] = {
-                        t: "D",
+                        t: 'D',
                         v: o,
                     };
                     break;
-                case " ":
+                case ' ':
                     out[out.length] = {
                         t: c,
                         v: c,
                     };
                     ++i;
                     break;
-                case "$":
+                case '$':
                     out[out.length] = {
-                        t: "t",
-                        v: "$",
+                        t: 't',
+                        v: '$',
                     };
                     ++i;
                     break;
@@ -1467,12 +1361,12 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
                     // if ("¤฿BsBr₵₡₫ƒFtRs.₭kr£₤Lm₥₦₱PQRSkRp৲৳R$S/.〒₮₩¥NT￥zł₴₪៛руб€＄,$-+/():!^&'~{}<>=€acfijklopqrtuvwxzP".indexOf(c) === -1) throw new Error('unrecognized character ' + c + ' in ' + fmt);
                     if (
                         "Ω¤฿BsBr₵₡₫ƒFtRs.₭kr£₤Lm₥₦₱PQRSkRp৲৳R$S/.〒₮₩¥NT￥zł₴₪៛руб€₹＄,$-+/():!^&'~{}<>=€acfijklopqrtuvwxzP$￥LekdinAf$dhAflRial?￡BirrKzMOPPGKRsGsB/R$ррlevkrKMzBsPNuFBuKPkrRD$NfkCFA?CVEGMDFrCDHTGNAfLFdjKGSFGGHSRielKCFknKshLSLL￡LtRFRONArRfMWKRMMURsMROS/KMDLMTnRC$kr€GELCHFSLLSCRDbSZLSDGSOSSomFCFPTShT$VUVQUGXгрнsomWSTNT$FtDramRpZMWFCFA".indexOf(
-                            c
+                            c,
                         ) === -1
                     )
-                        throw new Error("unrecognized character " + c + " in " + fmt);
+                        throw new Error(`unrecognized character ${c} in ${fmt}`);
                     out[out.length] = {
-                        t: "t",
+                        t: 't',
                         v: c,
                     };
                     ++i;
@@ -1483,35 +1377,34 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
         var bt = 0,
             ss0 = 0,
             ssm;
-        for (i = out.length - 1, lst = "t"; i >= 0; --i) {
+        for (i = out.length - 1, lst = 't'; i >= 0; --i) {
             switch (out[i].t) {
-                case "h":
-                case "H":
+                case 'h':
+                case 'H':
                     out[i].t = hr;
-                    lst = "h";
+                    lst = 'h';
                     if (bt < 1) bt = 1;
                     break;
-                case "s":
-                    if ((ssm = out[i].v.match(/\.0+$/)))
-                        ss0 = Math.max(ss0, ssm[0].length - 1);
+                case 's':
+                    if ((ssm = out[i].v.match(/\.0+$/))) ss0 = Math.max(ss0, ssm[0].length - 1);
                     if (bt < 3) bt = 3;
                 /* falls through */
-                case "d":
-                case "y":
-                case "M":
-                case "e":
+                case 'd':
+                case 'y':
+                case 'M':
+                case 'e':
                     lst = out[i].t;
                     break;
-                case "m":
-                    if (lst === "s") {
-                        out[i].t = "M";
+                case 'm':
+                    if (lst === 's') {
+                        out[i].t = 'M';
                         if (bt < 2) bt = 2;
                     }
                     break;
-                case "X":
+                case 'X':
                     /*if(out[i].v === "B2");*/
                     break;
-                case "Z":
+                case 'Z':
                     if (bt < 1 && out[i].v.match(/[Hh]/)) bt = 1;
                     if (bt < 2 && out[i].v.match(/[Mm]/)) bt = 2;
                     if (bt < 3 && out[i].v.match(/[Ss]/)) bt = 3;
@@ -1547,153 +1440,138 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
                 break;
         }
         /* replace fields */
-        var nstr = "",
+        var nstr = '',
             jj;
         for (i = 0; i < out.length; ++i) {
             switch (out[i].t) {
-                case "t":
-                case "T":
-                case " ":
-                case "D":
+                case 't':
+                case 'T':
+                case ' ':
+                case 'D':
                     break;
-                case "X":
-                    out[i].v = "";
-                    out[i].t = ";";
+                case 'X':
+                    out[i].v = '';
+                    out[i].t = ';';
                     break;
-                case "d":
-                case "m":
-                case "y":
-                case "h":
-                case "H":
-                case "M":
-                case "s":
-                case "e":
-                case "b":
-                case "Z":
+                case 'd':
+                case 'm':
+                case 'y':
+                case 'h':
+                case 'H':
+                case 'M':
+                case 's':
+                case 'e':
+                case 'b':
+                case 'Z':
                     out[i].v = write_date(out[i].t.charCodeAt(0), out[i].v, dt, ss0);
-                    out[i].t = "t";
+                    out[i].t = 't';
                     break;
-                case "n":
-                case "?":
+                case 'n':
+                case '?':
                     jj = i + 1;
                     while (
                         out[jj] != null &&
-                        ((c = out[jj].t) === "?" ||
-                            c === "D" ||
-                            ((c === " " || c === "t") &&
+                        ((c = out[jj].t) === '?' ||
+                            c === 'D' ||
+                            ((c === ' ' || c === 't') &&
                                 out[jj + 1] != null &&
-                                (out[jj + 1].t === "?" ||
-                                    (out[jj + 1].t === "t" && out[jj + 1].v === "/"))) ||
-                            (out[i].t === "(" && (c === " " || c === "n" || c === ")")) ||
-                            (c === "t" &&
-                                (out[jj].v === "/" ||
-                                    (out[jj].v === " " &&
-                                        out[jj + 1] != null &&
-                                        out[jj + 1].t == "?"))))
-                        ) {
+                                (out[jj + 1].t === '?' || (out[jj + 1].t === 't' && out[jj + 1].v === '/'))) ||
+                            (out[i].t === '(' && (c === ' ' || c === 'n' || c === ')')) ||
+                            (c === 't' &&
+                                (out[jj].v === '/' ||
+                                    (out[jj].v === ' ' && out[jj + 1] != null && out[jj + 1].t === '?'))))
+                    ) {
                         out[i].v += out[jj].v;
                         out[jj] = {
-                            v: "",
-                            t: ";",
+                            v: '',
+                            t: ';',
                         };
                         ++jj;
                     }
                     nstr += out[i].v;
                     i = jj - 1;
                     break;
-                case "G":
-                    out[i].t = "t";
+                case 'G':
+                    out[i].t = 't';
                     out[i].v = general_fmt(v, opts);
                     break;
             }
         }
-        var vv = "",
+        var vv = '',
             myv,
             ostr;
         if (nstr.length > 0) {
-            if (nstr.charCodeAt(0) == 40) {
+            if (nstr.charCodeAt(0) === 40) {
                 /* '(' */
                 myv = v < 0 && nstr.charCodeAt(0) === 45 ? -v : v;
-                ostr = write_num("n", nstr, myv);
+                ostr = write_num('n', nstr, myv);
             } else {
                 myv = v < 0 && flen > 1 ? -v : v;
-                ostr = write_num("n", nstr, myv);
-                if (myv < 0 && out[0] && out[0].t == "t") {
+                ostr = write_num('n', nstr, myv);
+                if (myv < 0 && out[0] && out[0].t === 't') {
                     ostr = ostr.substr(1);
-                    out[0].v = "-" + out[0].v;
+                    out[0].v = `-${out[0].v}`;
                 }
             }
             jj = ostr.length - 1;
             var decpt = out.length;
             for (i = 0; i < out.length; ++i)
-                if (out[i] != null && out[i].t != "t" && out[i].v.indexOf(".") > -1) {
+                if (out[i] != null && out[i].t !== 't' && out[i].v.indexOf('.') > -1) {
                     decpt = i;
                     break;
                 }
             var lasti = out.length;
-            if (decpt === out.length && ostr.indexOf("E") === -1) {
+            if (decpt === out.length && ostr.indexOf('E') === -1) {
                 for (i = out.length - 1; i >= 0; --i) {
-                    if (out[i] == null || "n?".indexOf(out[i].t) === -1) continue;
+                    if (out[i] == null || 'n?'.indexOf(out[i].t) === -1) continue;
                     if (jj >= out[i].v.length - 1) {
                         jj -= out[i].v.length;
                         out[i].v = ostr.substr(jj + 1, out[i].v.length);
-                    } else if (jj < 0) out[i].v = "";
+                    } else if (jj < 0) out[i].v = '';
                     else {
                         out[i].v = ostr.substr(0, jj + 1);
                         jj = -1;
                     }
-                    out[i].t = "t";
+                    out[i].t = 't';
                     lasti = i;
                 }
-                if (jj >= 0 && lasti < out.length)
-                    out[lasti].v = ostr.substr(0, jj + 1) + out[lasti].v;
-            } else if (decpt !== out.length && ostr.indexOf("E") === -1) {
-                jj = ostr.indexOf(".") - 1;
+                if (jj >= 0 && lasti < out.length) out[lasti].v = ostr.substr(0, jj + 1) + out[lasti].v;
+            } else if (decpt !== out.length && ostr.indexOf('E') === -1) {
+                jj = ostr.indexOf('.') - 1;
                 for (i = decpt; i >= 0; --i) {
-                    if (out[i] == null || "n?".indexOf(out[i].t) === -1) continue;
-                    j =
-                        out[i].v.indexOf(".") > -1 && i === decpt
-                            ? out[i].v.indexOf(".") - 1
-                            : out[i].v.length - 1;
+                    if (out[i] == null || 'n?'.indexOf(out[i].t) === -1) continue;
+                    j = out[i].v.indexOf('.') > -1 && i === decpt ? out[i].v.indexOf('.') - 1 : out[i].v.length - 1;
                     vv = out[i].v.substr(j + 1);
                     for (; j >= 0; --j) {
-                        if (
-                            jj >= 0 &&
-                            (out[i].v.charAt(j) === "0" || out[i].v.charAt(j) === "#")
-                        )
+                        if (jj >= 0 && (out[i].v.charAt(j) === '0' || out[i].v.charAt(j) === '#'))
                             vv = ostr.charAt(jj--) + vv;
                     }
                     out[i].v = vv;
-                    out[i].t = "t";
+                    out[i].t = 't';
                     lasti = i;
                 }
-                if (jj >= 0 && lasti < out.length)
-                    out[lasti].v = ostr.substr(0, jj + 1) + out[lasti].v;
-                jj = ostr.indexOf(".") + 1;
+                if (jj >= 0 && lasti < out.length) out[lasti].v = ostr.substr(0, jj + 1) + out[lasti].v;
+                jj = ostr.indexOf('.') + 1;
                 for (i = decpt; i < out.length; ++i) {
-                    if (out[i] == null || ("n?(".indexOf(out[i].t) === -1 && i !== decpt))
-                        continue;
-                    j =
-                        out[i].v.indexOf(".") > -1 && i === decpt
-                            ? out[i].v.indexOf(".") + 1
-                            : 0;
+                    if (out[i] == null || ('n?('.indexOf(out[i].t) === -1 && i !== decpt)) continue;
+                    j = out[i].v.indexOf('.') > -1 && i === decpt ? out[i].v.indexOf('.') + 1 : 0;
                     vv = out[i].v.substr(0, j);
                     for (; j < out[i].v.length; ++j) {
                         if (jj < ostr.length) vv += ostr.charAt(jj++);
                     }
                     out[i].v = vv;
-                    out[i].t = "t";
+                    out[i].t = 't';
                     lasti = i;
                 }
             }
         }
         for (i = 0; i < out.length; ++i)
-            if (out[i] != null && "n?".indexOf(out[i].t) > -1) {
-                myv = flen > 1 && v < 0 && i > 0 && out[i - 1].v === "-" ? -v : v;
+            if (out[i] != null && 'n?'.indexOf(out[i].t) > -1) {
+                myv = flen > 1 && v < 0 && i > 0 && out[i - 1].v === '-' ? -v : v;
                 out[i].v = write_num(out[i].t, out[i].v, myv);
-                out[i].t = "t";
+                out[i].t = 't';
             }
-        var retval = "";
+        var retval = '';
         for (i = 0; i !== out.length; ++i) if (out[i] != null) retval += out[i].v;
 
         return retval;
@@ -1707,22 +1585,22 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
         if (rr == null) return false;
         var thresh = parseFloat(rr[2]);
         switch (rr[1]) {
-            case "=":
-                if (v == thresh) return true;
+            case '=':
+                if (v === thresh) return true;
                 break;
-            case ">":
+            case '>':
                 if (v > thresh) return true;
                 break;
-            case "<":
+            case '<':
                 if (v < thresh) return true;
                 break;
-            case "<>":
-                if (v != thresh) return true;
+            case '<>':
+                if (v !== thresh) return true;
                 break;
-            case ">=":
+            case '>=':
                 if (v >= thresh) return true;
                 break;
-            case "<=":
+            case '<=':
                 if (v <= thresh) return true;
                 break;
         }
@@ -1732,192 +1610,174 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
     function choose_fmt(f: any, v: any): any[] {
         var fmt = split_fmt(f);
         var l = fmt.length,
-            lat = fmt[l - 1].indexOf("@");
+            lat = fmt[l - 1].indexOf('@');
         if (l < 4 && lat > -1) --l;
-        if (fmt.length > 4)
-            throw new Error("cannot find right format for |" + fmt.join("|") + "|");
+        if (fmt.length > 4) throw new Error(`cannot find right format for |${fmt.join('|')}|`);
         // This line of code is deprecated because v might be "1", and we need to check for true, false, ' ' values, so we need to use parseFloat(v).toString() to determine if it's a Number type
         // if (typeof v !== "number")
-        if (parseFloat(v).toString() == "NaN")
-            return [4, fmt.length === 4 || lat > -1 ? fmt[fmt.length - 1] : "@"];
+        if (parseFloat(v).toString() === 'NaN') return [4, fmt.length === 4 || lat > -1 ? fmt[fmt.length - 1] : '@'];
         switch (fmt.length) {
             case 1:
-                fmt =
-                    lat > -1
-                        ? ["General", "General", "General", fmt[0]]
-                        : [fmt[0], fmt[0], fmt[0], "@"];
+                fmt = lat > -1 ? ['General', 'General', 'General', fmt[0]] : [fmt[0], fmt[0], fmt[0], '@'];
                 break;
             case 2:
-                fmt =
-                    lat > -1
-                        ? [fmt[0], fmt[0], fmt[0], fmt[1]]
-                        : [fmt[0], fmt[1], fmt[0], "@"];
+                fmt = lat > -1 ? [fmt[0], fmt[0], fmt[0], fmt[1]] : [fmt[0], fmt[1], fmt[0], '@'];
                 break;
             case 3:
-                fmt =
-                    lat > -1
-                        ? [fmt[0], fmt[1], fmt[0], fmt[2]]
-                        : [fmt[0], fmt[1], fmt[2], "@"];
+                fmt = lat > -1 ? [fmt[0], fmt[1], fmt[0], fmt[2]] : [fmt[0], fmt[1], fmt[2], '@'];
                 break;
             case 4:
                 break;
         }
         var ff = v > 0 ? fmt[0] : v < 0 ? fmt[1] : fmt[2];
-        if (fmt[0].indexOf("[") === -1 && fmt[1].indexOf("[") === -1)
-            return [l, ff];
+        if (fmt[0].indexOf('[') === -1 && fmt[1].indexOf('[') === -1) return [l, ff];
         if (fmt[0].match(cfregex) != null || fmt[1].match(cfregex) != null) {
             var m1 = fmt[0].match(cfregex2);
             var m2 = fmt[1].match(cfregex2);
             return chkcond(v, m1)
                 ? [l, fmt[0]]
                 : chkcond(v, m2)
-                    ? [l, fmt[1]]
-                    : [l, fmt[m1 != null && m2 != null ? 2 : 1]];
+                  ? [l, fmt[1]]
+                  : [l, fmt[m1 != null && m2 != null ? 2 : 1]];
         }
         return [l, ff];
     }
 
     function format(fmt: any, v: any, o?: any) {
         if (o == null) o = {};
-        let sfmt = "";
+        let sfmt = '';
         switch (typeof fmt) {
-            case "string":
-                if (fmt == "m/d/yy" && o.dateNF) sfmt = o.dateNF;
+            case 'string':
+                if (fmt === 'm/d/yy' && o.dateNF) sfmt = o.dateNF;
                 else sfmt = fmt;
                 break;
-            case "number":
-                if (fmt == 14 && o.dateNF) sfmt = o.dateNF;
+            case 'number':
+                if (fmt === 14 && o.dateNF) sfmt = o.dateNF;
                 else sfmt = (o.table != null ? o.table : table_fmt)[fmt];
-                if (sfmt == null)
-                    sfmt =
-                        (o.table && o.table[default_map[fmt]]) ||
-                        table_fmt[default_map[fmt]];
-                if (sfmt == null) sfmt = default_str[fmt] || "General";
+                if (sfmt == null) sfmt = o.table?.[default_map[fmt]] || table_fmt[default_map[fmt]];
+                if (sfmt == null) sfmt = default_str[fmt] || 'General';
                 break;
         }
 
         //new runze: add wan (10k) and yi (100M) Chinese number unit formats
         //Note: "w":2wan2500  "w0":2wan2500  "w0.0":2wan2500.2  "w0.00":2wan2500.23......custom precision
         var reg = /^(w|W)((0?)|(0\.0+))$/;
-        if (!!sfmt.match(reg)) {
-            if (isNaN(v)) {
+        if (sfmt.match(reg)) {
+            if (Number.isNaN(v)) {
                 return v;
             }
 
             //var v =300101886.436;
             var acc = sfmt.slice(1); //get 0/0.0/0.00
             var isNegative = false;
-            if (!isNaN(v) && Number(v) < 0) {
+            if (!Number.isNaN(v) && Number(v) < 0) {
                 isNegative = true;
                 v = Math.abs(v);
             }
-            var vInt = parseInt(v);
+            var vInt = parseInt(v, 10);
 
             var vlength = vInt.toString().length;
             if (vlength > 4) {
                 if (vlength > 8) {
-                    let y = parseInt((parseFloat(v.toString()) / 100000000).toString()); //hundred-millions (yi units)
-                    let w = parseInt((parseFloat(v.toString()) - (y * 100000000) / 10000).toString()); //ten-thousands (wan units)
+                    const y = parseInt((parseFloat(v.toString()) / 100000000).toString(), 10); //hundred-millions (yi units)
+                    const w = parseInt((parseFloat(v.toString()) - (y * 100000000) / 10000).toString(), 10); //ten-thousands (wan units)
                     let q = parseFloat(v.toString()) - (y * 100000000 + w * 10000); //remainder below thousands
-                    if (acc != "") {
+                    if (acc !== '') {
                         q = parseFloat(numeral(q).format(acc)); //apply precision
                     }
-                    v = y + "亿" + w + "万" + q;
+                    v = `${y}亿${w}万${q}`;
                 } else {
-                    let w = parseInt((parseFloat(v.toString()) / 10000).toString()); //ten-thousands (wan units)
+                    const w = parseInt((parseFloat(v.toString()) / 10000).toString(), 10); //ten-thousands (wan units)
                     let q = parseFloat(v.toString()) - w * 10000; //remainder below thousands
-                    if (acc != "") {
+                    if (acc !== '') {
                         q = parseFloat(numeral(q).format(acc)); //apply precision
                     }
-                    v = w + "万" + q;
+                    v = `${w}万${q}`;
                 }
 
-                if (v.indexOf("亿0万0") != -1) {
-                    v = v.replace("0万0", "");
-                } else if (v.indexOf("亿0万") != -1) {
-                    v = v.replace("0万", "");
-                } else if (v.indexOf("万0") != -1) {
-                    v = v.replace("万0", "万");
+                if (v.indexOf('亿0万0') !== -1) {
+                    v = v.replace('0万0', '');
+                } else if (v.indexOf('亿0万') !== -1) {
+                    v = v.replace('0万', '');
+                } else if (v.indexOf('万0') !== -1) {
+                    v = v.replace('万0', '万');
                 }
 
                 //Dropped regex lookbehind syntax — not recognized by older browsers (360 V9)
-                if (v.indexOf("亿") != -1 && v.indexOf("万") == -1) {
+                if (v.indexOf('亿') !== -1 && v.indexOf('万') === -1) {
                     //1yi/1yi111 => 1yi/1yi0111 (pad digits after the yi unit)
-                    var afterYi = v.substring(v.indexOf("亿") + 1);
-                    if (afterYi.substring(0, 1) !== "." && afterYi != "") {
-                        switch ((parseInt(afterYi) + "").length) {
+                    var afterYi = v.substring(v.indexOf('亿') + 1);
+                    if (afterYi.substring(0, 1) !== '.' && afterYi !== '') {
+                        switch (`${parseInt(afterYi, 10)}`.length) {
                             case 1:
-                                afterYi = "000" + afterYi;
+                                afterYi = `000${afterYi}`;
                                 break;
                             case 2:
-                                afterYi = "00" + afterYi;
+                                afterYi = `00${afterYi}`;
                                 break;
                             case 3:
-                                afterYi = "0" + afterYi;
+                                afterYi = `0${afterYi}`;
                                 break;
                         }
-                        v = v.substring(0, v.indexOf("亿") + 1) + afterYi;
+                        v = v.substring(0, v.indexOf('亿') + 1) + afterYi;
                     }
-                } else if (v.indexOf("亿") == -1 && v.indexOf("万") != -1) {
+                } else if (v.indexOf('亿') === -1 && v.indexOf('万') !== -1) {
                     //3wan0011 (pad digits after the wan unit)
-                    var afterWan = v.substring(v.indexOf("万") + 1);
-                    if (afterWan.substring(0, 1) !== "." && afterWan != "") {
-                        switch ((parseInt(afterWan) + "").length) {
+                    var afterWan = v.substring(v.indexOf('万') + 1);
+                    if (afterWan.substring(0, 1) !== '.' && afterWan !== '') {
+                        switch (`${parseInt(afterWan, 10)}`.length) {
                             case 1:
-                                afterWan = "000" + afterWan;
+                                afterWan = `000${afterWan}`;
                                 break;
                             case 2:
-                                afterWan = "00" + afterWan;
+                                afterWan = `00${afterWan}`;
                                 break;
                             case 3:
-                                afterWan = "0" + afterWan;
+                                afterWan = `0${afterWan}`;
                                 break;
                         }
-                        v = v.substring(0, v.indexOf("万") + 1) + afterWan;
+                        v = v.substring(0, v.indexOf('万') + 1) + afterWan;
                     }
-                } else if (v.indexOf("亿") != -1 && v.indexOf("万") != -1) {
+                } else if (v.indexOf('亿') !== -1 && v.indexOf('万') !== -1) {
                     //1yi0053wan0611 (pad digits between yi and wan units, and after wan)
-                    var afterYi = v.substring(v.indexOf("亿") + 1, v.indexOf("万")),
-                        afterWan = v.substring(v.indexOf("万") + 1);
+                    var afterYi = v.substring(v.indexOf('亿') + 1, v.indexOf('万')),
+                        afterWan = v.substring(v.indexOf('万') + 1);
 
-                    switch ((parseInt(afterYi) + "").length) {
+                    switch (`${parseInt(afterYi, 10)}`.length) {
                         case 1:
-                            afterYi = "000" + afterYi;
+                            afterYi = `000${afterYi}`;
                             break;
                         case 2:
-                            afterYi = "00" + afterYi;
+                            afterYi = `00${afterYi}`;
                             break;
                         case 3:
-                            afterYi = "0" + afterYi;
+                            afterYi = `0${afterYi}`;
                             break;
                     }
-                    v =
-                        v.substring(0, v.indexOf("亿") + 1) +
-                        afterYi +
-                        v.substring(v.indexOf("万"));
+                    v = v.substring(0, v.indexOf('亿') + 1) + afterYi + v.substring(v.indexOf('万'));
 
-                    if (afterWan.substring(0, 1) !== "." && afterWan != "") {
-                        switch ((parseInt(afterWan) + "").length) {
+                    if (afterWan.substring(0, 1) !== '.' && afterWan !== '') {
+                        switch (`${parseInt(afterWan, 10)}`.length) {
                             case 1:
-                                afterWan = "000" + afterWan;
+                                afterWan = `000${afterWan}`;
                                 break;
                             case 2:
-                                afterWan = "00" + afterWan;
+                                afterWan = `00${afterWan}`;
                                 break;
                             case 3:
-                                afterWan = "0" + afterWan;
+                                afterWan = `0${afterWan}`;
                                 break;
                         }
-                        v = v.substring(0, v.indexOf("万") + 1) + afterWan;
+                        v = v.substring(0, v.indexOf('万') + 1) + afterWan;
                     }
                 }
             } else {
-                if (acc != "") {
+                if (acc !== '') {
                     v = numeral(v).format(acc); //apply precision
                 }
             }
             if (isNegative) {
-                return "-" + v;
+                return `-${v}`;
             } else {
                 return v;
             }
@@ -1927,21 +1787,21 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
         if (v instanceof Date) v = datenum_local(v, o.date1904);
         var f = choose_fmt(sfmt, v);
         if (isgeneral(f[1])) return general_fmt(v, o);
-        if (v === true) v = "TRUE";
-        else if (v === false) v = "FALSE";
-        else if (v === "" || v == null) return "";
+        if (v === true) v = 'TRUE';
+        else if (v === false) v = 'FALSE';
+        else if (v === '' || v == null) return '';
         return eval_fmt(f[1], v, o, f[0]);
     }
 
     function load_entry(fmt: any, idx: any) {
-        if (typeof idx != "number") {
+        if (typeof idx !== 'number') {
             idx = +idx || -1;
             for (let i = 0; i < 0x0188; ++i) {
-                if (table_fmt[i] == undefined) {
+                if (table_fmt[i] === undefined) {
                     if (idx < 0) idx = i;
                     continue;
                 }
-                if (table_fmt[i] == fmt) {
+                if (table_fmt[i] === fmt) {
                     idx = i;
                     break;
                 }
@@ -1958,8 +1818,7 @@ const make_ssf = function make_ssf(SSF: SSFInterface) {
         return table_fmt;
     };
     SSF.load_table = function load_table(tbl) {
-        for (var i = 0; i != 0x0188; ++i)
-            if (tbl[i] !== undefined) load_entry(tbl[i], i);
+        for (var i = 0; i !== 0x0188; ++i) if (tbl[i] !== undefined) load_entry(tbl[i], i);
     };
     SSF.init_table = init_table;
     SSF.format = format;

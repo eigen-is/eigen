@@ -1,5 +1,5 @@
-import React, {useCallback, useMemo, useState} from "react";
-import {Dialog, DialogContent,} from "@workspace/ui/components/dialog";
+import { Dialog, DialogContent } from '@workspace/ui/components/dialog';
+import React, { useCallback, useMemo, useState } from 'react';
 
 type ModalContextType = {
     showModal: (c: React.ReactNode) => void;
@@ -7,36 +7,40 @@ type ModalContextType = {
 };
 
 const ModalContext = React.createContext<ModalContextType>({
-    showModal: () => {
-    },
-    hideModal: () => {
-    },
+    showModal: () => {},
+    hideModal: () => {},
 });
 
-function ModalProvider({children}: { children?: React.ReactNode }) {
+function ModalProvider({ children }: { children?: React.ReactNode }) {
     const [content, setContent] = useState<React.ReactNode>(null);
     const open = content !== null;
 
     const showModal = useCallback((c: React.ReactNode) => setContent(c), []);
     const hideModal = useCallback(() => setContent(null), []);
 
-    const providerValue = useMemo(
-        () => ({showModal, hideModal}),
-        [hideModal, showModal]
-    );
+    const providerValue = useMemo(() => ({ showModal, hideModal }), [hideModal, showModal]);
 
     return (
         <ModalContext.Provider value={providerValue}>
             {children}
-            <Dialog open={open} onOpenChange={(o) => {
-                if (!o) hideModal();
-            }}>
+            <Dialog
+                open={open}
+                onOpenChange={(o) => {
+                    if (!o) hideModal();
+                }}
+            >
                 <DialogContent
                     showCloseButton={false}
                     onPointerDownOutside={(e) => e.preventDefault()}
                     onInteractOutside={(e) => e.preventDefault()}
                     className="max-w-[90vw]"
-                    style={{display: 'flex', flexDirection: 'column', maxHeight: '75vh', overflow: 'hidden', width: 500}}
+                    style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        maxHeight: '75vh',
+                        overflow: 'hidden',
+                        width: 500,
+                    }}
                 >
                     <div
                         className="flex flex-col min-h-0 flex-1"
@@ -53,4 +57,4 @@ function ModalProvider({children}: { children?: React.ReactNode }) {
     );
 }
 
-export {ModalContext, ModalProvider};
+export { ModalContext, ModalProvider };
