@@ -20,10 +20,15 @@ describe('fortune-sheet/formula-parser/helper/cell', () => {
 
     describe('.toLabel()', () => {
         test('should correctly create cell labels', () => {
-            const result1 = toLabel(0 as any, 0 as any);
-            const result2 = toLabel(1 as any, 9 as any);
-            expect(typeof result1).toBe('string');
-            expect(typeof result2).toBe('string');
+            expect(
+                toLabel({ index: 0, label: '1', isAbsolute: false }, { index: 0, label: 'A', isAbsolute: false }),
+            ).toBe('A1');
+            expect(
+                toLabel({ index: 9, label: '10', isAbsolute: false }, { index: 1, label: 'B', isAbsolute: false }),
+            ).toBe('B10');
+            expect(
+                toLabel({ index: 0, label: '1', isAbsolute: true }, { index: 0, label: 'A', isAbsolute: true }),
+            ).toBe('$A$1');
         });
     });
 

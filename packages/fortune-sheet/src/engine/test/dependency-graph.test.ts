@@ -114,7 +114,7 @@ describe('engine/dependency-graph — matchDependencies', () => {
     });
 
     test('uses cache on second call for the same range', () => {
-        const cache: Record<string, any> = {};
+        const cache: Parameters<typeof matchDependencies>[0] = {};
         const dep = { row: [0, 0] as [number, number], column: [0, 0] as [number, number], sheetId: 's1' };
         const cellInfoMap: FormulaCellInfoMap = { r0c0is1: makeCell('r0c0is1') };
 
@@ -131,7 +131,7 @@ describe('engine/dependency-graph — matchDependencies', () => {
     });
 
     test('does not populate cache when both maps are null', () => {
-        const cache: Record<string, any> = {};
+        const cache: Parameters<typeof matchDependencies>[0] = {};
         const dep = { row: [0, 0] as [number, number], column: [0, 0] as [number, number], sheetId: 's1' };
 
         matchDependencies(cache, [dep], null, null, () => {});

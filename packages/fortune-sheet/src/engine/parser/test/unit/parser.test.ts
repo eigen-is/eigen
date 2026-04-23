@@ -18,10 +18,14 @@ describe('fortune-sheet/formula-parser/parser', () => {
         });
 
         test('should return error when input is not a string', () => {
-            expect(parser!.parse(123 as any)).toMatchObject({ error: '#ERROR!', result: null });
-            expect(parser!.parse(null as any)).toMatchObject({ error: '#ERROR!', result: null });
-            expect(parser!.parse(undefined as any)).toMatchObject({ error: '#ERROR!', result: null });
-            expect(parser!.parse({} as any)).toMatchObject({ error: '#ERROR!', result: null });
+            // @ts-expect-error - runtime robustness: non-string inputs should error, not crash
+            expect(parser!.parse(123)).toMatchObject({ error: '#ERROR!', result: null });
+            // @ts-expect-error - runtime robustness: non-string inputs should error, not crash
+            expect(parser!.parse(null)).toMatchObject({ error: '#ERROR!', result: null });
+            // @ts-expect-error - runtime robustness: non-string inputs should error, not crash
+            expect(parser!.parse(undefined)).toMatchObject({ error: '#ERROR!', result: null });
+            // @ts-expect-error - runtime robustness: non-string inputs should error, not crash
+            expect(parser!.parse({})).toMatchObject({ error: '#ERROR!', result: null });
         });
 
         test('should return empty string when input is empty', () => {
