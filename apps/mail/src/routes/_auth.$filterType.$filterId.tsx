@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useLocation } from '@tanstack/react-router';
 import { useEmail, useEmails, useMailboxes } from '@workspace/lib/mail';
 import type { Email, EmailDraft as EmailDraftType } from '@workspace/lib/types/mail';
 import { EmptyState } from '@workspace/ui';
@@ -34,6 +34,10 @@ function MailRoute() {
     const { filterId } = Route.useParams();
     const { mailId, mode, to } = Route.useSearch();
     const { isTablet } = useLayout();
+    // Reply/Forward/Compose all write to history state (see use-mail-actions.ts). prefillDraft
+    // seeds the composer; composeSessionKey is a nonce that flips the EmailDraft remount key
+    // each time a new compose session starts, so an in-progress composer is unmounted cleanly.
+    const { prefillDraft, composeSessionKey } = useLocation().state;
 
     const [searchQuery, setSearchQuery] = useState('');
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -150,14 +154,20 @@ function MailRoute() {
                     {showDetail ? (
                         isDraft ? (
                             <EmailDraft
-                                // Identity key: one compose session (mode='compose') stays stable even
-                                // after the first auto-save assigns an id and updates the URL. When
-                                // the user navigates to a different draft from the list, mode is
-                                // absent and mailId changes — the remount lets LightEditor pick up
-                                // the new initial content (Tiptap's useEditor reads `content` on
-                                // mount only).
-                                key={mode === 'compose' ? 'compose-session' : (selectedEmail?.id ?? 'empty')}
+                                // Identity key: within one compose session (mode='compose' +
+                                // same composeSessionKey), the composer stays mounted across
+                                // the auto-save URL update. A new Reply/Forward/Compose click
+                                // bumps composeSessionKey, forcing a remount. For draft
+                                // detail (mode absent), keying on mailId lets LightEditor pick
+                                // up fresh initial content — Tiptap's useEditor reads
+                                // `content` on mount only.
+                                key={
+                                    mode === 'compose'
+                                        ? `compose-${composeSessionKey ?? 'fresh'}`
+                                        : (selectedEmail?.id ?? 'empty')
+                                }
                                 email={selectedEmail as EmailDraftType}
+                                prefillDraft={prefillDraft}
                                 sendDraft={actions.handleSendEmail}
                                 onAutoSave={actions.saveDraft}
                                 onDraftIdAssigned={actions.handleDraftIdAssigned}

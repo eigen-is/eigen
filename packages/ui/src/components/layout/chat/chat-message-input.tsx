@@ -103,7 +103,7 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
 
     // acceptShiftEnter matches historic behaviour where shift+Enter also committed the
     // @-mention; the slash suggests below intentionally let shift+Enter through as a newline.
-    const atSuggest = useSuggestions<string>({
+    const atSuggest = useSuggestions({
         visible: suggestOpen,
         onSelect: handlePlayerSelect,
         onEscape: closeSuggest,
@@ -126,10 +126,12 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
         setContent(command + (commandNeedsSpace(command) ? ' ' : ''));
     }, []);
 
-    const slashSuggest = useSuggestions<string>({
+    const clearContent = useCallback(() => setContent(''), []);
+
+    const slashSuggest = useSuggestions({
         visible: slashSuggestOpen,
         onSelect: handleSlashSelect,
-        onEscape: () => setContent(''),
+        onEscape: clearContent,
         passthroughWhenEmpty: true,
     });
 
@@ -160,22 +162,28 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
         [slashTarget?.appendSpace],
     );
 
-    const targetSuggest = useSuggestions<string>({
-        visible: slashTargetOpen,
-        onSelect: handleSlashTargetSelect,
-        // Escape drops the target back to just the command (keep everything before the space).
-        onEscape: () =>
+    // Escape drops the target back to just the command (keep everything before the space).
+    const clearSlashTarget = useCallback(
+        () =>
             setContent((prev) => {
                 const spaceIdx = prev.indexOf(' ');
                 return spaceIdx > 0 ? prev.slice(0, spaceIdx) : prev;
             }),
+        [],
+    );
+
+    const targetSuggest = useSuggestions({
+        visible: slashTargetOpen,
+        onSelect: handleSlashTargetSelect,
+        onEscape: clearSlashTarget,
         passthroughWhenEmpty: true,
     });
 
     // ── Keyboard handling ───────────────────────────────────────────────
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        // Priority order matters when two suggests happen to be visible at once: slash wins
-        // over target (target is gated on !slashSuggestOpen), and either wins over @-mention.
+        // Slash and target are mutually exclusive (target is gated on !slashSuggestOpen), but
+        // target and @-mention can both match at once — e.g. typing `/whisper @al`. Target
+        // takes precedence so Tab/Enter commits the member, not the @-prefixed username.
         if (slashSuggest.handleKeyDown(e)) return;
         if (targetSuggest.handleKeyDown(e)) return;
         if (atSuggest.handleKeyDown(e)) return;
