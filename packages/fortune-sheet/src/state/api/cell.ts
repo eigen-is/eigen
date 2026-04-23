@@ -14,8 +14,7 @@ import type {Cell, CellStyle} from "../../engine/types";
 import {SingleRange} from "../types";
 import {CommonOptions, getSheet} from "./common";
 import {SHEET_NOT_FOUND} from "./errors";
-// @ts-ignore
-import SSF from "../../engine/ssf";
+import {format} from "numfmt";
 
 export function getCellValue(
     ctx: Context,
@@ -217,7 +216,7 @@ export function setCellFormat(
             "'fa' and 't' should be present in value when attr is 'ct'"
         );
     } else if (attr === "ct" && !_.isNil(cellData.v)) {
-        cellData.m = SSF.format(value.fa, cellData.v); // auto generate mask
+        cellData.m = format(value.fa, cellData.v); // auto generate mask
     }
 
     // @ts-ignore

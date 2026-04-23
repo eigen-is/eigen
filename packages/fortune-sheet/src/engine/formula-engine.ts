@@ -1,6 +1,6 @@
+import { format } from 'numfmt';
 import { getCalculationOrder } from './dependency-graph';
 import { ERROR_REF, Parser } from './parser';
-import SSF from './ssf';
 import type {
     Cell,
     CellInfo,
@@ -221,7 +221,7 @@ export class FormulaEngine {
     }
 
     format(value: unknown, pattern: string): string {
-        return SSF.format(pattern, value);
+        return format(pattern, value);
     }
 
     resetState(): void {
