@@ -3,3 +3,4 @@ export * from './chat-message-list';
 export * from './chat-player-suggest';
 export * from './chat-slash-suggest';
 export * from './chat-utils';
+export * from './use-suggestions';

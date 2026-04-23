@@ -10,6 +10,7 @@ import { SimpleAttachmentChip } from '../attachment/simple-attachment-chip';
 import { ChatPlayerSuggest } from './chat-player-suggest';
 import { ChatSlashSuggest } from './chat-slash-suggest';
 import { getAtSuggestQuery, getSlashTargetQuery } from './chat-utils';
+import { useSuggestions } from './use-suggestions';
 
 export type ChatMessageInputHandle = {
     addFiles: (files: File[]) => void;
@@ -52,8 +53,6 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
 ) {
     const [content, setContent] = useState('');
     const [files, setFiles] = useState<File[]>([]);
-    const [selectedSuggestIdx, setSelectedSuggestIdx] = useState(0);
-    const suggestCountRef = useRef(0);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     useImperativeHandle(ref, () => ({
@@ -93,15 +92,6 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
             if (atIdx > 0 && !/[\s,.]/.test(prev[atIdx - 1])) return prev;
             return `${prev.slice(0, atIdx) + email} `;
         });
-        setSelectedSuggestIdx(0);
-    }, []);
-
-    const suggestEmailsRef = useRef<string[]>([]);
-
-    const handleSuggestItemsChange = useCallback((count: number, emails: string[]) => {
-        suggestCountRef.current = count;
-        suggestEmailsRef.current = emails;
-        if (count > 0) setSelectedSuggestIdx((prev) => Math.min(prev, count - 1));
     }, []);
 
     const closeSuggest = useCallback(() => {
@@ -109,8 +99,17 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
             const atIdx = prev.lastIndexOf('@');
             return atIdx === -1 ? prev : prev.slice(0, atIdx);
         });
-        setSelectedSuggestIdx(0);
     }, []);
+
+    // acceptShiftEnter matches historic behaviour where shift+Enter also committed the
+    // @-mention; the slash suggests below intentionally let shift+Enter through as a newline.
+    const atSuggest = useSuggestions<string>({
+        visible: suggestOpen,
+        onSelect: handlePlayerSelect,
+        onEscape: closeSuggest,
+        onCommitEmpty: closeSuggest,
+        acceptShiftEnter: true,
+    });
 
     // ── Slash command suggest ───────────────────────────────────────────
     const getSlashQuery = (): string | null => {
@@ -123,28 +122,20 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
     const slashQuery = getSlashQuery();
     const slashSuggestOpen = slashQuery !== null && slashQuery.length > 0 && !SLASH_COMMANDS.includes(slashQuery);
 
-    const slashSuggestCountRef = useRef(0);
-    const slashSuggestCmdsRef = useRef<string[]>([]);
-    const [selectedSlashIdx, setSelectedSlashIdx] = useState(0);
-
     const handleSlashSelect = useCallback((command: string) => {
         setContent(command + (commandNeedsSpace(command) ? ' ' : ''));
-        setSelectedSlashIdx(0);
     }, []);
 
-    const handleSlashItemsChange = useCallback((count: number, cmds: string[]) => {
-        slashSuggestCountRef.current = count;
-        slashSuggestCmdsRef.current = cmds;
-        if (count > 0) setSelectedSlashIdx((prev) => Math.min(prev, count - 1));
-    }, []);
+    const slashSuggest = useSuggestions<string>({
+        visible: slashSuggestOpen,
+        onSelect: handleSlashSelect,
+        onEscape: () => setContent(''),
+        passthroughWhenEmpty: true,
+    });
 
     // ── Slash target suggest (emote/whisper/invite targets) ─────────────
     const slashTarget = getSlashTargetQuery(content);
     const slashTargetOpen = slashTarget !== null && !slashSuggestOpen;
-
-    const slashTargetCountRef = useRef(0);
-    const slashTargetEmailsRef = useRef<string[]>([]);
-    const [selectedTargetIdx, setSelectedTargetIdx] = useState(0);
 
     const slashTargetMembers = useMemo(() => {
         if (!slashTarget) return [];
@@ -165,111 +156,29 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
                 if (spaceIdx <= 0) return prev;
                 return prev.slice(0, spaceIdx + 1) + email + (shouldAppendSpace ? ' ' : '');
             });
-            setSelectedTargetIdx(0);
         },
         [slashTarget?.appendSpace],
     );
 
-    const handleSlashTargetItemsChange = useCallback((count: number, emails: string[]) => {
-        slashTargetCountRef.current = count;
-        slashTargetEmailsRef.current = emails;
-        if (count > 0) setSelectedTargetIdx((prev) => Math.min(prev, count - 1));
-    }, []);
+    const targetSuggest = useSuggestions<string>({
+        visible: slashTargetOpen,
+        onSelect: handleSlashTargetSelect,
+        // Escape drops the target back to just the command (keep everything before the space).
+        onEscape: () =>
+            setContent((prev) => {
+                const spaceIdx = prev.indexOf(' ');
+                return spaceIdx > 0 ? prev.slice(0, spaceIdx) : prev;
+            }),
+        passthroughWhenEmpty: true,
+    });
 
     // ── Keyboard handling ───────────────────────────────────────────────
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        // Slash command suggest
-        if (slashSuggestOpen && slashSuggestCountRef.current > 0) {
-            if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                setSelectedSlashIdx((i) => Math.min(i + 1, slashSuggestCountRef.current - 1));
-                return;
-            }
-            if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                setSelectedSlashIdx((i) => Math.max(i - 1, 0));
-                return;
-            }
-            if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
-                e.preventDefault();
-                const cmd = slashSuggestCmdsRef.current[selectedSlashIdx];
-                if (cmd) {
-                    handleSlashSelect(cmd);
-                }
-                return;
-            }
-            if (e.key === 'Escape') {
-                e.preventDefault();
-                setContent('');
-                setSelectedSlashIdx(0);
-                return;
-            }
-        }
-
-        // Slash target suggest
-        if (slashTargetOpen && slashTargetCountRef.current > 0) {
-            if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                setSelectedTargetIdx((i) => Math.min(i + 1, slashTargetCountRef.current - 1));
-                return;
-            }
-            if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                setSelectedTargetIdx((i) => Math.max(i - 1, 0));
-                return;
-            }
-            if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
-                e.preventDefault();
-                const email = slashTargetEmailsRef.current[selectedTargetIdx];
-                if (email) {
-                    handleSlashTargetSelect(email);
-                }
-                return;
-            }
-            if (e.key === 'Escape') {
-                e.preventDefault();
-                setSelectedTargetIdx(0);
-                // Remove the target part, keep the command
-                setContent((prev) => {
-                    const spaceIdx = prev.indexOf(' ');
-                    return spaceIdx > 0 ? prev.slice(0, spaceIdx) : prev;
-                });
-                return;
-            }
-        }
-
-        // @ mention suggest
-        if (suggestOpen) {
-            if (e.key === 'ArrowDown') {
-                e.preventDefault();
-                if (suggestCountRef.current > 0) {
-                    setSelectedSuggestIdx((i) => Math.min(i + 1, suggestCountRef.current - 1));
-                }
-                return;
-            }
-            if (e.key === 'ArrowUp') {
-                e.preventDefault();
-                if (suggestCountRef.current > 0) {
-                    setSelectedSuggestIdx((i) => Math.max(i - 1, 0));
-                }
-                return;
-            }
-            if (e.key === 'Enter' || e.key === 'Tab') {
-                e.preventDefault();
-                const email = suggestEmailsRef.current[selectedSuggestIdx];
-                if (email) {
-                    handlePlayerSelect(email);
-                } else {
-                    closeSuggest();
-                }
-                return;
-            }
-            if (e.key === 'Escape') {
-                e.preventDefault();
-                closeSuggest();
-                return;
-            }
-        }
+        // Priority order matters when two suggests happen to be visible at once: slash wins
+        // over target (target is gated on !slashSuggestOpen), and either wins over @-mention.
+        if (slashSuggest.handleKeyDown(e)) return;
+        if (targetSuggest.handleKeyDown(e)) return;
+        if (atSuggest.handleKeyDown(e)) return;
 
         if (onKeyDownProp) {
             const handled = onKeyDownProp(e, content);
@@ -347,8 +256,8 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
                     roomMembers={roomMembers}
                     onSelect={handlePlayerSelect}
                     visible={suggestOpen}
-                    selectedIndex={selectedSuggestIdx}
-                    onItemsChange={handleSuggestItemsChange}
+                    selectedIndex={atSuggest.selectedIndex}
+                    onItemsChange={atSuggest.onItemsChange}
                     includeContacts={false}
                 />
                 {slashTargetOpen && slashTarget && (
@@ -357,8 +266,8 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
                         roomMembers={slashTarget.mode === 'contacts' ? [] : slashTargetMembers}
                         onSelect={handleSlashTargetSelect}
                         visible
-                        selectedIndex={selectedTargetIdx}
-                        onItemsChange={handleSlashTargetItemsChange}
+                        selectedIndex={targetSuggest.selectedIndex}
+                        onItemsChange={targetSuggest.onItemsChange}
                         includeContacts={slashTarget.mode === 'contacts'}
                     />
                 )}
@@ -367,8 +276,8 @@ export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageIn
                     commandsHelp={COMMANDS_HELP}
                     onSelect={handleSlashSelect}
                     visible={slashSuggestOpen}
-                    selectedIndex={selectedSlashIdx}
-                    onItemsChange={handleSlashItemsChange}
+                    selectedIndex={slashSuggest.selectedIndex}
+                    onItemsChange={slashSuggest.onItemsChange}
                 />
                 <textarea
                     ref={textareaRef}
