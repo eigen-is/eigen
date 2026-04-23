@@ -1,7 +1,7 @@
 # Code Quality Follow-ups (2026-04-23)
 
 Follow-ups identified during the drive-picker / save-to-drive review session.
-Sections 1–3 shipped on 2026-04-23. Three items remain.
+All six sections shipped on 2026-04-23.
 
 ## Status
 
@@ -10,9 +10,9 @@ Sections 1–3 shipped on 2026-04-23. Three items remain.
 | 1 | Mail-draft hook trio refactor | ✅ shipped (`180d6014`, `b45af345`, `ed2de47e`) |
 | 2 | Drive + SharedDrive wrapper pattern | ✅ shipped (`6483ed81`, `ed2de47e`) |
 | 3 | routes/drive.ts eigendoc-create consolidation | ✅ shipped (`74924e55`, `ed2de47e`) |
-| 4 | ChatMessageInput suggest state machines | ⏳ pending |
-| 5 | Reply/Forward should not persist a draft on click | ⏳ pending |
-| 6 | Mail draft attachment merge drops in-flight tempId attachments | ⏳ pending (uncovered during §1 review) |
+| 4 | ChatMessageInput suggest state machines | ✅ shipped (`eacab998`) |
+| 5 | Reply/Forward should not persist a draft on click | ✅ shipped (`1a359373`) |
+| 6 | Mail draft attachment merge drops in-flight tempId attachments | ✅ shipped (`d883dd49`) |
 
 ## Notes on shipped sections
 
