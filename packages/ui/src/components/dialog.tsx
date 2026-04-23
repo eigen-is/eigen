@@ -69,10 +69,11 @@ function DialogContent({
                     size ? dialogSizeMap[size] : 'sm:max-w-xl',
                     className,
                 )}
-                // When a dialog is open and the user clicks outside it, check if they
-                // clicked within the preview overlay — if so, don't dismiss either
+                // For dialogs rendered above an open preview, a pointer-down on the preview
+                // overlay should close the preview (and keep the dialog open) instead of the
+                // default "click outside closes the dialog" behaviour.
                 onPointerDownOutside={(e) => {
-                    if (preview?.isPreviewOpen) {
+                    if (abovePreview && preview?.isPreviewOpen) {
                         e.preventDefault();
                         const target = e.target as HTMLElement;
                         if (!target.closest('[data-preview-overlay]')) {

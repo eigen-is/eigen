@@ -4,6 +4,7 @@ import { useCheckPermissions } from '@workspace/lib/drive';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import {
     ChatMessageInput,
+    type ChatMessageInputHandle,
     ChatMessageList,
     LoadingState,
     RequestAccessView,
@@ -14,7 +15,7 @@ import {
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
 import { DriveAccessDialog } from '@workspace/ui/components/layout/drive/drive-access-dialog';
-import { DriveFilePicker } from '@workspace/ui/components/layout/drive/drive-file-picker';
+import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
 import { DriveRenameItem } from '@workspace/ui/components/layout/drive/drive-rename-item';
 import { DriveShareSummary } from '@workspace/ui/components/layout/drive/drive-share-summary';
 import { Pencil, UserRoundPlus } from 'lucide-react';
@@ -30,7 +31,7 @@ function ChatView() {
     const [accessDialogOpen, setAccessDialogOpen] = useState(false);
     const [renameDialogOpen, setRenameDialogOpen] = useState(false);
     const [filePickerOpen, setFilePickerOpen] = useState(false);
-    const fileInputTriggerRef = useRef<(() => void) | undefined>(undefined);
+    const chatInputRef = useRef<ChatMessageInputHandle>(null);
 
     if (permLoading) return <LoadingState />;
     if (!permissions?.canRead) {
@@ -92,6 +93,7 @@ function ChatView() {
                             onCancelEdit={editing.endEditing}
                         />
                         <ChatMessageInput
+                            ref={chatInputRef}
                             onSend={chat.handleSendMessage}
                             disabled={chat.disabled}
                             readOnly={chat.readOnly}
@@ -103,7 +105,6 @@ function ChatView() {
                             onAttachClick={() => setFilePickerOpen(true)}
                             driveAttachments={chat.driveAttachments}
                             onRemoveDriveAttachment={chat.removeDriveAttachment}
-                            fileInputTriggerRef={fileInputTriggerRef}
                         />
                     </div>
                 </Column>
@@ -125,16 +126,14 @@ function ChatView() {
                 onDelete={editing.handleDeleteConfirm}
             />
 
-            <DriveFilePicker
+            <DrivePickerWithUpload
                 open={filePickerOpen}
                 onOpenChange={setFilePickerOpen}
                 title="Attach file"
                 multiSelect
-                onSelect={chat.addDriveAttachments}
-                onUploadFromDevice={() => {
-                    setFilePickerOpen(false);
-                    setTimeout(() => fileInputTriggerRef.current?.(), 0);
-                }}
+                onPickFromDrive={chat.addDriveAttachments}
+                onPickFromDevice={(files) => chatInputRef.current?.addFiles(files)}
+                multiple
             />
         </>
     );

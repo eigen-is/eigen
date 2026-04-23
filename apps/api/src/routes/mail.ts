@@ -1,5 +1,4 @@
-import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
-import { Elysia, type Static, t } from 'elysia';
+import { Elysia, t } from 'elysia';
 import { contentDisposition, setCacheHeaders } from '../lib/core';
 import { requireLocalhost, requireNonGuest, requireSelf } from '../lib/core/access';
 import {
@@ -27,6 +26,7 @@ import {
     uploadDraftAttachment,
 } from '../lib/mail/mail';
 import { betterAuth } from './auth';
+import { attachmentReferenceSchema } from './shared-schemas';
 
 const EmailAddressSchema = t.Object({
     address: t.Optional(t.String()),
@@ -40,30 +40,6 @@ const AddressObjectSchema = t.Object({
     text: t.String(),
 });
 
-const AttachmentReferenceSchema = t.Object({
-    type: t.Literal('reference'),
-    ownerId: t.String(),
-    mountId: t.String(),
-    id: t.String(),
-    name: t.String(),
-    driveType: t.Union([
-        t.Literal('doc'),
-        t.Literal('stickies'),
-        t.Literal('slides'),
-        t.Literal('sheets'),
-        t.Literal('chat'),
-        t.Literal('folder'),
-        t.Literal('file'),
-    ]),
-    mimeType: t.String(),
-});
-
-// Compile-time guard that the Elysia schema stays in sync with the shared TS type. Adding
-// a field to drive-reference.ts without mirroring it here (or vice-versa) fails the check.
-type TypesEqual<X, Y> = (<T>() => T extends X ? 1 : 2) extends <T>() => T extends Y ? 1 : 2 ? true : false;
-const _schemaMatchesType: TypesEqual<Static<typeof AttachmentReferenceSchema>, AttachmentReference> = true;
-void _schemaMatchesType;
-
 const MailDraftSchema = t.Object({
     id: t.Optional(t.String()),
     subject: t.Optional(t.String()),
@@ -76,7 +52,7 @@ const MailDraftSchema = t.Object({
     messageId: t.Optional(t.String()),
     inReplyTo: t.Optional(t.String()),
     references: t.Optional(t.Union([t.Array(t.String()), t.String()])),
-    driveReferences: t.Optional(t.Array(AttachmentReferenceSchema)),
+    driveReferences: t.Optional(t.Array(attachmentReferenceSchema)),
 });
 
 export const mailRouter = new Elysia({ name: 'mail' })

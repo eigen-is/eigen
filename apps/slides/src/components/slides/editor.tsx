@@ -17,9 +17,9 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { CommentDialog, CommentPanel, CreateCommentDialog, NoteCardContextMenu } from '@workspace/ui';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
-import { DriveFilePicker } from '@workspace/ui/components/layout/drive/drive-file-picker';
+import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
 import { Column, ColumnLayout, EmptyState, LoadingState } from '@workspace/ui/index';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useActiveComments } from './hooks/use-active-comments';
 import { useDeck } from './hooks/use-deck';
 import { useSlideDnd } from './hooks/use-slide-dnd';
@@ -151,7 +151,6 @@ function SlideEditorInner({
     const [selectedObjectIds, setSelectedObjectIds] = useState<string[]>([]);
     const [editingObjectId, setEditingObjectId] = useState<string | null>(null);
     const [isPresenting, setIsPresenting] = useState(false);
-    const imageInputRef = useRef<HTMLInputElement>(null);
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
 
     const auth = useAuth();
@@ -295,11 +294,10 @@ function SlideEditorInner({
         [activeSlideId, mediaFolderId, uploadFile, addObject],
     );
 
-    const handleImageSelect = useCallback(
-        (e: React.ChangeEvent<HTMLInputElement>) => {
-            const file = e.target.files?.[0];
+    const handleImageFromDevice = useCallback(
+        (files: File[]) => {
+            const file = files[0];
             if (file) handleImageFile(file);
-            e.target.value = '';
         },
         [handleImageFile],
     );
@@ -773,25 +771,16 @@ function SlideEditorInner({
                 </div>
 
                 {mediaFolderId && (
-                    <DriveFilePicker
+                    <DrivePickerWithUpload
                         open={imagePickerOpen}
                         onOpenChange={setImagePickerOpen}
                         title="Add image"
                         mimeFilter={['image/*']}
-                        onSelect={handleImagePickFromDrive}
-                        onUploadFromDevice={() => {
-                            setImagePickerOpen(false);
-                            setTimeout(() => imageInputRef.current?.click(), 0);
-                        }}
+                        onPickFromDrive={handleImagePickFromDrive}
+                        onPickFromDevice={handleImageFromDevice}
+                        accept="image/*"
                     />
                 )}
-                <input
-                    ref={imageInputRef}
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleImageSelect}
-                />
             </Column>
 
             {chatFolderId && (

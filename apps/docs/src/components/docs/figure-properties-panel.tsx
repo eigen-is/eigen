@@ -4,7 +4,7 @@ import { useMediaResolver } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import { Input } from '@workspace/ui/components/input';
-import { DriveFilePicker } from '@workspace/ui/components/layout/drive/drive-file-picker';
+import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
 import {
     AlignmentPicker,
     PropertiesPanel,
@@ -13,7 +13,7 @@ import {
 } from '@workspace/ui/components/layout/properties-panel';
 import { Toggle } from '@workspace/ui/components/toggle';
 import { ImagePlus, PanelLeft, PanelRight, Rows3 } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 
 type FigurePropertiesPanelProps = {
     editor: Editor;
@@ -23,7 +23,6 @@ type FigurePropertiesPanelProps = {
 
 export function FigurePropertiesPanel({ editor, onReplaceImage, onReplaceImageFromDrive }: FigurePropertiesPanelProps) {
     const { resolveMediaUrl } = useMediaResolver();
-    const fileInputRef = useRef<HTMLInputElement>(null);
     const [replacePickerOpen, setReplacePickerOpen] = useState(false);
     const attrs = editor.getAttributes('figure');
     const layout = (attrs.layout as FigureLayout) || 'block';
@@ -104,27 +103,14 @@ export function FigurePropertiesPanel({ editor, onReplaceImage, onReplaceImageFr
                     <ImagePlus className="h-3.5 w-3.5 mr-1.5" />
                     Replace image
                 </Button>
-                <DriveFilePicker
+                <DrivePickerWithUpload
                     open={replacePickerOpen}
                     onOpenChange={setReplacePickerOpen}
                     title="Replace image"
                     mimeFilter={['image/*']}
-                    onSelect={(paths) => onReplaceImageFromDrive?.(paths)}
-                    onUploadFromDevice={() => {
-                        setReplacePickerOpen(false);
-                        setTimeout(() => fileInputRef.current?.click(), 0);
-                    }}
-                />
-                <input
-                    ref={fileInputRef}
-                    type="file"
+                    onPickFromDrive={(paths) => onReplaceImageFromDrive?.(paths)}
+                    onPickFromDevice={(files) => files[0] && onReplaceImage(files[0])}
                     accept="image/*"
-                    className="hidden"
-                    onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) onReplaceImage(file);
-                        e.target.value = '';
-                    }}
                 />
             </PropertySection>
         </PropertiesPanel>

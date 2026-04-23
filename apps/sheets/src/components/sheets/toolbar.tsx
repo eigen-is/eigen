@@ -1,15 +1,14 @@
+import { XLSX_MIME } from '@workspace/lib/constants/mime';
 import { useExportDocument, useImportDocument, useImportFromDrive } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { CountBadge, TooltipButton } from '@workspace/ui';
 
-import { DriveFilePicker } from '@workspace/ui/components/layout/drive/drive-file-picker';
+import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
 import { ExportProgressDialog } from '@workspace/ui/components/layout/drive/export-progress-dialog';
 import { DocumentModeButton } from '@workspace/ui/components/layout/toolbar/document-mode-button';
 import { FileMenu } from '@workspace/ui/components/layout/toolbar/file-menu';
 import { MessageSquare, Sheet, UserRoundPlus } from 'lucide-react';
-import { useRef, useState } from 'react';
-
-const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+import { useState } from 'react';
 
 type ToolbarLeftProps = {
     canWrite: boolean;
@@ -31,7 +30,6 @@ export function ToolbarLeftItems({ path, onAccessDialogOpen, onRestore, canWrite
     const importFromDriveMutation = useImportFromDrive(path.ownerId, path.mountId);
     const { exportDocument, isExporting } = useExportDocument();
     const [importPickerOpen, setImportPickerOpen] = useState(false);
-    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleImport = () => setImportPickerOpen(true);
 
@@ -46,15 +44,9 @@ export function ToolbarLeftItems({ path, onAccessDialogOpen, onRestore, canWrite
         });
     };
 
-    const handleImportFromDevice = () => {
-        setImportPickerOpen(false);
-        setTimeout(() => fileInputRef.current?.click(), 0);
-    };
-
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
+    const handleImportFromDevice = (files: File[]) => {
+        const file = files[0];
         if (file) importMutation.mutate({ pathId: path.id, file });
-        e.target.value = '';
     };
 
     const handleExport = (format: string) => exportDocument(path.ownerId, path.mountId, path.id, format);
@@ -75,15 +67,15 @@ export function ToolbarLeftItems({ path, onAccessDialogOpen, onRestore, canWrite
                 createType="sheets"
             />
             <ExportProgressDialog open={isExporting} />
-            <DriveFilePicker
+            <DrivePickerWithUpload
                 open={importPickerOpen}
                 onOpenChange={setImportPickerOpen}
                 title="Import xlsx file"
                 mimeFilter={[XLSX_MIME]}
-                onSelect={handleImportFromDrive}
-                onUploadFromDevice={handleImportFromDevice}
+                onPickFromDrive={handleImportFromDrive}
+                onPickFromDevice={handleImportFromDevice}
+                accept=".xlsx"
             />
-            <input ref={fileInputRef} type="file" accept=".xlsx" className="hidden" onChange={handleFileChange} />
         </>
     );
 }

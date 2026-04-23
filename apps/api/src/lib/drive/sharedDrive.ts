@@ -149,10 +149,9 @@ export default class SharedDrive extends Drive {
         name: string,
         mimeType: string,
         data: Buffer | StorageFile,
-        originalName?: string,
     ): Promise<DrivePath> {
         return this.withWritePermission(mountId, parentId, () =>
-            this.sharedDrive.createFileFromData(mountId, parentId, name, mimeType, data, originalName),
+            this.sharedDrive.createFileFromData(mountId, parentId, name, mimeType, data),
         );
     }
 

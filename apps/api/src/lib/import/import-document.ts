@@ -8,6 +8,8 @@ import { writeDocToYjs } from './doc/writer';
 import { xlsxToSheets } from './sheets/from-xlsx';
 import { writeSheetsToDoc } from './sheets/writer';
 
+// xlsx and docx are zip-based formats — the parsers need the full file in memory to read
+// the central directory and extract parts. Callers are expected to size-check before passing.
 async function parseXlsxOrThrow(buffer: Buffer): Promise<Sheet[]> {
     try {
         return await xlsxToSheets(buffer);

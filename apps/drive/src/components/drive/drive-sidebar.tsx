@@ -3,7 +3,7 @@ import { useAuth } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, useListTrash, usePathInfo } from '@workspace/lib/drive';
 import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
 import { SidebarItem, StorageUsage, UserAvatar } from '@workspace/ui';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
@@ -91,7 +91,7 @@ export function DriveSidebar({ condensed = false, onClose, isMobile = false, roo
     const trashCount = trashedItems?.length ?? 0;
 
     const [createFolderOpen, setCreateFolderOpen] = useState(false);
-    const [createType, setCreateType] = useState<'doc' | 'stickies' | 'slides' | 'sheets' | 'chat' | null>(null);
+    const [createType, setCreateType] = useState<EigenDocType | null>(null);
     const [uploadOpen, setUploadOpen] = useState(false);
     const [uploadFiles, setUploadFiles] = useState<File[]>([]);
     const navigate = useNavigate();

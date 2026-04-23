@@ -2,7 +2,7 @@ import { formatForDisplay } from '@tanstack/react-hotkeys';
 import { useNavigate } from '@tanstack/react-router';
 import { fetchRevisionState, useCollabRevisions } from '@workspace/lib/collab';
 import { formatDateTime } from '@workspace/lib/date';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import {
     DropdownMenu,
@@ -56,7 +56,7 @@ type FileMenuProps = {
     exportFormats?: string[];
     createLabel: string;
     createIcon?: LucideIcon;
-    createType: 'doc' | 'stickies' | 'slides' | 'sheets' | 'chat';
+    createType: EigenDocType;
     children?: ReactNode;
 };
 

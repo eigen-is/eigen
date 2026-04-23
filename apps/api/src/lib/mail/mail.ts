@@ -2,7 +2,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DraftAttachmentUpload, Email, EmailDraft, EmailSummary, NewDraft } from '@workspace/lib/types/mail';
 import type { User } from 'better-auth/types';
 import { processInboundImip } from '../calendar/imip';
-import { getMailUploadMaxSize } from '../config/enforcement';
+import { getMailUploadMaxSize, getUploadMaxSize } from '../config/enforcement';
 import { ApiError } from '../core/errors';
 import { getSharedDrive } from '../drive';
 import { getHome } from '../home';
@@ -140,13 +140,16 @@ export async function attachFromDrive(
     const drive = await getSharedDrive(sourceOwnerId, user);
     const sourcePath = await drive.getPath(sourceMountId, sourcePathId);
     if (!sourcePath) throw new ApiError(404, 'Source file not found');
+    if (sourcePath.size > maxSize) {
+        const limitMB = Math.floor(maxSize / (1024 * 1024));
+        throw new ApiError(413, `Attachment exceeds ${limitMB}MB limit`);
+    }
 
     const sourceFile = await drive.downloadFile(sourceMountId, sourcePathId);
     if (!sourceFile) throw new ApiError(404, 'Source file missing on disk');
-    const buffer = Buffer.from(await sourceFile.arrayBuffer());
 
     const filename = sourcePath.details?.originalName || sourcePath.name;
-    return await mailClient.stageDriveAttachment(buffer, filename, sourcePath.mimeType, maxSize);
+    return await mailClient.stageDriveAttachment(sourceFile, filename, sourcePath.mimeType, maxSize);
 }
 
 export async function messageSend(user: User, mail: NewDraft | EmailDraft) {
@@ -183,14 +186,28 @@ export async function saveAttachmentsToDrive(
 
     const mail = await getMailClient(user);
     const drive = await getSharedDrive(targetOwnerId, user);
+    const maxSize = await getUploadMaxSize(targetOwnerId, user.id, targetMountId);
+
+    // Indexes refer to positions in the raw parsed EML attachment list (including calendar parts).
+    // Parse the EML once and index into the result — avoids re-parsing on every iteration.
+    const attachments = await mail.messageGetAttachments(messageId);
+    for (const index of indexes) {
+        if (index >= attachments.length) throw new ApiError(404, `Attachment ${index} not found`);
+    }
 
     const results: DrivePath[] = [];
-    // Indexes refer to positions in the raw parsed EML attachment list (including calendar parts).
     for (const index of indexes) {
-        const att = await mail.messageGetAttachment(messageId, index);
+        const att = attachments[index];
         const filename = att.filename || `attachment-${index}`;
-        if (!(att.content instanceof Uint8Array)) throw new ApiError(400, `Attachment ${index} has no content`);
+        // Attachment.content is typed unknown (parser origin); narrow to Uint8Array at this boundary.
+        if (!(att.content instanceof Uint8Array)) {
+            throw new ApiError(400, `Attachment ${index} has no content`);
+        }
         const content = Buffer.isBuffer(att.content) ? att.content : Buffer.from(att.content);
+        if (content.byteLength > maxSize) {
+            const limitMB = Math.floor(maxSize / (1024 * 1024));
+            throw new ApiError(413, `Attachment "${filename}" exceeds ${limitMB}MB drive limit`);
+        }
         const result = await drive.createFileFromData(
             targetMountId,
             targetParentId,

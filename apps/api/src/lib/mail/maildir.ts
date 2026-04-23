@@ -13,6 +13,7 @@ import { SSEventType } from '@workspace/lib/types/sse';
 import { ApiError, STANDARD_MAILBOXES } from '../core';
 import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
+import type { StorageFile } from '../storage';
 import { parseEml } from './mail-parse';
 import MailDB from './maildb';
 import { MaildirStore } from './maildir-store';
@@ -194,6 +195,13 @@ export default class Maildir {
         }
 
         return parsed.attachments[index];
+    }
+
+    async messageGetAttachments(messageId: string) {
+        const email = this.db.getEmail(messageId);
+        if (!email) throw new ApiError(404, `Message '${messageId}' not found`);
+        const parsed = await this.readAndParse(messageId, email.mailbox, email.filename);
+        return parsed?.attachments ?? [];
     }
 
     async messageDelete(messageId: string): Promise<void> {
@@ -506,43 +514,49 @@ export default class Maildir {
         return parsed as EmailDraft;
     }
 
-    async uploadDraftAttachment(request: Request, maxSize: number): Promise<DraftAttachmentUpload> {
+    private async persistDraftTemp(
+        write: (writer: ReturnType<MaildirStore['openDraftTempWriter']>) => Promise<number>,
+        filename: string,
+        contentType: string,
+    ): Promise<DraftAttachmentUpload> {
         await this.store.ensureDraftTempDir();
+        const tempId = crypto.randomUUID();
+        const writer = this.store.openDraftTempWriter(tempId);
+        let size: number;
+        try {
+            size = await write(writer);
+            await writer.end();
+        } catch (e) {
+            await writer.end();
+            await this.store.cleanupDraftTemp(tempId);
+            throw e;
+        }
+        const meta = { filename, size, contentType };
+        try {
+            await this.store.writeDraftTempMeta(tempId, meta);
+        } catch (e) {
+            await this.store.cleanupDraftTemp(tempId);
+            throw e;
+        }
+        return { tempId, ...meta };
+    }
 
+    async uploadDraftAttachment(request: Request, maxSize: number): Promise<DraftAttachmentUpload> {
         try {
             for await (const part of parseMultipartRequest(request, { maxFileSize: maxSize })) {
                 if (!part.isFile || !part.filename) continue;
-
-                const tempId = crypto.randomUUID();
-                const writer = this.store.openDraftTempWriter(tempId);
-
-                let size = 0;
-                try {
-                    for (const chunk of part.content) {
-                        writer.write(chunk);
-                        size += chunk.length;
-                    }
-                    await writer.end();
-                } catch (e) {
-                    await writer.end();
-                    await this.store.cleanupDraftTemp(tempId);
-                    throw e;
-                }
-
-                const meta = {
-                    filename: part.filename,
-                    size,
-                    contentType: part.mediaType || 'application/octet-stream',
-                };
-
-                try {
-                    await this.store.writeDraftTempMeta(tempId, meta);
-                } catch (e) {
-                    await this.store.cleanupDraftTemp(tempId);
-                    throw e;
-                }
-
-                return { tempId, ...meta };
+                return await this.persistDraftTemp(
+                    async (writer) => {
+                        let size = 0;
+                        for (const chunk of part.content) {
+                            writer.write(chunk);
+                            size += chunk.length;
+                        }
+                        return size;
+                    },
+                    part.filename,
+                    part.mediaType || 'application/octet-stream',
+                );
             }
         } catch (e) {
             if (e instanceof MaxFileSizeExceededError) {
@@ -556,40 +570,32 @@ export default class Maildir {
     }
 
     async stageDriveAttachment(
-        content: Buffer,
+        source: StorageFile,
         filename: string,
         contentType: string,
         maxSize: number,
     ): Promise<DraftAttachmentUpload> {
-        if (content.byteLength > maxSize) {
-            const limitMB = Math.floor(maxSize / (1024 * 1024));
-            throw new ApiError(413, `Attachment exceeds ${limitMB}MB limit`);
-        }
-
-        await this.store.ensureDraftTempDir();
-
-        const tempId = crypto.randomUUID();
-        const writer = this.store.openDraftTempWriter(tempId);
-
-        try {
-            writer.write(content);
-            await writer.end();
-        } catch (e) {
-            await writer.end();
-            await this.store.cleanupDraftTemp(tempId);
-            throw e;
-        }
-
-        const meta = { filename, size: content.byteLength, contentType };
-
-        try {
-            await this.store.writeDraftTempMeta(tempId, meta);
-        } catch (e) {
-            await this.store.cleanupDraftTemp(tempId);
-            throw e;
-        }
-
-        return { tempId, ...meta };
+        // Source size is known from the drive DB; the route validates it against maxSize before
+        // calling us. We still guard during streaming in case the source grows mid-read.
+        return this.persistDraftTemp(
+            async (writer) => {
+                let size = 0;
+                const reader = source.stream().getReader();
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    size += value.byteLength;
+                    if (size > maxSize) {
+                        const limitMB = Math.floor(maxSize / (1024 * 1024));
+                        throw new ApiError(413, `Attachment exceeds ${limitMB}MB limit`);
+                    }
+                    writer.write(value);
+                }
+                return size;
+            },
+            filename,
+            contentType,
+        );
     }
 
     async getDraftTempFile(tempId: string): Promise<{
