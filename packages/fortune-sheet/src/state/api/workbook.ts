@@ -7,7 +7,7 @@ import {
 } from "../modules";
 import {Settings} from "../settings";
 import {CommonOptions, getSheet} from "./common";
-import {INVALID_PARAMS} from "./errors";
+import {invalidParams} from "./errors";
 
 export function addSheet(
     ctx: Context,
@@ -75,14 +75,14 @@ export function scroll(
 ) {
     if (options.scrollLeft != null) {
         if (!_.isNumber(options.scrollLeft)) {
-            throw INVALID_PARAMS;
+            throw invalidParams();
         }
         if (scrollbarX) {
             scrollbarX.scrollLeft = options.scrollLeft;
         }
     } else if (options.targetColumn != null) {
         if (!_.isNumber(options.targetColumn)) {
-            throw INVALID_PARAMS;
+            throw invalidParams();
         }
         const col_pre =
             options.targetColumn <= 0
@@ -95,14 +95,14 @@ export function scroll(
 
     if (options.scrollTop != null) {
         if (!_.isNumber(options.scrollTop)) {
-            throw INVALID_PARAMS;
+            throw invalidParams();
         }
         if (scrollbarY) {
             scrollbarY.scrollTop = options.scrollTop;
         }
     } else if (options.targetRow != null) {
         if (!_.isNumber(options.targetRow)) {
-            throw INVALID_PARAMS;
+            throw invalidParams();
         }
         const row_pre =
             options.targetRow <= 0 ? 0 : ctx.visibledatarow[options.targetRow - 1];

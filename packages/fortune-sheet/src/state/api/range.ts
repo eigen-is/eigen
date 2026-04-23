@@ -6,7 +6,7 @@ import type {Cell} from "../../engine/types";
 import {Range, SingleRange} from "../types";
 import {setCellFormat, setCellValue} from "./cell";
 import {CommonOptions, getSheet} from "./common";
-import {INVALID_PARAMS} from "./errors";
+import {invalidParams} from "./errors";
 
 export function getSelection(ctx: Context) {
     return ctx.luckysheet_select_save?.map((selection) => ({
@@ -69,7 +69,7 @@ export function getCellsByRange(
     if (!range || typeof range === "object") {
         return getdatabyselection(ctx, range, sheet.id!);
     }
-    throw INVALID_PARAMS;
+    throw invalidParams();
 }
 
 export function getHtmlByRange(
@@ -101,7 +101,7 @@ export function setCellValuesByRange(
     options: CommonOptions = {}
 ) {
     if (data == null) {
-        throw INVALID_PARAMS;
+        throw invalidParams();
     }
 
     if (range instanceof Array) {
@@ -109,7 +109,7 @@ export function setCellValuesByRange(
     }
 
     if (!_.isPlainObject(range)) {
-        throw INVALID_PARAMS;
+        throw invalidParams();
     }
 
     const rowCount = range.row[1] - range.row[0] + 1;
@@ -140,7 +140,7 @@ export function setCellFormatByRange(
     }
 
     if (!_.isArray(range)) {
-        throw INVALID_PARAMS;
+        throw invalidParams();
     }
 
     range.forEach((singleRange) => {

@@ -3,7 +3,7 @@ import {Context} from "../context";
 import type {CellMatrix} from "../../engine/types";
 import {CellWithRowAndCol, Sheet} from "../types";
 import {getSheetIndex} from "../utils";
-import {SHEET_NOT_FOUND} from "./errors";
+import {sheetNotFound} from "./errors";
 
 export type CommonOptions = { index?: number; id?: string };
 
@@ -53,13 +53,13 @@ export function getSheet(ctx: Context, options: CommonOptions = {}) {
         options;
 
     if (index == null) {
-        throw SHEET_NOT_FOUND;
+        throw sheetNotFound();
     }
 
     const sheet = ctx.luckysheetfile[index];
 
     if (sheet == null) {
-        throw SHEET_NOT_FOUND;
+        throw sheetNotFound();
     }
 
     return sheet;

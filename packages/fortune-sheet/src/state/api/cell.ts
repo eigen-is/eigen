@@ -13,7 +13,7 @@ import {
 import type {Cell, CellStyle} from "../../engine/types";
 import {SingleRange} from "../types";
 import {CommonOptions, getSheet} from "./common";
-import {SHEET_NOT_FOUND} from "./errors";
+import {sheetNotFound} from "./errors";
 // @ts-ignore
 import SSF from "../../engine/ssf";
 
@@ -30,7 +30,7 @@ export function getCellValue(
     const {type = "v"} = options;
     const targetSheetData = sheet.data;
     if (!targetSheetData) {
-        throw SHEET_NOT_FOUND;
+        throw sheetNotFound();
     }
     const cellData = targetSheetData[row][column];
     let ret;
@@ -97,7 +97,7 @@ export function setCellValue(
     };
 
     if (value == null || value.toString().length === 0) {
-        delFunctionGroup(ctx, row, column);
+        delFunctionGroup(ctx, row, column, sheet.id);
         setCellValueInternal(ctx, row, column, data, value);
     } else if (value instanceof Object) {
         const curv: Cell = {};
@@ -126,7 +126,7 @@ export function setCellValue(
             if (value.m != null) {
                 curv.m = value.m;
             }
-            delFunctionGroup(ctx, row, column);
+            delFunctionGroup(ctx, row, column, sheet.id);
             setCellValueInternal(ctx, row, column, data, curv); // update text value
         }
         _.forEach(value, (v, attr) => {
@@ -154,7 +154,7 @@ export function setCellValue(
         ) {
             updateCell(ctx, row, column, cellInput, value); // update formula value or convert inline string html to object
         } else {
-            delFunctionGroup(ctx, row, column);
+            delFunctionGroup(ctx, row, column, sheet.id);
             setCellValueInternal(ctx, row, column, data, value);
         }
     }
