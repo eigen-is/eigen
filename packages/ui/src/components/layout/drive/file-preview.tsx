@@ -2,7 +2,7 @@ import { useHotkey } from '@tanstack/react-hotkeys';
 import { getDriveDownloadUrl, getDriveItemUrl } from '@workspace/lib/api';
 import { useCopyFiles, useTextPreview } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { isFolderType } from '@workspace/lib/types/drive';
+import { isDocumentType, isFolderType } from '@workspace/lib/types/drive';
 import { ChevronLeft, ChevronRight, Download, ExternalLink, FolderDown, Loader2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { DownloadMode, PreviewMode } from '../preview-provider/preview-provider';
@@ -67,7 +67,10 @@ export function FilePreview({
     useEffect(() => () => downloadTimers.current.forEach(clearTimeout), []);
 
     const openUrl = getDriveItemUrl(path);
-    const downloadableSiblings = siblings.filter((s) => !isFolderType(s.type));
+    // Eigendocs (doc/stickies/slides/sheets/chat) can't be downloaded as raw files — they're
+    // containers with internal dbs. The "Open" button takes the user to the app instead.
+    const canDownload = !isDocumentType(path.type);
+    const downloadableSiblings = siblings.filter((s) => !isFolderType(s.type) && !isDocumentType(s.type));
 
     const triggerDownload = (url: string) => {
         const a = document.createElement('a');
@@ -176,13 +179,13 @@ export function FilePreview({
                         Open
                     </FooterButton>
                 )}
-                {downloadUrl && downloadMode === 'direct' && (
+                {canDownload && downloadUrl && downloadMode === 'direct' && (
                     <FooterButton href={downloadUrl} download>
                         <Download className="size-3.5" />
                         Download
                     </FooterButton>
                 )}
-                {downloadUrl && downloadMode === 'save-to-drive' && (
+                {canDownload && downloadUrl && downloadMode === 'save-to-drive' && (
                     <FooterActionButton
                         onClick={() => {
                             setLocationPickerMode('single');
@@ -190,16 +193,10 @@ export function FilePreview({
                         }}
                     >
                         <Download className="size-3.5" />
-                        Save to Drive
+                        Download
                     </FooterActionButton>
                 )}
-                {downloadableSiblings.length >= 2 && downloadMode === 'direct' && (
-                    <FooterActionButton onClick={downloadAll}>
-                        <FolderDown className="size-3.5" />
-                        Download all ({downloadableSiblings.length})
-                    </FooterActionButton>
-                )}
-                {downloadableSiblings.length >= 2 && downloadMode === 'save-to-drive' && (
+                {canDownload && downloadableSiblings.length >= 2 && downloadMode === 'save-to-drive' && (
                     <FooterActionButton
                         onClick={() => {
                             setLocationPickerMode('all');
@@ -207,7 +204,7 @@ export function FilePreview({
                         }}
                     >
                         <FolderDown className="size-3.5" />
-                        Save all to Drive ({downloadableSiblings.length})
+                        Download all ({downloadableSiblings.length})
                     </FooterActionButton>
                 )}
             </div>
@@ -217,7 +214,7 @@ export function FilePreview({
                     onOpenChange={setLocationPickerOpen}
                     abovePreview
                     mode="folder"
-                    title={locationPickerMode === 'all' ? 'Save all to Drive' : 'Save to Drive'}
+                    title={locationPickerMode === 'all' ? 'Download all' : 'Download'}
                     confirmLabel="Save here"
                     defaultOwnerId={path.ownerId}
                     defaultMountId={path.mountId}

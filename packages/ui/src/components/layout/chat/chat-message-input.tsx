@@ -2,7 +2,7 @@ import { COMMANDS_HELP, commandNeedsSpace, SLASH_COMMANDS } from '@workspace/lib
 import type { ChatAttachment, RoomMember } from '@workspace/lib/types/chat';
 import { isAttachmentReference } from '@workspace/lib/types/chat';
 import { Paperclip, Send } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { cn } from '../../../lib/utils';
 import { Button } from '../../button';
 import { ReferenceAttachmentChip } from '../attachment/reference-attachment-chip';
@@ -10,6 +10,10 @@ import { SimpleAttachmentChip } from '../attachment/simple-attachment-chip';
 import { ChatPlayerSuggest } from './chat-player-suggest';
 import { ChatSlashSuggest } from './chat-slash-suggest';
 import { getAtSuggestQuery, getSlashTargetQuery } from './chat-utils';
+
+export type ChatMessageInputHandle = {
+    addFiles: (files: File[]) => void;
+};
 
 type ChatMessageInputProps = {
     onSend: (rawContent: string, files?: File[]) => void;
@@ -22,40 +26,39 @@ type ChatMessageInputProps = {
     messageCount?: number;
     className?: string;
     onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>, content: string) => boolean | undefined;
+    // When omitted, the paperclip button is hidden (the input renders without file-attach support).
     onAttachClick?: () => void;
     driveAttachments?: ChatAttachment[];
     onRemoveDriveAttachment?: (attachment: ChatAttachment) => void;
-    fileInputTriggerRef?: React.MutableRefObject<(() => void) | undefined>;
 };
 
-export function ChatMessageInput({
-    onSend,
-    disabled = false,
-    readOnly = false,
-    placeholder = 'Type a message...',
-    readOnlyMessage = 'You have read-only access to this chat',
-    roomMembers = [],
-    currentUserEmail = '',
-    messageCount = 0,
-    className,
-    onKeyDown: onKeyDownProp,
-    onAttachClick,
-    driveAttachments,
-    onRemoveDriveAttachment,
-    fileInputTriggerRef,
-}: ChatMessageInputProps) {
+export const ChatMessageInput = forwardRef<ChatMessageInputHandle, ChatMessageInputProps>(function ChatMessageInput(
+    {
+        onSend,
+        disabled = false,
+        readOnly = false,
+        placeholder = 'Type a message...',
+        readOnlyMessage = 'You have read-only access to this chat',
+        roomMembers = [],
+        currentUserEmail = '',
+        messageCount = 0,
+        className,
+        onKeyDown: onKeyDownProp,
+        onAttachClick,
+        driveAttachments,
+        onRemoveDriveAttachment,
+    },
+    ref,
+) {
     const [content, setContent] = useState('');
     const [files, setFiles] = useState<File[]>([]);
     const [selectedSuggestIdx, setSelectedSuggestIdx] = useState(0);
     const suggestCountRef = useRef(0);
-    const fileInputRef = useRef<HTMLInputElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-    useEffect(() => {
-        if (fileInputTriggerRef) {
-            fileInputTriggerRef.current = () => fileInputRef.current?.click();
-        }
-    }, [fileInputTriggerRef]);
+    useImperativeHandle(ref, () => ({
+        addFiles: (newFiles) => setFiles((prev) => [...prev, ...newFiles]),
+    }));
 
     const hasDriveAttachments = !!driveAttachments && driveAttachments.length > 0;
 
@@ -287,14 +290,6 @@ export function ChatMessageInput({
         }
     };
 
-    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const newFiles = e.target.files ? Array.from(e.target.files) : [];
-        if (newFiles.length > 0) {
-            setFiles((prev) => [...prev, ...newFiles]);
-        }
-        if (fileInputRef.current) fileInputRef.current.value = '';
-    };
-
     const removeFile = (index: number) => {
         setFiles((prev) => prev.filter((_, i) => i !== index));
     };
@@ -336,16 +331,17 @@ export function ChatMessageInput({
                 </div>
             )}
             <div className="flex items-end gap-2 relative">
-                <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileSelect} />
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    className="shrink-0 h-10 w-10 text-muted-foreground hover:text-foreground"
-                    onClick={() => (onAttachClick ? onAttachClick() : fileInputRef.current?.click())}
-                    disabled={disabled}
-                >
-                    <Paperclip className="h-4 w-4" />
-                </Button>
+                {onAttachClick && (
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="shrink-0 h-10 w-10 text-muted-foreground hover:text-foreground"
+                        onClick={onAttachClick}
+                        disabled={disabled}
+                    >
+                        <Paperclip className="h-4 w-4" />
+                    </Button>
+                )}
                 <ChatPlayerSuggest
                     query={atQuery || ''}
                     roomMembers={roomMembers}
@@ -400,4 +396,4 @@ export function ChatMessageInput({
             </div>
         </div>
     );
-}
+});
