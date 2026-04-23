@@ -1,3 +1,4 @@
+import { useLocation } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
 import { useAttachFromDrive, useUploadDraftAttachment } from '@workspace/lib/mail';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -82,6 +83,12 @@ export function EmailDraft({
     const uploadMutation = useUploadDraftAttachment();
     const attachFromDriveMutation = useAttachFromDrive();
 
+    // Reply/forward navigate with a NewDraft in history state (see use-mail-actions.ts).
+    // useDraft reads it once on mount to seed fields + fingerprint, so no save fires until
+    // the user actually edits. History state survives reloads on most browsers, so a reload
+    // before the first auto-save still brings the quoted body back.
+    const prefillDraft = useLocation().state.prefillDraft;
+
     const {
         state,
         setField,
@@ -94,6 +101,7 @@ export function EmailDraft({
     } = useDraft({
         email,
         prefillTo: to,
+        prefillDraft,
         onSave: onAutoSave,
         onDraftIdAssigned,
     });

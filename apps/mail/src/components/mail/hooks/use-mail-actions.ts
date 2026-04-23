@@ -13,6 +13,15 @@ import {
 import type { Email, NewDraft } from '@workspace/lib/types/mail';
 import { Route } from '../../../routes/_auth.$filterType.$filterId';
 
+// Reply/forward stash the prefilled draft in the router's history state so the composer
+// can read it at mount without a round-trip to the server. Both navigate() and
+// useLocation() are typed against this shape.
+declare module '@tanstack/history' {
+    interface HistoryState {
+        prefillDraft?: NewDraft;
+    }
+}
+
 export function useMailActions() {
     const { filterType, filterId } = Route.useParams();
     const navigate = useNavigate();
@@ -50,15 +59,16 @@ export function useMailActions() {
         navigateToList();
     };
 
-    const handleNewDraftEmail = async (mail: NewDraft) => {
-        const draft = await updateDraft.mutateAsync({ draft: mail });
-        if (draft) {
-            navigate({
-                to: Route.fullPath,
-                params: { filterType, filterId },
-                search: { mailId: draft.id },
-            });
-        }
+    // Navigate to the compose view with a prefilled draft in history state. No API call —
+    // the composer reads the state at mount, seeds its fingerprint from it, and the first
+    // POST only fires once the user actually edits (triggering the auto-save).
+    const openPrefilledCompose = (prefillDraft: NewDraft) => {
+        navigate({
+            to: Route.fullPath,
+            params: { filterType, filterId },
+            search: { mode: 'compose' },
+            state: { prefillDraft },
+        });
     };
 
     // After the first auto-save of a fresh compose, add ?mailId=... to the URL so a reload lands
@@ -162,7 +172,7 @@ export function useMailActions() {
     const handleReplyEmail = async (emailId: string) => {
         const email = await getEmailById(emailId);
         if (!email) return;
-        await handleNewDraftEmail(
+        openPrefilledCompose(
             createDraftEmail({
                 to: email.replyTo || email.from,
                 subject: email.subject?.startsWith('RE:') ? email.subject : `RE: ${email.subject}`,
@@ -181,7 +191,7 @@ export function useMailActions() {
         const allRecipients = [...replyTo, ...toValues, ...ccValues].filter(
             (addr) => addr.address?.toLowerCase() !== myEmail,
         );
-        await handleNewDraftEmail(
+        openPrefilledCompose(
             createDraftEmail({
                 to: { value: allRecipients, html: '', text: '' },
                 subject: email.subject?.startsWith('RE:') ? email.subject : `RE: ${email.subject}`,
@@ -193,7 +203,7 @@ export function useMailActions() {
     const handleForwardEmail = async (emailId: string) => {
         const email = await getEmailById(emailId);
         if (!email) return;
-        await handleNewDraftEmail(
+        openPrefilledCompose(
             createDraftEmail({
                 subject: `FW: ${email.subject}`,
                 html: formatEmailQuote(email),
@@ -223,7 +233,6 @@ export function useMailActions() {
         handleReplyAllEmail,
         handleForwardEmail,
         handleSendEmail,
-        handleNewDraftEmail,
         handleToggleMailRead,
         saveDraft: (
             draft: NewDraft,
