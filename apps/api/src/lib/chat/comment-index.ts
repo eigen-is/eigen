@@ -95,7 +95,8 @@ export async function openCommentIndex(drive: Drive | SharedDrive, containerPath
     return new CommentIndex(managed.db);
 }
 
-// Convenience: resolves path + opens index. SharedDrive.getPath() enforces read permission.
+// Convenience: resolves path + opens index. When called with a SharedDrive, getPath enforces
+// read permission; raw Drive callers (own-drive paths) skip the check intentionally.
 export async function getCommentIndex(
     drive: Drive | SharedDrive,
     mountId: string,

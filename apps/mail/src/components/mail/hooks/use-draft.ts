@@ -3,7 +3,7 @@ import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import type { AddressObject, Attachment, AttachmentMeta, EmailDraft, NewDraft } from '@workspace/lib/types/mail';
 import { useEffect, useReducer, useRef } from 'react';
 
-const DEFAULT_DEBOUNCE_MS = 2500;
+const AUTO_SAVE_DEBOUNCE_MS = 2500;
 
 type DraftFields = {
     id?: string;
@@ -50,7 +50,6 @@ type UseDraftOptions = {
     prefillTo?: string;
     onSave?: SaveFn;
     onDraftIdAssigned?: (id: string) => void;
-    debounceMs?: number;
 };
 
 function addressObjectToString(addr?: AddressObject): string {
@@ -225,13 +224,7 @@ function isSaveable(f: DraftFields): boolean {
 
 const noopSave: SaveFn = () => Promise.resolve(null);
 
-export function useDraft({
-    email,
-    prefillTo,
-    onSave = noopSave,
-    onDraftIdAssigned,
-    debounceMs = DEFAULT_DEBOUNCE_MS,
-}: UseDraftOptions) {
+export function useDraft({ email, prefillTo, onSave = noopSave, onDraftIdAssigned }: UseDraftOptions) {
     const { user } = useAuth();
     const [state, dispatch] = useReducer(reducer, undefined, () => {
         const fields = initFields(email, prefillTo);
@@ -294,9 +287,9 @@ export function useDraft({
         if (disabledRef.current) return;
         if (!isSaveable(state.fields)) return;
         if (fingerprintFields(state.fields) === state.lastSavedFingerprint) return;
-        const timer = setTimeout(() => void runSave(), debounceMs);
+        const timer = setTimeout(() => void runSave(), AUTO_SAVE_DEBOUNCE_MS);
         return () => clearTimeout(timer);
-    }, [state, debounceMs]);
+    }, [state]);
 
     // Save on unmount — force a full EML rebuild so IMAP clients see fresh content. Fires when
     // the current state is dirty OR anything was saved during this session.
