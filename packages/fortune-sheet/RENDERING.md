@@ -39,14 +39,14 @@
 
 ### Canvas (cell content)
 
-**Files**: `Sheet/index.tsx`, `core/canvas.ts`
+**Files**: `Sheet/index.tsx`, `state/canvas.ts`
 
 The actual spreadsheet grid — cells, text, gridlines, borders, fill colors — is drawn on an HTML5 Canvas
 2D context. This is what makes rendering thousands of cells performant.
 
 - `Sheet/index.tsx` creates a `<canvas>` element sized to the container
 - On context changes or scroll, it calls `requestAnimationFrame` to coalesce redraws
-- `core/canvas.ts` contains the `Canvas` class with methods like `drawMain()`, `renderCell()`, etc.
+- `state/canvas.ts` contains the `Canvas` class with methods like `drawMain()`, `renderCell()`, etc.
 - **Gridlines**: stroked paths (`#dfdfdf`)
 - **Cell text**: `ctx.fillText()` with font metrics from `getMeasureText()`
 - **Cell backgrounds**: `ctx.fillRect()` with the cell's fill color
@@ -145,7 +145,7 @@ Small divs positioned over filtered column header cells:
 - Active image: `z-index: 300`, with resize handles (8-point) and control buttons (Crop, Restore, Delete)
 - Inactive images: `z-index: 200`, just `<img>` in a bordered div
 - All dimensions scaled by `zoomRatio`
-- ID: `luckysheet-modal-dialog-activeImage` (queried by `core/modules/image.ts`)
+- ID: `luckysheet-modal-dialog-activeImage` (queried by `state/modules/image.ts`)
 
 ### 8. Comments (React DOM + Canvas arrow)
 
@@ -155,7 +155,7 @@ Small divs positioned over filtered column header cells:
 - Arrow: `<canvas>` element draws a connector line from cell to comment box
 - Normal: `z-index: 100`, editing: `z-index: 200`
 - 8 resize handles + 4 move indicators when editing
-- Box IDs: `comment-box-{r}{c}` (queried by `core/modules/comment.ts`)
+- Box IDs: `comment-box-{r}{c}` (queried by `state/modules/comment.ts`)
 
 ### 9. Hyperlink Editor (React DOM)
 
@@ -167,7 +167,7 @@ Three modes:
 3. **Range selection modal**: cell range input for internal links
 
 Positioned absolutely near the active cell. Class: `.fortune-link-modify-modal` (queried by
-`core/modules/hyperlink.ts`).
+`state/modules/hyperlink.ts`).
 
 ### 10. Data Verification Dropdown (React DOM)
 

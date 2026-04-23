@@ -1,10 +1,11 @@
 # Fortune-Sheet Audit & Refactor TODO
 
-> **TLDR**: Audit/refactor TODO for `packages/fortune-sheet`. Goals: migrate CSS → Tailwind, div buttons → shadcn
-> Button, adopt shared UI components, named exports, translate Chinese. See priority phases at bottom.
+> **TLDR**: Consolidated cleanup list for `packages/fortune-sheet/`. Goal: make the package "ours" —
+> biome-clean end to end, lodash-free, CSS fully migrated to Tailwind, shadcn adopted, typing tightened.
+> See priority phases at bottom.
 
-Full audit of `packages/fortune-sheet/src/` — identifying cleanup, shadcn/Tailwind migration, shared component adoption,
-and structural improvements.
+The package is a full fork of fortune-sheet + luckysheet (no external `@fortune-sheet/core` dependency).
+Treat it as owned code: fix broken windows when touching it, prefer modern patterns over preserving legacy.
 
 ## Legend
 
@@ -338,3 +339,61 @@ implementations:
 9. Localize hardcoded Chinese strings in `ImgBoxs`
 10. Evaluate replacing Font Awesome icons with Lucide
 11. Remove `css.d.ts` once all CSS imports eliminated
+
+---
+
+## 10. State Directory (biome excluded)
+
+The `state/` directory (renamed from `core/` during the engine extraction) is currently excluded from
+biome linting. It holds the context-coupled runtime — canvas renderer, event handlers, modules, public
+API bridge. Outstanding work:
+
+- **Lodash removal**: 53 files still `import _ from 'lodash'`. Most calls are mechanical swaps
+  (`_.isNil` → `x == null`, `_.cloneDeep` → `structuredClone`, `_.forEach` → `for...of`). Blocks
+  turning on biome for `state/` without drowning in `noImportNamespace` warnings.
+- **`any` annotations**: ~210 across `state/` (30 in `rowcol.ts` alone). Tightening enables strictness.
+- **`@ts-ignore` debt**: ~80 directives across `state/` + `components/` — each hides a typing gap.
+- **`ConditionFormat.ts` (1,768 lines) vs `conditionalFormat.ts` (578 lines)**: both live in
+  `state/modules/` with unclear separation. Audit then merge or rename.
+- **Enable biome on `state/`**: blocked by lodash + `any`; do after those.
+- **Enable biome on `components/`**: smaller lift, independent of `state/`. Start here.
+
+The old monolithic `mouse.ts` (5k+ lines) and `formula.ts` (3.5k lines) have already been split —
+`state/events/mouse.ts` is now a 5-line re-export barrel, and `formula.ts` is gone (replaced by
+`formula-cache`, `formula-editor`, `formula-exec`, `formula-range`, `formula-ui`, `formulaHelper`).
+
+## 11. DOM Selector Coupling
+
+The `state/` code has ~365 references to `luckysheet-*` class names and IDs, many used as DOM selectors
+(`getElementById`, `querySelector`, `getElementsByClassName`). Before removing any class name during CSS
+migration, grep `state/` for the class — removing a selector-referenced class silently breaks behavior.
+
+Key IDs/classes that MUST be preserved on component elements:
+
+- `fortune-cell-selected-move` (`moveCells.ts`)
+- `luckysheet-modal-dialog-activeImage` (`image.ts`)
+- `luckysheet-formula-text-lpar` (`formula-exec.ts`)
+- `fortune-search-replace` (`searchReplace.ts`)
+- `fortune-freeze-drag-line` (`mouse-*.ts`)
+- Many `luckysheet-cell-*` selection classes (165 references in `mouse-cell.ts`)
+
+## 12. Dialog System — intentional bypasses
+
+These components use absolute-positioned divs instead of `useDialog`. This is intentional — they need
+drag/resize behavior or cell-anchored positioning the dialog system doesn't support:
+
+- `ImgBoxs` — image drag/resize with 8-point handles
+- `NotationBoxes` — comment boxes anchored to cells, draggable/resizable
+- `LinkEditCard` — cell-relative positioning
+- `DataVerification/DropdownList` — cell-attached dropdown
+
+## 13. Keyboard Handlers
+
+All keyboard shortcuts are manual implementations in `state/events/keyboard.ts` (~950 lines). Most are
+too complex/stateful for `@tanstack/react-hotkeys` (arrow navigation with hidden row/col awareness,
+formula editing, etc.). Only Ctrl+Z/Y (undo/redo) might be extractable.
+
+## 14. Package Location
+
+This package is only used by `apps/sheets/`. Could be moved to `apps/sheets/src/fortune-sheet/` to make
+the dependency explicit. Low priority — a rename-only change with no code impact.
