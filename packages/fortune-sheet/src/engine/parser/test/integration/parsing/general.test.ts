@@ -17,42 +17,50 @@ describe('fortune-sheet/formula-parser/integration/parsing/general', () => {
     });
 
     test('should not parse an number type data', () => {
-        expect(parser!.parse(200 as any)).toMatchObject({ error: '#ERROR!', result: null });
-        expect(parser!.parse(20.1 as any)).toMatchObject({
-            error: '#ERROR!',
-            result: null,
-        });
+        // @ts-expect-error - runtime robustness: non-string inputs should error, not crash
+        expect(parser!.parse(200)).toMatchObject({ error: '#ERROR!', result: null });
+        // @ts-expect-error - runtime robustness: non-string inputs should error, not crash
+        expect(parser!.parse(20.1)).toMatchObject({ error: '#ERROR!', result: null });
     });
 
     test('should not parse an object type data', () => {
-        expect(parser!.parse({} as any)).toMatchObject({ error: '#ERROR!', result: null });
-        expect(parser!.parse([] as any)).toMatchObject({ error: '#ERROR!', result: null });
+        // @ts-expect-error - runtime robustness: non-string inputs should error, not crash
+        expect(parser!.parse({})).toMatchObject({ error: '#ERROR!', result: null });
+        // @ts-expect-error - runtime robustness: non-string inputs should error, not crash
+        expect(parser!.parse([])).toMatchObject({ error: '#ERROR!', result: null });
     });
 
     test('should not parse a null type data', () => {
-        expect(parser!.parse(null as any)).toMatchObject({ error: '#ERROR!', result: null });
+        // @ts-expect-error - runtime robustness: non-string inputs should error, not crash
+        expect(parser!.parse(null)).toMatchObject({ error: '#ERROR!', result: null });
     });
 
     test('should not parse an undefined type data', () => {
-        expect(parser!.parse(undefined as any)).toMatchObject({ error: '#ERROR!', result: null });
+        // @ts-expect-error - runtime robustness: non-string inputs should error, not crash
+        expect(parser!.parse(undefined)).toMatchObject({ error: '#ERROR!', result: null });
     });
 
     test('should not parse a boolean type data', () => {
-        expect(parser!.parse(true as any)).toMatchObject({ error: '#ERROR!', result: null });
-        expect(parser!.parse(false as any)).toMatchObject({ error: '#ERROR!', result: null });
+        // @ts-expect-error - runtime robustness: non-string inputs should error, not crash
+        expect(parser!.parse(true)).toMatchObject({ error: '#ERROR!', result: null });
+        // @ts-expect-error - runtime robustness: non-string inputs should error, not crash
+        expect(parser!.parse(false)).toMatchObject({ error: '#ERROR!', result: null });
     });
 
     test('should handle function type data', () => {
         const fn = () => {};
-        expect(parser!.parse(fn as any)).toMatchObject({ error: '#ERROR!', result: null });
+        // @ts-expect-error - runtime robustness: non-string inputs should error, not crash
+        expect(parser!.parse(fn)).toMatchObject({ error: '#ERROR!', result: null });
     });
 
     test('should not parse a symbol type data', () => {
         const sym = Symbol('test');
-        expect(parser!.parse(sym as any)).toMatchObject({ error: '#ERROR!', result: null });
+        // @ts-expect-error - runtime robustness: non-string inputs should error, not crash
+        expect(parser!.parse(sym)).toMatchObject({ error: '#ERROR!', result: null });
     });
 
     test('should not parse a bigint type data', () => {
-        expect(parser!.parse(BigInt(123) as any)).toMatchObject({ error: '#ERROR!', result: null });
+        // @ts-expect-error - runtime robustness: non-string inputs should error, not crash
+        expect(parser!.parse(BigInt(123))).toMatchObject({ error: '#ERROR!', result: null });
     });
 });
