@@ -16,18 +16,18 @@ import power from './operator/power.ts';
 
 type OperatorCallable = (...args: FormulaArg[]) => FormulaOutput;
 
-// Operators come in two flavors: direct (the function IS the callable) or factory
-// (the function takes the symbol and returns the callable). A tagged union lets TS
-// narrow on `isFactory` instead of relying on casts at the registration boundary.
-type DirectOperator = OperatorCallable & {
+// Direct operator: the function itself handles the call.
+export type DirectOperator = OperatorCallable & {
     SYMBOL: string | string[];
     isFactory?: false;
 };
-type FactoryOperator = ((symbol: string) => OperatorCallable) & {
+
+// Factory operator: receives the symbol at registration time and returns the
+// callable (used by formulaFunction to close over SUPPORTED_FORMULAS names).
+export type FactoryOperator = ((symbol: string) => OperatorCallable) & {
     SYMBOL: string | string[];
     isFactory: true;
 };
-type OperatorFunction = DirectOperator | FactoryOperator;
 
 const availableOperators: Record<string, OperatorCallable> = Object.create(null);
 
@@ -42,28 +42,34 @@ export default function evaluateByOperator(operator: string, params: FormulaArg[
     return availableOperators[upperOperator](...params);
 }
 
-// Register operator. Factories (marked `isFactory`) receive the symbol at
-// registration time and yield the actual callable; non-factories are stored directly.
-// Operator modules narrow their parameter types for clarity (scalar-only arithmetic,
-// etc.); the cast at each call site widens them to the common OperatorFunction shape.
-export function registerOperation(symbol: string | string[], func: OperatorFunction): void {
+// Register operator. Overloaded so direct operators and factories are type-checked
+// separately — a factory's call returns the callable, a direct operator's IS the
+// callable, and TS can't express both under one union without either variance
+// issues or casts at call sites.
+export function registerOperation(symbol: string | string[], func: DirectOperator): void;
+export function registerOperation(symbol: string | string[], func: FactoryOperator): void;
+export function registerOperation(symbol: string | string[], func: DirectOperator | FactoryOperator): void {
     const symbols = Array.isArray(symbol) ? symbol.map((s) => s.toUpperCase()) : [symbol.toUpperCase()];
 
     for (const s of symbols) {
-        availableOperators[s] = func.isFactory === true ? func(s) : func;
+        if (func.isFactory === true) {
+            availableOperators[s] = func(s);
+        } else {
+            availableOperators[s] = func;
+        }
     }
 }
 
-registerOperation(add.SYMBOL, add as OperatorFunction);
-registerOperation(ampersand.SYMBOL, ampersand as OperatorFunction);
-registerOperation(divide.SYMBOL, divide as OperatorFunction);
-registerOperation(equal.SYMBOL, equal as OperatorFunction);
-registerOperation(power.SYMBOL, power as OperatorFunction);
-registerOperation(formulaFunction.SYMBOL, formulaFunction as OperatorFunction);
-registerOperation(greaterThan.SYMBOL, greaterThan as OperatorFunction);
-registerOperation(greaterThanOrEqual.SYMBOL, greaterThanOrEqual as OperatorFunction);
-registerOperation(lessThan.SYMBOL, lessThan as OperatorFunction);
-registerOperation(lessThanOrEqual.SYMBOL, lessThanOrEqual as OperatorFunction);
-registerOperation(multiply.SYMBOL, multiply as OperatorFunction);
-registerOperation(notEqual.SYMBOL, notEqual as OperatorFunction);
-registerOperation(minus.SYMBOL, minus as OperatorFunction);
+registerOperation(add.SYMBOL, add);
+registerOperation(ampersand.SYMBOL, ampersand);
+registerOperation(divide.SYMBOL, divide);
+registerOperation(equal.SYMBOL, equal);
+registerOperation(power.SYMBOL, power);
+registerOperation(formulaFunction.SYMBOL, formulaFunction);
+registerOperation(greaterThan.SYMBOL, greaterThan);
+registerOperation(greaterThanOrEqual.SYMBOL, greaterThanOrEqual);
+registerOperation(lessThan.SYMBOL, lessThan);
+registerOperation(lessThanOrEqual.SYMBOL, lessThanOrEqual);
+registerOperation(multiply.SYMBOL, multiply);
+registerOperation(notEqual.SYMBOL, notEqual);
+registerOperation(minus.SYMBOL, minus);

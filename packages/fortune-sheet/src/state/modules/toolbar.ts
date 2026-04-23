@@ -966,9 +966,7 @@ export function handleNumberDecrease(ctx: Context, cellInput: HTMLDivElement) {
     if (foucsStatus.fa === "General") {
         if (!cell || !cell.v) return;
 
-        const mask = genarate(cell.v);
-        if (!mask || mask.length < 2) return;
-        [, foucsStatus] = mask;
+        [, foucsStatus] = genarate(cell.v);
     }
 
     // Wan/Yi (10,000/100,000,000) number format
@@ -1055,9 +1053,7 @@ export function handleNumberIncrease(ctx: Context, cellInput: HTMLDivElement) {
 
     if (foucsStatus.fa === "General") {
         if (!cell || !cell.v) return;
-        const mask = genarate(cell.v);
-        if (!mask || mask.length < 2) return;
-        [, foucsStatus] = mask;
+        [, foucsStatus] = genarate(cell.v);
     }
 
     if (foucsStatus.fa === "General") {

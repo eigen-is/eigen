@@ -1,9 +1,9 @@
 import { getCalculationOrder } from './dependency-graph';
 import { ERROR_REF, Parser } from './parser';
-import type { CellInfo, RangeCell } from './parser/parser';
 import SSF from './ssf';
 import type {
     Cell,
+    CellInfo,
     CellResolver,
     EvaluationResult,
     FormulaCellInfoMap,
@@ -11,9 +11,8 @@ import type {
     FormulaEngineState,
     ParserDoneCallback,
     ParserOptions,
+    RangeCell,
 } from './types';
-
-type DoneCallback = ParserDoneCallback;
 
 export function isFormula(value: unknown): boolean {
     return typeof value === 'string' && value.length > 1 && value[0] === '=';
@@ -59,7 +58,7 @@ export class FormulaEngine {
 
         this.parser = new Parser();
 
-        this.parser.on('callCellValue', (cellCoord: CellInfo, options: ParserOptions, done: DoneCallback) => {
+        this.parser.on('callCellValue', (cellCoord: CellInfo, options: ParserOptions, done: ParserDoneCallback) => {
             const resolver = this.currentResolver!;
             const sheetId =
                 cellCoord.sheetName == null ? options.sheetId : resolver.getSheetIdByName(cellCoord.sheetName);
@@ -78,7 +77,7 @@ export class FormulaEngine {
 
         this.parser.on(
             'callRangeValue',
-            (startCellCoord: RangeCell, endCellCoord: RangeCell, options: ParserOptions, done: DoneCallback) => {
+            (startCellCoord: RangeCell, endCellCoord: RangeCell, options: ParserOptions, done: ParserDoneCallback) => {
                 const resolver = this.currentResolver!;
                 const sheetId =
                     startCellCoord.sheetName == null
@@ -183,7 +182,7 @@ export class FormulaEngine {
     getDependencies(formula: string, sheetId: string): FormulaDependency[] {
         const deps: FormulaDependency[] = [];
 
-        const cellHandler = (cellCoord: CellInfo, options: ParserOptions, done: DoneCallback) => {
+        const cellHandler = (cellCoord: CellInfo, options: ParserOptions, done: ParserDoneCallback) => {
             const depSheetId = cellCoord.sheetName == null ? options.sheetId : sheetId;
             deps.push({
                 row: [cellCoord.row.index, cellCoord.row.index],
@@ -197,7 +196,7 @@ export class FormulaEngine {
             startCellCoord: RangeCell,
             endCellCoord: RangeCell,
             options: ParserOptions,
-            done: DoneCallback,
+            done: ParserDoneCallback,
         ) => {
             const depSheetId = startCellCoord.sheetName == null ? options.sheetId : sheetId;
             deps.push({

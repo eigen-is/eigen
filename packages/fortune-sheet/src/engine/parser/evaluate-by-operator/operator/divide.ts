@@ -1,10 +1,10 @@
-import type { FormulaValue } from '../../../types.ts';
+import type { FormulaArg } from '../../../types.ts';
 import { ERROR_DIV_ZERO, ERROR_VALUE } from '../../error.ts';
 import { toNumber } from '../../helper/number.ts';
 
 export const SYMBOL = '/';
 
-function func(first: FormulaValue, ...rest: FormulaValue[]): number {
+function func(first: FormulaArg, ...rest: FormulaArg[]): number {
     const result = rest.reduce<number>(
         (acc, value) => acc / (toNumber(value) ?? Number.NaN),
         toNumber(first) ?? Number.NaN,

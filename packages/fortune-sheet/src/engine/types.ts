@@ -1,3 +1,24 @@
+import type { CellCoordinate } from './parser/helper/cell.ts';
+
+export type { CellCoordinate };
+
+// Single cell reference resolved from a label like `A1` or `Sheet1!$A$1`.
+export type CellInfo = {
+    label: string;
+    row: CellCoordinate;
+    column: CellCoordinate;
+    sheetName: string | null;
+};
+
+// Cell reference used as an endpoint of a range (`A1:B3`). The sheet name lives
+// on the start endpoint only — the end inherits it.
+export type RangeCell = {
+    row: CellCoordinate;
+    column: CellCoordinate;
+    label: string;
+    sheetName?: string | null;
+};
+
 export type CellStyle = {
     bl?: number;
     it?: number;
