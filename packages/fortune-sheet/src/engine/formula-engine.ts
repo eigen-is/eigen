@@ -1,13 +1,22 @@
-import {ERROR_REF, Parser} from "./parser";
-import type {CellInfo, ParserOptions, RangeCell} from "./parser/parser";
-import type {Cell, CellResolver, EvaluationResult, FormulaCellInfoMap, FormulaDependency, FormulaEngineState} from "./types";
-import {getCalculationOrder} from "./dependency-graph";
-import SSF from "./ssf";
+import { getCalculationOrder } from './dependency-graph';
+import { ERROR_REF, Parser } from './parser';
+import type { CellInfo, RangeCell } from './parser/parser';
+import SSF from './ssf';
+import type {
+    Cell,
+    CellResolver,
+    EvaluationResult,
+    FormulaCellInfoMap,
+    FormulaDependency,
+    FormulaEngineState,
+    ParserDoneCallback,
+    ParserOptions,
+} from './types';
 
-type DoneCallback = (value: unknown) => void;
+type DoneCallback = ParserDoneCallback;
 
 export function isFormula(value: unknown): boolean {
-    return typeof value === "string" && value.length > 1 && value[0] === "=";
+    return typeof value === 'string' && value.length > 1 && value[0] === '=';
 }
 
 // Matches a cell reference like A1, $B$3, AA100, A1:B3, or Sheet1!A1
@@ -21,19 +30,19 @@ export function isCellReference(txt: string): boolean {
 
 function getCellValue(cell: Cell | null | undefined): unknown {
     if (cell == null) return undefined;
-    if (cell.ct?.t === "n") {
+    if (cell.ct?.t === 'n') {
         const n = Number(cell.v);
         return Number.isNaN(n) ? cell.v : n;
     }
     return cell.v;
 }
 
-function inferType(value: unknown): EvaluationResult["type"] {
-    if (typeof value === "number") return "number";
-    if (typeof value === "boolean") return "boolean";
-    if (value instanceof Date) return "date";
-    if (typeof value === "string" && value.startsWith("#")) return "error";
-    return "string";
+function inferType(value: unknown): EvaluationResult['type'] {
+    if (typeof value === 'number') return 'number';
+    if (typeof value === 'boolean') return 'boolean';
+    if (value instanceof Date) return 'date';
+    if (typeof value === 'string' && value.startsWith('#')) return 'error';
+    return 'string';
 }
 
 export class FormulaEngine {
@@ -50,40 +59,26 @@ export class FormulaEngine {
 
         this.parser = new Parser();
 
-        this.parser.on(
-            "callCellValue",
-            (cellCoord: CellInfo, options: ParserOptions, done: DoneCallback) => {
-                const resolver = this.currentResolver!;
-                const sheetId =
-                    cellCoord.sheetName == null
-                        ? options.sheetId
-                        : resolver.getSheetIdByName(cellCoord.sheetName);
-                if (sheetId == null) throw Error(ERROR_REF);
+        this.parser.on('callCellValue', (cellCoord: CellInfo, options: ParserOptions, done: DoneCallback) => {
+            const resolver = this.currentResolver!;
+            const sheetId =
+                cellCoord.sheetName == null ? options.sheetId : resolver.getSheetIdByName(cellCoord.sheetName);
+            if (sheetId == null) throw Error(ERROR_REF);
 
-                const cacheKey = `${cellCoord.row.index}_${cellCoord.column.index}_${sheetId}`;
-                const cached = this.state.execFunctionGlobalData[cacheKey];
-                if (cached !== undefined) {
-                    done(getCellValue(cached as Cell));
-                    return;
-                }
-
-                const cell = resolver.getCell(
-                    sheetId,
-                    cellCoord.row.index,
-                    cellCoord.column.index
-                );
-                done(getCellValue(cell));
+            const cacheKey = `${cellCoord.row.index}_${cellCoord.column.index}_${sheetId}`;
+            const cached = this.state.execFunctionGlobalData[cacheKey];
+            if (cached !== undefined) {
+                done(getCellValue(cached as Cell));
+                return;
             }
-        );
+
+            const cell = resolver.getCell(sheetId, cellCoord.row.index, cellCoord.column.index);
+            done(getCellValue(cell));
+        });
 
         this.parser.on(
-            "callRangeValue",
-            (
-                startCellCoord: RangeCell,
-                endCellCoord: RangeCell,
-                options: ParserOptions,
-                done: DoneCallback
-            ) => {
+            'callRangeValue',
+            (startCellCoord: RangeCell, endCellCoord: RangeCell, options: ParserOptions, done: DoneCallback) => {
                 const resolver = this.currentResolver!;
                 const sheetId =
                     startCellCoord.sheetName == null
@@ -129,40 +124,32 @@ export class FormulaEngine {
                 }
 
                 done(fragment);
-            }
+            },
         );
     }
 
-    evaluate(
-        formula: string,
-        sheetId: string,
-        _row: number,
-        _col: number,
-        resolver: CellResolver
-    ): EvaluationResult {
+    evaluate(formula: string, sheetId: string, _row: number, _col: number, resolver: CellResolver): EvaluationResult {
         this.currentResolver = resolver;
         try {
             const expression = formula.substring(1);
             const { error, result } = this.parser.parse(expression, { sheetId });
 
             if (error != null) {
-                return { value: error, display: error, type: "error" };
+                return { value: error, display: error, type: 'error' };
             }
 
             const raw = result instanceof Date ? result.toString() : result;
             // Cell-scoped formulas produce scalars. Range references can
             // surface arrays if a formula evaluates to a bare range — coerce
             // those (and any other non-primitive) to a string for storage.
-            const value: Cell["v"] =
-                typeof raw === "string" ||
-                typeof raw === "number" ||
-                typeof raw === "boolean"
+            const value: Cell['v'] =
+                typeof raw === 'string' || typeof raw === 'number' || typeof raw === 'boolean'
                     ? raw
                     : raw == null
-                        ? undefined
-                        : String(raw);
+                      ? undefined
+                      : String(raw);
             const type = inferType(value);
-            const display = value == null ? "" : String(value);
+            const display = value == null ? '' : String(value);
 
             return { value, display, type };
         } finally {
@@ -172,7 +159,7 @@ export class FormulaEngine {
 
     evaluateAll(
         cells: Array<{ r: number; c: number; id: string; f: string }>,
-        resolver: CellResolver
+        resolver: CellResolver,
     ): Map<string, EvaluationResult> {
         const results = new Map<string, EvaluationResult>();
 
@@ -182,10 +169,10 @@ export class FormulaEngine {
             results.set(key, result);
 
             // Store in global data so subsequent formulas can reference this result
-            if (result.type !== "error") {
+            if (result.type !== 'error') {
                 this.state.execFunctionGlobalData[key] = {
                     v: result.value,
-                    ct: { t: result.type === "number" ? "n" : "s", fa: "General" },
+                    ct: { t: result.type === 'number' ? 'n' : 's', fa: 'General' },
                 };
             }
         }
@@ -196,14 +183,8 @@ export class FormulaEngine {
     getDependencies(formula: string, sheetId: string): FormulaDependency[] {
         const deps: FormulaDependency[] = [];
 
-        const cellHandler = (
-            cellCoord: CellInfo,
-            options: ParserOptions,
-            done: DoneCallback
-        ) => {
-            const depSheetId = cellCoord.sheetName == null
-                ? options.sheetId
-                : sheetId;
+        const cellHandler = (cellCoord: CellInfo, options: ParserOptions, done: DoneCallback) => {
+            const depSheetId = cellCoord.sheetName == null ? options.sheetId : sheetId;
             deps.push({
                 row: [cellCoord.row.index, cellCoord.row.index],
                 column: [cellCoord.column.index, cellCoord.column.index],
@@ -216,11 +197,9 @@ export class FormulaEngine {
             startCellCoord: RangeCell,
             endCellCoord: RangeCell,
             options: ParserOptions,
-            done: DoneCallback
+            done: DoneCallback,
         ) => {
-            const depSheetId = startCellCoord.sheetName == null
-                ? options.sheetId
-                : sheetId;
+            const depSheetId = startCellCoord.sheetName == null ? options.sheetId : sheetId;
             deps.push({
                 row: [startCellCoord.row.index, endCellCoord.row.index],
                 column: [startCellCoord.column.index, endCellCoord.column.index],
@@ -230,8 +209,8 @@ export class FormulaEngine {
         };
 
         const tempParser = new Parser();
-        tempParser.on("callCellValue", cellHandler);
-        tempParser.on("callRangeValue", rangeHandler);
+        tempParser.on('callCellValue', cellHandler);
+        tempParser.on('callRangeValue', rangeHandler);
 
         try {
             tempParser.parse(formula.substring(1), { sheetId });
@@ -277,7 +256,7 @@ export class FormulaEngine {
                     id: entry.id,
                     parents: {},
                     chidren: {},
-                    color: "w",
+                    color: 'w',
                 };
             }
         }
@@ -312,24 +291,18 @@ export class FormulaEngine {
         const results = new Map<string, EvaluationResult>();
 
         for (const info of ordered) {
-            const result = this.evaluate(
-                info.calc_funcStr,
-                info.id,
-                info.r,
-                info.c,
-                resolver
-            );
+            const result = this.evaluate(info.calc_funcStr, info.id, info.r, info.c, resolver);
 
             const resultKey = `${info.r}_${info.c}_${info.id}`;
             results.set(resultKey, result);
 
             // Cache result so subsequent formulas can reference it
-            if (result.type !== "error") {
+            if (result.type !== 'error') {
                 this.state.execFunctionGlobalData[resultKey] = {
                     v: result.value,
                     ct: {
-                        t: result.type === "number" ? "n" : "s",
-                        fa: "General",
+                        t: result.type === 'number' ? 'n' : 's',
+                        fa: 'General',
                     },
                 };
             }

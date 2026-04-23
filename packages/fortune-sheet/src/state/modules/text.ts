@@ -441,7 +441,7 @@ export function getCellTextInfo(
             const {un} = shareCell;
             let {v} = shareCell;
             const {fs} = shareCell;
-            v = v
+            v = (v ?? '')
                 .replace(/\r\n/g, "_x000D_")
                 .replace(/&#13;&#10;/g, "_x000D_")
                 .replace(/\r/g, "_x000D_")

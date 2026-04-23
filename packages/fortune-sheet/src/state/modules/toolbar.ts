@@ -56,12 +56,12 @@ export function updateFormatCell(
 
             for (let c = col_st; c <= col_ed; c += 1) {
                 const cell = d[r][c];
-                let value;
+                let value: string | number | boolean | null | undefined;
 
-                if (_.isPlainObject(cell)) {
-                    value = cell?.v;
+                if (cell != null && typeof cell === "object") {
+                    value = cell.v;
                 } else {
-                    value = cell;
+                    value = cell as string | number | boolean | null | undefined;
                 }
 
                 if (foucsStatus !== "@" && isRealNum(value)) {

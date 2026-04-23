@@ -1,18 +1,19 @@
-import {toNumber} from "../../helper/number.ts";
-import {ERROR_DIV_ZERO, ERROR_VALUE} from "../../error.ts";
+import type { FormulaValue } from '../../../types.ts';
+import { ERROR_DIV_ZERO, ERROR_VALUE } from '../../error.ts';
+import { toNumber } from '../../helper/number.ts';
 
-export const SYMBOL = "/";
+export const SYMBOL = '/';
 
-function func(first: any, ...rest: any[]): number {
-    const result = rest.reduce(
-        (acc: number, value: any) => acc / toNumber(value)!,
-        toNumber(first)!
+function func(first: FormulaValue, ...rest: FormulaValue[]): number {
+    const result = rest.reduce<number>(
+        (acc, value) => acc / (toNumber(value) ?? Number.NaN),
+        toNumber(first) ?? Number.NaN,
     );
 
-    if (result === Infinity) {
+    if (!Number.isFinite(result) && !Number.isNaN(result)) {
         throw new Error(ERROR_DIV_ZERO);
     }
-    if (isNaN(result)) {
+    if (Number.isNaN(result)) {
         throw new Error(ERROR_VALUE);
     }
 
