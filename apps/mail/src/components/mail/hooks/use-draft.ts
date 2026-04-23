@@ -149,11 +149,18 @@ function buildSaveOptions(fields: DraftFields, forceFullSave: boolean): SaveOpti
     };
 }
 
-// Replace local attachment metas with the server's parsed list, preserving keys/localUrl by
-// filename+size match so React doesn't remount chips representing the same attachment.
-function mergeServerAttachments(local: AttachmentMeta[], parsed: Attachment[]): AttachmentMeta[] {
+// Reconcile the server's response with edits made while the save was in flight. `serverActual`
+// is what the server has now (with local keys preserved by filename+size so React chips don't
+// remount). `localNext` is the user's intent — serverActual minus attachments removed during
+// the save, plus tempId attachments added during the save. Drift between the two naturally
+// re-triggers the auto-save to sync the server.
+function mergeServerAttachments(
+    local: AttachmentMeta[],
+    sent: AttachmentMeta[],
+    parsed: Attachment[],
+): { serverActual: AttachmentMeta[]; localNext: AttachmentMeta[] } {
     const visible = parsed.filter((a) => !a.contentType.startsWith('text/calendar'));
-    return visible.map((a, i) => {
+    const serverActual: AttachmentMeta[] = visible.map((a, i) => {
         const filename = a.filename || `Attachment ${i + 1}`;
         const prevMatch = local.find((p) => p.filename === filename && p.size === a.size);
         return {
@@ -165,6 +172,16 @@ function mergeServerAttachments(local: AttachmentMeta[], parsed: Attachment[]): 
             localUrl: prevMatch?.localUrl,
         };
     });
+
+    const removedDuringSave = sent.filter((s) => !local.some((l) => l.filename === s.filename && l.size === s.size));
+    const withoutRemoved = serverActual.filter(
+        (a) => !removedDuringSave.some((r) => r.filename === a.filename && r.size === a.size),
+    );
+    const inFlightAdditions = local.filter(
+        (l) => !!l.tempId && !visible.some((a) => (a.filename ?? '') === l.filename && a.size === l.size),
+    );
+
+    return { serverActual, localNext: [...withoutRemoved, ...inFlightAdditions] };
 }
 
 function reducer(state: DraftState, action: Action): DraftState {
@@ -204,14 +221,18 @@ function reducer(state: DraftState, action: Action): DraftState {
                 },
             };
         case 'save-completed': {
-            const merged = mergeServerAttachments(state.fields.attachments, action.serverAttachments);
+            const { serverActual, localNext } = mergeServerAttachments(
+                state.fields.attachments,
+                action.sentFields.attachments,
+                action.serverAttachments,
+            );
             // The fingerprint reflects what the server actually has: the fields we sent + the
             // server's post-parse attachment list. Edits made during the save will diff against
             // this and trigger another save automatically.
-            const serverHas = { ...action.sentFields, attachments: merged };
+            const serverHas = { ...action.sentFields, attachments: serverActual };
             return {
                 ...state,
-                fields: { ...state.fields, attachments: merged },
+                fields: { ...state.fields, attachments: localNext },
                 lastSavedFingerprint: fingerprintFields(serverHas),
             };
         }
