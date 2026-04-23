@@ -3,7 +3,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { eq, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { ApiError } from '../core/errors';
-import type { Drive } from '../drive';
+import type { Drive, SharedDrive } from '../drive';
 import { COMMENT_INDEX_DB_CONFIG } from './comment-db-config';
 import * as commentSchema from './comment-schema';
 
@@ -88,7 +88,7 @@ export class CommentIndex {
     }
 }
 
-export async function openCommentIndex(drive: Drive, containerPath: DrivePath): Promise<CommentIndex> {
+export async function openCommentIndex(drive: Drive | SharedDrive, containerPath: DrivePath): Promise<CommentIndex> {
     const dbPath = await drive.getChildByName(containerPath.mountId, containerPath.id, 'comments.db');
     if (!dbPath) throw new ApiError(404, 'comments.db not found');
     const managed = await drive.openDatabase(containerPath.mountId, COMMENT_INDEX_DB_CONFIG, dbPath.id);
@@ -96,7 +96,11 @@ export async function openCommentIndex(drive: Drive, containerPath: DrivePath): 
 }
 
 // Convenience: resolves path + opens index. SharedDrive.getPath() enforces read permission.
-export async function getCommentIndex(drive: Drive, mountId: string, pathId: string): Promise<CommentIndex> {
+export async function getCommentIndex(
+    drive: Drive | SharedDrive,
+    mountId: string,
+    pathId: string,
+): Promise<CommentIndex> {
     const path = await drive.getPath(mountId, pathId);
     if (!path) throw new ApiError(404, 'Container not found');
     return openCommentIndex(drive, path);

@@ -10,16 +10,23 @@ import type { Home } from '../home';
 import type { StorageFile } from '../storage';
 import { getMemberships, type Memberships } from '../user/';
 import { canReadFromAncestors } from './acl';
-import Drive from './drive';
+import type Drive from './drive';
 
-export default class SharedDrive extends Drive {
+// Composition over inheritance: SharedDrive deliberately does NOT extend Drive. Pairing this
+// with `getSharedDrive(): Promise<Drive | SharedDrive>` (see ./get-drive.ts) means routes can
+// only call methods present on the union — i.e., methods explicitly wrapped here. A new
+// public method on Drive without a matching wrapper here is unreachable from routes (TS error
+// at the callsite), which closes the recurring "forgot the SharedDrive wrapper, ACL bypassed"
+// hole.
+export default class SharedDrive {
     private sharedDrive: Drive;
     private user: User;
+    private owner: User;
 
     constructor(sharedHome: Home, user: User) {
-        super(sharedHome);
         this.sharedDrive = sharedHome.drive;
         this.user = user;
+        this.owner = sharedHome.user;
     }
 
     private async getUserMemberships(): Promise<Memberships> {
@@ -50,8 +57,6 @@ export default class SharedDrive extends Drive {
         }
         throw new ApiError(403, 'No write permission');
     }
-
-    public async init() {}
 
     public async listMounts(): Promise<MountInfo[]> {
         return this.sharedDrive.listMounts();
@@ -369,34 +374,7 @@ export default class SharedDrive extends Drive {
         return memberships.teamIds.includes(parsed.id);
     }
 
-    // Methods below must not be called on a SharedDrive. They are owner-only operations
-    // (mount management, share propagation, lifecycle) that are invoked internally by Home
-    // or the propagation system, never through routes.
-    getMountConfig(): never {
-        throw new ApiError(403, 'Not available on shared drive');
-    }
-
-    async addMount(): Promise<never> {
-        throw new ApiError(403, 'Not available on shared drive');
-    }
-
-    async removeMount(): Promise<never> {
-        throw new ApiError(403, 'Not available on shared drive');
-    }
-
-    async receiveACLChange(): Promise<never> {
-        throw new ApiError(403, 'Not available on shared drive');
-    }
-
-    async getSharedPathsWithMe(): Promise<never> {
-        throw new ApiError(403, 'Not available on shared drive');
-    }
-
-    async getSharedPathsByMe(): Promise<never> {
-        throw new ApiError(403, 'Not available on shared drive');
-    }
-
-    async getSharedWith(user: User): Promise<DrivePath[]> {
+    public async getSharedWith(user: User): Promise<DrivePath[]> {
         // No owner/team check — getSharedWith is self-filtering: it only returns
         // paths where the querying user has ACL read access.
         return this.sharedDrive.getSharedWith(user);
