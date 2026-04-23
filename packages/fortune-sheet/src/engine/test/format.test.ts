@@ -122,16 +122,21 @@ describe('engine/format — update', () => {
 });
 
 describe('engine/format — is_date', () => {
-    // format.ts is_date does Number(fmt) before passing to SSF.is_date.
-    // For any string that is not a valid number (e.g. "m/d/yy"), Number() yields NaN,
-    // whose string representation "NaN" contains no date tokens → always false.
-    // For numeric codes, "14" → no date tokens → false.
-    // In practice callers combine is_date() with explicit numeric-code checks.
+    test('detects date format strings', () => {
+        expect(is_date('yyyy-MM-dd')).toBe(true);
+        expect(is_date('m/d/yy')).toBe(true);
+        expect(is_date('hh:mm:ss')).toBe(true);
+    });
 
-    test('returns false for all inputs (Number coercion prevents token matching)', () => {
-        expect(is_date('yyyy-MM-dd')).toBe(false);
-        expect(is_date('m/d/yy')).toBe(false);
+    test('returns false for non-date format strings', () => {
         expect(is_date('General')).toBe(false);
+        expect(is_date('0.00')).toBe(false);
+        expect(is_date('#,##0')).toBe(false);
+    });
+
+    // Numeric input is Excel's built-in format code id (e.g. 14 = m/d/yyyy).
+    // Callers resolve numeric codes via explicit id checks (see state/modules/toolbar.ts).
+    test('returns false for numeric format codes', () => {
         expect(is_date(14)).toBe(false);
         expect(is_date(0)).toBe(false);
     });

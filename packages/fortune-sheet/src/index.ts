@@ -30,7 +30,6 @@ export {
     SUPPORTED_FORMULAS,
     toLabel,
 } from './engine/parser';
-export { default as SSF } from './engine/ssf';
 export type {
     CalculationChainEntry,
     Cell,
