@@ -3,7 +3,7 @@ import { getUploadMaxSize } from '../lib/config/enforcement';
 import { ApiError } from '../lib/core';
 import { requireNonGuest } from '../lib/core/access';
 import { contentDisposition, setCacheHeaders } from '../lib/core/http';
-import { getSharedDrive } from '../lib/drive';
+import { getDrive, getSharedDrive } from '../lib/drive';
 import { exportDocument } from '../lib/export/export-document';
 import { getHome } from '../lib/home';
 import { sendToHome } from '../lib/home/home-relay';
@@ -37,7 +37,10 @@ export const driveRouter = new Elysia({ name: 'drive' })
     .get(
         '/drive/:ownerId/shared/by-me',
         async ({ params, user }) => {
-            const drive = await getSharedDrive(params.ownerId, user);
+            // Shared-by-me listings are owner-only (the SharedDrive surface deliberately omits
+            // them). Reject cross-owner calls explicitly rather than relying on a runtime stub.
+            if (params.ownerId !== user.id) throw new ApiError(403, 'Not your drive');
+            const drive = await getDrive(user);
             return await drive.getSharedPathsByMe();
         },
         { auth: true },
@@ -45,7 +48,8 @@ export const driveRouter = new Elysia({ name: 'drive' })
     .get(
         '/drive/:ownerId/shared/with-me',
         async ({ params, user }) => {
-            const drive = await getSharedDrive(params.ownerId, user);
+            if (params.ownerId !== user.id) throw new ApiError(403, 'Not your drive');
+            const drive = await getDrive(user);
             return await drive.getSharedPathsWithMe();
         },
         { auth: true },

@@ -1,7 +1,7 @@
 import type { Sheet } from '@workspace/lib/sheets';
 import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, type DrivePath } from '@workspace/lib/types/drive';
 import { ApiError } from '../core';
-import type { Drive } from '../drive';
+import type { Drive, SharedDrive } from '../drive';
 import type { Mount } from '../mount';
 import type { DocxImage } from './doc/from-docx';
 import { writeDocToYjs } from './doc/writer';
@@ -40,7 +40,7 @@ async function saveDocImages(mount: Mount, docPath: DrivePath, images: DocxImage
 }
 
 export async function convertToDocument(
-    drive: Drive,
+    drive: Drive | SharedDrive,
     mount: Mount,
     sourcePath: DrivePath,
     targetType: 'eigensheets' | 'eigendoc',
@@ -79,7 +79,12 @@ export async function convertToDocument(
     throw new ApiError(400, `Conversion to "${targetType}" is not supported`);
 }
 
-export async function importIntoDocument(drive: Drive, mount: Mount, path: DrivePath, buffer: Buffer): Promise<void> {
+export async function importIntoDocument(
+    drive: Drive | SharedDrive,
+    mount: Mount,
+    path: DrivePath,
+    buffer: Buffer,
+): Promise<void> {
     if (path.mimeType === DRIVE_MIME_SHEETS) {
         const sheets = await parseXlsxOrThrow(buffer);
         const collabDoc = await drive.getCollabDocument(path.mountId, path.id);
