@@ -1,5 +1,5 @@
 import numeral from "numeral";
-import _ from "lodash";
+import * as _ from "es-toolkit/compat";
 import {execfunction, functionCopy, update} from ".";
 import type {Cell, CellMatrix} from "../../engine/types";
 import {Context, diff, getFlowdata, isdatetime, isRealNull, isRealNum,} from "..";

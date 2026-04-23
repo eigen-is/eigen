@@ -1,4 +1,4 @@
-import _ from "lodash";
+import * as _ from "es-toolkit/compat";
 import type {Context} from "../context";
 import {escapeHTMLTag, escapeScriptTag} from "../utils";
 import {locale} from "../locale";

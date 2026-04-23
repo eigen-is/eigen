@@ -21,7 +21,7 @@ import {
 } from "../../state";
 import type {Cell, CellMatrix} from "../../engine/types";
 import {applyPatches} from "immer";
-import _ from "lodash";
+import * as _ from "es-toolkit/compat";
 import {SetContextOptions} from "../../context";
 
 export function generateAPIs(

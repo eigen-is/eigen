@@ -1,4 +1,4 @@
-import _ from "lodash";
+import * as _ from "es-toolkit/compat";
 import {Context, getFlowdata} from "../context";
 import {locale} from "../locale";
 import {delFunctionGroup, execfunction, execFunctionGroup, functionCopy,} from "../modules/formula-ui";

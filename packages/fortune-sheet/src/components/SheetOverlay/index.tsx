@@ -26,7 +26,7 @@ import {
     selectAll,
     showLinkCard,
 } from "../../state";
-import _ from "lodash";
+import * as _ from "es-toolkit/compat";
 import {SetContextOptions, WorkbookContext} from "../../context";
 import {ColumnHeader} from "./ColumnHeader";
 import {RowHeader} from "./RowHeader";

@@ -1,4 +1,4 @@
-import _ from "lodash";
+import * as _ from "es-toolkit/compat";
 import type {History, Selection} from "../types";
 import type {Context} from "../context";
 import {getFlowdata} from "../context";

@@ -1,5 +1,5 @@
 import dayjs from "dayjs";
-import _ from "lodash";
+import * as _ from "es-toolkit/compat";
 import {Context} from "../context";
 import {hasChinaword} from "./text";
 

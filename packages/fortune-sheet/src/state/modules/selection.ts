@@ -1,4 +1,4 @@
-import _ from "lodash";
+import * as _ from "es-toolkit/compat";
 import type {Freezen, Range, Sheet as SheetType} from "../types";
 import {Context, getFlowdata} from "../context";
 import {

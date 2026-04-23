@@ -1,4 +1,4 @@
-import _ from "lodash";
+import * as _ from "es-toolkit/compat";
 import {Context, getFlowdata} from "../context";
 import {getSheetIndex, isAllowEdit} from "../utils";
 import {mergeBorder} from "./cell";

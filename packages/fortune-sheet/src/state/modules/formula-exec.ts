@@ -1,7 +1,7 @@
 // Context-coupled formula execution. These functions read/write Context
 // (formula caches, sheet data, calc chains) so they stay in the state layer.
 // The engine directory has zero state-runtime dependencies.
-import _ from "lodash";
+import * as _ from "es-toolkit/compat";
 import type {Cell, CellMatrix, FormulaCellInfo, FormulaDependency} from "../../engine/types";
 import type {FormulaCell} from "../types";
 import { Context, getFlowdata } from "../context";

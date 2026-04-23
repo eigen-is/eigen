@@ -1,4 +1,4 @@
-import _ from "lodash";
+import * as _ from "es-toolkit/compat";
 import {cancelPaintModel, checkCF, getComputeMap, getSheetIndex} from "..";
 import {Context} from "../context";
 import {copy, selectIsOverlap} from "../modules/selection";

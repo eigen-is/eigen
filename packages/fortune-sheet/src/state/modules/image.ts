@@ -1,4 +1,4 @@
-import _ from "lodash";
+import * as _ from "es-toolkit/compat";
 import {GlobalCache} from "../types";
 import {mergeBorder} from ".";
 import {Context, getFlowdata} from "../context";

@@ -18,7 +18,7 @@ import {
     valueShowEs,
 } from "../../state";
 import React, {useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState,} from "react";
-import _ from "lodash";
+import * as _ from "es-toolkit/compat";
 import {WorkbookContext} from "../../context";
 import {ContentEditable} from "./ContentEditable";
 import {FormulaSearch} from "./FormulaSearch";

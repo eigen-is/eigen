@@ -1,4 +1,4 @@
-import _ from "lodash";
+import * as _ from "es-toolkit/compat";
 import {Context, getFlowdata} from "../context";
 import type {Cell, CellMatrix, FormulaDependency} from "../../engine/types";
 import {Range, Selection, SingleRange} from "../types";

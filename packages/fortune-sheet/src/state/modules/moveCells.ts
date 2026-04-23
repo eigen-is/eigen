@@ -1,4 +1,4 @@
-import _ from "lodash";
+import * as _ from "es-toolkit/compat";
 import {getdatabyselection} from "./cell";
 
 import {Context, getFlowdata} from "../context";

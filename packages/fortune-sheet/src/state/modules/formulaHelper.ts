@@ -1,4 +1,4 @@
-import _ from "lodash";
+import * as _ from "es-toolkit/compat";
 import type {CellMatrix, FormulaCellInfo, FormulaCellInfoMap, FormulaDependency} from "../../engine/types";
 import {
     Context,

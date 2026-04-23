@@ -1,4 +1,4 @@
-import _ from "lodash";
+import * as _ from "es-toolkit/compat";
 import {Patch} from "immer";
 import {getSheetIndex} from ".";
 import {Context, getFlowdata} from "../context";
