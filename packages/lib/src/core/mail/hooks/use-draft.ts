@@ -75,9 +75,32 @@ export function useUpdateDraft() {
                 keepAttachmentIndexes: input.keepAttachmentIndexes,
                 forceFullSave: input.forceFullSave,
             }),
+        // Optimistically merge the user's edits into the cached detail. This matters for
+        // fire-and-forget unmount saves: if the user navigates away then immediately back, the
+        // detail query is observed before the network save completes, and useEmail's
+        // staleTime: Infinity would otherwise serve the pre-edit copy.
+        onMutate: ({ draft }) => {
+            if (!draft.id) return;
+            const key = emailKeys.detail(ownerId, draft.id);
+            const previous = queryClient.getQueryData<EmailDraft | null>(key);
+            if (!previous) return;
+            queryClient.setQueryData<EmailDraft | null>(key, {
+                ...previous,
+                subject: draft.subject ?? previous.subject,
+                to: draft.to ?? previous.to,
+                cc: draft.cc ?? previous.cc,
+                bcc: draft.bcc ?? previous.bcc,
+                text: draft.text ?? previous.text,
+                html: draft.html ?? previous.html,
+                driveReferences: draft.driveReferences ?? previous.driveReferences,
+            });
+        },
         onSuccess: (data) => {
+            // Push the parsed response into the cache so the next observe doesn't need a
+            // refetch. The list still gets invalidated because per-message metadata (date,
+            // attachment count) may have changed.
+            if (data?.id) queryClient.setQueryData(emailKeys.detail(ownerId, data.id), data);
             queryClient.invalidateQueries({ queryKey: emailKeys.list(ownerId, 'Drafts') });
-            if (data?.id) queryClient.invalidateQueries({ queryKey: emailKeys.detail(ownerId, data.id) });
             invalidateMailboxes(queryClient, ownerId);
             invalidateHomeSize(queryClient, ownerId);
         },
