@@ -15,8 +15,7 @@ import {escapeHTMLTag, getSheetIndex, isAllowEdit, replaceHtml,} from "../utils"
 import {hasPartMC} from "./validation";
 import {CFSplitRange, getComputeMap} from "./ConditionFormat";
 import {update} from "../../engine/format";
-// @ts-ignore
-import SSF from "../../engine/ssf";
+import {format} from "numfmt";
 
 export const selectionCache = {
     isPasteAction: false,
@@ -2323,9 +2322,9 @@ export function calcSelectionInfo(ctx: Context, lang?: string | null) {
     }
     const formatString =
         lang && !["zh", "zh_tw"].includes(lang) ? "0.00" : "w0.00";
-    const average: string = SSF.format(formatString, sum / numberC);
-    const sumStr: string = SSF.format(formatString, sum);
-    const maxStr: string = SSF.format(formatString, max);
-    const minStr: string = SSF.format(formatString, min);
+    const average: string = format(formatString, sum / numberC);
+    const sumStr: string = format(formatString, sum);
+    const maxStr: string = format(formatString, max);
+    const minStr: string = format(formatString, min);
     return {numberC, count, sum: sumStr, max: maxStr, min: minStr, average};
 }

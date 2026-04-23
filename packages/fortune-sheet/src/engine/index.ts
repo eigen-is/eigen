@@ -22,7 +22,6 @@ export {
     operatorjson,
     operatorPriority,
 } from './formula-utils';
-export { default as SSF } from './ssf';
 export type {
     CalculationChainEntry,
     CellResolver,
