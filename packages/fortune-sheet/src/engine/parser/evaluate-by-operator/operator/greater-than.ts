@@ -1,12 +1,11 @@
-import type { FormulaArg } from '../../../types.ts';
+import type { FormulaArg, FormulaValue } from '../../../types.ts';
 
 export const SYMBOL = '>';
 
+// Scalar comparison: the grammar only emits arrays into formula-function operators
+// (SUM, AVERAGEIFS, etc.), so the cast is the runtime contract, not an assertion.
 function func(exp1: FormulaArg, exp2: FormulaArg): boolean {
-    const a = exp1 ?? 0;
-    const b = exp2 ?? 0;
-    if (Array.isArray(a) || Array.isArray(b)) return false;
-    return a > b;
+    return ((exp1 ?? 0) as NonNullable<FormulaValue>) > ((exp2 ?? 0) as NonNullable<FormulaValue>);
 }
 
 func.SYMBOL = SYMBOL;
