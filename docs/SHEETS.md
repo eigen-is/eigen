@@ -30,6 +30,27 @@ merge cleanly.
 **Snapshot**: Saved on `beforeunload` (flushes latest data to `state.snapshot` and clears the ops array). New joiners
 load from the snapshot, then replay any pending ops that arrived during initial sync.
 
+## Mount-time Bootstrap
+
+On first mount, the Workbook (`packages/fortune-sheet/src/components/Workbook/index.tsx`) reconciles the
+incoming `Sheet[]` before rendering:
+
+1. **Materialize `data`** — expand sparse `celldata` into a 2D `data` matrix.
+2. **Derive `calcChain`** — walk the matrix for cells where `isFormula(cell.f)` and assign
+   `sheet.calcChain = [{r,c,id}]`. Without this, `execFunctionGroup` has no formula list on edit, so edits
+   don't propagate to dependent cells.
+3. **Recompute formulas** — `api.calculateFormula(draftCtx)` evaluates every formula cell so displayed
+   values reflect current inputs (not stale cached results from xlsx import or a previous save). Requires
+   `ctx.currentSheetId` to be set first (via `initSheetIndex`), otherwise `setCellValue` throws
+   `SHEET_NOT_FOUND`.
+
+This lets importers (xlsx, seed data, migrations) emit `Sheet[]` with just `celldata + f` fields — the
+Workbook handles the rest. Two invariants importers still must uphold:
+- **Pair `ct.fa` with `ct.t`**: whenever a cell has `ct.t` (type), set `ct.fa` (format assignment). Default
+  to `'General'` when Excel reports no explicit format. `SSF.format(undefined, n)` returns `""`, which blanks
+  the display cell on recalc.
+- **Formula cells carry `f` with leading `=`**: `isFormula()` checks `value[0] === '='`.
+
 ## Comments
 
 Comments anchor to cells via `commentChatNames?: string[]` on the `Cell` type. The fortune-sheet built-in

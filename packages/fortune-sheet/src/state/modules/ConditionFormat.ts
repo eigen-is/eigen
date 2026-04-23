@@ -785,12 +785,12 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                         let dBig;
                         let dSmall;
                         if (conditionValue0.toString().indexOf("-") === -1) {
-                            dBig = genarate(conditionValue0)![2].toString();
-                            dSmall = genarate(conditionValue0)![2].toString();
+                            dBig = genarate(conditionValue0)[2].toString();
+                            dSmall = genarate(conditionValue0)[2].toString();
                         } else {
                             const str = conditionValue0.toString().split("-");
-                            dBig = genarate(str[1].trim())![2].toString();
-                            dSmall = genarate(str[0].trim()![2].toString());
+                            dBig = genarate(str[1].trim())[2].toString();
+                            dSmall = genarate(str[0].trim())[2].toString();
                         }
                         // iterate over apply range and evaluate
                         for (

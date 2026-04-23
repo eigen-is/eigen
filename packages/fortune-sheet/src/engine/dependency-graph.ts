@@ -1,11 +1,11 @@
-import type {FormulaCellInfo, FormulaCellInfoMap, FormulaDependency} from "./types";
+import type { FormulaCellInfo, FormulaCellInfoMap, FormulaDependency } from './types';
 
 // Topological sort: returns formula cells in evaluation order (dependencies before dependents).
 // Uses a stack-based DFS with two-color marking: gray (in-progress) → black (done).
 // Cells that have already been added to the run list are tracked in existsKeys.
 export function getCalculationOrder(
     updateValueArray: FormulaCellInfo[],
-    formulaCellInfoMap: FormulaCellInfoMap
+    formulaCellInfoMap: FormulaCellInfoMap,
 ): FormulaCellInfo[] {
     const formulaRunList: FormulaCellInfo[] = [];
     let stack = [...updateValueArray];
@@ -18,9 +18,9 @@ export function getCalculationOrder(
             continue;
         }
 
-        if (formulaObject.color === "b") {
+        if (formulaObject.color === 'b') {
             // Already visited all parents — finalize this node
-            formulaObject.color = "w";
+            formulaObject.color = 'w';
             formulaRunList.push(formulaObject);
             existsKeys[formulaObject.key] = 1;
             continue;
@@ -39,7 +39,7 @@ export function getCalculationOrder(
             existsKeys[formulaObject.key] = 1;
         } else {
             // Mark gray: push self back, then push parents so they resolve first
-            formulaObject.color = "b";
+            formulaObject.color = 'b';
             stack.push(formulaObject);
             stack = stack.concat(parentNodes);
         }
@@ -58,7 +58,7 @@ export const matchDependencies = (
     formulaDependency: FormulaDependency[],
     formulaCellInfoMap: FormulaCellInfoMap | null,
     updateValueObjects: Record<string, unknown> | null,
-    func: MatchCallback
+    func: MatchCallback,
 ): void => {
     for (const range of formulaDependency) {
         const cacheKey = `r${range.row[0]}${range.row[1]}c${range.column[0]}${range.column[1]}id${range.sheetId}`;

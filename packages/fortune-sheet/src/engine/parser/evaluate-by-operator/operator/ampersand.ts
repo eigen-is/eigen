@@ -1,7 +1,9 @@
-export const SYMBOL = "&";
+import type { FormulaArg } from '../../../types.ts';
 
-function func(first: any, ...rest: any[]): string {
-    return [first, ...rest].reduce((acc, value) => acc + (value?.toString() ?? ""), "");
+export const SYMBOL = '&';
+
+function func(first: FormulaArg, ...rest: FormulaArg[]): string {
+    return [first, ...rest].reduce<string>((acc, value) => acc + (value?.toString() ?? ''), '');
 }
 
 func.SYMBOL = SYMBOL;

@@ -1,167 +1,167 @@
-import {afterEach, beforeEach, describe, expect, test} from 'bun:test';
-import Parser from "../../../parser.ts";
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import Parser from '../../../parser.ts';
 
-describe(".parse() logical", () => {
-    let parser: Parser;
+describe('.parse() logical', () => {
+    let parser: Parser | null;
 
     beforeEach(() => {
         parser = new Parser();
     });
     afterEach(() => {
-        parser = null as any;
+        parser = null;
     });
 
-    test("operator: =", () => {
-        expect(parser!.parse("10 = 10")).toMatchObject({
+    test('operator: =', () => {
+        expect(parser!.parse('10 = 10')).toMatchObject({
             error: null,
             result: true,
         });
 
-        expect(parser!.parse("10 = 11")).toMatchObject({
-            error: null,
-            result: false,
-        });
-    });
-
-    test("operator: >", () => {
-        expect(parser!.parse("11 > 10")).toMatchObject({
-            error: null,
-            result: true,
-        });
-        expect(parser!.parse("10 > 1.1")).toMatchObject({
-            error: null,
-            result: true,
-        });
-        expect(parser!.parse("10 >- 10")).toMatchObject({
-            error: null,
-            result: true,
-        });
-
-        expect(parser!.parse("10 > 11")).toMatchObject({
-            error: null,
-            result: false,
-        });
-        expect(parser!.parse("10 > 11.1")).toMatchObject({
-            error: null,
-            result: false,
-        });
-        expect(parser!.parse("10 > 10.00001")).toMatchObject({
+        expect(parser!.parse('10 = 11')).toMatchObject({
             error: null,
             result: false,
         });
     });
 
-    test("operator: <", () => {
-        expect(parser!.parse("10 < 11")).toMatchObject({
+    test('operator: >', () => {
+        expect(parser!.parse('11 > 10')).toMatchObject({
             error: null,
             result: true,
         });
-        expect(parser!.parse("10 < 11.1")).toMatchObject({
+        expect(parser!.parse('10 > 1.1')).toMatchObject({
             error: null,
             result: true,
         });
-        expect(parser!.parse("10 < 10.00001")).toMatchObject({
+        expect(parser!.parse('10 >- 10')).toMatchObject({
             error: null,
             result: true,
         });
 
-        expect(parser!.parse("11 < 10")).toMatchObject({
+        expect(parser!.parse('10 > 11')).toMatchObject({
             error: null,
             result: false,
         });
-        expect(parser!.parse("10 < 1.1")).toMatchObject({
+        expect(parser!.parse('10 > 11.1')).toMatchObject({
             error: null,
             result: false,
         });
-        expect(parser!.parse("10 <- 10")).toMatchObject({
+        expect(parser!.parse('10 > 10.00001')).toMatchObject({
             error: null,
             result: false,
         });
     });
 
-    test("operator: >=", () => {
-        expect(parser!.parse("11 >= 10")).toMatchObject({
+    test('operator: <', () => {
+        expect(parser!.parse('10 < 11')).toMatchObject({
             error: null,
             result: true,
         });
-        expect(parser!.parse("11 >= 11")).toMatchObject({
+        expect(parser!.parse('10 < 11.1')).toMatchObject({
             error: null,
             result: true,
         });
-        expect(parser!.parse("10 >= 10")).toMatchObject({
-            error: null,
-            result: true,
-        });
-        expect(parser!.parse("10 >= -10")).toMatchObject({
+        expect(parser!.parse('10 < 10.00001')).toMatchObject({
             error: null,
             result: true,
         });
 
-        expect(parser!.parse("10 >= 11")).toMatchObject({
+        expect(parser!.parse('11 < 10')).toMatchObject({
             error: null,
             result: false,
         });
-        expect(parser!.parse("10 >= 11.1")).toMatchObject({
+        expect(parser!.parse('10 < 1.1')).toMatchObject({
             error: null,
             result: false,
         });
-        expect(parser!.parse("10 >= 10.00001")).toMatchObject({
+        expect(parser!.parse('10 <- 10')).toMatchObject({
             error: null,
             result: false,
         });
     });
 
-    test("operator: <=", () => {
-        expect(parser!.parse("10 <= 10")).toMatchObject({
+    test('operator: >=', () => {
+        expect(parser!.parse('11 >= 10')).toMatchObject({
             error: null,
             result: true,
         });
-        expect(parser!.parse("1.1 <= 10")).toMatchObject({
+        expect(parser!.parse('11 >= 11')).toMatchObject({
             error: null,
             result: true,
         });
-        expect(parser!.parse("-10 <= 10")).toMatchObject({
+        expect(parser!.parse('10 >= 10')).toMatchObject({
+            error: null,
+            result: true,
+        });
+        expect(parser!.parse('10 >= -10')).toMatchObject({
             error: null,
             result: true,
         });
 
-        expect(parser!.parse("11 <= 10")).toMatchObject({
+        expect(parser!.parse('10 >= 11')).toMatchObject({
             error: null,
             result: false,
         });
-        expect(parser!.parse("11.1 <= 10")).toMatchObject({
+        expect(parser!.parse('10 >= 11.1')).toMatchObject({
             error: null,
             result: false,
         });
-        expect(parser!.parse("10.00001 <= 10")).toMatchObject({
+        expect(parser!.parse('10 >= 10.00001')).toMatchObject({
             error: null,
             result: false,
         });
     });
 
-    test("operator: <>", () => {
-        expect(parser!.parse("10 <> 11")).toMatchObject({
+    test('operator: <=', () => {
+        expect(parser!.parse('10 <= 10')).toMatchObject({
             error: null,
             result: true,
         });
-        expect(parser!.parse("1.1 <> 10")).toMatchObject({
+        expect(parser!.parse('1.1 <= 10')).toMatchObject({
             error: null,
             result: true,
         });
-        expect(parser!.parse("-10 <> 10")).toMatchObject({
+        expect(parser!.parse('-10 <= 10')).toMatchObject({
             error: null,
             result: true,
         });
 
-        expect(parser!.parse("10 <> 10")).toMatchObject({
+        expect(parser!.parse('11 <= 10')).toMatchObject({
             error: null,
             result: false,
         });
-        expect(parser!.parse("11.1 <> 11.1")).toMatchObject({
+        expect(parser!.parse('11.1 <= 10')).toMatchObject({
             error: null,
             result: false,
         });
-        expect(parser!.parse("10.00001 <> 10.00001")).toMatchObject({
+        expect(parser!.parse('10.00001 <= 10')).toMatchObject({
+            error: null,
+            result: false,
+        });
+    });
+
+    test('operator: <>', () => {
+        expect(parser!.parse('10 <> 11')).toMatchObject({
+            error: null,
+            result: true,
+        });
+        expect(parser!.parse('1.1 <> 10')).toMatchObject({
+            error: null,
+            result: true,
+        });
+        expect(parser!.parse('-10 <> 10')).toMatchObject({
+            error: null,
+            result: true,
+        });
+
+        expect(parser!.parse('10 <> 10')).toMatchObject({
+            error: null,
+            result: false,
+        });
+        expect(parser!.parse('11.1 <> 11.1')).toMatchObject({
+            error: null,
+            result: false,
+        });
+        expect(parser!.parse('10.00001 <> 10.00001')).toMatchObject({
             error: null,
             result: false,
         });

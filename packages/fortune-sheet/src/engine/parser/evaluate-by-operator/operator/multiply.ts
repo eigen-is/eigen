@@ -1,15 +1,13 @@
-import {toNumber} from "../../helper/number.ts";
-import {ERROR_VALUE} from "../../error.ts";
+import type { FormulaArg } from '../../../types.ts';
+import { ERROR_VALUE } from '../../error.ts';
+import { toNumber } from '../../helper/number.ts';
 
-export const SYMBOL = "*";
+export const SYMBOL = '*';
 
-function func(first: any, ...rest: any[]): number {
-    const result = rest.reduce(
-        (acc, value) => acc * (toNumber(value) ?? 0),
-        toNumber(first) ?? 0
-    );
+function func(first: FormulaArg, ...rest: FormulaArg[]): number {
+    const result = rest.reduce<number>((acc, value) => acc * (toNumber(value) ?? 0), toNumber(first) ?? 0);
 
-    if (isNaN(result)) {
+    if (Number.isNaN(result)) {
         throw Error(ERROR_VALUE);
     }
 

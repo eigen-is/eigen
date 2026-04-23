@@ -1,5 +1,12 @@
-import React from "react";
-import {Context, defaultContext, defaultSettings, GlobalCache, PatchOptions, Settings,} from "../state";
+import React from 'react';
+import {
+    type Context,
+    defaultContext,
+    defaultSettings,
+    type GlobalCache,
+    type PatchOptions,
+    type Settings,
+} from '../state';
 
 export type RefValues = {
     globalCache: GlobalCache;
@@ -18,56 +25,44 @@ export type SetContextOptions = {
 } & PatchOptions;
 
 const defaultScrollListeners = new Set<() => void>();
-const defaultGlobalCache = {
-    undoList: [] as any[],
-    redoList: [] as any[],
+const defaultGlobalCache: GlobalCache = {
+    undoList: [],
+    redoList: [],
     scrollLeft: 0,
     scrollTop: 0,
     scrollListeners: defaultScrollListeners,
     notifyScrollListeners: () => {
-        defaultScrollListeners.forEach((fn) => fn());
+        defaultScrollListeners.forEach((fn) => {
+            fn();
+        });
     },
 };
 
-const defaultRefs = {
-    globalCache: defaultGlobalCache as any,
+const defaultRefs: RefValues = {
+    globalCache: defaultGlobalCache,
     cellInput: React.createRef<HTMLDivElement | null>(),
     fxInput: React.createRef<HTMLDivElement | null>(),
     canvas: React.createRef<HTMLCanvasElement | null>(),
+    scrollbarX: React.createRef<HTMLDivElement | null>(),
+    scrollbarY: React.createRef<HTMLDivElement | null>(),
     cellArea: React.createRef<HTMLDivElement | null>(),
     workbookContainer: React.createRef<HTMLDivElement | null>(),
 };
 
 const WorkbookContext = React.createContext<{
     context: Context;
-    setContext: (
-        recipe: (ctx: Context) => void,
-        options?: SetContextOptions
-    ) => void;
-    // eslint-disable-next-line
+    setContext: (recipe: (ctx: Context) => void, options?: SetContextOptions) => void;
     settings: Required<Settings>;
     refs: RefValues;
     handleUndo: () => void;
     handleRedo: () => void;
 }>({
     context: defaultContext(defaultRefs),
-    setContext: () => {
-    },
+    setContext: () => {},
     settings: defaultSettings,
-    handleUndo: () => {
-    },
-    handleRedo: () => {
-    },
-    refs: {
-        globalCache: defaultGlobalCache as any,
-        cellInput: React.createRef<HTMLDivElement | null>(),
-        fxInput: React.createRef<HTMLDivElement | null>(),
-        canvas: React.createRef<HTMLCanvasElement | null>(),
-        scrollbarX: React.createRef<HTMLDivElement | null>(),
-        scrollbarY: React.createRef<HTMLDivElement | null>(),
-        cellArea: React.createRef<HTMLDivElement | null>(),
-        workbookContainer: React.createRef<HTMLDivElement | null>(),
-    },
+    handleUndo: () => {},
+    handleRedo: () => {},
+    refs: defaultRefs,
 });
 
 export { WorkbookContext };

@@ -19,7 +19,7 @@ export function DropDownList() {
         });
     }, [setContext]);
 
-    useOutsideClick(containerRef, close, [close]);
+    useOutsideClick(containerRef, close);
 
     // Initialize multi-select dropdown
     useEffect(() => {

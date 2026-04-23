@@ -182,3 +182,23 @@ apps/api/src/lib/export/sheets/
   content.ts     # Yjs snapshot → Sheet[]
   xlsx.ts        # Sheet[] → XLSX buffer via ExcelJS
 ```
+
+## Sheets Import
+
+Eigensheets import XLSX via the same shape, reversed:
+
+```
+apps/api/src/lib/import/sheets/
+  from-xlsx.ts   # Buffer → Sheet[] (ExcelJS Workbook → fortune-sheet cells)
+  writer.ts      # Sheet[] → Yjs snapshot (JSON in state map)
+```
+
+The importer only needs to emit `celldata` (with `f` for formula cells) and `config`. `calcChain` and
+initial computed values are filled in by the Workbook's mount-time bootstrap — see
+[SHEETS.md § Mount-time Bootstrap](SHEETS.md#mount-time-bootstrap).
+
+Invariants the importer must uphold:
+- **`ct.fa` paired with `ct.t`** — when setting cell type (`t`), always set format assignment (`fa`), defaulting
+  to `'General'` if Excel reports no explicit numFmt. `SSF.format(undefined, n) === ""` blanks the display on
+  recalc.
+- **Formula cells use leading `=`** — `f: '=SUM(A1:A3)'`, not `f: 'SUM(A1:A3)'`.

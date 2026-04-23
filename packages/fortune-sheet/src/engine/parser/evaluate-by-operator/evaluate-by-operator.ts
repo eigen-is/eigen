@@ -1,35 +1,38 @@
-import add from "./operator/add.ts";
-import ampersand from "./operator/ampersand.ts";
-import divide from "./operator/divide.ts";
-import equal from "./operator/equal.ts";
-import formulaFunction from "./operator/formula-function.ts";
-import greaterThan from "./operator/greater-than.ts";
-import greaterThanOrEqual from "./operator/greater-than-or-equal.ts";
-import lessThan from "./operator/less-than.ts";
-import lessThanOrEqual from "./operator/less-than-or-equal.ts";
-import minus from "./operator/minus.ts";
-import multiply from "./operator/multiply.ts";
-import notEqual from "./operator/not-equal.ts";
-import power from "./operator/power.ts";
-import {ERROR_NAME} from "../error.ts";
+import type { FormulaArg, FormulaOutput } from '../../types.ts';
+import { ERROR_NAME } from '../error.ts';
+import add from './operator/add.ts';
+import ampersand from './operator/ampersand.ts';
+import divide from './operator/divide.ts';
+import equal from './operator/equal.ts';
+import formulaFunction from './operator/formula-function.ts';
+import greaterThan from './operator/greater-than.ts';
+import greaterThanOrEqual from './operator/greater-than-or-equal.ts';
+import lessThan from './operator/less-than.ts';
+import lessThanOrEqual from './operator/less-than-or-equal.ts';
+import minus from './operator/minus.ts';
+import multiply from './operator/multiply.ts';
+import notEqual from './operator/not-equal.ts';
+import power from './operator/power.ts';
 
-interface OperatorFunction {
+type OperatorCallable = (...args: FormulaArg[]) => FormulaOutput;
+
+// Direct operator: the function itself handles the call.
+export type DirectOperator = OperatorCallable & {
     SYMBOL: string | string[];
-    isFactory?: boolean;
+    isFactory?: false;
+};
 
-    (...args: any[]): any;
-}
+// Factory operator: receives the symbol at registration time and returns the
+// callable (used by formulaFunction to close over SUPPORTED_FORMULAS names).
+export type FactoryOperator = ((symbol: string) => OperatorCallable) & {
+    SYMBOL: string | string[];
+    isFactory: true;
+};
 
-const availableOperators: Record<string, OperatorFunction> = Object.create(null);
+const availableOperators: Record<string, OperatorCallable> = Object.create(null);
 
-/**
- * Evaluate values by operator id.
- *
- * @param operator Operator id.
- * @param params Arguments to evaluate.
- * @returns Evaluation result.
- */
-export default function evaluateByOperator(operator: string, params: any[] = []): any {
+// Evaluate values by operator id.
+export default function evaluateByOperator(operator: string, params: FormulaArg[] = []): FormulaOutput {
     const upperOperator = operator.toUpperCase();
 
     if (!availableOperators[upperOperator]) {
@@ -39,22 +42,22 @@ export default function evaluateByOperator(operator: string, params: any[] = [])
     return availableOperators[upperOperator](...params);
 }
 
-/**
- * Register operator.
- *
- * @param symbol Symbol to register.
- * @param func Logic to register for this symbol.
- */
-export function registerOperation(symbol: string | string[], func: OperatorFunction): void {
-    const symbols = Array.isArray(symbol) ? symbol.map(s => s.toUpperCase()) : [symbol.toUpperCase()];
+// Register operator. Overloaded so direct operators and factories are type-checked
+// separately — a factory's call returns the callable, a direct operator's IS the
+// callable, and TS can't express both under one union without either variance
+// issues or casts at call sites.
+export function registerOperation(symbol: string | string[], func: DirectOperator): void;
+export function registerOperation(symbol: string | string[], func: FactoryOperator): void;
+export function registerOperation(symbol: string | string[], func: DirectOperator | FactoryOperator): void {
+    const symbols = Array.isArray(symbol) ? symbol.map((s) => s.toUpperCase()) : [symbol.toUpperCase()];
 
-    symbols.forEach((s) => {
-        if (func.isFactory) {
+    for (const s of symbols) {
+        if (func.isFactory === true) {
             availableOperators[s] = func(s);
         } else {
             availableOperators[s] = func;
         }
-    });
+    }
 }
 
 registerOperation(add.SYMBOL, add);

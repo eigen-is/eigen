@@ -1,49 +1,32 @@
-// @ts-ignore - No types available for tiny-emitter
-import TinyEmitter from "tiny-emitter";
-import evaluateByOperator from "./evaluate-by-operator/evaluate-by-operator.ts";
-import {trimEdges} from "./helper/string.ts";
-import {invertNumber, toNumber} from "./helper/number.ts";
-import errorParser, {ERROR, ERROR_NAME, ERROR_VALUE, isValidStrict as isErrorValid,} from "./error.ts";
-import {CellCoordinate, extractLabel, toLabel} from "./helper/cell.ts";
-import {Parser as GrammarParser} from "./grammar-parser/grammar-parser.ts";
+import { TinyEmitter } from 'tiny-emitter';
+import type {
+    CellInfo,
+    FormulaArg,
+    FormulaFunction,
+    FormulaOutput,
+    FormulaValue,
+    ParseResult,
+    ParserEventListener,
+    ParserOptions,
+    RangeCell,
+} from '../types.ts';
+import errorParser, { ERROR, ERROR_NAME, ERROR_VALUE, isValidStrict as isErrorValid } from './error.ts';
+import evaluateByOperator from './evaluate-by-operator/evaluate-by-operator.ts';
+import { Parser as GrammarParser } from './grammar-parser/grammar-parser.ts';
+import { extractLabel, toLabel } from './helper/cell.ts';
+import { invertNumber, toNumber } from './helper/number.ts';
+import { trimEdges } from './helper/string.ts';
 
-export interface ParseResult {
-    error: string | null;
-    result: any;
-}
+type GrammarParserInstance = { parse: (expression: string) => unknown; yy: Record<string, unknown> };
 
-export interface ParserOptions {
-    sheetId?: string;
-
-    [key: string]: any;
-}
-
-export interface CellInfo {
-    label: string;
-    row: CellCoordinate;
-    column: CellCoordinate;
-    sheetName: string | null;
-}
-
-export interface RangeCell {
-    row: CellCoordinate;
-    column: CellCoordinate;
-    label: string;
-    sheetName?: string | null;
-}
-
-/**
- * Parser class for formula expressions
- */
 class Parser {
-    private parser: any;
-    private variables: Record<string, any>;
-    private functions: Record<string, Function>;
+    private parser: GrammarParserInstance;
+    private variables: Record<string, unknown>;
+    private functions: Record<string, FormulaFunction>;
     private options: ParserOptions;
-    private emitter: any;
+    private emitter: TinyEmitter;
 
     constructor() {
-        // @ts-ignore - tiny-emitter instantiation
         this.emitter = new TinyEmitter();
         this.parser = new GrammarParser();
         this.parser.yy = {
@@ -53,7 +36,7 @@ class Parser {
             throwError: (errorName: string) => this._throwError(errorName),
             callVariable: (variable: string) => this._callVariable(variable),
             evaluateByOperator,
-            callFunction: (name: string, params: any[]) => this._callFunction(name, params),
+            callFunction: (name: string, params: FormulaArg[]) => this._callFunction(name, params),
             cellValue: (value: string) => this._callCellValue(value),
             rangeValue: (start: string, end: string) => this._callRangeValue(start, end),
         };
@@ -61,58 +44,31 @@ class Parser {
         this.functions = Object.create(null);
         this.options = Object.create(null);
 
-        this.setVariable("TRUE", true)
-            .setVariable("FALSE", false)
-            .setVariable("NULL", null);
+        this.setVariable('TRUE', true).setVariable('FALSE', false).setVariable('NULL', null);
     }
 
-    /**
-     * Add event listener.
-     *
-     * @param event Event name.
-     * @param listener Event listener.
-     */
-    on(event: string, listener: (...args: any[]) => void): void {
+    on(event: string, listener: ParserEventListener): void {
         this.emitter.on(event, listener);
     }
 
-    /**
-     * Remove event listener.
-     *
-     * @param event Event name.
-     * @param listener Event listener.
-     */
-    off(event: string, listener: (...args: any[]) => void): void {
+    off(event: string, listener: ParserEventListener): void {
         this.emitter.off(event, listener);
     }
 
-    /**
-     * Parse formula expression.
-     *
-     * @param expression Expression to parse.
-     * @param options Additional params.
-     * @param options.sheetId ID of sheet which the formula expression belongs to.
-     * @return Returns an object with two properties `error` and `result`.
-     */
     parse(expression: string, options: ParserOptions = {}): ParseResult {
-        let result: any = null;
+        let result: unknown = null;
         let error: string | null = null;
         this.options = options;
 
         try {
-            if (expression === "") {
-                result = "";
+            if (expression === '') {
+                result = '';
             } else {
                 result = this.parser.parse(expression);
             }
-        } catch (ex: any) {
-            const message = errorParser(ex.message);
-
-            if (message) {
-                error = message;
-            } else {
-                error = errorParser(ERROR)!;
-            }
+        } catch (ex) {
+            const message = ex instanceof Error ? errorParser(ex.message) : null;
+            error = message ?? errorParser(ERROR)!;
         }
 
         if (result instanceof Error) {
@@ -120,200 +76,126 @@ class Parser {
             result = null;
         }
 
-        return {
-            error,
-            result,
-        };
+        return { error, result };
     }
 
-    /**
-     * Set predefined variable name which can be visible while parsing formula expression.
-     *
-     * @param name Variable name.
-     * @param value Variable value.
-     * @returns Parser instance for chaining.
-     */
-    setVariable(name: string, value: any): Parser {
+    setVariable(name: string, value: unknown): Parser {
         this.variables[name] = value;
-
         return this;
     }
 
-    /**
-     * Get variable value by name.
-     *
-     * @param name Variable name.
-     * @returns Variable value.
-     */
-    getVariable(name: string): any {
+    getVariable(name: string): unknown {
         return this.variables[name];
     }
 
-    /**
-     * Set custom function which can be visible while parsing formula expression.
-     *
-     * @param name Custom function name.
-     * @param fn Custom function.
-     * @returns Parser instance for chaining.
-     */
-    setFunction(name: string, fn: Function): Parser {
+    setFunction(name: string, fn: FormulaFunction): Parser {
         this.functions[name] = fn;
-
         return this;
     }
 
-    /**
-     * Get custom function by name.
-     *
-     * @param name Custom function name.
-     * @returns Custom function.
-     */
-    getFunction(name: string): Function | undefined {
+    getFunction(name: string): FormulaFunction | undefined {
         return this.functions[name];
     }
 
-    private emit(event: string, ...args: any[]): void {
+    private emit(event: string, ...args: unknown[]): void {
         this.emitter.emit(event, ...args);
     }
 
-    /**
-     * Retrieve variable value by its name.
-     *
-     * @param name Variable name.
-     * @returns Variable value.
-     * @private
-     */
-    private _callVariable(name: string): any {
+    // Returns `FormulaArg` because variables registered via `setVariable` feed directly
+    // into the grammar's arithmetic/comparison pipelines, which expect scalars or arrays
+    // (e.g. `setVariable('range', [1, 2, 3])` for CORREL-style formulas).
+    private _callVariable(name: string): FormulaArg {
         let value = this.getVariable(name);
 
-        this.emit("callVariable", name, (newValue: any) => {
-            if (newValue !== void 0) {
+        this.emit('callVariable', name, (newValue: unknown) => {
+            if (newValue !== undefined) {
                 value = newValue;
             }
         });
 
-        if (value === void 0) {
+        if (value === undefined) {
             throw Error(ERROR_NAME);
         }
 
-        return value;
+        return value as FormulaArg;
     }
 
-    /**
-     * Call function with provided params.
-     *
-     * @param name Function name.
-     * @param params Function params.
-     * @returns Function result.
-     * @private
-     */
-    private _callFunction(name: string, params: any[] = []): any {
+    private _callFunction(name: string, params: FormulaArg[] = []): FormulaOutput {
         const fn = this.getFunction(name);
-        let value: any;
+        let value: FormulaOutput | undefined;
 
         if (fn) {
             value = fn(params);
         }
 
-        this.emit("callFunction", name, params, (newValue: any) => {
-            if (newValue !== void 0) {
+        this.emit('callFunction', name, params, (newValue: FormulaOutput) => {
+            if (newValue !== undefined) {
                 value = newValue;
             }
         });
 
-        return value === void 0 ? evaluateByOperator(name, params) : value;
+        return value === undefined ? evaluateByOperator(name, params) : value;
     }
 
-    /**
-     * Retrieve value by its label (`B3`, `B$3`, `B$3`, `$B$3`).
-     *
-     * @param label Coordinates.
-     * @returns Cell value.
-     * @private
-     */
-    private _callCellValue(label: string): any {
+    // Retrieve value by its label (`B3`, `B$3`, `B$3`, `$B$3`). Returns `FormulaArg`
+    // because a user-defined variable (set via `setVariable`) may hold an array for
+    // array-aware formulas like CORREL / LINEST.
+    private _callCellValue(label: string): FormulaArg {
         const [row, column, sheetName] = extractLabel(label);
         if (column?.index === -1) {
             if (row?.isAbsolute || column?.isAbsolute) {
                 throw Error(ERROR_NAME);
             }
             return (row?.index ?? 0) + 1;
-        } else if (row?.index === -1) {
+        }
+        if (row?.index === -1) {
             return this._callVariable(label);
         }
-        let value: any = void 0;
 
-        this.emit(
-            "callCellValue",
-            {label: toLabel(row!, column!), row, column, sheetName},
-            this.options,
-            (_value: any) => {
-                value = _value;
-            }
-        );
+        let value: FormulaValue;
+        const cell: CellInfo = { label: toLabel(row!, column!), row: row!, column: column!, sheetName };
+        this.emit('callCellValue', cell, this.options, (_value: FormulaValue) => {
+            value = _value;
+        });
 
         return value;
     }
 
-    /**
-     * Retrieve value by its label (`B3:A1`, `B$3:A1`, `B$3:$A1`, `$B$3:A$1`).
-     *
-     * @param startLabel Coordinates of the first cell.
-     * @param endLabel Coordinates of the last cell.
-     * @returns Returns an array of mixed values.
-     * @private
-     */
-    private _callRangeValue(startLabel: string, endLabel: string): any[] {
+    // Retrieve values by range label (`B3:A1`, `B$3:A1`, `B$3:$A1`, `$B$3:A$1`).
+    private _callRangeValue(startLabel: string, endLabel: string): FormulaValue[] | FormulaValue[][] {
         const [startRow, startColumn, startSheetName] = extractLabel(startLabel);
         const [endRow, endColumn, endSheetName] = extractLabel(endLabel);
-        if (endSheetName != null && startSheetName != endSheetName) {
+        if (endSheetName != null && startSheetName !== endSheetName) {
             throw Error(ERROR_VALUE);
         }
-        let startCell: Partial<RangeCell> = {};
-        let endCell: Partial<RangeCell> = {};
-        startCell.sheetName = startSheetName;
 
-        if (startRow!.index <= endRow!.index) {
-            startCell.row = startRow!;
-            endCell.row = endRow!;
-        } else {
-            startCell.row = endRow!;
-            endCell.row = startRow!;
-        }
+        const [rowStart, rowEnd] = startRow!.index <= endRow!.index ? [startRow!, endRow!] : [endRow!, startRow!];
+        const [colStart, colEnd] =
+            startColumn!.index <= endColumn!.index ? [startColumn!, endColumn!] : [endColumn!, startColumn!];
 
-        if (startColumn!.index <= endColumn!.index) {
-            startCell.column = startColumn!;
-            endCell.column = endColumn!;
-        } else {
-            startCell.column = endColumn!;
-            endCell.column = startColumn!;
-        }
+        const startCell: RangeCell = {
+            row: rowStart,
+            column: colStart,
+            label: toLabel(rowStart, colStart),
+            sheetName: startSheetName,
+        };
+        const endCell: RangeCell = { row: rowEnd, column: colEnd, label: toLabel(rowEnd, colEnd) };
 
-        startCell.label = toLabel(startCell.row!, startCell.column!);
-        endCell.label = toLabel(endCell.row!, endCell.column!);
-
-        let value: any[] = [];
+        let value: FormulaValue[] | FormulaValue[][] = [];
 
         this.emit(
-            "callRangeValue",
+            'callRangeValue',
             startCell,
             endCell,
             this.options,
-            (_value: any[] = []) => {
+            (_value: FormulaValue[] | FormulaValue[][] = []) => {
                 value = _value;
-            }
+            },
         );
 
         return value;
     }
 
-    /**
-     * Try to throw error by its name.
-     *
-     * @param errorName Error name.
-     * @returns Error name.
-     * @private
-     */
     private _throwError(errorName: string): never {
         if (isErrorValid(errorName)) {
             throw Error(errorName);

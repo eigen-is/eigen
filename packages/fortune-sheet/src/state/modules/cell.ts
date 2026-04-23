@@ -261,13 +261,13 @@ export function setCellValue(
                     cell.m = cell.v.toExponential(len).toString();
                 } else {
                     const v_p = Math.round(cell.v * 1000000000) / 1000000000;
-                    if (_.isNil(cell.ct)) {
+                    if (_.isNil(cell.ct) || _.isNil(cell.ct.fa)) {
                         const mask = genarate(v_p);
                         if (mask != null) {
                             cell.m = mask[0].toString();
                         }
                     } else {
-                        const mask = update(cell.ct.fa!, v_p);
+                        const mask = update(cell.ct.fa, v_p);
                         cell.m = mask.toString();
                     }
 

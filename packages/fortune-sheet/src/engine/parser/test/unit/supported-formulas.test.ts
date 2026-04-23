@@ -1,8 +1,8 @@
-import {describe, expect, test} from 'bun:test';
-import SUPPORTED_FORMULAS from "../../supported-formulas.ts";
+import { describe, expect, test } from 'bun:test';
+import SUPPORTED_FORMULAS from '../../supported-formulas.ts';
 
-describe("fortune-sheet/formula-parser/supported-formulas", () => {
-    test("should be defined", () => {
+describe('fortune-sheet/formula-parser/supported-formulas', () => {
+    test('should be defined', () => {
         expect(SUPPORTED_FORMULAS.length).toBe(453);
     });
 });

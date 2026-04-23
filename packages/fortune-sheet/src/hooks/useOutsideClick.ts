@@ -1,24 +1,20 @@
-import React, {useEffect} from "react";
+import type React from 'react';
+import { useEffect, useRef } from 'react';
 
-export function useOutsideClick(
-    containerRef: React.RefObject<HTMLElement | null>,
-    handler: () => void,
-    deps?: React.DependencyList
-) {
+export function useOutsideClick(containerRef: React.RefObject<HTMLElement | null>, handler: () => void) {
+    const handlerRef = useRef(handler);
+    handlerRef.current = handler;
+
     useEffect(() => {
         function handleClickOutside(e: MouseEvent) {
-            if (
-                containerRef.current &&
-                !containerRef.current.contains(e.target as HTMLElement)
-            ) {
-                handler();
+            if (containerRef.current && !containerRef.current.contains(e.target as HTMLElement)) {
+                handlerRef.current();
             }
         }
 
-        document.addEventListener("mousedown", handleClickOutside);
+        document.addEventListener('mousedown', handleClickOutside);
         return () => {
-            document.removeEventListener("mousedown", handleClickOutside);
+            document.removeEventListener('mousedown', handleClickOutside);
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, deps);
+    }, [containerRef]);
 }
