@@ -86,6 +86,9 @@ export function createAppConfig(appName: string, extraConfig?: UserConfig) {
                         if (id.includes('node_modules/@tanstack/')) {
                             return 'tanstack';
                         }
+                        if (id.includes('node_modules/numfmt')) {
+                            return 'numfmt';
+                        }
                     },
                 },
             },
