@@ -1,5 +1,5 @@
 import numeral from 'numeral';
-import SSF from './ssf';
+import { format, isDateFormat } from 'numfmt';
 import type { CellMatrix, CellType } from './types';
 import { isdatetime, isRealNum, valueIsError } from './validation';
 
@@ -94,7 +94,7 @@ export function genarate(value: string | number | boolean): [string, CellType, s
             ct = { fa: '#0.E+00', t: 'n' };
         }
 
-        m = SSF.format(ct.fa, v);
+        m = format(ct.fa!, v);
     } else if (value.toString().indexOf('%') > -1) {
         const index = value.toString().indexOf('%');
         const value2 = value.toString().substring(0, index);
@@ -128,7 +128,7 @@ export function genarate(value: string | number | boolean): [string, CellType, s
                                 t: 'n',
                             };
                             v = numeral(value).value() ?? 0;
-                            m = SSF.format(ct.fa, v);
+                            m = format(ct.fa!, v);
                         } else {
                             m = value.toString();
                             ct = { fa: '@', t: 's' };
@@ -136,7 +136,7 @@ export function genarate(value: string | number | boolean): [string, CellType, s
                     } else {
                         ct = { fa: `0.${new Array(len + 1).join('0')}%`, t: 'n' };
                         v = numeral(value).value() ?? 0;
-                        m = SSF.format(ct.fa, v);
+                        m = format(ct.fa!, v);
                     }
                 } else {
                     m = value.toString();
@@ -156,7 +156,7 @@ export function genarate(value: string | number | boolean): [string, CellType, s
                 if (isThousands) {
                     ct = { fa: '#,##0%', t: 'n' };
                     v = numeral(value).value() ?? 0;
-                    m = SSF.format(ct.fa, v);
+                    m = format(ct.fa!, v);
                 } else {
                     m = value.toString();
                     ct = { fa: '@', t: 's' };
@@ -164,7 +164,7 @@ export function genarate(value: string | number | boolean): [string, CellType, s
             } else {
                 ct = { fa: '0%', t: 'n' };
                 v = numeral(value).value() ?? 0;
-                m = SSF.format(ct.fa, v);
+                m = format(ct.fa!, v);
             }
         } else {
             m = value.toString();
@@ -194,7 +194,7 @@ export function genarate(value: string | number | boolean): [string, CellType, s
                 if (isThousands) {
                     ct = { fa: `#,##0.${new Array(len + 1).join('0')}`, t: 'n' };
                     v = numeral(value).value() ?? 0;
-                    m = SSF.format(ct.fa, v);
+                    m = format(ct.fa!, v);
                 } else {
                     m = value.toString();
                     ct = { fa: '@', t: 's' };
@@ -203,7 +203,7 @@ export function genarate(value: string | number | boolean): [string, CellType, s
                 if (isRealNum(value1) && isRealNum(value2)) {
                     ct = { fa: `0.${new Array(len + 1).join('0')}`, t: 'n' };
                     v = numeral(value).value() ?? 0;
-                    m = SSF.format(ct.fa, v);
+                    m = format(ct.fa!, v);
                 } else {
                     m = value.toString();
                     ct = { fa: '@', t: 's' };
@@ -236,7 +236,7 @@ export function genarate(value: string | number | boolean): [string, CellType, s
         }
 
         ct.t = 'd';
-        m = SSF.format(ct.fa, v);
+        m = format(ct.fa!, v);
     } else if (
         isdatetime(value, '12') &&
         (value.toString().indexOf('.') > -1 || value.toString().indexOf(':') > -1 || value.toString().length < 20)
@@ -264,7 +264,7 @@ export function genarate(value: string | number | boolean): [string, CellType, s
         }
 
         ct.t = 'd';
-        m = SSF.format(ct.fa, v);
+        m = format(ct.fa!, v);
     } else {
         m = value as string;
         ct.fa = 'General';
@@ -275,11 +275,12 @@ export function genarate(value: string | number | boolean): [string, CellType, s
 }
 
 export function update(fmt: string, v: string | number | boolean | null | undefined): string {
-    return SSF.format(fmt, v);
+    return format(fmt, v);
 }
 
 export function is_date(fmt: number | string): boolean {
-    return SSF.is_date(Number(fmt));
+    if (typeof fmt !== 'string') return false;
+    return isDateFormat(fmt);
 }
 
 function fuzzynum(s: string | number | boolean) {
