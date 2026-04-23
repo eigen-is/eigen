@@ -24,7 +24,7 @@ import {
 import type {CellMatrix} from "../../engine/types";
 import React, {useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState,} from "react";
 import {applyPatches, enablePatches, Patch, produce, produceWithPatches,} from "immer";
-import _ from "lodash";
+import * as _ from "es-toolkit/compat";
 import {Sheet} from "../Sheet";
 import {RefValues, SetContextOptions, WorkbookContext} from "../../context";
 import {Toolbar} from "../Toolbar";

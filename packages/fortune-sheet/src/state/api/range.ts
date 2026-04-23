@@ -1,4 +1,4 @@
-import _ from "lodash";
+import * as _ from "es-toolkit/compat";
 import {getdatabyselection, getFlowdata, getRangetxt, Selection} from "..";
 import {Context} from "../context";
 import {normalizeSelection, rangeValueToHtml} from "../modules";

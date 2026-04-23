@@ -1,4 +1,4 @@
-import _ from "lodash";
+import * as _ from "es-toolkit/compat";
 import {v4 as uuidv4} from "uuid";
 import {initSheetData} from "../api/sheet";
 import {Context} from "../context";

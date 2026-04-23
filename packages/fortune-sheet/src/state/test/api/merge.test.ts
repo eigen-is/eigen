@@ -1,4 +1,4 @@
-import _ from "lodash";
+import * as _ from "es-toolkit/compat";
 import {contextFactory, selectionFactory} from "../factories/context";
 import {Context} from "../../context";
 import {cancelMerge, mergeCells} from "../../api/merge";

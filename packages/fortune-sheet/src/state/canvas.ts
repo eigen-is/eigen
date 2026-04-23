@@ -1,4 +1,4 @@
-import _ from "lodash";
+import * as _ from "es-toolkit/compat";
 import {defaultContext, getFlowdata} from "./context";
 import {getRealCellValue, normalizedAttr} from "./modules/cell";
 import {clearMeasureTextCache, defaultFont, getCellTextInfo, getFontSet, getMeasureText,} from "./modules/text";

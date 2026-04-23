@@ -1,4 +1,4 @@
-import _ from "lodash";
+import * as _ from "es-toolkit/compat";
 import {colLocationByIndex, Context, Freezen, getSheetIndex, GlobalCache, rowLocationByIndex,} from "..";
 
 function cutVolumn(arr: number[], cutindex: number) {

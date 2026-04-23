@@ -1,4 +1,4 @@
-import _ from "lodash";
+import * as _ from "es-toolkit/compat";
 import type {Context} from "../context";
 import type {Rect} from "../types";
 import {columnCharToIndex, indexToColumnChar} from "../utils";
