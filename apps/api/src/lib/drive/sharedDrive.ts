@@ -89,6 +89,23 @@ export default class SharedDrive {
         return [];
     }
 
+    public async getMountMimeTypeContents(
+        mountId: string,
+        mimeType: string,
+        options?: {
+            excludeDocumentChildren?: boolean;
+        },
+    ): Promise<DrivePath[]> {
+        const parsed = parseOwnerId(this.owner.id);
+        if (parsed?.type === 'team') {
+            const memberships = await this.getUserMemberships();
+            if (memberships.teamIds.includes(parsed.id)) {
+                return this.sharedDrive.getMountMimeTypeContents(mountId, mimeType, options);
+            }
+        }
+        return [];
+    }
+
     public async canWrite(mountId: string, pathId: string, user: User, memberships?: Memberships) {
         return this.sharedDrive.canWrite(mountId, pathId, user, memberships);
     }

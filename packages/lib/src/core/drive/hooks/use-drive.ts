@@ -31,6 +31,8 @@ export const driveKeys = {
         [...driveKeys.folders(ownerId), mountId, pathId] as const,
     mimeTypes: (ownerId: string) => [...driveKeys.owner(ownerId), 'mime'] as const,
     mime: (ownerId: string, mimeType: string) => [...driveKeys.mimeTypes(ownerId), mimeType] as const,
+    mountMime: (ownerId: string, mountId: string, mimeType: string) =>
+        [...driveKeys.mimeTypes(ownerId), mountId, mimeType] as const,
     paths: (ownerId: string) => [...driveKeys.owner(ownerId), 'path'] as const,
     path: (ownerId: string, mountId: string, pathId: string) => [...driveKeys.paths(ownerId), mountId, pathId] as const,
     permissions: (ownerId: string, mountId: string, pathId: string) =>
@@ -139,6 +141,24 @@ export function useMimeContent(ownerId: string, mimeType: string) {
         enabled: !!mimeType && !!ownerId,
         retry: 1,
         staleTime: 1000 * 60 * 5, // 5 minutes
+    });
+}
+
+// GET MIME CONTENTS scoped to a single mount
+export function useMountMimeContent(ownerId: string, mountId: string, mimeType: string) {
+    return useQuery<DrivePath[]>({
+        queryKey: driveKeys.mountMime(ownerId, mountId, mimeType),
+        queryFn: async () => {
+            if (!mimeType) return [];
+            const response = await driveApi({ ownerId })({ mountId }).mime({ mimeType }).get();
+            if (response.error) {
+                throw new AppError(response);
+            }
+            return response.data || [];
+        },
+        enabled: !!mimeType && !!ownerId && !!mountId,
+        retry: 1,
+        staleTime: 1000 * 60 * 5,
     });
 }
 

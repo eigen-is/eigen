@@ -485,6 +485,17 @@ export default class Drive {
         return [...allResults, ...unique];
     }
 
+    async getMountMimeTypeContents(
+        mountId: string,
+        mimeType: string,
+        options: {
+            excludeDocumentChildren?: boolean;
+        } = { excludeDocumentChildren: true },
+    ): Promise<DrivePath[]> {
+        const mount = this.getMount(mountId);
+        return mount.getPathsByMimeType(mimeType, options);
+    }
+
     async breadCrumb(mountId: string, pathId: string): Promise<DrivePath[]> {
         const mount = this.getMount(mountId);
         return await mount.getBreadcrumb(pathId);
