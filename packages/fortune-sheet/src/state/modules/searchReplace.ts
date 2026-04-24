@@ -1,4 +1,4 @@
-import * as _ from "es-toolkit/compat";
+import {cloneDeep, set, size} from "es-toolkit/compat";
 
 import {Context, getFlowdata} from "../context";
 import {locale} from "../locale";
@@ -54,7 +54,7 @@ export function getSearchIndexArr(
                             if (caseCheck) {
                                 if (searchText === value) {
                                     if (!(`${r}_${c}` in obj)) {
-                                        _.set(obj, `${r}_${c}`, 0);
+                                        set(obj, `${r}_${c}`, 0);
                                         arr.push({r, c});
                                     }
                                 }
@@ -62,7 +62,7 @@ export function getSearchIndexArr(
                                 const txt = searchText.toLowerCase();
                                 if (txt === value.toLowerCase()) {
                                     if (!(`${r}_${c}` in obj)) {
-                                        _.set(obj, `${r}_${c}`, 0);
+                                        set(obj, `${r}_${c}`, 0);
                                         arr.push({r, c});
                                     }
                                 }
@@ -79,7 +79,7 @@ export function getSearchIndexArr(
 
                             if (reg.test(value)) {
                                 if (!(`${r}_${c}` in obj)) {
-                                    _.set(obj, `${r}_${c}`, 0);
+                                    set(obj, `${r}_${c}`, 0);
                                     arr.push({r, c});
                                 }
                             }
@@ -87,14 +87,14 @@ export function getSearchIndexArr(
                             if (caseCheck) {
                                 if (~value.indexOf(searchText)) {
                                     if (!(`${r}_${c}` in obj)) {
-                                        _.set(obj, `${r}_${c}`, 0);
+                                        set(obj, `${r}_${c}`, 0);
                                         arr.push({r, c});
                                     }
                                 }
                             } else {
                                 if (~value.toLowerCase().indexOf(searchText.toLowerCase())) {
                                     if (!(`${r}_${c}` in obj)) {
-                                        _.set(obj, `${r}_${c}`, 0);
+                                        set(obj, `${r}_${c}`, 0);
                                         arr.push({r, c});
                                     }
                                 }
@@ -125,7 +125,7 @@ export function searchNext(
     }
     let range: Selection[];
     if (
-        _.size(ctx.luckysheet_select_save) === 0 ||
+        size(ctx.luckysheet_select_save) === 0 ||
         (ctx.luckysheet_select_save?.length === 1 &&
             ctx.luckysheet_select_save[0].row[0] ===
             ctx.luckysheet_select_save[0].row[1] &&
@@ -141,7 +141,7 @@ export function searchNext(
             },
         ];
     } else {
-        range = _.cloneDeep(ctx.luckysheet_select_save) ?? [];
+        range = cloneDeep(ctx.luckysheet_select_save) ?? [];
     }
 
     const searchIndexArr = getSearchIndexArr(
@@ -158,14 +158,14 @@ export function searchNext(
     let count = 0;
 
     if (
-        _.size(ctx.luckysheet_select_save) === 0 ||
+        size(ctx.luckysheet_select_save) === 0 ||
         (ctx.luckysheet_select_save?.length === 1 &&
             ctx.luckysheet_select_save[0].row[0] ===
             ctx.luckysheet_select_save[0].row[1] &&
             ctx.luckysheet_select_save[0].column[0] ===
             ctx.luckysheet_select_save[0].column[1])
     ) {
-        if (_.size(ctx.luckysheet_select_save) === 0) {
+        if (size(ctx.luckysheet_select_save) === 0) {
             count = 0;
         } else {
             for (let i = 0; i < searchIndexArr.length; i += 1) {
@@ -255,7 +255,7 @@ export function searchAll(
 
     let range;
     if (
-        _.size(ctx.luckysheet_select_save) === 0 ||
+        size(ctx.luckysheet_select_save) === 0 ||
         (ctx.luckysheet_select_save?.length === 1 &&
             ctx.luckysheet_select_save[0].row[0] ===
             ctx.luckysheet_select_save[0].row[1] &&
@@ -269,7 +269,7 @@ export function searchAll(
             },
         ];
     } else {
-        range = _.cloneDeep(ctx.luckysheet_select_save) ?? [];
+        range = cloneDeep(ctx.luckysheet_select_save) ?? [];
     }
 
     const searchIndexArr = getSearchIndexArr(
@@ -344,7 +344,7 @@ export function onSearchDialogMoveStart(
     left -= rect.left;
     top -= rect.top;
     const initialPosition = {left, top, width, height};
-    _.set(globalCache, "searchDialog.moveProps", {
+    set(globalCache, "searchDialog.moveProps", {
         cursorMoveStartPosition: {
             x: e.pageX,
             y: e.pageY,
@@ -368,7 +368,7 @@ export function onSearchDialogMove(globalCache: GlobalCache, e: MouseEvent) {
 }
 
 export function onSearchDialogMoveEnd(globalCache: GlobalCache) {
-    _.set(globalCache, "searchDialog.moveProps", undefined);
+    set(globalCache, "searchDialog.moveProps", undefined);
 }
 
 export function replace(
@@ -394,7 +394,7 @@ export function replace(
 
     let range;
     if (
-        _.size(ctx.luckysheet_select_save) === 0 ||
+        size(ctx.luckysheet_select_save) === 0 ||
         (ctx.luckysheet_select_save?.length === 1 &&
             ctx.luckysheet_select_save[0].row[0] ===
             ctx.luckysheet_select_save[0].row[1] &&
@@ -408,7 +408,7 @@ export function replace(
             },
         ];
     } else {
-        range = _.cloneDeep(ctx.luckysheet_select_save) ?? [];
+        range = cloneDeep(ctx.luckysheet_select_save) ?? [];
     }
 
     const searchIndexArr = getSearchIndexArr(
@@ -514,7 +514,7 @@ export function replaceAll(
 
     let range;
     if (
-        _.size(ctx.luckysheet_select_save) === 0 ||
+        size(ctx.luckysheet_select_save) === 0 ||
         (ctx.luckysheet_select_save?.length === 1 &&
             ctx.luckysheet_select_save[0].row[0] ===
             ctx.luckysheet_select_save[0].row[1] &&
@@ -528,7 +528,7 @@ export function replaceAll(
             },
         ];
     } else {
-        range = _.cloneDeep(ctx.luckysheet_select_save) ?? [];
+        range = cloneDeep(ctx.luckysheet_select_save) ?? [];
     }
 
     const searchIndexArr = getSearchIndexArr(

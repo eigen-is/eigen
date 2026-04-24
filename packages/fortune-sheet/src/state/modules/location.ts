@@ -1,4 +1,4 @@
-import * as _ from "es-toolkit/compat";
+import {sortedIndex} from "es-toolkit/compat";
 import {Context} from "../context";
 
 export function mousePosition(x: number, y: number, ctx: Context) {
@@ -28,7 +28,7 @@ export function rowLocationByIndex(row_index: number, visibleRow: number[]) {
 }
 
 export function rowLocation(y: number, visibleRow: number[]) {
-    let row_index = _.sortedIndex(visibleRow, y);
+    let row_index = sortedIndex(visibleRow, y);
 
     if (row_index >= visibleRow.length && y > 0) {
         row_index = visibleRow.length - 1;
@@ -54,7 +54,7 @@ export function colLocationByIndex(col_index: number, visibleCol: number[]) {
 }
 
 export function colLocation(x: number, visibleCol: number[]) {
-    let col_index = _.sortedIndex(visibleCol, x);
+    let col_index = sortedIndex(visibleCol, x);
 
     if (col_index >= visibleCol.length && x > 0) {
         col_index = visibleCol.length - 1;

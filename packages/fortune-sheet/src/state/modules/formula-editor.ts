@@ -1,4 +1,4 @@
-import * as _ from "es-toolkit/compat";
+import {isEmpty, indexOf, isNil, last, startsWith} from "es-toolkit/compat";
 import type {Context} from "../context";
 import {escapeHTMLTag, escapeScriptTag} from "../utils";
 import {locale} from "../locale";
@@ -171,7 +171,7 @@ function functionHTML(txt: string) {
                 !/[^0-9]/.test(s_next) &&
                 s === "-" &&
                 (s_pre === "(" ||
-                    _.isNil(s_pre) ||
+                    isNil(s_pre) ||
                     s_pre === "," ||
                     s_pre === " " ||
                     s_pre in operatorjson)
@@ -193,7 +193,7 @@ function functionHTML(txt: string) {
 
         if (i === funcstack.length - 1) {
             // function_str += str;
-            if (iscelldata(_.trim(str))) {
+            if (iscelldata(str.trim())) {
                 const rangeIndex =
                     formulaUIState.rangeIndexes.length > formulaUIState.functionHTMLIndex
                         ? formulaUIState.rangeIndexes[formulaUIState.functionHTMLIndex]
@@ -205,7 +205,7 @@ function functionHTML(txt: string) {
             } else if (str.indexOf("</span>") === -1 && str.length > 0) {
                 const regx = /{.*?}/;
 
-                if (regx.test(_.trim(str))) {
+                if (regx.test(str.trim())) {
                     const arraytxt = regx.exec(str)![0];
                     const arraystart = str.search(regx);
                     let alltxt = "";
@@ -269,7 +269,7 @@ function searchFunction(ctx: Context, searchtxt: string) {
     const {functionlist} = locale(ctx);
 
     // // This logic has been modified from the original project
-    // if (_.isNil($editer)) {
+    // if (isNil($editer)) {
     //   return;
     // }
     // const inputContent = $editer.innerText.toUpperCase();
@@ -294,7 +294,7 @@ function searchFunction(ctx: Context, searchtxt: string) {
         if (n === searchtxt) {
             f.unshift(item);
             result_i += 1;
-        } else if (_.startsWith(n, searchtxt)) {
+        } else if (startsWith(n, searchtxt)) {
             s.unshift(item);
             result_i += 1;
         } else if (n.indexOf(searchtxt) > -1) {
@@ -326,10 +326,10 @@ export function getrangeseleciton() {
         anchorNode.parentNode?.nodeName?.toLowerCase() === "span" &&
         anchorOffset !== 0
     ) {
-        let txt = _.trim(anchorNode.textContent || "");
+        let txt = anchorNode.textContent || "".trim();
         if (txt.length === 0 && anchorNode.parentNode.previousSibling) {
             const ahr = anchorNode.parentNode.previousSibling;
-            txt = _.trim(ahr.textContent || "");
+            txt = ahr.textContent || "".trim();
             return ahr;
         }
         return anchorNode.parentNode;
@@ -339,14 +339,14 @@ export function getrangeseleciton() {
         anchorElement.id === "luckysheet-rich-text-editor" ||
         anchorElement.id === "luckysheet-functionbox-cell"
     ) {
-        let txt = _.trim(_.last(anchorElement.querySelectorAll("span"))?.innerText);
+        let txt = last(anchorElement.querySelectorAll("span".trim())?.innerText);
 
         if (txt.length === 0 && anchorElement.querySelectorAll("span").length > 1) {
             const ahr = anchorElement.querySelectorAll("span");
-            txt = _.trim(ahr[ahr.length - 2].innerText);
+            txt = ahr[ahr.length - 2].innerText.trim();
             return ahr?.[0];
         }
-        return _.last(anchorElement.querySelectorAll("span"));
+        return last(anchorElement.querySelectorAll("span"));
     }
     if (
         anchorNode?.parentElement?.id === "luckysheet-rich-text-editor" ||
@@ -370,7 +370,7 @@ function helpFunctionExe(
     ctx: Context
 ) {
     const {functionlist} = locale(ctx);
-    if (_.isEmpty(ctx.formulaCache.functionlistMap)) {
+    if (isEmpty(ctx.formulaCache.functionlistMap)) {
         for (let i = 0; i < functionlist.length; i += 1) {
             ctx.formulaCache.functionlistMap[functionlist[i].n] = functionlist[i];
         }
@@ -381,7 +381,7 @@ function helpFunctionExe(
 
     const $prev = currSelection;
     const $span = $editer.querySelectorAll("span");
-    const currentIndex = _.indexOf(
+    const currentIndex = indexOf(
         currSelection.parentNode?.childNodes,
         currSelection
     );
@@ -406,7 +406,7 @@ function helpFunctionExe(
 
             if (
                 $cur.classList.contains("luckysheet-formula-text-func") ||
-                _.trim($cur.textContent || "").toUpperCase() in
+                $cur.textContent || "".trim().toUpperCase() in
                 ctx.formulaCache.functionlistMap
             ) {
                 funcName = $cur.textContent;
@@ -449,7 +449,7 @@ export function rangeHightlightselected(ctx: Context, $editor: HTMLDivElement) {
     const currSelection = getrangeseleciton();
     if (!currSelection) return;
 
-    const currText = _.trim(currSelection.textContent || "");
+    const currText = currSelection.textContent || "".trim();
     if (currText?.match(/^[a-zA-Z_]+$/)) {
         searchFunction(ctx, currText.toUpperCase());
         ctx.functionHint = null;
@@ -476,12 +476,12 @@ export function israngeseleciton(ctx: Context, istooltip?: boolean) {
         anchor?.parentNode?.nodeName.toLowerCase() === "span" &&
         anchorOffset !== 0
     ) {
-        let txt = _.trim(anchor.textContent);
+        let txt = anchor.textContent.trim();
         let lasttxt = "";
 
         if (txt.length === 0 && anchor.parentNode.previousSibling) {
             const ahr = anchor.parentNode.previousSibling;
-            txt = _.trim(ahr.textContent || "");
+            txt = ahr.textContent || "".trim();
             lasttxt = txt.substring(txt.length - 1, 1);
             ctx.formulaCache.rangeSetValueTo = anchor.parentNode;
         } else {
@@ -504,17 +504,17 @@ export function israngeseleciton(ctx: Context, istooltip?: boolean) {
         anchorElement.id === "luckysheet-rich-text-editor" ||
         anchorElement.id === "luckysheet-functionbox-cell"
     ) {
-        let txt = _.trim(_.last(anchorElement.querySelectorAll("span"))?.innerText);
+        let txt = last(anchorElement.querySelectorAll("span".trim())?.innerText);
 
-        ctx.formulaCache.rangeSetValueTo = _.last(
+        ctx.formulaCache.rangeSetValueTo = last(
             anchorElement.querySelectorAll("span")
         );
 
         if (txt.length === 0 && anchorElement.querySelectorAll("span").length > 1) {
             const ahr = anchorElement.querySelectorAll("span");
-            txt = _.trim(ahr[ahr.length - 2].innerText);
+            txt = ahr[ahr.length - 2].innerText.trim();
 
-            txt = _.trim(ahr[ahr.length - 2].innerText);
+            txt = ahr[ahr.length - 2].innerText.trim();
             ctx.formulaCache.rangeSetValueTo = ahr;
         }
 
@@ -542,7 +542,7 @@ export function israngeseleciton(ctx: Context, istooltip?: boolean) {
         if (!anchor) return false;
         if (anchor.previousSibling?.textContent == null) return false;
         if (anchor.previousSibling) {
-            const txt = _.trim(anchor.previousSibling.textContent);
+            const txt = anchor.previousSibling.textContent.trim();
             const lasttxt = txt.substring(txt.length - 1, 1);
 
             ctx.formulaCache.rangeSetValueTo = anchor.previousSibling;
@@ -576,7 +576,7 @@ function functionRange(
         if (!currSelection) return;
         const fri = findrangeindex(ctx, v, vp);
 
-        if (_.isNil(fri)) {
+        if (isNil(fri)) {
             currSelection.selectAllChildren(obj);
             currSelection.collapseToEnd();
         } else {
@@ -612,7 +612,7 @@ function findrangeindex(ctx: Context, v: string, vp: string) {
         const p = vp_a[i];
         const n = v_a[i];
 
-        if (_.isNil(p)) {
+        if (isNil(p)) {
             if (vp_a.length <= i) {
                 pfri = [vp_a.length - 1, vp_a.length - 1];
             } else if (v_a.length <= i) {
@@ -623,8 +623,8 @@ function findrangeindex(ctx: Context, v: string, vp: string) {
         }
         if (p.length === n.length) {
             if (
-                !_.isNil(vp_a[i + 1]) &&
-                !_.isNil(v_a[i + 1]) &&
+                !isNil(vp_a[i + 1]) &&
+                !isNil(v_a[i + 1]) &&
                 vp_a[i + 1].length < v_a[i + 1].length
             ) {
                 pfri[0] += 1;
@@ -635,8 +635,8 @@ function findrangeindex(ctx: Context, v: string, vp: string) {
         }
         if (p.length > n.length) {
             if (
-                !_.isNil(p) &&
-                !_.isNil(v_a[i + 1]) &&
+                !isNil(p) &&
+                !isNil(v_a[i + 1]) &&
                 v_a[i + 1].substring(0, 1) === '"' &&
                 (p.indexOf("{") > -1 || p.indexOf("}") > -1)
             ) {
@@ -660,7 +660,7 @@ function findrangeindex(ctx: Context, v: string, vp: string) {
         const p = vp_a[i];
         const n = v_a[i];
 
-        if (_.isNil(n)) {
+        if (isNil(n)) {
             if (v_a[i - 1].indexOf("{") > -1) {
                 pfri[0] -= 1;
                 const start = v_a[i - 1].search("{");
@@ -671,7 +671,7 @@ function findrangeindex(ctx: Context, v: string, vp: string) {
             }
         } else if (p.length === n.length) {
             if (
-                !_.isNil(v_a[i + 1]) &&
+                !isNil(v_a[i + 1]) &&
                 (v_a[i + 1].substring(0, 1) === '"' ||
                     v_a[i + 1].substring(0, 1) === "{" ||
                     v_a[i + 1].substring(0, 1) === "}")
@@ -679,17 +679,17 @@ function findrangeindex(ctx: Context, v: string, vp: string) {
                 pfri[0] += 1;
                 pfri[1] = 1;
             } else if (
-                !_.isNil(p) &&
+                !isNil(p) &&
                 p.length > 2 &&
                 p.substring(0, 1) === '"' &&
                 p.substring(p.length - 1, 1) === '"'
             ) {
                 // pfri[1] = n.length-1;
-            } else if (!_.isNil(v_a[i]) && v_a[i] === '")') {
+            } else if (!isNil(v_a[i]) && v_a[i] === '")') {
                 pfri[1] = 1;
-            } else if (!_.isNil(v_a[i]) && v_a[i] === '"}') {
+            } else if (!isNil(v_a[i]) && v_a[i] === '"}') {
                 pfri[1] = 1;
-            } else if (!_.isNil(v_a[i]) && v_a[i] === "{)") {
+            } else if (!isNil(v_a[i]) && v_a[i] === "{)") {
                 pfri[1] = 1;
             } else {
                 pfri[1] = n.length;
@@ -698,7 +698,7 @@ function findrangeindex(ctx: Context, v: string, vp: string) {
             return pfri;
         } else if (p.length > n.length) {
             if (
-                !_.isNil(v_a[i + 1]) &&
+                !isNil(v_a[i + 1]) &&
                 (v_a[i + 1].substring(0, 1) === '"' ||
                     v_a[i + 1].substring(0, 1) === "{" ||
                     v_a[i + 1].substring(0, 1) === "}")
@@ -720,10 +720,10 @@ function findrangeindex(ctx: Context, v: string, vp: string) {
         const p = vp_a[i];
         const n = v_a[i];
 
-        if (_.isNil(p)) {
+        if (isNil(p)) {
             pfri[0] = v_a.length - 1;
 
-            if (!_.isNil(n)) {
+            if (!isNil(n)) {
                 pfri[1] = n.length;
             } else {
                 pfri[1] = 1;
@@ -737,7 +737,7 @@ function findrangeindex(ctx: Context, v: string, vp: string) {
             ) {
                 pfri[1] = n.length;
             } else if (
-                !_.isNil(v_a[i + 1]) &&
+                !isNil(v_a[i + 1]) &&
                 v_a[i + 1].substring(0, 1) === '"' &&
                 (v_a[i + 1].substring(0, 1) === "{" ||
                     v_a[i + 1].substring(0, 1) === "}")
@@ -745,7 +745,7 @@ function findrangeindex(ctx: Context, v: string, vp: string) {
                 pfri[0] += 1;
                 pfri[1] = 1;
             } else if (
-                !_.isNil(n) &&
+                !isNil(n) &&
                 n.substring(0, 1) === '"' &&
                 n.substring(n.length - 1, 1) === '"' &&
                 p.substring(0, 1) === '"' &&
@@ -753,7 +753,7 @@ function findrangeindex(ctx: Context, v: string, vp: string) {
             ) {
                 pfri[1] = n.length;
             } else if (
-                !_.isNil(n) &&
+                !isNil(n) &&
                 n.substring(0, 1) === "{" &&
                 n.substring(n.length - 1, 1) === "}" &&
                 p.substring(0, 1) === "{" &&
@@ -771,23 +771,23 @@ function findrangeindex(ctx: Context, v: string, vp: string) {
 
             return pfri;
         } else if (p.length > n.length) {
-            if (!_.isNil(p) && p.substring(0, 1) === '"') {
+            if (!isNil(p) && p.substring(0, 1) === '"') {
                 pfri[1] = n.length;
-            } else if (_.isNil(v_a[i + 1]) && /{.*?}/.test(v_a[i + 1])) {
+            } else if (isNil(v_a[i + 1]) && /{.*?}/.test(v_a[i + 1])) {
                 pfri[0] += 1;
                 pfri[1] = v_a[i + 1].length;
             } else if (
-                !_.isNil(p) &&
+                !isNil(p) &&
                 v_a[i + 1].substring(0, 1) === '"' &&
                 (p.indexOf("{") > -1 || p.indexOf("}") > -1)
             ) {
                 pfri[0] += 1;
                 pfri[1] = 1;
-            } else if (!_.isNil(p) && (p.indexOf("{") > -1 || p.indexOf("}") > -1)) {
+            } else if (!isNil(p) && (p.indexOf("{") > -1 || p.indexOf("}") > -1)) {
             } else if (
-                !_.isNil(p) &&
-                !_.startsWith(p[0], "=") &&
-                _.startsWith(n, "=")
+                !isNil(p) &&
+                !startsWith(p[0], "=") &&
+                startsWith(n, "=")
             ) {
                 return [vlen - 1, v_a[vlen - 1].length];
             } else {
@@ -845,7 +845,7 @@ export function handleFormulaInput(
                     ];
             } else {
                 ctx.formulaCache.functionRangeIndex = [
-                    _.indexOf(
+                    indexOf(
                         currSelection.anchorNode?.parentNode?.parentNode?.childNodes,
                         // @ts-ignore
                         currSelection.anchorNode?.parentNode
@@ -881,13 +881,13 @@ export function handleFormulaInput(
 
             rangeHightlightselected(ctx, $editor);
         }
-    } else if (_.startsWith(value1txt, "=") && !_.startsWith(value, "=")) {
+    } else if (startsWith(value1txt, "=") && !startsWith(value, "=")) {
         if ($copyTo) $copyTo.innerHTML = value;
         $editor.innerHTML = escapeHTMLTag(value);
-    } else if (!_.startsWith(value1txt, "=")) {
+    } else if (!startsWith(value1txt, "=")) {
         if (!$copyTo) return;
         if ($copyTo.id === "luckysheet-rich-text-editor") {
-            if (!_.startsWith($copyTo.innerHTML, "<span")) {
+            if (!startsWith($copyTo.innerHTML, "<span")) {
                 $copyTo.innerHTML = escapeHTMLTag(value);
             }
         } else {

@@ -1,4 +1,4 @@
-import * as _ from "es-toolkit/compat";
+import {forEach, isEmpty, isNil, isPlainObject, pick, round, set} from "es-toolkit/compat";
 import {isdatatypemulti} from ".";
 import type {Context} from "../context";
 import {locale} from "../locale";
@@ -60,11 +60,11 @@ export function getFontSet(
     defaultFontSize: number,
     ctx?: Context
 ) {
-    if (_.isPlainObject(format)) {
+    if (isPlainObject(format)) {
         const fontAttr: string[] = [];
 
         // font-style
-        if (format.it === "0" || format.it === 0 || _.isNil(format.it)) {
+        if (format.it === "0" || format.it === 0 || isNil(format.it)) {
             fontAttr.push("normal");
         } else {
             fontAttr.push("italic");
@@ -74,7 +74,7 @@ export function getFontSet(
         fontAttr.push("normal");
 
         // font-weight
-        if (format.bl === "0" || format.bl === 0 || _.isNil(format.bl)) {
+        if (format.bl === "0" || format.bl === 0 || isNil(format.bl)) {
             fontAttr.push("normal");
         } else {
             fontAttr.push("bold");
@@ -236,7 +236,7 @@ export function getMeasureText(
 
 export function isSupportBoundingBox(ctx: CanvasRenderingContext2D) {
     const measureText = ctx.measureText("田");
-    if (_.isNil(measureText.actualBoundingBoxAscent)) {
+    if (isNil(measureText.actualBoundingBoxAscent)) {
         return false;
     }
     return true;
@@ -259,7 +259,7 @@ export function drawLineInfo(
         return;
     }
 
-    if (wordGroup.inline === true && !_.isNil(wordGroup.style)) {
+    if (wordGroup.inline === true && !isNil(wordGroup.style)) {
         cancelLine = wordGroup.style.cl;
         underLine = wordGroup.style.un;
     }
@@ -380,7 +380,7 @@ export function getCellTextInfo(
 
     let isRotateUp = 1;
 
-    if (_.isNil(rt)) {
+    if (isNil(rt)) {
         if (tr === "0") {
             rt = 0;
         } else if (tr === "1") {
@@ -393,7 +393,7 @@ export function getCellTextInfo(
             rt = 180;
         }
 
-        if (_.isNil(rt)) {
+        if (isNil(rt)) {
             rt = 0;
         }
     }
@@ -510,14 +510,14 @@ export function getCellTextInfo(
 
         if (cell instanceof Object) {
             value = cell.m;
-            if (_.isNil(value)) {
+            if (isNil(value)) {
                 value = cell.v;
             }
         } else {
             value = cell;
         }
 
-        if (_.isEmpty(value)) {
+        if (isEmpty(value)) {
             return null;
         }
     }
@@ -543,7 +543,7 @@ export function getCellTextInfo(
                     showValue = "";
 
                     if (
-                        !_.isNil(preShareCell) &&
+                        !isNil(preShareCell) &&
                         preShareCell.wrap !== true &&
                         i < inlineStringArr.length - 1
                     ) {
@@ -576,7 +576,7 @@ export function getCellTextInfo(
                 if (tb === "2" && !shareCell.wrap) {
                     if (
                         textH_all_cache > cellHeight &&
-                        !_.isNil(textH_all_Column[colIndex])
+                        !isNil(textH_all_Column[colIndex])
                     ) {
                         // textW_all += textW;
                         // textH_all = Math.max(textH_all,textH_all_cache);
@@ -591,7 +591,7 @@ export function getCellTextInfo(
                     textH_all_ColumnHeight.push(textH_all_cache);
                 }
 
-                if (_.isNil(textH_all_Column[colIndex])) {
+                if (isNil(textH_all_Column[colIndex])) {
                     textH_all_Column[colIndex] = [];
                 }
 
@@ -642,7 +642,7 @@ export function getCellTextInfo(
                 if (tb === "2") {
                     if (
                         textH_all_cache > cellHeight &&
-                        !_.isNil(textH_all_Column[colIndex])
+                        !isNil(textH_all_Column[colIndex])
                     ) {
                         // textW_all += textW;
                         // textH_all = Math.max(textH_all,textH_all_cache);
@@ -656,7 +656,7 @@ export function getCellTextInfo(
                     textH_all_ColumnHeight.push(textH_all_cache);
                 }
 
-                if (_.isNil(textH_all_Column[colIndex])) {
+                if (isNil(textH_all_Column[colIndex])) {
                     textH_all_Column[colIndex] = [];
                 }
 
@@ -817,7 +817,7 @@ export function getCellTextInfo(
                                 sheetCtx,
                                 sc.fontset
                             );
-                            if (_.isNil(text_all_split[splitIndex])) {
+                            if (isNil(text_all_split[splitIndex])) {
                                 text_all_split[splitIndex] = [];
                             }
                             text_all_split[splitIndex].push({
@@ -849,7 +849,7 @@ export function getCellTextInfo(
                     let textHeight = 0;
                     for (let s = 0; s < shareCells.length; s += 1) {
                         const sc = shareCells[s];
-                        if (_.isNil(sc.measureText)) {
+                        if (isNil(sc.measureText)) {
                             sc.measureText = getMeasureText(
                                 sc.v,
                                 renderCtx,
@@ -885,12 +885,12 @@ export function getCellTextInfo(
                         // console.log("all",anchor, i , str);
                         if (
                             height + space_height > cellHeight &&
-                            !_.isNil(text_all_split[splitIndex]) &&
+                            !isNil(text_all_split[splitIndex]) &&
                             tb === "2"
                         ) {
                             // console.log("cut",anchor, i , str);
 
-                            if (!_.isNil(spaceOrTwoByteIndex) && spaceOrTwoByteIndex < i) {
+                            if (!isNil(spaceOrTwoByteIndex) && spaceOrTwoByteIndex < i) {
                                 for (let s = 0; s < spaceOrTwoByteIndex - anchor; s += 1) {
                                     const sc = shareCells[s];
                                     text_all_split[splitIndex].push({
@@ -942,7 +942,7 @@ export function getCellTextInfo(
                             }
                         } else if (i === inlineStringArr.length) {
                             // console.log("last",anchor, i , str);
-                            if (_.isNil(text_all_split[splitIndex])) {
+                            if (isNil(text_all_split[splitIndex])) {
                                 text_all_split[splitIndex] = [];
                             }
                             for (let s = 0; s < shareCells.length; s += 1) {
@@ -965,7 +965,7 @@ export function getCellTextInfo(
                             }
                             break;
                         } else {
-                            if (_.isNil(text_all_split[splitIndex])) {
+                            if (isNil(text_all_split[splitIndex])) {
                                 text_all_split[splitIndex] = [];
                             }
                             i += 1;
@@ -974,10 +974,10 @@ export function getCellTextInfo(
                         // plain
                         if (
                             width + space_width > cellWidth &&
-                            !_.isNil(text_all_split[splitIndex]) &&
+                            !isNil(text_all_split[splitIndex]) &&
                             tb === "2"
                         ) {
-                            if (!_.isNil(spaceOrTwoByteIndex) && spaceOrTwoByteIndex < i) {
+                            if (!isNil(spaceOrTwoByteIndex) && spaceOrTwoByteIndex < i) {
                                 for (let s = 0; s < spaceOrTwoByteIndex - anchor; s += 1) {
                                     const sc = shareCells[s];
                                     text_all_split[splitIndex].push({
@@ -1028,7 +1028,7 @@ export function getCellTextInfo(
                                 splitIndex += 1;
                             }
                         } else if (i === inlineStringArr.length) {
-                            if (_.isNil(text_all_split[splitIndex])) {
+                            if (isNil(text_all_split[splitIndex])) {
                                 text_all_split[splitIndex] = [];
                             }
 
@@ -1053,7 +1053,7 @@ export function getCellTextInfo(
 
                             break;
                         } else {
-                            if (_.isNil(text_all_split[splitIndex])) {
+                            if (isNil(text_all_split[splitIndex])) {
                                 text_all_split[splitIndex] = [];
                             }
                             i += 1;
@@ -1096,11 +1096,11 @@ export function getCellTextInfo(
                         // console.log("all",anchor, i , str);
                         if (
                             height + space_height > cellHeight &&
-                            !_.isNil(text_all_split[splitIndex])
+                            !isNil(text_all_split[splitIndex])
                         ) {
                             // console.log("cut",anchor, i , str);
 
-                            if (!_.isNil(spaceOrTwoByte) && spaceOrTwoByte.index < i) {
+                            if (!isNil(spaceOrTwoByte) && spaceOrTwoByte.index < i) {
                                 anchor = spaceOrTwoByte.index;
 
                                 i = spaceOrTwoByte.index + 1;
@@ -1145,7 +1145,7 @@ export function getCellTextInfo(
                             }
                         } else if (i === value.length) {
                             // console.log("last",anchor, i , str);
-                            if (_.isNil(text_all_split[splitIndex])) {
+                            if (isNil(text_all_split[splitIndex])) {
                                 text_all_split[splitIndex] = [];
                             }
                             text_all_split[splitIndex].push({
@@ -1162,7 +1162,7 @@ export function getCellTextInfo(
                             });
                             break;
                         } else {
-                            if (_.isNil(text_all_split[splitIndex])) {
+                            if (isNil(text_all_split[splitIndex])) {
                                 text_all_split[splitIndex] = [];
                             }
                             i += 1;
@@ -1171,10 +1171,10 @@ export function getCellTextInfo(
                         // plain
                         if (
                             width + space_width > cellWidth &&
-                            !_.isNil(text_all_split[splitIndex])
+                            !isNil(text_all_split[splitIndex])
                         ) {
                             // console.log(spaceOrTwoByte, i, anchor);
-                            if (!_.isNil(spaceOrTwoByte) && spaceOrTwoByte.index < i) {
+                            if (!isNil(spaceOrTwoByte) && spaceOrTwoByte.index < i) {
                                 anchor = spaceOrTwoByte.index;
 
                                 i = spaceOrTwoByte.index + 1;
@@ -1219,7 +1219,7 @@ export function getCellTextInfo(
                                 if (parsedTextHeight >= cellHeight) break;
                             }
                         } else if (i === value.length) {
-                            if (_.isNil(text_all_split[splitIndex])) {
+                            if (isNil(text_all_split[splitIndex])) {
                                 text_all_split[splitIndex] = [];
                             }
                             text_all_split[splitIndex].push({
@@ -1237,7 +1237,7 @@ export function getCellTextInfo(
 
                             break;
                         } else {
-                            if (_.isNil(text_all_split[splitIndex])) {
+                            if (isNil(text_all_split[splitIndex])) {
                                 text_all_split[splitIndex] = [];
                             }
                             i += 1;
@@ -1258,7 +1258,7 @@ export function getCellTextInfo(
             if (splitLen === 0) return textContent;
             for (let j = 0; j < splitLen; j += 1) {
                 const splitLists = text_all_split[j];
-                if (_.isNil(splitLists)) {
+                if (isNil(splitLists)) {
                     continue;
                 }
                 let sWidth = 0;
@@ -1349,7 +1349,7 @@ export function getCellTextInfo(
                 renderCtx.textAlign = "end";
                 for (let j = 0; j < splitLen; j += 1) {
                     const splitLists = text_all_split[j];
-                    if (_.isNil(splitLists)) {
+                    if (isNil(splitLists)) {
                         continue;
                     }
                     const size = split_all_size[j];
@@ -1482,7 +1482,7 @@ export function getCellTextInfo(
             } else {
                 for (let j = 0; j < splitLen; j += 1) {
                     const splitLists = text_all_split[j];
-                    if (_.isNil(splitLists)) {
+                    if (isNil(splitLists)) {
                         continue;
                     }
                     const size = split_all_size[j];

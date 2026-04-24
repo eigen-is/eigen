@@ -1,4 +1,4 @@
-import * as _ from "es-toolkit/compat";
+import {forEach, isNil} from "es-toolkit/compat";
 import {Context, getFlowdata} from "../context";
 import type {CellMatrix} from "../../engine/types";
 import {Sheet} from "../types";
@@ -70,7 +70,7 @@ export function setConditionRules(
             const c2 = rangeArr[0]?.column[1];
             if (r1 === r2 && c1 === c2) {
                 const d = getFlowdata(ctx);
-                if (!d || _.isNil(r1) || _.isNil(c1)) return;
+                if (!d || isNil(r1) || isNil(c1)) return;
                 v = getCellValue(r1, c1, d);
                 conditionRange.push({
                     row: rangeArr?.[0]?.row,
@@ -81,7 +81,7 @@ export function setConditionRules(
                 ctx.warnDialog = conditionformat.onlySingleCell;
             }
         } else if (rangeArr.length === 0) {
-            if (_.isNaN(v) || v === "") {
+            if (Number.isNaN(v) || v === "") {
                 ctx.warnDialog = conditionformat.conditionValueCanOnly;
                 return;
             }
@@ -104,7 +104,7 @@ export function setConditionRules(
             const c2 = rangeArr1[0]?.column[1];
             if (r1 === r2 && c1 === c2) {
                 const d = getFlowdata(ctx);
-                if (!d || _.isNil(r1) || _.isNil(c1)) return;
+                if (!d || isNil(r1) || isNil(c1)) return;
                 v1 = getCellValue(r1, c1, d);
                 conditionRange.push({
                     row: rangeArr1?.[0]?.row,
@@ -116,7 +116,7 @@ export function setConditionRules(
                 return;
             }
         } else if (rangeArr1.length === 0) {
-            if (_.isNaN(v1) || v1 === "") {
+            if (Number.isNaN(v1) || v1 === "") {
                 ctx.warnDialog = conditionformat.conditionValueCanOnly;
                 return;
             }
@@ -134,7 +134,7 @@ export function setConditionRules(
             const c2 = rangeArr2[0]?.column[1];
             if (r1 === r2 && c1 === c2) {
                 const d = getFlowdata(ctx);
-                if (!d || _.isNil(r1) || _.isNil(c1)) return;
+                if (!d || isNil(r1) || isNil(c1)) return;
                 v2 = getCellValue(r1, c1, d);
                 conditionRange.push({
                     row: rangeArr2?.[0]?.row,
@@ -145,7 +145,7 @@ export function setConditionRules(
                 return;
             }
         } else if (rangeArr2.length === 0) {
-            if (_.isNaN(v2) || v2 === "") {
+            if (Number.isNaN(v2) || v2 === "") {
                 ctx.warnDialog = conditionformat.conditionValueCanOnly;
             } else {
                 conditionValue.push(v2);
@@ -250,7 +250,7 @@ export function getColorGradation(
 }
 
 export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
-    if (_.isNil(ruleArr)) {
+    if (isNil(ruleArr)) {
         ruleArr = [];
     }
     // conditional computation storage
@@ -270,29 +270,29 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                             c <= cellrange[s].column[1];
                             c += 1
                         ) {
-                            if (_.isNil(d[r]) || _.isNil(d[r][c])) {
+                            if (isNil(d[r]) || isNil(d[r][c])) {
                                 continue;
                             }
                             const cell = d[r][c];
                             if (
-                                !_.isNil(cell) &&
-                                !_.isNil(cell.ct) &&
+                                !isNil(cell) &&
+                                !isNil(cell.ct) &&
                                 cell.ct.t === "n" &&
-                                !_.isNil(cell.v)
+                                !isNil(cell.v)
                             ) {
                                 const numVal = Number(cell.v);
-                                if (_.isNil(max) || numVal > max) {
+                                if (isNil(max) || numVal > max) {
                                     max = numVal;
                                 }
 
-                                if (_.isNil(min) || numVal < min) {
+                                if (isNil(min) || numVal < min) {
                                     min = numVal;
                                 }
                             }
                         }
                     }
                 }
-                if (!_.isNil(max) && !_.isNil(min)) {
+                if (!isNil(max) && !isNil(min)) {
                     if (min < 0) {
                         // selection range contains negative numbers
                         const plusLen = Math.round((max / (max - min)) * 10) / 10; // proportion of positive numbers
@@ -310,17 +310,17 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                                     c <= cellrange[s].column[1];
                                     c += 1
                                 ) {
-                                    if (_.isNil(d[r]) || _.isNil(d[r][c])) {
+                                    if (isNil(d[r]) || isNil(d[r][c])) {
                                         continue;
                                     }
 
                                     const cell = d[r][c];
 
                                     if (
-                                        !_.isNil(cell) &&
-                                        !_.isNil(cell.ct) &&
+                                        !isNil(cell) &&
+                                        !isNil(cell.ct) &&
                                         cell.ct.t === "n" &&
-                                        !_.isNil(cell.v)
+                                        !isNil(cell.v)
                                     ) {
                                         if (Number(cell.v) < 0) {
                                             // negative number
@@ -394,17 +394,17 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                                     c <= cellrange[s].column[1];
                                     c += 1
                                 ) {
-                                    if (_.isNil(d[r]) || _.isNil(d[r][c])) {
+                                    if (isNil(d[r]) || isNil(d[r][c])) {
                                         continue;
                                     }
 
                                     const cell = d[r][c];
 
                                     if (
-                                        !_.isNil(cell) &&
-                                        !_.isNil(cell.ct) &&
+                                        !isNil(cell) &&
+                                        !isNil(cell.ct) &&
                                         cell.ct.t === "n" &&
-                                        !_.isNil(cell.v)
+                                        !isNil(cell.v)
                                     ) {
                                         let valueLen;
                                         if (max === 0) {
@@ -451,34 +451,34 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                             c <= cellrange[s].column[1];
                             c += 1
                         ) {
-                            if (_.isNil(d[r]) || _.isNil(d[r][c])) {
+                            if (isNil(d[r]) || isNil(d[r][c])) {
                                 continue;
                             }
 
                             const cell = d[r][c];
 
                             if (
-                                !_.isNil(cell) &&
-                                !_.isNil(cell.ct) &&
+                                !isNil(cell) &&
+                                !isNil(cell.ct) &&
                                 cell.ct.t === "n" &&
-                                !_.isNil(cell.v)
+                                !isNil(cell.v)
                             ) {
                                 const numVal = Number(cell.v);
                                 count += 1;
                                 sum += numVal;
 
-                                if (_.isNil(max) || numVal > max) {
+                                if (isNil(max) || numVal > max) {
                                     max = numVal;
                                 }
 
-                                if (_.isNil(min) || numVal < min) {
+                                if (isNil(min) || numVal < min) {
                                     min = numVal;
                                 }
                             }
                         }
                     }
                 }
-                if (!_.isNil(max) && !_.isNil(min)) {
+                if (!isNil(max) && !isNil(min)) {
                     if (format.length === 3) {
                         // 3-color scale
                         const avg = Math.floor(sum / count);
@@ -494,17 +494,17 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                                     c <= cellrange[s].column[1];
                                     c += 1
                                 ) {
-                                    if (_.isNil(d[r]) || _.isNil(d[r][c])) {
+                                    if (isNil(d[r]) || isNil(d[r][c])) {
                                         continue;
                                     }
 
                                     const cell = d[r][c];
 
                                     if (
-                                        !_.isNil(cell) &&
-                                        !_.isNil(cell.ct) &&
+                                        !isNil(cell) &&
+                                        !isNil(cell.ct) &&
                                         cell.ct.t === "n" &&
-                                        !_.isNil(cell.v)
+                                        !isNil(cell.v)
                                     ) {
                                         if (Number(cell.v) === min) {
                                             if (`${r}_${c}` in computeMap) {
@@ -590,17 +590,17 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                                     c <= cellrange[s].column[1];
                                     c += 1
                                 ) {
-                                    if (_.isNil(d[r]) || _.isNil(d[r][c])) {
+                                    if (isNil(d[r]) || isNil(d[r][c])) {
                                         continue;
                                     }
 
                                     const cell = d[r][c];
 
                                     if (
-                                        !_.isNil(cell) &&
-                                        !_.isNil(cell.ct) &&
+                                        !isNil(cell) &&
+                                        !isNil(cell.ct) &&
                                         cell.ct.t === "n" &&
-                                        !_.isNil(cell.v)
+                                        !isNil(cell.v)
                                     ) {
                                         if (Number(cell.v) === min) {
                                             if (`${r}_${c}` in computeMap) {
@@ -672,12 +672,12 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                                 c <= cellrange[s].column[1];
                                 c += 1
                             ) {
-                                if (_.isNil(d[r]) || _.isNil(d[r][c])) {
+                                if (isNil(d[r]) || isNil(d[r][c])) {
                                     continue;
                                 }
                                 // cell value
                                 const cell = d[r][c];
-                                if (_.isNil(cell) || _.isNil(cell.v) || isRealNull(cell.v)) {
+                                if (isNil(cell) || isNil(cell.v) || isRealNull(cell.v)) {
                                     continue;
                                 }
                                 // matches condition
@@ -755,12 +755,12 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                                 c <= cellrange[s].column[1];
                                 c += 1
                             ) {
-                                if (_.isNil(d[r]) || _.isNil(d[r][c])) {
+                                if (isNil(d[r]) || isNil(d[r][c])) {
                                     continue;
                                 }
                                 // cell value
                                 const cell = d[r][c];
-                                if (_.isNil(cell) || _.isNil(cell.v) || isRealNull(cell.v)) {
+                                if (isNil(cell) || isNil(cell.v) || isRealNull(cell.v)) {
                                     continue;
                                 }
                                 // matches condition
@@ -803,13 +803,13 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                                 c <= cellrange[s].column[1];
                                 c += 1
                             ) {
-                                if (_.isNil(d[r]) || _.isNil(d[r][c])) {
+                                if (isNil(d[r]) || isNil(d[r][c])) {
                                     continue;
                                 }
                                 // cell value type is date
                                 if (
-                                    !_.isNil(d[r][c]) &&
-                                    !_.isNil(d[r][c]!.ct) &&
+                                    !isNil(d[r][c]) &&
+                                    !isNil(d[r][c]!.ct) &&
                                     d[r][c]!.ct!.t === "d"
                                 ) {
                                     // cell value
@@ -852,7 +852,7 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                         // iterate over apply range and evaluate
                         if (conditionValue0 === "0") {
                             // duplicate values
-                            _.forEach(dmap, (x) => {
+                            forEach(dmap, (x) => {
                                 if (x.length > 1) {
                                     for (let j = 0; j < x.length; j += 1) {
                                         if (`${x[j].r}_${x[j].c}` in computeMap) {
@@ -869,7 +869,7 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                             });
                         } else if (conditionValue0 === "1") {
                             // unique values
-                            _.forEach(dmap, (x) => {
+                            forEach(dmap, (x) => {
                                 if (x.length === 1) {
                                     if (`${x[0].r}_${x[0].c}` in computeMap) {
                                         computeMap[`${x[0].r}_${x[0].c}`].textColor = textColor;
@@ -903,14 +903,14 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                                 c <= cellrange[s].column[1];
                                 c += 1
                             ) {
-                                if (_.isNil(d[r]) || _.isNil(d[r][c])) {
+                                if (isNil(d[r]) || isNil(d[r][c])) {
                                     continue;
                                 }
 
                                 // cell value type is numeric
                                 if (
-                                    !_.isNil(d[r][c]) &&
-                                    !_.isNil(d[r][c]!.ct) &&
+                                    !isNil(d[r][c]) &&
+                                    !isNil(d[r][c]!.ct) &&
                                     d[r][c]!.ct!.t === "n"
                                 ) {
                                     dArr.push(Number(getCellValue(r, c, d)));
@@ -964,14 +964,14 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                                     c <= cellrange[s].column[1];
                                     c += 1
                                 ) {
-                                    if (_.isNil(d[r]) || _.isNil(d[r][c])) {
+                                    if (isNil(d[r]) || isNil(d[r][c])) {
                                         continue;
                                     }
 
                                     // cell value
                                     const cellVal = Number(getCellValue(r, c, d));
                                     // matches condition
-                                    if (!_.isNil(cArr) && cArr.indexOf(cellVal) !== -1) {
+                                    if (!isNil(cArr) && cArr.indexOf(cellVal) !== -1) {
                                         if (`${r}_${c}` in computeMap) {
                                             computeMap[`${r}_${c}`].textColor = textColor;
                                             computeMap[`${r}_${c}`].cellColor = cellColor;
@@ -1007,7 +1007,7 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                                         c <= cellrange[s].column[1];
                                         c += 1
                                     ) {
-                                        if (_.isNil(d[r]) || _.isNil(d[r][c])) {
+                                        if (isNil(d[r]) || isNil(d[r][c])) {
                                             continue;
                                         }
 
@@ -1039,7 +1039,7 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                                         c <= cellrange[s].column[1];
                                         c += 1
                                     ) {
-                                        if (_.isNil(d[r]) || _.isNil(d[r][c])) {
+                                        if (isNil(d[r]) || isNil(d[r][c])) {
                                             continue;
                                         }
 
@@ -1132,7 +1132,7 @@ export function getComputeMap(ctx: Context) {
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
     const ruleArr = ctx.luckysheetfile[index].luckysheet_conditionformat_save;
     const {data} = ctx.luckysheetfile[index];
-    if (_.isNil(data)) return null;
+    if (isNil(data)) return null;
 
     // Return cached result if inputs haven't changed (reference equality)
     if (
@@ -1155,7 +1155,7 @@ export function getComputeMap(ctx: Context) {
 }
 
 export function checkCF(r: number, c: number, computeMap: any) {
-    if (!_.isNil(computeMap) && `${r}_${c}` in computeMap) {
+    if (!isNil(computeMap) && `${r}_${c}` in computeMap) {
         return computeMap[`${r}_${c}`];
     }
     return null;

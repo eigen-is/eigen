@@ -1,4 +1,4 @@
-import * as _ from "es-toolkit/compat";
+import {cloneDeep, pick} from "es-toolkit/compat";
 import dayjs from "dayjs";
 
 import {Context, getFlowdata} from "../context";
@@ -522,8 +522,8 @@ function fillCopy(data: (Cell | null | undefined)[], len: number) {
 
     for (let i = 1; i <= len; i += 1) {
         const index = (i - 1) % data.length;
-        const d = _.cloneDeep(data[index]);
-        if (!_.isUndefined(d)) {
+        const d = cloneDeep(data[index]);
+        if (!d === undefined) {
             applyData.push(d);
         }
     }
@@ -540,7 +540,7 @@ function fillSeries(
 
     const dataNumArr = [];
     for (let j = 0; j < data.length; j += 1) {
-        const d = _.cloneDeep(data[j]);
+        const d = cloneDeep(data[j]);
         if (d != null) {
             dataNumArr.push(Number(d.v));
         }
@@ -555,7 +555,7 @@ function fillSeries(
         // geometric sequence
         for (let i = 1; i <= len; i += 1) {
             const index = (i - 1) % data.length;
-            const d = _.cloneDeep(data[index]);
+            const d = cloneDeep(data[index]);
 
             if (d != null) {
                 let num;
@@ -581,7 +581,7 @@ function fillSeries(
         const xArr = getXArr(data.length);
         for (let i = 1; i <= len; i += 1) {
             const index = (i - 1) % data.length;
-            const d = _.cloneDeep(data[index]);
+            const d = cloneDeep(data[index]);
             if (d != null) {
                 let y;
                 if (direction === "down" || direction === "right") {
@@ -612,7 +612,7 @@ function fillExtendNumber(
 
     for (let i = 1; i <= len; i += 1) {
         const index = (i - 1) % data.length;
-        const d = _.cloneDeep(data[index]);
+        const d = cloneDeep(data[index]);
         let last = data[data.length - 1]?.m;
         if (d != null && last != null) {
             last = `${last}`;
@@ -644,7 +644,7 @@ function fillDays(
     const applyData = [];
 
     for (let i = 1; i <= len; i += 1) {
-        const d = _.cloneDeep(data[data.length - 1]);
+        const d = cloneDeep(data[data.length - 1]);
         if (d != null) {
             let date = update("yyyy-MM-dd", d.v);
             date = dayjs(date)
@@ -672,7 +672,7 @@ function fillMonths(
     const applyData = [];
 
     for (let i = 1; i <= len; i += 1) {
-        const d = _.cloneDeep(data[data.length - 1]);
+        const d = cloneDeep(data[data.length - 1]);
         if (d != null) {
             let date = update("yyyy-MM-dd", d.v);
             date = dayjs(date)
@@ -699,7 +699,7 @@ function fillYears(
     const applyData = [];
 
     for (let i = 1; i <= len; i += 1) {
-        const d = _.cloneDeep(data[data.length - 1]);
+        const d = cloneDeep(data[data.length - 1]);
         if (d != null) {
             let date = update("yyyy-MM-dd", d.v);
             date = dayjs(date)
@@ -727,7 +727,7 @@ function fillChnWeek(
 
     for (let i = 1; i <= len; i += 1) {
         const index = (i - 1) % data.length;
-        const d = _.cloneDeep(data[index]);
+        const d = cloneDeep(data[index]);
 
         let num;
         const m = data[data.length - 1]?.m;
@@ -782,7 +782,7 @@ function fillChnWeek2(
 
     for (let i = 1; i <= len; i += 1) {
         const index = (i - 1) % data.length;
-        const d = _.cloneDeep(data[index]);
+        const d = cloneDeep(data[index]);
 
         let num;
         const m = data[data.length - 1]?.m;
@@ -839,7 +839,7 @@ function fillChnWeek3(
 
     for (let i = 1; i <= len; i += 1) {
         const index = (i - 1) % data.length;
-        const d = _.cloneDeep(data[index]);
+        const d = cloneDeep(data[index]);
 
         let num;
         const m = data[data.length - 1]?.m;
@@ -896,7 +896,7 @@ function fillChnNumber(
 
     for (let i = 1; i <= len; i += 1) {
         const index = (i - 1) % data.length;
-        const d = _.cloneDeep(data[index]);
+        const d = cloneDeep(data[index]);
 
         const m = data[data.length - 1]?.m;
         if (m != null && d != null) {
@@ -1029,7 +1029,7 @@ function getDataByType(
     type: string,
     dataType?: string
 ) {
-    data = _.cloneDeep(data);
+    data = cloneDeep(data);
     let applyData: (Cell | null | undefined)[] = [];
 
     if (type === "0" || data.length === 1) {
@@ -1283,7 +1283,7 @@ function getDataByType(
 
                 for (let i = 1; i <= len; i += 1) {
                     const index = (i - 1) % data.length;
-                    const d = _.cloneDeep(data[index]);
+                    const d = cloneDeep(data[index]);
                     const last = data[data.length - 1]?.m;
                     if (d != null && last != null) {
                         const day = dayjs(last)
@@ -1326,7 +1326,7 @@ function getDataByType(
                     let step: number; // compare against the first element in the array
                     for (let i = 1; i <= len; i += 1) {
                         const index = (i - 1) % data.length;
-                        const d = _.cloneDeep(data[index]);
+                        const d = cloneDeep(data[index]);
                         if (d != null) {
                             const num = Math.ceil(i / data.length);
                             if (index === 0) {
@@ -1369,7 +1369,7 @@ function getDataByType(
                     let step: number; // compare against the first element in the array
                     for (let i = 1; i <= len; i += 1) {
                         const index = (i - 1) % data.length;
-                        const d = _.cloneDeep(data[index]);
+                        const d = cloneDeep(data[index]);
                         if (d != null) {
                             const num = Math.ceil(i / data.length);
                             if (index === 0) {
@@ -1413,7 +1413,7 @@ function getDataByType(
 
                 for (let i = 1; i <= len; i += 1) {
                     const index = (i - 1) % data.length;
-                    const d = _.cloneDeep(data[index]);
+                    const d = cloneDeep(data[index]);
                     const last = data[data.length - 1]?.m;
                     if (d != null) {
                         const day = dayjs(last)
@@ -1456,7 +1456,7 @@ function getDataByType(
                     let step: number; // compare against the first element in the array
                     for (let i = 1; i <= len; i += 1) {
                         const index = (i - 1) % data.length;
-                        const d = _.cloneDeep(data[index]);
+                        const d = cloneDeep(data[index]);
                         if (d != null) {
                             const num = Math.ceil(i / data.length);
                             if (index === 0) {
@@ -1499,7 +1499,7 @@ function getDataByType(
                     let step: number; // compare against the first element in the array
                     for (let i = 1; i <= len; i += 1) {
                         const index = (i - 1) % data.length;
-                        const d = _.cloneDeep(data[index]);
+                        const d = cloneDeep(data[index]);
                         if (d != null) {
                             const num = Math.ceil(i / data.length);
                             if (index === 0) {
@@ -1566,7 +1566,7 @@ function getDataByType(
                 let step: number; // compare against the first element in the array
                 for (let i = 1; i <= len; i += 1) {
                     const index = (i - 1) % data.length;
-                    const d = _.cloneDeep(data[index]);
+                    const d = cloneDeep(data[index]);
                     if (d != null) {
                         const num = Math.ceil(i / data.length);
                         if (index === 0) {
@@ -1605,7 +1605,7 @@ function getDataByType(
                 let step: number; // compare against the first element in the array
                 for (let i = 1; i <= len; i += 1) {
                     const index = (i - 1) % data.length;
-                    const d = _.cloneDeep(data[index]);
+                    const d = cloneDeep(data[index]);
                     if (d != null) {
                         const num = Math.ceil(i / data.length);
                         if (index === 0) {
@@ -1657,7 +1657,7 @@ function getDataByType(
                 let step: number; // compare against the first element in the array
                 for (let i = 1; i <= len; i += 1) {
                     const index = (i - 1) % data.length;
-                    const d = _.cloneDeep(data[index]);
+                    const d = cloneDeep(data[index]);
                     if (d != null) {
                         const num = Math.ceil(i / data.length);
                         if (index === 0) {
@@ -1696,7 +1696,7 @@ function getDataByType(
                 let step: number; // compare against the first element in the array
                 for (let i = 1; i <= len; i += 1) {
                     const index = (i - 1) % data.length;
-                    const d = _.cloneDeep(data[index]);
+                    const d = cloneDeep(data[index]);
                     const num = Math.ceil(i / data.length);
                     if (d != null) {
                         if (index === 0) {
@@ -2290,12 +2290,12 @@ export function updateDropCell(ctx: Context) {
     const hiddenRows = new Set(Object.keys(file.config?.rowhidden || {}));
     const hiddenCols = new Set(Object.keys(file.config?.colhidden || {}));
 
-    const cfg = _.cloneDeep(ctx.config);
+    const cfg = cloneDeep(ctx.config);
     if (cfg.borderInfo == null) {
         cfg.borderInfo = [];
     }
     const borderInfoCompute = getBorderInfoCompute(ctx, ctx.currentSheetId);
-    const dataVerification = _.cloneDeep(file.dataVerification);
+    const dataVerification = cloneDeep(file.dataVerification);
 
     const {direction} = dropCellCache;
     // const type = dropCellCache.applyType;
@@ -2841,7 +2841,7 @@ export function onDropCellSelectEnd(
         let col_e = last.column[1];
 
         // copy range
-        dropCellCache.copyRange = _.cloneDeep(_.pick(last, ["row", "column"]));
+        dropCellCache.copyRange = cloneDeep(pick(last, ["row", "column"]));
         // applyType
         const typeItemHide = getTypeItemHide(ctx);
 

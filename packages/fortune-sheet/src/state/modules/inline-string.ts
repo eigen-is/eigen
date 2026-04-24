@@ -1,4 +1,4 @@
-import * as _ from "es-toolkit/compat";
+import {indexOf, isEmpty, kebabCase} from "es-toolkit/compat";
 import {Context} from "../context";
 import type {Cell, CellMatrix, CellStyle, InlineStringSegment} from "../../engine/types";
 import {getCellValue, getFontStyleByCell} from "./cell";
@@ -62,7 +62,7 @@ export function getInlineStringNoStyle(r: number, c: number, data: CellMatrix) {
 }
 
 export function convertCssToStyleList(cssText: string, originCell: Cell) {
-    if (_.isEmpty(cssText)) {
+    if (isEmpty(cssText)) {
         return {};
     }
     const cssTextArray = cssText.split(";");
@@ -78,8 +78,8 @@ export function convertCssToStyleList(cssText: string, originCell: Cell) {
     };
     cssTextArray.forEach((s) => {
         s = s.toLowerCase();
-        const key = _.trim(s.substring(0, s.indexOf(":")));
-        const value = _.trim(s.substring(s.indexOf(":") + 1));
+        const key = s.substring(0, s.indexOf(":")).trim();
+        const value = s.substring(s.indexOf(":") + 1).trim();
         if (key === "font-weight") {
             if (value === "bold") {
                 styleList.bl = 1;
@@ -184,8 +184,8 @@ function getClassWithcss(cssText: string, ukey: string) {
         for (let i = 0; i < cssTextArray.length; i += 1) {
             let s = cssTextArray[i];
             s = s.toLowerCase();
-            const key = _.trim(s.substring(0, s.indexOf(":")));
-            const value = _.trim(s.substring(s.indexOf(":") + 1));
+            const key = s.substring(0, s.indexOf(":")).trim();
+            const value = s.substring(s.indexOf(":") + 1).trim();
             if (key === ukey) {
                 return value;
             }
@@ -205,8 +205,8 @@ function upsetClassWithCss(cssText: string, ukey: string, uvalue: any) {
         for (let i = 0; i < cssTextArray.length; i += 1) {
             let s = cssTextArray[i];
             s = s.toLowerCase();
-            const key = _.trim(s.substring(0, s.indexOf(":")));
-            const value = _.trim(s.substring(s.indexOf(":") + 1));
+            const key = s.substring(0, s.indexOf(":")).trim();
+            const value = s.substring(s.indexOf(":") + 1).trim();
             if (key === ukey) {
                 newCss += `${key}:${uvalue};`;
             } else if (key.length > 0) {
@@ -236,8 +236,8 @@ function removeClassWidthCss(cssText: string, ukey: string) {
         for (let i = 0; i < cssTextArray.length; i += 1) {
             let s = cssTextArray[i];
             s = s.toLowerCase();
-            const key = _.trim(s.substring(0, s.indexOf(":")));
-            const value = _.trim(s.substring(s.indexOf(":") + 1));
+            const key = s.substring(0, s.indexOf(":")).trim();
+            const value = s.substring(s.indexOf(":") + 1).trim();
             if (
                 key === ukey ||
                 (oUkey === "cl" && key === "lucky-strike") ||
@@ -271,7 +271,7 @@ function getCssText(cssText: string, attr: keyof Cell, value: any) {
         styleObj._color = fontColor;
     }
     const s = getFontStyleByCell(styleObj, undefined, undefined, false);
-    const ukey = _.kebabCase(Object.keys(s)[0]);
+    const ukey = kebabCase(Object.keys(s)[0]);
     const uvalue = Object.values(s)[0];
     // let cssText = span.style.cssText;
     cssText = removeClassWidthCss(cssText, attr);
@@ -291,14 +291,14 @@ function extendCssText(origin: string, cover: string, isLimit = true) {
         let so = originArray[i];
         let isAdd = true;
         so = so.toLowerCase();
-        const okey = _.trim(so.substring(0, so.indexOf(":")));
+        const okey = so.substring(0, so.indexOf(":")).trim();
 
         /* Do not set font size here, to avoid the font growing larger after applying strikethrough etc. */
         if (okey === "font-size") {
             continue;
         }
 
-        const ovalue = _.trim(so.substring(so.indexOf(":") + 1));
+        const ovalue = so.substring(so.indexOf(":") + 1).trim();
 
         if (isLimit) {
             if (!(okey in inlineStyleAffectCssName)) {
@@ -309,8 +309,8 @@ function extendCssText(origin: string, cover: string, isLimit = true) {
         for (let a = 0; a < coverArray.length; a += 1) {
             let sc = coverArray[a];
             sc = sc.toLowerCase();
-            const ckey = _.trim(sc.substring(0, sc.indexOf(":")));
-            const cvalue = _.trim(sc.substring(sc.indexOf(":") + 1));
+            const ckey = sc.substring(0, sc.indexOf(":")).trim();
+            const cvalue = sc.substring(sc.indexOf(":") + 1).trim();
 
             if (okey === ckey) {
                 newCss += `${ckey}:${cvalue};`;
@@ -329,8 +329,8 @@ function extendCssText(origin: string, cover: string, isLimit = true) {
     for (let a = 0; a < coverArray.length; a += 1) {
         let sc = coverArray[a];
         sc = sc.toLowerCase();
-        const ckey = _.trim(sc.substring(0, sc.indexOf(":")));
-        const cvalue = _.trim(sc.substring(sc.indexOf(":") + 1));
+        const ckey = sc.substring(0, sc.indexOf(":")).trim();
+        const cvalue = sc.substring(sc.indexOf(":") + 1).trim();
 
         if (isLimit) {
             if (!(ckey in inlineStyleAffectCssName)) {
@@ -439,7 +439,7 @@ export function updateInlineStringFormat(
                 }
 
                 if (startContainer.parentElement?.tagName === "SPAN") {
-                    spanIndex = _.indexOf($textEditor.querySelectorAll("span"), span);
+                    spanIndex = indexOf($textEditor.querySelectorAll("span"), span);
                     span.outerHTML = cont;
                 } else {
                     spanIndex = 0;
@@ -466,8 +466,8 @@ export function updateInlineStringFormat(
                 const endSpan = endContainer.parentNode as HTMLElement | null;
                 const allSpans = $textEditor.querySelectorAll("span");
 
-                const startSpanIndex = _.indexOf(allSpans, startSpan);
-                const endSpanIndex = _.indexOf(allSpans, endSpan);
+                const startSpanIndex = indexOf(allSpans, startSpan);
+                const endSpanIndex = indexOf(allSpans, endSpan);
 
                 const startContent = startSpan?.innerHTML || "";
                 const endContent = endSpan?.innerHTML || "";

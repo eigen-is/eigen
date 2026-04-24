@@ -1,4 +1,4 @@
-import * as _ from "es-toolkit/compat";
+import {find, set} from "es-toolkit/compat";
 import {GlobalCache} from "../types";
 import {mergeBorder} from ".";
 import {Context, getFlowdata} from "../context";
@@ -18,8 +18,7 @@ export function saveImage(ctx: Context) {
 }
 
 export function removeActiveImage(ctx: Context) {
-    ctx.insertedImgs = _.filter(
-        ctx.insertedImgs,
+    ctx.insertedImgs = ctx.insertedImgs?.filter(
         (image) => image.id !== ctx.activeImg
     );
     ctx.activeImg = undefined;
@@ -86,7 +85,7 @@ export function onImageMoveStart(
     const position = getImagePosition();
     if (position) {
         const {top, left} = position;
-        _.set(globalCache, "image", {
+        set(globalCache, "image", {
             cursorMoveStartPosition: {x: e.pageX, y: e.pageY},
             imgInitialPosition: {left, top},
         });
@@ -120,7 +119,7 @@ export function onImageMoveEnd(ctx: Context, globalCache: GlobalCache) {
         globalCache.image = undefined;
 
         if (position) {
-            const img = _.find(ctx.insertedImgs, (v) => v.id === ctx.activeImg);
+            const img = find(ctx.insertedImgs, (v) => v.id === ctx.activeImg);
             if (img) {
                 img.left = position.left / ctx.zoomRatio;
                 img.top = position.top / ctx.zoomRatio;
@@ -137,7 +136,7 @@ export function onImageResizeStart(
 ) {
     const position = getImagePosition();
     if (position) {
-        _.set(globalCache, "image", {
+        set(globalCache, "image", {
             cursorMoveStartPosition: {x: e.pageX, y: e.pageY},
             resizingSide,
             imgInitialPosition: position,
@@ -210,7 +209,7 @@ export function onImageResizeEnd(ctx: Context, globalCache: GlobalCache) {
         globalCache.image = undefined;
         const position = getImagePosition();
         if (position) {
-            const img = _.find(ctx.insertedImgs, (v) => v.id === ctx.activeImg);
+            const img = find(ctx.insertedImgs, (v) => v.id === ctx.activeImg);
             if (img) {
                 img.left = position.left / ctx.zoomRatio;
                 img.top = position.top / ctx.zoomRatio;

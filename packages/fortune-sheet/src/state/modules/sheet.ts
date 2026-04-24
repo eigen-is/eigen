@@ -1,4 +1,4 @@
-import * as _ from "es-toolkit/compat";
+import {cloneDeep, isNil, sortBy, times} from "es-toolkit/compat";
 import {v4 as uuidv4} from "uuid";
 import {initSheetData} from "../api/sheet";
 import {Context} from "../context";
@@ -98,7 +98,7 @@ export function addSheet(
     const id = newSheetID ?? (settings?.generateSheetId() as string);
     const sheetname =
         sheetName || generateRandomSheetName(ctx.luckysheetfile, isPivotTable, ctx);
-    if (!_.isNil(sheetData)) {
+    if (!isNil(sheetData)) {
         delete sheetData.data;
         ctx.luckysheetfile.forEach((sheet) => {
             sheet.order =
@@ -108,7 +108,7 @@ export function addSheet(
             return sheet;
         });
     }
-    const sheetconfig: Sheet = _.isNil(sheetData)
+    const sheetconfig: Sheet = isNil(sheetData)
         ? {
             name: sheetName === undefined ? sheetname : sheetName,
             status: 0,
@@ -177,10 +177,10 @@ export function deleteSheet(ctx: Context, id: string) {
 
     // server.saveParam("shd", null, { deleIndex: index });
     if (id === ctx.currentSheetId) {
-        const shownSheets = _.cloneDeep(ctx.luckysheetfile).filter(
-            (singleSheet) => _.isUndefined(singleSheet.hide) || singleSheet.hide !== 1
+        const shownSheets = cloneDeep(ctx.luckysheetfile).filter(
+            (singleSheet) => singleSheet.hide === undefined || singleSheet.hide !== 1
         );
-        const orderSheets = _.sortBy(shownSheets, (sheet) => sheet.order);
+        const orderSheets = sortBy(shownSheets, (sheet) => sheet.order);
         ctx.currentSheetId = orderSheets?.[0]?.id as string;
     }
 
@@ -206,8 +206,8 @@ export function updateSheet(ctx: Context, newData: Sheet[]) {
                 lastRowNum = Math.max(lastRowNum, ctx.defaultrowNum);
                 lastColNum = Math.max(lastColNum, ctx.defaultcolumnNum);
             }
-            const expandedData: Sheet["data"] = _.times(lastRowNum, () =>
-                _.times(lastColNum, () => null)
+            const expandedData: Sheet["data"] = times(lastRowNum, () =>
+                times(lastColNum, () => null)
             );
             for (let i = 0; i < data.length; i += 1) {
                 for (let j = 0; j < data[i].length; j += 1) {
@@ -341,7 +341,7 @@ export function expandRowsAndColumns(
     }
 
     for (let r = 0; r < rowsToAdd; r += 1) {
-        data.push(_.times(currentColLen + columnsToAdd, () => null));
+        data.push(times(currentColLen + columnsToAdd, () => null));
     }
 
     return data;

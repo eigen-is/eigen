@@ -1,4 +1,4 @@
-import * as _ from "es-toolkit/compat";
+import {isNil} from "es-toolkit/compat";
 import type {History, Selection} from "../types";
 import type {Context} from "../context";
 import {getFlowdata} from "../context";
@@ -146,7 +146,7 @@ export class FormulaCache {
     ) {
         function requestUpdate(value: any) {
             if (value instanceof Object) {
-                if (!_.isNil(value.r) && !_.isNil(value.c)) {
+                if (!isNil(value.r) && !isNil(value.c)) {
                     setFormulaCellInfo(
                         ctx,
                         {

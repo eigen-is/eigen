@@ -1,4 +1,4 @@
-import * as _ from "es-toolkit/compat";
+import {isNil} from "es-toolkit/compat";
 import {
     colLocationByIndex,
     Context,
@@ -42,7 +42,7 @@ export function dataRangeSelection(
         const range = getRangeByTxt(ctx, rangT);
         const r = range[0]?.row;
         const c = range[0]?.column;
-        if (_.isNil(r) || _.isNil(c)) return;
+        if (isNil(r) || isNil(c)) return;
         const row_pre = rowLocationByIndex(r[0], ctx.visibledatarow)[0];
         const row = rowLocationByIndex(r[1], ctx.visibledatarow)[1];
         const col_pre = colLocationByIndex(c[0], ctx.visibledatacolumn)[0];
@@ -936,7 +936,7 @@ export function confirmMessage(
     let stc = range[range.length - 1]?.column[0];
     let edc = range[range.length - 1]?.column[1];
     const d = getFlowdata(ctx);
-    if (!d || _.isNil(str) || _.isNil(edr) || _.isNil(stc) || _.isNil(edc))
+    if (!d || isNil(str) || isNil(edr) || isNil(stc) || isNil(edc))
         return false;
     if (str < 0) {
         str = 0;
