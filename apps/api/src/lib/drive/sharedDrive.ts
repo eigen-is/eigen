@@ -1,6 +1,6 @@
 import type { MountInfo } from '@workspace/lib/types';
 import { parseOwnerId } from '@workspace/lib/types';
-import type { DriveACL, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
+import type { DriveACL, DrivePath, DriveVisibility, EigenDocType } from '@workspace/lib/types/drive';
 import type { User } from 'better-auth';
 import type { ChatRoom } from '../chat';
 import type CollabDocument from '../collab/collabDocument.ts';
@@ -156,33 +156,9 @@ export default class SharedDrive {
         );
     }
 
-    public async createStickies(mountId: string, parentId: string, stickiesName: string): Promise<DrivePath> {
+    public async create(mountId: string, parentId: string, name: string, type: EigenDocType): Promise<DrivePath> {
         return this.withWritePermission(mountId, parentId, () =>
-            this.sharedDrive.createStickies(mountId, parentId, stickiesName),
-        );
-    }
-
-    public async createSlides(mountId: string, parentId: string, slidesName: string): Promise<DrivePath> {
-        return this.withWritePermission(mountId, parentId, () =>
-            this.sharedDrive.createSlides(mountId, parentId, slidesName),
-        );
-    }
-
-    public async createSheets(mountId: string, parentId: string, sheetsName: string): Promise<DrivePath> {
-        return this.withWritePermission(mountId, parentId, () =>
-            this.sharedDrive.createSheets(mountId, parentId, sheetsName),
-        );
-    }
-
-    public async createDoc(mountId: string, parentId: string, docName: string): Promise<DrivePath> {
-        return this.withWritePermission(mountId, parentId, () =>
-            this.sharedDrive.createDoc(mountId, parentId, docName),
-        );
-    }
-
-    public async createChat(mountId: string, parentId: string, chatName: string): Promise<DrivePath> {
-        return this.withWritePermission(mountId, parentId, () =>
-            this.sharedDrive.createChat(mountId, parentId, chatName),
+            this.sharedDrive.create(mountId, parentId, name, type),
         );
     }
 

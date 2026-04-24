@@ -1,22 +1,19 @@
 import { randomUUID } from 'node:crypto';
 import {
     DRIVE_TYPE_CHAT,
-    DRIVE_TYPE_DOC,
     DRIVE_TYPE_FILE,
     DRIVE_TYPE_FOLDER,
-    DRIVE_TYPE_SHEETS,
-    DRIVE_TYPE_SLIDES,
-    DRIVE_TYPE_STICKIES,
     type MountConfig,
     type MountInfo,
     type MountSettings,
     parseOwnerId,
 } from '@workspace/lib/types';
 import {
+    DRIVE_EXTENSIONS,
     type DriveACL,
-    type DriveCollabType,
     type DrivePath,
     type DriveVisibility,
+    type EigenDocType,
     isChatType,
     isCollabType,
     isContainerType,
@@ -55,13 +52,6 @@ import { getSharedDatabase } from './shared';
 import * as sharedSchema from './sharedschema';
 import { buildDriveEvent } from './sse-events';
 import { streamFilesToTemp, writeTempWithHash } from './streaming';
-
-const COLLAB_EXTENSIONS: Record<string, string> = {
-    doc: '.eigendoc',
-    stickies: '.eigenstickies',
-    slides: '.eigenslides',
-    sheets: '.eigensheets',
-};
 
 export default class Drive {
     private home: Home;
@@ -186,35 +176,23 @@ export default class Drive {
         return folder;
     }
 
-    async createDoc(mountId: string, parentId: string, name: string): Promise<DrivePath> {
-        return this.createCollabDoc(mountId, parentId, name, DRIVE_TYPE_DOC);
-    }
-
-    async createStickies(mountId: string, parentId: string, name: string): Promise<DrivePath> {
-        return this.createCollabDoc(mountId, parentId, name, DRIVE_TYPE_STICKIES);
-    }
-
-    async createSlides(mountId: string, parentId: string, name: string): Promise<DrivePath> {
-        return this.createCollabDoc(mountId, parentId, name, DRIVE_TYPE_SLIDES);
-    }
-
-    async createSheets(mountId: string, parentId: string, name: string): Promise<DrivePath> {
-        return this.createCollabDoc(mountId, parentId, name, DRIVE_TYPE_SHEETS);
-    }
-
-    async createChat(mountId: string, parentId: string, chatName: string): Promise<DrivePath> {
+    async create(mountId: string, parentId: string, name: string, type: EigenDocType): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         if (!(await this.canWrite(mountId, parentId, this.owner))) {
             throw new ApiError(403, 'No write permission');
         }
 
-        const safeName = `${chatName}.eigenchat`;
-        const pathId = await mount.createFolder(parentId, safeName, DRIVE_TYPE_CHAT);
-        await ChatRoom.create(this, mountId, pathId);
-        const chat = await mount.getPath(pathId);
-        if (!chat) throw new ApiError(500, 'Failed to create chat');
-        this.emit(SSEventType.DRIVE_FILE_CREATED, chat);
-        return chat;
+        const safeName = `${name}${DRIVE_EXTENSIONS[type]}`;
+        const pathId = await mount.createFolder(parentId, safeName, type);
+        if (type === DRIVE_TYPE_CHAT) {
+            await ChatRoom.create(this, mountId, pathId);
+        } else {
+            await CollabDocument.create(this, mountId, pathId);
+        }
+        const created = await mount.getPath(pathId);
+        if (!created) throw new ApiError(500, `Failed to create ${type}`);
+        this.emit(SSEventType.DRIVE_FILE_CREATED, created);
+        return created;
     }
 
     async getChat(mountId: string, chatId: string): Promise<ChatRoom> {
@@ -874,26 +852,6 @@ export default class Drive {
                 console.error(`Failed to close mount databases:`, error);
             }
         }
-    }
-
-    private async createCollabDoc(
-        mountId: string,
-        parentId: string,
-        name: string,
-        type: DriveCollabType,
-    ): Promise<DrivePath> {
-        const mount = this.getMount(mountId);
-        if (!(await this.canWrite(mountId, parentId, this.owner))) {
-            throw new ApiError(403, 'No write permission');
-        }
-
-        const safeName = `${name}${COLLAB_EXTENSIONS[type]}`;
-        const pathId = await mount.createFolder(parentId, safeName, type);
-        await CollabDocument.create(this, mountId, pathId);
-        const created = await mount.getPath(pathId);
-        if (!created) throw new ApiError(500, `Failed to create ${type}`);
-        this.emit(SSEventType.DRIVE_FILE_CREATED, created);
-        return created;
     }
 
     private sharedRowToDrivePath(r: typeof sharedSchema.sharedPaths.$inferSelect): DrivePath {

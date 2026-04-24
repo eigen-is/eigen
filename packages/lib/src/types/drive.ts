@@ -40,8 +40,19 @@ export type DriveVisibility = 'private' | 'public-read' | 'public-write';
 export const EIGEN_DOC_TYPES = ['doc', 'stickies', 'slides', 'sheets', 'chat'] as const;
 export type EigenDocType = (typeof EIGEN_DOC_TYPES)[number];
 
+export const DRIVE_EXTENSIONS: Record<EigenDocType, string> = {
+    doc: '.eigendoc',
+    stickies: '.eigenstickies',
+    slides: '.eigenslides',
+    sheets: '.eigensheets',
+    chat: '.eigenchat',
+};
+
 export function stripEigenExtension(name: string): string {
-    return name.replace(/\.eigen(doc|stickies|slides|sheets|chat)$/, '');
+    for (const ext of Object.values(DRIVE_EXTENSIONS)) {
+        if (name.endsWith(ext)) return name.slice(0, -ext.length);
+    }
+    return name;
 }
 
 export type DriveCollabType = DriveTypeDoc | DriveTypeStickies | DriveTypeSlides | DriveTypeSheets;
