@@ -1,4 +1,4 @@
-import * as _ from "es-toolkit/compat";
+import {isEmpty, isPlainObject, sortedIndex} from "es-toolkit/compat";
 import {defaultContext, getFlowdata} from "./context";
 import {getRealCellValue, normalizedAttr} from "./modules/cell";
 import {clearMeasureTextCache, defaultFont, getCellTextInfo, getFontSet, getMeasureText,} from "./modules/text";
@@ -144,8 +144,8 @@ export class Canvas {
 
         let dataset_row_st;
         let dataset_row_ed;
-        dataset_row_st = _.sortedIndex(this.sheetCtx.visibledatarow, scrollHeight);
-        dataset_row_ed = _.sortedIndex(
+        dataset_row_st = sortedIndex(this.sheetCtx.visibledatarow, scrollHeight);
+        dataset_row_ed = sortedIndex(
             this.sheetCtx.visibledatarow,
             scrollHeight + drawHeight
         );
@@ -330,11 +330,11 @@ export class Canvas {
 
         let dataset_col_st;
         let dataset_col_ed;
-        dataset_col_st = _.sortedIndex(
+        dataset_col_st = sortedIndex(
             this.sheetCtx.visibledatacolumn,
             scrollWidth
         );
-        dataset_col_ed = _.sortedIndex(
+        dataset_col_ed = sortedIndex(
             this.sheetCtx.visibledatacolumn,
             scrollWidth + drawWidth
         );
@@ -560,8 +560,8 @@ export class Canvas {
         let colStart: number;
         let colEnd: number;
 
-        rowStart = _.sortedIndex(this.sheetCtx.visibledatarow, scrollHeight);
-        rowEnd = _.sortedIndex(
+        rowStart = sortedIndex(this.sheetCtx.visibledatarow, scrollHeight);
+        rowEnd = sortedIndex(
             this.sheetCtx.visibledatarow,
             scrollHeight + drawHeight
         );
@@ -582,8 +582,8 @@ export class Canvas {
             rowEnd = this.sheetCtx.visibledatarow.length - 1;
         }
 
-        colStart = _.sortedIndex(this.sheetCtx.visibledatacolumn, scrollWidth);
-        colEnd = _.sortedIndex(
+        colStart = sortedIndex(this.sheetCtx.visibledatacolumn, scrollWidth);
+        colEnd = sortedIndex(
             this.sheetCtx.visibledatacolumn,
             scrollWidth + drawWidth
         );
@@ -1136,7 +1136,7 @@ export class Canvas {
 
                 if (
                     cell &&
-                    (!_.isEmpty(cell.v) || isInlineStringCell(cell)) &&
+                    (!isEmpty(cell.v) || isInlineStringCell(cell)) &&
                     cell.mc == null &&
                     cell.tb === "1"
                 ) {
@@ -1982,7 +1982,7 @@ export class Canvas {
 
         // Trace terminates if cell is non-empty or merged
         const cell = data[r][traceC];
-        if (cell && (!_.isEmpty(cell.v) || cell.mc)) {
+        if (cell && (!isEmpty(cell.v) || cell.mc)) {
             return {
                 success: false,
                 r,
@@ -2146,7 +2146,7 @@ export class Canvas {
             }
 
             // Handle word.content being an object (edge case)
-            const txt = _.isPlainObject(word.content) ? word.content.m : word.content;
+            const txt = isPlainObject(word.content) ? word.content.m : word.content;
             ctx.fillText(txt, pos_x + word.left, pos_y + word.top);
 
             if (word.cancelLine) {

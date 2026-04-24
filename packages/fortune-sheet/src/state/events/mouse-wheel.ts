@@ -1,4 +1,4 @@
-import * as _ from "es-toolkit/compat";
+import {sortedIndex, uniq} from "es-toolkit/compat";
 import { Context } from "../context";
 import { GlobalCache } from "../types";
 
@@ -26,18 +26,18 @@ export function handleGlobalWheel(
     if (cache.visibleColumnsUnique != null) {
         visibledatacolumn_c = cache.visibleColumnsUnique;
     } else {
-        visibledatacolumn_c = _.uniq(visibledatacolumn_c);
+        visibledatacolumn_c = uniq(visibledatacolumn_c);
         cache.visibleColumnsUnique = visibledatacolumn_c;
     }
 
     if (cache.visibleRowsUnique != null) {
         visibledatarow_c = cache.visibleRowsUnique;
     } else {
-        visibledatarow_c = _.uniq(visibledatarow_c);
+        visibledatarow_c = uniq(visibledatarow_c);
         cache.visibleRowsUnique = visibledatarow_c;
     }
 
-    const row_st = _.sortedIndex(visibledatarow_c, scrollTop) + 1;
+    const row_st = sortedIndex(visibledatarow_c, scrollTop) + 1;
 
     let rowscroll = 0;
 

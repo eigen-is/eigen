@@ -1,4 +1,4 @@
-import * as _ from "es-toolkit/compat";
+import {isEmpty, isNil} from "es-toolkit/compat";
 import {cancelPaintModel, checkCF, getComputeMap, getSheetIndex} from "..";
 import {Context} from "../context";
 import {copy, selectIsOverlap} from "../modules/selection";
@@ -16,7 +16,7 @@ export function handleCopy(ctx: Context) {
     }
 
     const selection = ctx.luckysheet_select_save;
-    if (!selection || _.isEmpty(selection)) {
+    if (!selection || isEmpty(selection)) {
         return;
     }
 
@@ -52,9 +52,9 @@ export function handleCopy(ctx: Context) {
         ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId) as number]
             .luckysheet_conditionformat_save;
     if (
-        !_.isNil(ctx.luckysheet_select_save) &&
+        !isNil(ctx.luckysheet_select_save) &&
         ctx.luckysheet_select_save.length > 1 &&
-        !_.isNil(cdformat) &&
+        !isNil(cdformat) &&
         cdformat.length > 0
     ) {
         let hasCF = false;
@@ -76,7 +76,7 @@ export function handleCopy(ctx: Context) {
                     break;
                 }
                 for (let c = c1; c <= c2; c += 1) {
-                    if (!_.isNil(checkCF(r, c, cf_compute))) {
+                    if (!isNil(checkCF(r, c, cf_compute))) {
                         hasCF = true;
                         break;
                     }

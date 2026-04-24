@@ -1,4 +1,4 @@
-import * as _ from "es-toolkit/compat";
+import {cloneDeep, isNil} from "es-toolkit/compat";
 import {Context} from "../context";
 import {
     cancelPaintModel,
@@ -72,18 +72,18 @@ function renderCellSelection(
         return;
     }
 
-    const last = _.cloneDeep(
+    const last = cloneDeep(
         ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1]
     );
 
     if (
         !last ||
-        _.isNil(last.left) ||
-        _.isNil(last.top) ||
-        _.isNil(last.height) ||
-        _.isNil(last.width) ||
-        _.isNil(last.row_focus) ||
-        _.isNil(last.column_focus)
+        isNil(last.left) ||
+        isNil(last.top) ||
+        isNil(last.height) ||
+        isNil(last.width) ||
+        isNil(last.row_focus) ||
+        isNil(last.column_focus)
     ) {
         return;
     }

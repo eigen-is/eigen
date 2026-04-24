@@ -1,4 +1,4 @@
-import * as _ from "es-toolkit/compat";
+import {isEmpty, isNil, last, indexOf, set} from "es-toolkit/compat";
 import {Context, getFlowdata} from "../context";
 import {
     cancelActiveImgItem,
@@ -103,8 +103,7 @@ export function handleCellAreaMouseDown(
     // Right-click handling
     if (e.button === 2) {
         // If right-click is inside selection, stop mousedown handling
-        const isInSelection = _.some(
-            ctx.luckysheet_select_save,
+        const isInSelection = ctx.luckysheet_select_save?.some(
             (obj_s) =>
                 obj_s.row != null &&
                 row_index >= obj_s.row[0] &&
@@ -228,7 +227,7 @@ export function handleCellAreaMouseDown(
                 ctx.formulaCache.func_selectedrange = last;
             } else if (
                 e.ctrlKey &&
-                _.last(cellInput.querySelectorAll("span"))?.innerText !== ","
+                last(cellInput.querySelectorAll("span"))?.innerText !== ","
             ) {
                 // Ctrl held: finalize previous range
                 let vText = cellInput.innerText;
@@ -251,7 +250,7 @@ export function handleCellAreaMouseDown(
                         const currSelection = window.getSelection();
                         if (currSelection == null) return;
                         ctx.formulaCache.functionRangeIndex = [
-                            _.indexOf(
+                            indexOf(
                                 currSelection.anchorNode?.parentNode?.parentNode?.childNodes,
                                 // @ts-ignore
                                 currSelection.anchorNode?.parentNode
@@ -562,8 +561,8 @@ export function handleCellAreaDoubleClick(
     // Check if current and focus coordinates match; correct if not
     const {column_focus, row_focus} = ctx.luckysheet_select_save![0];
     if (
-        !_.isNil(column_focus) &&
-        !_.isNil(row_focus) &&
+        !isNil(column_focus) &&
+        !isNil(row_focus) &&
         (column_focus !== col_index || row_focus !== row_index)
     ) {
         row_index = row_focus;
@@ -592,7 +591,7 @@ export function handleContextMenu(
     const {cellContextMenu} = settings;
 
     // If all buttons hidden, hide the menu container
-    if (_.isEmpty(cellContextMenu)) {
+    if (isEmpty(cellContextMenu)) {
         return;
     }
 
@@ -608,7 +607,7 @@ export function handleContextMenu(
     // select current cell when clicking the right button
     e.preventDefault();
     if (area === "cell") {
-        _.set(ctx.contextMenu, "headerMenu", undefined);
+        set(ctx.contextMenu, "headerMenu", undefined);
         const rect = container.getBoundingClientRect();
         const mouseX = e.pageX - rect.left - window.scrollX;
         const mouseY = e.pageY - rect.top - window.scrollY;
@@ -631,8 +630,7 @@ export function handleContextMenu(
         const col_pre = col_location[0];
         const col_index = col_location[2];
         // If right-click is inside selection, skip selection handling
-        const isInSelection = _.some(
-            ctx.luckysheet_select_save,
+        const isInSelection = ctx.luckysheet_select_save?.some(
             (obj_s) =>
                 obj_s.row != null &&
                 row_index >= obj_s.row[0] &&
@@ -746,7 +744,7 @@ export function handleContextMenu(
             },
         ];
     } else if (area === "rowHeader") {
-        _.set(ctx.contextMenu, "headerMenu", "row");
+        set(ctx.contextMenu, "headerMenu", "row");
         const rect = container.getBoundingClientRect();
         const mouseY = e.pageY - rect.top - window.scrollY;
         const _selected_y = mouseY + ctx.scrollTop;
@@ -762,8 +760,7 @@ export function handleContextMenu(
         const row_pre = row_location[0];
         const row_index = row_location[2];
         // If right-click is inside selection, skip selection handling
-        const isInSelection = _.some(
-            ctx.luckysheet_select_save,
+        const isInSelection = ctx.luckysheet_select_save?.some(
             (obj_s) =>
                 obj_s.row != null &&
                 row_index >= obj_s.row[0] &&
@@ -798,7 +795,7 @@ export function handleContextMenu(
             row_select: true,
         });
     } else if (area === "columnHeader") {
-        _.set(ctx.contextMenu, "headerMenu", "column");
+        set(ctx.contextMenu, "headerMenu", "column");
         const rect = container.getBoundingClientRect();
         const mouseX = e.pageX - rect.left - window.scrollX;
         const _selected_x = mouseX + ctx.scrollLeft;
@@ -817,8 +814,7 @@ export function handleContextMenu(
         const col_pre = col_location[0];
         const col_index = col_location[2];
         // If right-click is inside selection, skip selection handling
-        const isInSelection = _.some(
-            ctx.luckysheet_select_save,
+        const isInSelection = ctx.luckysheet_select_save?.some(
             (obj_s) =>
                 obj_s.row != null &&
                 col_index >= obj_s.column[0] &&
