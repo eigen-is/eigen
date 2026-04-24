@@ -1,8 +1,11 @@
+import { useMyTeams } from '@workspace/lib/home';
+import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { SidebarItem, StorageUsage } from '@workspace/ui';
+import { SidebarItem, StorageUsage, UserAvatar } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { SidebarHeader } from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
+import { Separator } from '@workspace/ui/components/separator';
 import { Download, Plus, UsersRound } from 'lucide-react';
 import { useState } from 'react';
 import { DriveCreateEigenDoc } from './drive-create-eigendoc';
@@ -51,6 +54,7 @@ export function EigenDocSidebar({
     rootPath = null,
 }: EigenDocSidebarProps) {
     const [createOpen, setCreateOpen] = useState(false);
+    const { data: myTeams } = useMyTeams();
 
     return (
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
@@ -87,6 +91,27 @@ export function EigenDocSidebar({
                     condensed={condensed}
                 />
             </SidebarSection>
+
+            {myTeams?.some((t) => t.mounts.length > 0) && (
+                <>
+                    <Separator />
+                    <SidebarSection condensed={condensed} title={condensed ? undefined : 'Shared Drives'}>
+                        {myTeams.flatMap((team) =>
+                            team.mounts
+                                .filter((mount) => mount.rootPathId)
+                                .map((mount) => (
+                                    <SidebarItem
+                                        key={`${team.id}-${mount.id}`}
+                                        icon={<UserAvatar email={teamOwnerId(team.id)} className="h-4 w-4" />}
+                                        to={`/drive/${teamOwnerId(team.id)}/${mount.id}`}
+                                        label={mount.name}
+                                        condensed={condensed}
+                                    />
+                                )),
+                        )}
+                    </SidebarSection>
+                </>
+            )}
 
             <StorageUsage className="mt-auto" condensed={condensed} />
 

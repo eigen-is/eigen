@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { EigenDocListView, eigenDocValidateSearch, SHEETS_CONFIG } from '@workspace/ui/components/layout/drive';
 
 export const Route = createFileRoute('/_auth/_sidebar/')({
@@ -8,5 +8,14 @@ export const Route = createFileRoute('/_auth/_sidebar/')({
 
 function DriveRoute() {
     const { pid, mid } = Route.useSearch();
-    return <EigenDocListView config={SHEETS_CONFIG} pid={pid} mid={mid} />;
+    const navigate = useNavigate();
+    return (
+        <EigenDocListView
+            config={SHEETS_CONFIG}
+            pid={pid}
+            mid={mid}
+            onNavigate={(search) => navigate({ to: '/', search })}
+            onNavigateBack={() => navigate({ to: '/' })}
+        />
+    );
 }

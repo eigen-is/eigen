@@ -1,8 +1,7 @@
-import { useNavigate } from '@tanstack/react-router';
 import { getDriveItemUrl, openDocument } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
-import { DEFAULT_MOUNT_ID, useMimeContent, usePathInfo } from '@workspace/lib/drive';
-import { type DrivePath, isDocumentType } from '@workspace/lib/types/drive';
+import { DEFAULT_MOUNT_ID, useMimeContent, useMountMimeContent, usePathInfo } from '@workspace/lib/drive';
+import { type DrivePath, type DriveSearchParams, isDocumentType } from '@workspace/lib/types/drive';
 import { useContext } from 'react';
 import { useLayout } from '../app/layout-context';
 import { NotFound } from '../app/not-found';
@@ -15,28 +14,44 @@ type EigenDocListViewProps = {
     config: EigenDocAppConfig;
     pid?: string;
     mid?: string;
+    ownerId?: string;
+    mountId?: string;
+    onNavigate: (search: DriveSearchParams) => void;
+    onNavigateBack: () => void;
 };
 
-export function EigenDocListView({ config, pid, mid }: EigenDocListViewProps) {
+export function EigenDocListView({
+    config,
+    pid,
+    mid,
+    ownerId,
+    mountId,
+    onNavigate,
+    onNavigateBack,
+}: EigenDocListViewProps) {
     const { rootPath } = useContext(EigenDocDriveContext);
-    const navigate = useNavigate();
     const { user } = useAuth();
-    const ownerId = user!.id;
-    const { data: selectedPath = null } = usePathInfo(ownerId, mid || DEFAULT_MOUNT_ID, pid);
+    const effectiveOwnerId = ownerId || user!.id;
+    const isMountScoped = !!mountId;
+    const effectiveMountId = mid || mountId || DEFAULT_MOUNT_ID;
+
+    const { data: selectedPath = null } = usePathInfo(effectiveOwnerId, effectiveMountId, pid);
     const { isMobile } = useLayout();
     const { openPreview } = usePreview();
 
+    const ownerScoped = useMimeContent(isMountScoped ? '' : effectiveOwnerId, config.mimeType);
+    const mountScoped = useMountMimeContent(isMountScoped ? effectiveOwnerId : '', mountId || '', config.mimeType);
     const {
         data: folderContents = [],
         isLoading: isFolderContentLoading,
         error: isFolderContentLoadingError,
-    } = useMimeContent(ownerId, config.mimeType);
+    } = isMountScoped ? mountScoped : ownerScoped;
 
     const onRowSelect = (path: DrivePath) => {
         if (isMobile && isDocumentType(path.type)) {
             openDocument(path);
         } else {
-            navigate({ to: '/', search: { pid: path.id, mid: path.mountId } });
+            onNavigate({ pid: path.id, mid: path.mountId });
         }
     };
 
@@ -48,16 +63,16 @@ export function EigenDocListView({ config, pid, mid }: EigenDocListViewProps) {
         <DriveLayout
             pid={pid}
             selectedPath={selectedPath}
-            ownerId={ownerId}
-            mountId={mid || DEFAULT_MOUNT_ID}
+            ownerId={effectiveOwnerId}
+            mountId={effectiveMountId}
             folderContents={folderContents}
             isLoading={isFolderContentLoading}
             error={isFolderContentLoadingError}
             onRowSelect={onRowSelect}
             onRowActivate={openDocument}
             onQuickLook={(path, siblings) => openPreview(path, siblings)}
-            onBackToList={() => navigate({ to: '/' })}
-            onAfterAction={() => navigate({ to: '/' })}
+            onBackToList={onNavigateBack}
+            onAfterAction={onNavigateBack}
             allowDelete={true}
             allowShare={true}
             allowCreateFolder={false}

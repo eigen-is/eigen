@@ -1,4 +1,4 @@
-import { Outlet } from '@tanstack/react-router';
+import { Outlet, useLocation } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, useRootFolder } from '@workspace/lib/drive';
 import type { DriveContextType } from '@workspace/lib/types/drive';
@@ -18,11 +18,18 @@ type EigenDocRootProps = {
     isFullScreen?: boolean;
 };
 
+const TEAM_DRIVE_URL = /^\/drive\/(team_[^/]+)\/([^/]+)/;
+
 export function EigenDocRoot({ config, rootRoute, isFullScreen = false }: EigenDocRootProps) {
     const { user } = useAuth();
     const isGuest = user?.role === 'guest';
-    const mountId = DEFAULT_MOUNT_ID;
-    const { data: root } = useRootFolder(isGuest ? '' : user?.id || '', mountId);
+    const { pathname } = useLocation();
+    const teamMatch = pathname.match(TEAM_DRIVE_URL);
+    const teamOwnerId = teamMatch?.[1] ?? null;
+    const teamMountId = teamMatch?.[2] ?? null;
+    const activeOwnerId = teamOwnerId || (isGuest ? '' : user?.id || '');
+    const activeMountId = teamMountId || DEFAULT_MOUNT_ID;
+    const { data: root } = useRootFolder(activeOwnerId, activeMountId);
     const rootPath = isGuest ? null : root || null;
 
     if (!user) {
@@ -60,7 +67,7 @@ export function EigenDocRoot({ config, rootRoute, isFullScreen = false }: EigenD
                     : undefined
             }
         >
-            <EigenDocDriveContext.Provider value={{ rootPath, mountId }}>
+            <EigenDocDriveContext.Provider value={{ rootPath, mountId: activeMountId }}>
                 <Outlet />
             </EigenDocDriveContext.Provider>
         </AppShell>
