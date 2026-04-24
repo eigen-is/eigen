@@ -21,7 +21,7 @@ import {
 } from "../../state";
 import type {Cell, CellMatrix} from "../../engine/types";
 import {applyPatches} from "immer";
-import * as _ from "es-toolkit/compat";
+import {cloneDeep} from "es-toolkit/compat";
 import {SetContextOptions} from "../../context";
 
 export function generateAPIs(
@@ -280,7 +280,7 @@ export function generateAPIs(
             setContext((draftCtx) => api.deleteSheet(draftCtx, options)),
 
         updateSheet: (data: Sheet[]) =>
-            setContext((draftCtx) => api.updateSheet(draftCtx, _.cloneDeep(data))),
+            setContext((draftCtx) => api.updateSheet(draftCtx, cloneDeep(data))),
 
         activateSheet: (options: api.CommonOptions = {}) =>
             setContext((draftCtx) => api.activateSheet(draftCtx, options)),
