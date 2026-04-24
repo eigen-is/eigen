@@ -28,7 +28,7 @@ export const celldataToData = (
     rowCount?: number,
     colCount?: number
 ) => {
-    const lastRow = _.maxBy<CellWithRowAndCol>(celldata, "r");
+    const lastRow = maxBy<CellWithRowAndCol>(celldata, "r");
     const lastCol = maxBy(celldata, "c");
     let lastRowNum = (lastRow?.r ?? 0) + 1;
     let lastColNum = (lastCol?.c ?? 0) + 1;
