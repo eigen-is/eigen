@@ -254,9 +254,9 @@ export function isFunctionRange(
                 str = str.toUpperCase();
                 if (str.indexOf(":") > -1) {
                     const funcArray = str.split(":");
-                    function_str += `luckysheet_getSpecialReference(true,'${
-                        funcArray[0]
-                    .trim().replace(/'/g, "\\'")}', luckysheet_function.${
+                    function_str += `luckysheet_getSpecialReference(true,'${funcArray[0]
+                        .trim()
+                        .replace(/'/g, "\\'")}', luckysheet_function.${
                         funcArray[1]
                     }.f(#lucky#`;
                 } else {

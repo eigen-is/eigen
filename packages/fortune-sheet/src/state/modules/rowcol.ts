@@ -23,7 +23,7 @@ const refreshLocalMergeData = (merge_new: Record<string, any>, file: Sheet) => {
         }
 
         if (file?.data?.[r]?.[c]) {
-            file.data[r][c] = Object.assign(cloneDeep(file.data[r][c]), {mc: {r, c, rs, cs}});
+            file.data[r][c] = assign(cloneDeep(file.data[r][c]), {mc: {r, c, rs, cs}});
         }
     });
 };

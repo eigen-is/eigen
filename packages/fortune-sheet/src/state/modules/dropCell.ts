@@ -523,7 +523,7 @@ function fillCopy(data: (Cell | null | undefined)[], len: number) {
     for (let i = 1; i <= len; i += 1) {
         const index = (i - 1) % data.length;
         const d = cloneDeep(data[index]);
-        if (!d === undefined) {
+        if (d !== undefined) {
             applyData.push(d);
         }
     }
