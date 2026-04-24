@@ -348,14 +348,16 @@ The `state/` directory (renamed from `core/` during the engine extraction) is cu
 biome linting. It holds the context-coupled runtime — canvas renderer, event handlers, modules, public
 API bridge. Outstanding work:
 
-- **Lodash removal**: 53 files still `import _ from 'lodash'`. Most calls are mechanical swaps
-  (`_.isNil` → `x == null`, `_.cloneDeep` → `structuredClone`, `_.forEach` → `for...of`). Blocks
-  turning on biome for `state/` without drowning in `noImportNamespace` warnings.
+- ~~**Lodash removal**~~: Done. Migrated to `es-toolkit/compat` with named imports and conservative
+  native replacements (`Array.isArray`, `Object.keys/entries`, `.map/.filter`, etc.) where target
+  types were unambiguous. Null-sensitive calls like `trim(textContent)` stay on es-toolkit to
+  preserve lodash's null-safety.
 - **`any` annotations**: ~210 across `state/` (30 in `rowcol.ts` alone). Tightening enables strictness.
 - **`@ts-ignore` debt**: ~80 directives across `state/` + `components/` — each hides a typing gap.
 - **`ConditionFormat.ts` (1,768 lines) vs `conditionalFormat.ts` (578 lines)**: both live in
   `state/modules/` with unclear separation. Audit then merge or rename.
-- **Enable biome on `state/`**: blocked by lodash + `any`; do after those.
+- **Enable biome on `state/`**: now unblocked; ~210 `any` annotations will surface as the main
+  fix-up work.
 - **Enable biome on `components/`**: smaller lift, independent of `state/`. Start here.
 
 The old monolithic `mouse.ts` (5k+ lines) and `formula.ts` (3.5k lines) have already been split —
