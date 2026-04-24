@@ -1,4 +1,4 @@
-import {clone, cloneDeep, forEach, isEmpty, isNil, size} from "es-toolkit/compat";
+import {assign, clone, cloneDeep, forEach, isEmpty, isNil, size} from "es-toolkit/compat";
 import {Context} from "../context";
 import {Sheet} from "../types";
 import {getSheetIndex} from "../utils";
@@ -17,7 +17,7 @@ const refreshLocalMergeData = (merge_new: Record<string, any>, file: Sheet) => {
         for (let i = r; i < r + rs; i += 1) {
             for (let j = c; j < c + cs; j += 1) {
                 if (file?.data?.[i]?.[j]) {
-                    file.data[i][j] = Object.assign(cloneDeep(file.data[i][j]), {mc: {r, c}});
+                    file.data[i][j] = assign(cloneDeep(file.data[i][j]), {mc: {r, c}});
                 }
             }
         }

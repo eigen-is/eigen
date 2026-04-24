@@ -1,4 +1,4 @@
-import {isEmpty, indexOf, isNil, last, startsWith} from "es-toolkit/compat";
+import {indexOf, isEmpty, isNil, last, startsWith, trim} from "es-toolkit/compat";
 import type {Context} from "../context";
 import {escapeHTMLTag, escapeScriptTag} from "../utils";
 import {locale} from "../locale";
@@ -193,7 +193,7 @@ function functionHTML(txt: string) {
 
         if (i === funcstack.length - 1) {
             // function_str += str;
-            if (iscelldata(str.trim())) {
+            if (iscelldata(trim(str))) {
                 const rangeIndex =
                     formulaUIState.rangeIndexes.length > formulaUIState.functionHTMLIndex
                         ? formulaUIState.rangeIndexes[formulaUIState.functionHTMLIndex]
@@ -205,7 +205,7 @@ function functionHTML(txt: string) {
             } else if (str.indexOf("</span>") === -1 && str.length > 0) {
                 const regx = /{.*?}/;
 
-                if (regx.test(str.trim())) {
+                if (regx.test(trim(str))) {
                     const arraytxt = regx.exec(str)![0];
                     const arraystart = str.search(regx);
                     let alltxt = "";
@@ -326,10 +326,10 @@ export function getrangeseleciton() {
         anchorNode.parentNode?.nodeName?.toLowerCase() === "span" &&
         anchorOffset !== 0
     ) {
-        let txt = anchorNode.textContent || "".trim();
+        let txt = trim(anchorNode.textContent || "");
         if (txt.length === 0 && anchorNode.parentNode.previousSibling) {
             const ahr = anchorNode.parentNode.previousSibling;
-            txt = ahr.textContent || "".trim();
+            txt = trim(ahr.textContent || "");
             return ahr;
         }
         return anchorNode.parentNode;
@@ -339,11 +339,11 @@ export function getrangeseleciton() {
         anchorElement.id === "luckysheet-rich-text-editor" ||
         anchorElement.id === "luckysheet-functionbox-cell"
     ) {
-        let txt = last(anchorElement.querySelectorAll("span".trim())?.innerText);
+        let txt = trim(last(anchorElement.querySelectorAll("span"))?.innerText);
 
         if (txt.length === 0 && anchorElement.querySelectorAll("span").length > 1) {
             const ahr = anchorElement.querySelectorAll("span");
-            txt = ahr[ahr.length - 2].innerText.trim();
+            txt = trim(ahr[ahr.length - 2].innerText);
             return ahr?.[0];
         }
         return last(anchorElement.querySelectorAll("span"));
@@ -406,7 +406,7 @@ function helpFunctionExe(
 
             if (
                 $cur.classList.contains("luckysheet-formula-text-func") ||
-                $cur.textContent || "".trim().toUpperCase() in
+                trim($cur.textContent || "").toUpperCase() in
                 ctx.formulaCache.functionlistMap
             ) {
                 funcName = $cur.textContent;
@@ -449,7 +449,7 @@ export function rangeHightlightselected(ctx: Context, $editor: HTMLDivElement) {
     const currSelection = getrangeseleciton();
     if (!currSelection) return;
 
-    const currText = currSelection.textContent || "".trim();
+    const currText = trim(currSelection.textContent || "");
     if (currText?.match(/^[a-zA-Z_]+$/)) {
         searchFunction(ctx, currText.toUpperCase());
         ctx.functionHint = null;
@@ -476,12 +476,12 @@ export function israngeseleciton(ctx: Context, istooltip?: boolean) {
         anchor?.parentNode?.nodeName.toLowerCase() === "span" &&
         anchorOffset !== 0
     ) {
-        let txt = anchor.textContent.trim();
+        let txt = trim(anchor.textContent);
         let lasttxt = "";
 
         if (txt.length === 0 && anchor.parentNode.previousSibling) {
             const ahr = anchor.parentNode.previousSibling;
-            txt = ahr.textContent || "".trim();
+            txt = trim(ahr.textContent || "");
             lasttxt = txt.substring(txt.length - 1, 1);
             ctx.formulaCache.rangeSetValueTo = anchor.parentNode;
         } else {
@@ -504,7 +504,7 @@ export function israngeseleciton(ctx: Context, istooltip?: boolean) {
         anchorElement.id === "luckysheet-rich-text-editor" ||
         anchorElement.id === "luckysheet-functionbox-cell"
     ) {
-        let txt = last(anchorElement.querySelectorAll("span".trim())?.innerText);
+        let txt = trim(last(anchorElement.querySelectorAll("span"))?.innerText);
 
         ctx.formulaCache.rangeSetValueTo = last(
             anchorElement.querySelectorAll("span")
@@ -512,9 +512,9 @@ export function israngeseleciton(ctx: Context, istooltip?: boolean) {
 
         if (txt.length === 0 && anchorElement.querySelectorAll("span").length > 1) {
             const ahr = anchorElement.querySelectorAll("span");
-            txt = ahr[ahr.length - 2].innerText.trim();
+            txt = trim(ahr[ahr.length - 2].innerText);
 
-            txt = ahr[ahr.length - 2].innerText.trim();
+            txt = trim(ahr[ahr.length - 2].innerText);
             ctx.formulaCache.rangeSetValueTo = ahr;
         }
 
@@ -542,7 +542,7 @@ export function israngeseleciton(ctx: Context, istooltip?: boolean) {
         if (!anchor) return false;
         if (anchor.previousSibling?.textContent == null) return false;
         if (anchor.previousSibling) {
-            const txt = anchor.previousSibling.textContent.trim();
+            const txt = trim(anchor.previousSibling.textContent);
             const lasttxt = txt.substring(txt.length - 1, 1);
 
             ctx.formulaCache.rangeSetValueTo = anchor.previousSibling;
