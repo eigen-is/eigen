@@ -9,7 +9,6 @@ import { DriveSidebar, GuestDriveSidebar } from '../components/drive/drive-sideb
 
 export const DriveContext = createContext<DriveContextType>({
     rootPath: null,
-    mountId: DEFAULT_MOUNT_ID,
 });
 
 type MyRouterContext = {
@@ -41,7 +40,7 @@ function GuestDriveRoot() {
                 <GuestDriveSidebar condensed={condensed} isMobile={isMobile} onClose={onClose} />
             )}
         >
-            <DriveContext.Provider value={{ rootPath: null, mountId: DEFAULT_MOUNT_ID }}>
+            <DriveContext.Provider value={{ rootPath: null }}>
                 <Outlet />
             </DriveContext.Provider>
         </AppShell>
@@ -78,7 +77,7 @@ function AuthenticatedDriveRoot() {
                 <DriveSidebar condensed={condensed} isMobile={isMobile} onClose={onClose} rootPath={rootPath} />
             )}
         >
-            <DriveContext.Provider value={{ rootPath, mountId }}>
+            <DriveContext.Provider value={{ rootPath }}>
                 <Outlet />
             </DriveContext.Provider>
         </AppShell>

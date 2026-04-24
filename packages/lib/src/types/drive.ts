@@ -222,7 +222,6 @@ export type DriveSearchParams = {
 
 export type DriveContextType = {
     rootPath: DrivePath | null;
-    mountId: string;
 };
 
 export type InviteResult = {

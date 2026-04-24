@@ -16,11 +16,11 @@ import { usePreview } from '@workspace/ui/components/layout/preview-provider';
 
 export const Route = createFileRoute('/_auth/mime/$mimeType')({
     component: DriveRoute,
-    validateSearch: (search: Record<string, unknown>) => {
+    validateSearch: (search: Record<string, unknown>): DriveSearchParams => {
         const pid = typeof search.pid === 'string' ? search.pid : undefined;
         const uid = typeof search.uid === 'string' ? search.uid : undefined;
         const mid = typeof search.mid === 'string' ? search.mid : undefined;
-        return { pid, uid, mid } as DriveSearchParams;
+        return { pid, uid, mid };
     },
 });
 

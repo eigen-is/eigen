@@ -10,7 +10,6 @@ import { EigenDocSidebar, GuestEigenDocSidebar } from './eigendoc-sidebar';
 
 export const EigenDocDriveContext = createContext<DriveContextType>({
     rootPath: null,
-    mountId: DEFAULT_MOUNT_ID,
 });
 
 type EigenDocRootProps = {
@@ -65,7 +64,7 @@ export function EigenDocRoot({ config, rootRoute, isFullScreen = false, teamOwne
                     : undefined
             }
         >
-            <EigenDocDriveContext.Provider value={{ rootPath, mountId: activeMountId }}>
+            <EigenDocDriveContext.Provider value={{ rootPath }}>
                 <Outlet />
             </EigenDocDriveContext.Provider>
         </AppShell>

@@ -17,5 +17,5 @@ export function eigenDocValidateSearch(search: Record<string, unknown>): DriveSe
     const pid = typeof search.pid === 'string' ? search.pid : undefined;
     const uid = typeof search.uid === 'string' ? search.uid : undefined;
     const mid = typeof search.mid === 'string' ? search.mid : undefined;
-    return { pid, uid, mid } as DriveSearchParams;
+    return { pid, uid, mid };
 }
