@@ -1,4 +1,4 @@
-import * as _ from "es-toolkit/compat";
+import {sortedIndex} from "es-toolkit/compat";
 import {colLocationByIndex, Context, Freezen, getSheetIndex, GlobalCache, rowLocationByIndex,} from "..";
 
 function cutVolumn(arr: number[], cutindex: number) {
@@ -40,7 +40,7 @@ function frozenTofreezen(ctx: Context, cache: GlobalCache, sheetId: string) {
     // transform to freezen
     if (type === "rangeRow" || type === "rangeBoth") {
         const scrollTop = 0;
-        let row_st = _.sortedIndex(ctx.visibledatarow, scrollTop);
+        let row_st = sortedIndex(ctx.visibledatarow, scrollTop);
 
         const {row_focus} = range;
 
@@ -69,7 +69,7 @@ function frozenTofreezen(ctx: Context, cache: GlobalCache, sheetId: string) {
     }
     if (type === "rangeColumn" || type === "rangeBoth") {
         const scrollLeft = 0;
-        let col_st = _.sortedIndex(ctx.visibledatacolumn, scrollLeft);
+        let col_st = sortedIndex(ctx.visibledatacolumn, scrollLeft);
 
         const {column_focus} = range;
 
@@ -134,7 +134,7 @@ export function scrollToFrozenRowCol(
     if (freezenverticaldata != null && column != null) {
         let freezen_colindex = freezenverticaldata[1];
 
-        const offset = _.sortedIndex(freezenverticaldata[3], ctx.scrollLeft);
+        const offset = sortedIndex(freezenverticaldata[3], ctx.scrollLeft);
 
         const top = freezenverticaldata[4];
 
@@ -162,7 +162,7 @@ export function scrollToFrozenRowCol(
     if (freezenhorizontaldata != null && row != null) {
         let freezen_rowindex = freezenhorizontaldata[1];
 
-        const offset = _.sortedIndex(freezenhorizontaldata[3], ctx.scrollTop);
+        const offset = sortedIndex(freezenhorizontaldata[3], ctx.scrollTop);
 
         const left = freezenhorizontaldata[4];
 

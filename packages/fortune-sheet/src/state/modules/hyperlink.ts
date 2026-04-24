@@ -1,4 +1,4 @@
-import * as _ from "es-toolkit/compat";
+import {cloneDeep, omit, set} from "es-toolkit/compat";
 import {Context, getFlowdata} from "../context";
 import {getSheetIndex, isAllowEdit} from "../utils";
 import {mergeBorder} from "./cell";
@@ -58,7 +58,7 @@ export function saveHyperlink(
     if (sheetIndex != null && flowdata != null && linkType && linkAddress) {
         let cell = flowdata[r][c];
         if (cell == null) cell = {};
-        _.set(ctx.luckysheetfile[sheetIndex], ["hyperlink", `${r}_${c}`], {
+        set(ctx.luckysheetfile[sheetIndex], ["hyperlink", `${r}_${c}`], {
             linkType,
             linkAddress,
         });
@@ -78,11 +78,11 @@ export function removeHyperlink(ctx: Context, r: number, c: number) {
     const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
     const flowdata = getFlowdata(ctx);
     if (flowdata != null && sheetIndex != null) {
-        const hyperlink = _.omit(
+        const hyperlink = omit(
             ctx.luckysheetfile[sheetIndex].hyperlink,
             `${r}_${c}`
         );
-        _.set(ctx.luckysheetfile[sheetIndex], "hyperlink", hyperlink);
+        set(ctx.luckysheetfile[sheetIndex], "hyperlink", hyperlink);
         const cell = flowdata[r][c];
         if (cell != null) {
             flowdata[r][c] = {v: cell.v, m: cell.m};
@@ -157,14 +157,14 @@ export function goToLink(
         window.open(linkAddress);
     } else if (linkType === "sheet") {
         let sheetId;
-        _.forEach(ctx.luckysheetfile, (f) => {
+        ctx.luckysheetfile.forEach((f) => {
             if (linkAddress === f.name) {
                 sheetId = f.id;
             }
         });
         if (sheetId != null) changeSheet(ctx, sheetId);
     } else {
-        const range = _.cloneDeep(getcellrange(ctx, linkAddress));
+        const range = cloneDeep(getcellrange(ctx, linkAddress));
         if (range == null) return;
         const row_pre =
             range.row[0] - 1 === -1 ? 0 : ctx.visibledatarow[range.row[0] - 1];
@@ -218,7 +218,7 @@ export function onRangeSelectionModalMoveStart(
     const left = box.offsetLeft;
     const top = box.offsetTop;
     const initialPosition = {left, top, width, height};
-    _.set(globalCache, "linkCard.rangeSelectionModal", {
+    set(globalCache, "linkCard.rangeSelectionModal", {
         cursorMoveStartPosition: {
             x: e.pageX,
             y: e.pageY,
@@ -246,5 +246,5 @@ export function onRangeSelectionModalMove(
 }
 
 export function onRangeSelectionModalMoveEnd(globalCache: GlobalCache) {
-    _.set(globalCache, "linkCard.rangeSelectionModal", undefined);
+    set(globalCache, "linkCard.rangeSelectionModal", undefined);
 }

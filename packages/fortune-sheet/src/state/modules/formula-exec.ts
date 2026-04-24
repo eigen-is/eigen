@@ -1,7 +1,7 @@
 // Context-coupled formula execution. These functions read/write Context
 // (formula caches, sheet data, calc chains) so they stay in the state layer.
 // The engine directory has zero state-runtime dependencies.
-import * as _ from "es-toolkit/compat";
+import {forEach, isEmpty} from "es-toolkit/compat";
 import type {Cell, CellMatrix, FormulaCellInfo, FormulaDependency} from "../../engine/types";
 import type {FormulaCell} from "../types";
 import { Context, getFlowdata } from "../context";
@@ -82,7 +82,7 @@ function checkSpecialFunctionRange(
                 [function_str.split(",").length - 1].split("'")[1]
                 .split("'")[0];
 
-            const str_nb = _.trim(str);
+            const str_nb = str.trim();
             if (iscelldata(str_nb)) {
                 if (typeof cellRangeFunction === "function") {
                     cellRangeFunction(str_nb);
@@ -130,7 +130,7 @@ export function getcellrange(
             .replace(/\\'/g, "'")
             .replace(/''/g, "'");
 
-        _.forEach(luckysheetfile, (f) => {
+        forEach(luckysheetfile, (f) => {
             if (sheettxt === f.name) {
                 sheetId = f.id;
                 sheetdata = f.data;
@@ -254,9 +254,9 @@ export function isFunctionRange(
                 str = str.toUpperCase();
                 if (str.indexOf(":") > -1) {
                     const funcArray = str.split(":");
-                    function_str += `luckysheet_getSpecialReference(true,'${_.trim(
+                    function_str += `luckysheet_getSpecialReference(true,'${
                         funcArray[0]
-                    ).replace(/'/g, "\\'")}', luckysheet_function.${
+                    .trim().replace(/'/g, "\\'")}', luckysheet_function.${
                         funcArray[1]
                     }.f(#lucky#`;
                 } else {
@@ -380,11 +380,11 @@ export function isFunctionRange(
 
             if (s + s_next in operatorjson) {
                 if (bracket.length === 0) {
-                    if (_.trim(str).length > 0) {
+                    if (str.trim().length > 0) {
                         cal2.unshift(
                             isFunctionRange(
                                 ctx,
-                                _.trim(str),
+                                str.trim(),
                                 r,
                                 c,
                                 id,
@@ -392,8 +392,8 @@ export function isFunctionRange(
                                 cellRangeFunction
                             )
                         );
-                    } else if (_.trim(function_str).length > 0) {
-                        cal2.unshift(_.trim(function_str));
+                    } else if (function_str.trim().length > 0) {
+                        cal2.unshift(function_str.trim());
                     }
 
                     if (cal1[0] in operatorjson) {
@@ -416,11 +416,11 @@ export function isFunctionRange(
                 i += 1;
             } else {
                 if (bracket.length === 0) {
-                    if (_.trim(str).length > 0) {
+                    if (str.trim().length > 0) {
                         cal2.unshift(
                             isFunctionRange(
                                 ctx,
-                                _.trim(str),
+                                str.trim(),
                                 r,
                                 c,
                                 id,
@@ -428,8 +428,8 @@ export function isFunctionRange(
                                 cellRangeFunction
                             )
                         );
-                    } else if (_.trim(function_str).length > 0) {
-                        cal2.unshift(_.trim(function_str));
+                    } else if (function_str.trim().length > 0) {
+                        cal2.unshift(function_str.trim());
                     }
 
                     if (cal1[0] in operatorjson) {
@@ -457,7 +457,7 @@ export function isFunctionRange(
             }
         } else {
             if (matchConfig.dquote === 0 && matchConfig.squote === 0) {
-                str += _.trim(s);
+                str += s.trim();
             } else {
                 str += s;
             }
@@ -465,7 +465,7 @@ export function isFunctionRange(
 
         if (i === funcstack.length - 1) {
             let endstr = "";
-            let str_nb = _.trim(str).replace(/'/g, "\\'");
+            let str_nb = str.trim().replace(/'/g, "\\'");
             if (iscelldata(str_nb) && str_nb.substring(0, 1) !== ":") {
                 endstr = `luckysheet_getcelldata('${str_nb}')`;
             } else if (str_nb.substring(0, 1) === ":") {
@@ -474,7 +474,7 @@ export function isFunctionRange(
                     endstr = `luckysheet_getSpecialReference(false,${function_str},'${str_nb}')`;
                 }
             } else {
-                str = _.trim(str);
+                str = str.trim();
 
                 const regx = /{.*?}/;
                 if (
@@ -785,7 +785,7 @@ export function execFunctionGroup(
     // 3. formulaCellInfoMap: a cache of ALL formulas vs their ranges
     if (
         !ctx.formulaCache.formulaCellInfoMap ||
-        _.isEmpty(ctx.formulaCache.formulaCellInfoMap)
+        isEmpty(ctx.formulaCache.formulaCellInfoMap)
     ) {
         ctx.formulaCache.formulaCellInfoMap = {};
         setFormulaCellInfoMap(ctx, calcChains, data);

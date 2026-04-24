@@ -1,4 +1,4 @@
-import * as _ from "es-toolkit/compat";
+
 import {Context, getFlowdata} from "../context";
 import {getCellValue, setCellValue} from "./cell";
 
@@ -95,19 +95,19 @@ export function getDataArr(regStr: string, ctx: Context) {
     const r2 = ctx.luckysheet_select_save![0].row[1];
     const c = ctx.luckysheet_select_save![0].column[0];
     const data = getFlowdata(ctx);
-    if (!_.isNull(regStr) && regStr !== "") {
+    if (regStr !== null && regStr !== "") {
         const reg = new RegExp(regStr, "g");
         const dataArr = [];
         for (let r = r1; r <= r2; r += 1) {
             let rowArr = [];
             const cell = data![r][c];
             let value;
-            if (!_.isNull(cell) && !_.isNull(cell.m)) {
+            if (cell !== null && cell.m !== null) {
                 value = cell.m;
             } else {
                 value = getCellValue(r, c, data!);
             }
-            if (_.isNull(value) || _.isUndefined(value)) {
+            if (value === null || value === undefined) {
                 value = "";
             }
             rowArr = value.toString().split(reg);
@@ -133,13 +133,13 @@ export function getDataArr(regStr: string, ctx: Context) {
             const rowArr = [];
             const cell = data![r][c];
             let value;
-            if (!_.isNull(cell) && !_.isNull(cell.m)) {
+            if (cell !== null && cell.m !== null) {
                 value = cell.m;
             } else {
                 value = getCellValue(r, c, data!);
             }
 
-            if (_.isNull(value)) {
+            if (value === null) {
                 value = "";
             }
 
