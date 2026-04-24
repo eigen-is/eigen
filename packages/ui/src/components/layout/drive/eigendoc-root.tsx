@@ -1,6 +1,7 @@
-import { Outlet, useLocation } from '@tanstack/react-router';
+import { Outlet } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, useRootFolder } from '@workspace/lib/drive';
+import { parseOwnerId } from '@workspace/lib/types';
 import type { DriveContextType } from '@workspace/lib/types/drive';
 import { createContext } from 'react';
 import { AppShell } from '../app/app-shell';
@@ -16,19 +17,16 @@ type EigenDocRootProps = {
     config: EigenDocAppConfig;
     rootRoute: { useNavigate: () => (opts: { to: string }) => unknown };
     isFullScreen?: boolean;
+    teamOwnerId?: string;
+    teamMountId?: string;
 };
 
-const TEAM_DRIVE_URL = /^\/drive\/(team_[^/]+)\/([^/]+)/;
-
-export function EigenDocRoot({ config, rootRoute, isFullScreen = false }: EigenDocRootProps) {
+export function EigenDocRoot({ config, rootRoute, isFullScreen = false, teamOwnerId, teamMountId }: EigenDocRootProps) {
     const { user } = useAuth();
     const isGuest = user?.role === 'guest';
-    const { pathname } = useLocation();
-    const teamMatch = pathname.match(TEAM_DRIVE_URL);
-    const teamOwnerId = teamMatch?.[1] ?? null;
-    const teamMountId = teamMatch?.[2] ?? null;
-    const activeOwnerId = teamOwnerId || (isGuest ? '' : user?.id || '');
-    const activeMountId = teamMountId || DEFAULT_MOUNT_ID;
+    const isTeamView = !!teamOwnerId && !!teamMountId && parseOwnerId(teamOwnerId).type === 'team';
+    const activeOwnerId = isTeamView ? teamOwnerId : isGuest ? '' : user?.id || '';
+    const activeMountId = isTeamView ? teamMountId : DEFAULT_MOUNT_ID;
     const { data: root } = useRootFolder(activeOwnerId, activeMountId);
     const rootPath = isGuest ? null : root || null;
 

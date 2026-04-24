@@ -8,7 +8,16 @@ type MyRouterContext = {
 
 function SlidesRoot() {
     const isEditorRoute = useMatch({ from: '/_auth/slide/$ownerId/$mountId/$pathId', shouldThrow: false });
-    return <EigenDocRoot config={SLIDES_CONFIG} rootRoute={Route} isFullScreen={!!isEditorRoute} />;
+    const teamDriveMatch = useMatch({ from: '/_auth/_sidebar/drive/$ownerId/$mountId', shouldThrow: false });
+    return (
+        <EigenDocRoot
+            config={SLIDES_CONFIG}
+            rootRoute={Route}
+            isFullScreen={!!isEditorRoute}
+            teamOwnerId={teamDriveMatch?.params.ownerId}
+            teamMountId={teamDriveMatch?.params.mountId}
+        />
+    );
 }
 
 export const Route = createRootRouteWithContext<MyRouterContext>()({

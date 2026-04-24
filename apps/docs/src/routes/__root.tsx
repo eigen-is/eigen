@@ -8,7 +8,16 @@ type MyRouterContext = {
 
 function DocsRoot() {
     const isEditorRoute = useMatch({ from: '/_auth/doc/$ownerId/$mountId/$pathId', shouldThrow: false });
-    return <EigenDocRoot config={DOCS_CONFIG} rootRoute={Route} isFullScreen={!!isEditorRoute} />;
+    const teamDriveMatch = useMatch({ from: '/_auth/_sidebar/drive/$ownerId/$mountId', shouldThrow: false });
+    return (
+        <EigenDocRoot
+            config={DOCS_CONFIG}
+            rootRoute={Route}
+            isFullScreen={!!isEditorRoute}
+            teamOwnerId={teamDriveMatch?.params.ownerId}
+            teamMountId={teamDriveMatch?.params.mountId}
+        />
+    );
 }
 
 export const Route = createRootRouteWithContext<MyRouterContext>()({
