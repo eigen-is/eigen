@@ -1,4 +1,4 @@
-import * as _ from "es-toolkit/compat";
+import {cloneDeep, concat, debounce, omit, pull, union, without, xor} from "es-toolkit/compat";
 import {
     clearFilter,
     Context,
@@ -212,7 +212,7 @@ export const FilterMenu: React.FC = () => {
 
     const searchValues = useMemo(
         () =>
-            _.debounce((text: string) => {
+            debounce((text: string) => {
                 setShowValues(
                     data.flattenValues.filter(
                         (v) => v.toLowerCase().indexOf(text.toLowerCase()) > -1
@@ -235,11 +235,11 @@ export const FilterMenu: React.FC = () => {
     }, [data.dateRowMap, data.valueRowMap, data.visibleRows]);
 
     const inverseSelect = useCallback(() => {
-        setDatesUncheck(produce((draft) => _.xor(draft, Object.keys(data.dateRowMap))));
+        setDatesUncheck(produce((draft) => xor(draft, Object.keys(data.dateRowMap))));
         setValuesUncheck(
-            produce((draft) => _.xor(draft, Object.keys(data.valueRowMap)))
+            produce((draft) => xor(draft, Object.keys(data.valueRowMap)))
         );
-        hiddenRows.current = _.xor(hiddenRows.current, data.visibleRows);
+        hiddenRows.current = xor(hiddenRows.current, data.visibleRows);
     }, [data.dateRowMap, data.valueRowMap, data.visibleRows]);
 
     const onColorSelectChange = useCallback(
@@ -256,7 +256,7 @@ export const FilterMenu: React.FC = () => {
 
     const delayHideSubMenu = useMemo(
         () =>
-            _.debounce(() => {
+            debounce(() => {
                 if (mouseHoverSubMenu.current) return;
                 setShowSubMenu(false);
             }, 200),
@@ -350,7 +350,7 @@ export const FilterMenu: React.FC = () => {
         if (rect == null || subMenuRect == null) return;
 
         const winW = window.innerWidth;
-        const pos = _.cloneDeep(subMenuPos);
+        const pos = cloneDeep(subMenuPos);
         if (subMenuRect.left + subMenuRect.width > winW) {
             pos.left! -= subMenuRect.width;
             setSubMenuPos(pos);
@@ -370,7 +370,7 @@ export const FilterMenu: React.FC = () => {
             endRow,
             startCol
         );
-        setData(_.omit(res, ["datesUncheck", "valuesUncheck"]));
+        setData(omit(res, ["datesUncheck", "valuesUncheck"]));
         setDatesUncheck(res.datesUncheck);
         setValuesUncheck(res.valuesUncheck);
         setShowValues(res.flattenValues);
@@ -552,13 +552,13 @@ export const FilterMenu: React.FC = () => {
                                             onChange={(item: FilterDate, checked: boolean) => {
                                                 const rows = hiddenRows.current;
                                                 hiddenRows.current = checked
-                                                    ? _.without(rows, ...item.rows)
-                                                    : _.union(rows, item.rows);
+                                                    ? without(rows, ...item.rows)
+                                                    : union(rows, item.rows);
                                                 setDatesUncheck(
                                                     produce((draft) => {
                                                         return checked
-                                                            ? _.without(draft, ...item.dateValues)
-                                                            : _.union(draft, item.dateValues);
+                                                            ? without(draft, ...item.dateValues)
+                                                            : union(draft, item.dateValues);
                                                     })
                                                 );
                                             }}
@@ -580,12 +580,12 @@ export const FilterMenu: React.FC = () => {
                                                 onChange={(item: FilterValue, checked: boolean) => {
                                                     const rows = hiddenRows.current;
                                                     hiddenRows.current = checked
-                                                        ? _.without(rows, ...item.rows)
-                                                        : _.concat(rows, item.rows);
+                                                        ? without(rows, ...item.rows)
+                                                        : concat(rows, item.rows);
                                                     setValuesUncheck(
                                                         produce((draft) => {
                                                             if (checked) {
-                                                                _.pull(draft, item.key);
+                                                                pull(draft, item.key);
                                                             } else {
                                                                 draft.push(item.key);
                                                             }
