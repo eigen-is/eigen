@@ -57,7 +57,7 @@ export async function convertToDocument(
         }
         const sheets = await parseXlsxOrThrow(buffer);
         const name = sourcePath.name.replace(/\.xlsx$/i, '');
-        const newPath = await drive.createSheets(sourcePath.mountId, sourcePath.parentId, name);
+        const newPath = await drive.create(sourcePath.mountId, sourcePath.parentId, name, 'sheets');
         const collabDoc = await drive.getCollabDocument(sourcePath.mountId, newPath.id);
         writeSheetsToDoc(collabDoc.doc, sheets);
         return newPath;
@@ -69,7 +69,7 @@ export async function convertToDocument(
         }
         const { pmJson, images, schema } = await parseDocxOrThrow(buffer);
         const name = sourcePath.name.replace(/\.docx$/i, '');
-        const newPath = await drive.createDoc(sourcePath.mountId, sourcePath.parentId, name);
+        const newPath = await drive.create(sourcePath.mountId, sourcePath.parentId, name, 'doc');
         const collabDoc = await drive.getCollabDocument(sourcePath.mountId, newPath.id);
         writeDocToYjs(collabDoc.doc, pmJson, schema);
         await saveDocImages(mount, newPath, images);

@@ -92,7 +92,7 @@ overwrite it on their next save.
 `SharedDrive.getCollabDocument()` only checks **read** permission. The usual write check
 lives in `CollabDocument.handleMessage(canWrite)` — per WebSocket message. **Direct writes
 bypass that check**, so route handlers must call `drive.canWrite(...)` before writing.
-`drive.createSheets()` et al. already verify write permission on the parent folder, so
+`drive.create()` already verifies write permission on the parent folder, so
 newly-created documents don't need a second check.
 
 ## Per-type functions
@@ -187,9 +187,9 @@ import touch `drive.getCollabDocument()` (for writes). None add methods to `Driv
     const buffer = await mount.readFile(path.id);
     const sheets = await xlsxToSheets(buffer);
 
-    // createSheets enforces write permission on path.parentId.
+    // drive.create enforces write permission on path.parentId.
     const name = path.name.replace(/\.xlsx$/i, '');
-    const newPath = await drive.createSheets(params.mountId, path.parentId, name);
+    const newPath = await drive.create(params.mountId, path.parentId, name, 'sheets');
 
     const collabDoc = await drive.getCollabDocument(params.mountId, newPath.id);
     writeSheets(collabDoc.doc, sheets);

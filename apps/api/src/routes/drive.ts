@@ -87,26 +87,12 @@ export const driveRouter = new Elysia({ name: 'drive' })
         '/drive/:ownerId/:mountId/folder/:pathId/create/:type',
         async ({ params, body, user }): Promise<DrivePath> => {
             const drive = await getSharedDrive(params.ownerId, user);
-            const { mountId, pathId, type } = params;
-            const { fileName } = body;
-            switch (type) {
-                case 'doc':
-                    return await drive.createDoc(mountId, pathId, fileName);
-                case 'stickies':
-                    return await drive.createStickies(mountId, pathId, fileName);
-                case 'slides':
-                    return await drive.createSlides(mountId, pathId, fileName);
-                case 'sheets':
-                    return await drive.createSheets(mountId, pathId, fileName);
-                case 'chat':
-                    return await drive.createChat(mountId, pathId, fileName);
-            }
+            return await drive.create(params.mountId, params.pathId, body.fileName, params.type);
         },
         {
             body: t.Object({ fileName: t.String() }),
-            // Literal list mirrors EIGEN_DOC_TYPES — kept explicit so Elysia can preserve the
-            // tuple in `params.type`'s inferred type, which makes the handler's switch
-            // exhaustive at compile time.
+            // Literal list mirrors EIGEN_DOC_TYPES — kept explicit so Elysia preserves the
+            // tuple in `params.type`'s inferred type for Drive.create's EigenDocType argument.
             params: t.Object({
                 ownerId: t.String(),
                 mountId: t.String(),
