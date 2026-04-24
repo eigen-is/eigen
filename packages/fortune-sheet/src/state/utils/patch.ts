@@ -1,4 +1,4 @@
-import * as _ from "es-toolkit/compat";
+import {every, isEqual, isNil, isNumber, partition} from "es-toolkit/compat";
 import {Patch} from "immer";
 import {getSheetIndex} from ".";
 import {Context, getFlowdata} from "../context";
@@ -130,8 +130,7 @@ function additionalCellOps(
 }
 
 export function filterPatch(patches: Patch[]) {
-    return _.filter(
-        patches,
+    return patches.filter(
         (p) =>
             p.path[0] === "luckysheetfile" && p.path[2] !== "luckysheet_select_save"
     );
@@ -175,21 +174,21 @@ export function patchToOp(
             value: p.value,
             path: p.path,
         };
-        if (p.path[0] === "luckysheetfile" && _.isNumber(p.path[1])) {
+        if (p.path[0] === "luckysheetfile" && isNumber(p.path[1])) {
             const id = ctx.luckysheetfile[p.path[1]].id!;
             op.id = id;
             op.path = p.path.slice(2);
-            if (_.isEqual(op.path, ["calcChain", "length"])) {
+            if (isEqual(op.path, ["calcChain", "length"])) {
                 op.path = ["calcChain"];
                 op.value = ctx.luckysheetfile[p.path[1]].calcChain;
             }
         }
         return op;
     });
-    _.every(ops, (p) => {
+    every(ops, (p) => {
         if (
             p.op === "replace" &&
-            !_.isNil(p.value?.hl) &&
+            !isNil(p.value?.hl) &&
             p.path.length === 3 &&
             p.path![0] === "data"
         ) {
@@ -206,7 +205,7 @@ export function patchToOp(
         }
     });
     if (options?.insertRowColOp) {
-        const [nonDataOps, dataOps] = _.partition(ops, (p) => p.path[0] !== "data");
+        const [nonDataOps, dataOps] = partition(ops, (p) => p.path[0] !== "data");
         // find out formula cells as their formula range may be changed
         const formulaOps = extractFormulaCellOps(dataOps);
         ops = nonDataOps;
@@ -258,7 +257,7 @@ export function patchToOp(
             ops = [...ops, ...cellOps];
         }
     } else if (options?.deleteRowColOp) {
-        const [nonDataOps, dataOps] = _.partition(ops, (p) => p.path[0] !== "data");
+        const [nonDataOps, dataOps] = partition(ops, (p) => p.path[0] !== "data");
         // find out formula cells as their formula range may be changed
         const formulaOps = extractFormulaCellOps(dataOps);
         ops = nonDataOps;
@@ -273,7 +272,7 @@ export function patchToOp(
         const mergeOps = addtionalMergeOps(ops, ctx.currentSheetId);
         ops = [...ops, ...mergeOps];
     } else if (options?.addSheetOp) {
-        const [addSheetOps, otherOps] = _.partition(
+        const [addSheetOps, otherOps] = partition(
             ops,
             (op) => op.path.length === 0 && op.op === "add"
         );
@@ -296,7 +295,7 @@ export function patchToOp(
                 const sheetsRight = ctx.luckysheetfile.filter(
                     (sheet) => (sheet?.order as number) >= (order as number)
                 );
-                _.forEach(sheetsRight, (sheet) => {
+                sheetsRight.forEach((sheet) => {
                     ops.push({
                         id: sheet.id,
                         op: "replace",
@@ -339,7 +338,7 @@ export function patchToOp(
                     (sheet?.order as number) >= (order as number) &&
                     sheet.id !== options.deleteSheetOp?.id
             );
-            _.forEach(sheetsRight, (sheet) => {
+            sheetsRight.forEach((sheet) => {
                 ops.push({
                     id: sheet.id,
                     op: "replace",
@@ -362,7 +361,7 @@ export function patchToOp(
                 const sheetsRight = ctx.luckysheetfile.filter(
                     (sheet) => (sheet?.order as number) >= (order as number)
                 );
-                _.forEach(sheetsRight, (sheet) => {
+                sheetsRight.forEach((sheet) => {
                     ops.push({
                         id: sheet.id,
                         op: "replace",
@@ -377,7 +376,7 @@ export function patchToOp(
 }
 
 export function opToPatch(ctx: Context, ops: Op[]): [Patch[], Op[]] {
-    const [normalOps, specialOps] = _.partition(
+    const [normalOps, specialOps] = partition(
         ops,
         (op) => op.op === "add" || op.op === "remove" || op.op === "replace"
     );

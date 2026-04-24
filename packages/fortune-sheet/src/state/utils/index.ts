@@ -1,4 +1,4 @@
-import * as _ from "es-toolkit/compat";
+import {every, isNil, isUndefined} from "es-toolkit/compat";
 import {Context} from "../context";
 import {locale} from "../locale";
 import {Sheet} from "../types";
@@ -99,7 +99,7 @@ export function escapeScriptTag(str: string) {
 
 export function escapeHTMLTag(str: string) {
     if (typeof str !== "string") return str;
-    if (str.substr(0, 5) === "<span" || _.startsWith(str, "=")) {
+    if (str.substr(0, 5) === "<span" || str.startsWith("=")) {
         return str;
     }
     return str.replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -124,11 +124,11 @@ export function getSheetIdByName(ctx: Context, name: string) {
 }
 
 export function getSheetByIndex(ctx: Context, id: string) {
-    if (_.isNil(id)) {
+    if (isNil(id)) {
         id = ctx.currentSheetId;
     }
     const i = getSheetIndex(ctx, id);
-    if (_.isNil(i)) {
+    if (isNil(i)) {
         return null;
     }
     return ctx.luckysheetfile[i];
@@ -251,9 +251,9 @@ export function isAllowEdit(
     range?: Sheet["luckysheet_select_save"]
 ) {
     const cfg = ctx.config;
-    const judgeRange = _.isUndefined(range) ? ctx.luckysheet_select_save : range;
+    const judgeRange = isUndefined(range) ? ctx.luckysheet_select_save : range;
     return (
-        _.every(judgeRange, (selection) => {
+        every(judgeRange, (selection) => {
             for (let r = selection.row[0]; r <= selection.row[1]; r += 1) {
                 if (cfg.rowReadOnly?.[r]) {
                     return false;
@@ -274,6 +274,6 @@ export function isAllowEdit(
             }
 
             return true;
-        }) && (_.isUndefined(ctx.allowEdit) ? true : ctx.allowEdit)
+        }) && (isUndefined(ctx.allowEdit) ? true : ctx.allowEdit)
     );
 }

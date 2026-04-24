@@ -1,4 +1,4 @@
-import * as _ from "es-toolkit/compat";
+import {forEach, isNumber, isPlainObject, isUndefined} from "es-toolkit/compat";
 import {Context} from "../context";
 import {deleteRowCol, insertRowCol} from "../modules";
 import {CommonOptions, getSheet} from "./common";
@@ -40,8 +40,8 @@ export function insertRowOrColumn(
 ) {
     if (
         !["row", "column"].includes(type) ||
-        !_.isNumber(index) ||
-        !_.isNumber(count) ||
+        !isNumber(index) ||
+        !isNumber(count) ||
         !["lefttop", "rightbottom"].includes(direction)
     ) {
         throw invalidParams();
@@ -71,8 +71,8 @@ export function deleteRowOrColumn(
 ) {
     if (
         !["row", "column"].includes(type) ||
-        !_.isNumber(start) ||
-        !_.isNumber(end)
+        !isNumber(start) ||
+        !isNumber(end)
     ) {
         throw invalidParams();
     }
@@ -204,7 +204,7 @@ export function setRowHeight(
     options: CommonOptions = {},
     custom: boolean = false
 ) {
-    if (!_.isPlainObject(rowInfo)) {
+    if (!isPlainObject(rowInfo)) {
         throw invalidParams();
     }
 
@@ -215,11 +215,11 @@ export function setRowHeight(
         cfg.rowlen = {};
     }
 
-    _.forEach(rowInfo, (len, r) => {
+    forEach(rowInfo, (len, r) => {
         if (Number(r) >= 0) {
             if (Number(len) >= 0) {
                 cfg.rowlen![Number(r)] = Number(len);
-                if (custom && _.isUndefined(cfg.customHeight)) {
+                if (custom && isUndefined(cfg.customHeight)) {
                     cfg.customHeight = {[r]: 1};
                 } else if (custom) {
                     cfg.customHeight![r] = 1;
@@ -243,7 +243,7 @@ export function setColumnWidth(
     options: CommonOptions = {},
     custom: boolean = false
 ) {
-    if (!_.isPlainObject(columnInfo)) {
+    if (!isPlainObject(columnInfo)) {
         throw invalidParams();
     }
 
@@ -254,11 +254,11 @@ export function setColumnWidth(
         cfg.columnlen = {};
     }
 
-    _.forEach(columnInfo, (len, c) => {
+    forEach(columnInfo, (len, c) => {
         if (Number(c) >= 0) {
             if (Number(len) >= 0) {
                 cfg.columnlen![Number(c)] = Number(len);
-                if (custom && _.isUndefined(cfg.customWidth)) {
+                if (custom && isUndefined(cfg.customWidth)) {
                     cfg.customWidth = {[c]: 1};
                 } else if (custom) {
                     cfg.customWidth![c] = 1;
@@ -281,7 +281,7 @@ export function getRowHeight(
     rows: number[],
     options: CommonOptions = {}
 ) {
-    if (!_.isArray(rows) || rows.length === 0) {
+    if (!Array.isArray(rows) || rows.length === 0) {
         throw invalidParams();
     }
 
@@ -307,7 +307,7 @@ export function getColumnWidth(
     columns: number[],
     options: CommonOptions = {}
 ) {
-    if (!_.isArray(columns) || columns.length === 0) {
+    if (!Array.isArray(columns) || columns.length === 0) {
         throw invalidParams();
     }
 

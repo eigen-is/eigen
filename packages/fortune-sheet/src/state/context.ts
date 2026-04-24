@@ -1,4 +1,4 @@
-import * as _ from "es-toolkit/compat";
+import {isNil, sortBy} from "es-toolkit/compat";
 import {SheetConfig} from ".";
 import {FormulaCache} from "./modules";
 import {normalizeSelection} from "./modules/selection";
@@ -514,7 +514,7 @@ export function defaultContext(refs: RefValues): Context {
 export function getFlowdata(ctx?: Context, id?: string | null) {
     if (!ctx) return null;
     const i = getSheetIndex(ctx, id || ctx.currentSheetId);
-    if (_.isNil(i)) {
+    if (isNil(i)) {
         return null;
     }
     return ctx.luckysheetfile?.[i]?.data;
@@ -642,9 +642,9 @@ export function ensureSheetIndex(data: Sheet[], generateSheetId: () => string) {
 export function initSheetIndex(ctx: Context) {
     // get current sheet
     const shownSheets = ctx.luckysheetfile.filter(
-        (singleSheet) => _.isUndefined(singleSheet.hide) || singleSheet.hide !== 1
+        (singleSheet) => singleSheet.hide === undefined || singleSheet.hide !== 1
     );
-    ctx.currentSheetId = _.sortBy(shownSheets, (sheet) => sheet.order)[0]
+    ctx.currentSheetId = sortBy(shownSheets, (sheet) => sheet.order)[0]
         .id as string;
     for (let i = 0; i < ctx.luckysheetfile.length; i += 1) {
         if (
