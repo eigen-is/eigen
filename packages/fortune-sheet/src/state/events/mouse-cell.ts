@@ -1,4 +1,4 @@
-import {isEmpty, isNil, last, indexOf, set} from "es-toolkit/compat";
+import {indexOf, isEmpty, isNil, last, set} from "es-toolkit/compat";
 import {Context, getFlowdata} from "../context";
 import {
     cancelActiveImgItem,
