@@ -3192,4 +3192,74 @@ describe('Drive', () => {
             expect(res.status).toBe(403);
         });
     });
+
+    describe('Mount-scoped MIME Filter', () => {
+        let teamOwner: string;
+        let teamMountId: string;
+
+        beforeAll(async () => {
+            const config = getServerConfig();
+            const orgId = config!.orgId;
+
+            await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/set-active', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ organizationId: orgId }),
+            });
+
+            const teamRes = await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/create-team', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'Mount Mime Team', organizationId: orgId }),
+            });
+            const team = (await teamRes.json()) as OrgTeam;
+            teamOwner = teamOwnerId(team.id);
+
+            await authedRequest(ctx.alice.user.sessionToken, '/auth/organization/add-team-member', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ teamId: team.id, userId: ctx.alice.user.id }),
+            });
+
+            await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwner}/mount`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: 'Mount Mime Drive', storageType: 'local', maxSizeMB: 500 }),
+            });
+
+            const mountsRes = await authedRequest(ctx.alice.user.sessionToken, `/drive/${teamOwner}/mounts`);
+            const mounts = await assertJson<MountInfo[]>(mountsRes);
+            teamMountId = mounts[0].id;
+
+            const root = await driveGet(ctx.alice.user.sessionToken, teamOwner, teamMountId, 'root');
+            const file = new File(['hello'], 'team-mime-test.txt', { type: 'text/plain' });
+            await driveUpload(ctx.alice.user.sessionToken, teamOwner, teamMountId, root.id, file);
+        });
+
+        test('team member gets mount-scoped MIME results', async () => {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${teamOwner}/${teamMountId}/mime/text-plain`,
+            );
+            const data = await assertJson<DrivePath[]>(res);
+            expect(data.some((p) => p.name === 'team-mime-test.txt')).toBe(true);
+        });
+
+        test('non-member gets empty result on team mount-scoped MIME filter', async () => {
+            const res = await authedRequest(
+                ctx.bob.user.sessionToken,
+                `/drive/${teamOwner}/${teamMountId}/mime/text-plain`,
+            );
+            const data = await assertJson<DrivePath[]>(res);
+            expect(data).toEqual([]);
+        });
+
+        test('invalid mount returns 404 for team member', async () => {
+            const res = await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${teamOwner}/nonexistent-mount/mime/text-plain`,
+            );
+            expect(res.status).toBe(404);
+        });
+    });
 });

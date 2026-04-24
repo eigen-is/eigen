@@ -13,6 +13,7 @@ import { EigenDocDriveContext } from './eigendoc-root';
 type EigenDocListViewProps = {
     config: EigenDocAppConfig;
     pid?: string;
+    uid?: string;
     mid?: string;
     ownerId?: string;
     mountId?: string;
@@ -23,6 +24,7 @@ type EigenDocListViewProps = {
 export function EigenDocListView({
     config,
     pid,
+    uid,
     mid,
     ownerId,
     mountId,
@@ -35,7 +37,9 @@ export function EigenDocListView({
     const isMountScoped = !!mountId;
     const effectiveMountId = mid || mountId || DEFAULT_MOUNT_ID;
 
-    const { data: selectedPath = null } = usePathInfo(effectiveOwnerId, effectiveMountId, pid);
+    // The owner-aggregated mime query can return paths owned by other users via sharedPaths,
+    // so the selected item's owner (uid from search) may differ from the list's ownerId.
+    const { data: selectedPath = null } = usePathInfo(uid || effectiveOwnerId, effectiveMountId, pid);
     const { isMobile } = useLayout();
     const { openPreview } = usePreview();
 
@@ -51,7 +55,7 @@ export function EigenDocListView({
         if (isMobile && isDocumentType(path.type)) {
             openDocument(path);
         } else {
-            onNavigate({ pid: path.id, mid: path.mountId });
+            onNavigate({ pid: path.id, uid: path.ownerId, mid: path.mountId });
         }
     };
 

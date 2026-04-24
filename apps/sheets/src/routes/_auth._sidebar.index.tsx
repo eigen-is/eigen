@@ -7,12 +7,13 @@ export const Route = createFileRoute('/_auth/_sidebar/')({
 });
 
 function DriveRoute() {
-    const { pid, mid } = Route.useSearch();
+    const { pid, uid, mid } = Route.useSearch();
     const navigate = useNavigate();
     return (
         <EigenDocListView
             config={SHEETS_CONFIG}
             pid={pid}
+            uid={uid}
             mid={mid}
             onNavigate={(search) => navigate({ to: '/', search })}
             onNavigateBack={() => navigate({ to: '/' })}
