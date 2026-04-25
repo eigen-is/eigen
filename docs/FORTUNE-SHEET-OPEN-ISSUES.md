@@ -63,7 +63,7 @@ smoke pass. Sequence to run in `apps/sheets`:
       writes to correct cell, outside-click closes). Multi-select toggle
       still owed.
 - [ ] **shadcn cleanup pass (commit `b5c3b7e7`)** — the §3 sweep below
-      touched `DataVerification`, `LinkEidtCard`, `ConditionFormat/ConditionRules`,
+      touched `DataVerification`, `LinkEditCard`, `ConditionFormat/ConditionRules`,
       `ContextMenu/index.tsx`, `CustomSort`, `LocationCondition`, `SplitColumn`,
       `FilterMenu`. Walk through each dialog/popover.
 
@@ -88,7 +88,7 @@ smoke pass. Sequence to run in `apps/sheets`:
 - [ ] **CustomSort / LocationCondition / SplitColumn** dialogs (post
       `b5c3b7e7`): walk through select/checkbox/radio interactions, confirm
       `DialogFooter` layout matches RangeDialog.
-- [ ] **Link card** (LinkEidtCard:99): hyperlink a cell, click another cell
+- [ ] **Link card** (LinkEditCard:99): hyperlink a cell, click another cell
       with a different hyperlink, verify the card resets the form.
 - [ ] **Sheet tab scroll buttons** (SheetTab:41): add many sheets until the
       tab bar overflows, verify scroll arrows appear.
@@ -117,7 +117,7 @@ raw HTML. Most landed in commit `b5c3b7e7`.
 
 ### `<select>` → shadcn `Select` — all done
 - ~~`DataVerification/index.tsx` (5 sites)~~ — done
-- ~~`LinkEidtCard/index.tsx` (2 sites)~~ — done
+- ~~`LinkEditCard/index.tsx` (2 sites)~~ — done
 - ~~`ConditionFormat/ConditionRules.tsx` (1 site)~~ — done; also fixed a pre-existing bug where the original `<select>` wasn't passing `value`
 - ~~`CustomSort/index.tsx` (1 site)~~ — done
 
@@ -142,7 +142,7 @@ raw HTML. Most landed in commit `b5c3b7e7`.
 
 ### Previously deferred — now done
 
-- ~~**`LinkEidtCard/index.css` color-token migration.**~~ Done. All 182 lines
+- ~~**`LinkEditCard/index.css` color-token migration.**~~ Done. All 182 lines
   of CSS migrated to Tailwind + theme tokens inline; `index.css` deleted;
   2 raw `<input>` → shadcn `Input`. `fortune-link-modify-modal` +
   `range-selection-modal` classes preserved on the range-selection div
