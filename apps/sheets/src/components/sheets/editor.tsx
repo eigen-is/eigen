@@ -52,6 +52,7 @@ const TOOLBAR_ITEMS = [
     'freeze',
     'conditionFormat',
     'filter',
+    'dataVerification',
     'image',
     'quick-formula',
     'search',
