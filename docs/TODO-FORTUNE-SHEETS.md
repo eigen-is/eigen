@@ -65,7 +65,6 @@ The `useDialog` hook (in `hooks/useDialog.tsx`) wraps `ModalContext` to show/hid
 | `ConditionFormat/index.tsx`          | Yes              | No              | Shows `ConditionRules` dialog                            |
 | `ConditionFormat/ConditionRules.tsx` | Yes (hideDialog) | No              | Dialog content itself                                    |
 | `ContextMenu/index.tsx`              | Yes              | Yes             | Shows `CustomSort` dialog, alerts for errors             |
-| `ContextMenu/SheetTab.tsx`           | No               | Yes             | Delete/hide sheet alerts                                 |
 | `ContextMenu/FilterMenu.tsx`         | No               | Yes             | Sort error alerts                                        |
 | `CustomSort/index.tsx`               | Yes (hideDialog) | No              | Dialog content, closes on confirm                        |
 | `DataVerification/index.tsx`         | Yes              | No              | Shows RangeDialog                                        |
@@ -97,9 +96,6 @@ Components using `export default` that should use named function exports for con
 | `ConditionFormat/ConditionRules.tsx` | Named + default                                          | Remove redundant default                        |
 | `ContextMenu/index.tsx`              | `const ContextMenu: React.FC` + `export default`         | `export function ContextMenu()`                 |
 | `ContextMenu/FilterMenu.tsx`         | `const FilterMenu: React.FC` + `export default`          | `export function FilterMenu()`                  |
-| `ContextMenu/SheetTab.tsx`           | `const SheetTabContextMenu: React.FC` + `export default` | `export function SheetTabContextMenu()`         |
-| `ContextMenu/Menu.tsx`               | `const Menu: React.FC` + `export default`                | `export function Menu()`                        |
-| `ContextMenu/Divider.tsx`            | `const Divider: React.FC` + `export default`             | `export function Divider()`                     |
 | `CustomSort/index.tsx`               | `const CustomSort: React.FC` + `export default`          | `export function CustomSort()`                  |
 | `DataVerification/DropdownList.tsx`  | `const DropDownList: React.FC` + `export default`        | `export function DropDownList()`                |
 | `DataVerification/RangeDialog.tsx`   | `const RangeDialog: React.FC` + `export default`         | `export function RangeDialog()`                 |
@@ -171,15 +167,12 @@ implementations:
   using Lucide icons where possible
 - Some SVG icons have hardcoded Chinese labels (`裁剪`, `恢复原图`, `删除`) in `ImgBoxs/index.tsx` — should be localized
 
-### `ContextMenu/` (index, Menu, Divider, FilterMenu, SheetTab)
+### `ContextMenu/` (index, FilterMenu)
 
-- **CSS**: `index.css` (283 lines) imported by both `index.tsx` and `SheetTab.tsx`
+- ~~**CSS**: `index.css` (283 lines)~~ — deleted
 - ~~**BTN**: FilterMenu has 4 `button-basic` divs~~ — done in `b5c3b7e7`
-- `Menu.tsx` still has `luckysheet-*` CSS class names mixed with Tailwind — clean up
+- ~~**Deferred:** `menuItemClass` Tailwind string duplicated~~ — done in `bdb71f94`; const extracted, 4 inline duplicates deduped
 - `FilterMenu.tsx` — fixed-position panel, manual collision detection, and flyout submenu replaced with shadcn `Popover` + nested `Popover` in `b5c3b7e7`. Remaining: Chinese comments, `immer` `produce` patterns
-- `SheetTab.tsx` uses `SVGIcon` for right arrow — could use Lucide `ChevronRight`
-- `Divider.tsx` is a simple `<div>` — already uses Tailwind, **keep as-is**
-- **Deferred:** `menuItemClass` Tailwind string is duplicated inline at several sites in `ContextMenu/index.tsx` (insert-row, insert-column, set-row-height, …). FilterMenu now extracts it to a `menuItemClass` constant; aligning them is a future cleanup
 
 ### `CustomSort/index.tsx`
 
@@ -328,6 +321,8 @@ implementations:
 - ~~Replace hardcoded colors in components~~ — done in .tsx files (still present in remaining .css)
 - ~~Replace native `<input>`/`<select>`/`<checkbox>` with shadcn equivalents in CustomSort, FilterMenu~~ — done
 - ~~`FormulaSearch`, `ZoomControl`, `SheetOverlay` bottom-add-row shadcn migrations~~ — done
+- ~~Rename `LinkEidtCard/` → `LinkEditCard/`~~ — done (`dd46088a` + `3b5642a2`)
+- ~~9 `<div role="button">` pseudo-buttons → real `<button type="button">`~~ — done (`91e28493`)
 
 ### Next — Medium effort
 
