@@ -3,6 +3,7 @@ import { DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/component
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
+import { cn } from '@workspace/ui/lib/utils';
 import { useCallback, useContext, useMemo, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { cancelNormalSelected, locale, setCaretPosition } from '../../state';
@@ -147,14 +148,20 @@ export function FormulaSearch({ onCancel: _onCancel }: { onCancel: () => void })
             <div className="flex-1 min-h-0 border border-border rounded-md overflow-y-auto">
                 {filteredFunctionList.map((v, index) => (
                     <div
-                        className={`px-3 py-2 cursor-pointer border-b border-border text-sm ${index === selectedFuncIndex ? 'bg-primary text-primary-foreground' : 'hover:bg-muted/50'}`}
+                        className={cn(
+                            'px-3 py-2 cursor-pointer border-b border-border text-sm',
+                            index === selectedFuncIndex ? 'bg-primary text-primary-foreground' : 'hover:bg-muted/50',
+                        )}
                         key={v.n}
                         onClick={() => setSelectedFuncIndex(index)}
                         tabIndex={0}
                     >
                         <div className="font-medium">{v.n}</div>
                         <div
-                            className={`text-xs ${index === selectedFuncIndex ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}
+                            className={cn(
+                                'text-xs',
+                                index === selectedFuncIndex ? 'text-primary-foreground/70' : 'text-muted-foreground',
+                            )}
                         >
                             {v.a}
                         </div>

@@ -140,21 +140,17 @@ raw HTML. Most landed in commit `b5c3b7e7`.
 - `CustomSort/index.tsx` — sort column/order layout. Left as-is.
 - `SplitColumn/index.tsx` — preview grid. Left as-is.
 
-### Deliberately deferred (with reasons)
+### Previously deferred — now done
 
-- **`LinkEidtCard/index.css` color-token migration.** The CSS file has 15+
-  hardcoded hex colors (`#fff`, `#e5e5e5`, `#2674fb`, `#d9d9d9`, …). It
-  belongs to the broader CSS-to-Tailwind migration tracked under outstanding
-  item 5 in `project_fortune_sheet_followups.md` (along with `SheetTab/index.css`,
-  `SheetOverlay/index.css`, `SheetOverlay/ScrollBar/index.css`). Doing it
-  inside the shadcn sweep is scope creep into a separate sweep.
-- **`menuItemClass` propagation to `ContextMenu/index.tsx`.** `FilterMenu`
-  introduced a `menuItemClass` constant for its menu rows. The same Tailwind
-  string is hard-coded inline at several sites in the sibling
-  `ContextMenu/index.tsx` (insert-row, insert-column, set-row-height, …).
-  Aligning them would either extract to a shared sibling file or push the
-  constant into `ContextMenu/index.tsx` too. Pre-existing duplication —
-  fix when the next sweep touches `ContextMenu/index.tsx`.
+- ~~**`LinkEidtCard/index.css` color-token migration.**~~ Done. All 182 lines
+  of CSS migrated to Tailwind + theme tokens inline; `index.css` deleted;
+  2 raw `<input>` → shadcn `Input`. `fortune-link-modify-modal` +
+  `range-selection-modal` classes preserved on the range-selection div
+  (DOM-targeted from `state/modules/hyperlink.ts:214,237`).
+- ~~**`menuItemClass` propagation to `ContextMenu/index.tsx`.**~~ Done.
+  Module-level const extracted; 4 inline duplicates replaced. Note: kept
+  `gap-2` (which `FilterMenu`'s version omits) because the ContextMenu
+  call sites have inline `<input>` next to text and need the spacing.
 
 ---
 

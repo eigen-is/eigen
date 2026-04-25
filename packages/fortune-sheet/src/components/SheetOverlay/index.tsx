@@ -1,3 +1,5 @@
+import { Button } from '@workspace/ui/components/button';
+import { Input } from '@workspace/ui/components/input';
 import type React from 'react';
 import type { CSSProperties } from 'react';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -766,25 +768,27 @@ export const SheetOverlay: React.FC = () => {
                                         display: context.allowEdit ? 'block' : 'none',
                                     }}
                                 >
-                                    <div
-                                        className="fortune-add-row-button"
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
                                         onClick={() => {
                                             handleBottomAddRow();
                                         }}
                                         tabIndex={0}
                                     >
                                         {info.add}
-                                    </div>
-                                    <input
+                                    </Button>
+                                    <Input
                                         ref={bottomAddRowInputRef}
                                         type="text"
-                                        style={{ width: 50 }}
+                                        className="w-12"
                                         placeholder={context.addDefaultRows.toString()}
                                     />{' '}
-                                    <span style={{ fontSize: 14 }}>{info.row}</span>{' '}
-                                    <span style={{ fontSize: 14, color: '#9c9c9c' }}>({info.addLast})</span>
-                                    <span
-                                        className="fortune-add-row-button"
+                                    <span className="text-sm">{info.row}</span>{' '}
+                                    <span className="text-sm text-muted-foreground">({info.addLast})</span>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
                                         onClick={() => {
                                             refs.globalCache.scrollTop = 0;
                                             refs.globalCache.notifyScrollListeners();
@@ -795,7 +799,7 @@ export const SheetOverlay: React.FC = () => {
                                         tabIndex={0}
                                     >
                                         {info.backTop}
-                                    </span>
+                                    </Button>
                                 </div>
                             </div>
                         </div>
