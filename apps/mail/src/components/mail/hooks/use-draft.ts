@@ -76,7 +76,9 @@ function injectSignature(body: string, sig: string | undefined, kind: 'new' | 'r
     if (!sig) return body;
     const sep = '<p><br></p>';
     if (kind === 'new') return body + sep + sig;
-    return sep + sig + sep + body;
+    // formatEmailQuote already prefixes the quoted body with <br><br>, so a trailing
+    // separator here would stack visible blank lines between sig and quote.
+    return sep + sig + body;
 }
 
 function plainSignature(sig: string | undefined): string {

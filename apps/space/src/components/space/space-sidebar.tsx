@@ -4,7 +4,7 @@ import { SidebarItem, StorageUsage } from '@workspace/ui';
 import { SidebarHeader } from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import { Separator } from '@workspace/ui/components/separator';
-import { AtSign, BookUser, KeySquare, LockKeyholeIcon, Mail, Shield, UserRound } from 'lucide-react';
+import { BookUser, KeySquare, LockKeyholeIcon, Mail, MonitorSmartphone, Shield, UserRound } from 'lucide-react';
 
 type SpaceSidebarProps = {
     condensed?: boolean;
@@ -36,16 +36,16 @@ export function SpaceSidebar({ condensed = false, onClose, isMobile = false }: S
                 />
                 <SidebarItem
                     icon={<Mail className="h-4 w-4" />}
-                    label="Calendar & Mail"
-                    condensed={condensed}
-                    to="/services"
-                    params={{}}
-                />
-                <SidebarItem
-                    icon={<AtSign className="h-4 w-4" />}
                     label="Email"
                     condensed={condensed}
                     to="/email"
+                    params={{}}
+                />
+                <SidebarItem
+                    icon={<MonitorSmartphone className="h-4 w-4" />}
+                    label="Calendar & Mail"
+                    condensed={condensed}
+                    to="/services"
                     params={{}}
                 />
             </SidebarSection>

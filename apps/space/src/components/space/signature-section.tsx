@@ -53,7 +53,7 @@ export function SignatureSection() {
                 <LightEditor
                     content={html}
                     onChange={setHtml}
-                    toolbar="fixed"
+                    toolbar="floating"
                     placeholder="Type your signature here..."
                 />
             </div>
