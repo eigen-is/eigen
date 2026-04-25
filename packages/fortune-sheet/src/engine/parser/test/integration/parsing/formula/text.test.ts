@@ -483,4 +483,16 @@ describe('.parse() text formulas', () => {
             result: 0,
         });
     });
+
+    // formulajs.VALUE rejects numeric inputs with #VALUE!, but Excel accepts
+    // numbers (and booleans) as a pass-through. Calendar templates use
+    // `VALUE(prevDay) > daysInMonth` to gate spillover days; without this
+    // override the comparison silently fails and ghost days appear.
+    it('VALUE passes numbers and booleans through (Excel-correct)', () => {
+        expect(parser!.parse('VALUE(31)')).toMatchObject({ error: null, result: 31 });
+        expect(parser!.parse('VALUE(0)')).toMatchObject({ error: null, result: 0 });
+        expect(parser!.parse('VALUE(-1.5)')).toMatchObject({ error: null, result: -1.5 });
+        expect(parser!.parse('VALUE(TRUE)')).toMatchObject({ error: null, result: 1 });
+        expect(parser!.parse('VALUE(FALSE)')).toMatchObject({ error: null, result: 0 });
+    });
 });

@@ -61,6 +61,35 @@ describe('.parse() logical formulas', () => {
         });
     });
 
+    // Excel's IF skips the untaken branch, so an erroring branch in the path
+    // not chosen must not surface. The grammar evaluates both arms eagerly, so
+    // we rely on errors flowing through as in-band Error values rather than
+    // throws. Calendar templates that read empty IF results back through `+`
+    // (e.g. `IF(prev<>"", prev+1, fallback)` with `prev=""`) depend on this.
+    it('IF skips errors in the untaken branch', () => {
+        expect(parser!.parse('IF(FALSE, "x"+1, "ok")')).toMatchObject({
+            error: null,
+            result: 'ok',
+        });
+        expect(parser!.parse('IF(TRUE, 5, "x"+1)')).toMatchObject({
+            error: null,
+            result: 5,
+        });
+        expect(parser!.parse('IF(""<>"", ""+1, IF(TRUE, 7, ""))')).toMatchObject({
+            error: null,
+            result: 7,
+        });
+        // A taken branch that errors still surfaces as #VALUE!.
+        expect(parser!.parse('IF(TRUE, "x"+1, "ok")')).toMatchObject({
+            error: '#VALUE!',
+            result: null,
+        });
+        expect(parser!.parse('IF(FALSE, 5, "x"+1)')).toMatchObject({
+            error: '#VALUE!',
+            result: null,
+        });
+    });
+
     it('NOT', () => {
         expect(parser!.parse('NOT()')).toMatchObject({ error: null, result: true });
         expect(parser!.parse('NOT(TRUE)')).toMatchObject({

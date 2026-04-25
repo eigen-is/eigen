@@ -15,6 +15,22 @@ describe('.toNumber()', () => {
         const result1 = toNumber('foo');
         expect(result1 === undefined || Number.isNaN(result1)).toBe(true);
     });
+
+    // Date inputs come from formulajs date functions (DATEVALUE, EOMONTH, etc.)
+    // — those return JS Dates, but Excel returns serials. Coercing here is what
+    // makes `EOMONTH(d,0) - EOMONTH(d,-1)` produce a day count instead of either
+    // milliseconds (via .valueOf()) or NaN.
+    test('should convert Date to Excel serial (days since 1899-12-30)', () => {
+        // 1900-01-01 → serial 2 (Lotus 1900-leap-year bug means day 1 == 1899-12-31).
+        expect(toNumber(new Date(Date.UTC(1900, 0, 1)))).toBe(2);
+        // 2027-01-01 - 2026-12-31 should be exactly 1 day.
+        const a = toNumber(new Date(Date.UTC(2027, 0, 1)))!;
+        const b = toNumber(new Date(Date.UTC(2026, 11, 31)))!;
+        expect(a - b).toBe(1);
+        // 31 days in Jan 2027.
+        const jan31 = toNumber(new Date(Date.UTC(2027, 0, 31)))!;
+        expect(jan31 - a).toBe(30);
+    });
 });
 
 describe('.invertNumber()', () => {

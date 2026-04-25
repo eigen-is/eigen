@@ -31,7 +31,26 @@ export type FactoryOperator = ((symbol: string) => OperatorCallable) & {
 
 const availableOperators: Record<string, OperatorCallable> = Object.create(null);
 
-// Evaluate values by operator id.
+// Arithmetic operators coerce operands via `toNumber(x) ?? 0`, which silently
+// swallows an upstream Error: `Error + 1` would yield `0 + 1 = 1` and mask the
+// failure. Propagate the Error unchanged so nested arithmetic stays honest.
+//
+// Excluded:
+//  - Comparison operators (=, <>, <, >, <=, >=): these silently coerce Error to
+//    NaN/falsy via JS, returning `false`. That coercion is what lets common
+//    Excel-template patterns like `OR(x="", VALUE(x)>limit)` work even when
+//    `VALUE(x)` errors on a numeric input — the comparison degrades to false,
+//    OR sees false, IF picks the safe branch. Propagating here would surface
+//    the inner #VALUE! and break those templates.
+//  - Function-name operator (formulaFunction → formulajs): IF, IFERROR, IFNA,
+//    IFS, AND, OR explicitly inspect Error operands, so propagating before the
+//    call would defeat their short-circuit semantics.
+const PROPAGATE_ERROR_OPS = new Set(['+', '-', '*', '/', '^', '&']);
+
+// Evaluate values by operator id. A thrown Error is converted to a returned
+// Error so the grammar can keep reducing — the outer expression may discard it
+// (e.g. an untaken IF branch). The top-level parse() unwraps the Error result
+// into a `{error}` field for callers.
 export default function evaluateByOperator(operator: string, params: FormulaArg[] = []): FormulaOutput {
     const upperOperator = operator.toUpperCase();
 
@@ -39,7 +58,18 @@ export default function evaluateByOperator(operator: string, params: FormulaArg[
         throw Error(ERROR_NAME);
     }
 
-    return availableOperators[upperOperator](...params);
+    if (PROPAGATE_ERROR_OPS.has(upperOperator)) {
+        for (const p of params) {
+            if (p instanceof Error) return p;
+        }
+    }
+
+    try {
+        return availableOperators[upperOperator](...params);
+    } catch (e) {
+        if (e instanceof Error) return e;
+        throw e;
+    }
 }
 
 // Register operator. Overloaded so direct operators and factories are type-checked
