@@ -77,7 +77,7 @@ export function DropDownList() {
 
     return (
         <div
-            className="absolute z-[10000] bg-background border border-border shadow-md box-border text-xs"
+            className="luckysheet-mousedown-cancel absolute z-[10000] bg-background border border-border shadow-md box-border text-xs"
             style={position}
             ref={containerRef}
             onClick={(e) => e.stopPropagation()}
