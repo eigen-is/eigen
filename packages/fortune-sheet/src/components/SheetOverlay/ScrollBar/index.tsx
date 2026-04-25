@@ -15,6 +15,7 @@ export const ScrollBar: React.FC<Props> = ({ axis }) => {
     // button) sets context.scrollLeft/scrollTop, sync the DOM scrollbar and
     // globalCache. This effect only runs on actual context changes (rare during
     // user scrolling since we no longer write scroll to context on every tick).
+    // biome-ignore lint/correctness/useExhaustiveDependencies: deliberately runs only on the per-axis scroll value; including refs/globalCache/axis would re-fire this and clobber user scrolling
     useEffect(() => {
         if (axis === 'x') {
             globalCache.scrollLeft = context.scrollLeft;
@@ -23,7 +24,6 @@ export const ScrollBar: React.FC<Props> = ({ axis }) => {
             globalCache.scrollTop = context.scrollTop;
             refs.scrollbarY.current!.scrollTop = context.scrollTop;
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [axis === 'x' ? context.scrollLeft : context.scrollTop]);
 
     const onScroll = useCallback(() => {

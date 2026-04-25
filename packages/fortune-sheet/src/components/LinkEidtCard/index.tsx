@@ -96,6 +96,7 @@ export function LinkEditCard({
         [],
     );
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: `rc` is the trigger — when the active cell changes, reset the form even if the cell's stored link is identical
     useLayoutEffect(() => {
         setLinkAddress(originAddress);
         setLinkText(originText);

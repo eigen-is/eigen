@@ -72,7 +72,7 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
             }
             draftCtx.luckysheet_selection_range = [];
         });
-    }, [context.currentSheetId, context.sheetScrollRecord, setContext]);
+    }, [context.sheetScrollRecord, setContext]);
 
     useEffect(() => {
         if (!editable.current) return;

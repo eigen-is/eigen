@@ -320,16 +320,16 @@ export const SheetOverlay: React.FC = () => {
                 api.setSelection(draftCtx, [{ row: [0], column: [0] }], {});
             }
         });
-    }, [context.currentSheetId, setContext]);
+    }, [setContext]);
 
     // Warning dialog
+    // biome-ignore lint/correctness/useExhaustiveDependencies: only fires when a new warnDialog message arrives; showDialog from useDialog is stable
     useEffect(() => {
         if (context.warnDialog) {
             setTimeout(() => {
                 showDialog(context.warnDialog, 'ok');
             }, 240);
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [context.warnDialog]);
 
     useEffect(() => {
@@ -376,6 +376,7 @@ export const SheetOverlay: React.FC = () => {
         };
     }, [onKeyDownForZoom]);
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: range text recomputed on selection/sheet changes; context.config.merge is read but stable per sheet
     const rangeText = useMemo(() => {
         const lastSelection = context.luckysheet_select_save?.at(-1);
         if (!(lastSelection && lastSelection.row_focus != null && lastSelection.column_focus != null)) return '';
@@ -393,7 +394,6 @@ export const SheetOverlay: React.FC = () => {
         // Format single-cell selections (e.g., "AA12" → "AA. 12")
         // Format range selections (e.g., "A1:BB100" → "A. 1: BB. 100")
         return rawRangeTxt.replace(/([A-Z]+)(\d+)/g, '$1. $2');
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [context.currentSheetId, context.luckysheet_select_save]);
 
     const cellValue = () => {
@@ -412,6 +412,7 @@ export const SheetOverlay: React.FC = () => {
 
     const computedCellValue = cellValue();
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: FIXME audit-needed (PR 2) — see docs/FORTUNE-SHEET-EFFECT-DEPS-AUDIT.md (intentional snapshot on focus toggle)
     useEffect(() => {
         if (context.sheetFocused) {
             setLastRangeText(String(rangeText));
@@ -423,7 +424,7 @@ export const SheetOverlay: React.FC = () => {
         if (context.showSearch || context.showReplace) {
             showDialog(<SearchReplace />);
         }
-    }, [context.showSearch, context.showReplace]);
+    }, [context.showSearch, context.showReplace, showDialog]);
 
     return (
         <main
@@ -725,7 +726,7 @@ export const SheetOverlay: React.FC = () => {
                         })}
                     {context.linkCard?.sheetId === context.currentSheetId && <LinkEditCard {...context.linkCard} />}
                     {context.rangeDialog?.show && <RangeDialog />}
-                    <FilterOptions getContainer={() => containerRef.current!} />
+                    <FilterOptions />
                     <InputBox />
                     <div id="luckysheet-multipleRange-show" />
                     <div id="luckysheet-dynamicArray-hightShow" />
