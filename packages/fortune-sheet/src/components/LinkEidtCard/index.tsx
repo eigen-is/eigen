@@ -1,47 +1,44 @@
-import React, {useCallback, useContext, useLayoutEffect, useMemo, useRef, useState,} from "react";
+import type React from 'react';
+import { useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
     getRangetxt,
     goToLink,
     isLinkValid,
-    LinkCardProps,
+    type LinkCardProps,
     locale,
     normalizeSelection,
     onRangeSelectionModalMoveStart,
     removeHyperlink,
     replaceHtml,
     saveHyperlink,
-} from "../../state";
-import "./index.css";
-import {WorkbookContext} from "../../context";
-import type {LucideIcon} from "lucide-react";
-import {Copy, Grid3x3, Pencil, Unlink, X} from "lucide-react";
-import {Button} from "@workspace/ui/components/button";
+} from '../../state';
+import './index.css';
+import { Button } from '@workspace/ui/components/button';
+import type { LucideIcon } from 'lucide-react';
+import { Copy, Grid3x3, Pencil, Unlink, X } from 'lucide-react';
+import { WorkbookContext } from '../../context';
 
 export function LinkEditCard({
-                                 r,
-                                 c,
-                                 rc,
-                                 originText,
-                                 originType,
-                                 originAddress,
-                                 isEditing,
-                                 position,
-                                 selectingCellRange,
-                             }: LinkCardProps) {
-    const {context, setContext, refs} = useContext(WorkbookContext);
+    r,
+    c,
+    rc,
+    originText,
+    originType,
+    originAddress,
+    isEditing,
+    position,
+    selectingCellRange,
+}: LinkCardProps) {
+    const { context, setContext, refs } = useContext(WorkbookContext);
     const [linkText, setLinkText] = useState<string>(originText);
     const [linkAddress, setLinkAddress] = useState<string>(originAddress);
     const [linkType, setLinkType] = useState<string>(originType);
-    const {insertLink, linkTypeList, button} = locale(context);
-    const lastCell = useRef(
-        normalizeSelection(context, [{row: [r, r], column: [c, c]}])
-    );
+    const { insertLink, linkTypeList, button } = locale(context);
+    const lastCell = useRef(normalizeSelection(context, [{ row: [r, r], column: [c, c] }]));
     const skipCellRangeSet = useRef(true);
     const isLinkAddressValid = isLinkValid(context, linkType, linkAddress);
 
-    const tooltip = (
-        <div className="validation-input-tip">{isLinkAddressValid.tooltip}</div>
-    );
+    const tooltip = <div className="validation-input-tip">{isLinkAddressValid.tooltip}</div>;
 
     const hideLinkCard = useCallback(() => {
         if (refs.globalCache.linkCard) refs.globalCache.linkCard.mouseEnter = false;
@@ -54,10 +51,9 @@ export function LinkEditCard({
         (visible: boolean) =>
             setContext((draftCtx) => {
                 draftCtx.luckysheet_select_save! = lastCell.current!;
-                if (draftCtx.linkCard != null)
-                    draftCtx.linkCard.selectingCellRange = visible;
+                if (draftCtx.linkCard != null) draftCtx.linkCard.selectingCellRange = visible;
             }),
-        [setContext]
+        [setContext],
     );
 
     const containerEvent = useMemo(
@@ -68,18 +64,13 @@ export function LinkEditCard({
             onMouseLeave: () => {
                 if (refs.globalCache.linkCard) refs.globalCache.linkCard.mouseEnter = false;
             },
-            onMouseDown: (e: React.MouseEvent<HTMLDivElement, MouseEvent>) =>
-                e.stopPropagation(),
-            onMouseMove: (e: React.MouseEvent<HTMLDivElement, MouseEvent>) =>
-                e.stopPropagation(),
-            onMouseUp: (e: React.MouseEvent<HTMLDivElement, MouseEvent>) =>
-                e.stopPropagation(),
-            onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) =>
-                e.stopPropagation(),
-            onDoubleClick: (e: React.MouseEvent<HTMLDivElement, MouseEvent>) =>
-                e.stopPropagation(),
+            onMouseDown: (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => e.stopPropagation(),
+            onMouseMove: (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => e.stopPropagation(),
+            onMouseUp: (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => e.stopPropagation(),
+            onKeyDown: (e: React.KeyboardEvent<HTMLDivElement>) => e.stopPropagation(),
+            onDoubleClick: (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => e.stopPropagation(),
         }),
-        [refs.globalCache]
+        [refs.globalCache],
     );
 
     const renderBottomButton = useCallback(
@@ -93,16 +84,16 @@ export function LinkEditCard({
                 </Button>
             </div>
         ),
-        [button]
+        [button],
     );
 
     const renderToolbarButton = useCallback(
         (Icon: LucideIcon, onClick: () => void) => (
             <div className="fortune-toolbar-button" onClick={onClick} tabIndex={0}>
-                <Icon width={18} height={18} aria-hidden="true"/>
+                <Icon width={18} height={18} aria-hidden="true" />
             </div>
         ),
-        []
+        [],
     );
 
     useLayoutEffect(() => {
@@ -126,12 +117,7 @@ export function LinkEditCard({
             const len = context.luckysheet_select_save?.length ?? 0;
             if (len > 0) {
                 setLinkAddress(
-                    getRangetxt(
-                        context,
-                        context.currentSheetId,
-                        context.luckysheet_select_save![len - 1],
-                        ""
-                    )
+                    getRangetxt(context, context.currentSheetId, context.luckysheet_select_save![len - 1], ''),
                 );
             }
         }
@@ -145,7 +131,7 @@ export function LinkEditCard({
                     e.stopPropagation();
                 }}
                 className="fortune-link-modify-modal link-toolbar"
-                style={{left: position.cellLeft + 20, top: position.cellBottom}}
+                style={{ left: position.cellLeft + 20, top: position.cellBottom }}
             >
                 <div
                     className="link-content"
@@ -158,19 +144,17 @@ export function LinkEditCard({
                                 linkType,
                                 linkAddress,
                                 refs.scrollbarX.current!,
-                                refs.scrollbarY.current!
-                            )
+                                refs.scrollbarY.current!,
+                            ),
                         );
                     }}
                     tabIndex={0}
                 >
-                    {linkType === "webpage"
-                        ? insertLink.openLink
-                        : replaceHtml(insertLink.goTo, {linkAddress})}
+                    {linkType === 'webpage' ? insertLink.openLink : replaceHtml(insertLink.goTo, { linkAddress })}
                 </div>
-                {context.allowEdit === true && <div className="divider"/>}
+                {context.allowEdit === true && <div className="divider" />}
                 {context.allowEdit === true &&
-                    linkType === "webpage" &&
+                    linkType === 'webpage' &&
                     renderToolbarButton(Copy, () => {
                         navigator.clipboard.writeText(originAddress);
                         hideLinkCard();
@@ -181,15 +165,15 @@ export function LinkEditCard({
                             if (draftCtx.linkCard != null && draftCtx.allowEdit) {
                                 draftCtx.linkCard.isEditing = true;
                             }
-                        })
+                        }),
                     )}
-                {context.allowEdit === true && <div className="divider"/>}
+                {context.allowEdit === true && <div className="divider" />}
                 {context.allowEdit === true &&
                     renderToolbarButton(Unlink, () =>
                         setContext((draftCtx) => {
                             if (refs.globalCache.linkCard) refs.globalCache.linkCard.mouseEnter = false;
                             removeHyperlink(draftCtx, r, c);
-                        })
+                        }),
                     )}
             </div>
         );
@@ -198,27 +182,25 @@ export function LinkEditCard({
     return selectingCellRange ? (
         <div
             className="fortune-link-modify-modal range-selection-modal"
-            style={{left: position.cellLeft, top: position.cellBottom + 5}}
-            {...Object.fromEntries(Object.entries(containerEvent).filter(([k]) => !["onMouseDown", "onMouseMove", "onMouseUp"].includes(k)))}
+            style={{ left: position.cellLeft, top: position.cellBottom + 5 }}
+            {...Object.fromEntries(
+                Object.entries(containerEvent).filter(
+                    ([k]) => !['onMouseDown', 'onMouseMove', 'onMouseUp'].includes(k),
+                ),
+            )}
             onMouseDown={(e) => {
-                const {nativeEvent} = e;
+                const { nativeEvent } = e;
                 onRangeSelectionModalMoveStart(context, refs.globalCache, nativeEvent);
                 e.stopPropagation();
             }}
         >
-            <div
-                className="modal-icon-close"
-                onClick={() => setRangeModalVisible(false)}
-                tabIndex={0}
-            >
-                <X aria-hidden="true"/>
+            <div className="modal-icon-close" onClick={() => setRangeModalVisible(false)} tabIndex={0}>
+                <X aria-hidden="true" />
             </div>
             <div className="modal-title">{insertLink.selectCellRange}</div>
             <input
                 {...containerEvent}
-                className={`range-selection-input ${
-                    !linkAddress || isLinkAddressValid.isValid ? "" : "error-input"
-                }`}
+                className={`range-selection-input ${!linkAddress || isLinkAddressValid.isValid ? '' : 'error-input'}`}
                 placeholder={insertLink.cellRangePlaceholder}
                 onChange={(e) => setLinkAddress(e.target.value)}
                 value={linkAddress}
@@ -232,7 +214,7 @@ export function LinkEditCard({
                     () => {
                         setLinkAddress(originAddress);
                         setRangeModalVisible(false);
-                    }
+                    },
                 )}
             </div>
         </div>
@@ -262,15 +244,15 @@ export function LinkEditCard({
                     className="fortune-link-modify-select"
                     value={linkType}
                     onChange={(e) => {
-                        if (e.target.value === "sheet") {
+                        if (e.target.value === 'sheet') {
                             if (!linkText) {
                                 setLinkText(context.luckysheetfile[0].name);
                             }
                             setLinkAddress(context.luckysheetfile[0].name);
                         } else {
-                            setLinkAddress("");
+                            setLinkAddress('');
                         }
-                        if (e.target.value === "cellrange") setRangeModalVisible(true);
+                        if (e.target.value === 'cellrange') setRangeModalVisible(true);
                         setLinkType(e.target.value);
                     }}
                 >
@@ -282,14 +264,12 @@ export function LinkEditCard({
                 </select>
             </div>
             <div className="fortune-link-modify-line">
-                {linkType === "webpage" && (
+                {linkType === 'webpage' && (
                     <>
-                        <div className="fortune-link-modify-title">
-                            {insertLink.linkAddress}
-                        </div>
+                        <div className="fortune-link-modify-title">{insertLink.linkAddress}</div>
                         <input
                             className={`fortune-link-modify-input ${
-                                !linkAddress || isLinkAddressValid.isValid ? "" : "error-input"
+                                !linkAddress || isLinkAddressValid.isValid ? '' : 'error-input'
                             }`}
                             spellCheck="false"
                             value={linkAddress}
@@ -298,14 +278,12 @@ export function LinkEditCard({
                         {tooltip}
                     </>
                 )}
-                {linkType === "cellrange" && (
+                {linkType === 'cellrange' && (
                     <>
-                        <div className="fortune-link-modify-title">
-                            {insertLink.linkCell}
-                        </div>
+                        <div className="fortune-link-modify-title">{insertLink.linkCell}</div>
                         <input
                             className={`fortune-link-modify-input ${
-                                !linkAddress || isLinkAddressValid.isValid ? "" : "error-input"
+                                !linkAddress || isLinkAddressValid.isValid ? '' : 'error-input'
                             }`}
                             spellCheck="false"
                             value={linkAddress}
@@ -316,16 +294,14 @@ export function LinkEditCard({
                             onClick={() => setRangeModalVisible(true)}
                             tabIndex={0}
                         >
-                            <Grid3x3 aria-hidden="true"/>
+                            <Grid3x3 aria-hidden="true" />
                         </div>
                         {tooltip}
                     </>
                 )}
-                {linkType === "sheet" && (
+                {linkType === 'sheet' && (
                     <>
-                        <div className="fortune-link-modify-title">
-                            {insertLink.linkSheet}
-                        </div>
+                        <div className="fortune-link-modify-title">{insertLink.linkSheet}</div>
                         <select
                             className="fortune-link-modify-select"
                             onChange={(e) => {
@@ -348,12 +324,9 @@ export function LinkEditCard({
                 {renderBottomButton(() => {
                     if (!isLinkAddressValid.isValid) return;
                     if (refs.globalCache.linkCard) refs.globalCache.linkCard.mouseEnter = false;
-                    setContext((draftCtx) =>
-                        saveHyperlink(draftCtx, r, c, linkText, linkType, linkAddress)
-                    );
+                    setContext((draftCtx) => saveHyperlink(draftCtx, r, c, linkText, linkType, linkAddress));
                 }, hideLinkCard)}
             </div>
         </div>
     );
 }
-

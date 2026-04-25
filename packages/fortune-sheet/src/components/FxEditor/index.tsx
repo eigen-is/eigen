@@ -1,3 +1,7 @@
+import { FunctionSquare } from 'lucide-react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { WorkbookContext } from '../../context';
+import { usePrevious } from '../../hooks/usePrevious';
 import {
     cancelNormalSelected,
     escapeHTMLTag,
@@ -14,18 +18,14 @@ import {
     rangeHightlightselected,
     updateCell,
     valueShowEs,
-} from "../../state";
-import {useCallback, useContext, useEffect, useMemo, useRef, useState,} from "react";
-import {WorkbookContext} from "../../context";
-import {FunctionSquare} from "lucide-react";
-import {ContentEditable} from "../SheetOverlay/ContentEditable";
-import {FormulaSearch} from "../SheetOverlay/FormulaSearch";
-import {FormulaHint} from "../SheetOverlay/FormulaHint";
-import {NameBox} from "./NameBox";
-import {usePrevious} from "../../hooks/usePrevious";
+} from '../../state';
+import { ContentEditable } from '../SheetOverlay/ContentEditable';
+import { FormulaHint } from '../SheetOverlay/FormulaHint';
+import { FormulaSearch } from '../SheetOverlay/FormulaSearch';
+import { NameBox } from './NameBox';
 
 export function FxEditor() {
-    const {context, setContext, refs} = useContext(WorkbookContext);
+    const { context, setContext, refs } = useContext(WorkbookContext);
     const [focused, setFocused] = useState(false);
     const lastKeyDownEventRef = useRef<KeyboardEvent>(null);
     const inputContainerRef = useRef<HTMLDivElement>(null);
@@ -33,8 +33,8 @@ export function FxEditor() {
     const firstSelection = context.luckysheet_select_save?.[0];
     const prevFirstSelection = usePrevious(firstSelection);
     const prevSheetId = usePrevious(context.currentSheetId);
-    const recentText = useRef("");
-    const {info} = locale(context);
+    const recentText = useRef('');
+    const { info } = locale(context);
 
     useEffect(() => {
         // If selected row/column is in hidden state, don't allow editing
@@ -47,7 +47,7 @@ export function FxEditor() {
             return;
         }
         const d = getFlowdata(context);
-        let value = "";
+        let value = '';
         if (firstSelection) {
             const r = firstSelection.row_focus;
             const c = firstSelection.column_focus;
@@ -58,22 +58,18 @@ export function FxEditor() {
                 if (isInlineStringCell(cell)) {
                     value = getInlineStringNoStyle(r, c, d);
                 } else if (cell.f) {
-                    value = getCellValue(r, c, d, "f");
+                    value = getCellValue(r, c, d, 'f');
                 } else {
                     const shown = valueShowEs(r, c, d);
-                    value = shown == null ? "" : String(shown);
+                    value = shown == null ? '' : String(shown);
                 }
             }
             refs.fxInput.current!.innerHTML = escapeHTMLTag(escapeScriptTag(value));
         } else {
-            refs.fxInput.current!.innerHTML = "";
+            refs.fxInput.current!.innerHTML = '';
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [
-        context.luckysheetfile,
-        context.currentSheetId,
-        context.luckysheet_select_save,
-    ]);
+    }, [context.luckysheetfile, context.currentSheetId, context.luckysheet_select_save]);
 
     const onFocus = useCallback(() => {
         if (context.allowEdit === false) {
@@ -86,10 +82,7 @@ export function FxEditor() {
         ) {
             setFocused(true);
             setContext((draftCtx) => {
-                const last =
-                    draftCtx.luckysheet_select_save![
-                    draftCtx.luckysheet_select_save!.length - 1
-                        ];
+                const last = draftCtx.luckysheet_select_save![draftCtx.luckysheet_select_save!.length - 1];
 
                 const row_index = last.row_focus;
                 const col_index = last.column_focus;
@@ -115,15 +108,15 @@ export function FxEditor() {
                 return;
             }
             lastKeyDownEventRef.current = new KeyboardEvent(e.type, e.nativeEvent);
-            const {key} = e;
+            const { key } = e;
             recentText.current = refs.fxInput.current!.innerText;
-            if (key === "ArrowLeft" || key === "ArrowRight") {
+            if (key === 'ArrowLeft' || key === 'ArrowRight') {
                 e.stopPropagation();
             }
             setContext((draftCtx) => {
                 if (context.luckysheetCellUpdate.length > 0) {
                     switch (key) {
-                        case "Enter": {
+                        case 'Enter': {
                             // if (
                             //   $("#luckysheet-formula-search-c").is(":visible") &&
                             //   formula.searchFunctionCell != null
@@ -139,7 +132,7 @@ export function FxEditor() {
                                 draftCtx,
                                 draftCtx.luckysheetCellUpdate[0],
                                 draftCtx.luckysheetCellUpdate[1],
-                                refs.fxInput.current!
+                                refs.fxInput.current!,
                             );
                             draftCtx.luckysheet_select_save = [
                                 {
@@ -149,16 +142,16 @@ export function FxEditor() {
                                     column_focus: lastCellUpdate[1],
                                 },
                             ];
-                            moveHighlightCell(draftCtx, "down", 1, "rangeOfSelect");
+                            moveHighlightCell(draftCtx, 'down', 1, 'rangeOfSelect');
                             // $("#luckysheet-rich-text-editor").focus();
                             // }
                             e.preventDefault();
                             e.stopPropagation();
                             break;
                         }
-                        case "Escape": {
+                        case 'Escape': {
                             cancelNormalSelected(draftCtx);
-                            moveHighlightCell(draftCtx, "down", 0, "rangeOfSelect");
+                            moveHighlightCell(draftCtx, 'down', 0, 'rangeOfSelect');
                             // $("#luckysheet-functionbox-cell").blur();
                             // $("#luckysheet-rich-text-editor").focus();
                             e.preventDefault();
@@ -211,11 +204,11 @@ export function FxEditor() {
                             break;
                           }
                           */
-                        case "ArrowLeft": {
+                        case 'ArrowLeft': {
                             rangeHightlightselected(draftCtx, refs.fxInput.current!);
                             break;
                         }
-                        case "ArrowRight": {
+                        case 'ArrowRight': {
                             rangeHightlightselected(draftCtx, refs.fxInput.current!);
                             break;
                         }
@@ -225,12 +218,7 @@ export function FxEditor() {
                 }
             });
         },
-        [
-            context.allowEdit,
-            context.luckysheetCellUpdate.length,
-            refs.fxInput,
-            setContext,
-        ]
+        [context.allowEdit, context.luckysheetCellUpdate.length, refs.fxInput, setContext],
     );
 
     const onChange = useCallback(() => {
@@ -247,8 +235,7 @@ export function FxEditor() {
                 kcode === 108 ||
                 e.ctrlKey ||
                 e.altKey ||
-                (e.shiftKey &&
-                    (kcode === 37 || kcode === 38 || kcode === 39 || kcode === 40))
+                (e.shiftKey && (kcode === 37 || kcode === 38 || kcode === 39 || kcode === 40))
             ) ||
             kcode === 8 ||
             kcode === 32 ||
@@ -256,13 +243,7 @@ export function FxEditor() {
             (e.ctrlKey && kcode === 86)
         ) {
             setContext((draftCtx) => {
-                handleFormulaInput(
-                    draftCtx,
-                    refs.cellInput.current!,
-                    refs.fxInput.current!,
-                    kcode,
-                    recentText.current
-                );
+                handleFormulaInput(draftCtx, refs.cellInput.current!, refs.fxInput.current!, kcode, recentText.current);
             });
         }
     }, [refs.cellInput, refs.fxInput, setContext]);
@@ -279,23 +260,19 @@ export function FxEditor() {
         }
         return true;
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [
-        context.config,
-        context.luckysheet_select_save,
-        context.luckysheetfile,
-        context.currentSheetId,
-        isHidenRC,
-    ]);
+    }, [context.config, context.luckysheet_select_save, context.luckysheetfile, context.currentSheetId, isHidenRC]);
 
     return (
         <aside>
             <div className="flex flex-row h-7 border-b border-border">
-                <NameBox/>
+                <NameBox />
                 <div className="flex items-center  pl-2 pr-2">
-                    <FunctionSquare width={18} height={18} aria-hidden="true"/>
+                    <FunctionSquare width={18} height={18} aria-hidden="true" />
                 </div>
-                <div ref={inputContainerRef}
-                     className="overflow-visible p-0 flex-1 flex items-center relative border-l border-border">
+                <div
+                    ref={inputContainerRef}
+                    className="overflow-visible p-0 flex-1 flex items-center relative border-l border-border"
+                >
                     <ContentEditable
                         innerRef={(e) => {
                             refs.fxInput.current = e;
@@ -330,4 +307,3 @@ export function FxEditor() {
         </aside>
     );
 }
-

@@ -1,17 +1,16 @@
-import {getCellValue, getDropdownList, getFlowdata, getSheetIndex, mergeBorder, setDropcownValue,} from "../../state";
-import {useCallback, useContext, useEffect, useRef, useState,} from "react";
-import {WorkbookContext} from "../../context";
-import {useOutsideClick} from "../../hooks/useOutsideClick";
-import {Check} from "lucide-react";
-
+import { Check } from 'lucide-react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { WorkbookContext } from '../../context';
+import { useOutsideClick } from '../../hooks/useOutsideClick';
+import { getCellValue, getDropdownList, getFlowdata, getSheetIndex, mergeBorder, setDropcownValue } from '../../state';
 
 export function DropDownList() {
-    const {context, setContext} = useContext(WorkbookContext);
+    const { context, setContext } = useContext(WorkbookContext);
     const containerRef = useRef<HTMLDivElement>(null);
-    const [list, setList] = useState<any[]>([]);
+    const [list, setList] = useState<(string | number | boolean)[]>([]);
     const [isMul, setIsMul] = useState<boolean>(false);
     const [position, setPosition] = useState<{ left: number; top: number }>();
-    const [selected, setSelected] = useState<any[]>([]);
+    const [selected, setSelected] = useState<string[]>([]);
 
     const close = useCallback(() => {
         setContext((ctx) => {
@@ -24,8 +23,7 @@ export function DropDownList() {
     // Initialize multi-select dropdown
     useEffect(() => {
         if (!context.luckysheet_select_save) return;
-        const last =
-            context.luckysheet_select_save[context.luckysheet_select_save.length - 1];
+        const last = context.luckysheet_select_save[context.luckysheet_select_save.length - 1];
         const rowIndex = last.row_focus;
         const colIndex = last.column_focus;
         if (rowIndex == null || colIndex == null) return;
@@ -39,41 +37,40 @@ export function DropDownList() {
             [col_pre, ,] = margeSet.column;
         }
         const index = getSheetIndex(context, context.currentSheetId) as number;
-        const {dataVerification} = context.luckysheetfile[index];
+        const { dataVerification } = context.luckysheetfile[index];
         const item = dataVerification[`${rowIndex}_${colIndex}`];
         const dropdownList = getDropdownList(context, item.value1);
         // Pre-select current cell value in the dropdown
         const cellValue = getCellValue(rowIndex, colIndex, d);
 
         if (cellValue) {
-            setSelected(cellValue.toString().split(","));
+            setSelected(cellValue.toString().split(','));
         }
         setList(dropdownList);
         setPosition({
             left: col_pre,
             top: row,
         });
-        setIsMul(item.type2 === "true");
+        setIsMul(item.type2 === 'true');
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Update dropdown value on sheet change
     useEffect(() => {
         if (!context.luckysheet_select_save) return;
-        const last =
-            context.luckysheet_select_save[context.luckysheet_select_save.length - 1];
+        const last = context.luckysheet_select_save[context.luckysheet_select_save.length - 1];
         const rowIndex = last.row_focus;
         const colIndex = last.column_focus;
         if (rowIndex == null || colIndex == null) return;
         const index = getSheetIndex(context, context.currentSheetId) as number;
-        const {dataVerification} = context.luckysheetfile[index];
+        const { dataVerification } = context.luckysheetfile[index];
         const item = dataVerification[`${rowIndex}_${colIndex}`];
-        if (item.type2 !== "true") return;
+        if (item.type2 !== 'true') return;
         const d = getFlowdata(context);
         if (!d) return;
         const cellValue = getCellValue(rowIndex, colIndex, d);
         if (cellValue) {
-            setSelected(cellValue.toString().split(","));
+            setSelected(cellValue.toString().split(','));
         }
 
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -91,36 +88,40 @@ export function DropDownList() {
             onMouseUp={(e) => e.stopPropagation()}
             tabIndex={0}
         >
-            {list.map((v, i) => (
-                <div
-                    className="px-2.5 py-1.5 box-border cursor-pointer hover:bg-accent"
-                    key={i}
-                    onClick={() => {
-                        setContext((ctx) => {
-                            const arr = selected;
-                            const index = arr.indexOf(v);
-                            if (index < 0) {
-                                arr.push(v);
-                            } else {
-                                arr.splice(index, 1);
-                            }
-                            setSelected(arr);
-                            setDropcownValue(ctx, v, arr);
-                        });
-                    }}
-                    tabIndex={0}
-                >
-                    <Check
-                        width={12}
-                        height={12}
-                        style={{
-                            verticalAlign: "middle",
-                            display: isMul && selected.includes(v) ? "inline" : "none",
+            {list.map((v, i) => {
+                const vStr = String(v);
+                return (
+                    <div
+                        className="px-2.5 py-1.5 box-border cursor-pointer hover:bg-accent"
+                        // biome-ignore lint/suspicious/noArrayIndexKey: dropdown values can repeat, index is the stable identity
+                        key={i}
+                        onClick={() => {
+                            setContext((ctx) => {
+                                const arr = selected;
+                                const index = arr.indexOf(vStr);
+                                if (index < 0) {
+                                    arr.push(vStr);
+                                } else {
+                                    arr.splice(index, 1);
+                                }
+                                setSelected(arr);
+                                setDropcownValue(ctx, vStr, arr);
+                            });
                         }}
-                    />
-                    {v}
-                </div>
-            ))}
+                        tabIndex={0}
+                    >
+                        <Check
+                            width={12}
+                            height={12}
+                            style={{
+                                verticalAlign: 'middle',
+                                display: isMul && selected.includes(vStr) ? 'inline' : 'none',
+                            }}
+                        />
+                        {v}
+                    </div>
+                );
+            })}
         </div>
     );
 }

@@ -358,7 +358,11 @@ API bridge. Outstanding work:
   `state/modules/` with unclear separation. Audit then merge or rename.
 - **Enable biome on `state/`**: now unblocked; ~210 `any` annotations will surface as the main
   fix-up work.
-- **Enable biome on `components/`**: smaller lift, independent of `state/`. Start here.
+- **Enable biome on `components/`**: **done** — covered by biome lint/format. One rule is
+  scoped-off in `biome.jsonc` overrides: `lint/correctness/useExhaustiveDependencies` has ~100
+  diagnostics across effects in `InputBox`, `FxEditor`, `DropdownList`, etc. Luckysheet-fork
+  effects deliberately omit deps to avoid render loops, so each site needs per-effect judgement.
+  Audit and re-enable in a follow-up PR.
 
 The old monolithic `mouse.ts` (5k+ lines) and `formula.ts` (3.5k lines) have already been split —
 `state/events/mouse.ts` is now a 5-line re-export barrel, and `formula.ts` is gone (replaced by

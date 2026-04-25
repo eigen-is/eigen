@@ -1,4 +1,19 @@
-import {useCallback, useContext, useMemo, useRef, useState} from "react";
+import { useMediaQuery } from '@workspace/lib/media';
+import { Toolbar as SharedToolbar, TooltipButton } from '@workspace/ui';
+import { Button } from '@workspace/ui/components/button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
+    DropdownMenuTrigger,
+} from '@workspace/ui/components/dropdown-menu';
+import { useCallback, useContext, useMemo, useRef, useState } from 'react';
+import { WorkbookContext } from '../../context';
+import { useDialog } from '../../hooks/useDialog';
 import {
     applyLocation,
     autoSelectionFormula,
@@ -21,29 +36,14 @@ import {
     toolbarItemClickHandler,
     toolbarItemSelectedFunc,
     updateFormat,
-} from "../../state";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuSub,
-    DropdownMenuSubContent,
-    DropdownMenuSubTrigger,
-    DropdownMenuTrigger,
-} from "@workspace/ui/components/dropdown-menu";
-import {Button} from "@workspace/ui/components/button";
-import {useMediaQuery} from "@workspace/lib/media";
-import {Toolbar as SharedToolbar, TooltipButton} from "@workspace/ui";
-import {WorkbookContext} from "../../context";
-import {useDialog} from "../../hooks/useDialog";
-import {FormulaSearch} from "../FormulaSearch";
-import {SplitColumn} from "../SplitColumn";
-import {LocationCondition} from "../LocationCondition";
-import {DataVerification} from "../DataVerification";
-import {ConditionalFormat} from "../ConditionFormat";
-import {CustomBorder} from "./CustomBorder";
-import {FormatSearch} from "../FormatSearch";
+} from '../../state';
+import { ConditionalFormat } from '../ConditionFormat';
+import { DataVerification } from '../DataVerification';
+import { FormatSearch } from '../FormatSearch';
+import { FormulaSearch } from '../FormulaSearch';
+import { LocationCondition } from '../LocationCondition';
+import { SplitColumn } from '../SplitColumn';
+import { CustomBorder } from './CustomBorder';
 import {
     ColorCombo,
     ICON_MAP,
@@ -51,29 +51,27 @@ import {
     ToolbarIcon,
     ToolbarMenuButton,
     ToolbarSeparator,
-} from "./toolbar-helpers";
+} from './toolbar-helpers';
 
 export function Toolbar({
-                            leftItems,
-                            centerItems,
-                            rightItems,
-                        }: {
+    leftItems,
+    centerItems,
+    rightItems,
+}: {
     leftItems?: React.ReactNode;
     centerItems?: React.ReactNode;
     rightItems?: React.ReactNode;
 }) {
-    const {context, setContext, refs, settings, handleUndo, handleRedo} =
-        useContext(WorkbookContext);
+    const { context, setContext, refs, settings, handleUndo, handleRedo } = useContext(WorkbookContext);
     const contextRef = useRef(context);
-    const {showDialog, hideDialog} = useDialog();
+    const { showDialog, hideDialog } = useDialog();
     const isMobile = useMediaQuery('(max-width: 1200px)');
     const firstSelection = context.luckysheet_select_save?.[0];
     const flowdata = getFlowdata(context);
     contextRef.current = context;
     const row = firstSelection?.row_focus;
     const col = firstSelection?.column_focus;
-    const cell =
-        flowdata && row != null && col != null ? flowdata?.[row]?.[col] : undefined;
+    const cell = flowdata && row != null && col != null ? flowdata?.[row]?.[col] : undefined;
     const {
         toolbar,
         merge,
@@ -92,31 +90,31 @@ export function Toolbar({
         fontarray,
     } = locale(context);
     const toolbarFormat = locale(context).format;
-    const {currency} = settings;
+    const { currency } = settings;
     const defaultFormat = defaultFmt(currency);
 
-    const [customColor, setCustomColor] = useState("#000000");
-    const [customStyle, setCustomStyle] = useState("1");
+    const [customColor, setCustomColor] = useState('#000000');
+    const [customStyle, setCustomStyle] = useState('1');
 
     const getToolbarItem = useCallback(
         (name: string, i: number) => {
-            // @ts-ignore
+            // @ts-expect-error
             const tooltip = toolbar[name];
 
-            if (name === "|") {
-                return <ToolbarSeparator key={i}/>;
+            if (name === '|') {
+                return <ToolbarSeparator key={i} />;
             }
 
-            if (["font-color", "background"].includes(name)) {
+            if (['font-color', 'background'].includes(name)) {
                 const pick = (color: string | undefined) => {
                     setContext((draftCtx) =>
-                        (name === "font-color" ? handleTextColor : handleTextBackground)(
+                        (name === 'font-color' ? handleTextColor : handleTextBackground)(
                             draftCtx,
                             refs.cellInput.current!,
-                            color as string
-                        )
+                            color as string,
+                        ),
                     );
-                    if (name === "font-color") {
+                    if (name === 'font-color') {
                         refs.globalCache.recentTextColor = color;
                     } else {
                         refs.globalCache.recentBackgroundColor = color;
@@ -128,7 +126,7 @@ export function Toolbar({
                         name={name}
                         tooltip={tooltip}
                         recentColor={
-                            name === "font-color"
+                            name === 'font-color'
                                 ? refs.globalCache.recentTextColor
                                 : refs.globalCache.recentBackgroundColor
                         }
@@ -137,61 +135,44 @@ export function Toolbar({
                 );
             }
 
-            if (name === "format") {
+            if (name === 'format') {
                 let currentFmt = defaultFormat[0].text;
                 if (cell) {
-                    const curr = normalizedCellAttr(cell, "ct");
+                    const curr = normalizedCellAttr(cell, 'ct');
                     const format = defaultFormat.find((v) => v.value === curr?.fa);
                     if (curr?.fa != null) {
-                        currentFmt =
-                            format != null
-                                ? format.text
-                                : defaultFormat[defaultFormat.length - 1].text;
+                        currentFmt = format != null ? format.text : defaultFormat[defaultFormat.length - 1].text;
                     }
                 }
                 return (
                     <ToolbarDropdown text={currentFmt} key={name} tooltip={tooltip}>
-                        {defaultFormat.map(({text, value, example}, ii) => {
-                            if (value === "split") {
-                                return <DropdownMenuSeparator key={ii}/>;
+                        {defaultFormat.map(({ text, value, example }, ii) => {
+                            if (value === 'split') {
+                                // biome-ignore lint/suspicious/noArrayIndexKey: separator in static defaultFormat list
+                                return <DropdownMenuSeparator key={ii} />;
                             }
-                            if (value === "fmtOtherSelf") {
+                            if (value === 'fmtOtherSelf') {
                                 return (
                                     <DropdownMenuSub key={value}>
                                         <DropdownMenuSubTrigger>{text}</DropdownMenuSubTrigger>
                                         <DropdownMenuSubContent>
                                             <DropdownMenuItem
                                                 onClick={() => {
-                                                    showDialog(
-                                                        <FormatSearch
-                                                            onCancel={hideDialog}
-                                                            type="currency"
-                                                        />
-                                                    );
+                                                    showDialog(<FormatSearch onCancel={hideDialog} type="currency" />);
                                                 }}
                                             >
                                                 {toolbarFormat.moreCurrency}
                                             </DropdownMenuItem>
                                             <DropdownMenuItem
                                                 onClick={() => {
-                                                    showDialog(
-                                                        <FormatSearch
-                                                            onCancel={hideDialog}
-                                                            type="number"
-                                                        />
-                                                    );
+                                                    showDialog(<FormatSearch onCancel={hideDialog} type="number" />);
                                                 }}
                                             >
                                                 {toolbarFormat.moreNumber}
                                             </DropdownMenuItem>
                                             <DropdownMenuItem
                                                 onClick={() => {
-                                                    showDialog(
-                                                        <FormatSearch
-                                                            onCancel={hideDialog}
-                                                            type="date"
-                                                        />
-                                                    );
+                                                    showDialog(<FormatSearch onCancel={hideDialog} type="date" />);
                                                 }}
                                             >
                                                 {toolbarFormat.moreDateTime}
@@ -207,7 +188,7 @@ export function Toolbar({
                                         setContext((ctx) => {
                                             const d = getFlowdata(ctx);
                                             if (d == null) return;
-                                            updateFormat(ctx, refs.cellInput.current!, d, "ct", value);
+                                            updateFormat(ctx, refs.cellInput.current!, d, 'ct', value);
                                         });
                                     }}
                                 >
@@ -222,10 +203,10 @@ export function Toolbar({
                 );
             }
 
-            if (name === "font") {
+            if (name === 'font') {
                 let current = fontarray[0];
                 if (cell?.ff != null) {
-                    current = typeof cell.ff === "number" ? fontarray[cell.ff] : cell.ff;
+                    current = typeof cell.ff === 'number' ? fontarray[cell.ff] : cell.ff;
                 }
                 return (
                     <ToolbarDropdown text={current} key={name} tooltip={tooltip}>
@@ -236,81 +217,69 @@ export function Toolbar({
                                     setContext((ctx) => {
                                         const d = getFlowdata(ctx);
                                         if (!d) return;
-                                        updateFormat(ctx, refs.cellInput.current!, d, "ff", o);
+                                        updateFormat(ctx, refs.cellInput.current!, d, 'ff', o);
                                     });
                                 }}
                             >
-                                <span style={{fontFamily: `'${o}', sans-serif`}}>{o}</span>
+                                <span style={{ fontFamily: `'${o}', sans-serif` }}>{o}</span>
                             </DropdownMenuItem>
                         ))}
                     </ToolbarDropdown>
                 );
             }
 
-            if (name === "font-size") {
+            if (name === 'font-size') {
                 return (
                     <ToolbarDropdown
                         text={
                             cell
-                                ? normalizedCellAttr(cell, "fs", context.defaultFontSize)
+                                ? normalizedCellAttr(cell, 'fs', context.defaultFontSize)
                                 : context.defaultFontSize.toString()
                         }
                         key={name}
                         tooltip={tooltip}
                     >
-                        {[9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72].map(
-                            (num) => (
-                                <DropdownMenuItem
-                                    key={num}
-                                    onClick={() => {
-                                        setContext((draftContext) =>
-                                            handleTextSize(
-                                                draftContext,
-                                                refs.cellInput.current!,
-                                                num,
-                                                refs.canvas.current!.getContext("2d")!
-                                            )
-                                        );
-                                    }}
-                                >
-                                    {num}
-                                </DropdownMenuItem>
-                            )
-                        )}
+                        {[9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72].map((num) => (
+                            <DropdownMenuItem
+                                key={num}
+                                onClick={() => {
+                                    setContext((draftContext) =>
+                                        handleTextSize(
+                                            draftContext,
+                                            refs.cellInput.current!,
+                                            num,
+                                            refs.canvas.current!.getContext('2d')!,
+                                        ),
+                                    );
+                                }}
+                            >
+                                {num}
+                            </DropdownMenuItem>
+                        ))}
                     </ToolbarDropdown>
                 );
             }
 
-            if (name === "horizontal-align") {
+            if (name === 'horizontal-align') {
                 const items = [
-                    {id: "align-left", text: align.left, value: 1},
-                    {id: "align-center", text: align.center, value: 0},
-                    {id: "align-right", text: align.right, value: 2},
+                    { id: 'align-left', text: align.left, value: 1 },
+                    { id: 'align-center', text: align.center, value: 0 },
+                    { id: 'align-right', text: align.right, value: 2 },
                 ];
-                const currentId =
-                    items.find((item) => `${item.value}` === `${cell?.ht}`)?.id ??
-                    "align-left";
+                const currentId = items.find((item) => `${item.value}` === `${cell?.ht}`)?.id ?? 'align-left';
                 return (
-                    <ToolbarMenuButton
-                        iconId={currentId}
-                        key={name}
-                        tooltip={toolbar.horizontalAlign}
-                    >
-                        {items.map(({text, id}) => (
+                    <ToolbarMenuButton iconId={currentId} key={name} tooltip={toolbar.horizontalAlign}>
+                        {items.map(({ text, id }) => (
                             <DropdownMenuItem
                                 key={id}
                                 onClick={() => {
                                     setContext((ctx) => {
-                                        handleHorizontalAlign(
-                                            ctx,
-                                            refs.cellInput.current!,
-                                            id.replace("align-", "")
-                                        );
+                                        handleHorizontalAlign(ctx, refs.cellInput.current!, id.replace('align-', ''));
                                     });
                                 }}
                             >
                                 <div className="flex items-center gap-2">
-                                    <ToolbarIcon name={id} className="h-4 w-4"/>
+                                    <ToolbarIcon name={id} className="h-4 w-4" />
                                     <span>{text}</span>
                                 </div>
                             </DropdownMenuItem>
@@ -319,36 +288,26 @@ export function Toolbar({
                 );
             }
 
-            if (name === "vertical-align") {
+            if (name === 'vertical-align') {
                 const items = [
-                    {id: "align-top", text: align.top, value: 1},
-                    {id: "align-middle", text: align.middle, value: 0},
-                    {id: "align-bottom", text: align.bottom, value: 2},
+                    { id: 'align-top', text: align.top, value: 1 },
+                    { id: 'align-middle', text: align.middle, value: 0 },
+                    { id: 'align-bottom', text: align.bottom, value: 2 },
                 ];
-                const currentId =
-                    items.find((item) => `${item.value}` === `${cell?.vt}`)?.id ??
-                    "align-top";
+                const currentId = items.find((item) => `${item.value}` === `${cell?.vt}`)?.id ?? 'align-top';
                 return (
-                    <ToolbarMenuButton
-                        iconId={currentId}
-                        key={name}
-                        tooltip={toolbar.verticalAlign}
-                    >
-                        {items.map(({text, id}) => (
+                    <ToolbarMenuButton iconId={currentId} key={name} tooltip={toolbar.verticalAlign}>
+                        {items.map(({ text, id }) => (
                             <DropdownMenuItem
                                 key={id}
                                 onClick={() => {
                                     setContext((ctx) => {
-                                        handleVerticalAlign(
-                                            ctx,
-                                            refs.cellInput.current!,
-                                            id.replace("align-", "")
-                                        );
+                                        handleVerticalAlign(ctx, refs.cellInput.current!, id.replace('align-', ''));
                                     });
                                 }}
                             >
                                 <div className="flex items-center gap-2">
-                                    <ToolbarIcon name={id} className="h-4 w-4"/>
+                                    <ToolbarIcon name={id} className="h-4 w-4" />
                                     <span>{text}</span>
                                 </div>
                             </DropdownMenuItem>
@@ -357,7 +316,7 @@ export function Toolbar({
                 );
             }
 
-            if (name === "undo") {
+            if (name === 'undo') {
                 return (
                     <TooltipButton
                         key={name}
@@ -369,7 +328,7 @@ export function Toolbar({
                 );
             }
 
-            if (name === "redo") {
+            if (name === 'redo') {
                 return (
                     <TooltipButton
                         key={name}
@@ -381,7 +340,7 @@ export function Toolbar({
                 );
             }
 
-            if (name === "screenshot") {
+            if (name === 'screenshot') {
                 return (
                     <TooltipButton
                         key={name}
@@ -392,15 +351,9 @@ export function Toolbar({
                             if (imgsrc) {
                                 showDialog(
                                     <div>
-                                        <p className="text-sm mb-3">
-                                            {screenshot.screenshotTipSuccess}
-                                        </p>
-                                        <img
-                                            src={imgsrc}
-                                            alt=""
-                                            style={{maxWidth: "100%", maxHeight: "100%"}}
-                                        />
-                                    </div>
+                                        <p className="text-sm mb-3">{screenshot.screenshotTipSuccess}</p>
+                                        <img src={imgsrc} alt="" style={{ maxWidth: '100%', maxHeight: '100%' }} />
+                                    </div>,
                                 );
                             }
                         }}
@@ -408,7 +361,7 @@ export function Toolbar({
                 );
             }
 
-            if (name === "splitColumn") {
+            if (name === 'splitColumn') {
                 return (
                     <TooltipButton
                         key={name}
@@ -417,18 +370,18 @@ export function Toolbar({
                         onClick={() => {
                             if (contextRef.current.allowEdit === false) return;
                             if (contextRef.current.luckysheet_select_save == null) {
-                                showDialog(splitText.tipNoSelect, "ok");
+                                showDialog(splitText.tipNoSelect, 'ok');
                             } else {
                                 const currentColumn =
                                     contextRef.current.luckysheet_select_save[
-                                    contextRef.current.luckysheet_select_save.length - 1
-                                        ].column;
+                                        contextRef.current.luckysheet_select_save.length - 1
+                                    ].column;
                                 if (contextRef.current.luckysheet_select_save.length > 1) {
-                                    showDialog(splitText.tipNoMulti, "ok");
+                                    showDialog(splitText.tipNoMulti, 'ok');
                                 } else if (currentColumn[0] !== currentColumn[1]) {
-                                    showDialog(splitText.tipNoMultiColumn, "ok");
+                                    showDialog(splitText.tipNoMultiColumn, 'ok');
                                 } else {
-                                    showDialog(<SplitColumn/>);
+                                    showDialog(<SplitColumn />);
                                 }
                             }
                         }}
@@ -436,7 +389,7 @@ export function Toolbar({
                 );
             }
 
-            if (name === "dataVerification") {
+            if (name === 'dataVerification') {
                 return (
                     <TooltipButton
                         key={name}
@@ -444,42 +397,38 @@ export function Toolbar({
                         tooltipText={tooltip}
                         onClick={() => {
                             if (contextRef.current.allowEdit === false) return;
-                            showDialog(<DataVerification/>);
+                            showDialog(<DataVerification />);
                         }}
                     />
                 );
             }
 
-            if (name === "locationCondition") {
+            if (name === 'locationCondition') {
                 const items = [
-                    {text: findAndReplace.location, value: "location"},
-                    {text: findAndReplace.locationFormula, value: "locationFormula"},
-                    {text: findAndReplace.locationDate, value: "locationDate"},
-                    {text: findAndReplace.locationDigital, value: "locationDigital"},
-                    {text: findAndReplace.locationString, value: "locationString"},
-                    {text: findAndReplace.locationError, value: "locationError"},
-                    {text: findAndReplace.locationRowSpan, value: "locationRowSpan"},
-                    {text: findAndReplace.columnSpan, value: "locationColumnSpan"},
+                    { text: findAndReplace.location, value: 'location' },
+                    { text: findAndReplace.locationFormula, value: 'locationFormula' },
+                    { text: findAndReplace.locationDate, value: 'locationDate' },
+                    { text: findAndReplace.locationDigital, value: 'locationDigital' },
+                    { text: findAndReplace.locationString, value: 'locationString' },
+                    { text: findAndReplace.locationError, value: 'locationError' },
+                    { text: findAndReplace.locationRowSpan, value: 'locationRowSpan' },
+                    { text: findAndReplace.columnSpan, value: 'locationColumnSpan' },
                 ];
                 return (
-                    <ToolbarMenuButton
-                        iconId="locationCondition"
-                        key={name}
-                        tooltip={findAndReplace.location}
-                    >
-                        {items.map(({text, value}) => (
+                    <ToolbarMenuButton iconId="locationCondition" key={name} tooltip={findAndReplace.location}>
+                        {items.map(({ text, value }) => (
                             <DropdownMenuItem
                                 key={value}
                                 onClick={() => {
                                     const ctx = contextRef.current;
                                     if (ctx.luckysheet_select_save == null) {
-                                        showDialog(freezen.noSeletionError, "ok");
+                                        showDialog(freezen.noSeletionError, 'ok');
                                         return;
                                     }
                                     const last = ctx.luckysheet_select_save[0];
                                     const fd = getFlowdata(ctx);
-                                    let range: { row: any[]; column: any[] }[];
-                                    let rangeArr: any[] = [];
+                                    let range: { row: number[]; column: number[] }[];
+                                    let rangeArr: { row: number[]; column: number[] }[] = [];
                                     if (
                                         ctx.luckysheet_select_save?.length === 0 ||
                                         (ctx.luckysheet_select_save?.length === 1 &&
@@ -495,63 +444,63 @@ export function Toolbar({
                                     } else {
                                         range = [...ctx.luckysheet_select_save];
                                     }
-                                    if (value === "location") {
-                                        showDialog(<LocationCondition/>);
-                                    } else if (value === "locationFormula") {
+                                    if (value === 'location') {
+                                        showDialog(<LocationCondition />);
+                                    } else if (value === 'locationFormula') {
                                         setContext((c) => {
-                                            rangeArr = applyLocation(range, "locationFormula", "all", c);
+                                            rangeArr = applyLocation(range, 'locationFormula', 'all', c);
                                         });
-                                    } else if (value === "locationDate") {
+                                    } else if (value === 'locationDate') {
                                         setContext((c) => {
-                                            rangeArr = applyLocation(range, "locationConstant", "d", c);
+                                            rangeArr = applyLocation(range, 'locationConstant', 'd', c);
                                         });
-                                    } else if (value === "locationDigital") {
+                                    } else if (value === 'locationDigital') {
                                         setContext((c) => {
-                                            rangeArr = applyLocation(range, "locationConstant", "n", c);
+                                            rangeArr = applyLocation(range, 'locationConstant', 'n', c);
                                         });
-                                    } else if (value === "locationString") {
+                                    } else if (value === 'locationString') {
                                         setContext((c) => {
-                                            rangeArr = applyLocation(range, "locationConstant", "s,g", c);
+                                            rangeArr = applyLocation(range, 'locationConstant', 's,g', c);
                                         });
-                                    } else if (value === "locationError") {
+                                    } else if (value === 'locationError') {
                                         setContext((c) => {
-                                            rangeArr = applyLocation(range, "locationConstant", "e", c);
+                                            rangeArr = applyLocation(range, 'locationConstant', 'e', c);
                                         });
-                                    } else if (value === "locationCondition") {
+                                    } else if (value === 'locationCondition') {
                                         setContext((c) => {
-                                            rangeArr = applyLocation(range, "locationCF", undefined, c);
+                                            rangeArr = applyLocation(range, 'locationCF', undefined, c);
                                         });
-                                    } else if (value === "locationRowSpan") {
+                                    } else if (value === 'locationRowSpan') {
                                         if (
                                             ctx.luckysheet_select_save?.length === 0 ||
                                             (ctx.luckysheet_select_save?.length === 1 &&
                                                 ctx.luckysheet_select_save[0].row[0] ===
-                                                ctx.luckysheet_select_save[0].row[1])
+                                                    ctx.luckysheet_select_save[0].row[1])
                                         ) {
-                                            showDialog(findAndReplace.locationTiplessTwoRow, "ok");
+                                            showDialog(findAndReplace.locationTiplessTwoRow, 'ok');
                                             return;
                                         }
                                         range = [...ctx.luckysheet_select_save];
                                         setContext((c) => {
-                                            rangeArr = applyLocation(range, "locationRowSpan", undefined, c);
+                                            rangeArr = applyLocation(range, 'locationRowSpan', undefined, c);
                                         });
-                                    } else if (value === "locationColumnSpan") {
+                                    } else if (value === 'locationColumnSpan') {
                                         if (
                                             ctx.luckysheet_select_save?.length === 0 ||
                                             (ctx.luckysheet_select_save?.length === 1 &&
                                                 ctx.luckysheet_select_save[0].column[0] ===
-                                                ctx.luckysheet_select_save[0].column[1])
+                                                    ctx.luckysheet_select_save[0].column[1])
                                         ) {
-                                            showDialog(findAndReplace.locationTiplessTwoColumn, "ok");
+                                            showDialog(findAndReplace.locationTiplessTwoColumn, 'ok');
                                             return;
                                         }
                                         range = [...ctx.luckysheet_select_save];
                                         setContext((c) => {
-                                            rangeArr = applyLocation(range, "locationColumnSpan", undefined, c);
+                                            rangeArr = applyLocation(range, 'locationColumnSpan', undefined, c);
                                         });
                                     }
-                                    if (rangeArr.length === 0 && value !== "location")
-                                        showDialog(findAndReplace.locationTipNotFindCell, "ok");
+                                    if (rangeArr.length === 0 && value !== 'location')
+                                        showDialog(findAndReplace.locationTipNotFindCell, 'ok');
                                 }}
                             >
                                 {text}
@@ -561,25 +510,16 @@ export function Toolbar({
                 );
             }
 
-            if (name === "conditionFormat") {
-                const items = [
-                    "highlightCellRules",
-                    "itemSelectionRules",
-                    "-",
-                    "deleteRule",
-                ];
+            if (name === 'conditionFormat') {
+                const items = ['highlightCellRules', 'itemSelectionRules', '-', 'deleteRule'];
                 return (
-                    <ToolbarMenuButton
-                        iconId="conditionFormat"
-                        key={name}
-                        tooltip={toolbar.conditionalFormat}
-                    >
-                        <ConditionalFormat items={items}/>
+                    <ToolbarMenuButton iconId="conditionFormat" key={name} tooltip={toolbar.conditionalFormat}>
+                        <ConditionalFormat items={items} />
                     </ToolbarMenuButton>
                 );
             }
 
-            if (name === "image") {
+            if (name === 'image') {
                 if (!settings.hooks?.onInsertImage) return null;
                 return (
                     <TooltipButton
@@ -594,30 +534,37 @@ export function Toolbar({
                 );
             }
 
-
-            if (name === "quick-formula") {
+            if (name === 'quick-formula') {
                 const itemData = [
-                    {text: formula.sum, value: "SUM"},
-                    {text: formula.average, value: "AVERAGE"},
-                    {text: formula.count, value: "COUNT"},
-                    {text: formula.max, value: "MAX"},
-                    {text: formula.min, value: "MIN"},
+                    { text: formula.sum, value: 'SUM' },
+                    { text: formula.average, value: 'AVERAGE' },
+                    { text: formula.count, value: 'COUNT' },
+                    { text: formula.max, value: 'MAX' },
+                    { text: formula.min, value: 'MIN' },
                 ];
                 return (
                     <ToolbarMenuButton iconId="formula-sum" key={name} tooltip={toolbar.autoSum}>
                         <DropdownMenuItem
-                            onClick={() => setContext((ctx) => {
-                                handleSum(ctx, refs.cellInput.current!, refs.fxInput.current, refs.globalCache!);
-                            })}
+                            onClick={() =>
+                                setContext((ctx) => {
+                                    handleSum(ctx, refs.cellInput.current!, refs.fxInput.current, refs.globalCache!);
+                                })
+                            }
                         >
                             {formula.sum} (SUM)
                         </DropdownMenuItem>
-                        {itemData.slice(1).map(({value, text}) => (
+                        {itemData.slice(1).map(({ value, text }) => (
                             <DropdownMenuItem
                                 key={value}
                                 onClick={() => {
                                     setContext((ctx) => {
-                                        autoSelectionFormula(ctx, refs.cellInput.current!, refs.fxInput.current, value, refs.globalCache);
+                                        autoSelectionFormula(
+                                            ctx,
+                                            refs.cellInput.current!,
+                                            refs.fxInput.current,
+                                            value,
+                                            refs.globalCache,
+                                        );
                                     });
                                 }}
                             >
@@ -627,29 +574,32 @@ export function Toolbar({
                                 </div>
                             </DropdownMenuItem>
                         ))}
-                        <DropdownMenuSeparator/>
-                        <DropdownMenuItem onClick={() => showDialog(<FormulaSearch onCancel={hideDialog}/>)}>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => showDialog(<FormulaSearch onCancel={hideDialog} />)}>
                             {`${formula.find}...`}
                         </DropdownMenuItem>
                     </ToolbarMenuButton>
                 );
             }
 
-            if (name === "merge-cell") {
+            if (name === 'merge-cell') {
                 const itemdata = [
-                    {text: merge.mergeAll, value: "merge-all"},
-                    {text: merge.mergeV, value: "merge-vertical"},
-                    {text: merge.mergeH, value: "merge-horizontal"},
-                    {text: merge.mergeCancel, value: "merge-cancel"},
+                    { text: merge.mergeAll, value: 'merge-all' },
+                    { text: merge.mergeV, value: 'merge-vertical' },
+                    { text: merge.mergeH, value: 'merge-horizontal' },
+                    { text: merge.mergeCancel, value: 'merge-cancel' },
                 ];
                 return (
                     <ToolbarMenuButton iconId="merge-all" key={name} tooltip={tooltip}>
-                        {itemdata.map(({text, value}) => (
-                            <DropdownMenuItem key={value} onClick={() => {
-                                setContext((ctx) => {
-                                    handleMerge(ctx, value);
-                                });
-                            }}>
+                        {itemdata.map(({ text, value }) => (
+                            <DropdownMenuItem
+                                key={value}
+                                onClick={() => {
+                                    setContext((ctx) => {
+                                        handleMerge(ctx, value);
+                                    });
+                                }}
+                            >
                                 {text}
                             </DropdownMenuItem>
                         ))}
@@ -657,63 +607,72 @@ export function Toolbar({
                 );
             }
 
-            if (name === "border") {
+            if (name === 'border') {
                 const items = [
-                    {text: border.borderTop, value: "border-top"},
-                    {text: border.borderBottom, value: "border-bottom"},
-                    {text: border.borderLeft, value: "border-left"},
-                    {text: border.borderRight, value: "border-right"},
-                    {text: "", value: "divider"},
-                    {text: border.borderNone, value: "border-none"},
-                    {text: border.borderAll, value: "border-all"},
-                    {text: border.borderOutside, value: "border-outside"},
-                    {text: "", value: "divider"},
-                    {text: border.borderInside, value: "border-inside"},
-                    {text: border.borderHorizontal, value: "border-horizontal"},
-                    {text: border.borderVertical, value: "border-vertical"},
-                    {text: border.borderSlash, value: "border-slash"},
-                    {text: "", value: "divider"},
+                    { text: border.borderTop, value: 'border-top' },
+                    { text: border.borderBottom, value: 'border-bottom' },
+                    { text: border.borderLeft, value: 'border-left' },
+                    { text: border.borderRight, value: 'border-right' },
+                    { text: '', value: 'divider' },
+                    { text: border.borderNone, value: 'border-none' },
+                    { text: border.borderAll, value: 'border-all' },
+                    { text: border.borderOutside, value: 'border-outside' },
+                    { text: '', value: 'divider' },
+                    { text: border.borderInside, value: 'border-inside' },
+                    { text: border.borderHorizontal, value: 'border-horizontal' },
+                    { text: border.borderVertical, value: 'border-vertical' },
+                    { text: border.borderSlash, value: 'border-slash' },
+                    { text: '', value: 'divider' },
                 ];
                 return (
                     <ToolbarMenuButton iconId="border-all" key={name} tooltip={tooltip}>
-                        {items.map(({text, value}, ii) =>
-                            value !== "divider" ? (
-                                <DropdownMenuItem key={value} onClick={() => {
-                                    setContext((ctx) => {
-                                        handleBorder(ctx, value, customColor, customStyle);
-                                    });
-                                }}>
+                        {items.map(({ text, value }, ii) =>
+                            value !== 'divider' ? (
+                                <DropdownMenuItem
+                                    key={value}
+                                    onClick={() => {
+                                        setContext((ctx) => {
+                                            handleBorder(ctx, value, customColor, customStyle);
+                                        });
+                                    }}
+                                >
                                     {text}
                                 </DropdownMenuItem>
                             ) : (
-                                <DropdownMenuSeparator key={`divider-${ii}`}/>
-                            )
+                                // biome-ignore lint/suspicious/noArrayIndexKey: separator in static border-items list
+                                <DropdownMenuSeparator key={`divider-${ii}`} />
+                            ),
                         )}
-                        <CustomBorder onPick={(color, style) => {
-                            setCustomColor(color as string);
-                            setCustomStyle(style as string);
-                        }}/>
+                        <CustomBorder
+                            onPick={(color, style) => {
+                                setCustomColor(color as string);
+                                setCustomStyle(style as string);
+                            }}
+                        />
                     </ToolbarMenuButton>
                 );
             }
 
-            if (name === "freeze") {
+            if (name === 'freeze') {
                 const items = [
-                    {text: freezen.freezenRowRange, value: "freeze-row"},
-                    {text: freezen.freezenColumnRange, value: "freeze-col"},
-                    {text: freezen.freezenRCRange, value: "freeze-row-col"},
-                    {text: freezen.freezenCancel, value: "freeze-cancel"},
+                    { text: freezen.freezenRowRange, value: 'freeze-row' },
+                    { text: freezen.freezenColumnRange, value: 'freeze-col' },
+                    { text: freezen.freezenRCRange, value: 'freeze-row-col' },
+                    { text: freezen.freezenCancel, value: 'freeze-cancel' },
                 ];
                 return (
                     <ToolbarMenuButton iconId="freeze-row-col" key={name} tooltip={tooltip}>
-                        {items.map(({text, value}) => (
-                            <DropdownMenuItem key={value} onClick={() => {
-                                setContext((ctx) => {
-                                    handleFreeze(ctx, value);
-                                });
-                            }}>
+                        {items.map(({ text, value }) => (
+                            <DropdownMenuItem
+                                key={value}
+                                onClick={() => {
+                                    setContext((ctx) => {
+                                        handleFreeze(ctx, value);
+                                    });
+                                }}
+                            >
                                 <div className="flex items-center gap-2">
-                                    <ToolbarIcon name={value} className="h-4 w-4"/>
+                                    <ToolbarIcon name={value} className="h-4 w-4" />
                                     <span>{text}</span>
                                 </div>
                             </DropdownMenuItem>
@@ -722,24 +681,27 @@ export function Toolbar({
                 );
             }
 
-            if (name === "text-wrap") {
+            if (name === 'text-wrap') {
                 const items = [
-                    {text: textWrap.clip, id: "text-clip", value: "clip"},
-                    {text: textWrap.overflow, id: "text-overflow", value: "overflow"},
-                    {text: textWrap.wrap, id: "text-wrap", value: "wrap"},
+                    { text: textWrap.clip, id: 'text-clip', value: 'clip' },
+                    { text: textWrap.overflow, id: 'text-overflow', value: 'overflow' },
+                    { text: textWrap.wrap, id: 'text-wrap', value: 'wrap' },
                 ];
                 return (
                     <ToolbarMenuButton iconId="text-wrap" key={name} tooltip={toolbar.textWrap}>
-                        {items.map(({text, id, value}) => (
-                            <DropdownMenuItem key={value} onClick={() => {
-                                setContext((ctx) => {
-                                    const d = getFlowdata(ctx);
-                                    if (d == null) return;
-                                    updateFormat(ctx, refs.cellInput.current!, d, "tb", value);
-                                });
-                            }}>
+                        {items.map(({ text, id, value }) => (
+                            <DropdownMenuItem
+                                key={value}
+                                onClick={() => {
+                                    setContext((ctx) => {
+                                        const d = getFlowdata(ctx);
+                                        if (d == null) return;
+                                        updateFormat(ctx, refs.cellInput.current!, d, 'tb', value);
+                                    });
+                                }}
+                            >
                                 <div className="flex items-center gap-2">
-                                    <ToolbarIcon name={id} className="h-4 w-4"/>
+                                    <ToolbarIcon name={id} className="h-4 w-4" />
                                     <span>{text}</span>
                                 </div>
                             </DropdownMenuItem>
@@ -748,27 +710,30 @@ export function Toolbar({
                 );
             }
 
-            if (name === "text-rotation") {
+            if (name === 'text-rotation') {
                 const items = [
-                    {text: rotation.none, id: "text-rotation-none", value: "none"},
-                    {text: rotation.angleup, id: "text-rotation-angleup", value: "angleup"},
-                    {text: rotation.angledown, id: "text-rotation-angledown", value: "angledown"},
-                    {text: rotation.vertical, id: "text-rotation-vertical", value: "vertical"},
-                    {text: rotation.rotationUp, id: "text-rotation-up", value: "rotation-up"},
-                    {text: rotation.rotationDown, id: "text-rotation-down", value: "rotation-down"},
+                    { text: rotation.none, id: 'text-rotation-none', value: 'none' },
+                    { text: rotation.angleup, id: 'text-rotation-angleup', value: 'angleup' },
+                    { text: rotation.angledown, id: 'text-rotation-angledown', value: 'angledown' },
+                    { text: rotation.vertical, id: 'text-rotation-vertical', value: 'vertical' },
+                    { text: rotation.rotationUp, id: 'text-rotation-up', value: 'rotation-up' },
+                    { text: rotation.rotationDown, id: 'text-rotation-down', value: 'rotation-down' },
                 ];
                 return (
                     <ToolbarMenuButton iconId="text-rotation-none" key={name} tooltip={toolbar.textRotate}>
-                        {items.map(({text, id, value}) => (
-                            <DropdownMenuItem key={value} onClick={() => {
-                                setContext((ctx) => {
-                                    const d = getFlowdata(ctx);
-                                    if (d == null) return;
-                                    updateFormat(ctx, refs.cellInput.current!, d, "tr", value);
-                                });
-                            }}>
+                        {items.map(({ text, id, value }) => (
+                            <DropdownMenuItem
+                                key={value}
+                                onClick={() => {
+                                    setContext((ctx) => {
+                                        const d = getFlowdata(ctx);
+                                        if (d == null) return;
+                                        updateFormat(ctx, refs.cellInput.current!, d, 'tr', value);
+                                    });
+                                }}
+                            >
                                 <div className="flex items-center gap-2">
-                                    <ToolbarIcon name={id} className="h-4 w-4"/>
+                                    <ToolbarIcon name={id} className="h-4 w-4" />
                                     <span>{text}</span>
                                 </div>
                             </DropdownMenuItem>
@@ -777,46 +742,60 @@ export function Toolbar({
                 );
             }
 
-            if (name === "filter") {
+            if (name === 'filter') {
                 const items = [
                     {
-                        id: "sort-asc", value: "sort-asc", text: sort.asc, onClick: () => setContext((ctx) => {
-                            handleSort(ctx, true);
-                        })
+                        id: 'sort-asc',
+                        value: 'sort-asc',
+                        text: sort.asc,
+                        onClick: () =>
+                            setContext((ctx) => {
+                                handleSort(ctx, true);
+                            }),
                     },
                     {
-                        id: "sort-desc", value: "sort-desc", text: sort.desc, onClick: () => setContext((ctx) => {
-                            handleSort(ctx, false);
-                        })
+                        id: 'sort-desc',
+                        value: 'sort-desc',
+                        text: sort.desc,
+                        onClick: () =>
+                            setContext((ctx) => {
+                                handleSort(ctx, false);
+                            }),
                     },
-                    {id: "", value: "divider"},
+                    { id: '', value: 'divider' },
                     {
-                        id: "filter1", value: "filter", text: filter.filter, onClick: () => setContext((draftCtx) => {
-                            createFilter(draftCtx);
-                        })
+                        id: 'filter1',
+                        value: 'filter',
+                        text: filter.filter,
+                        onClick: () =>
+                            setContext((draftCtx) => {
+                                createFilter(draftCtx);
+                            }),
                     },
                     {
-                        id: "eraser",
-                        value: "eraser",
+                        id: 'eraser',
+                        value: 'eraser',
                         text: filter.clearFilter,
-                        onClick: () => setContext((draftCtx) => {
-                            clearFilter(draftCtx);
-                        })
+                        onClick: () =>
+                            setContext((draftCtx) => {
+                                clearFilter(draftCtx);
+                            }),
                     },
                 ];
                 return (
                     <ToolbarMenuButton iconId="filter" key={name} tooltip={toolbar.sortAndFilter}>
-                        {items.map(({text, id, value, onClick}, index) =>
-                            value !== "divider" ? (
+                        {items.map(({ text, id, value, onClick }, index) =>
+                            value !== 'divider' ? (
                                 <DropdownMenuItem key={value} onClick={() => onClick?.()}>
                                     <div className="flex items-center gap-2">
-                                        <ToolbarIcon name={id} className="h-4 w-4"/>
+                                        <ToolbarIcon name={id} className="h-4 w-4" />
                                         <span>{text}</span>
                                     </div>
                                 </DropdownMenuItem>
                             ) : (
-                                <DropdownMenuSeparator key={`divider-${index}`}/>
-                            )
+                                // biome-ignore lint/suspicious/noArrayIndexKey: separator in static filter-items list
+                                <DropdownMenuSeparator key={`divider-${index}`} />
+                            ),
                         )}
                     </ToolbarMenuButton>
                 );
@@ -834,7 +813,11 @@ export function Toolbar({
                             active={!!selected}
                             onClick={() =>
                                 setContext((draftCtx) => {
-                                    toolbarItemClickHandler(name)?.(draftCtx, refs.cellInput.current!, refs.globalCache);
+                                    toolbarItemClickHandler(name)?.(
+                                        draftCtx,
+                                        refs.cellInput.current!,
+                                        refs.globalCache,
+                                    );
                                 })
                             }
                         />
@@ -846,7 +829,11 @@ export function Toolbar({
                         <DropdownMenuItem
                             onClick={() =>
                                 setContext((draftCtx) => {
-                                    toolbarItemClickHandler(name)?.(draftCtx, refs.cellInput.current!, refs.globalCache);
+                                    toolbarItemClickHandler(name)?.(
+                                        draftCtx,
+                                        refs.cellInput.current!,
+                                        refs.globalCache,
+                                    );
                                 })
                             }
                         >
@@ -859,393 +846,546 @@ export function Toolbar({
         // Only rebuild when the focused cell or relevant toolbar state changes.
         // During drag selection, cell/row/col don't change, so this is stable.
         [
-            cell, row, col,
-            toolbar, setContext, refs.cellInput, refs.fxInput, refs.globalCache, refs.canvas,
-            defaultFormat, align, handleUndo, handleRedo, formula, showDialog, hideDialog,
-            merge, border, freezen, screenshot, sort, textWrap, rotation, filter,
-            splitText, findAndReplace, fontarray,
-            context.defaultFontSize, context.allowEdit,
-            customColor, customStyle, toolbarFormat.moreCurrency, toolbarFormat.moreNumber, toolbarFormat.moreDateTime,
-        ]
+            cell,
+            row,
+            col,
+            toolbar,
+            setContext,
+            refs.cellInput,
+            refs.fxInput,
+            refs.globalCache,
+            refs.canvas,
+            defaultFormat,
+            align,
+            handleUndo,
+            handleRedo,
+            formula,
+            showDialog,
+            hideDialog,
+            merge,
+            border,
+            freezen,
+            screenshot,
+            sort,
+            textWrap,
+            rotation,
+            filter,
+            splitText,
+            findAndReplace,
+            fontarray,
+            context.defaultFontSize,
+            context.allowEdit,
+            customColor,
+            customStyle,
+            toolbarFormat.moreCurrency,
+            toolbarFormat.moreNumber,
+            toolbarFormat.moreDateTime,
+        ],
     );
 
     const clickHandler = (name: string) => () =>
         setContext((ctx) => toolbarItemClickHandler(name)?.(ctx, refs.cellInput.current!, refs.globalCache));
 
-    const mobileToolbar = useMemo(() => (
-        <div className="bg-background h-12 flex items-center justify-between px-4 border-b no-print">
-            <SharedToolbar>
-                <div className="flex items-center">
-                    {leftItems}
+    const mobileToolbar = useMemo(
+        () => (
+            <div className="bg-background h-12 flex items-center justify-between px-4 border-b no-print">
+                <SharedToolbar>
+                    <div className="flex items-center">
+                        {leftItems}
 
-                    {context.allowEdit && (
-                        <>
-                            {/* Edit menu */}
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost">Edit</Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="start">
-                                    <DropdownMenuItem onClick={() => handleUndo()}
-                                                      disabled={refs.globalCache.undoList.length === 0}>
-                                        <ToolbarIcon name="undo" className="h-4 w-4 mr-2"/> {toolbar.undo}
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => handleRedo()}
-                                                      disabled={refs.globalCache.redoList.length === 0}>
-                                        <ToolbarIcon name="redo" className="h-4 w-4 mr-2"/> {toolbar.redo}
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator/>
-                                    <DropdownMenuItem onClick={clickHandler('format-painter')}>
-                                        <ToolbarIcon name="format-painter" className="h-4 w-4 mr-2"/> {toolbar.paintFormat}
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={clickHandler('clear-format')}>
-                                        <ToolbarIcon name="clear-format" className="h-4 w-4 mr-2"/> {toolbar['clear-format']}
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator/>
-                                    <DropdownMenuItem onClick={clickHandler('search')}>
-                                        <ToolbarIcon name="search" className="h-4 w-4 mr-2"/> {toolbar.findAndReplace}
-                                    </DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
+                        {context.allowEdit && (
+                            <>
+                                {/* Edit menu */}
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="ghost">Edit</Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="start">
+                                        <DropdownMenuItem
+                                            onClick={() => handleUndo()}
+                                            disabled={refs.globalCache.undoList.length === 0}
+                                        >
+                                            <ToolbarIcon name="undo" className="h-4 w-4 mr-2" /> {toolbar.undo}
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                            onClick={() => handleRedo()}
+                                            disabled={refs.globalCache.redoList.length === 0}
+                                        >
+                                            <ToolbarIcon name="redo" className="h-4 w-4 mr-2" /> {toolbar.redo}
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem onClick={clickHandler('format-painter')}>
+                                            <ToolbarIcon name="format-painter" className="h-4 w-4 mr-2" />{' '}
+                                            {toolbar.paintFormat}
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={clickHandler('clear-format')}>
+                                            <ToolbarIcon name="clear-format" className="h-4 w-4 mr-2" />{' '}
+                                            {toolbar['clear-format']}
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem onClick={clickHandler('search')}>
+                                            <ToolbarIcon name="search" className="h-4 w-4 mr-2" />{' '}
+                                            {toolbar.findAndReplace}
+                                        </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
 
-                            {/* Format menu */}
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost">Format</Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="start" className="max-h-[70vh] overflow-y-auto">
-                                    <DropdownMenuSub>
-                                        <DropdownMenuSubTrigger>
-                                            <ToolbarIcon name="font" className="h-4 w-4 mr-2"/> Font
-                                        </DropdownMenuSubTrigger>
-                                        <DropdownMenuSubContent className="max-h-[50vh] overflow-y-auto">
-                                            {fontarray.map((f) => (
-                                                <DropdownMenuItem key={f} onClick={() => {
-                                                    setContext((ctx) => {
-                                                        const d = getFlowdata(ctx);
-                                                        if (d) updateFormat(ctx, refs.cellInput.current!, d, "ff", f);
-                                                    });
-                                                }}>
-                                                    <span style={{fontFamily: `'${f}', sans-serif`}}>{f}</span>
-                                                </DropdownMenuItem>
-                                            ))}
-                                        </DropdownMenuSubContent>
-                                    </DropdownMenuSub>
-                                    <DropdownMenuSub>
-                                        <DropdownMenuSubTrigger>
-                                            <ToolbarIcon name="font-size" className="h-4 w-4 mr-2"/> Font size
-                                        </DropdownMenuSubTrigger>
-                                        <DropdownMenuSubContent>
-                                            {[9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72].map((n) => (
-                                                <DropdownMenuItem key={n} onClick={() => {
-                                                    setContext((ctx) =>
-                                                        handleTextSize(ctx, refs.cellInput.current!, n, refs.canvas.current!.getContext("2d")!)
-                                                    );
-                                                }}>
-                                                    {n}
-                                                </DropdownMenuItem>
-                                            ))}
-                                        </DropdownMenuSubContent>
-                                    </DropdownMenuSub>
-                                    <DropdownMenuSub>
-                                        <DropdownMenuSubTrigger>
-                                            <ToolbarIcon name="format" className="h-4 w-4 mr-2"/> Number format
-                                        </DropdownMenuSubTrigger>
-                                        <DropdownMenuSubContent className="max-h-[50vh] overflow-y-auto">
-                                            {defaultFormat.map(({text, value, example}, ii) => {
-                                                if (value === "split") return <DropdownMenuSeparator key={ii}/>;
-                                                if (value === "fmtOtherSelf") return null;
-                                                return (
-                                                    <DropdownMenuItem key={value} onClick={() => {
-                                                        setContext((ctx) => {
-                                                            const d = getFlowdata(ctx);
-                                                            if (d) updateFormat(ctx, refs.cellInput.current!, d, "ct", value);
-                                                        });
-                                                    }}>
-                                                        <div className="flex items-center justify-between w-full">
-                                                            <span>{text}</span>
-                                                            {example &&
-                                                                <span className="text-xs opacity-50 pl-6">{example}</span>}
-                                                        </div>
+                                {/* Format menu */}
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="ghost">Format</Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="start" className="max-h-[70vh] overflow-y-auto">
+                                        <DropdownMenuSub>
+                                            <DropdownMenuSubTrigger>
+                                                <ToolbarIcon name="font" className="h-4 w-4 mr-2" /> Font
+                                            </DropdownMenuSubTrigger>
+                                            <DropdownMenuSubContent className="max-h-[50vh] overflow-y-auto">
+                                                {fontarray.map((f) => (
+                                                    <DropdownMenuItem
+                                                        key={f}
+                                                        onClick={() => {
+                                                            setContext((ctx) => {
+                                                                const d = getFlowdata(ctx);
+                                                                if (d)
+                                                                    updateFormat(
+                                                                        ctx,
+                                                                        refs.cellInput.current!,
+                                                                        d,
+                                                                        'ff',
+                                                                        f,
+                                                                    );
+                                                            });
+                                                        }}
+                                                    >
+                                                        <span style={{ fontFamily: `'${f}', sans-serif` }}>{f}</span>
                                                     </DropdownMenuItem>
-                                                );
-                                            })}
-                                        </DropdownMenuSubContent>
-                                    </DropdownMenuSub>
-                                    <DropdownMenuSeparator/>
-                                    <DropdownMenuItem onClick={clickHandler('bold')}>
-                                        <ToolbarIcon name="bold" className="h-4 w-4 mr-2"/> {toolbar.bold}
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={clickHandler('italic')}>
-                                        <ToolbarIcon name="italic" className="h-4 w-4 mr-2"/> {toolbar.italic}
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={clickHandler('strike-through')}>
-                                        <ToolbarIcon name="strike-through"
-                                                     className="h-4 w-4 mr-2"/> {toolbar['strike-through']}
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={clickHandler('underline')}>
-                                        <ToolbarIcon name="underline" className="h-4 w-4 mr-2"/> {toolbar.underline}
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator/>
-                                    <DropdownMenuSub>
-                                        <DropdownMenuSubTrigger>
-                                            <ToolbarIcon name="align-left"
-                                                         className="h-4 w-4 mr-2"/> {toolbar.horizontalAlign}
-                                        </DropdownMenuSubTrigger>
-                                        <DropdownMenuSubContent>
-                                            {[
-                                                {id: "align-left", text: align.left},
-                                                {id: "align-center", text: align.center},
-                                                {id: "align-right", text: align.right},
-                                            ].map(({id, text}) => (
-                                                <DropdownMenuItem key={id} onClick={() => {
-                                                    setContext((ctx) => handleHorizontalAlign(ctx, refs.cellInput.current!, id.replace("align-", "")));
-                                                }}>
-                                                    <ToolbarIcon name={id} className="h-4 w-4 mr-2"/> {text}
-                                                </DropdownMenuItem>
-                                            ))}
-                                        </DropdownMenuSubContent>
-                                    </DropdownMenuSub>
-                                    <DropdownMenuSub>
-                                        <DropdownMenuSubTrigger>
-                                            <ToolbarIcon name="align-top"
-                                                         className="h-4 w-4 mr-2"/> {toolbar.verticalAlign}
-                                        </DropdownMenuSubTrigger>
-                                        <DropdownMenuSubContent>
-                                            {[
-                                                {id: "align-top", text: align.top},
-                                                {id: "align-middle", text: align.middle},
-                                                {id: "align-bottom", text: align.bottom},
-                                            ].map(({id, text}) => (
-                                                <DropdownMenuItem key={id} onClick={() => {
-                                                    setContext((ctx) => handleVerticalAlign(ctx, refs.cellInput.current!, id.replace("align-", "")));
-                                                }}>
-                                                    <ToolbarIcon name={id} className="h-4 w-4 mr-2"/> {text}
-                                                </DropdownMenuItem>
-                                            ))}
-                                        </DropdownMenuSubContent>
-                                    </DropdownMenuSub>
-                                    <DropdownMenuSub>
-                                        <DropdownMenuSubTrigger>
-                                            <ToolbarIcon name="text-wrap"
-                                                         className="h-4 w-4 mr-2"/> {toolbar.textWrap}
-                                        </DropdownMenuSubTrigger>
-                                        <DropdownMenuSubContent>
-                                            {[
-                                                {id: "text-clip", text: textWrap.clip, value: "clip"},
-                                                {id: "text-overflow", text: textWrap.overflow, value: "overflow"},
-                                                {id: "text-wrap", text: textWrap.wrap, value: "wrap"},
-                                            ].map(({id, text, value}) => (
-                                                <DropdownMenuItem key={value} onClick={() => {
-                                                    setContext((ctx) => {
-                                                        const d = getFlowdata(ctx);
-                                                        if (d) updateFormat(ctx, refs.cellInput.current!, d, "tb", value);
-                                                    });
-                                                }}>
-                                                    <ToolbarIcon name={id} className="h-4 w-4 mr-2"/> {text}
-                                                </DropdownMenuItem>
-                                            ))}
-                                        </DropdownMenuSubContent>
-                                    </DropdownMenuSub>
-                                    <DropdownMenuSeparator/>
-                                    <DropdownMenuSub>
-                                        <DropdownMenuSubTrigger>
-                                            <ToolbarIcon name="border-all"
-                                                         className="h-4 w-4 mr-2"/> {toolbar.border}
-                                        </DropdownMenuSubTrigger>
-                                        <DropdownMenuSubContent className="max-h-[50vh] overflow-y-auto">
-                                            {[
-                                                {text: border.borderTop, value: "border-top"},
-                                                {text: border.borderBottom, value: "border-bottom"},
-                                                {text: border.borderLeft, value: "border-left"},
-                                                {text: border.borderRight, value: "border-right"},
-                                                {text: "", value: "divider-1"},
-                                                {text: border.borderNone, value: "border-none"},
-                                                {text: border.borderAll, value: "border-all"},
-                                                {text: border.borderOutside, value: "border-outside"},
-                                                {text: "", value: "divider-2"},
-                                                {text: border.borderInside, value: "border-inside"},
-                                                {text: border.borderHorizontal, value: "border-horizontal"},
-                                                {text: border.borderVertical, value: "border-vertical"},
-                                            ].map(({text, value}) =>
-                                                value.startsWith("divider") ? (
-                                                    <DropdownMenuSeparator key={value}/>
-                                                ) : (
-                                                    <DropdownMenuItem key={value} onClick={() => {
-                                                        setContext((ctx) => handleBorder(ctx, value, customColor, customStyle));
-                                                    }}>
+                                                ))}
+                                            </DropdownMenuSubContent>
+                                        </DropdownMenuSub>
+                                        <DropdownMenuSub>
+                                            <DropdownMenuSubTrigger>
+                                                <ToolbarIcon name="font-size" className="h-4 w-4 mr-2" /> Font size
+                                            </DropdownMenuSubTrigger>
+                                            <DropdownMenuSubContent>
+                                                {[9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72].map(
+                                                    (n) => (
+                                                        <DropdownMenuItem
+                                                            key={n}
+                                                            onClick={() => {
+                                                                setContext((ctx) =>
+                                                                    handleTextSize(
+                                                                        ctx,
+                                                                        refs.cellInput.current!,
+                                                                        n,
+                                                                        refs.canvas.current!.getContext('2d')!,
+                                                                    ),
+                                                                );
+                                                            }}
+                                                        >
+                                                            {n}
+                                                        </DropdownMenuItem>
+                                                    ),
+                                                )}
+                                            </DropdownMenuSubContent>
+                                        </DropdownMenuSub>
+                                        <DropdownMenuSub>
+                                            <DropdownMenuSubTrigger>
+                                                <ToolbarIcon name="format" className="h-4 w-4 mr-2" /> Number format
+                                            </DropdownMenuSubTrigger>
+                                            <DropdownMenuSubContent className="max-h-[50vh] overflow-y-auto">
+                                                {defaultFormat.map(({ text, value, example }, ii) => {
+                                                    if (value === 'split')
+                                                        // biome-ignore lint/suspicious/noArrayIndexKey: separator in static defaultFormat list
+                                                        return <DropdownMenuSeparator key={ii} />;
+                                                    if (value === 'fmtOtherSelf') return null;
+                                                    return (
+                                                        <DropdownMenuItem
+                                                            key={value}
+                                                            onClick={() => {
+                                                                setContext((ctx) => {
+                                                                    const d = getFlowdata(ctx);
+                                                                    if (d)
+                                                                        updateFormat(
+                                                                            ctx,
+                                                                            refs.cellInput.current!,
+                                                                            d,
+                                                                            'ct',
+                                                                            value,
+                                                                        );
+                                                                });
+                                                            }}
+                                                        >
+                                                            <div className="flex items-center justify-between w-full">
+                                                                <span>{text}</span>
+                                                                {example && (
+                                                                    <span className="text-xs opacity-50 pl-6">
+                                                                        {example}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </DropdownMenuItem>
+                                                    );
+                                                })}
+                                            </DropdownMenuSubContent>
+                                        </DropdownMenuSub>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem onClick={clickHandler('bold')}>
+                                            <ToolbarIcon name="bold" className="h-4 w-4 mr-2" /> {toolbar.bold}
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={clickHandler('italic')}>
+                                            <ToolbarIcon name="italic" className="h-4 w-4 mr-2" /> {toolbar.italic}
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={clickHandler('strike-through')}>
+                                            <ToolbarIcon name="strike-through" className="h-4 w-4 mr-2" />{' '}
+                                            {toolbar['strike-through']}
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={clickHandler('underline')}>
+                                            <ToolbarIcon name="underline" className="h-4 w-4 mr-2" />{' '}
+                                            {toolbar.underline}
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuSub>
+                                            <DropdownMenuSubTrigger>
+                                                <ToolbarIcon name="align-left" className="h-4 w-4 mr-2" />{' '}
+                                                {toolbar.horizontalAlign}
+                                            </DropdownMenuSubTrigger>
+                                            <DropdownMenuSubContent>
+                                                {[
+                                                    { id: 'align-left', text: align.left },
+                                                    { id: 'align-center', text: align.center },
+                                                    { id: 'align-right', text: align.right },
+                                                ].map(({ id, text }) => (
+                                                    <DropdownMenuItem
+                                                        key={id}
+                                                        onClick={() => {
+                                                            setContext((ctx) =>
+                                                                handleHorizontalAlign(
+                                                                    ctx,
+                                                                    refs.cellInput.current!,
+                                                                    id.replace('align-', ''),
+                                                                ),
+                                                            );
+                                                        }}
+                                                    >
+                                                        <ToolbarIcon name={id} className="h-4 w-4 mr-2" /> {text}
+                                                    </DropdownMenuItem>
+                                                ))}
+                                            </DropdownMenuSubContent>
+                                        </DropdownMenuSub>
+                                        <DropdownMenuSub>
+                                            <DropdownMenuSubTrigger>
+                                                <ToolbarIcon name="align-top" className="h-4 w-4 mr-2" />{' '}
+                                                {toolbar.verticalAlign}
+                                            </DropdownMenuSubTrigger>
+                                            <DropdownMenuSubContent>
+                                                {[
+                                                    { id: 'align-top', text: align.top },
+                                                    { id: 'align-middle', text: align.middle },
+                                                    { id: 'align-bottom', text: align.bottom },
+                                                ].map(({ id, text }) => (
+                                                    <DropdownMenuItem
+                                                        key={id}
+                                                        onClick={() => {
+                                                            setContext((ctx) =>
+                                                                handleVerticalAlign(
+                                                                    ctx,
+                                                                    refs.cellInput.current!,
+                                                                    id.replace('align-', ''),
+                                                                ),
+                                                            );
+                                                        }}
+                                                    >
+                                                        <ToolbarIcon name={id} className="h-4 w-4 mr-2" /> {text}
+                                                    </DropdownMenuItem>
+                                                ))}
+                                            </DropdownMenuSubContent>
+                                        </DropdownMenuSub>
+                                        <DropdownMenuSub>
+                                            <DropdownMenuSubTrigger>
+                                                <ToolbarIcon name="text-wrap" className="h-4 w-4 mr-2" />{' '}
+                                                {toolbar.textWrap}
+                                            </DropdownMenuSubTrigger>
+                                            <DropdownMenuSubContent>
+                                                {[
+                                                    { id: 'text-clip', text: textWrap.clip, value: 'clip' },
+                                                    { id: 'text-overflow', text: textWrap.overflow, value: 'overflow' },
+                                                    { id: 'text-wrap', text: textWrap.wrap, value: 'wrap' },
+                                                ].map(({ id, text, value }) => (
+                                                    <DropdownMenuItem
+                                                        key={value}
+                                                        onClick={() => {
+                                                            setContext((ctx) => {
+                                                                const d = getFlowdata(ctx);
+                                                                if (d)
+                                                                    updateFormat(
+                                                                        ctx,
+                                                                        refs.cellInput.current!,
+                                                                        d,
+                                                                        'tb',
+                                                                        value,
+                                                                    );
+                                                            });
+                                                        }}
+                                                    >
+                                                        <ToolbarIcon name={id} className="h-4 w-4 mr-2" /> {text}
+                                                    </DropdownMenuItem>
+                                                ))}
+                                            </DropdownMenuSubContent>
+                                        </DropdownMenuSub>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuSub>
+                                            <DropdownMenuSubTrigger>
+                                                <ToolbarIcon name="border-all" className="h-4 w-4 mr-2" />{' '}
+                                                {toolbar.border}
+                                            </DropdownMenuSubTrigger>
+                                            <DropdownMenuSubContent className="max-h-[50vh] overflow-y-auto">
+                                                {[
+                                                    { text: border.borderTop, value: 'border-top' },
+                                                    { text: border.borderBottom, value: 'border-bottom' },
+                                                    { text: border.borderLeft, value: 'border-left' },
+                                                    { text: border.borderRight, value: 'border-right' },
+                                                    { text: '', value: 'divider-1' },
+                                                    { text: border.borderNone, value: 'border-none' },
+                                                    { text: border.borderAll, value: 'border-all' },
+                                                    { text: border.borderOutside, value: 'border-outside' },
+                                                    { text: '', value: 'divider-2' },
+                                                    { text: border.borderInside, value: 'border-inside' },
+                                                    { text: border.borderHorizontal, value: 'border-horizontal' },
+                                                    { text: border.borderVertical, value: 'border-vertical' },
+                                                ].map(({ text, value }) =>
+                                                    value.startsWith('divider') ? (
+                                                        <DropdownMenuSeparator key={value} />
+                                                    ) : (
+                                                        <DropdownMenuItem
+                                                            key={value}
+                                                            onClick={() => {
+                                                                setContext((ctx) =>
+                                                                    handleBorder(ctx, value, customColor, customStyle),
+                                                                );
+                                                            }}
+                                                        >
+                                                            {text}
+                                                        </DropdownMenuItem>
+                                                    ),
+                                                )}
+                                            </DropdownMenuSubContent>
+                                        </DropdownMenuSub>
+                                        <DropdownMenuSub>
+                                            <DropdownMenuSubTrigger>
+                                                <ToolbarIcon name="merge-all" className="h-4 w-4 mr-2" />{' '}
+                                                {toolbar['merge-cell']}
+                                            </DropdownMenuSubTrigger>
+                                            <DropdownMenuSubContent>
+                                                {[
+                                                    { text: merge.mergeAll, value: 'merge-all' },
+                                                    { text: merge.mergeV, value: 'merge-vertical' },
+                                                    { text: merge.mergeH, value: 'merge-horizontal' },
+                                                    { text: merge.mergeCancel, value: 'merge-cancel' },
+                                                ].map(({ text, value }) => (
+                                                    <DropdownMenuItem
+                                                        key={value}
+                                                        onClick={() => {
+                                                            setContext((ctx) => handleMerge(ctx, value));
+                                                        }}
+                                                    >
                                                         {text}
                                                     </DropdownMenuItem>
-                                                )
-                                            )}
-                                        </DropdownMenuSubContent>
-                                    </DropdownMenuSub>
-                                    <DropdownMenuSub>
-                                        <DropdownMenuSubTrigger>
-                                            <ToolbarIcon name="merge-all"
-                                                         className="h-4 w-4 mr-2"/> {toolbar['merge-cell']}
-                                        </DropdownMenuSubTrigger>
-                                        <DropdownMenuSubContent>
-                                            {[
-                                                {text: merge.mergeAll, value: "merge-all"},
-                                                {text: merge.mergeV, value: "merge-vertical"},
-                                                {text: merge.mergeH, value: "merge-horizontal"},
-                                                {text: merge.mergeCancel, value: "merge-cancel"},
-                                            ].map(({text, value}) => (
-                                                <DropdownMenuItem key={value} onClick={() => {
-                                                    setContext((ctx) => handleMerge(ctx, value));
-                                                }}>
-                                                    {text}
-                                                </DropdownMenuItem>
-                                            ))}
-                                        </DropdownMenuSubContent>
-                                    </DropdownMenuSub>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
+                                                ))}
+                                            </DropdownMenuSubContent>
+                                        </DropdownMenuSub>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
 
-                            {/* Data menu */}
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost">Data</Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="start">
-                                    <DropdownMenuSub>
-                                        <DropdownMenuSubTrigger>
-                                            <ToolbarIcon name="formula-sum"
-                                                         className="h-4 w-4 mr-2"/> {toolbar.autoSum}
-                                        </DropdownMenuSubTrigger>
-                                        <DropdownMenuSubContent>
-                                            <DropdownMenuItem onClick={() => setContext((ctx) => {
-                                                handleSum(ctx, refs.cellInput.current!, refs.fxInput.current, refs.globalCache!);
-                                            })}>
-                                                {formula.sum} (SUM)
-                                            </DropdownMenuItem>
-                                            {[
-                                                {text: formula.average, value: "AVERAGE"},
-                                                {text: formula.count, value: "COUNT"},
-                                                {text: formula.max, value: "MAX"},
-                                                {text: formula.min, value: "MIN"},
-                                            ].map(({text, value}) => (
-                                                <DropdownMenuItem key={value} onClick={() => {
-                                                    setContext((ctx) => autoSelectionFormula(ctx, refs.cellInput.current!, refs.fxInput.current, value, refs.globalCache));
-                                                }}>
-                                                    <div className="flex items-center justify-between w-full">
-                                                        <span>{text}</span>
-                                                        <span className="text-xs opacity-50 pl-6">{value}</span>
-                                                    </div>
+                                {/* Data menu */}
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="ghost">Data</Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="start">
+                                        <DropdownMenuSub>
+                                            <DropdownMenuSubTrigger>
+                                                <ToolbarIcon name="formula-sum" className="h-4 w-4 mr-2" />{' '}
+                                                {toolbar.autoSum}
+                                            </DropdownMenuSubTrigger>
+                                            <DropdownMenuSubContent>
+                                                <DropdownMenuItem
+                                                    onClick={() =>
+                                                        setContext((ctx) => {
+                                                            handleSum(
+                                                                ctx,
+                                                                refs.cellInput.current!,
+                                                                refs.fxInput.current,
+                                                                refs.globalCache!,
+                                                            );
+                                                        })
+                                                    }
+                                                >
+                                                    {formula.sum} (SUM)
                                                 </DropdownMenuItem>
-                                            ))}
-                                        </DropdownMenuSubContent>
-                                    </DropdownMenuSub>
-                                    <DropdownMenuSeparator/>
-                                    <DropdownMenuSub>
-                                        <DropdownMenuSubTrigger>
-                                            <ToolbarIcon name="freeze-row-col"
-                                                         className="h-4 w-4 mr-2"/> {toolbar.freeze}
-                                        </DropdownMenuSubTrigger>
-                                        <DropdownMenuSubContent>
-                                            {[
-                                                {text: freezen.freezenRowRange, value: "freeze-row"},
-                                                {text: freezen.freezenColumnRange, value: "freeze-col"},
-                                                {text: freezen.freezenRCRange, value: "freeze-row-col"},
-                                                {text: freezen.freezenCancel, value: "freeze-cancel"},
-                                            ].map(({text, value}) => (
-                                                <DropdownMenuItem key={value} onClick={() => {
-                                                    setContext((ctx) => handleFreeze(ctx, value));
-                                                }}>
-                                                    <ToolbarIcon name={value} className="h-4 w-4 mr-2"/> {text}
+                                                {[
+                                                    { text: formula.average, value: 'AVERAGE' },
+                                                    { text: formula.count, value: 'COUNT' },
+                                                    { text: formula.max, value: 'MAX' },
+                                                    { text: formula.min, value: 'MIN' },
+                                                ].map(({ text, value }) => (
+                                                    <DropdownMenuItem
+                                                        key={value}
+                                                        onClick={() => {
+                                                            setContext((ctx) =>
+                                                                autoSelectionFormula(
+                                                                    ctx,
+                                                                    refs.cellInput.current!,
+                                                                    refs.fxInput.current,
+                                                                    value,
+                                                                    refs.globalCache,
+                                                                ),
+                                                            );
+                                                        }}
+                                                    >
+                                                        <div className="flex items-center justify-between w-full">
+                                                            <span>{text}</span>
+                                                            <span className="text-xs opacity-50 pl-6">{value}</span>
+                                                        </div>
+                                                    </DropdownMenuItem>
+                                                ))}
+                                            </DropdownMenuSubContent>
+                                        </DropdownMenuSub>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuSub>
+                                            <DropdownMenuSubTrigger>
+                                                <ToolbarIcon name="freeze-row-col" className="h-4 w-4 mr-2" />{' '}
+                                                {toolbar.freeze}
+                                            </DropdownMenuSubTrigger>
+                                            <DropdownMenuSubContent>
+                                                {[
+                                                    { text: freezen.freezenRowRange, value: 'freeze-row' },
+                                                    { text: freezen.freezenColumnRange, value: 'freeze-col' },
+                                                    { text: freezen.freezenRCRange, value: 'freeze-row-col' },
+                                                    { text: freezen.freezenCancel, value: 'freeze-cancel' },
+                                                ].map(({ text, value }) => (
+                                                    <DropdownMenuItem
+                                                        key={value}
+                                                        onClick={() => {
+                                                            setContext((ctx) => handleFreeze(ctx, value));
+                                                        }}
+                                                    >
+                                                        <ToolbarIcon name={value} className="h-4 w-4 mr-2" /> {text}
+                                                    </DropdownMenuItem>
+                                                ))}
+                                            </DropdownMenuSubContent>
+                                        </DropdownMenuSub>
+                                        <DropdownMenuItem onClick={clickHandler('conditionFormat')}>
+                                            <ToolbarIcon name="conditionFormat" className="h-4 w-4 mr-2" />{' '}
+                                            {toolbar.conditionalFormat}
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSub>
+                                            <DropdownMenuSubTrigger>
+                                                <ToolbarIcon name="filter" className="h-4 w-4 mr-2" />{' '}
+                                                {toolbar.sortAndFilter}
+                                            </DropdownMenuSubTrigger>
+                                            <DropdownMenuSubContent>
+                                                <DropdownMenuItem
+                                                    onClick={() => setContext((ctx) => handleSort(ctx, true))}
+                                                >
+                                                    <ToolbarIcon name="sort-asc" className="h-4 w-4 mr-2" /> {sort.asc}
                                                 </DropdownMenuItem>
-                                            ))}
-                                        </DropdownMenuSubContent>
-                                    </DropdownMenuSub>
-                                    <DropdownMenuItem onClick={clickHandler('conditionFormat')}>
-                                        <ToolbarIcon name="conditionFormat"
-                                                     className="h-4 w-4 mr-2"/> {toolbar.conditionalFormat}
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSub>
-                                        <DropdownMenuSubTrigger>
-                                            <ToolbarIcon name="filter"
-                                                         className="h-4 w-4 mr-2"/> {toolbar.sortAndFilter}
-                                        </DropdownMenuSubTrigger>
-                                        <DropdownMenuSubContent>
-                                            <DropdownMenuItem onClick={() => setContext((ctx) => handleSort(ctx, true))}>
-                                                <ToolbarIcon name="sort-asc" className="h-4 w-4 mr-2"/> {sort.asc}
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                onClick={() => setContext((ctx) => handleSort(ctx, false))}>
-                                                <ToolbarIcon name="sort-desc" className="h-4 w-4 mr-2"/> {sort.desc}
-                                            </DropdownMenuItem>
-                                            <DropdownMenuSeparator/>
-                                            <DropdownMenuItem
-                                                onClick={() => setContext((ctx) => createFilter(ctx))}>
-                                                <ToolbarIcon name="filter1"
-                                                             className="h-4 w-4 mr-2"/> {filter.filter}
-                                            </DropdownMenuItem>
-                                            <DropdownMenuItem
-                                                onClick={() => setContext((ctx) => clearFilter(ctx))}>
-                                                <ToolbarIcon name="eraser"
-                                                             className="h-4 w-4 mr-2"/> {filter.clearFilter}
-                                            </DropdownMenuItem>
-                                        </DropdownMenuSubContent>
-                                    </DropdownMenuSub>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                        </>
-                    )}
+                                                <DropdownMenuItem
+                                                    onClick={() => setContext((ctx) => handleSort(ctx, false))}
+                                                >
+                                                    <ToolbarIcon name="sort-desc" className="h-4 w-4 mr-2" />{' '}
+                                                    {sort.desc}
+                                                </DropdownMenuItem>
+                                                <DropdownMenuSeparator />
+                                                <DropdownMenuItem
+                                                    onClick={() => setContext((ctx) => createFilter(ctx))}
+                                                >
+                                                    <ToolbarIcon name="filter1" className="h-4 w-4 mr-2" />{' '}
+                                                    {filter.filter}
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => setContext((ctx) => clearFilter(ctx))}>
+                                                    <ToolbarIcon name="eraser" className="h-4 w-4 mr-2" />{' '}
+                                                    {filter.clearFilter}
+                                                </DropdownMenuItem>
+                                            </DropdownMenuSubContent>
+                                        </DropdownMenuSub>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </>
+                        )}
 
-                    {/* Font color & background stay visible on mobile */}
-                    {context.allowEdit && getToolbarItem("font-color", -3)}
-                    {context.allowEdit && getToolbarItem("background", -4)}
-                </div>
-                <div className="flex items-center">
-                    {rightItems}
-                </div>
-            </SharedToolbar>
-        </div>
-    ), [
-        leftItems, rightItems, context.allowEdit, getToolbarItem,
-        toolbar, align, border, merge, freezen, formula, sort, filter, textWrap,
-        fontarray, defaultFormat, customColor, customStyle,
-        handleUndo, handleRedo, refs, setContext,
-    ]);
+                        {/* Font color & background stay visible on mobile */}
+                        {context.allowEdit && getToolbarItem('font-color', -3)}
+                        {context.allowEdit && getToolbarItem('background', -4)}
+                    </div>
+                    <div className="flex items-center">{rightItems}</div>
+                </SharedToolbar>
+            </div>
+        ),
+        [
+            leftItems,
+            rightItems,
+            context.allowEdit,
+            getToolbarItem,
+            toolbar,
+            align,
+            border,
+            merge,
+            freezen,
+            formula,
+            sort,
+            filter,
+            textWrap,
+            fontarray,
+            defaultFormat,
+            customColor,
+            customStyle,
+            handleUndo,
+            handleRedo,
+            refs,
+            setContext,
+        ],
+    );
 
     // Memoize the entire toolbar output. During drag selection, none of these
     // deps change (cell stays the same, focused row/col don't move), so React
     // reuses the cached JSX and skips reconciliation of 1100+ lines of toolbar.
-    const desktopToolbar = useMemo(() => (
-        <div className="bg-background h-12 flex items-center justify-between px-4 border-b no-print">
-            <SharedToolbar>
-                <div className="flex items-center">
-                    {leftItems}
-                    {getToolbarItem("undo", -1)}
-                    {getToolbarItem("redo", -2)}
-                </div>
-                {centerItems}
-                <div className="flex items-center">
-                    {settings.customToolbarItems.length > 0 && (
-                        <>
-                            {settings.customToolbarItems.map((n) => (
-                                <TooltipButton
-                                    key={n.key}
-                                    icon={n.icon as any}
-                                    tooltipText={n.tooltip ?? ""}
-                                    onClick={() => n.onClick?.({} as any)}
-                                />
-                            ))}
-                            <ToolbarSeparator/>
-                        </>
-                    )}
-                    {settings.toolbarItems
-                        .filter((n) => !["undo", "redo"].includes(n))
-                        .map((name, i) => getToolbarItem(name, i))}
-                </div>
-                <div className="flex items-center">
-                    {rightItems}
-                </div>
-            </SharedToolbar>
-        </div>
-    ), [getToolbarItem, leftItems, centerItems, rightItems, settings.customToolbarItems, settings.toolbarItems]);
+    const desktopToolbar = useMemo(
+        () => (
+            <div className="bg-background h-12 flex items-center justify-between px-4 border-b no-print">
+                <SharedToolbar>
+                    <div className="flex items-center">
+                        {leftItems}
+                        {getToolbarItem('undo', -1)}
+                        {getToolbarItem('redo', -2)}
+                    </div>
+                    {centerItems}
+                    <div className="flex items-center">
+                        {settings.customToolbarItems.length > 0 && (
+                            <>
+                                {settings.customToolbarItems.map((n) => (
+                                    <TooltipButton
+                                        key={n.key}
+                                        // biome-ignore lint/suspicious/noExplicitAny: customToolbarItems.icon is typed ReactNode but TooltipButton expects LucideIcon — caller contract mismatch
+                                        icon={n.icon as any}
+                                        tooltipText={n.tooltip ?? ''}
+                                        // biome-ignore lint/suspicious/noExplicitAny: synthetic event to satisfy customToolbarItems handler signature from TooltipButton's no-arg onClick
+                                        onClick={() => n.onClick?.({} as any)}
+                                    />
+                                ))}
+                                <ToolbarSeparator />
+                            </>
+                        )}
+                        {settings.toolbarItems
+                            .filter((n) => !['undo', 'redo'].includes(n))
+                            .map((name, i) => getToolbarItem(name, i))}
+                    </div>
+                    <div className="flex items-center">{rightItems}</div>
+                </SharedToolbar>
+            </div>
+        ),
+        [getToolbarItem, leftItems, centerItems, rightItems, settings.customToolbarItems, settings.toolbarItems],
+    );
 
     return isMobile ? mobileToolbar : desktopToolbar;
 }
-

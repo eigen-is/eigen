@@ -1,14 +1,22 @@
+import { readEigenClipboard } from '@workspace/lib/clipboard';
+import type { EigenClipboardData, EigenClipboardTextItem } from '@workspace/lib/types/clipboard';
+import { cloneDeep } from 'es-toolkit/compat';
+import { applyPatches, enablePatches, type Patch, produce, produceWithPatches } from 'immer';
+import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { type RefValues, type SetContextOptions, WorkbookContext } from '../../context';
+import { ModalProvider } from '../../context/modal';
+import type { CellMatrix } from '../../engine/types';
 import {
     api,
+    type CellWithRowAndCol,
+    type Context,
     calcSelectionInfo,
-    CellWithRowAndCol,
-    Context,
     defaultContext,
     defaultSettings,
     ensureSheetIndex,
     filterPatch,
+    type GlobalCache,
     getSheetIndex,
-    GlobalCache,
     groupValuesRefresh,
     handleGlobalKeyDown,
     handlePaste,
@@ -16,30 +24,19 @@ import {
     insertRowCol,
     inverseRowColOptions,
     locale,
-    Op,
+    type Op,
     patchToOp,
-    Settings,
-    Sheet as SheetType,
-} from "../../state";
-import type {CellMatrix} from "../../engine/types";
-import React, {useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState,} from "react";
-import {applyPatches, enablePatches, Patch, produce, produceWithPatches,} from "immer";
-import {cloneDeep} from "es-toolkit/compat";
-import {Sheet} from "../Sheet";
-import {RefValues, SetContextOptions, WorkbookContext} from "../../context";
-import {Toolbar} from "../Toolbar";
-import {FxEditor} from "../FxEditor";
-import {SheetTab} from "../SheetTab";
-import {ContextMenu} from "../ContextMenu";
-
-import {generateAPIs} from "./api";
-import {ModalProvider} from "../../context/modal";
-import {FilterMenu} from "../ContextMenu/FilterMenu";
-
-import {readEigenClipboard} from "@workspace/lib/clipboard";
-import type {EigenClipboardData, EigenClipboardTextItem} from "@workspace/lib/types/clipboard";
-import {consumePendingCopy} from "../../state/modules/clipboard";
-
+    type Settings,
+    type Sheet as SheetType,
+} from '../../state';
+import { consumePendingCopy } from '../../state/modules/clipboard';
+import { ContextMenu } from '../ContextMenu';
+import { FilterMenu } from '../ContextMenu/FilterMenu';
+import { FxEditor } from '../FxEditor';
+import { Sheet } from '../Sheet';
+import { SheetTab } from '../SheetTab';
+import { Toolbar } from '../Toolbar';
+import { generateAPIs } from './api';
 
 enablePatches();
 
@@ -68,7 +65,10 @@ const concatProducer = (...producers: ((ctx: Context) => void)[]) => {
 };
 
 export const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
-    ({onChange, onOp, toolbarLeftItems, toolbarCenterItems, toolbarRightItems, data: originalData, ...props}, ref) => {
+    (
+        { onChange, onOp, toolbarLeftItems, toolbarCenterItems, toolbarRightItems, data: originalData, ...props },
+        ref,
+    ) => {
         const scrollListeners = useRef(new Set<() => void>());
         const globalCache = useRef<GlobalCache>({
             undoList: [],
@@ -99,12 +99,11 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 cellArea,
                 workbookContainer,
             }),
-            []
+            [],
         );
 
         const [context, setContext] = useState(defaultContext(refs));
-        const {info, formula} = locale(context);
-
+        const { info, formula } = locale(context);
 
         const [calInfo, setCalInfo] = useState<{
             numberC: number;
@@ -116,23 +115,23 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         }>({
             numberC: 0,
             count: 0,
-            sum: "0",
-            max: "0",
-            min: "0",
-            average: "",
+            sum: '0',
+            max: '0',
+            min: '0',
+            average: '',
         });
 
         const mergedSettings = useMemo(
             () => Object.assign(cloneDeep(defaultSettings), props) as Required<Settings>,
             // props expects data, onChange, onOp
             // eslint-disable-next-line react-hooks/exhaustive-deps
-            [...Object.values(props)]
+            [...Object.values(props)],
         );
 
         // Calculate selection info
         useEffect(() => {
             const selection = context.luckysheet_select_save;
-            const {lang} = props;
+            const { lang } = props;
             if (selection) {
                 const re = calcSelectionInfo(context, lang);
                 setCalInfo(re);
@@ -141,17 +140,12 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         }, [context.luckysheet_select_save]);
 
         const emitOp = useCallback(
-            (
-                ctx: Context,
-                patches: Patch[],
-                options?: SetContextOptions,
-                undo: boolean = false
-            ) => {
+            (ctx: Context, patches: Patch[], options?: SetContextOptions, undo: boolean = false) => {
                 if (onOp) {
                     onOp(patchToOp(ctx, patches, options, undo));
                 }
             },
-            [onOp]
+            [onOp],
         );
 
         function reduceUndoList(ctx: Context, ctxBefore: Context) {
@@ -164,39 +158,28 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     undo.options?.deleteSheetOp ||
                     undo.options?.id === undefined ||
                     sheetsId.indexOf(undo.options?.id) !== -1 ||
-                    sheetDeletedByMe.indexOf(undo.options?.id) !== -1
+                    sheetDeletedByMe.indexOf(undo.options?.id) !== -1,
             );
             if (ctxBefore.luckysheetfile.length > ctx.luckysheetfile.length) {
                 const sheetDeleted = ctxBefore.luckysheetfile
-                    .filter(
-                        (oneSheet) =>
-                            ctx.luckysheetfile.map((item) => item.id).indexOf(oneSheet.id) === -1
-                    )
+                    .filter((oneSheet) => ctx.luckysheetfile.map((item) => item.id).indexOf(oneSheet.id) === -1)
                     .map((item) => getSheetIndex(ctxBefore, item.id as string));
                 const deletedIndex = sheetDeleted[0];
-                globalCache.current.undoList = globalCache.current.undoList.map(
-                    (oneStep) => {
-                        oneStep.patches = oneStep.patches.map((onePatch) => {
-                            if (
-                                typeof onePatch.path[1] === "number" &&
-                                onePatch.path[1] > (deletedIndex as number)
-                            ) {
-                                onePatch.path[1] -= 1;
-                            }
-                            return onePatch;
-                        });
-                        oneStep.inversePatches = oneStep.inversePatches.map((onePatch) => {
-                            if (
-                                typeof onePatch.path[1] === "number" &&
-                                onePatch.path[1] > (deletedIndex as number)
-                            ) {
-                                onePatch.path[1] -= 1;
-                            }
-                            return onePatch;
-                        });
-                        return oneStep;
-                    }
-                );
+                globalCache.current.undoList = globalCache.current.undoList.map((oneStep) => {
+                    oneStep.patches = oneStep.patches.map((onePatch) => {
+                        if (typeof onePatch.path[1] === 'number' && onePatch.path[1] > (deletedIndex as number)) {
+                            onePatch.path[1] -= 1;
+                        }
+                        return onePatch;
+                    });
+                    oneStep.inversePatches = oneStep.inversePatches.map((onePatch) => {
+                        if (typeof onePatch.path[1] === 'number' && onePatch.path[1] > (deletedIndex as number)) {
+                            onePatch.path[1] -= 1;
+                        }
+                        return onePatch;
+                    });
+                    return oneStep;
+                });
             }
         }
 
@@ -234,20 +217,17 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     // produceWithPatches generates JSON patches for every mutation,
                     // but selection changes are filtered out by filterPatch anyway.
                     if (options.noHistory) {
-                        return produce(
-                            ctx_,
-                            concatProducer(syncScroll, recipe, triggerGroupValuesRefresh)
-                        );
+                        return produce(ctx_, concatProducer(syncScroll, recipe, triggerGroupValuesRefresh));
                     }
 
                     const [result, patches, inversePatches] = produceWithPatches(
                         ctx_,
-                        concatProducer(syncScroll, recipe, triggerGroupValuesRefresh)
+                        concatProducer(syncScroll, recipe, triggerGroupValuesRefresh),
                     );
                     if (patches.length > 0 && !options.noHistory) {
                         if (options.logPatch) {
                             // eslint-disable-next-line no-console
-                            console.info("patch", patches);
+                            console.info('patch', patches);
                         }
                         const filteredPatches = filterPatch(patches);
                         let filteredInversePatches = filterPatch(inversePatches);
@@ -255,35 +235,31 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                             options.id = ctx_.currentSheetId;
                             if (options.deleteSheetOp) {
                                 const target = ctx_.luckysheetfile.filter(
-                                    (sheet) => sheet.id === options.deleteSheetOp?.id
+                                    (sheet) => sheet.id === options.deleteSheetOp?.id,
                                 );
                                 if (target) {
-                                    const index = getSheetIndex(
-                                        ctx_,
-                                        options.deleteSheetOp.id as string
-                                    ) as number;
+                                    const index = getSheetIndex(ctx_, options.deleteSheetOp.id as string) as number;
                                     options.deletedSheet = {
                                         id: options.deleteSheetOp.id as string,
                                         index: index as number,
                                         value: cloneDeep(ctx_.luckysheetfile[index]),
                                     };
                                     options.deletedSheet!.value!.celldata = dataToCelldata(
-                                        options.deletedSheet!.value!.data as CellMatrix
+                                        options.deletedSheet!.value!.data as CellMatrix,
                                     );
                                     delete options.deletedSheet!.value!.data;
                                     options.deletedSheet.value!.status = 0;
                                     filteredInversePatches = [
                                         {
-                                            op: "add",
-                                            path: ["luckysheetfile", 0],
+                                            op: 'add',
+                                            path: ['luckysheetfile', 0],
                                             value: options.deletedSheet.value,
                                         },
                                     ];
                                 }
                             } else if (options.addSheetOp) {
                                 options.addSheet = {};
-                                options.addSheet!.id =
-                                    result.luckysheetfile[result.luckysheetfile.length - 1].id;
+                                options.addSheet!.id = result.luckysheetfile[result.luckysheetfile.length - 1].id;
                             }
                             globalCache.current.undoList.push({
                                 patches: filteredPatches,
@@ -301,7 +277,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     return result;
                 });
             },
-            [emitOp]
+            [emitOp],
         );
 
         const handleUndo = useCallback(() => {
@@ -314,16 +290,12 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         const sheetsRight = ctx_.luckysheetfile.filter(
                             (sheet) =>
                                 (sheet?.order as number) >= (order as number) &&
-                                sheet.id !== history?.options?.deleteSheetOp?.id
+                                sheet.id !== history?.options?.deleteSheetOp?.id,
                         );
                         for (const sheet of sheetsRight) {
                             history.inversePatches.push({
-                                op: "replace",
-                                path: [
-                                    "luckysheetfile",
-                                    getSheetIndex(ctx_, sheet.id as string) as number,
-                                    "order",
-                                ],
+                                op: 'replace',
+                                path: ['luckysheetfile', getSheetIndex(ctx_, sheet.id as string) as number, 'order'],
                                 value: (sheet?.order as number) + 1,
                             } as Patch);
                         }
@@ -341,17 +313,14 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         inversedOptions.restoreDeletedCells = true;
                     }
                     if (history.options?.addSheetOp) {
-                        const index = getSheetIndex(
-                            ctx_,
-                            history.options.addSheet!.id as string
-                        ) as number;
+                        const index = getSheetIndex(ctx_, history.options.addSheet!.id as string) as number;
                         inversedOptions!.addSheet = {
                             id: history.options.addSheet!.id as string,
                             index: index as number,
                             value: cloneDeep(ctx_.luckysheetfile[index]),
                         };
                         inversedOptions!.addSheet!.value!.celldata = dataToCelldata(
-                            inversedOptions!.addSheet!.value?.data as CellMatrix
+                            inversedOptions!.addSheet!.value?.data as CellMatrix,
                         );
                         delete inversedOptions!.addSheet!.value!.data;
                     }
@@ -362,12 +331,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         history.options?.restoreDeletedCells
                     )
                         newContext.formulaCache.formulaCellInfoMap = null;
-                    else
-                        newContext.formulaCache.updateFormulaCache(
-                            newContext,
-                            history,
-                            "undo"
-                        );
+                    else newContext.formulaCache.updateFormulaCache(newContext, history, 'undo');
                     return newContext;
                 });
             }
@@ -393,12 +357,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         history.options?.restoreDeletedCells
                     )
                         newContext.formulaCache.formulaCellInfoMap = null;
-                    else
-                        newContext.formulaCache.updateFormulaCache(
-                            newContext,
-                            history,
-                            "redo"
-                        );
+                    else newContext.formulaCache.updateFormulaCache(newContext, history, 'redo');
                     return newContext;
                 });
             }
@@ -406,16 +365,9 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
 
         useEffect(() => {
             if (context.luckysheet_select_save != null) {
-                mergedSettings.hooks?.afterSelectionChange?.(
-                    context.currentSheetId,
-                    context.luckysheet_select_save[0]
-                );
+                mergedSettings.hooks?.afterSelectionChange?.(context.currentSheetId, context.luckysheet_select_save[0]);
             }
-        }, [
-            context.currentSheetId,
-            context.luckysheet_select_save,
-            mergedSettings.hooks,
-        ]);
+        }, [context.currentSheetId, context.luckysheet_select_save, mergedSettings.hooks]);
 
         const providerValue = useMemo(
             () => ({
@@ -426,14 +378,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 handleRedo,
                 refs,
             }),
-            [
-                context,
-                handleRedo,
-                handleUndo,
-                mergedSettings,
-                refs,
-                setContextWithProduce,
-            ]
+            [context, handleRedo, handleUndo, mergedSettings, refs, setContextWithProduce],
         );
 
         useEffect(() => {
@@ -450,10 +395,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     draftCtx.defaultFontSize = mergedSettings.defaultFontSize;
                     if (draftCtx.luckysheetfile.length === 0) {
                         draftCtx.luckysheetfile = cloneDeep(originalData);
-                        ensureSheetIndex(
-                            draftCtx.luckysheetfile,
-                            mergedSettings.generateSheetId
-                        );
+                        ensureSheetIndex(draftCtx.luckysheetfile, mergedSettings.generateSheetId);
                         for (const newDatum of draftCtx.luckysheetfile) {
                             const index = getSheetIndex(draftCtx, newDatum.id!) as number;
                             const sheet = draftCtx.luckysheetfile[index];
@@ -489,7 +431,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     const sheet = draftCtx.luckysheetfile?.[sheetIdx];
                     if (!sheet) return;
 
-                    let {data} = sheet;
+                    let { data } = sheet;
                     // expand cell data
                     if (!data || data.length === 0) {
                         const temp = api.initSheetData(draftCtx, sheetIdx, sheet);
@@ -500,16 +442,13 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
 
                     if (
                         (!draftCtx.luckysheet_select_save || draftCtx.luckysheet_select_save.length === 0) &&
-                        sheet.luckysheet_select_save && sheet.luckysheet_select_save.length > 0
+                        sheet.luckysheet_select_save &&
+                        sheet.luckysheet_select_save.length > 0
                     ) {
                         draftCtx.luckysheet_select_save = sheet.luckysheet_select_save;
                     }
                     if (draftCtx.luckysheet_select_save?.length === 0) {
-                        if (
-                            data?.[0]?.[0]?.mc &&
-                            data?.[0]?.[0]?.mc?.rs != null &&
-                            data?.[0]?.[0]?.mc?.cs != null
-                        ) {
+                        if (data?.[0]?.[0]?.mc && data?.[0]?.[0]?.mc?.rs != null && data?.[0]?.[0]?.mc?.cs != null) {
                             draftCtx.luckysheet_select_save = [
                                 {
                                     row: [0, data[0][0].mc.rs - 1],
@@ -528,13 +467,11 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
 
                     draftCtx.config = sheet.config ?? {};
                     draftCtx.insertedImgs = sheet.images;
-                    draftCtx.currency = mergedSettings.currency || "€";
+                    draftCtx.currency = mergedSettings.currency || '€';
 
                     draftCtx.zoomRatio = sheet.zoomRatio ?? 1;
-                    draftCtx.rowHeaderWidth =
-                        mergedSettings.rowHeaderWidth * draftCtx.zoomRatio;
-                    draftCtx.columnHeaderHeight =
-                        mergedSettings.columnHeaderHeight * draftCtx.zoomRatio;
+                    draftCtx.rowHeaderWidth = mergedSettings.rowHeaderWidth * draftCtx.zoomRatio;
+                    draftCtx.columnHeaderHeight = mergedSettings.columnHeaderHeight * draftCtx.zoomRatio;
 
                     if (sheet.defaultRowHeight != null) {
                         draftCtx.defaultrowlen = Number(sheet.defaultRowHeight);
@@ -555,7 +492,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     }
 
                     if (sheet.showGridLines != null) {
-                        const {showGridLines} = sheet;
+                        const { showGridLines } = sheet;
                         if (showGridLines === 0 || showGridLines === false) {
                             draftCtx.showGridLines = false;
                         } else {
@@ -568,12 +505,12 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         const lang =
                             navigator.languages?.[0] ||
                             navigator.language ||
-                            // @ts-ignore
+                            // @ts-expect-error
                             navigator.userLanguage;
                         draftCtx.lang = lang;
                     }
                 },
-                {noHistory: true}
+                { noHistory: true },
             );
         }, [
             context.currentSheetId,
@@ -598,11 +535,11 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
 
         const onKeyDown = useCallback(
             (e: React.KeyboardEvent<HTMLDivElement>) => {
-                const {nativeEvent} = e;
+                const { nativeEvent } = e;
                 // handling undo and redo ahead because handleUndo and handleRedo
                 // themselves are calling setContext, and should not be nested
                 // in setContextWithProduce.
-                if ((e.ctrlKey || e.metaKey) && e.code === "KeyZ") {
+                if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') {
                     if (e.shiftKey) {
                         handleRedo();
                     } else {
@@ -611,7 +548,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     e.stopPropagation();
                     return;
                 }
-                if ((e.ctrlKey || e.metaKey) && e.code === "KeyY") {
+                if ((e.ctrlKey || e.metaKey) && e.code === 'KeyY') {
                     handleRedo();
                     e.stopPropagation();
                     e.preventDefault();
@@ -626,57 +563,54 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         globalCache.current!,
                         handleUndo, // still passing handleUndo and handleRedo here to satisfy API
                         handleRedo,
-                        canvas.current!.getContext("2d")!
+                        canvas.current!.getContext('2d')!,
                     );
                 });
             },
-            [handleRedo, handleUndo, setContextWithProduce]
+            [handleRedo, handleUndo, setContextWithProduce],
         );
 
-        const onCopy = useCallback(
-            (e: ClipboardEvent) => {
-                const pending = consumePendingCopy();
-                if (!pending) return;
+        const onCopy = useCallback((e: ClipboardEvent) => {
+            const pending = consumePendingCopy();
+            if (!pending) return;
 
-                e.preventDefault();
+            e.preventDefault();
 
-                // Build eigen clipboard data with the cell text
-                const eigenData: EigenClipboardData = {
-                    version: 1,
-                    items: [{type: 'text', text: pending.plainText}],
-                };
+            // Build eigen clipboard data with the cell text
+            const eigenData: EigenClipboardData = {
+                version: 1,
+                items: [{ type: 'text', text: pending.plainText }],
+            };
 
-                // Embed eigen clipboard marker in the HTML alongside the fortune-sheet table
-                const eigenJson = JSON.stringify(eigenData);
-                const eigenMarker = `<span data-eigen-clipboard="${encodeURIComponent(eigenJson)}"></span>`;
-                const combinedHtml = eigenMarker + pending.html;
+            // Embed eigen clipboard marker in the HTML alongside the fortune-sheet table
+            const eigenJson = JSON.stringify(eigenData);
+            const eigenMarker = `<span data-eigen-clipboard="${encodeURIComponent(eigenJson)}"></span>`;
+            const combinedHtml = eigenMarker + pending.html;
 
-                e.clipboardData?.setData("text/html", combinedHtml);
-                e.clipboardData?.setData("text/plain", pending.plainText);
-                // Also set the custom MIME type for same-origin reads
-                e.clipboardData?.setData("application/eigen-clipboard", eigenJson);
-            },
-            []
-        );
+            e.clipboardData?.setData('text/html', combinedHtml);
+            e.clipboardData?.setData('text/plain', pending.plainText);
+            // Also set the custom MIME type for same-origin reads
+            e.clipboardData?.setData('application/eigen-clipboard', eigenJson);
+        }, []);
 
         const onPaste = useCallback(
             (e: ClipboardEvent) => {
                 // deal with multi instance case, only the focused sheet handles the paste
                 if (
                     cellInput.current === document.activeElement ||
-                    document.activeElement?.className === "fortune-sheet-overlay"
+                    document.activeElement?.className === 'fortune-sheet-overlay'
                 ) {
-                    let {clipboardData} = e;
+                    let { clipboardData } = e;
                     if (!clipboardData) {
-                        // @ts-ignore
+                        // @ts-expect-error
                         clipboardData = window.clipboardData;
                     }
                     if (!clipboardData) return;
 
                     // Check for eigen clipboard data from other eigen apps (docs, slides, etc.)
                     // but only if this is NOT a fortune-sheet internal copy (which uses HTML with fortune-copy-action-table)
-                    const htmlData = clipboardData.getData("text/html");
-                    const isInternalCopy = htmlData?.includes("fortune-copy-action-table");
+                    const htmlData = clipboardData.getData('text/html');
+                    const isInternalCopy = htmlData?.includes('fortune-copy-action-table');
 
                     if (!isInternalCopy) {
                         const eigenData = readEigenClipboard(clipboardData);
@@ -684,19 +618,19 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                             // Extract text from eigen clipboard items and paste as plain text
                             const textParts = eigenData.items
                                 .filter((item): item is EigenClipboardTextItem => item.type === 'text')
-                                .map(item => item.text);
+                                .map((item) => item.text);
                             if (textParts.length > 0) {
                                 e.preventDefault();
                                 // Create a synthetic paste with the text — let handlePaste process it
                                 const syntheticTransfer = new DataTransfer();
-                                syntheticTransfer.setData("text/plain", textParts.join("\n"));
-                                const syntheticEvent = new ClipboardEvent("paste", {
+                                syntheticTransfer.setData('text/plain', textParts.join('\n'));
+                                const syntheticEvent = new ClipboardEvent('paste', {
                                     clipboardData: syntheticTransfer,
                                 });
                                 setContextWithProduce((draftCtx) => {
                                     try {
                                         handlePaste(draftCtx, syntheticEvent);
-                                    } catch (err: any) {
+                                    } catch (err) {
                                         console.error(err);
                                     }
                                 });
@@ -705,34 +639,26 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         }
                     }
 
-                    const txtdata = htmlData || clipboardData.getData("text/plain");
-                    const ele = document.createElement("div");
+                    const txtdata = htmlData || clipboardData.getData('text/plain');
+                    const ele = document.createElement('div');
                     ele.innerHTML = txtdata;
 
-                    const trList = ele.querySelectorAll("table tr");
-                    const maxRow =
-                        trList.length + context.luckysheet_select_save![0].row[0];
+                    const trList = ele.querySelectorAll('table tr');
+                    const maxRow = trList.length + context.luckysheet_select_save![0].row[0];
                     const rowToBeAdded =
                         maxRow -
-                        context.luckysheetfile[
-                            getSheetIndex(
-                                context,
-                                context!.currentSheetId! as string
-                            ) as number
-                            ].data!.length;
+                        context.luckysheetfile[getSheetIndex(context, context!.currentSheetId! as string) as number]
+                            .data!.length;
                     const range = context.luckysheet_select_save;
                     if (rowToBeAdded > 0) {
-                        const insertRowColOp: SetContextOptions["insertRowColOp"] = {
-                            type: "row",
+                        const insertRowColOp: SetContextOptions['insertRowColOp'] = {
+                            type: 'row',
                             index:
                                 context.luckysheetfile[
-                                    getSheetIndex(
-                                        context,
-                                        context!.currentSheetId! as string
-                                    ) as number
-                                    ].data!.length - 1,
+                                    getSheetIndex(context, context!.currentSheetId! as string) as number
+                                ].data!.length - 1,
                             count: rowToBeAdded,
-                            direction: "rightbottom",
+                            direction: 'rightbottom',
                             id: context.currentSheetId,
                         };
                         setContextWithProduce(
@@ -742,30 +668,29 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                             },
                             {
                                 insertRowColOp,
-                            }
+                            },
                         );
                     }
                     setContextWithProduce((draftCtx) => {
                         try {
                             handlePaste(draftCtx, e);
-                        } catch (err: any) {
+                        } catch (err) {
                             console.error(err);
                         }
                     });
                 }
             },
-            [context, setContextWithProduce]
+            [context, setContextWithProduce],
         );
 
-
         useEffect(() => {
-            document.addEventListener("copy", onCopy);
-            document.addEventListener("cut", onCopy);
-            document.addEventListener("paste", onPaste);
+            document.addEventListener('copy', onCopy);
+            document.addEventListener('cut', onCopy);
+            document.addEventListener('paste', onPaste);
             return () => {
-                document.removeEventListener("copy", onCopy);
-                document.removeEventListener("cut", onCopy);
-                document.removeEventListener("paste", onPaste);
+                document.removeEventListener('copy', onCopy);
+                document.removeEventListener('cut', onCopy);
+                document.removeEventListener('paste', onPaste);
             };
         }, [onCopy, onPaste]);
 
@@ -781,9 +706,9 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     mergedSettings,
                     cellInput.current,
                     scrollbarX.current,
-                    scrollbarY.current
+                    scrollbarY.current,
                 ),
-            [context, setContextWithProduce, handleUndo, handleRedo, mergedSettings]
+            [context, setContextWithProduce, handleUndo, handleRedo, mergedSettings],
         );
 
         const i = getSheetIndex(context, context.currentSheetId);
@@ -835,12 +760,12 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                                     rightItems={toolbarRightItems}
                                 />
                             )}
-                            {mergedSettings.showFormulaBar && <FxEditor/>}
+                            {mergedSettings.showFormulaBar && <FxEditor />}
                         </div>
-                        <Sheet sheet={sheet}/>
-                        {mergedSettings.showSheetTabs && <SheetTab/>}
-                        <ContextMenu/>
-                        <FilterMenu/>
+                        <Sheet sheet={sheet} />
+                        {mergedSettings.showSheetTabs && <SheetTab />}
+                        <ContextMenu />
+                        <FilterMenu />
                         {context.contextMenu && Object.keys(context.contextMenu).length > 0 && (
                             <div
                                 onMouseDown={() => {
@@ -861,7 +786,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         <div className="flex justify-end items-center leading-[0] h-0">
                             <div className="luckysheet-sheet-selection-calInfo">
                                 {!!calInfo.count && (
-                                    <div style={{width: "60px"}}>
+                                    <div style={{ width: '60px' }}>
                                         {formula.count}: {calInfo.count}
                                     </div>
                                 )}
@@ -891,6 +816,5 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 </ModalProvider>
             </WorkbookContext.Provider>
         );
-    }
+    },
 );
-

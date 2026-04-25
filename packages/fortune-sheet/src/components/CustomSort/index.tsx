@@ -1,19 +1,20 @@
-import {Context, getSheetIndex, indexToColumnChar, locale, sortSelection,} from "../../state";
-import React, {ChangeEvent, useCallback, useContext, useEffect, useState,} from "react";
-import {WorkbookContext} from "../../context";
-import {useDialog} from "../../hooks/useDialog";
-import {Button} from "@workspace/ui/components/button";
+import { Button } from '@workspace/ui/components/button';
+import type React from 'react';
+import { type ChangeEvent, useCallback, useContext, useEffect, useState } from 'react';
+import { WorkbookContext } from '../../context';
+import { useDialog } from '../../hooks/useDialog';
+import { type Context, getSheetIndex, indexToColumnChar, locale, sortSelection } from '../../state';
 
 type RadioChangeEvent = React.ChangeEvent<HTMLInputElement>;
 
 export function CustomSort() {
     const [rangeColChar, setRangeColChar] = useState<string[]>([]);
     const [ascOrDesc, setAscOrDesc] = useState(true);
-    const {context, setContext} = useContext(WorkbookContext);
-    const [selectedValue, setSelectedValue] = useState<string>("0");
+    const { context, setContext } = useContext(WorkbookContext);
+    const [selectedValue, setSelectedValue] = useState<string>('0');
     const [isTitleChange, setIsTitleChange] = useState(false);
-    const {sort} = locale(context);
-    const {hideDialog} = useDialog();
+    const { sort } = locale(context);
+    const { hideDialog } = useDialog();
 
     const col_start = context.luckysheet_select_save![0].column[0];
     const col_end = context.luckysheet_select_save![0].column[1];
@@ -29,16 +30,13 @@ export function CustomSort() {
     // Change sort direction
     const handleRadioChange = useCallback((e: RadioChangeEvent) => {
         const sortValue = e.target.value;
-        setAscOrDesc(sortValue === "asc");
+        setAscOrDesc(sortValue === 'asc');
     }, []);
 
-    const handleTitleChange = useCallback(
-        (e: React.ChangeEvent<HTMLInputElement>) => {
-            const value = e.target.checked;
-            setIsTitleChange(value);
-        },
-        []
-    );
+    const handleTitleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.checked;
+        setIsTitleChange(value);
+    }, []);
 
     // Build column list for sort selector
     useEffect(() => {
@@ -61,78 +59,66 @@ export function CustomSort() {
             }
         }
         setRangeColChar(list);
-    }, [
-        col_end,
-        col_start,
-        context.luckysheetfile,
-        isTitleChange,
-        row_start,
-        sheetIndex,
-        sort.columnOperation,
-    ]);
+    }, [col_end, col_start, context.luckysheetfile, isTitleChange, row_start, sheetIndex, sort.columnOperation]);
 
     return (
         <div className="fortune-sort">
             <div className="text-base mb-4">
-        <span>
-          <span>{sort.sortRangeTitle}</span>
-            {indexToColumnChar(col_start)}
-            {row_start + 1}
-            <span>{sort.sortRangeTitleTo}</span>
-            {indexToColumnChar(col_end)}
-            {row_end + 1}
-        </span>
+                <span>
+                    <span>{sort.sortRangeTitle}</span>
+                    {indexToColumnChar(col_start)}
+                    {row_start + 1}
+                    <span>{sort.sortRangeTitleTo}</span>
+                    {indexToColumnChar(col_end)}
+                    {row_end + 1}
+                </span>
             </div>
 
             <div>
                 <div className="space-y-2.5">
                     <div>
-                        <input
-                            type="checkbox"
-                            id="fortune-sort-haveheader"
-                            onChange={handleTitleChange}
-                        />
+                        <input type="checkbox" id="fortune-sort-haveheader" onChange={handleTitleChange} />
                         <span>{sort.hasTitle}</span>
                     </div>
 
                     <div className="[&_td]:p-1.5 [&_td]:whitespace-nowrap">
                         <table cellSpacing="0">
                             <tbody>
-                            <tr>
-                                <td style={{width: "190px"}}>
-                                    {sort.sortBy}
-                                    <select name="sort_0" onChange={handleSelectChange}>
-                                        {rangeColChar.map((col, index) => {
-                                            return (
-                                                <option value={index} key={index}>
-                                                    {col}
-                                                </option>
-                                            );
-                                        })}
-                                    </select>
-                                </td>
-                                <td>
-                                    <div>
-                                        <input
-                                            type="radio"
-                                            value="asc"
-                                            defaultChecked
-                                            name="sort_0"
-                                            onChange={handleRadioChange}
-                                        />
-                                        <span>{sort.asc}</span>
-                                    </div>
-                                    <div>
-                                        <input
-                                            type="radio"
-                                            value="desc"
-                                            name="sort_0"
-                                            onChange={handleRadioChange}
-                                        />
-                                        <span>{sort.desc}</span>
-                                    </div>
-                                </td>
-                            </tr>
+                                <tr>
+                                    <td style={{ width: '190px' }}>
+                                        {sort.sortBy}
+                                        <select name="sort_0" onChange={handleSelectChange}>
+                                            {rangeColChar.map((col, index) => {
+                                                return (
+                                                    <option value={index} key={col}>
+                                                        {col}
+                                                    </option>
+                                                );
+                                            })}
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <div>
+                                            <input
+                                                type="radio"
+                                                value="asc"
+                                                defaultChecked
+                                                name="sort_0"
+                                                onChange={handleRadioChange}
+                                            />
+                                            <span>{sort.asc}</span>
+                                        </div>
+                                        <div>
+                                            <input
+                                                type="radio"
+                                                value="desc"
+                                                name="sort_0"
+                                                onChange={handleRadioChange}
+                                            />
+                                            <span>{sort.desc}</span>
+                                        </div>
+                                    </td>
+                                </tr>
                             </tbody>
                         </table>
                     </div>
@@ -156,4 +142,3 @@ export function CustomSort() {
         </div>
     );
 }
-
