@@ -76,9 +76,11 @@ function injectSignature(body: string, sig: string | undefined, kind: 'new' | 'r
     if (!sig) return body;
     const sep = '<p><br></p>';
     if (kind === 'new') return body + sep + sig;
-    // formatEmailQuote already prefixes the quoted body with <br><br>, so a trailing
-    // separator here would stack visible blank lines between sig and quote.
-    return sep + sig + body;
+    // formatEmailQuote prefixes the quoted body with <br><br> as breathing room above the
+    // quote. With a signature injected, the sig itself provides the visual separation, so
+    // strip one leading <br> to keep the gap at two blank lines instead of three.
+    const trimmed = body.replace(/^<br\s*\/?>/i, '');
+    return sep + sig + trimmed;
 }
 
 function plainSignature(sig: string | undefined): string {
