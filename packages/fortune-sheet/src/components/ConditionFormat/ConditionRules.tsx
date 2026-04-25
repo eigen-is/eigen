@@ -5,6 +5,7 @@ import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker';
 import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import produce from 'immer';
 import { useCallback, useContext, useEffect, useState } from 'react';
 import { WorkbookContext } from '../../context';
@@ -147,18 +148,22 @@ export function ConditionRules({ type }: { type: string }) {
                 )}
 
                 {type === 'duplicateValue' && (
-                    <select
-                        className="mb-3 h-8 rounded-md border border-input bg-background px-3 text-sm"
-                        onChange={(e) => {
-                            const { value } = e.target;
+                    <Select
+                        value={context.conditionRules.repeatValue}
+                        onValueChange={(value) => {
                             setContext((ctx) => {
                                 ctx.conditionRules.repeatValue = value;
                             });
                         }}
                     >
-                        <option value="0">{conditionformat.duplicateValue}</option>
-                        <option value="1">{conditionformat.uniqueValue}</option>
-                    </select>
+                        <SelectTrigger size="sm" className="mb-3">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="0">{conditionformat.duplicateValue}</SelectItem>
+                            <SelectItem value="1">{conditionformat.uniqueValue}</SelectItem>
+                        </SelectContent>
+                    </Select>
                 )}
 
                 {(type === 'top10' || type === 'top10_percent' || type === 'last10' || type === 'last10_percent') && (
@@ -197,9 +202,10 @@ export function ConditionRules({ type }: { type: string }) {
                         </Label>
                         <Popover>
                             <PopoverTrigger asChild>
-                                <button
-                                    type="button"
-                                    className="h-6 w-10 rounded border border-input"
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-6 w-10 p-0"
                                     style={{ backgroundColor: colorRules.textColor }}
                                 />
                             </PopoverTrigger>
@@ -235,9 +241,10 @@ export function ConditionRules({ type }: { type: string }) {
                         </Label>
                         <Popover>
                             <PopoverTrigger asChild>
-                                <button
-                                    type="button"
-                                    className="h-6 w-10 rounded border border-input"
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-6 w-10 p-0"
                                     style={{ backgroundColor: colorRules.cellColor }}
                                 />
                             </PopoverTrigger>

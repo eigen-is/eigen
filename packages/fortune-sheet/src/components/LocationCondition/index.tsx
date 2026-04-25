@@ -1,30 +1,32 @@
 import { Button } from '@workspace/ui/components/button';
+import { Checkbox } from '@workspace/ui/components/checkbox';
+import { DialogFooter } from '@workspace/ui/components/dialog';
+import { Label } from '@workspace/ui/components/label';
+import { RadioGroup, RadioGroupItem } from '@workspace/ui/components/radio-group';
 import produce from 'immer';
 import { useCallback, useContext, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
 import { applyLocation, getFlowdata, getOptionValue, getSelectRange, locale } from '../../state';
 
+const VALUE_KEYS = ['locationDate', 'locationDigital', 'locationString', 'locationBool', 'locationError'] as const;
+
+const initialFlags: Record<(typeof VALUE_KEYS)[number], boolean> = {
+    locationDate: true,
+    locationDigital: true,
+    locationString: true,
+    locationBool: true,
+    locationError: true,
+};
+
 export function LocationCondition() {
     const { context, setContext } = useContext(WorkbookContext);
     const { showDialog, hideDialog } = useDialog();
     const { findAndReplace, button } = locale(context);
     const [conditionType, setConditionType] = useState('locationConstant');
-    const [constants, setConstants] = useState<Record<string, boolean>>({
-        locationDate: true,
-        locationDigital: true,
-        locationString: true,
-        locationBool: true,
-        locationError: true,
-    });
-    const [formulas, setFormulas] = useState<Record<string, boolean>>({
-        locationDate: true,
-        locationDigital: true,
-        locationString: true,
-        locationBool: true,
-        locationError: true,
-    });
-    // Confirm button
+    const [constants, setConstants] = useState(initialFlags);
+    const [formulas, setFormulas] = useState(initialFlags);
+
     const onConfirm = useCallback(() => {
         if (conditionType === 'locationConstant') {
             const value = getOptionValue(constants);
@@ -69,7 +71,6 @@ export function LocationCondition() {
                 if (rangeArr.length === 0) showDialog(findAndReplace.locationTipNotFindCell, 'ok');
             });
         } else {
-            // Empty value handling
             let selectRange: {
                 row: (number | undefined)[];
                 column: (number | undefined)[];
@@ -107,112 +108,72 @@ export function LocationCondition() {
         showDialog,
     ]);
 
-    // Selection event handler
-    const isSelect = useCallback((currentType: string) => conditionType === currentType, [conditionType]);
-
     return (
         <div>
             <div className="text-base leading-[48px]">{findAndReplace.location}</div>
-            <div className="border border-[#dfdfdf] p-2.5 text-sm">
-                {/* Constants */}
+            <RadioGroup value={conditionType} onValueChange={setConditionType} className="border p-2.5 text-sm gap-0">
                 <div className="py-1.5">
-                    <input
-                        type="radio"
-                        name="locationType"
-                        id="locationConstant"
-                        checked={isSelect('locationConstant')}
-                        onChange={() => {
-                            setConditionType('locationConstant');
-                        }}
-                    />
-                    <label htmlFor="locationConstant">{findAndReplace.locationConstant}</label>
-                    <div className="h-[30px] px-2.5 flex gap-1">
-                        {['locationDate', 'locationDigital', 'locationString', 'locationBool', 'locationError'].map(
-                            (v) => (
-                                <div className="float-left mr-1.5" key={v}>
-                                    <input
-                                        type="checkbox"
-                                        disabled={!isSelect('locationConstant')}
-                                        checked={constants[v]}
-                                        onChange={() => {
-                                            setConstants(
-                                                produce((draft) => {
-                                                    draft[v] = !draft[v];
-                                                }),
-                                            );
-                                        }}
-                                    />
-                                    <label
-                                        htmlFor={v}
-                                        style={{
-                                            color: isSelect('locationConstant') ? '#000' : '#666',
-                                        }}
-                                    >
-                                        {findAndReplace[v as keyof typeof findAndReplace]}
-                                    </label>
-                                </div>
-                            ),
-                        )}
+                    <Label className="flex items-center gap-1.5">
+                        <RadioGroupItem value="locationConstant" />
+                        {findAndReplace.locationConstant}
+                    </Label>
+                    <div className="h-[30px] px-2.5 flex gap-3 mt-1">
+                        {VALUE_KEYS.map((v) => (
+                            <Label key={v} className="flex items-center gap-1.5 peer-disabled:opacity-50">
+                                <Checkbox
+                                    className="peer"
+                                    disabled={conditionType !== 'locationConstant'}
+                                    checked={constants[v]}
+                                    onCheckedChange={() => {
+                                        setConstants(
+                                            produce((draft) => {
+                                                draft[v] = !draft[v];
+                                            }),
+                                        );
+                                    }}
+                                />
+                                {findAndReplace[v]}
+                            </Label>
+                        ))}
                     </div>
                 </div>
-                {/* Formula */}
                 <div className="py-1.5">
-                    <input
-                        type="radio"
-                        name="locationType"
-                        id="locationFormula"
-                        checked={isSelect('locationFormula')}
-                        onChange={() => {
-                            setConditionType('locationFormula');
-                        }}
-                    />
-                    <label htmlFor="locationFormula">{findAndReplace.locationFormula}</label>
-                    <div className="h-[30px] px-2.5 flex gap-1">
-                        {['locationDate', 'locationDigital', 'locationString', 'locationBool', 'locationError'].map(
-                            (v) => (
-                                <div className="float-left mr-1.5" key={v}>
-                                    <input
-                                        type="checkbox"
-                                        disabled={!isSelect('locationFormula')}
-                                        checked={formulas[v]}
-                                        onChange={() => {
-                                            setFormulas(
-                                                produce((draft) => {
-                                                    draft[v] = !draft[v];
-                                                }),
-                                            );
-                                        }}
-                                    />
-                                    <label
-                                        htmlFor={v}
-                                        style={{
-                                            color: isSelect('locationFormula') ? '#000' : '#666',
-                                        }}
-                                    >
-                                        {findAndReplace[v as keyof typeof findAndReplace]}
-                                    </label>
-                                </div>
-                            ),
-                        )}
+                    <Label className="flex items-center gap-1.5">
+                        <RadioGroupItem value="locationFormula" />
+                        {findAndReplace.locationFormula}
+                    </Label>
+                    <div className="h-[30px] px-2.5 flex gap-3 mt-1">
+                        {VALUE_KEYS.map((v) => (
+                            <Label key={v} className="flex items-center gap-1.5 peer-disabled:opacity-50">
+                                <Checkbox
+                                    className="peer"
+                                    disabled={conditionType !== 'locationFormula'}
+                                    checked={formulas[v]}
+                                    onCheckedChange={() => {
+                                        setFormulas(
+                                            produce((draft) => {
+                                                draft[v] = !draft[v];
+                                            }),
+                                        );
+                                    }}
+                                />
+                                {findAndReplace[v]}
+                            </Label>
+                        ))}
                     </div>
                 </div>
-                {/* TODO Conditional format */}
-                {['locationNull', 'locationRowSpan', 'locationColumnSpan'].map((v) => (
-                    <div className="py-1.5" key={v}>
-                        <input
-                            type="radio"
-                            name={v}
-                            checked={isSelect(v)}
-                            onChange={() => {
-                                setConditionType(v);
-                            }}
-                        />
-                        <label htmlFor={v}>{findAndReplace[v as keyof typeof findAndReplace]}</label>
-                    </div>
+                {(['locationNull', 'locationRowSpan', 'locationColumnSpan'] as const).map((v) => (
+                    <Label key={v} className="flex items-center gap-1.5 py-1.5">
+                        <RadioGroupItem value={v} />
+                        {findAndReplace[v]}
+                    </Label>
                 ))}
-            </div>
+            </RadioGroup>
 
-            <div className="flex gap-2 mt-3">
+            <DialogFooter>
+                <Button variant="outline" size="sm" onClick={() => hideDialog()}>
+                    {button.cancel}
+                </Button>
                 <Button
                     size="sm"
                     onClick={() => {
@@ -222,10 +183,7 @@ export function LocationCondition() {
                 >
                     {button.confirm}
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => hideDialog()}>
-                    {button.cancel}
-                </Button>
-            </div>
+            </DialogFooter>
         </div>
     );
 }

@@ -34,55 +34,35 @@ export function updateMoreCell(
     // selectHightlightShow();
 }
 
-// Handle separator
-export function getRegStr(regStr: string, splitSymbols: any) {
-    regStr = "";
+// Build the split-regex source from the user's checkbox/text-input selection.
+// Order matters: each separator appends to the alternation; "splitsimple" wraps
+// the result with `[...]+` and must be applied last.
+export function getRegStr(selected: ReadonlySet<string>, otherValue: string) {
+    let regStr = "";
     let mark = 0;
-    for (let i = 0; i < splitSymbols.length; i += 1) {
-        const split = splitSymbols[i];
-        const inputNode = split.childNodes[0];
-        if (inputNode.checked) {
-            const {id} = inputNode;
-            if (id === "Tab") {
-                // Tab key
-                regStr += "\\t";
-                mark += 1;
-            } else if (id === "semicolon") {
-                // Semicolon
-                if (mark > 0) {
-                    regStr += "|";
-                }
-                regStr += ";";
-                mark = 1;
-            } else if (id === "comma") {
-                // Comma
-                if (mark > 0) {
-                    regStr += "|";
-                }
-                regStr += ",";
-                mark += 1;
-            } else if (id === "space") {
-                // Space
-                if (mark > 0) {
-                    regStr += "|";
-                }
-
-                regStr += "\\s";
-                mark += 1;
-            } else if (id === "splitsimple") {
-                // Treat consecutive separators as single
-                regStr = `[${regStr}]+`;
-            } else if (id === "other") {
-                // Other
-                const txt = split.childNodes[2].value;
-                if (txt !== "") {
-                    if (mark > 0) {
-                        regStr += "|";
-                    }
-                    regStr += txt;
-                }
-            }
-        }
+    const append = (token: string, separator = "|") => {
+        if (mark > 0) regStr += separator;
+        regStr += token;
+        mark += 1;
+    };
+    if (selected.has("Tab")) {
+        regStr += "\\t";
+        mark += 1;
+    }
+    if (selected.has("semicolon")) {
+        append(";");
+    }
+    if (selected.has("comma")) {
+        append(",");
+    }
+    if (selected.has("space")) {
+        append("\\s");
+    }
+    if (selected.has("other") && otherValue !== "") {
+        append(otherValue);
+    }
+    if (selected.has("splitsimple")) {
+        regStr = `[${regStr}]+`;
     }
     return regStr;
 }

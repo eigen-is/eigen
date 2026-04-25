@@ -3,7 +3,6 @@ import type { CSSProperties } from 'react';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import './index.css';
 import { debounce } from 'es-toolkit/compat';
-import { ChevronDown } from 'lucide-react';
 import { type SetContextOptions, WorkbookContext } from '../../context';
 import { useAlert } from '../../hooks/useAlert';
 import { useDialog } from '../../hooks/useDialog';
@@ -49,7 +48,6 @@ export const SheetOverlay: React.FC = () => {
     const { showDialog } = useDialog();
     const containerRef = useRef<HTMLDivElement>(null);
     const bottomAddRowInputRef = useRef<HTMLInputElement>(null);
-    const dataVerificationHintBoxRef = useRef<HTMLDivElement>(null);
     const [lastRangeText, setLastRangeText] = useState('');
     const [lastCellValue, setLastCellValue] = useState('');
     const { showAlert } = useAlert();
@@ -732,29 +730,8 @@ export const SheetOverlay: React.FC = () => {
                     <div id="luckysheet-multipleRange-show" />
                     <div id="luckysheet-dynamicArray-hightShow" />
                     <ImgBoxs />
-                    <div
-                        id="luckysheet-dataVerification-dropdown-btn"
-                        onClick={() => {
-                            setContext((ctx) => {
-                                ctx.dataVerificationDropDownList = true;
-                                dataVerificationHintBoxRef.current!.style.display = 'none';
-                            });
-                        }}
-                        tabIndex={0}
-                        style={{ display: 'none' }}
-                    >
-                        <ChevronDown width={16} height={16} aria-hidden="true" />
-                    </div>
-                    {context.dataVerificationDropDownList && <DropDownList />}
-                    {/* <div
-            id="luckysheet-dataVerification-dropdown-List"
-            className="luckysheet-mousedown-cancel"
-          /> */}
-                    <div
-                        id="luckysheet-dataVerification-showHintBox"
-                        className="luckysheet-mousedown-cancel"
-                        ref={dataVerificationHintBoxRef}
-                    />
+                    <DropDownList />
+                    <div id="luckysheet-dataVerification-showHintBox" className="luckysheet-mousedown-cancel" />
                     <div className="luckysheet-cell-copy" />
                     <div className="luckysheet-grdblkflowpush" />
                     <div id="luckysheet-cell-flow_0" className="luckysheet-cell-flow luckysheetsheetchange">

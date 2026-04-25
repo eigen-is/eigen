@@ -1,11 +1,13 @@
 import { Button } from '@workspace/ui/components/button';
-import type React from 'react';
-import { type ChangeEvent, useCallback, useContext, useEffect, useState } from 'react';
+import { Checkbox } from '@workspace/ui/components/checkbox';
+import { DialogFooter } from '@workspace/ui/components/dialog';
+import { Label } from '@workspace/ui/components/label';
+import { RadioGroup, RadioGroupItem } from '@workspace/ui/components/radio-group';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
+import { useContext, useEffect, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
 import { type Context, getSheetIndex, indexToColumnChar, locale, sortSelection } from '../../state';
-
-type RadioChangeEvent = React.ChangeEvent<HTMLInputElement>;
 
 export function CustomSort() {
     const [rangeColChar, setRangeColChar] = useState<string[]>([]);
@@ -23,22 +25,6 @@ export function CustomSort() {
 
     const sheetIndex = getSheetIndex(context, context.currentSheetId) as number;
 
-    const handleSelectChange = (event: ChangeEvent<HTMLSelectElement>) => {
-        setSelectedValue(event.target.value);
-    };
-
-    // Change sort direction
-    const handleRadioChange = useCallback((e: RadioChangeEvent) => {
-        const sortValue = e.target.value;
-        setAscOrDesc(sortValue === 'asc');
-    }, []);
-
-    const handleTitleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-        const value = e.target.checked;
-        setIsTitleChange(value);
-    }, []);
-
-    // Build column list for sort selector
     useEffect(() => {
         const list: string[] = [];
         if (isTitleChange) {
@@ -74,58 +60,49 @@ export function CustomSort() {
                 </span>
             </div>
 
-            <div>
-                <div className="space-y-2.5">
-                    <div>
-                        <input type="checkbox" id="fortune-sort-haveheader" onChange={handleTitleChange} />
-                        <span>{sort.hasTitle}</span>
-                    </div>
+            <div className="space-y-2.5">
+                <Label className="flex items-center gap-1.5">
+                    <Checkbox checked={isTitleChange} onCheckedChange={(v) => setIsTitleChange(!!v)} />
+                    {sort.hasTitle}
+                </Label>
 
-                    <div className="[&_td]:p-1.5 [&_td]:whitespace-nowrap">
-                        <table cellSpacing="0">
-                            <tbody>
-                                <tr>
-                                    <td style={{ width: '190px' }}>
-                                        {sort.sortBy}
-                                        <select name="sort_0" onChange={handleSelectChange}>
-                                            {rangeColChar.map((col, index) => {
-                                                return (
-                                                    <option value={index} key={col}>
-                                                        {col}
-                                                    </option>
-                                                );
-                                            })}
-                                        </select>
-                                    </td>
-                                    <td>
-                                        <div>
-                                            <input
-                                                type="radio"
-                                                value="asc"
-                                                defaultChecked
-                                                name="sort_0"
-                                                onChange={handleRadioChange}
-                                            />
-                                            <span>{sort.asc}</span>
-                                        </div>
-                                        <div>
-                                            <input
-                                                type="radio"
-                                                value="desc"
-                                                name="sort_0"
-                                                onChange={handleRadioChange}
-                                            />
-                                            <span>{sort.desc}</span>
-                                        </div>
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
+                <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2 flex-1">
+                        <span>{sort.sortBy}</span>
+                        <Select value={selectedValue} onValueChange={setSelectedValue}>
+                            <SelectTrigger size="sm" className="w-full">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {rangeColChar.map((col, index) => (
+                                    <SelectItem value={String(index)} key={col}>
+                                        {col}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                     </div>
+                    <RadioGroup
+                        value={ascOrDesc ? 'asc' : 'desc'}
+                        onValueChange={(v) => setAscOrDesc(v === 'asc')}
+                        className="gap-1.5"
+                    >
+                        <Label className="flex items-center gap-1.5">
+                            <RadioGroupItem value="asc" />
+                            {sort.asc}
+                        </Label>
+                        <Label className="flex items-center gap-1.5">
+                            <RadioGroupItem value="desc" />
+                            {sort.desc}
+                        </Label>
+                    </RadioGroup>
                 </div>
             </div>
 
-            <div className="mt-2.5 mb-6">
+            <DialogFooter>
+                <Button variant="outline" size="sm" onClick={() => hideDialog()}>
+                    {sort.close}
+                </Button>
                 <Button
                     size="sm"
                     onClick={() => {
@@ -138,7 +115,7 @@ export function CustomSort() {
                 >
                     {sort.confirm}
                 </Button>
-            </div>
+            </DialogFooter>
         </div>
     );
 }

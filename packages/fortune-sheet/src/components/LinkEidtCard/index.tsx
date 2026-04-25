@@ -14,6 +14,7 @@ import {
 } from '../../state';
 import './index.css';
 import { Button } from '@workspace/ui/components/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import type { LucideIcon } from 'lucide-react';
 import { Copy, Grid3x3, Pencil, Unlink, X } from 'lucide-react';
 import { WorkbookContext } from '../../context';
@@ -241,11 +242,10 @@ export function LinkEditCard({
             </div>
             <div className="fortune-link-modify-line">
                 <div className="fortune-link-modify-title">{insertLink.linkType}</div>
-                <select
-                    className="fortune-link-modify-select"
+                <Select
                     value={linkType}
-                    onChange={(e) => {
-                        if (e.target.value === 'sheet') {
+                    onValueChange={(value) => {
+                        if (value === 'sheet') {
                             if (!linkText) {
                                 setLinkText(context.luckysheetfile[0].name);
                             }
@@ -253,16 +253,21 @@ export function LinkEditCard({
                         } else {
                             setLinkAddress('');
                         }
-                        if (e.target.value === 'cellrange') setRangeModalVisible(true);
-                        setLinkType(e.target.value);
+                        if (value === 'cellrange') setRangeModalVisible(true);
+                        setLinkType(value);
                     }}
                 >
-                    {linkTypeList.map((type) => (
-                        <option key={type.value} value={type.value}>
-                            {type.text}
-                        </option>
-                    ))}
-                </select>
+                    <SelectTrigger size="sm" className="w-[232px]">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        {linkTypeList.map((type) => (
+                            <SelectItem key={type.value} value={type.value}>
+                                {type.text}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
             </div>
             <div className="fortune-link-modify-line">
                 {linkType === 'webpage' && (
@@ -303,20 +308,24 @@ export function LinkEditCard({
                 {linkType === 'sheet' && (
                     <>
                         <div className="fortune-link-modify-title">{insertLink.linkSheet}</div>
-                        <select
-                            className="fortune-link-modify-select"
-                            onChange={(e) => {
-                                if (!linkText) setLinkText(e.target.value);
-                                setLinkAddress(e.target.value);
-                            }}
+                        <Select
                             value={linkAddress}
+                            onValueChange={(value) => {
+                                if (!linkText) setLinkText(value);
+                                setLinkAddress(value);
+                            }}
                         >
-                            {context.luckysheetfile.map((sheet) => (
-                                <option key={sheet.id} value={sheet.name}>
-                                    {sheet.name}
-                                </option>
-                            ))}
-                        </select>
+                            <SelectTrigger size="sm" className="w-[232px]">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {context.luckysheetfile.map((sheet) => (
+                                    <SelectItem key={sheet.id} value={sheet.name}>
+                                        {sheet.name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                         {tooltip}
                     </>
                 )}

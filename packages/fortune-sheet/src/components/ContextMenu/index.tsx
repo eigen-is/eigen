@@ -1,5 +1,6 @@
 import { isLightColor } from '@workspace/lib/constants';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants/colors';
+import { Button } from '@workspace/ui/components/button';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -651,22 +652,22 @@ export const ContextMenu: React.FC = () => {
                                     <DropdownMenuSubTrigger className="gap-2">Comment color</DropdownMenuSubTrigger>
                                     <DropdownMenuSubContent>
                                         <div className="flex gap-1 p-2">
-                                            <button
-                                                type="button"
-                                                className="h-4 w-4 rounded-full border border-border hover:scale-125 transition-transform flex items-center justify-center bg-background"
+                                            <Button
+                                                variant="outline"
+                                                className="h-4 w-4 rounded-full p-0 shadow-none hover:scale-125 transition-transform"
                                                 title="No color"
                                                 onClick={() => {
                                                     closeMenu();
                                                     settings.hooks!.onCommentColor!(row_index!, col_index!, null);
                                                 }}
                                             >
-                                                <CircleOff className="h-2.5 w-2.5 text-muted-foreground" />
-                                            </button>
+                                                <CircleOff className="size-2.5 text-muted-foreground" />
+                                            </Button>
                                             {EIGEN_STICKIES_COLORS[0].map((c) => (
-                                                <button
-                                                    type="button"
+                                                <Button
+                                                    variant="outline"
                                                     key={c.value}
-                                                    className="h-4 w-4 rounded-full border border-border/50 hover:scale-125 transition-transform flex items-center justify-center"
+                                                    className="h-4 w-4 rounded-full p-0 border-border/50 shadow-none hover:scale-125 transition-transform"
                                                     style={{ backgroundColor: c.value }}
                                                     title={c.label}
                                                     onClick={() => {
@@ -680,11 +681,11 @@ export const ContextMenu: React.FC = () => {
                                                 >
                                                     {info?.color === c.value && (
                                                         <Check
-                                                            className="h-2 w-2"
+                                                            className="size-2"
                                                             style={{ color: isLightColor(c.value) ? '#000' : '#fff' }}
                                                         />
                                                     )}
-                                                </button>
+                                                </Button>
                                             ))}
                                         </div>
                                     </DropdownMenuSubContent>
