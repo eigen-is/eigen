@@ -28,7 +28,7 @@ can be removed once no `.css` imports remain.
 | `SheetTab/index.css`               | 280    | TODO     | Sheet tab area, active/hover states, scroll buttons. Hardcoded colors.                    |
 | `SheetOverlay/index.css`           | 882    | TODO     | Largest file. Cell selection, drag, resize, frozen panes, cell editor, formula bar.        |
 | `SheetOverlay/ScrollBar/index.css` | 40     | TODO     | Custom scrollbar styling.                                                                 |
-| `LinkEidtCard/index.css`           | 182    | TODO     | Link edit modal. Replace with shadcn `Dialog`/`Input`/`Button`.                           |
+| `LinkEidtCard/index.css`           | —      | **DONE** | Deleted. Migrated to Tailwind + theme tokens inline in `index.tsx`.                       |
 | `ContextMenu/index.css`            | —      | **DONE** | Deleted.                                                                                  |
 | `Workbook/index.css`               | —      | **DONE** | Deleted.                                                                                  |
 | `DataVerification/index.css`       | —      | **DONE** | Deleted.                                                                                  |
@@ -40,7 +40,7 @@ can be removed once no `.css` imports remain.
 - [ ] Migrate `SheetTab/index.css` → Tailwind classes
 - [ ] Migrate `SheetOverlay/index.css` → Tailwind classes (break into multiple PRs)
 - [ ] Migrate `SheetOverlay/ScrollBar/index.css` → Tailwind
-- [ ] Migrate `LinkEidtCard/index.css` → Tailwind + shadcn components
+- [x] Migrate `LinkEidtCard/index.css` → Tailwind + shadcn components — done
 - [ ] Delete `css.d.ts` once all CSS imports are removed
 
 ---
@@ -131,15 +131,14 @@ implementations:
 
 | Fortune-Sheet Component                | Shared Replacement                                                               | Notes                                                                                                                                                                                                     |
 |----------------------------------------|----------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `ContextMenu/Menu.tsx` + `Divider.tsx` | `@workspace/ui/components/context-menu`                                          | Custom context menu could use shadcn `ContextMenu` or `DropdownMenu` sub-components. **Complex** — the fortune-sheet context menu has custom positioning logic and inline inputs, so this is non-trivial. |
 | `FilterMenu.tsx` filter buttons        | `@workspace/ui/components/button`                                                | **DONE** (commit `b5c3b7e7`)                                                                                                                                                                              |
-| `LinkEidtCard/index.tsx`               | `@workspace/ui/components/dialog`, `input`, `button`, `select`                   | **Partial** — `<select>` swapped to shadcn `Select` in `b5c3b7e7`. Full rewrite (eliminating `index.css`) still pending the CSS migration sweep                                                           |
+| `LinkEidtCard/index.tsx` + `index.css` | `@workspace/ui/components/dialog`, `input`, `button`, `select`                   | **DONE** — `<select>` (b5c3b7e7), then full CSS-to-Tailwind + 2 raw `<input>` → `Input`; `index.css` deleted                                                                                              |
 | `CustomSort/index.tsx`                 | `@workspace/ui/components/checkbox`, `radio-group`, `select`, `button`, `dialog` | **DONE** (commit `b5c3b7e7`) — all native form controls migrated; buttons in `DialogFooter`                                                                                                                |
 | `DataVerification/DropdownList.tsx`    | `@workspace/ui/components/dropdown-menu`                                         | **DONE** (commit `b5c3b7e7`) — controlled `DropdownMenu` with `CheckboxItem`/`Item`. Trigger via `asChild` on the existing chevron div. Required `luckysheet-mousedown-cancel` on `DropdownMenuContent` — see `FORTUNE-SHEET-OPEN-ISSUES.md` §1 |
 | `FilterMenu.tsx` select/checkbox items | `@workspace/ui/components/checkbox` + `popover`                                  | **DONE** (commit `b5c3b7e7`) — `Checkbox` for value list, `Popover` (virtual `PopoverAnchor`) for the panel + nested `Popover` for filter-by-color                                                         |
-| `FormulaSearch/index.tsx`              | `@workspace/ui/components/input`, `select`                                       | Replace inline-styled `<input>` and `<select>`                                                                                                                                                            |
-| `ZoomControl/index.tsx`                | Consider `@workspace/ui/components/popover`                                      | Zoom preset menu could use shadcn `Popover` instead of custom absolute-positioned div                                                                                                                     |
-| `SheetOverlay` bottom add-row          | `@workspace/ui/components/input`, `button`                                       | If present, replace with shadcn                                                                                                                                                                           |
+| `FormulaSearch/index.tsx`              | `@workspace/ui/components/input`, `select`                                       | **DONE** — already shadcn-migrated in an earlier commit; broken-window `cn()` fix applied this sweep                                                                                                       |
+| `ZoomControl/index.tsx`                | `@workspace/ui/components/popover`                                               | **DONE** — custom absolute-positioned preset menu replaced with shadcn `Popover`; removed `useOutsideClick`/`useRef`/`useState`                                                                            |
+| `SheetOverlay` bottom add-row          | `@workspace/ui/components/input`, `button`                                       | **DONE** — `fortune-add-row-button` divs/spans → `Button`; raw `<input>` → `Input`; dead `.fortune-add-row-button` / `#luckysheet-bottom-add-row*` / `#luckysheet-bottom-return-top` rules dropped from `index.css` |
 
 ### Already using shared UI
 
@@ -222,14 +221,12 @@ implementations:
 - Chinese hardcoded strings: `裁剪`, `恢复原图`, `删除` — localize via `locale()`
 - Font Awesome icons (`fa fa-pencil`, `fa fa-trash`, etc.) — replace with Lucide or SVGIcon
 
-### `LinkEidtCard/` (index, CSS)
+### `LinkEidtCard/` (index)
 
-- **Partial** — 2 `<select>` migrated to shadcn `Select` in `b5c3b7e7`; dead `.fortune-link-modify-select` rule removed
-- **CSS**: 182 lines remaining — full migration still needed (16+ hardcoded hex colors). Deferred from the shadcn sweep into the broader CSS-to-Tailwind migration above
-- **BTN**: 2 `button-basic` divs in `renderBottomButton` — shadcn `Button` migration still pending
-- Typo in directory name: `LinkEidtCard` should be `LinkEditCard`
+- **DONE** — `<select>` → shadcn `Select` (`b5c3b7e7`); `index.css` deleted, all 182 lines migrated to Tailwind utilities + theme tokens inline; 2 raw `<input>` → shadcn `Input`. Only `fortune-link-modify-modal` + `range-selection-modal` classes preserved (DOM-targeted from `state/modules/hyperlink.ts`).
+- Typo in directory name: `LinkEidtCard` should be `LinkEditCard` — outstanding
 - Complex component with 3 modes (toolbar, range-selection, editing)
-- Uses `SVGIcon` for icons — some could be Lucide
+- Uses Lucide icons (`Copy`, `Pencil`, `Unlink`)
 
 ### `NotationBoxes/index.tsx`
 
@@ -326,18 +323,18 @@ implementations:
 
 ### Done
 
-- ~~Delete dead CSS files~~ — 5 of 9 CSS files deleted (ContextMenu, Workbook, DataVerification, SearchReplace, ConditionFormat)
+- ~~Delete dead CSS files~~ — 6 of 9 CSS files deleted (ContextMenu, Workbook, DataVerification, SearchReplace, ConditionFormat, LinkEidtCard)
 - ~~Replace `button-basic` divs with shadcn `Button`~~ — all migrated
 - ~~Fix `NameBox.tsx` export name~~ — done
 - ~~Replace hardcoded colors in components~~ — done in .tsx files (still present in remaining .css)
+- ~~Replace native `<input>`/`<select>`/`<checkbox>` with shadcn equivalents in CustomSort, FilterMenu~~ — done
+- ~~`FormulaSearch`, `ZoomControl`, `SheetOverlay` bottom-add-row shadcn migrations~~ — done
 
 ### Next — Medium effort
 
 1. Fix `LinkEidtCard` directory typo → `LinkEditCard`
-2. Migrate `LinkEidtCard/index.css` to Tailwind + shadcn (182 lines)
-3. Replace native `<input>`, `<select>`, `<checkbox>` with shadcn equivalents in CustomSort, FilterMenu
-4. Convert remaining `export default` → named exports (~4 components)
-5. Translate Chinese comments to English
+2. Convert remaining `export default` → named exports (~4 components)
+3. Translate Chinese comments to English
 
 ### Later — Major effort
 

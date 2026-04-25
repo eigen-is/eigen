@@ -37,6 +37,9 @@ import {
 } from '../../state';
 import { CustomSort } from '../CustomSort';
 
+const menuItemClass =
+    'relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground';
+
 export const ContextMenu: React.FC = () => {
     const { showDialog } = useDialog();
     const { context, setContext, settings } = useContext(WorkbookContext);
@@ -101,7 +104,7 @@ export const ContextMenu: React.FC = () => {
                     : (['left', 'right'] as const).map((dir) => (
                           <div
                               key={`add-col-${dir}`}
-                              className="relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground"
+                              className={menuItemClass}
                               onClick={(e) => {
                                   const position = context.luckysheet_select_save?.[0]?.column?.[0];
                                   if (position == null) return;
@@ -167,7 +170,7 @@ export const ContextMenu: React.FC = () => {
                     : (['top', 'bottom'] as const).map((dir) => (
                           <div
                               key={`add-row-${dir}`}
-                              className="relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground"
+                              className={menuItemClass}
                               onClick={(e) => {
                                   const position = context.luckysheet_select_save?.[0]?.row?.[0];
                                   if (position == null) return;
@@ -382,7 +385,7 @@ export const ContextMenu: React.FC = () => {
                 return context.luckysheet_select_save?.some((section) => section.row_select) ? (
                     <div
                         key="set-row-height"
-                        className="relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground"
+                        className={menuItemClass}
                         onClick={(e) => {
                             const targetRowHeight = e.currentTarget.querySelector('input')?.value;
                             setContext((draftCtx) => {
@@ -437,7 +440,7 @@ export const ContextMenu: React.FC = () => {
                 return context.luckysheet_select_save?.some((section) => section.column_select) ? (
                     <div
                         key="set-column-width"
-                        className="relative flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground"
+                        className={menuItemClass}
                         onClick={(e) => {
                             const targetColWidth = e.currentTarget.querySelector('input')?.value;
                             setContext((draftCtx) => {

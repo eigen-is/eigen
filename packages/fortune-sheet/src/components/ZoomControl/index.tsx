@@ -1,57 +1,27 @@
+import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
+import { cn } from '@workspace/ui/lib/utils';
 import { Minus, Plus } from 'lucide-react';
-import { useCallback, useContext, useRef, useState } from 'react';
+import { useCallback, useContext } from 'react';
 import { WorkbookContext } from '../../context';
-import { useOutsideClick } from '../../hooks/useOutsideClick';
 import { type Context, getSheetIndex, locale, MAX_ZOOM_RATIO, MIN_ZOOM_RATIO } from '../../state';
 
 const presets = [
-    {
-        text: '10%',
-        value: 0.1,
-    },
-    {
-        text: '30%',
-        value: 0.3,
-    },
-    {
-        text: '50%',
-        value: 0.5,
-    },
-    {
-        text: '70%',
-        value: 0.7,
-    },
-    {
-        text: '100%',
-        value: 1,
-    },
-    {
-        text: '150%',
-        value: 1.5,
-    },
-    {
-        text: '200%',
-        value: 2,
-    },
-    {
-        text: '300%',
-        value: 3,
-    },
-    {
-        text: '400%',
-        value: 4,
-    },
+    { text: '10%', value: 0.1 },
+    { text: '30%', value: 0.3 },
+    { text: '50%', value: 0.5 },
+    { text: '70%', value: 0.7 },
+    { text: '100%', value: 1 },
+    { text: '150%', value: 1.5 },
+    { text: '200%', value: 2 },
+    { text: '300%', value: 3 },
+    { text: '400%', value: 4 },
 ];
+
+const buttonClass = 'flex cursor-pointer items-center justify-center w-6 h-6 hover:bg-muted rounded';
 
 export function ZoomControl() {
     const { context, setContext } = useContext(WorkbookContext);
-    const menuRef = useRef<HTMLDivElement>(null);
-    const [radioMenuOpen, setRadioMenuOpen] = useState(false);
     const { info } = locale(context);
-
-    useOutsideClick(menuRef, () => {
-        setRadioMenuOpen(false);
-    });
 
     const zoomTo = useCallback(
         (val: number) => {
@@ -75,9 +45,9 @@ export function ZoomControl() {
     );
 
     return (
-        <aside title="Zoom settings" className="whitespace-nowrap overflow-visible flex items-center select-none">
+        <aside title="Zoom settings" className="whitespace-nowrap flex items-center select-none">
             <div
-                className="flex cursor-pointer items-center justify-center w-6 h-6 hover:bg-muted rounded"
+                className={buttonClass}
                 aria-label={info.zoomOut}
                 onClick={(e) => {
                     zoomTo(context.zoomRatio - 0.1);
@@ -88,37 +58,28 @@ export function ZoomControl() {
             >
                 <Minus width={16} height={16} aria-hidden="true" />
             </div>
-            <div className="relative flex justify-center w-12 text-xs cursor-pointer">
-                <div
-                    className="w-full flex cursor-pointer items-center justify-center w-6 h-6 hover:bg-muted rounded"
-                    onClick={() => setRadioMenuOpen(true)}
-                    tabIndex={0}
-                >
-                    {(context.zoomRatio * 100).toFixed(0)}%
-                </div>
-                {radioMenuOpen && (
-                    <div
-                        className="absolute bottom-[30px] left-0 leading-6 shadow-md py-2.5 rounded-md bg-popover z-[1004]"
-                        ref={menuRef}
-                    >
-                        {presets.map((v) => (
-                            <div
-                                className="hover:bg-muted"
-                                key={v.text}
-                                onClick={(e) => {
-                                    zoomTo(v.value);
-                                    e.preventDefault();
-                                }}
-                                tabIndex={0}
-                            >
-                                <div className="px-2.5">{v.text}</div>
-                            </div>
-                        ))}
+            <Popover>
+                <PopoverTrigger asChild>
+                    <div className={cn(buttonClass, 'w-12 text-xs')} tabIndex={0} role="button">
+                        {(context.zoomRatio * 100).toFixed(0)}%
                     </div>
-                )}
-            </div>
+                </PopoverTrigger>
+                <PopoverContent side="top" align="center" className="w-auto p-1 text-xs">
+                    {presets.map((v) => (
+                        <div
+                            key={v.text}
+                            className="px-2.5 py-1 rounded-sm cursor-pointer hover:bg-muted"
+                            onClick={() => zoomTo(v.value)}
+                            tabIndex={0}
+                            role="button"
+                        >
+                            {v.text}
+                        </div>
+                    ))}
+                </PopoverContent>
+            </Popover>
             <div
-                className="flex cursor-pointer items-center justify-center w-6 h-6 hover:bg-muted rounded"
+                className={buttonClass}
                 aria-label={info.zoomIn}
                 onClick={(e) => {
                     zoomTo(context.zoomRatio + 0.1);
