@@ -34,7 +34,6 @@ import {
     showLinkCard,
 } from '../../state';
 import { DropDownList } from '../DataVerification/DropdownList';
-import { RangeDialog } from '../DataVerification/RangeDialog';
 import { FilterOptions } from '../FilterOption';
 import { ImgBoxs } from '../ImgBoxs';
 import { LinkEditCard } from '../LinkEidtCard';
@@ -725,7 +724,6 @@ export const SheetOverlay: React.FC = () => {
                             );
                         })}
                     {context.linkCard?.sheetId === context.currentSheetId && <LinkEditCard {...context.linkCard} />}
-                    {context.rangeDialog?.show && <RangeDialog />}
                     <FilterOptions />
                     <InputBox />
                     <div id="luckysheet-multipleRange-show" />

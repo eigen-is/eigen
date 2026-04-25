@@ -1,5 +1,6 @@
 import { Button } from '@workspace/ui/components/button';
-
+import { DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { Input } from '@workspace/ui/components/input';
 import { useCallback, useContext, useEffect, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
@@ -13,71 +14,52 @@ export function RangeDialog() {
     const { dataVerification, button } = locale(context);
     const [rangeTxt2, setRangeTxt2] = useState<string>(context.rangeDialog?.rangeTxt ?? '');
 
-    const close = useCallback(() => {
-        setContext((ctx) => {
-            ctx.rangeDialog!.show = false;
-            ctx.rangeDialog!.singleSelect = false;
-        });
-        if (!context.rangeDialog) return;
-        const rangeDialogType = context.rangeDialog.type;
-        if (rangeDialogType.includes('between')) {
-            showDialog(<ConditionRules type="between" />);
-            return;
-        }
-        if (rangeDialogType.includes('conditionRules')) {
-            const rulesType = rangeDialogType.substring('conditionRules'.length, rangeDialogType.length);
-            showDialog(<ConditionRules type={rulesType} />);
-            return;
-        }
-        showDialog(<DataVerification />);
-    }, [context.rangeDialog, setContext, showDialog]);
-
-    useEffect(() => {
-        setRangeTxt2((r) => {
-            if (context.luckysheet_select_save) {
-                const range = context.luckysheet_select_save[context.luckysheet_select_save.length - 1];
-                r = getRangetxt(context, context.currentSheetId, range, context.currentSheetId);
-                return r;
+    const close = useCallback(
+        (commit: boolean) => {
+            setContext((ctx) => {
+                if (ctx.rangeDialog) {
+                    if (commit) ctx.rangeDialog.rangeTxt = rangeTxt2;
+                    ctx.rangeDialog.show = false;
+                    ctx.rangeDialog.singleSelect = false;
+                }
+            });
+            const rangeDialogType = context.rangeDialog?.type ?? '';
+            if (rangeDialogType.includes('between')) {
+                showDialog(<ConditionRules type="between" />);
+                return;
             }
-            return '';
-        });
-    }, [context, context.luckysheet_select_save]);
+            if (rangeDialogType.includes('conditionRules')) {
+                const rulesType = rangeDialogType.substring('conditionRules'.length);
+                showDialog(<ConditionRules type={rulesType} />);
+                return;
+            }
+            showDialog(<DataVerification />);
+        },
+        [context.rangeDialog, rangeTxt2, setContext, showDialog],
+    );
+
+    // Keep the input in sync with the user's selection in the spreadsheet.
+    // biome-ignore lint/correctness/useExhaustiveDependencies: only re-syncs when the selection changes; getRangetxt reads `context` directly
+    useEffect(() => {
+        if (!context.luckysheet_select_save) return;
+        const range = context.luckysheet_select_save[context.luckysheet_select_save.length - 1];
+        setRangeTxt2(getRangetxt(context, context.currentSheetId, range, context.currentSheetId));
+    }, [context.luckysheet_select_save]);
 
     return (
-        <div
-            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-[90%] z-[100003] bg-background border border-border shadow-lg p-8 select-none outline-none"
-            onClick={(e) => e.stopPropagation()}
-            onChange={(e) => e.stopPropagation()}
-            onKeyDown={(e) => e.stopPropagation()}
-            onMouseDown={(e) => e.stopPropagation()}
-            onMouseUp={(e) => e.stopPropagation()}
-            tabIndex={0}
-        >
-            <div className="text-base font-normal leading-6 mb-4 cursor-default">
-                {dataVerification.selectCellRange}
-            </div>
-            <input
-                className="h-[30px] px-2.5 border border-border outline-none select-none"
-                readOnly
-                placeholder={dataVerification.selectCellRange2}
-                value={rangeTxt2}
-            />
-            <div className="flex gap-2 mt-3">
-                <Button
-                    size="sm"
-                    onClick={() => {
-                        setContext((ctx) => {
-                            ctx.rangeDialog!.rangeTxt = rangeTxt2;
-                        });
-                        close();
-                    }}
-                >
-                    {button.confirm}
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => close()}>
+        <>
+            <DialogHeader>
+                <DialogTitle className="text-base">{dataVerification.selectCellRange}</DialogTitle>
+            </DialogHeader>
+            <Input className="h-8" readOnly placeholder={dataVerification.selectCellRange2} value={rangeTxt2} />
+            <DialogFooter>
+                <Button variant="outline" size="sm" onClick={() => close(false)}>
                     {button.close}
                 </Button>
-            </div>
-        </div>
+                <Button size="sm" onClick={() => close(true)}>
+                    {button.confirm}
+                </Button>
+            </DialogFooter>
+        </>
     );
 }
