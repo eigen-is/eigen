@@ -8,12 +8,13 @@ import {
 } from '../../state';
 import { SVGIcon } from '../icon-map';
 
-export function FilterOptions({ getContainer }: { getContainer: () => HTMLDivElement }) {
+export function FilterOptions() {
     const { context, setContext, refs } = useContext(WorkbookContext);
     const { filterOptions, currentSheetId, filter, visibledatarow, visibledatacolumn } = context;
     const sheetIndex = getSheetIndex(context, context.currentSheetId);
     const { filter_select, frozen } = context.luckysheetfile[sheetIndex!];
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: deps are intentional triggers — body reads `draftCtx` so biome can't see the connection
     useEffect(() => {
         setContext((draftCtx) => {
             const sheetIdx = getSheetIndex(draftCtx, draftCtx.currentSheetId);
@@ -55,7 +56,7 @@ export function FilterOptions({ getContainer }: { getContainer: () => HTMLDivEle
                 };
             });
         },
-        [filterOptions, getContainer, refs.scrollbarX, refs.scrollbarY, setContext],
+        [filterOptions, refs.scrollbarX, refs.scrollbarY, setContext],
     );
 
     const freezeType = frozen?.type;

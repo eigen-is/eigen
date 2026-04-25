@@ -5,6 +5,7 @@ import { getRangetxt } from '../../state';
 export function NameBox() {
     const { context } = useContext(WorkbookContext);
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: depending on the full context object would re-compute on every change; merge config is read but stable per sheet
     const rangeText = useMemo(() => {
         const lastSelection = context.luckysheet_select_save?.[context.luckysheet_select_save.length - 1];
         if (!(lastSelection && lastSelection.row_focus != null && lastSelection.column_focus != null)) return '';
@@ -17,7 +18,6 @@ export function NameBox() {
             });
         }
         return getRangetxt(context, context.currentSheetId, lastSelection);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [context.currentSheetId, context.luckysheet_select_save]);
 
     return (

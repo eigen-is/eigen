@@ -96,6 +96,7 @@ export function Toolbar({
     const [customColor, setCustomColor] = useState('#000000');
     const [customStyle, setCustomStyle] = useState('1');
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: FIXME audit-needed (PR 2) — see docs/FORTUNE-SHEET-EFFECT-DEPS-AUDIT.md
     const getToolbarItem = useCallback(
         (name: string, i: number) => {
             // @ts-expect-error
@@ -886,6 +887,7 @@ export function Toolbar({
     const clickHandler = (name: string) => () =>
         setContext((ctx) => toolbarItemClickHandler(name)?.(ctx, refs.cellInput.current!, refs.globalCache));
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: FIXME audit-needed (PR 2) — see docs/FORTUNE-SHEET-EFFECT-DEPS-AUDIT.md (clickHandler recreated each render — adding it would defeat the memo)
     const mobileToolbar = useMemo(
         () => (
             <div className="bg-background h-12 flex items-center justify-between px-4 border-b no-print">
