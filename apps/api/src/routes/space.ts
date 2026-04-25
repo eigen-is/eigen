@@ -31,6 +31,19 @@ export const spaceRouter = new Elysia({ name: 'space' })
         {
             body: t.Object({
                 theme: t.Optional(t.Union([t.Literal('light'), t.Literal('dark'), t.Literal('system')])),
+                email: t.Optional(
+                    t.Object({
+                        signatures: t.Optional(
+                            t.Array(
+                                t.Object({
+                                    id: t.String(),
+                                    name: t.String(),
+                                    html: t.String(),
+                                }),
+                            ),
+                        ),
+                    }),
+                ),
             }),
             auth: true,
         },
