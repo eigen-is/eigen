@@ -52,6 +52,7 @@ type UseDraftOptions = {
     // persisting a draft until the user actually edits. lastSavedFingerprint is computed from
     // these fields so no save fires on mount.
     prefillDraft?: NewDraft;
+    signatureHtml?: string;
     onSave?: SaveFn;
     onDraftIdAssigned?: (id: string) => void;
 };
@@ -71,8 +72,26 @@ function stringToAddressObject(text: string): AddressObject | undefined {
     return { value, html: text, text };
 }
 
-function initFields(email: EmailDraft | null, prefillTo?: string, prefillDraft?: NewDraft): DraftFields {
+function injectSignature(body: string, sig: string | undefined, kind: 'new' | 'reply'): string {
+    if (!sig) return body;
+    const sep = '<p><br></p>';
+    if (kind === 'new') return body + sep + sig;
+    return sep + sig + sep + body;
+}
+
+function plainSignature(sig: string | undefined): string {
+    if (!sig) return '';
+    return sig.replace(/<[^>]+>/g, '').trim();
+}
+
+function initFields(
+    email: EmailDraft | null,
+    prefillTo?: string,
+    prefillDraft?: NewDraft,
+    signatureHtml?: string,
+): DraftFields {
     if (email) {
+        // Saved-draft branch: never re-inject. The body is whatever the user last saved.
         return {
             id: email.id,
             to: addressObjectToString(email.to),
@@ -94,14 +113,15 @@ function initFields(email: EmailDraft | null, prefillTo?: string, prefillDraft?:
             messageId: email.messageId,
         };
     }
+    const sigText = plainSignature(signatureHtml);
     if (prefillDraft) {
         return {
             to: addressObjectToString(prefillDraft.to),
             cc: addressObjectToString(prefillDraft.cc),
             bcc: addressObjectToString(prefillDraft.bcc),
             subject: prefillDraft.subject || '',
-            body: prefillDraft.html || '',
-            bodyText: prefillDraft.text || '',
+            body: injectSignature(prefillDraft.html || '', signatureHtml, 'reply'),
+            bodyText: sigText ? `${sigText}\n\n${prefillDraft.text || ''}` : prefillDraft.text || '',
             attachments: [],
             driveReferences: prefillDraft.driveReferences ?? [],
             inReplyTo: prefillDraft.inReplyTo,
@@ -114,8 +134,8 @@ function initFields(email: EmailDraft | null, prefillTo?: string, prefillDraft?:
         cc: '',
         bcc: '',
         subject: '',
-        body: '',
-        bodyText: '',
+        body: injectSignature('', signatureHtml, 'new'),
+        bodyText: sigText ? `\n\n${sigText}` : '',
         attachments: [],
         driveReferences: [],
     };
@@ -264,10 +284,17 @@ function isSaveable(f: DraftFields): boolean {
 
 const noopSave: SaveFn = () => Promise.resolve(null);
 
-export function useDraft({ email, prefillTo, prefillDraft, onSave = noopSave, onDraftIdAssigned }: UseDraftOptions) {
+export function useDraft({
+    email,
+    prefillTo,
+    prefillDraft,
+    signatureHtml,
+    onSave = noopSave,
+    onDraftIdAssigned,
+}: UseDraftOptions) {
     const { user } = useAuth();
     const [state, dispatch] = useReducer(reducer, undefined, () => {
-        const fields = initFields(email, prefillTo, prefillDraft);
+        const fields = initFields(email, prefillTo, prefillDraft, signatureHtml);
         return { fields, lastSavedFingerprint: fingerprintFields(fields) };
     });
 
