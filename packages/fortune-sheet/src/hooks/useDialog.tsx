@@ -2,7 +2,7 @@ import { Button } from '@workspace/ui/components/button';
 import { DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import type React from 'react';
 import { useCallback, useContext } from 'react';
-import { ModalContext } from '../context/modal';
+import { ModalContext, type ModalOptions } from '../context/modal';
 
 export function useDialog() {
     const { showModal, hideModal } = useContext(ModalContext);
@@ -27,7 +27,15 @@ export function useDialog() {
         [hideModal, showModal],
     );
 
-    return { showDialog, hideDialog: hideModal };
+    /** Show a dialog without a modal backdrop — the rest of the page stays interactive. */
+    const showNonModalDialog = useCallback(
+        (content: React.ReactNode, options: Omit<ModalOptions, 'modal'> = {}) => {
+            showModal(content, { ...options, modal: false });
+        },
+        [showModal],
+    );
+
+    return { showDialog, showNonModalDialog, hideDialog: hideModal };
 }
 
 function DialogWrapper({
