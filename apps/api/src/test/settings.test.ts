@@ -1,7 +1,13 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import type { HomeSizeResponse, MountResponse, ServerSettings, TeamSettings } from '@workspace/lib/types/settings';
+import type {
+    HomeSizeResponse,
+    MountResponse,
+    ServerSettings,
+    TeamSettings,
+    UserSettings,
+} from '@workspace/lib/types/settings';
 import { getServerConfig } from '../lib/config/server-config';
 import { assertJson, authedRequest, getTestContext } from './setup';
 
@@ -419,5 +425,56 @@ describe('Setup Flow', () => {
         expect(data.quotas.mailAndContactsMaxMB).toBe(100);
         expect(data.quotas.defaultMountMaxSizeMB).toBe(500);
         expect(data.quotas.maxUploadSizeMB).toBe(35);
+    });
+});
+
+describe('User Settings', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+    });
+
+    test('PUT and GET round-trips email signatures', async () => {
+        const sig = { id: 'sig-roundtrip', name: 'Default', html: '<p>Cheers, Alice</p>' };
+        const putRes = await authedRequest(ctx.alice.user.sessionToken, `/space/${ctx.alice.user.id}/settings`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: { signatures: [sig] } }),
+        });
+        expect(putRes.status).toBe(200);
+
+        const getRes = await authedRequest(ctx.alice.user.sessionToken, `/space/${ctx.alice.user.id}/settings`);
+        const data = await assertJson<UserSettings>(getRes);
+        expect(data.email?.signatures).toEqual([sig]);
+    });
+
+    test('updating theme does not clobber email.signatures (cross-namespace deep merge)', async () => {
+        const sig = { id: 'sig-merge', name: 'Default', html: '<p>Hi</p>' };
+        await authedRequest(ctx.alice.user.sessionToken, `/space/${ctx.alice.user.id}/settings`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: { signatures: [sig] } }),
+        });
+
+        await authedRequest(ctx.alice.user.sessionToken, `/space/${ctx.alice.user.id}/settings`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ theme: 'dark' }),
+        });
+
+        const getRes = await authedRequest(ctx.alice.user.sessionToken, `/space/${ctx.alice.user.id}/settings`);
+        const data = await assertJson<UserSettings>(getRes);
+        expect(data.theme).toBe('dark');
+        expect(data.email?.signatures).toEqual([sig]);
+    });
+
+    test('PUT with malformed signature returns 422', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/space/${ctx.alice.user.id}/settings`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: { signatures: [{ id: 'x', name: 'y' }] } }),
+        });
+        expect(res.status).toBe(422);
     });
 });
