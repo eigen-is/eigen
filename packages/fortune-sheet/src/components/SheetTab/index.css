@@ -84,15 +84,16 @@
 }
 
 .luckysheet-sheet-container-menu-hide .luckysheet-sheets-item {
+    /* biome-ignore lint/complexity/noImportantStyles: override the sheet-item padding when menu is hidden */
     padding-right: 5px !important;
 }
 
 .luckysheet-sheet-container-menu-hide .luckysheet-sheets-item-menu {
+    /* biome-ignore lint/complexity/noImportantStyles: hide menu regardless of sibling display rules */
     display: none !important;
 }
 
 .luckysheet-sheet-area div.luckysheet-sheets-item {
-    padding: 2px 6px;
     height: 29px;
     line-height: 29px;
     background-color: #fafafc;
@@ -125,7 +126,6 @@
     margin-left: 2px;
     display: inline-block;
     top: -2px;
-    position: relative;
     color: #a1a1a1;
     position: absolute;
     height: 100%;
@@ -134,9 +134,7 @@
     text-align: center;
 }
 
-.luckysheet-sheet-area
-div.luckysheet-sheets-item
-.luckysheet-sheets-item-menu:hover {
+.luckysheet-sheet-area div.luckysheet-sheets-item .luckysheet-sheets-item-menu:hover {
     color: #2a2a2a;
     cursor: pointer;
 }
@@ -153,9 +151,7 @@ div.luckysheet-sheets-item
     left: 0;
 }
 
-.luckysheet-sheet-area
-div.luckysheet-sheets-item
-.luckysheet-sheets-item-name[contenteditable="true"] {
+.luckysheet-sheet-area div.luckysheet-sheets-item .luckysheet-sheets-item-name[contenteditable="true"] {
     border: 1px solid #d9d9d9;
     display: inline-block;
     height: 18px;
@@ -164,14 +160,15 @@ div.luckysheet-sheets-item
     margin: -4px -1px;
     -moz-user-modify: read-write-plaintext-only;
     -webkit-user-modify: read-write-plaintext-only;
+    /* biome-ignore lint/complexity/noImportantStyles: force text selection inside a container that disables it */
     -moz-user-select: text !important;
+    /* biome-ignore lint/complexity/noImportantStyles: force text selection inside a container that disables it */
     -ms-user-select: text !important;
+    /* biome-ignore lint/complexity/noImportantStyles: force text selection inside a container that disables it */
     -webkit-user-select: text !important;
 }
 
-.luckysheet-sheet-area
-div.luckysheet-sheets-item
-.luckysheet-sheets-item-name[contenteditable="true"]:focus {
+.luckysheet-sheet-area div.luckysheet-sheets-item .luckysheet-sheets-item-name[contenteditable="true"]:focus {
     -webkit-box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
     -moz-box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
     box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.3);
@@ -218,8 +215,7 @@ div.luckysheet-sheets-item
 }
 
 .luckysheet-noselected-text {
-    -moz-user-select: -moz-test;
-    -khtml-user-select: none;
+    -moz-user-select: none;
     -webkit-user-select: none;
     -ms-user-select: none;
     user-select: none;
@@ -276,5 +272,6 @@ div.luckysheet-sheets-item
 }
 
 .fortune-sheet-area-right {
+    /* biome-ignore lint/complexity/noImportantStyles: override shared hidden utility */
     display: flex !important;
 }

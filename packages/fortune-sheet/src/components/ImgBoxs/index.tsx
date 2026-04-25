@@ -1,29 +1,29 @@
-import {onImageMoveStart, onImageResizeStart} from "../../state";
-import type {Image} from "../../state/types";
-import {useCallback, useContext, useMemo} from "react";
-import {WorkbookContext} from "../../context";
+import { useCallback, useContext, useMemo } from 'react';
+import { WorkbookContext } from '../../context';
+import { onImageMoveStart, onImageResizeStart } from '../../state';
+import type { Image } from '../../state/types';
 
 const HANDLE_POSITIONS = [
-    {key: "lt", className: "-top-1.5 -left-1.5 cursor-nwse-resize"},
-    {key: "mt", className: "-top-1.5 left-1/2 -translate-x-1/2 cursor-ns-resize"},
-    {key: "rt", className: "-top-1.5 -right-1.5 cursor-nesw-resize"},
-    {key: "lm", className: "top-1/2 -left-1.5 -translate-y-1/2 cursor-ew-resize"},
-    {key: "rm", className: "top-1/2 -right-1.5 -translate-y-1/2 cursor-ew-resize"},
-    {key: "lb", className: "-bottom-1.5 -left-1.5 cursor-nesw-resize"},
-    {key: "mb", className: "-bottom-1.5 left-1/2 -translate-x-1/2 cursor-ns-resize"},
-    {key: "rb", className: "-bottom-1.5 -right-1.5 cursor-nwse-resize"},
+    { key: 'lt', className: '-top-1.5 -left-1.5 cursor-nwse-resize' },
+    { key: 'mt', className: '-top-1.5 left-1/2 -translate-x-1/2 cursor-ns-resize' },
+    { key: 'rt', className: '-top-1.5 -right-1.5 cursor-nesw-resize' },
+    { key: 'lm', className: 'top-1/2 -left-1.5 -translate-y-1/2 cursor-ew-resize' },
+    { key: 'rm', className: 'top-1/2 -right-1.5 -translate-y-1/2 cursor-ew-resize' },
+    { key: 'lb', className: '-bottom-1.5 -left-1.5 cursor-nesw-resize' },
+    { key: 'mb', className: '-bottom-1.5 left-1/2 -translate-x-1/2 cursor-ns-resize' },
+    { key: 'rb', className: '-bottom-1.5 -right-1.5 cursor-nwse-resize' },
 ] as const;
 
 function useResolvedImageUrl(mediaName: string | undefined) {
-    const {settings} = useContext(WorkbookContext);
+    const { settings } = useContext(WorkbookContext);
     return useMemo(
-        () => mediaName ? settings.hooks?.resolveImageUrl?.(mediaName) ?? null : null,
+        () => (mediaName ? (settings.hooks?.resolveImageUrl?.(mediaName) ?? null) : null),
         [mediaName, settings.hooks],
     );
 }
 
-function ActiveImage({img}: { img: Image }) {
-    const {context, refs} = useContext(WorkbookContext);
+function ActiveImage({ img }: { img: Image }) {
+    const { context, refs } = useContext(WorkbookContext);
     const url = useResolvedImageUrl(img.mediaName);
     const w = img.width * context.zoomRatio;
     const h = img.height * context.zoomRatio;
@@ -38,7 +38,7 @@ function ActiveImage({img}: { img: Image }) {
                 height: h,
                 left: img.left * context.zoomRatio,
                 top: img.top * context.zoomRatio,
-                outline: "1px solid var(--selection-handle)",
+                outline: '1px solid var(--selection-handle)',
             }}
         >
             {/* Class kept for DOM querySelector in image.ts resize logic */}
@@ -49,14 +49,14 @@ function ActiveImage({img}: { img: Image }) {
                     height: h,
                     backgroundImage: url ? `url(${url})` : undefined,
                     backgroundSize: `${w}px ${h}px`,
-                    backgroundRepeat: "no-repeat",
+                    backgroundRepeat: 'no-repeat',
                 }}
                 onMouseDown={(e) => {
                     onImageMoveStart(context, refs.globalCache, e.nativeEvent);
                     e.stopPropagation();
                 }}
             />
-            {HANDLE_POSITIONS.map(({key, className}) => (
+            {HANDLE_POSITIONS.map(({ key, className }) => (
                 <div
                     key={key}
                     className={`absolute h-3 w-3 bg-background border border-selection-handle rounded-sm ${className}`}
@@ -71,18 +71,21 @@ function ActiveImage({img}: { img: Image }) {
     );
 }
 
-function InactiveImage({img}: { img: Image }) {
-    const {context, setContext} = useContext(WorkbookContext);
+function InactiveImage({ img }: { img: Image }) {
+    const { context, setContext } = useContext(WorkbookContext);
     const url = useResolvedImageUrl(img.mediaName);
     const w = img.width * context.zoomRatio;
     const h = img.height * context.zoomRatio;
 
-    const handleClick = useCallback((e: React.MouseEvent) => {
-        setContext((ctx) => {
-            ctx.activeImg = img.id;
-        });
-        e.stopPropagation();
-    }, [setContext, img.id]);
+    const handleClick = useCallback(
+        (e: React.MouseEvent) => {
+            setContext((ctx) => {
+                ctx.activeImg = img.id;
+            });
+            e.stopPropagation();
+        },
+        [setContext, img.id],
+    );
 
     if (!url) return null;
 
@@ -101,25 +104,25 @@ function InactiveImage({img}: { img: Image }) {
             onClick={handleClick}
             tabIndex={0}
         >
-            <img src={url} alt="" style={{width: w, height: h}}/>
+            <img src={url} alt="" style={{ width: w, height: h }} />
         </div>
     );
 }
 
 export function ImgBoxs() {
-    const {context} = useContext(WorkbookContext);
+    const { context } = useContext(WorkbookContext);
     const activeImg = useMemo(() => {
-        return context.insertedImgs?.find(img => img.id === context.activeImg);
+        return context.insertedImgs?.find((img) => img.id === context.activeImg);
     }, [context.activeImg, context.insertedImgs]);
 
     return (
         <div id="luckysheet-image-showBoxs">
-            {activeImg && <ActiveImage img={activeImg}/>}
+            {activeImg && <ActiveImage img={activeImg} />}
             {context.insertedImgs?.map((img) => {
                 if (img.id === context.activeImg) return null;
-                return <InactiveImage key={img.id} img={img}/>;
+                return <InactiveImage key={img.id} img={img} />;
             })}
-            <div className="cell-date-picker"/>
+            <div className="cell-date-picker" />
         </div>
     );
 }

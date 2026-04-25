@@ -1,9 +1,7 @@
-import React, {useCallback, useEffect, useRef} from "react";
+import type React from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
-type ContentEditableProps = Omit<
-    React.HTMLAttributes<HTMLDivElement>,
-    "onChange"
-> & {
+type ContentEditableProps = Omit<React.HTMLAttributes<HTMLDivElement>, 'onChange'> & {
     initialContent?: string;
     innerRef?: (e: HTMLDivElement | null) => void;
     onChange?: (html: string, isBlur?: boolean) => void;
@@ -21,7 +19,7 @@ export const ContentEditable: React.FC<ContentEditableProps> = ({
     initialContent,
     ...restProps
 }) => {
-    const lastHtml = useRef("");
+    const lastHtml = useRef('');
     const root = useRef<HTMLDivElement | null>(null);
 
     useEffect(() => {
@@ -38,18 +36,18 @@ export const ContentEditable: React.FC<ContentEditableProps> = ({
     }, [initialContent]);
 
     const fnEmitChange = useCallback(
-        (__: any, isBlur?: boolean) => {
-            let html;
+        (__: unknown, isBlur?: boolean) => {
+            let html: string | undefined;
 
             if (root.current != null) {
                 html = root.current.innerHTML;
             }
             if (onChange && html !== lastHtml.current) {
-                onChange(html || "", isBlur);
+                onChange(html || '', isBlur);
             }
-            lastHtml.current = html || "";
+            lastHtml.current = html || '';
         },
-        [root, onChange]
+        [root, onChange],
     );
 
     const allowEdit = allowEditProp ?? true;

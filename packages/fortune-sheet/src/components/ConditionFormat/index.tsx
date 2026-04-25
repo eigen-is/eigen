@@ -1,55 +1,49 @@
-import {useCallback, useContext} from "react";
-import {locale, updateItem} from "../../state";
-import {WorkbookContext} from "../../context";
-import {useDialog} from "../../hooks/useDialog";
-import {ConditionRules} from "./ConditionRules";
-import {ManageRules} from "./ManageRules";
 import {
     DropdownMenuItem,
     DropdownMenuSeparator,
     DropdownMenuSub,
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
-} from "@workspace/ui/components/dropdown-menu";
+} from '@workspace/ui/components/dropdown-menu';
+import { useCallback, useContext } from 'react';
+import { WorkbookContext } from '../../context';
+import { useDialog } from '../../hooks/useDialog';
+import { locale, updateItem } from '../../state';
+import { ConditionRules } from './ConditionRules';
+import { ManageRules } from './ManageRules';
 
-export function ConditionalFormat({
-                                      items,
-                                  }: {
-    items: string[];
-}) {
-    const {context, setContext} = useContext(WorkbookContext);
-    const {showDialog} = useDialog();
-    const {conditionformat} = locale(context);
+export function ConditionalFormat({ items }: { items: string[] }) {
+    const { context, setContext } = useContext(WorkbookContext);
+    const { showDialog } = useDialog();
+    const { conditionformat } = locale(context);
 
     const getConditionFormatItem = useCallback(
         (name: string) => {
-            if (name === "-") {
-                return <DropdownMenuSeparator key={name}/>;
+            if (name === '-') {
+                return <DropdownMenuSeparator key={name} />;
             }
-            if (name === "highlightCellRules") {
+            if (name === 'highlightCellRules') {
                 return (
                     <DropdownMenuSub key={name}>
-                        <DropdownMenuSubTrigger>
-                            {conditionformat[name]}
-                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubTrigger>{conditionformat[name]}</DropdownMenuSubTrigger>
                         <DropdownMenuSubContent>
                             {[
-                                {text: "greaterThan", value: ">"},
-                                {text: "lessThan", value: "<"},
-                                {text: "between", value: "[]"},
-                                {text: "equal", value: "="},
-                                {text: "textContains", value: "()"},
-                                {text: "occurrenceDate", value: conditionformat.yesterday},
-                                {text: "duplicateValue", value: "##"},
+                                { text: 'greaterThan', value: '>' },
+                                { text: 'lessThan', value: '<' },
+                                { text: 'between', value: '[]' },
+                                { text: 'equal', value: '=' },
+                                { text: 'textContains', value: '()' },
+                                { text: 'occurrenceDate', value: conditionformat.yesterday },
+                                { text: 'duplicateValue', value: '##' },
                             ].map((v) => (
                                 <DropdownMenuItem
                                     key={v.text}
                                     onClick={() => {
-                                        showDialog(<ConditionRules type={v.text}/>);
+                                        showDialog(<ConditionRules type={v.text} />);
                                     }}
                                 >
                                     <div className="flex items-center justify-between w-full">
-                                        <span>{(conditionformat as any)[v.text]}</span>
+                                        <span>{conditionformat[v.text as keyof typeof conditionformat]}</span>
                                         <span className="text-xs opacity-50 ml-4">{v.value}</span>
                                     </div>
                                 </DropdownMenuItem>
@@ -58,29 +52,27 @@ export function ConditionalFormat({
                     </DropdownMenuSub>
                 );
             }
-            if (name === "itemSelectionRules") {
+            if (name === 'itemSelectionRules') {
                 return (
                     <DropdownMenuSub key={name}>
-                        <DropdownMenuSubTrigger>
-                            {conditionformat[name]}
-                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubTrigger>{conditionformat[name]}</DropdownMenuSubTrigger>
                         <DropdownMenuSubContent>
                             {[
-                                {text: "top10", value: conditionformat.top10},
-                                {text: "top10_percent", value: conditionformat.top10_percent},
-                                {text: "last10", value: conditionformat.last10},
-                                {text: "last10_percent", value: conditionformat.last10_percent},
-                                {text: "aboveAverage", value: conditionformat.above},
-                                {text: "belowAverage", value: conditionformat.below},
+                                { text: 'top10', value: conditionformat.top10 },
+                                { text: 'top10_percent', value: conditionformat.top10_percent },
+                                { text: 'last10', value: conditionformat.last10 },
+                                { text: 'last10_percent', value: conditionformat.last10_percent },
+                                { text: 'aboveAverage', value: conditionformat.above },
+                                { text: 'belowAverage', value: conditionformat.below },
                             ].map((v) => (
                                 <DropdownMenuItem
                                     key={v.text}
                                     onClick={() => {
-                                        showDialog(<ConditionRules type={v.text}/>);
+                                        showDialog(<ConditionRules type={v.text} />);
                                     }}
                                 >
                                     <div className="flex items-center justify-between w-full">
-                                        <span>{(conditionformat as any)[v.text]}</span>
+                                        <span>{conditionformat[v.text as keyof typeof conditionformat]}</span>
                                         <span className="text-xs opacity-50 ml-4">{v.value}</span>
                                     </div>
                                 </DropdownMenuItem>
@@ -89,24 +81,22 @@ export function ConditionalFormat({
                     </DropdownMenuSub>
                 );
             }
-            if (name === "deleteRule") {
+            if (name === 'deleteRule') {
                 return (
                     <DropdownMenuSub key={name}>
-                        <DropdownMenuSubTrigger>
-                            {conditionformat[name]}
-                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubTrigger>{conditionformat[name]}</DropdownMenuSubTrigger>
                         <DropdownMenuSubContent>
                             <DropdownMenuItem
                                 onClick={() => {
                                     setContext((ctx) => {
-                                        updateItem(ctx, "delSheet");
+                                        updateItem(ctx, 'delSheet');
                                     });
                                 }}
                             >
                                 {conditionformat.deleteSheetRule}
                             </DropdownMenuItem>
-                            <DropdownMenuSeparator/>
-                            <DropdownMenuItem onClick={() => showDialog(<ManageRules/>)}>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem onClick={() => showDialog(<ManageRules />)}>
                                 {conditionformat.manageRules}
                             </DropdownMenuItem>
                         </DropdownMenuSubContent>
@@ -116,9 +106,8 @@ export function ConditionalFormat({
 
             return null;
         },
-        [conditionformat, setContext, showDialog]
+        [conditionformat, setContext, showDialog],
     );
 
     return <>{items.map((v) => getConditionFormatItem(v))}</>;
 }
-

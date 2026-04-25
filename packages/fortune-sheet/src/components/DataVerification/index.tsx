@@ -1,3 +1,12 @@
+import { Button } from '@workspace/ui/components/button';
+import { Checkbox } from '@workspace/ui/components/checkbox';
+import { DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { Input } from '@workspace/ui/components/input';
+import { Label } from '@workspace/ui/components/label';
+import { Table } from 'lucide-react';
+import { useCallback, useContext, useEffect, useState } from 'react';
+import { WorkbookContext } from '../../context';
+import { useDialog } from '../../hooks/useDialog';
 import {
     confirmMessage,
     getDropdownList,
@@ -7,41 +16,32 @@ import {
     getSheetIndex,
     locale,
     setCellValue,
-} from "../../state";
-import {useCallback, useContext, useEffect, useState} from "react";
-import {WorkbookContext} from "../../context";
-import {useDialog} from "../../hooks/useDialog";
-import {Table} from "lucide-react";
-import {Button} from "@workspace/ui/components/button";
-import {Input} from "@workspace/ui/components/input";
-import {Checkbox} from "@workspace/ui/components/checkbox";
-import {Label} from "@workspace/ui/components/label";
-import {DialogFooter, DialogHeader, DialogTitle} from "@workspace/ui/components/dialog";
+} from '../../state';
 
 export function DataVerification() {
-    const {context, setContext} = useContext(WorkbookContext);
-    const {showDialog, hideDialog} = useDialog();
-    const {dataVerification, toolbar, button, generalDialog} = locale(context);
+    const { context, setContext } = useContext(WorkbookContext);
+    const { showDialog, hideDialog } = useDialog();
+    const { dataVerification, toolbar, button, generalDialog } = locale(context);
     const [numberCondition] = useState<string[]>([
-        "between",
-        "notBetween",
-        "equal",
-        "notEqualTo",
-        "moreThanThe",
-        "lessThan",
-        "greaterOrEqualTo",
-        "lessThanOrEqualTo",
+        'between',
+        'notBetween',
+        'equal',
+        'notEqualTo',
+        'moreThanThe',
+        'lessThan',
+        'greaterOrEqualTo',
+        'lessThanOrEqualTo',
     ]);
 
     const [dateCondition] = useState<string[]>([
-        "between",
-        "notBetween",
-        "equal",
-        "notEqualTo",
-        "earlierThan",
-        "noEarlierThan",
-        "laterThan",
-        "noLaterThan",
+        'between',
+        'notBetween',
+        'equal',
+        'notEqualTo',
+        'earlierThan',
+        'noEarlierThan',
+        'laterThan',
+        'noLaterThan',
     ]);
 
     // Enable mouse selection
@@ -54,85 +54,67 @@ export function DataVerification() {
                 ctx.rangeDialog!.rangeTxt = value;
             });
         },
-        [hideDialog, setContext]
+        [hideDialog, setContext],
     );
 
     // Confirm and cancel buttons
     const btn = useCallback(
         (type: string) => {
-            if (type === "confirm") {
+            if (type === 'confirm') {
                 setContext((ctx) => {
                     const isPass = confirmMessage(ctx, generalDialog, dataVerification);
                     if (isPass) {
-                        const range = getRangeByTxt(
-                            ctx,
-                            ctx.dataVerification?.dataRegulation?.rangeTxt as string
-                        );
+                        const range = getRangeByTxt(ctx, ctx.dataVerification?.dataRegulation?.rangeTxt as string);
                         if (range.length === 0) {
                             return;
                         }
                         const regulation = ctx.dataVerification!.dataRegulation!;
                         const verifacationT = regulation?.type;
-                        const {value1} = regulation;
+                        const { value1 } = regulation;
                         const item = {
                             ...regulation,
                             checked: false, // checkbox defaults to false in cell (unchecked), true for checked
                         };
-                        if (verifacationT === "dropdown") {
+                        if (verifacationT === 'dropdown') {
                             const list = getDropdownList(ctx, value1);
-                            item.value1 = list.join(",");
+                            item.value1 = list.join(',');
                         }
                         const currentDataVerification =
-                            ctx.luckysheetfile[
-                                getSheetIndex(ctx, ctx.currentSheetId) as number
-                                ].dataVerification ?? {};
+                            ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId) as number].dataVerification ?? {};
 
                         const str = range[range.length - 1]?.row[0];
                         const edr = range[range.length - 1]?.row[1];
                         const stc = range[range.length - 1]?.column[0];
                         const edc = range[range.length - 1]?.column[1];
                         const d = getFlowdata(ctx);
-                        if (
-                            !d ||
-                            str == null ||
-                            stc == null ||
-                            edr == null ||
-                            edc == null
-                        )
-                            return;
+                        if (!d || str == null || stc == null || edr == null || edc == null) return;
                         for (let r = str; r <= edr; r += 1) {
                             for (let c = stc; c <= edc; c += 1) {
                                 const key = `${r}_${c}`;
                                 currentDataVerification[key] = item;
-                                if (regulation.type === "checkbox") {
+                                if (regulation.type === 'checkbox') {
                                     setCellValue(ctx, r, c, d, item.value2);
                                 }
                             }
                         }
-                        ctx.luckysheetfile[
-                            getSheetIndex(ctx, ctx.currentSheetId) as number
-                            ].dataVerification = currentDataVerification;
+                        ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId) as number].dataVerification =
+                            currentDataVerification;
                     }
                 });
-            } else if (type === "delete") {
+            } else if (type === 'delete') {
                 setContext((ctx) => {
-                    const range = getRangeByTxt(
-                        ctx,
-                        ctx.dataVerification?.dataRegulation?.rangeTxt as string
-                    );
+                    const range = getRangeByTxt(ctx, ctx.dataVerification?.dataRegulation?.rangeTxt as string);
                     if (range.length === 0) {
-                        showDialog(generalDialog.noSeletionError, "ok");
+                        showDialog(generalDialog.noSeletionError, 'ok');
                         return;
                     }
                     const currentDataVerification =
-                        ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId) as number]
-                            .dataVerification ?? {};
+                        ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId) as number].dataVerification ?? {};
                     const str = range[range.length - 1]?.row[0];
                     const edr = range[range.length - 1]?.row[1];
                     const stc = range[range.length - 1]?.column[0];
                     const edc = range[range.length - 1]?.column[1];
-                    if (str == null || stc == null || edr == null || edc == null)
-                        return;
+                    if (str == null || stc == null || edr == null || edc == null) return;
                     for (let r = str; r <= edr; r += 1) {
                         for (let c = stc; c <= edc; c += 1) {
                             delete currentDataVerification[`${r}_${c}`];
@@ -142,42 +124,34 @@ export function DataVerification() {
             }
             hideDialog();
         },
-        [dataVerification, generalDialog, hideDialog, setContext, showDialog]
+        [dataVerification, generalDialog, hideDialog, setContext, showDialog],
     );
 
     // Initialize
     useEffect(() => {
         setContext((ctx) => {
-            let rangeT = "";
+            let rangeT = '';
 
             // If there's a selection, convert it to string form for display
             if (ctx.luckysheet_select_save) {
-                const range =
-                    ctx.luckysheet_select_save[ctx.luckysheet_select_save.length - 1];
-                rangeT = getRangetxt(
-                    context,
-                    context.currentSheetId,
-                    range,
-                    context.currentSheetId
-                );
+                const range = ctx.luckysheet_select_save[ctx.luckysheet_select_save.length - 1];
+                rangeT = getRangetxt(context, context.currentSheetId, range, context.currentSheetId);
             }
 
             // Initialize values
             const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
-            const ctxDataVerification =
-                ctx.luckysheetfile[index].dataVerification ?? {};
+            const ctxDataVerification = ctx.luckysheetfile[index].dataVerification ?? {};
             if (!ctx.luckysheet_select_save) return;
-            const last =
-                ctx.luckysheet_select_save[ctx.luckysheet_select_save.length - 1];
+            const last = ctx.luckysheet_select_save[ctx.luckysheet_select_save.length - 1];
             const rowIndex = last.row_focus;
             const colIndex = last.column_focus;
             if (rowIndex == null || colIndex == null) return;
             const item = ctxDataVerification[`${rowIndex}_${colIndex}`];
             const defaultItem = item ?? {};
-            let rangValue = defaultItem.value1 ?? "";
+            let rangValue = defaultItem.value1 ?? '';
             // Range assignment related
             if (
-                ctx.rangeDialog?.type === "dropDown" &&
+                ctx.rangeDialog?.type === 'dropDown' &&
                 ctx.dataVerification &&
                 ctx.dataVerification.dataRegulation &&
                 ctx.dataVerification.dataRegulation.rangeTxt
@@ -186,7 +160,7 @@ export function DataVerification() {
                 rangeT = ctx.dataVerification.dataRegulation.rangeTxt;
                 rangValue = ctx.rangeDialog.rangeTxt;
             } else if (
-                ctx.rangeDialog?.type === "rangeTxt" &&
+                ctx.rangeDialog?.type === 'rangeTxt' &&
                 ctx.dataVerification &&
                 ctx.dataVerification.dataRegulation &&
                 ctx.dataVerification.dataRegulation.value1
@@ -195,7 +169,7 @@ export function DataVerification() {
                 rangValue = ctx.dataVerification.dataRegulation.value1;
                 rangeT = ctx.rangeDialog.rangeTxt;
             }
-            ctx.rangeDialog!.type = "";
+            ctx.rangeDialog!.type = '';
 
             if (item) {
                 ctx.dataVerification!.dataRegulation = {
@@ -205,23 +179,23 @@ export function DataVerification() {
                 };
             } else {
                 ctx.dataVerification!.dataRegulation! = {
-                    type: "dropdown",
-                    type2: "",
+                    type: 'dropdown',
+                    type2: '',
                     rangeTxt: rangeT,
                     value1: rangValue,
-                    value2: "",
-                    validity: "",
+                    value2: '',
+                    validity: '',
                     remote: false,
                     prohibitInput: false,
                     hintShow: false,
-                    hintValue: "",
+                    hintValue: '',
                 };
             }
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const selectClass = "h-8 w-full rounded-md border border-input bg-background px-3 text-sm";
+    const selectClass = 'h-8 w-full rounded-md border border-input bg-background px-3 text-sm';
 
     return (
         <div className="flex flex-col gap-4 select-none">
@@ -238,7 +212,7 @@ export function DataVerification() {
                             spellCheck={false}
                             value={context.dataVerification!.dataRegulation?.rangeTxt}
                             onChange={(e) => {
-                                const {value} = e.target;
+                                const { value } = e.target;
                                 setContext((ctx) => {
                                     ctx.dataVerification!.dataRegulation!.rangeTxt = value;
                                 });
@@ -249,67 +223,61 @@ export function DataVerification() {
                             className="px-2 hover:bg-muted cursor-pointer"
                             onClick={() => {
                                 hideDialog();
-                                dataSelectRange(
-                                    "rangeTxt",
-                                    context.dataVerification!.dataRegulation!.value1
-                                );
+                                dataSelectRange('rangeTxt', context.dataVerification!.dataRegulation!.value1);
                             }}
                         >
-                            <Table className="size-4"/>
+                            <Table className="size-4" />
                         </button>
                     </div>
                 </div>
 
                 <div className="space-y-2">
-                    <div className="text-sm font-semibold">
-                        {dataVerification.verificationCondition}
-                    </div>
+                    <div className="text-sm font-semibold">{dataVerification.verificationCondition}</div>
                     <select
                         className={selectClass}
                         value={context.dataVerification!.dataRegulation!.type}
                         onChange={(e) => {
-                            const {value} = e.target;
+                            const { value } = e.target;
                             setContext((ctx) => {
                                 ctx.dataVerification!.dataRegulation!.type = value;
-                                if (value === "dropdown" || value === "checkbox") {
-                                    ctx.dataVerification!.dataRegulation!.type2 = "";
+                                if (value === 'dropdown' || value === 'checkbox') {
+                                    ctx.dataVerification!.dataRegulation!.type2 = '';
                                 } else if (
-                                    value === "number" ||
-                                    value === "number_integer" ||
-                                    value === "number_decimal" ||
-                                    value === "text_length" ||
-                                    value === "date"
+                                    value === 'number' ||
+                                    value === 'number_integer' ||
+                                    value === 'number_decimal' ||
+                                    value === 'text_length' ||
+                                    value === 'date'
                                 ) {
-                                    ctx.dataVerification!.dataRegulation!.type2 = "between";
-                                } else if (value === "text_content") {
-                                    ctx.dataVerification!.dataRegulation!.type2 = "include";
-                                } else if (value === "validity") {
-                                    ctx.dataVerification!.dataRegulation!.type2 =
-                                        "identificationNumber";
+                                    ctx.dataVerification!.dataRegulation!.type2 = 'between';
+                                } else if (value === 'text_content') {
+                                    ctx.dataVerification!.dataRegulation!.type2 = 'include';
+                                } else if (value === 'validity') {
+                                    ctx.dataVerification!.dataRegulation!.type2 = 'identificationNumber';
                                 }
-                                ctx.dataVerification!.dataRegulation!.value1 = "";
-                                ctx.dataVerification!.dataRegulation!.value2 = "";
+                                ctx.dataVerification!.dataRegulation!.value1 = '';
+                                ctx.dataVerification!.dataRegulation!.value2 = '';
                             });
                         }}
                     >
                         {[
-                            "dropdown",
-                            "checkbox",
-                            "number",
-                            "number_integer",
-                            "number_decimal",
-                            "text_content",
-                            "text_length",
-                            "date",
-                            "validity",
+                            'dropdown',
+                            'checkbox',
+                            'number',
+                            'number_integer',
+                            'number_decimal',
+                            'text_content',
+                            'text_length',
+                            'date',
+                            'validity',
                         ].map((v) => (
                             <option value={v} key={v}>
-                                {(dataVerification as any)[v]}
+                                {dataVerification[v as keyof typeof dataVerification]}
                             </option>
                         ))}
                     </select>
 
-                    {context.dataVerification?.dataRegulation?.type === "dropdown" && (
+                    {context.dataVerification?.dataRegulation?.type === 'dropdown' && (
                         <div className="space-y-2">
                             <div className="flex h-8 rounded-md border border-input overflow-hidden">
                                 <Input
@@ -318,7 +286,7 @@ export function DataVerification() {
                                     value={context.dataVerification!.dataRegulation!.value1}
                                     placeholder={dataVerification.placeholder1}
                                     onChange={(e) => {
-                                        const {value} = e.target;
+                                        const { value } = e.target;
                                         setContext((ctx) => {
                                             ctx.dataVerification!.dataRegulation!.value1 = value;
                                         });
@@ -328,20 +296,15 @@ export function DataVerification() {
                                     type="button"
                                     className="px-2 hover:bg-muted cursor-pointer"
                                     onClick={() =>
-                                        dataSelectRange(
-                                            "dropDown",
-                                            context.dataVerification!.dataRegulation!.value1
-                                        )
+                                        dataSelectRange('dropDown', context.dataVerification!.dataRegulation!.value1)
                                     }
                                 >
-                                    <Table className="size-4"/>
+                                    <Table className="size-4" />
                                 </button>
                             </div>
                             <Label className="flex items-center gap-1.5">
                                 <Checkbox
-                                    checked={
-                                        context.dataVerification!.dataRegulation!.type2 === "true"
-                                    }
+                                    checked={context.dataVerification!.dataRegulation!.type2 === 'true'}
                                     onCheckedChange={(checked) => {
                                         setContext((ctx) => {
                                             ctx.dataVerification!.dataRegulation!.type2 = `${checked}`;
@@ -353,7 +316,7 @@ export function DataVerification() {
                         </div>
                     )}
 
-                    {context.dataVerification?.dataRegulation?.type === "checkbox" && (
+                    {context.dataVerification?.dataRegulation?.type === 'checkbox' && (
                         <div className="space-y-2">
                             <div className="flex items-center gap-2">
                                 <span className="text-sm shrink-0">{dataVerification.selected}</span>
@@ -362,7 +325,7 @@ export function DataVerification() {
                                     placeholder={dataVerification.placeholder2}
                                     value={context.dataVerification?.dataRegulation?.value1}
                                     onChange={(e) => {
-                                        const {value} = e.target;
+                                        const { value } = e.target;
                                         setContext((ctx) => {
                                             ctx.dataVerification!.dataRegulation!.value1 = value;
                                         });
@@ -376,7 +339,7 @@ export function DataVerification() {
                                     placeholder={dataVerification.placeholder2}
                                     value={context.dataVerification?.dataRegulation?.value2}
                                     onChange={(e) => {
-                                        const {value} = e.target;
+                                        const { value } = e.target;
                                         setContext((ctx) => {
                                             ctx.dataVerification!.dataRegulation!.value2 = value;
                                         });
@@ -386,34 +349,31 @@ export function DataVerification() {
                         </div>
                     )}
 
-                    {(context.dataVerification?.dataRegulation?.type === "number" ||
-                        context.dataVerification?.dataRegulation?.type ===
-                        "number_integer" ||
-                        context.dataVerification?.dataRegulation?.type ===
-                        "number_decimal" ||
-                        context.dataVerification?.dataRegulation?.type ===
-                        "text_length") && (
+                    {(context.dataVerification?.dataRegulation?.type === 'number' ||
+                        context.dataVerification?.dataRegulation?.type === 'number_integer' ||
+                        context.dataVerification?.dataRegulation?.type === 'number_decimal' ||
+                        context.dataVerification?.dataRegulation?.type === 'text_length') && (
                         <div className="space-y-2">
                             <select
                                 className={selectClass}
                                 value={context.dataVerification.dataRegulation.type2}
                                 onChange={(e) => {
-                                    const {value} = e.target;
+                                    const { value } = e.target;
                                     setContext((ctx) => {
                                         ctx.dataVerification!.dataRegulation!.type2 = value;
-                                        ctx.dataVerification!.dataRegulation!.value1 = "";
-                                        ctx.dataVerification!.dataRegulation!.value2 = "";
+                                        ctx.dataVerification!.dataRegulation!.value1 = '';
+                                        ctx.dataVerification!.dataRegulation!.value2 = '';
                                     });
                                 }}
                             >
                                 {numberCondition.map((v) => (
                                     <option value={v} key={v}>
-                                        {(dataVerification as any)[v]}
+                                        {dataVerification[v as keyof typeof dataVerification]}
                                     </option>
                                 ))}
                             </select>
-                            {context.dataVerification.dataRegulation.type2 === "between" ||
-                            context.dataVerification.dataRegulation.type2 === "notBetween" ? (
+                            {context.dataVerification.dataRegulation.type2 === 'between' ||
+                            context.dataVerification.dataRegulation.type2 === 'notBetween' ? (
                                 <div className="flex items-center gap-2">
                                     <Input
                                         type="number"
@@ -421,7 +381,7 @@ export function DataVerification() {
                                         placeholder="1"
                                         value={context.dataVerification.dataRegulation.value1}
                                         onChange={(e) => {
-                                            const {value} = e.target;
+                                            const { value } = e.target;
                                             setContext((ctx) => {
                                                 ctx.dataVerification!.dataRegulation!.value1 = value;
                                             });
@@ -434,7 +394,7 @@ export function DataVerification() {
                                         placeholder="100"
                                         value={context.dataVerification.dataRegulation.value2}
                                         onChange={(e) => {
-                                            const {value} = e.target;
+                                            const { value } = e.target;
                                             setContext((ctx) => {
                                                 ctx.dataVerification!.dataRegulation!.value2 = value;
                                             });
@@ -448,7 +408,7 @@ export function DataVerification() {
                                     placeholder={dataVerification.placeholder3}
                                     value={context.dataVerification.dataRegulation.value1}
                                     onChange={(e) => {
-                                        const {value} = e.target;
+                                        const { value } = e.target;
                                         setContext((ctx) => {
                                             ctx.dataVerification!.dataRegulation!.value1 = value;
                                         });
@@ -458,70 +418,69 @@ export function DataVerification() {
                         </div>
                     )}
 
-                    {context.dataVerification?.dataRegulation?.type ===
-                        "text_content" && (
-                            <div className="space-y-2">
-                                <select
-                                    className={selectClass}
-                                    value={context.dataVerification.dataRegulation.type2}
-                                    onChange={(e) => {
-                                        const {value} = e.target;
-                                        setContext((ctx) => {
-                                            ctx.dataVerification!.dataRegulation!.type2 = value;
-                                            ctx.dataVerification!.dataRegulation!.value1 = "";
-                                            ctx.dataVerification!.dataRegulation!.value2 = "";
-                                        });
-                                    }}
-                                >
-                                    {["include", "exclude", "equal"].map((v) => (
-                                        <option value={v} key={v}>
-                                            {(dataVerification as any)[v]}
-                                        </option>
-                                    ))}
-                                </select>
-                                <Input
-                                    className="h-8"
-                                    placeholder={dataVerification.placeholder4}
-                                    value={context.dataVerification.dataRegulation.value1}
-                                    onChange={(e) => {
-                                        const {value} = e.target;
-                                        setContext((ctx) => {
-                                            ctx.dataVerification!.dataRegulation!.value1 = value;
-                                        });
-                                    }}
-                                />
-                            </div>
-                        )}
-
-                    {context.dataVerification?.dataRegulation?.type === "date" && (
+                    {context.dataVerification?.dataRegulation?.type === 'text_content' && (
                         <div className="space-y-2">
                             <select
                                 className={selectClass}
                                 value={context.dataVerification.dataRegulation.type2}
                                 onChange={(e) => {
-                                    const {value} = e.target;
+                                    const { value } = e.target;
                                     setContext((ctx) => {
                                         ctx.dataVerification!.dataRegulation!.type2 = value;
-                                        ctx.dataVerification!.dataRegulation!.value1 = "";
-                                        ctx.dataVerification!.dataRegulation!.value2 = "";
+                                        ctx.dataVerification!.dataRegulation!.value1 = '';
+                                        ctx.dataVerification!.dataRegulation!.value2 = '';
+                                    });
+                                }}
+                            >
+                                {['include', 'exclude', 'equal'].map((v) => (
+                                    <option value={v} key={v}>
+                                        {dataVerification[v as keyof typeof dataVerification]}
+                                    </option>
+                                ))}
+                            </select>
+                            <Input
+                                className="h-8"
+                                placeholder={dataVerification.placeholder4}
+                                value={context.dataVerification.dataRegulation.value1}
+                                onChange={(e) => {
+                                    const { value } = e.target;
+                                    setContext((ctx) => {
+                                        ctx.dataVerification!.dataRegulation!.value1 = value;
+                                    });
+                                }}
+                            />
+                        </div>
+                    )}
+
+                    {context.dataVerification?.dataRegulation?.type === 'date' && (
+                        <div className="space-y-2">
+                            <select
+                                className={selectClass}
+                                value={context.dataVerification.dataRegulation.type2}
+                                onChange={(e) => {
+                                    const { value } = e.target;
+                                    setContext((ctx) => {
+                                        ctx.dataVerification!.dataRegulation!.type2 = value;
+                                        ctx.dataVerification!.dataRegulation!.value1 = '';
+                                        ctx.dataVerification!.dataRegulation!.value2 = '';
                                     });
                                 }}
                             >
                                 {dateCondition.map((v) => (
                                     <option value={v} key={v}>
-                                        {(dataVerification as any)[v]}
+                                        {dataVerification[v as keyof typeof dataVerification]}
                                     </option>
                                 ))}
                             </select>
-                            {context.dataVerification.dataRegulation.type2 === "between" ||
-                            context.dataVerification.dataRegulation.type2 === "notBetween" ? (
+                            {context.dataVerification.dataRegulation.type2 === 'between' ||
+                            context.dataVerification.dataRegulation.type2 === 'notBetween' ? (
                                 <div className="flex items-center gap-2">
                                     <Input
                                         type="date"
                                         className="h-8"
                                         value={context.dataVerification.dataRegulation.value1}
                                         onChange={(e) => {
-                                            const {value} = e.target;
+                                            const { value } = e.target;
                                             setContext((ctx) => {
                                                 ctx.dataVerification!.dataRegulation!.value1 = value;
                                             });
@@ -533,7 +492,7 @@ export function DataVerification() {
                                         className="h-8"
                                         value={context.dataVerification.dataRegulation.value2}
                                         onChange={(e) => {
-                                            const {value} = e.target;
+                                            const { value } = e.target;
                                             setContext((ctx) => {
                                                 ctx.dataVerification!.dataRegulation!.value2 = value;
                                             });
@@ -547,7 +506,7 @@ export function DataVerification() {
                                     placeholder={dataVerification.placeholder3}
                                     value={context.dataVerification.dataRegulation.value1}
                                     onChange={(e) => {
-                                        const {value} = e.target;
+                                        const { value } = e.target;
                                         setContext((ctx) => {
                                             ctx.dataVerification!.dataRegulation!.value1 = value;
                                         });
@@ -557,22 +516,22 @@ export function DataVerification() {
                         </div>
                     )}
 
-                    {context.dataVerification?.dataRegulation?.type === "validity" && (
+                    {context.dataVerification?.dataRegulation?.type === 'validity' && (
                         <select
                             className={selectClass}
                             value={context.dataVerification.dataRegulation.type2}
                             onChange={(e) => {
-                                const {value} = e.target;
+                                const { value } = e.target;
                                 setContext((ctx) => {
                                     ctx.dataVerification!.dataRegulation!.type2 = value;
-                                    ctx.dataVerification!.dataRegulation!.value1 = "";
-                                    ctx.dataVerification!.dataRegulation!.value2 = "";
+                                    ctx.dataVerification!.dataRegulation!.value1 = '';
+                                    ctx.dataVerification!.dataRegulation!.value2 = '';
                                 });
                             }}
                         >
-                            {["identificationNumber", "phoneNumber"].map((v) => (
+                            {['identificationNumber', 'phoneNumber'].map((v) => (
                                 <option value={v} key={v}>
-                                    {(dataVerification as any)[v]}
+                                    {dataVerification[v as keyof typeof dataVerification]}
                                 </option>
                             ))}
                         </select>
@@ -580,25 +539,23 @@ export function DataVerification() {
                 </div>
 
                 <div className="space-y-2">
-                    {(["prohibitInput", "hintShow"] as const).map((v) => (
+                    {(['prohibitInput', 'hintShow'] as const).map((v) => (
                         <Label className="flex items-center gap-1.5" key={v}>
                             <Checkbox
                                 id={v}
                                 checked={context.dataVerification!.dataRegulation![v]}
                                 onCheckedChange={() => {
                                     setContext((ctx) => {
-                                        const dataRegulation =
-                                            ctx.dataVerification?.dataRegulation;
-                                        if (v === "prohibitInput") {
-                                            dataRegulation!.prohibitInput =
-                                                !dataRegulation!.prohibitInput;
-                                        } else if (v === "hintShow") {
+                                        const dataRegulation = ctx.dataVerification?.dataRegulation;
+                                        if (v === 'prohibitInput') {
+                                            dataRegulation!.prohibitInput = !dataRegulation!.prohibitInput;
+                                        } else if (v === 'hintShow') {
                                             dataRegulation!.hintShow = !dataRegulation!.hintShow;
                                         }
                                     });
                                 }}
                             />
-                            {(dataVerification as any)[v]}
+                            {dataVerification[v as keyof typeof dataVerification]}
                         </Label>
                     ))}
                     {context.dataVerification?.dataRegulation?.hintShow && (
@@ -607,7 +564,7 @@ export function DataVerification() {
                             placeholder={dataVerification.placeholder5}
                             value={context.dataVerification!.dataRegulation!.hintValue}
                             onChange={(e) => {
-                                const {value} = e.target;
+                                const { value } = e.target;
                                 setContext((ctx) => {
                                     ctx.dataVerification!.dataRegulation!.hintValue = value;
                                 });
@@ -618,17 +575,16 @@ export function DataVerification() {
             </div>
 
             <DialogFooter>
-                <Button variant="outline" size="sm" onClick={() => btn("close")}>
+                <Button variant="outline" size="sm" onClick={() => btn('close')}>
                     {button.cancel}
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => btn("delete")}>
+                <Button variant="outline" size="sm" onClick={() => btn('delete')}>
                     {dataVerification.deleteVerification}
                 </Button>
-                <Button size="sm" onClick={() => btn("confirm")}>
+                <Button size="sm" onClick={() => btn('confirm')}>
                     {button.confirm}
                 </Button>
             </DialogFooter>
         </div>
     );
 }
-

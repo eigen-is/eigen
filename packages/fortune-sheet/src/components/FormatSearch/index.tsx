@@ -1,48 +1,48 @@
-import {useCallback, useContext, useMemo, useState} from "react";
-import {cancelNormalSelected, getSheetIndex, locale, update,} from "../../state";
-import {Button} from "@workspace/ui/components/button";
-import {Input} from "@workspace/ui/components/input";
-import {Label} from "@workspace/ui/components/label";
-import {DialogFooter, DialogHeader, DialogTitle} from "@workspace/ui/components/dialog";
-import {cn} from "@workspace/ui/lib/utils";
-import {WorkbookContext} from "../../context";
-import {useDialog} from "../../hooks/useDialog";
+import { Button } from '@workspace/ui/components/button';
+import { DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { Input } from '@workspace/ui/components/input';
+import { Label } from '@workspace/ui/components/label';
+import { cn } from '@workspace/ui/lib/utils';
+import { useCallback, useContext, useMemo, useState } from 'react';
+import { WorkbookContext } from '../../context';
+import { useDialog } from '../../hooks/useDialog';
+import { cancelNormalSelected, getSheetIndex, locale, update } from '../../state';
 
 export function FormatSearch({
-                                 type,
-                                 onCancel: _onCancel,
-                             }: {
-    type: "currency" | "date" | "number";
+    type,
+    onCancel: _onCancel,
+}: {
+    type: 'currency' | 'date' | 'number';
     onCancel: () => void;
 }) {
     const {
         context,
         setContext,
-        refs: {cellInput},
+        refs: { cellInput },
     } = useContext(WorkbookContext);
     const [decimalPlace, setDecimalPlace] = useState(2);
     const [selectedFormatIndex, setSelectedFormatIndex] = useState(0);
-    const {button, format, currencyDetail, dateFmtList, numberFmtList} =
-        locale(context);
-    const {showDialog} = useDialog();
+    const { button, format, currencyDetail, dateFmtList, numberFmtList } = locale(context);
+    const { showDialog } = useDialog();
     type ToolbarFormatType = { name: string; pos?: string; value: string };
 
     const toolbarFormat: ToolbarFormatType[] = useMemo(() => {
-        const list = type === "currency" ? currencyDetail : type === "date" ? dateFmtList : numberFmtList;
-        if (type !== "currency") return list;
+        const list = type === 'currency' ? currencyDetail : type === 'date' ? dateFmtList : numberFmtList;
+        if (type !== 'currency') return list;
         return [...list].sort((a, b) => {
-            if (a.name === "EUR") return -1;
-            if (b.name === "EUR") return 1;
+            if (a.name === 'EUR') return -1;
+            if (b.name === 'EUR') return 1;
             return a.name.localeCompare(b.name);
         });
     }, [type, currencyDetail, dateFmtList, numberFmtList]);
 
-    const title = type === "currency" ? format.titleCurrency : type === "date" ? format.titleDateTime : format.titleNumber;
+    const title =
+        type === 'currency' ? format.titleCurrency : type === 'date' ? format.titleDateTime : format.titleNumber;
 
     const onConfirm = useCallback(() => {
-        if (type !== "date" && (decimalPlace < 0 || decimalPlace > 9)) {
+        if (type !== 'date' && (decimalPlace < 0 || decimalPlace > 9)) {
             _onCancel();
-            showDialog(format.tipDecimalPlaces, "ok");
+            showDialog(format.tipDecimalPlaces, 'ok');
             return;
         }
         setContext((ctx) => {
@@ -56,31 +56,22 @@ export function FormatSearch({
                         const cell = ctx.luckysheetfile[index].data?.[r][c];
                         if (!cell) continue;
 
-                        if (type === "date") {
+                        if (type === 'date') {
                             if (!cell.ct) cell.ct = {};
                             cell.ct.fa = selectedFormatVal;
-                            cell.ct.t = "d";
+                            cell.ct.t = 'd';
                             cell.m = update(selectedFormatVal, cell.v);
-                        } else if (cell.ct?.t === "n") {
-                            let selectedFormatPos: string = "before";
-                            if ("pos" in toolbarFormat[selectedFormatIndex])
-                                selectedFormatPos = toolbarFormat[selectedFormatIndex].pos || "before";
+                        } else if (cell.ct?.t === 'n') {
+                            let selectedFormatPos: string = 'before';
+                            if ('pos' in toolbarFormat[selectedFormatIndex])
+                                selectedFormatPos = toolbarFormat[selectedFormatIndex].pos || 'before';
                             const zero = 0;
-                            if (selectedFormatPos === "after") {
-                                cell.ct!.fa = zero
-                                    .toFixed(decimalPlace)
-                                    .concat(`${selectedFormatVal}`);
-                                cell.m = update(
-                                    zero.toFixed(decimalPlace).concat(`${selectedFormatVal}`),
-                                    cell.v
-                                );
+                            if (selectedFormatPos === 'after') {
+                                cell.ct!.fa = zero.toFixed(decimalPlace).concat(`${selectedFormatVal}`);
+                                cell.m = update(zero.toFixed(decimalPlace).concat(`${selectedFormatVal}`), cell.v);
                             } else {
-                                cell.ct!.fa =
-                                    `${selectedFormatVal}`.concat(zero.toFixed(decimalPlace));
-                                cell.m = update(
-                                    `${selectedFormatVal}`.concat(zero.toFixed(decimalPlace)),
-                                    cell.v
-                                );
+                                cell.ct!.fa = `${selectedFormatVal}`.concat(zero.toFixed(decimalPlace));
+                                cell.m = update(`${selectedFormatVal}`.concat(zero.toFixed(decimalPlace)), cell.v);
                             }
                         }
                     }
@@ -103,7 +94,7 @@ export function FormatSearch({
         setContext((ctx) => {
             cancelNormalSelected(ctx);
             if (cellInput.current) {
-                cellInput.current.textContent = "";
+                cellInput.current.textContent = '';
             }
         });
         _onCancel();
@@ -114,7 +105,7 @@ export function FormatSearch({
             <DialogHeader>
                 <DialogTitle>{title}</DialogTitle>
             </DialogHeader>
-            {type !== "date" && (
+            {type !== 'date' && (
                 <div className="flex items-center gap-2 shrink-0">
                     <Label className="text-sm whitespace-nowrap">{format.decimalPlaces}:</Label>
                     <Input
@@ -131,10 +122,8 @@ export function FormatSearch({
                 {toolbarFormat.map((v: ToolbarFormatType, index: number) => (
                     <div
                         className={cn(
-                            "flex items-center justify-between px-3 py-1.5 text-sm cursor-pointer border-b border-border",
-                            index === selectedFormatIndex
-                                ? "bg-primary text-primary-foreground"
-                                : "hover:bg-muted/50"
+                            'flex items-center justify-between px-3 py-1.5 text-sm cursor-pointer border-b border-border',
+                            index === selectedFormatIndex ? 'bg-primary text-primary-foreground' : 'hover:bg-muted/50',
                         )}
                         key={v.name}
                         onClick={() => setSelectedFormatIndex(index)}
@@ -142,7 +131,12 @@ export function FormatSearch({
                     >
                         <span>{v.name}</span>
                         <span
-                            className={index === selectedFormatIndex ? "text-primary-foreground/70" : "text-muted-foreground"}>{v.value}</span>
+                            className={
+                                index === selectedFormatIndex ? 'text-primary-foreground/70' : 'text-muted-foreground'
+                            }
+                        >
+                            {v.value}
+                        </span>
                     </div>
                 ))}
             </div>

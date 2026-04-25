@@ -116,11 +116,9 @@
 
 .fortune-add-row-button {
     padding: 1px 20px;
-    margin-right: 5px;
     display: inline-flex;
     align-items: center;
     margin: 0 8px;
-    border: none;
     border-radius: 4px;
     font-size: 14px;
     line-height: 20px;
@@ -347,7 +345,6 @@
     box-shadow: 0 2px 5px rgb(0 0 0 / 40%);
     word-wrap: break-word;
     background-color: rgb(255, 255, 255);
-    font-size: 13px;
     right: auto;
     overflow-y: auto;
     box-sizing: border-box;
@@ -579,9 +576,7 @@
     top: 0;
 }
 
-.luckysheet-postil-show-active
-.luckysheet-postil-dialog-move
-.luckysheet-postil-dialog-move-item {
+.luckysheet-postil-show-active .luckysheet-postil-dialog-move .luckysheet-postil-dialog-move-item {
     border-color: var(--selection-handle);
 }
 
@@ -702,7 +697,7 @@
 
 .fortune-formula-functionrange-highlight .fortune-copy {
     background-image: none;
-    background: var(--selection-handle);
+    background-color: var(--selection-handle);
     position: absolute;
     z-index: 18;
     cursor: move;
