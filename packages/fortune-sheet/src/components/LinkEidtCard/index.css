@@ -64,8 +64,7 @@
     margin-right: 6px;
 }
 
-.fortune-link-modify-input,
-.fortune-link-modify-select {
+.fortune-link-modify-input {
     width: 232px;
     box-sizing: border-box;
     height: 26px;

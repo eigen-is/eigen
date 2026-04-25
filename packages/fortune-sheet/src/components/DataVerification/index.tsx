@@ -3,8 +3,9 @@ import { Checkbox } from '@workspace/ui/components/checkbox';
 import { DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Table } from 'lucide-react';
-import { useCallback, useContext, useEffect, useState } from 'react';
+import { useCallback, useContext, useEffect } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
 import {
@@ -19,31 +20,48 @@ import {
 } from '../../state';
 import { RangeDialog } from './RangeDialog';
 
+const VERIFICATION_TYPES = [
+    'dropdown',
+    'checkbox',
+    'number',
+    'number_integer',
+    'number_decimal',
+    'text_content',
+    'text_length',
+    'date',
+    'validity',
+] as const;
+
+const NUMBER_CONDITIONS = [
+    'between',
+    'notBetween',
+    'equal',
+    'notEqualTo',
+    'moreThanThe',
+    'lessThan',
+    'greaterOrEqualTo',
+    'lessThanOrEqualTo',
+] as const;
+
+const DATE_CONDITIONS = [
+    'between',
+    'notBetween',
+    'equal',
+    'notEqualTo',
+    'earlierThan',
+    'noEarlierThan',
+    'laterThan',
+    'noLaterThan',
+] as const;
+
+const TEXT_CONTENT_CONDITIONS = ['include', 'exclude', 'equal'] as const;
+
+const VALIDITY_CONDITIONS = ['identificationNumber', 'phoneNumber'] as const;
+
 export function DataVerification() {
     const { context, setContext } = useContext(WorkbookContext);
     const { showDialog, showNonModalDialog, hideDialog } = useDialog();
     const { dataVerification, toolbar, button, generalDialog } = locale(context);
-    const [numberCondition] = useState<string[]>([
-        'between',
-        'notBetween',
-        'equal',
-        'notEqualTo',
-        'moreThanThe',
-        'lessThan',
-        'greaterOrEqualTo',
-        'lessThanOrEqualTo',
-    ]);
-
-    const [dateCondition] = useState<string[]>([
-        'between',
-        'notBetween',
-        'equal',
-        'notEqualTo',
-        'earlierThan',
-        'noEarlierThan',
-        'laterThan',
-        'noLaterThan',
-    ]);
 
     // Enable mouse selection
     const dataSelectRange = useCallback(
@@ -196,8 +214,6 @@ export function DataVerification() {
         });
     }, []);
 
-    const selectClass = 'h-8 w-full rounded-md border border-input bg-background px-3 text-sm';
-
     return (
         <div className="flex flex-col gap-4 select-none">
             <DialogHeader>
@@ -219,26 +235,25 @@ export function DataVerification() {
                                 });
                             }}
                         />
-                        <button
-                            type="button"
-                            className="px-2 hover:bg-muted cursor-pointer"
+                        <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            className="rounded-none"
                             onClick={() => {
                                 hideDialog();
                                 dataSelectRange('rangeTxt', context.dataVerification!.dataRegulation!.value1);
                             }}
                         >
-                            <Table className="size-4" />
-                        </button>
+                            <Table />
+                        </Button>
                     </div>
                 </div>
 
                 <div className="space-y-2">
                     <div className="text-sm font-semibold">{dataVerification.verificationCondition}</div>
-                    <select
-                        className={selectClass}
+                    <Select
                         value={context.dataVerification!.dataRegulation!.type}
-                        onChange={(e) => {
-                            const { value } = e.target;
+                        onValueChange={(value) => {
                             setContext((ctx) => {
                                 ctx.dataVerification!.dataRegulation!.type = value;
                                 if (value === 'dropdown' || value === 'checkbox') {
@@ -261,22 +276,17 @@ export function DataVerification() {
                             });
                         }}
                     >
-                        {[
-                            'dropdown',
-                            'checkbox',
-                            'number',
-                            'number_integer',
-                            'number_decimal',
-                            'text_content',
-                            'text_length',
-                            'date',
-                            'validity',
-                        ].map((v) => (
-                            <option value={v} key={v}>
-                                {dataVerification[v as keyof typeof dataVerification]}
-                            </option>
-                        ))}
-                    </select>
+                        <SelectTrigger size="sm" className="w-full">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {VERIFICATION_TYPES.map((v) => (
+                                <SelectItem value={v} key={v}>
+                                    {dataVerification[v]}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
 
                     {context.dataVerification?.dataRegulation?.type === 'dropdown' && (
                         <div className="space-y-2">
@@ -293,15 +303,16 @@ export function DataVerification() {
                                         });
                                     }}
                                 />
-                                <button
-                                    type="button"
-                                    className="px-2 hover:bg-muted cursor-pointer"
+                                <Button
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    className="rounded-none"
                                     onClick={() =>
                                         dataSelectRange('dropDown', context.dataVerification!.dataRegulation!.value1)
                                     }
                                 >
-                                    <Table className="size-4" />
-                                </button>
+                                    <Table />
+                                </Button>
                             </div>
                             <Label className="flex items-center gap-1.5">
                                 <Checkbox
@@ -355,11 +366,9 @@ export function DataVerification() {
                         context.dataVerification?.dataRegulation?.type === 'number_decimal' ||
                         context.dataVerification?.dataRegulation?.type === 'text_length') && (
                         <div className="space-y-2">
-                            <select
-                                className={selectClass}
+                            <Select
                                 value={context.dataVerification.dataRegulation.type2}
-                                onChange={(e) => {
-                                    const { value } = e.target;
+                                onValueChange={(value) => {
                                     setContext((ctx) => {
                                         ctx.dataVerification!.dataRegulation!.type2 = value;
                                         ctx.dataVerification!.dataRegulation!.value1 = '';
@@ -367,12 +376,17 @@ export function DataVerification() {
                                     });
                                 }}
                             >
-                                {numberCondition.map((v) => (
-                                    <option value={v} key={v}>
-                                        {dataVerification[v as keyof typeof dataVerification]}
-                                    </option>
-                                ))}
-                            </select>
+                                <SelectTrigger size="sm" className="w-full">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {NUMBER_CONDITIONS.map((v) => (
+                                        <SelectItem value={v} key={v}>
+                                            {dataVerification[v]}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                             {context.dataVerification.dataRegulation.type2 === 'between' ||
                             context.dataVerification.dataRegulation.type2 === 'notBetween' ? (
                                 <div className="flex items-center gap-2">
@@ -421,11 +435,9 @@ export function DataVerification() {
 
                     {context.dataVerification?.dataRegulation?.type === 'text_content' && (
                         <div className="space-y-2">
-                            <select
-                                className={selectClass}
+                            <Select
                                 value={context.dataVerification.dataRegulation.type2}
-                                onChange={(e) => {
-                                    const { value } = e.target;
+                                onValueChange={(value) => {
                                     setContext((ctx) => {
                                         ctx.dataVerification!.dataRegulation!.type2 = value;
                                         ctx.dataVerification!.dataRegulation!.value1 = '';
@@ -433,12 +445,17 @@ export function DataVerification() {
                                     });
                                 }}
                             >
-                                {['include', 'exclude', 'equal'].map((v) => (
-                                    <option value={v} key={v}>
-                                        {dataVerification[v as keyof typeof dataVerification]}
-                                    </option>
-                                ))}
-                            </select>
+                                <SelectTrigger size="sm" className="w-full">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {TEXT_CONTENT_CONDITIONS.map((v) => (
+                                        <SelectItem value={v} key={v}>
+                                            {dataVerification[v]}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                             <Input
                                 className="h-8"
                                 placeholder={dataVerification.placeholder4}
@@ -455,11 +472,9 @@ export function DataVerification() {
 
                     {context.dataVerification?.dataRegulation?.type === 'date' && (
                         <div className="space-y-2">
-                            <select
-                                className={selectClass}
+                            <Select
                                 value={context.dataVerification.dataRegulation.type2}
-                                onChange={(e) => {
-                                    const { value } = e.target;
+                                onValueChange={(value) => {
                                     setContext((ctx) => {
                                         ctx.dataVerification!.dataRegulation!.type2 = value;
                                         ctx.dataVerification!.dataRegulation!.value1 = '';
@@ -467,12 +482,17 @@ export function DataVerification() {
                                     });
                                 }}
                             >
-                                {dateCondition.map((v) => (
-                                    <option value={v} key={v}>
-                                        {dataVerification[v as keyof typeof dataVerification]}
-                                    </option>
-                                ))}
-                            </select>
+                                <SelectTrigger size="sm" className="w-full">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {DATE_CONDITIONS.map((v) => (
+                                        <SelectItem value={v} key={v}>
+                                            {dataVerification[v]}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
                             {context.dataVerification.dataRegulation.type2 === 'between' ||
                             context.dataVerification.dataRegulation.type2 === 'notBetween' ? (
                                 <div className="flex items-center gap-2">
@@ -518,11 +538,9 @@ export function DataVerification() {
                     )}
 
                     {context.dataVerification?.dataRegulation?.type === 'validity' && (
-                        <select
-                            className={selectClass}
+                        <Select
                             value={context.dataVerification.dataRegulation.type2}
-                            onChange={(e) => {
-                                const { value } = e.target;
+                            onValueChange={(value) => {
                                 setContext((ctx) => {
                                     ctx.dataVerification!.dataRegulation!.type2 = value;
                                     ctx.dataVerification!.dataRegulation!.value1 = '';
@@ -530,12 +548,17 @@ export function DataVerification() {
                                 });
                             }}
                         >
-                            {['identificationNumber', 'phoneNumber'].map((v) => (
-                                <option value={v} key={v}>
-                                    {dataVerification[v as keyof typeof dataVerification]}
-                                </option>
-                            ))}
-                        </select>
+                            <SelectTrigger size="sm" className="w-full">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {VALIDITY_CONDITIONS.map((v) => (
+                                    <SelectItem value={v} key={v}>
+                                        {dataVerification[v]}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                     )}
                 </div>
 
@@ -556,7 +579,7 @@ export function DataVerification() {
                                     });
                                 }}
                             />
-                            {dataVerification[v as keyof typeof dataVerification]}
+                            {dataVerification[v]}
                         </Label>
                     ))}
                     {context.dataVerification?.dataRegulation?.hintShow && (
@@ -576,7 +599,7 @@ export function DataVerification() {
             </div>
 
             <DialogFooter>
-                <Button variant="outline" size="sm" onClick={() => btn('close')}>
+                <Button variant="outline" size="sm" onClick={() => hideDialog()}>
                     {button.cancel}
                 </Button>
                 <Button variant="outline" size="sm" onClick={() => btn('delete')}>

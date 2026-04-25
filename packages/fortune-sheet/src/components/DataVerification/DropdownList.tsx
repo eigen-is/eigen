@@ -1,126 +1,103 @@
-import { Check } from 'lucide-react';
-import { useCallback, useContext, useEffect, useRef, useState } from 'react';
+import {
+    DropdownMenu,
+    DropdownMenuCheckboxItem,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@workspace/ui/components/dropdown-menu';
+import { ChevronDown } from 'lucide-react';
+import { useContext, useMemo } from 'react';
 import { WorkbookContext } from '../../context';
-import { useOutsideClick } from '../../hooks/useOutsideClick';
-import { getCellValue, getDropdownList, getFlowdata, getSheetIndex, mergeBorder, setDropcownValue } from '../../state';
+import { getCellValue, getDropdownList, getFlowdata, getSheetIndex, setDropcownValue } from '../../state';
 
 export function DropDownList() {
     const { context, setContext } = useContext(WorkbookContext);
-    const containerRef = useRef<HTMLDivElement>(null);
-    const [list, setList] = useState<(string | number | boolean)[]>([]);
-    const [isMul, setIsMul] = useState<boolean>(false);
-    const [position, setPosition] = useState<{ left: number; top: number }>();
-    const [selected, setSelected] = useState<string[]>([]);
+    const open = !!context.dataVerificationDropDownList;
 
-    const close = useCallback(() => {
+    const cellInfo = useMemo(() => {
+        if (!open) return null;
+        const last = context.luckysheet_select_save?.[context.luckysheet_select_save.length - 1];
+        if (!last) return null;
+        const { row_focus: r, column_focus: c } = last;
+        if (r == null || c == null) return null;
+        const sheetIndex = getSheetIndex(context, context.currentSheetId);
+        if (sheetIndex == null || sheetIndex < 0) return null;
+        const dv = context.luckysheetfile[sheetIndex]?.dataVerification?.[`${r}_${c}`];
+        if (!dv) return null;
+        const list = getDropdownList(context, dv.value1);
+        const isMul = dv.type2 === 'true';
+        const d = getFlowdata(context);
+        const cellValue = d ? getCellValue(r, c, d) : null;
+        const selected = cellValue != null && cellValue !== '' ? String(cellValue).split(',') : [];
+        return { list, isMul, selected };
+    }, [open, context]);
+
+    const setOpen = (next: boolean) => {
         setContext((ctx) => {
-            ctx.dataVerificationDropDownList = false;
+            ctx.dataVerificationDropDownList = next;
+            if (next) {
+                // Hint box overlaps the dropdown — hide it while the menu is open
+                const hintBox = document.getElementById('luckysheet-dataVerification-showHintBox');
+                if (hintBox) hintBox.style.display = 'none';
+            }
         });
-    }, [setContext]);
+    };
 
-    useOutsideClick(containerRef, close);
-
-    // Initialize multi-select dropdown
-    // biome-ignore lint/correctness/useExhaustiveDependencies: mount-only — captures the initial cell, position, and dropdown values
-    useEffect(() => {
-        if (!context.luckysheet_select_save) return;
-        const last = context.luckysheet_select_save[context.luckysheet_select_save.length - 1];
-        const rowIndex = last.row_focus;
-        const colIndex = last.column_focus;
-        if (rowIndex == null || colIndex == null) return;
-        let row = context.visibledatarow[rowIndex];
-        let col_pre = colIndex === 0 ? 0 : context.visibledatacolumn[colIndex - 1];
-        const d = getFlowdata(context);
-        if (!d) return;
-        const margeSet = mergeBorder(context, d, rowIndex, colIndex);
-        if (margeSet) {
-            [, row] = margeSet.row;
-            [col_pre, ,] = margeSet.column;
-        }
-        const index = getSheetIndex(context, context.currentSheetId) as number;
-        const { dataVerification } = context.luckysheetfile[index];
-        const item = dataVerification[`${rowIndex}_${colIndex}`];
-        const dropdownList = getDropdownList(context, item.value1);
-        // Pre-select current cell value in the dropdown
-        const cellValue = getCellValue(rowIndex, colIndex, d);
-
-        if (cellValue) {
-            setSelected(cellValue.toString().split(','));
-        }
-        setList(dropdownList);
-        setPosition({
-            left: col_pre,
-            top: row,
+    const onSelect = (value: string) => {
+        if (!cellInfo) return;
+        const next = cellInfo.isMul
+            ? cellInfo.selected.includes(value)
+                ? cellInfo.selected.filter((v) => v !== value)
+                : [...cellInfo.selected, value]
+            : [value];
+        setContext((ctx) => {
+            setDropcownValue(ctx, value, next);
         });
-        setIsMul(item.type2 === 'true');
-    }, []);
-
-    // Update dropdown value on sheet change
-    // biome-ignore lint/correctness/useExhaustiveDependencies: re-syncs preselected values only when the workbook file changes
-    useEffect(() => {
-        if (!context.luckysheet_select_save) return;
-        const last = context.luckysheet_select_save[context.luckysheet_select_save.length - 1];
-        const rowIndex = last.row_focus;
-        const colIndex = last.column_focus;
-        if (rowIndex == null || colIndex == null) return;
-        const index = getSheetIndex(context, context.currentSheetId) as number;
-        const { dataVerification } = context.luckysheetfile[index];
-        const item = dataVerification[`${rowIndex}_${colIndex}`];
-        if (item.type2 !== 'true') return;
-        const d = getFlowdata(context);
-        if (!d) return;
-        const cellValue = getCellValue(rowIndex, colIndex, d);
-        if (cellValue) {
-            setSelected(cellValue.toString().split(','));
-        }
-    }, [context.luckysheetfile]);
+    };
 
     return (
-        <div
-            className="luckysheet-mousedown-cancel absolute z-[10000] bg-background border border-border shadow-md box-border text-xs"
-            style={position}
-            ref={containerRef}
-            onClick={(e) => e.stopPropagation()}
-            onChange={(e) => e.stopPropagation()}
-            onKeyDown={(e) => e.stopPropagation()}
-            onMouseDown={(e) => e.stopPropagation()}
-            onMouseUp={(e) => e.stopPropagation()}
-            tabIndex={0}
-        >
-            {list.map((v, i) => {
-                const vStr = String(v);
-                return (
-                    <div
-                        className="px-2.5 py-1.5 box-border cursor-pointer hover:bg-accent"
-                        // biome-ignore lint/suspicious/noArrayIndexKey: dropdown values can repeat, index is the stable identity
-                        key={i}
-                        onClick={() => {
-                            setContext((ctx) => {
-                                const arr = selected;
-                                const index = arr.indexOf(vStr);
-                                if (index < 0) {
-                                    arr.push(vStr);
-                                } else {
-                                    arr.splice(index, 1);
-                                }
-                                setSelected(arr);
-                                setDropcownValue(ctx, vStr, arr);
-                            });
-                        }}
-                        tabIndex={0}
-                    >
-                        <Check
-                            width={12}
-                            height={12}
-                            style={{
-                                verticalAlign: 'middle',
-                                display: isMul && selected.includes(vStr) ? 'inline' : 'none',
-                            }}
-                        />
-                        {v}
-                    </div>
-                );
-            })}
-        </div>
+        <DropdownMenu open={open} onOpenChange={setOpen}>
+            <DropdownMenuTrigger asChild>
+                <div
+                    id="luckysheet-dataVerification-dropdown-btn"
+                    className="luckysheet-mousedown-cancel"
+                    style={{ display: 'none' }}
+                    tabIndex={0}
+                >
+                    <ChevronDown width={16} height={16} aria-hidden="true" />
+                </div>
+            </DropdownMenuTrigger>
+            {/* Radix portals out of cellArea's DOM, but React synthetic events still bubble up
+                the React tree across portals — without this class, cellAreaMouseDown's DOM-level
+                closest() guard at SheetOverlay/index.tsx misses the menu items and selection
+                jumps to the cell underneath the popup. */}
+            <DropdownMenuContent align="start" className="luckysheet-mousedown-cancel text-xs">
+                {cellInfo?.list.map((v, i) => {
+                    const vStr = String(v);
+                    if (cellInfo.isMul) {
+                        return (
+                            <DropdownMenuCheckboxItem
+                                // biome-ignore lint/suspicious/noArrayIndexKey: dropdown values can repeat, position is the stable identity
+                                key={i}
+                                checked={cellInfo.selected.includes(vStr)}
+                                onCheckedChange={() => onSelect(vStr)}
+                                onSelect={(e) => e.preventDefault()}
+                            >
+                                {vStr}
+                            </DropdownMenuCheckboxItem>
+                        );
+                    }
+                    return (
+                        <DropdownMenuItem
+                            // biome-ignore lint/suspicious/noArrayIndexKey: dropdown values can repeat, position is the stable identity
+                            key={i}
+                            onSelect={() => onSelect(vStr)}
+                        >
+                            {vStr}
+                        </DropdownMenuItem>
+                    );
+                })}
+            </DropdownMenuContent>
+        </DropdownMenu>
     );
 }

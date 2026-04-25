@@ -1,12 +1,15 @@
 import { Button } from '@workspace/ui/components/button';
-import { cloneDeep, concat, debounce, omit, pull, union, without, xor } from 'es-toolkit/compat';
+import { Checkbox } from '@workspace/ui/components/checkbox';
+import { Input } from '@workspace/ui/components/input';
+import { Popover, PopoverAnchor, PopoverContent } from '@workspace/ui/components/popover';
+import { cn } from '@workspace/ui/lib/utils';
+import { concat, debounce, omit, pull, union, without, xor } from 'es-toolkit/compat';
 import produce from 'immer';
-import { ArrowUpDown } from 'lucide-react';
+import { ChevronDown, ChevronRight, Filter as FilterIcon } from 'lucide-react';
 import type React from 'react';
-import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useAlert } from '../../hooks/useAlert';
-import { useOutsideClick } from '../../hooks/useOutsideClick';
 import {
     type Context,
     clearFilter,
@@ -19,29 +22,27 @@ import {
     orderbydatafiler,
     saveFilter,
 } from '../../state';
-import { SVGIcon } from '../icon-map';
 
-const SelectItem: React.FC<{
+type ColorKind = 'bgColors' | 'fcColors';
+
+const menuItemClass =
+    'relative flex cursor-default items-center rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground';
+
+const FilterValueItem: React.FC<{
     item: FilterValue;
     isChecked: (key: string) => boolean;
     onChange: (item: FilterValue, checked: boolean) => void;
     isItemVisible: (item: FilterValue) => boolean;
 }> = ({ item, isChecked, onChange, isItemVisible }) => {
     const checked = useMemo(() => isChecked(item.key), [isChecked, item.key]);
-    return isItemVisible(item) ? (
-        <div className="select-item">
-            <input
-                className="filter-checkbox"
-                type="checkbox"
-                checked={checked}
-                onChange={() => {
-                    onChange(item, !checked);
-                }}
-            />
-            <div>{item.text}</div>
-            <span className="count">{`( ${item.rows.length} )`}</span>
-        </div>
-    ) : null;
+    if (!isItemVisible(item)) return null;
+    return (
+        <label className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-accent rounded-sm text-sm">
+            <Checkbox checked={checked} onCheckedChange={(v) => onChange(item, !!v)} />
+            <span className="truncate">{item.text}</span>
+            <span className="ml-auto text-xs text-muted-foreground">{`(${item.rows.length})`}</span>
+        </label>
+    );
 };
 
 const DateSelectTreeItem: React.FC<{
@@ -55,35 +56,35 @@ const DateSelectTreeItem: React.FC<{
 }> = ({ item, depth = 0, initialExpand, onExpand, isChecked, onChange, isItemVisible }) => {
     const [expand, setExpand] = useState(initialExpand(item.key));
     const checked = useMemo(() => isChecked(item.key), [isChecked, item.key]);
-
-    return isItemVisible(item) ? (
+    if (!isItemVisible(item)) return null;
+    const hasChildren = item.children && item.children.length > 0;
+    return (
         <div>
             <div
-                className="select-item"
-                style={{ marginLeft: -2 + depth * 20 }}
+                className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-accent rounded-sm text-sm"
+                style={{ paddingLeft: 8 + depth * 16 }}
                 onClick={() => {
                     onExpand?.(item.key, !expand);
                     setExpand(!expand);
                 }}
                 tabIndex={0}
             >
-                {!item.children || item.children.length === 0 ? (
-                    <div style={{ width: 10 }} />
+                {hasChildren ? (
+                    expand ? (
+                        <ChevronDown className="size-3.5 shrink-0" aria-hidden="true" />
+                    ) : (
+                        <ChevronRight className="size-3.5 shrink-0" aria-hidden="true" />
+                    )
                 ) : (
-                    <div className={`filter-caret ${expand ? 'down' : 'right'}`} style={{ cursor: 'pointer' }} />
+                    <span className="w-3.5 shrink-0" />
                 )}
-                <input
-                    className="filter-checkbox"
-                    type="checkbox"
+                <Checkbox
                     checked={checked}
-                    onChange={() => {
-                        onChange(item, !checked);
-                    }}
+                    onCheckedChange={(v) => onChange(item, !!v)}
                     onClick={(e) => e.stopPropagation()}
-                    tabIndex={0}
                 />
-                <div>{item.text}</div>
-                <span className="count">{`( ${item.rows.length} )`}</span>
+                <span className="truncate">{item.text}</span>
+                <span className="ml-auto text-xs text-muted-foreground">{`(${item.rows.length})`}</span>
             </div>
             {expand &&
                 item.children.map((v) => (
@@ -95,7 +96,7 @@ const DateSelectTreeItem: React.FC<{
                     />
                 ))}
         </div>
-    ) : null;
+    );
 };
 
 const DateSelectTree: React.FC<{
@@ -105,26 +106,21 @@ const DateSelectTree: React.FC<{
     isChecked: (key: string) => boolean;
     onChange: (item: FilterDate, checked: boolean) => void;
     isItemVisible: (item: FilterDate) => boolean;
-}> = ({ dates, initialExpand, onExpand, isChecked, onChange, isItemVisible }) => {
-    return (
-        <>
-            {dates.map((v) => (
-                <DateSelectTreeItem
-                    key={v.key}
-                    item={v}
-                    {...{ initialExpand, onExpand, isChecked, onChange, isItemVisible }}
-                />
-            ))}
-        </>
-    );
-};
+}> = ({ dates, initialExpand, onExpand, isChecked, onChange, isItemVisible }) => (
+    <>
+        {dates.map((v) => (
+            <DateSelectTreeItem
+                key={v.key}
+                item={v}
+                {...{ initialExpand, onExpand, isChecked, onChange, isItemVisible }}
+            />
+        ))}
+    </>
+);
 
 export const FilterMenu: React.FC = () => {
     const { context, setContext, settings } = useContext(WorkbookContext);
     const contextRef = useRef<Context>(context);
-    const containerRef = useRef<HTMLDivElement>(null);
-    const byColorMenuRef = useRef<HTMLDivElement>(null);
-    const subMenuRef = useRef<HTMLDivElement>(null);
     const { filterContextMenu } = context;
     const { startRow, startCol, endRow, endCol, col, listBoxMaxHeight } = filterContextMenu || {
         startRow: null,
@@ -156,28 +152,32 @@ export const FilterMenu: React.FC = () => {
     const hiddenRows = useRef<number[]>([]);
     const [showValues, setShowValues] = useState<string[]>([]);
     const [searchText, setSearchText] = useState('');
-    const [subMenuPos, setSubMenuPos] = useState<{
-        left?: number;
-        top: number;
-        right?: number;
-    }>();
     const [filterColors, setFilterColors] = useState<{
         bgColors: FilterColor[];
         fcColors: FilterColor[];
     }>({ bgColors: [], fcColors: [] });
     const [showSubMenu, setShowSubMenu] = useState(false);
+    const subMenuCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const { showAlert } = useAlert();
-    const mouseHoverSubMenu = useRef<boolean>(false);
     contextRef.current = context;
 
-    // Close FilterMenu
+    // Bridge the gap between the trigger and the portaled PopoverContent so the cursor
+    // can cross the side-offset without unmounting the submenu.
+    const openSubMenu = useCallback(() => {
+        if (subMenuCloseTimer.current) clearTimeout(subMenuCloseTimer.current);
+        setShowSubMenu(true);
+    }, []);
+
+    const closeSubMenu = useCallback(() => {
+        if (subMenuCloseTimer.current) clearTimeout(subMenuCloseTimer.current);
+        subMenuCloseTimer.current = setTimeout(() => setShowSubMenu(false), 120);
+    }, []);
+
     const close = useCallback(() => {
         setContext((ctx) => {
             ctx.filterContextMenu = undefined;
         });
     }, [setContext]);
-
-    useOutsideClick(containerRef, close);
 
     const initialExpand = useCallback((key: string) => {
         const expand = dateTreeExpandState.current[key];
@@ -218,23 +218,14 @@ export const FilterMenu: React.FC = () => {
         hiddenRows.current = xor(hiddenRows.current, data.visibleRows);
     }, [data.dateRowMap, data.valueRowMap, data.visibleRows]);
 
-    const onColorSelectChange = useCallback((key: 'bgColors' | 'fcColors', color: string, checked: boolean) => {
+    const onColorSelectChange = useCallback((key: ColorKind, color: string, checked: boolean) => {
         setFilterColors(
             produce((draft) => {
-                const colorData = draft[key]?.find((v) => v.color === color);
+                const colorData = draft[key].find((v) => v.color === color);
                 if (colorData) colorData.checked = checked;
             }),
         );
     }, []);
-
-    const delayHideSubMenu = useMemo(
-        () =>
-            debounce(() => {
-                if (mouseHoverSubMenu.current) return;
-                setShowSubMenu(false);
-            }, 200),
-        [],
-    );
 
     const sortData = useCallback(
         (asc: boolean) => {
@@ -246,90 +237,6 @@ export const FilterMenu: React.FC = () => {
         },
         [col, setContext, startRow, startCol, endRow, endCol, showAlert],
     );
-
-    const renderColorList = useCallback(
-        (
-            key: 'bgColors' | 'fcColors',
-            title: string,
-            colors: FilterColor[],
-            onSelectChange: (datakey: 'bgColors' | 'fcColors', color: string, checked: boolean) => void,
-        ) =>
-            colors.length > 1 ? (
-                <div key={key}>
-                    <div className="title">{title}</div>
-                    <div className="color-list">
-                        {colors.map((v) => (
-                            <div
-                                key={v.color}
-                                className="item"
-                                onClick={() => onSelectChange(key, v.color, !v.checked)}
-                                tabIndex={0}
-                            >
-                                <div className="color-label" style={{ backgroundColor: v.color }} />
-                                <input
-                                    className="luckysheet-mousedown-cancel"
-                                    type="checkbox"
-                                    checked={v.checked}
-                                    onChange={() => {}}
-                                />
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            ) : null,
-        [],
-    );
-
-    // Reposition main container if it overflows the viewport
-    // biome-ignore lint/correctness/useExhaustiveDependencies: FIXME audit-needed (PR 2) — see docs/FORTUNE-SHEET-EFFECT-DEPS-AUDIT.md
-    useLayoutEffect(() => {
-        if (!containerRef.current || !filterContextMenu) return;
-        const rect = containerRef.current.getBoundingClientRect();
-        const winH = window.innerHeight;
-        const winW = window.innerWidth;
-        let needsUpdate = false;
-        let newX = filterContextMenu.x;
-        let newY = filterContextMenu.y;
-        if (newX + rect.width > winW) {
-            newX = winW - rect.width - 8;
-            needsUpdate = true;
-        }
-        if (newY + rect.height > winH) {
-            newY = winH - rect.height - 8;
-            needsUpdate = true;
-        }
-        if (newX < 0) {
-            newX = 8;
-            needsUpdate = true;
-        }
-        if (newY < 0) {
-            newY = 8;
-            needsUpdate = true;
-        }
-        if (needsUpdate && (newX !== filterContextMenu.x || newY !== filterContextMenu.y)) {
-            setContext((draftCtx) => {
-                if (draftCtx.filterContextMenu) {
-                    draftCtx.filterContextMenu.x = newX;
-                    draftCtx.filterContextMenu.y = newY;
-                }
-            });
-        }
-    }, [filterContextMenu?.x, filterContextMenu?.y, setContext]);
-
-    useLayoutEffect(() => {
-        if (!subMenuPos) return;
-        // re-position the subMenu if it overflows the window
-        const rect = byColorMenuRef.current?.getBoundingClientRect();
-        const subMenuRect = subMenuRef.current?.getBoundingClientRect();
-        if (rect == null || subMenuRect == null) return;
-
-        const winW = window.innerWidth;
-        const pos = cloneDeep(subMenuPos);
-        if (subMenuRect.left + subMenuRect.width > winW) {
-            pos.left! -= subMenuRect.width;
-            setSubMenuPos(pos);
-        }
-    }, [subMenuPos]);
 
     useEffect(() => {
         if (col == null) return;
@@ -352,11 +259,25 @@ export const FilterMenu: React.FC = () => {
     if (!filterContextMenu) return null;
 
     return (
-        <>
-            <div
-                ref={containerRef}
-                className="fixed rounded-md border bg-popover p-1 shadow-lg text-sm fortune-filter-menu"
-                style={{ left: filterContextMenu.x, top: filterContextMenu.y, zIndex: 1010 }}
+        <Popover open onOpenChange={(open) => !open && close()}>
+            <PopoverAnchor asChild>
+                <div
+                    style={{
+                        position: 'fixed',
+                        left: filterContextMenu.x,
+                        top: filterContextMenu.y,
+                        width: 0,
+                        height: 0,
+                        pointerEvents: 'none',
+                    }}
+                />
+            </PopoverAnchor>
+            <PopoverContent
+                side="bottom"
+                align="start"
+                collisionPadding={8}
+                className="w-auto p-1 text-sm"
+                style={{ zIndex: 1010 }}
                 onContextMenu={(e) => e.stopPropagation()}
             >
                 {settings.filterContextMenu?.map((name, i) => {
@@ -366,169 +287,242 @@ export const FilterMenu: React.FC = () => {
                     }
                     if (name === 'sort-by-asc') {
                         return (
-                            <div
+                            <button
+                                type="button"
                                 key={name}
-                                className="relative flex cursor-default items-center rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground"
+                                className={cn(menuItemClass, 'w-full')}
                                 onClick={() => sortData(true)}
                             >
                                 {filter.sortByAsc}
-                            </div>
+                            </button>
                         );
                     }
                     if (name === 'sort-by-desc') {
                         return (
-                            <div
+                            <button
+                                type="button"
                                 key={name}
-                                className="relative flex cursor-default items-center rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground"
+                                className={cn(menuItemClass, 'w-full')}
                                 onClick={() => sortData(false)}
                             >
                                 {filter.sortByDesc}
-                            </div>
+                            </button>
                         );
                     }
                     if (name === 'filter-by-color') {
                         return (
-                            <div
-                                key={name}
-                                ref={byColorMenuRef}
-                                onMouseEnter={() => {
-                                    if (!filterContextMenu) {
-                                        return;
-                                    }
-                                    setShowSubMenu(true);
-                                    const rect = byColorMenuRef.current?.getBoundingClientRect();
-                                    if (rect == null) return;
-                                    setSubMenuPos({ top: rect.top - 5, left: rect.right });
-                                }}
-                                onMouseLeave={delayHideSubMenu}
-                            >
-                                <div className="relative flex cursor-default items-center rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground">
-                                    <div className="filter-bycolor-container">
-                                        {filter.filterByColor}
-                                        <div className="filter-caret right" />
+                            <Popover key={name} open={showSubMenu} onOpenChange={setShowSubMenu}>
+                                <PopoverAnchor asChild>
+                                    <div
+                                        className={cn(menuItemClass, 'justify-between gap-2')}
+                                        onMouseEnter={openSubMenu}
+                                        onMouseLeave={closeSubMenu}
+                                    >
+                                        <span>{filter.filterByColor}</span>
+                                        <ChevronRight className="size-3.5" aria-hidden="true" />
                                     </div>
-                                </div>
-                            </div>
+                                </PopoverAnchor>
+                                <PopoverContent
+                                    side="right"
+                                    align="start"
+                                    sideOffset={4}
+                                    className="w-auto p-2 text-sm"
+                                    style={{ zIndex: 1011 }}
+                                    onMouseEnter={openSubMenu}
+                                    onMouseLeave={closeSubMenu}
+                                >
+                                    {filterColors.bgColors.length < 2 && filterColors.fcColors.length < 2 ? (
+                                        <div className="px-2 py-1 text-muted-foreground">
+                                            {filter.filterContainerOneColorTip}
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            {(
+                                                [
+                                                    {
+                                                        key: 'bgColors',
+                                                        title: filter.filiterByColorTip,
+                                                        colors: filterColors.bgColors,
+                                                    },
+                                                    {
+                                                        key: 'fcColors',
+                                                        title: filter.filiterByTextColorTip,
+                                                        colors: filterColors.fcColors,
+                                                    },
+                                                ] as const
+                                            ).map(({ key, title, colors }) =>
+                                                colors.length > 1 ? (
+                                                    <div key={key}>
+                                                        <div className="px-1 py-1 text-xs text-muted-foreground">
+                                                            {title}
+                                                        </div>
+                                                        <div className="flex flex-col gap-1">
+                                                            {colors.map((v) => (
+                                                                <label
+                                                                    key={v.color}
+                                                                    className="flex items-center gap-2 px-2 py-1 cursor-pointer hover:bg-accent rounded-sm"
+                                                                >
+                                                                    <span
+                                                                        className="size-4 rounded border"
+                                                                        style={{ backgroundColor: v.color }}
+                                                                    />
+                                                                    <Checkbox
+                                                                        checked={v.checked}
+                                                                        onCheckedChange={(c) =>
+                                                                            onColorSelectChange(key, v.color, !!c)
+                                                                        }
+                                                                    />
+                                                                </label>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ) : null,
+                                            )}
+                                            <Button
+                                                size="sm"
+                                                onClick={() => {
+                                                    if (col == null) return;
+                                                    setContext((draftCtx) => {
+                                                        const uncheckedRows = Object.values(filterColors)
+                                                            .flat()
+                                                            .flatMap((v) => (v.checked ? [] : v.rows));
+                                                        const rowHidden = uncheckedRows.reduce(
+                                                            (pre, curr) => {
+                                                                pre[curr] = 0;
+                                                                return pre;
+                                                            },
+                                                            {} as Record<string, number>,
+                                                        );
+                                                        saveFilter(
+                                                            draftCtx,
+                                                            Object.keys(rowHidden).length > 0,
+                                                            rowHidden,
+                                                            {},
+                                                            startRow,
+                                                            endRow,
+                                                            col,
+                                                            startCol,
+                                                            endCol,
+                                                        );
+                                                        hiddenRows.current = [];
+                                                        draftCtx.filterContextMenu = undefined;
+                                                    });
+                                                }}
+                                            >
+                                                {filter.filterConform}
+                                            </Button>
+                                        </div>
+                                    )}
+                                </PopoverContent>
+                            </Popover>
                         );
                     }
                     if (name === 'filter-by-condition') {
+                        // Placeholder slot — not yet implemented. Render disabled-looking so it
+                        // doesn't masquerade as a working menu item.
                         return (
-                            <div key={name}>
-                                <div className="relative flex cursor-default items-center rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground">
-                                    <div className="filter-caret right" />
-                                    {filter.filterByCondition}
-                                </div>
-                                <div className="luckysheet-${menuid}-bycondition" style={{ display: 'none' }}>
-                                    <div
-                                        className="luckysheet-flat-menu-button luckysheet-mousedown-cancel"
-                                        id="luckysheet-${menuid}-selected"
-                                    >
-                                        <span className="luckysheet-mousedown-cancel" data-value="null" data-type="0">
-                                            {filter.filiterInputNone}
-                                        </span>
-                                        <div className="luckysheet-mousedown-cancel">
-                                            <ArrowUpDown size={14} />
-                                        </div>
-                                    </div>
-                                </div>
+                            <div
+                                key={name}
+                                className={cn(menuItemClass, 'justify-between gap-2 opacity-50 pointer-events-none')}
+                            >
+                                <span>{filter.filterByCondition}</span>
+                                <ChevronRight className="size-3.5" aria-hidden="true" />
                             </div>
                         );
                     }
                     if (name === 'filter-by-value') {
                         return (
-                            <div key={name}>
-                                <div className="relative flex cursor-default items-center rounded-sm px-2 py-1.5 text-sm outline-hidden select-none hover:bg-accent hover:text-accent-foreground">
-                                    <div className="filter-caret right" />
-                                    {filter.filterByValues}
+                            <div key={name} className="mt-1 px-1">
+                                <div className="flex items-center justify-between mb-1.5">
+                                    <div className="text-xs">
+                                        <button
+                                            type="button"
+                                            className="underline-offset-2 hover:underline"
+                                            onClick={selectAll}
+                                        >
+                                            {filter.filterValueByAllBtn}
+                                        </button>
+                                        {' - '}
+                                        <button
+                                            type="button"
+                                            className="underline-offset-2 hover:underline"
+                                            onClick={clearAll}
+                                        >
+                                            {filter.filterValueByClearBtn}
+                                        </button>
+                                        {' - '}
+                                        <button
+                                            type="button"
+                                            className="underline-offset-2 hover:underline"
+                                            onClick={inverseSelect}
+                                        >
+                                            {filter.filterValueByInverseBtn}
+                                        </button>
+                                    </div>
+                                    <FilterIcon className="size-4 text-muted-foreground" aria-hidden="true" />
                                 </div>
-                                <div className="luckysheet-filter-byvalue">
-                                    <div className="fortune-menuitem-row byvalue-btn-row">
-                                        <div>
-                                            <span className="fortune-byvalue-btn" onClick={selectAll} tabIndex={0}>
-                                                {filter.filterValueByAllBtn}
-                                            </span>
-                                            {' - '}
-                                            <span className="fortune-byvalue-btn" onClick={clearAll} tabIndex={0}>
-                                                {filter.filterValueByClearBtn}
-                                            </span>
-                                            {' - '}
-                                            <span className="fortune-byvalue-btn" onClick={inverseSelect} tabIndex={0}>
-                                                {filter.filterValueByInverseBtn}
-                                            </span>
-                                        </div>
-                                        <div className="byvalue-filter-icon">
-                                            <SVGIcon name="filter-fill" style={{ width: 20, height: 20 }} />
-                                        </div>
-                                    </div>
-                                    <div className="filtermenu-input-container">
-                                        <input
-                                            type="text"
-                                            onKeyDown={(e) => e.stopPropagation()}
-                                            placeholder={filter.filterValueByTip}
-                                            className="luckysheet-mousedown-cancel"
-                                            id="luckysheet-${menuid}-byvalue-input"
-                                            value={searchText}
-                                            onChange={(e) => {
-                                                setSearchText(e.target.value);
-                                                searchValues(e.target.value);
-                                            }}
-                                        />
-                                    </div>
-                                    <div id="luckysheet-filter-byvalue-select" style={{ maxHeight: listBoxMaxHeight }}>
-                                        <DateSelectTree
-                                            dates={data.dates}
-                                            onExpand={onExpand}
-                                            initialExpand={initialExpand}
-                                            isChecked={(key: string) =>
-                                                datesUncheck.find((v: string) => v.match(key) != null) == null
-                                            }
-                                            onChange={(item: FilterDate, checked: boolean) => {
+                                <Input
+                                    onKeyDown={(e) => e.stopPropagation()}
+                                    placeholder={filter.filterValueByTip}
+                                    className="h-7 mb-1.5"
+                                    value={searchText}
+                                    onChange={(e) => {
+                                        setSearchText(e.target.value);
+                                        searchValues(e.target.value);
+                                    }}
+                                />
+                                <div className="overflow-y-auto" style={{ maxHeight: listBoxMaxHeight }}>
+                                    <DateSelectTree
+                                        dates={data.dates}
+                                        onExpand={onExpand}
+                                        initialExpand={initialExpand}
+                                        isChecked={(key) => datesUncheck.find((v) => v.match(key) != null) == null}
+                                        onChange={(item, checked) => {
+                                            const rows = hiddenRows.current;
+                                            hiddenRows.current = checked
+                                                ? without(rows, ...item.rows)
+                                                : union(rows, item.rows);
+                                            setDatesUncheck(
+                                                produce((draft) =>
+                                                    checked
+                                                        ? without(draft, ...item.dateValues)
+                                                        : union(draft, item.dateValues),
+                                                ),
+                                            );
+                                        }}
+                                        isItemVisible={(item) =>
+                                            showValues.length === data.flattenValues.length
+                                                ? true
+                                                : showValues.findIndex((v) => v.match(item.key) != null) > -1
+                                        }
+                                    />
+                                    {data.values.map((v) => (
+                                        <FilterValueItem
+                                            key={v.key}
+                                            item={v}
+                                            isChecked={(key) => !valuesUncheck.includes(key)}
+                                            onChange={(item, checked) => {
                                                 const rows = hiddenRows.current;
                                                 hiddenRows.current = checked
                                                     ? without(rows, ...item.rows)
-                                                    : union(rows, item.rows);
-                                                setDatesUncheck(
+                                                    : concat(rows, item.rows);
+                                                setValuesUncheck(
                                                     produce((draft) => {
-                                                        return checked
-                                                            ? without(draft, ...item.dateValues)
-                                                            : union(draft, item.dateValues);
+                                                        if (checked) {
+                                                            pull(draft, item.key);
+                                                        } else {
+                                                            draft.push(item.key);
+                                                        }
                                                     }),
                                                 );
                                             }}
-                                            isItemVisible={(item) => {
-                                                return showValues.length === data.flattenValues.length
+                                            isItemVisible={(item) =>
+                                                showValues.length === data.flattenValues.length
                                                     ? true
-                                                    : showValues.findIndex((v) => v.match(item.key) != null) > -1;
-                                            }}
+                                                    : showValues.includes(item.text)
+                                            }
                                         />
-                                        {data.values.map((v) => (
-                                            <SelectItem
-                                                key={v.key}
-                                                item={v}
-                                                isChecked={(key: string) => !valuesUncheck.includes(key)}
-                                                onChange={(item: FilterValue, checked: boolean) => {
-                                                    const rows = hiddenRows.current;
-                                                    hiddenRows.current = checked
-                                                        ? without(rows, ...item.rows)
-                                                        : concat(rows, item.rows);
-                                                    setValuesUncheck(
-                                                        produce((draft) => {
-                                                            if (checked) {
-                                                                pull(draft, item.key);
-                                                            } else {
-                                                                draft.push(item.key);
-                                                            }
-                                                        }),
-                                                    );
-                                                }}
-                                                isItemVisible={(item) => {
-                                                    return showValues.length === data.flattenValues.length
-                                                        ? true
-                                                        : showValues.includes(item.text);
-                                                }}
-                                            />
-                                        ))}
-                                    </div>
+                                    ))}
                                 </div>
                             </div>
                         );
@@ -536,7 +530,7 @@ export const FilterMenu: React.FC = () => {
                     return null;
                 })}
                 <div className="h-px my-1 bg-border" />
-                <div className="fortune-menuitem-row">
+                <div className="flex items-center gap-2 px-1 py-1">
                     <Button
                         size="sm"
                         onClick={() => {
@@ -567,15 +561,7 @@ export const FilterMenu: React.FC = () => {
                     >
                         {filter.filterConform}
                     </Button>
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                            setContext((draftCtx) => {
-                                draftCtx.filterContextMenu = undefined;
-                            });
-                        }}
-                    >
+                    <Button variant="outline" size="sm" onClick={close}>
                         {filter.filterCancel}
                     </Button>
                     <Button
@@ -590,75 +576,7 @@ export const FilterMenu: React.FC = () => {
                         {filter.clearFilter}
                     </Button>
                 </div>
-            </div>
-            {showSubMenu && (
-                <div
-                    ref={subMenuRef}
-                    className="luckysheet-filter-bycolor-submenu"
-                    style={subMenuPos}
-                    onMouseEnter={() => {
-                        mouseHoverSubMenu.current = true;
-                    }}
-                    onMouseLeave={() => {
-                        mouseHoverSubMenu.current = false;
-                        setShowSubMenu(false);
-                    }}
-                >
-                    {filterColors.bgColors.length < 2 && filterColors.fcColors.length < 2 ? (
-                        <div className="one-color-tip">{filter.filterContainerOneColorTip}</div>
-                    ) : (
-                        <>
-                            {(
-                                [
-                                    {
-                                        key: 'bgColors',
-                                        title: filter.filiterByColorTip,
-                                        colors: filterColors.bgColors,
-                                    },
-                                    {
-                                        key: 'fcColors',
-                                        title: filter.filiterByTextColorTip,
-                                        colors: filterColors.fcColors,
-                                    },
-                                ] as const
-                            ).map((v) => renderColorList(v.key, v.title, v.colors, onColorSelectChange))}
-                            <Button
-                                size="sm"
-                                onClick={() => {
-                                    if (col == null) return;
-                                    setContext((draftCtx) => {
-                                        const uncheckedRows = Object.values(filterColors)
-                                            .flat()
-                                            .flatMap((v) => (v.checked ? [] : v.rows));
-                                        const rowHidden = uncheckedRows.reduce(
-                                            (pre, curr) => {
-                                                pre[curr] = 0;
-                                                return pre;
-                                            },
-                                            {} as Record<string, number>,
-                                        );
-                                        saveFilter(
-                                            draftCtx,
-                                            Object.keys(rowHidden).length > 0,
-                                            rowHidden,
-                                            {},
-                                            startRow,
-                                            endRow,
-                                            col,
-                                            startCol,
-                                            endCol,
-                                        );
-                                        hiddenRows.current = [];
-                                        draftCtx.filterContextMenu = undefined;
-                                    });
-                                }}
-                            >
-                                {filter.filterConform}
-                            </Button>
-                        </>
-                    )}
-                </div>
-            )}
-        </>
+            </PopoverContent>
+        </Popover>
     );
 };

@@ -1,7 +1,9 @@
-/* eslint-disable jsx-a11y/control-has-associated-label */
-
 import { Button } from '@workspace/ui/components/button';
-import { useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { Checkbox } from '@workspace/ui/components/checkbox';
+import { DialogFooter } from '@workspace/ui/components/dialog';
+import { Input } from '@workspace/ui/components/input';
+import { Label } from '@workspace/ui/components/label';
+import { useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
 import { getDataArr, getFlowdata, getRegStr, locale, updateMoreCell } from '../../state';
@@ -9,21 +11,28 @@ import { getDataArr, getFlowdata, getRegStr, locale, updateMoreCell } from '../.
 export function SplitColumn() {
     const { context, setContext } = useContext(WorkbookContext);
     const { splitText, button } = locale(context);
-    const [splitOperate, setSplitOperate] = useState('');
-    const [otherFlag, setOtherFlag] = useState(false);
+    const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
+    const [otherValue, setOtherValue] = useState('');
     const [tableData, setTableData] = useState<string[][]>([]);
-    const splitSymbols = useRef<HTMLDivElement>(null);
     const { showDialog, hideDialog } = useDialog();
 
-    // Confirm button
+    const splitOperate = useMemo(() => getRegStr(selected, otherValue), [selected, otherValue]);
+
+    const toggle = useCallback((id: string, checked: boolean) => {
+        setSelected((prev) => {
+            const next = new Set(prev);
+            if (checked) next.add(id);
+            else next.delete(id);
+            return next;
+        });
+    }, []);
+
     const certainBtn = useCallback(() => {
         hideDialog();
         const dataArr = getDataArr(splitOperate, context);
         const r = context.luckysheet_select_save![0].row[0];
         const c = context.luckysheet_select_save![0].column[0];
-        if (dataArr[0].length === 1) {
-            return;
-        }
+        if (dataArr[0].length === 1) return;
         let dataCover = false;
         const data = getFlowdata(context);
         for (let i = 0; i < dataArr.length; i += 1) {
@@ -49,111 +58,68 @@ export function SplitColumn() {
         }
     }, [context, hideDialog, setContext, showDialog, splitOperate, splitText.splitConfirmToExe]);
 
-    // Data preview
     useEffect(() => {
-        setTableData((table) => {
-            table = getDataArr(splitOperate, context);
-            return table;
-        });
+        setTableData(getDataArr(splitOperate, context));
     }, [context, splitOperate]);
 
     return (
-        <div className="select-none [&_table]:border-collapse [&_td]:border [&_td]:border-[#333]">
+        <div className="select-none [&_table]:border-collapse [&_td]:border [&_td]:border-border">
             <div className="text-base">{splitText.splitTextTitle}</div>
             <div className="mt-2.5">{splitText.splitDelimiters}</div>
-            <div className="relative border border-[#dfdfdf] p-1.5 my-1.5" ref={splitSymbols}>
+            <div className="border p-1.5 my-1.5 space-y-1 text-sm">
                 {splitText.splitSymbols.map((o) => (
-                    <div key={o.value} className="text-sm">
-                        <input
-                            id={o.value}
-                            name={o.value}
-                            type="checkbox"
-                            onClick={() =>
-                                setSplitOperate((regStr) => {
-                                    return getRegStr(regStr, splitSymbols.current?.childNodes);
-                                })
-                            }
-                            tabIndex={0}
-                        />
-                        <label htmlFor={o.value}>{o.name}</label>
-                    </div>
+                    <Label key={o.value} className="flex items-center gap-1.5">
+                        <Checkbox checked={selected.has(o.value)} onCheckedChange={(c) => toggle(o.value, !!c)} />
+                        {o.name}
+                    </Label>
                 ))}
-                <div className="text-sm">
-                    <input
-                        id="other"
-                        name="other"
-                        type="checkbox"
-                        onClick={() => {
-                            setOtherFlag(!otherFlag);
-                            setSplitOperate((regStr) => {
-                                return getRegStr(regStr, splitSymbols.current?.childNodes);
-                            });
-                        }}
-                        tabIndex={0}
+                <Label className="flex items-center gap-1.5">
+                    <Checkbox checked={selected.has('other')} onCheckedChange={(c) => toggle('other', !!c)} />
+                    {splitText.splitOther}
+                    <Input
+                        className="ml-1.5 h-7 w-[80px]"
+                        value={otherValue}
+                        onChange={(e) => setOtherValue(e.target.value)}
                     />
-                    <label htmlFor="other">{splitText.splitOther}</label>
-                    <input
-                        id="otherValue"
-                        name="otherValue"
-                        className="ml-1.5 w-[50px] px-1.5"
-                        type="text"
-                        onBlur={() => {
-                            if (otherFlag) {
-                                setSplitOperate((regStr) => {
-                                    return getRegStr(regStr, splitSymbols.current?.childNodes);
-                                });
-                            }
-                        }}
+                </Label>
+                <Label className="flex items-center gap-1.5">
+                    <Checkbox
+                        checked={selected.has('splitsimple')}
+                        onCheckedChange={(c) => toggle('splitsimple', !!c)}
                     />
-                </div>
-                <div className="text-sm absolute top-[114px] left-0">
-                    <input
-                        id="splitsimple"
-                        name="splitsimple"
-                        type="checkbox"
-                        onClick={() => {
-                            setSplitOperate((regStr) => {
-                                return getRegStr(regStr, splitSymbols.current?.childNodes);
-                            });
-                        }}
-                        tabIndex={0}
-                    />
-                    <label htmlFor="splitsimple">{splitText.splitContinueSymbol}</label>
-                </div>
+                    {splitText.splitContinueSymbol}
+                </Label>
             </div>
             <div className="text-sm mt-6">{splitText.splitDataPreview}</div>
-            <div className="border border-[#dfdfdf] p-1.5 my-1.5 h-[100px] overflow-y-auto">
+            <div className="border p-1.5 my-1.5 h-[100px] overflow-y-auto">
                 <table>
                     <tbody>
-                        {tableData.map((o, index) => {
-                            if (o.length >= 1) {
-                                return (
-                                    // biome-ignore lint/suspicious/noArrayIndexKey: preview rows rendered in a stable order
-                                    <tr key={index}>
-                                        {o.map((o1: string) => (
-                                            <td key={o + o1}>{o1}</td>
-                                        ))}
-                                    </tr>
-                                );
-                            }
-                            return (
+                        {tableData.map((row, index) =>
+                            row.length >= 1 ? (
+                                // biome-ignore lint/suspicious/noArrayIndexKey: preview rows rendered in a stable order
+                                <tr key={index}>
+                                    {row.map((cell) => (
+                                        <td key={row + cell}>{cell}</td>
+                                    ))}
+                                </tr>
+                            ) : (
                                 // biome-ignore lint/suspicious/noArrayIndexKey: preview rows rendered in a stable order
                                 <tr key={index}>
                                     <td />
                                 </tr>
-                            );
-                        })}
+                            ),
+                        )}
                     </tbody>
                 </table>
             </div>
-            <div className="flex gap-2 mt-3">
-                <Button size="sm" onClick={() => certainBtn()}>
-                    {button.confirm}
-                </Button>
+            <DialogFooter>
                 <Button variant="outline" size="sm" onClick={() => hideDialog()}>
                     {button.cancel}
                 </Button>
-            </div>
+                <Button size="sm" onClick={() => certainBtn()}>
+                    {button.confirm}
+                </Button>
+            </DialogFooter>
         </div>
     );
 }
