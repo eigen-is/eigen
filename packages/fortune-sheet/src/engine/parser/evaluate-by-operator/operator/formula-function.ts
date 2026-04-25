@@ -27,9 +27,33 @@ function resolveFormula(symbolParts: string[]): [object, FormulajsMethod] | null
     return typeof node === 'function' ? [receiver, node] : null;
 }
 
+// Excel-correct overrides for formulajs functions whose behavior diverges from
+// Excel in ways that real-world spreadsheets depend on. Each takes the raw
+// `params` array and returns either a value (used directly), an Error (in-band
+// error), or `undefined` to fall through to the formulajs implementation.
+const OVERRIDES: Record<string, (params: FormulaArg[]) => FormulaOutput | undefined> = {
+    // formulajs.VALUE rejects numbers with #VALUE!. Excel accepts numbers as a
+    // pass-through (and booleans as 1/0). Without this fix, calendar templates
+    // like `IF(VALUE(prev) > daysInMonth, "", prev+1)` always take the fallback
+    // branch because VALUE(numberCell) errors and the comparison silently
+    // coerces the Error to false.
+    VALUE(params) {
+        const v = params[0];
+        if (typeof v === 'number') return v;
+        if (typeof v === 'boolean') return v ? 1 : 0;
+        return undefined;
+    },
+};
+
 function func(symbol: string): FormulajsMethod {
+    const upper = symbol.toUpperCase();
+    const override = OVERRIDES[upper];
     return function __formulaFunction(...params: FormulaArg[]): FormulaOutput {
-        const resolved = resolveFormula(symbol.toUpperCase().split('.'));
+        if (override) {
+            const result = override(params);
+            if (result !== undefined) return result;
+        }
+        const resolved = resolveFormula(upper.split('.'));
         if (!resolved) {
             throw Error(ERROR_NAME);
         }

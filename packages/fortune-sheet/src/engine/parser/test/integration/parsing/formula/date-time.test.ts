@@ -119,6 +119,29 @@ describe('.parse() date & time formulas', () => {
         expect(r1).toBeInstanceOf(Date);
     });
 
+    // formulajs's date functions return JS Date objects but Excel returns serial
+    // numbers, so any arithmetic on those results has to coerce Date → serial
+    // for `EOMONTH(d,0) - EOMONTH(d,-1)` to come out as a day count rather than
+    // milliseconds (or worse, NaN). This is what calendar templates use to compute
+    // "days in this month".
+    it('subtracting date function results yields day counts', () => {
+        // Jan has 31 days. EOMONTH(Jan 1, 0) - EOMONTH(Jan 1, -1) === 31.
+        expect(parser!.parse('EOMONTH("1/1/2027", 0) - EOMONTH("1/1/2027", -1)')).toMatchObject({
+            error: null,
+            result: 31,
+        });
+        // Feb 2027: 28 days (not leap).
+        expect(parser!.parse('EOMONTH("2/1/2027", 0) - EOMONTH("2/1/2027", -1)')).toMatchObject({
+            error: null,
+            result: 28,
+        });
+        // Adding 1 to a Date result steps forward one day.
+        expect(parser!.parse('DATEVALUE("1/1/2027") + 1 - DATEVALUE("1/1/2027")')).toMatchObject({
+            error: null,
+            result: 1,
+        });
+    });
+
     it('HOUR', () => {
         expect(parser!.parse('HOUR()')).toMatchObject({
             error: '#VALUE!',
