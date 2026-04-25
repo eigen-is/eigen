@@ -397,39 +397,6 @@
     z-index: 1000;
 }
 
-.luckysheet-cell-flow-column {
-    position: absolute;
-    height: inherit;
-    width: inherit;
-    top: 0;
-    left: 0;
-    z-index: 1;
-    touch-action: manipulation;
-}
-
-.luckysheet-cell-flow-column-line {
-    position: absolute;
-    border-right: 1px solid #d4d4d4;
-    height: inherit;
-}
-
-.luckysheet-cell-flow-row {
-    text-align: left;
-    position: absolute;
-    height: inherit;
-    width: inherit;
-    top: 0;
-    left: 0;
-    z-index: 1;
-    touch-action: manipulation;
-}
-
-.luckysheet-cell-flow-row-line {
-    position: absolute;
-    border-bottom: 1px solid #d4d4d4;
-    width: inherit;
-}
-
 .fortune-cols-change-size,
 .fortune-rows-change-size,
 .fortune-change-size-line,
@@ -493,7 +460,7 @@
     cursor: ew-resize;
 }
 
-/*批注聚焦框 移动 改变大小*/
+/* Comment dialog: move and resize handles */
 .luckysheet-postil-dialog-move {
     position: absolute;
     margin: 0px;

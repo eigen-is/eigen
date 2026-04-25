@@ -753,29 +753,16 @@ export const SheetOverlay: React.FC = () => {
                                     className="luckysheet-bottom-controll-row"
                                     onMouseDown={(e) => e.stopPropagation()}
                                     onMouseUp={(e) => e.stopPropagation()}
-                                    // onMouseMove={(e) => {
-                                    //   e.stopPropagation();
-                                    //   e.preventDefault();
-                                    // }}
                                     onKeyDown={(e) => e.stopPropagation()}
                                     onKeyUp={(e) => e.stopPropagation()}
-                                    onKeyPress={(e) => e.stopPropagation()}
                                     onClick={(e) => e.stopPropagation()}
                                     onDoubleClick={(e) => e.stopPropagation()}
-                                    tabIndex={0}
                                     style={{
                                         left: context.scrollLeft,
                                         display: context.allowEdit ? 'block' : 'none',
                                     }}
                                 >
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => {
-                                            handleBottomAddRow();
-                                        }}
-                                        tabIndex={0}
-                                    >
+                                    <Button variant="outline" size="sm" onClick={handleBottomAddRow}>
                                         {info.add}
                                     </Button>
                                     <Input
@@ -796,7 +783,6 @@ export const SheetOverlay: React.FC = () => {
                                                 ctx.scrollTop = 0;
                                             });
                                         }}
-                                        tabIndex={0}
                                     >
                                         {info.backTop}
                                     </Button>

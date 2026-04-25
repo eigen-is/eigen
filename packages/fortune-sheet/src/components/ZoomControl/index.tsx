@@ -46,50 +46,47 @@ export function ZoomControl() {
 
     return (
         <aside title="Zoom settings" className="whitespace-nowrap flex items-center select-none">
-            <div
+            <button
+                type="button"
                 className={buttonClass}
                 aria-label={info.zoomOut}
                 onClick={(e) => {
                     zoomTo(context.zoomRatio - 0.1);
                     e.stopPropagation();
                 }}
-                tabIndex={0}
-                role="button"
             >
                 <Minus width={16} height={16} aria-hidden="true" />
-            </div>
+            </button>
             <Popover>
                 <PopoverTrigger asChild>
-                    <div className={cn(buttonClass, 'w-12 text-xs')} tabIndex={0} role="button">
+                    <button type="button" className={cn(buttonClass, 'w-12 text-xs')}>
                         {(context.zoomRatio * 100).toFixed(0)}%
-                    </div>
+                    </button>
                 </PopoverTrigger>
                 <PopoverContent side="top" align="center" className="w-auto p-1 text-xs">
                     {presets.map((v) => (
-                        <div
+                        <button
+                            type="button"
                             key={v.text}
-                            className="px-2.5 py-1 rounded-sm cursor-pointer hover:bg-muted"
+                            className="block w-full text-left px-2.5 py-1 rounded-sm cursor-pointer hover:bg-muted"
                             onClick={() => zoomTo(v.value)}
-                            tabIndex={0}
-                            role="button"
                         >
                             {v.text}
-                        </div>
+                        </button>
                     ))}
                 </PopoverContent>
             </Popover>
-            <div
+            <button
+                type="button"
                 className={buttonClass}
                 aria-label={info.zoomIn}
                 onClick={(e) => {
                     zoomTo(context.zoomRatio + 0.1);
                     e.stopPropagation();
                 }}
-                tabIndex={0}
-                role="button"
             >
                 <Plus width={16} height={16} aria-hidden="true" />
-            </div>
+            </button>
         </aside>
     );
 }
