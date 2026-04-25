@@ -1,6 +1,7 @@
-import { EditorContent, useEditor } from '@tiptap/react';
+import { type Editor, EditorContent, useEditor } from '@tiptap/react';
 import { BubbleMenu } from '@tiptap/react/menus';
 import StarterKit from '@tiptap/starter-kit';
+import { useEffect, useRef } from 'react';
 import { cn } from '../../../lib/utils';
 import { LightEditorToolbar } from './light-editor-toolbar';
 
@@ -8,6 +9,10 @@ type LightEditorProps = {
     content: string;
     onChange: (html: string) => void;
     onChangeText?: (text: string) => void;
+    // Fires once after TipTap parses the initial content. Use it to read the editor's
+    // canonical HTML/text — useful for callers that fingerprint state and need the post-parse
+    // values to avoid spurious diffs on first interaction.
+    onReady?: (editor: Editor) => void;
     placeholder?: string;
     toolbar?: 'floating' | 'fixed' | 'none';
     className?: string;
@@ -32,6 +37,7 @@ export function LightEditor({
     content,
     onChange,
     onChangeText,
+    onReady,
     placeholder,
     toolbar = 'floating',
     className,
@@ -52,6 +58,13 @@ export function LightEditor({
             onChangeText?.(e.getText());
         },
     });
+
+    const readyFiredRef = useRef(false);
+    useEffect(() => {
+        if (!editor || readyFiredRef.current) return;
+        readyFiredRef.current = true;
+        onReady?.(editor);
+    }, [editor, onReady]);
 
     if (!editor) return null;
 
