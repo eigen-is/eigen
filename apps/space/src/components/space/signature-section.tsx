@@ -28,15 +28,14 @@ export function SignatureSection() {
     const isDirty = html !== (existing?.html ?? '');
 
     const handleSave = () => {
+        // Claim the signature id before the mutation flies so the post-save refetch (where
+        // existing.id flips from undefined → new uuid on first save) doesn't trigger the
+        // seed effect and clobber edits the user makes during the in-flight request.
+        const id = existing?.id ?? crypto.randomUUID();
+        seededRef.current = id;
         update.mutate({
             email: {
-                signatures: [
-                    {
-                        id: existing?.id ?? crypto.randomUUID(),
-                        name: existing?.name ?? 'Default',
-                        html,
-                    },
-                ],
+                signatures: [{ id, name: existing?.name ?? 'Default', html }],
             },
         });
     };

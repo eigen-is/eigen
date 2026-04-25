@@ -82,19 +82,22 @@ function injectSignature(body: string, sig: string | undefined, kind: 'new' | 'r
     if (kind === 'new') return body + EMPTY_PARA + sig;
     // formatEmailQuote prefixes the quoted body with <br><br>; bare <br>s between block
     // elements aren't canonical and TipTap rewrites them on first edit. Strip them and use
-    // explicit empty paragraphs for the breathing room (two blank lines between sig and quote).
+    // one explicit empty paragraph for the breathing room between sig and quote.
     const trimmed = body.replace(/^(<br\s*\/?>)+/i, '');
-    return EMPTY_PARA + sig + EMPTY_PARA + EMPTY_PARA + trimmed;
+    return EMPTY_PARA + sig + EMPTY_PARA + trimmed;
 }
 
-// TipTap's getText() joins paragraphs with \n\n and renders <br> as \n. Mirror that so the
-// initial bodyText matches what the editor will emit, keeping the auto-save fingerprint stable.
+// Mirror TipTap getText(): block boundaries become \n\n, <br> becomes \n. Keeps the seeded
+// bodyText close to what the editor will emit so the auto-save fingerprint stays stable
+// when the user first interacts. Covers the block elements LightEditor exposes (p, blockquote,
+// ul/ol/li); inline marks (strong, em, link) need no special handling.
 function plainSignature(sig: string | undefined): string {
     if (!sig) return '';
     return sig
-        .replace(/<\/p>\s*<p[^>]*>/gi, '\n\n')
+        .replace(/<\/(p|li|blockquote|ul|ol)>\s*/gi, '\n\n')
         .replace(/<br\s*\/?>/gi, '\n')
         .replace(/<[^>]+>/g, '')
+        .replace(/\n{3,}/g, '\n\n')
         .trim();
 }
 
