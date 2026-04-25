@@ -18,7 +18,7 @@ import {
     valueShowEs,
 } from "../../state";
 import React, {useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState,} from "react";
-import _ from "lodash";
+import {isEqual} from "es-toolkit/compat";
 import {WorkbookContext} from "../../context";
 import {ContentEditable} from "./ContentEditable";
 import {FormulaSearch} from "./FormulaSearch";
@@ -73,7 +73,7 @@ export const InputBox: React.FC = () => {
                 return;
             }
             if (
-                _.isEqual(prevCellUpdate, context.luckysheetCellUpdate) &&
+                isEqual(prevCellUpdate, context.luckysheetCellUpdate) &&
                 prevSheetId === context.currentSheetId
             ) {
                 // data change by a collaborative update should not trigger this effect

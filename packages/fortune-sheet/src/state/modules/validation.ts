@@ -1,5 +1,5 @@
 import dayjs from "dayjs";
-import _ from "lodash";
+import {forEach} from "es-toolkit/compat";
 import {Context} from "../context";
 import {hasChinaword} from "./text";
 
@@ -47,7 +47,7 @@ export function hasPartMC(
 ) {
     let ret = false;
 
-    _.forEach(ctx.config.merge, (mc) => {
+    forEach(ctx.config.merge, (mc) => {
         if (r1 < mc.r) {
             if (r2 >= mc.r && r2 < mc.r + mc.rs - 1) {
                 if (c1 >= mc.c && c1 <= mc.c + mc.cs - 1) {

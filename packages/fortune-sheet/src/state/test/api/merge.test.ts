@@ -1,4 +1,4 @@
-import _ from "lodash";
+import {range} from "es-toolkit/compat";
 import {contextFactory, selectionFactory} from "../factories/context";
 import {Context} from "../../context";
 import {cancelMerge, mergeCells} from "../../api/merge";
@@ -42,16 +42,16 @@ describe("fortune-sheet/core/api/merge", () => {
                 }
             };
             mergeCells(ctx, ranges, mergeMode);
-            _.range(r0, r1 + 1).forEach((r) => {
-                _.range(c0, c1 + 1).forEach((c) => {
+            range(r0, r1 + 1).forEach((r) => {
+                range(c0, c1 + 1).forEach((c) => {
                     expect(ctx.luckysheetfile[0]?.data?.[r]?.[c]?.mc).toEqual(
                         expectedValue(r, c, mergeMode)
                     );
                 });
             });
             cancelMerge(ctx, ranges);
-            _.range(r0, r1 + 1).forEach((r) => {
-                _.range(c0, c1 + 1).forEach((c) => {
+            range(r0, r1 + 1).forEach((r) => {
+                range(c0, c1 + 1).forEach((c) => {
                     expect(ctx.luckysheetfile[0]?.data?.[r]?.[c]?.mc).toEqual(undefined);
                 });
             });

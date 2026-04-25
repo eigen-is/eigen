@@ -24,7 +24,7 @@ import {
 import type {CellMatrix} from "../../engine/types";
 import React, {useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState,} from "react";
 import {applyPatches, enablePatches, Patch, produce, produceWithPatches,} from "immer";
-import _ from "lodash";
+import {cloneDeep} from "es-toolkit/compat";
 import {Sheet} from "../Sheet";
 import {RefValues, SetContextOptions, WorkbookContext} from "../../context";
 import {Toolbar} from "../Toolbar";
@@ -123,7 +123,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         });
 
         const mergedSettings = useMemo(
-            () => Object.assign(_.cloneDeep(defaultSettings), props) as Required<Settings>,
+            () => Object.assign(cloneDeep(defaultSettings), props) as Required<Settings>,
             // props expects data, onChange, onOp
             // eslint-disable-next-line react-hooks/exhaustive-deps
             [...Object.values(props)]
@@ -265,7 +265,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                                     options.deletedSheet = {
                                         id: options.deleteSheetOp.id as string,
                                         index: index as number,
-                                        value: _.cloneDeep(ctx_.luckysheetfile[index]),
+                                        value: cloneDeep(ctx_.luckysheetfile[index]),
                                     };
                                     options.deletedSheet!.value!.celldata = dataToCelldata(
                                         options.deletedSheet!.value!.data as CellMatrix
@@ -348,7 +348,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         inversedOptions!.addSheet = {
                             id: history.options.addSheet!.id as string,
                             index: index as number,
-                            value: _.cloneDeep(ctx_.luckysheetfile[index]),
+                            value: cloneDeep(ctx_.luckysheetfile[index]),
                         };
                         inversedOptions!.addSheet!.value!.celldata = dataToCelldata(
                             inversedOptions!.addSheet!.value?.data as CellMatrix
@@ -449,7 +449,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     draftCtx.defaultrowNum = mergedSettings.row;
                     draftCtx.defaultFontSize = mergedSettings.defaultFontSize;
                     if (draftCtx.luckysheetfile.length === 0) {
-                        draftCtx.luckysheetfile = _.cloneDeep(originalData);
+                        draftCtx.luckysheetfile = cloneDeep(originalData);
                         ensureSheetIndex(
                             draftCtx.luckysheetfile,
                             mergedSettings.generateSheetId

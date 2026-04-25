@@ -1,4 +1,4 @@
-import _ from "lodash";
+import {cloneDeep, isPlainObject} from "es-toolkit/compat";
 import {getdatabyselection, getFlowdata, getRangetxt, Selection} from "..";
 import {Context} from "../context";
 import {normalizeSelection, rangeValueToHtml} from "../modules";
@@ -45,7 +45,7 @@ export function getCellsByFlattenRange(
 
 export function getSelectionCoordinates(ctx: Context) {
     const result: string[] = [];
-    const rangeArr = _.cloneDeep(ctx.luckysheet_select_save);
+    const rangeArr = cloneDeep(ctx.luckysheet_select_save);
     const sheetId = ctx.currentSheetId;
 
     rangeArr?.forEach((ele) => {
@@ -108,7 +108,7 @@ export function setCellValuesByRange(
         throw new Error("setCellValuesByRange does not support multiple ranges");
     }
 
-    if (!_.isPlainObject(range)) {
+    if (!isPlainObject(range)) {
         throw invalidParams();
     }
 
@@ -135,11 +135,11 @@ export function setCellFormatByRange(
     range: Range | SingleRange,
     options: CommonOptions = {}
 ) {
-    if (_.isPlainObject(range)) {
+    if (isPlainObject(range)) {
         range = [range as SingleRange];
     }
 
-    if (!_.isArray(range)) {
+    if (!Array.isArray(range)) {
         throw invalidParams();
     }
 

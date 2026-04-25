@@ -12,15 +12,14 @@
     "@workspace/lib": "workspace:*",
     "@workspace/ui": "workspace:*",
     "dayjs": "^1.11.0",
+    "es-toolkit": "^1.46.0",
     "immer": "^9.0.12",
-    "lodash": "^4.17.21",
     "numeral": "^2.0.6",
     "numfmt": "^3.2.6",
     "tiny-emitter": "^2.1.0",
     "uuid": "^9.0.0"
   },
   "devDependencies": {
-    "@types/lodash": "^4.17.16",
     "@types/numeral": "^2.0.5",
     "@types/uuid": "^9.0.0"
   },

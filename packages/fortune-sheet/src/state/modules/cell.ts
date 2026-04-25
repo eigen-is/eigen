@@ -1,4 +1,4 @@
-import _ from "lodash";
+import {camelCase, cloneDeep, every, forEach, indexOf, isEmpty, isNil, isNumber, isPlainObject, isString, kebabCase, map} from "es-toolkit/compat";
 import {Context, getFlowdata} from "../context";
 import type {Cell, CellMatrix, FormulaDependency} from "../../engine/types";
 import {Range, Selection, SingleRange} from "../types";
@@ -46,7 +46,7 @@ export function normalizedCellAttr(
         value ||= "none";
     } else if (attr === "ht" || attr === "vt") {
         const defaultValue = attr === "ht" ? "1" : "0";
-        value = !_.isNil(value) ? value.toString() : defaultValue;
+        value = !isNil(value) ? value.toString() : defaultValue;
         if (["0", "1", "2"].indexOf(value.toString()) === -1) {
             value = defaultValue;
         }
@@ -85,11 +85,11 @@ export function getCellValue(
 
     let d_value;
 
-    if (!_.isNil(r) && !_.isNil(c)) {
+    if (!isNil(r) && !isNil(c)) {
         d_value = data[r][c];
-    } else if (!_.isNil(r)) {
+    } else if (!isNil(r)) {
         d_value = data[r];
-    } else if (!_.isNil(c)) {
+    } else if (!isNil(c)) {
         const newData = data[0].map((col, i) => {
             return data.map((row) => {
                 return row[i];
@@ -102,11 +102,11 @@ export function getCellValue(
 
     let retv: any = d_value;
 
-    if (_.isPlainObject(d_value)) {
+    if (isPlainObject(d_value)) {
         const d = d_value as Cell;
         retv = d[attr];
 
-        if (attr === "f" && !_.isNil(retv)) {
+        if (attr === "f" && !isNil(retv)) {
             retv = functionHTMLGenerate(retv);
         } else if (attr === "f") {
             retv = (d as Cell).v;
@@ -129,7 +129,7 @@ export function setCellValue(
     d: CellMatrix | null | undefined,
     v: any
 ) {
-    if (_.isNil(d)) {
+    if (isNil(d)) {
         d = getFlowdata(ctx);
     }
     if (!d) return;
@@ -140,22 +140,22 @@ export function setCellValue(
 
     let vupdate;
 
-    if (_.isPlainObject(v)) {
-        if (_.isNil(cell)) {
+    if (isPlainObject(v)) {
+        if (isNil(cell)) {
             cell = v;
         } else {
-            if (!_.isNil(v.f)) {
+            if (!isNil(v.f)) {
                 cell.f = v.f;
             } else if ("f" in cell) {
                 delete cell.f;
             }
 
-            if (!_.isNil(v.ct)) {
+            if (!isNil(v.ct)) {
                 cell.ct = v.ct;
             }
         }
 
-        if (_.isPlainObject(v.v)) {
+        if (isPlainObject(v.v)) {
             vupdate = v.v.v;
         } else {
             vupdate = v.v;
@@ -165,7 +165,7 @@ export function setCellValue(
     }
 
     if (isRealNull(vupdate)) {
-        if (_.isPlainObject(cell)) {
+        if (isPlainObject(cell)) {
             delete cell!.m;
             // @ts-ignore
             delete cell.v;
@@ -182,7 +182,7 @@ export function setCellValue(
     // 2. Data from pivot table, each data in flowdata might be a string, result is cell === v === a string or number data
     if (
         isRealNull(cell) ||
-        ((_.isString(cell) || _.isNumber(cell)) && cell === v)
+        ((isString(cell) || isNumber(cell)) && cell === v)
     ) {
         cell = {};
     }
@@ -202,14 +202,14 @@ export function setCellValue(
         cell.v = vupdateStr;
     } else if (
         vupdateStr.toUpperCase() === "TRUE" &&
-        (_.isNil(cell.ct?.fa) || cell.ct?.fa !== "@")
+        (isNil(cell.ct?.fa) || cell.ct?.fa !== "@")
     ) {
         cell.m = "TRUE";
         cell.ct = {fa: "General", t: "b"};
         cell.v = true;
     } else if (
         vupdateStr.toUpperCase() === "FALSE" &&
-        (_.isNil(cell.ct?.fa) || cell.ct?.fa !== "@")
+        (isNil(cell.ct?.fa) || cell.ct?.fa !== "@")
     ) {
         cell.m = "FALSE";
         cell.ct = {fa: "General", t: "b"};
@@ -217,7 +217,7 @@ export function setCellValue(
     } else if (
         vupdateStr.substr(-1) === "%" &&
         isRealNum(vupdateStr.substring(0, vupdateStr.length - 1)) &&
-        (_.isNil(cell.ct?.fa) || cell.ct?.fa !== "@")
+        (isNil(cell.ct?.fa) || cell.ct?.fa !== "@")
     ) {
         cell.ct = {fa: "0%", t: "n"};
         cell.v = vupdateStr.substring(0, vupdateStr.length - 1) / 100;
@@ -225,7 +225,7 @@ export function setCellValue(
     } else if (valueIsError(vupdate)) {
         cell.m = vupdateStr;
         // cell.ct = { "fa": "General", "t": "e" };
-        if (!_.isNil(cell.ct)) {
+        if (!isNil(cell.ct)) {
             cell.ct.t = "e";
         } else {
             cell.ct = {fa: "General", t: "e"};
@@ -233,14 +233,14 @@ export function setCellValue(
         cell.v = vupdate;
     } else {
         if (
-            !_.isNil(cell.f) &&
+            !isNil(cell.f) &&
             isRealNum(vupdate) &&
             !/^\d{6}(18|19|20)?\d{2}(0[1-9]|1[12])(0[1-9]|[12]\d|3[01])\d{3}(\d|X)$/i.test(
                 vupdate
             )
         ) {
             cell.v = parseFloat(vupdate);
-            if (_.isNil(cell.ct)) {
+            if (isNil(cell.ct)) {
                 cell.ct = {fa: "General", t: "n"};
             }
 
@@ -261,7 +261,7 @@ export function setCellValue(
                     cell.m = cell.v.toExponential(len).toString();
                 } else {
                     const v_p = Math.round(cell.v * 1000000000) / 1000000000;
-                    if (_.isNil(cell.ct) || _.isNil(cell.ct.fa)) {
+                    if (isNil(cell.ct) || isNil(cell.ct.fa)) {
                         const mask = genarate(v_p);
                         if (mask != null) {
                             cell.m = mask[0].toString();
@@ -272,10 +272,10 @@ export function setCellValue(
                     }
                 }
             }
-        } else if (!_.isNil(cell.ct) && cell.ct.fa === "@") {
+        } else if (!isNil(cell.ct) && cell.ct.fa === "@") {
             cell.m = vupdateStr;
             cell.v = vupdate;
-        } else if (cell.ct != null && cell.ct.t === "d" && _.isString(vupdate)) {
+        } else if (cell.ct != null && cell.ct.t === "d" && isString(vupdate)) {
             const mask = genarate(vupdate) as any;
             if (mask[1].t !== "d" || mask[1].fa === cell.ct.fa) {
                 [cell.m, cell.ct, cell.v] = mask;
@@ -284,8 +284,8 @@ export function setCellValue(
                 cell.m = update(cell.ct.fa!, cell.v);
             }
         } else if (
-            !_.isNil(cell.ct) &&
-            !_.isNil(cell.ct.fa) &&
+            !isNil(cell.ct) &&
+            !isNil(cell.ct.fa) &&
             cell.ct.fa !== "General"
         ) {
             if (isRealNum(vupdate)) {
@@ -346,10 +346,10 @@ export function setCellValue(
 
     // if (!server.allowUpdate && !luckysheetConfigsetting.pointEdit) {
     //   if (
-    //     !_.isNil(cell.ct) &&
+    //     !isNil(cell.ct) &&
     //     /^(w|W)((0?)|(0\.0+))$/.test(cell.ct.fa) === false &&
     //     cell.ct.t === "n" &&
-    //     !_.isNil(cell.v) &&
+    //     !isNil(cell.v) &&
     //     parseInt(cell.v, 10).toString().length > 4
     //   ) {
     //     const autoFormatw = luckysheetConfigsetting.autoFormatw
@@ -376,9 +376,9 @@ export function getRealCellValue(
     attr?: keyof Cell
 ) {
     let value = getCellValue(r, c, data, "m");
-    if (_.isNil(value)) {
+    if (isNil(value)) {
         value = getCellValue(r, c, data, attr);
-        if (_.isNil(value)) {
+        if (isNil(value)) {
             const ct = getCellValue(r, c, data, "ct");
             if (isInlineStringCT(ct)) {
                 value = ct.s;
@@ -409,7 +409,7 @@ export function mergeBorder(
         col_index = margeMaindata.c;
         row_index = margeMaindata.r;
 
-        if (_.isNil(d?.[row_index]?.[col_index])) {
+        if (isNil(d?.[row_index]?.[col_index])) {
             return null;
         }
         const col_rs = d[row_index]?.[col_index]?.mc?.cs;
@@ -418,10 +418,10 @@ export function mergeBorder(
 
         if (
             !mergeMain ||
-            _.isNil(mergeMain?.rs) ||
-            _.isNil(mergeMain?.cs) ||
-            _.isNil(col_rs) ||
-            _.isNil(row_rs)
+            isNil(mergeMain?.rs) ||
+            isNil(mergeMain?.cs) ||
+            isNil(col_rs) ||
+            isNil(row_rs)
         ) {
             return null;
         }
@@ -469,7 +469,7 @@ export function mergeBorder(
             }
         }
 
-        if (_.isNil(row_pre) || _.isNil(col_pre) || _.isNil(row) || _.isNil(col)) {
+        if (isNil(row_pre) || isNil(col_pre) || isNil(row) || isNil(col)) {
             return null;
         }
 
@@ -671,7 +671,7 @@ export function updateCell(
     const flowdata = getFlowdata(ctx);
     if (!flowdata) return;
 
-    // if (!_.isNil(rangetosheet) && rangetosheet !== ctx.currentSheetId) {
+    // if (!isNil(rangetosheet) && rangetosheet !== ctx.currentSheetId) {
     //   sheetmanage.changeSheetExec(rangetosheet);
     // }
 
@@ -682,10 +682,10 @@ export function updateCell(
     // Data validation: block input when the entered data is invalid
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
     const {dataVerification} = ctx.luckysheetfile[index];
-    if (!_.isNil(dataVerification)) {
+    if (!isNil(dataVerification)) {
         const dvItem = dataVerification[`${r}_${c}`];
         if (
-            !_.isNil(dvItem) &&
+            !isNil(dvItem) &&
             dvItem.prohibitInput &&
             !validateCellData(ctx, dvItem, inputText)
         ) {
@@ -701,7 +701,7 @@ export function updateCell(
     let curv = flowdata[r][c];
 
     // ctx.old value for hook function
-    const oldValue = _.cloneDeep(curv);
+    const oldValue = cloneDeep(curv);
 
     const isPrevInline = isInlineStringCell(curv);
     let isCurInline =
@@ -728,7 +728,7 @@ export function updateCell(
         curv.ct.fa = "General";
         value = "";
     } else if (isCurInline) {
-        if (!_.isPlainObject(curv)) {
+        if (!isPlainObject(curv)) {
             curv = {};
         }
         curv ||= {};
@@ -776,7 +776,7 @@ export function updateCell(
             }
         } else if (curv && curv.qp !== 1) {
             if (
-                _.isPlainObject(curv) &&
+                isPlainObject(curv) &&
                 (value === curv.f || value === curv.v || value === curv.m)
             ) {
                 cancelNormalSelected(ctx);
@@ -788,9 +788,9 @@ export function updateCell(
             }
         }
 
-        if (_.isString(value) && value.slice(0, 1) === "=" && value.length > 1) {
+        if (isString(value) && value.slice(0, 1) === "=" && value.length > 1) {
         } else if (
-            _.isPlainObject(curv) &&
+            isPlainObject(curv) &&
             curv &&
             curv.ct &&
             curv.ct.fa &&
@@ -808,15 +808,15 @@ export function updateCell(
     // TODO window.luckysheet_getcelldata_cache = null;
 
     const d = flowdata; // TODO const d = editor.deepCopyFlowData(flowdata);
-    if (_.isPlainObject(curv)) {
+    if (isPlainObject(curv)) {
         if (!isCurInline) {
             if (isFormula(value)) {
                 const v = execfunction(ctx, value, r, c, undefined, undefined, true);
-                curv = _.cloneDeep(d?.[r]?.[c] || {});
+                curv = cloneDeep(d?.[r]?.[c] || {});
                 [, curv.v, curv.f] = v;
             }
             // from API setCellValue,luckysheet.setCellValue(0, 0, {f: "=sum(D1)", bg:"#0188fb"}),value is an object, so get attribute f as value
-            else if (_.isPlainObject(value)) {
+            else if (isPlainObject(value)) {
                 const valueFunction = value.f;
 
                 if (isFormula(valueFunction)) {
@@ -831,7 +831,7 @@ export function updateCell(
                     );
                     // get v/m/ct
 
-                    curv = _.cloneDeep(d?.[r]?.[c] || {});
+                    curv = cloneDeep(d?.[r]?.[c] || {});
                     [, curv.v, curv.f] = v;
                 }
                 // from API setCellValue,luckysheet.setCellValue(0, 0, {f: "=sum(D1)", bg:"#0188fb"}),value is an object, so get attribute f as value
@@ -844,7 +844,7 @@ export function updateCell(
                 delFunctionGroup(ctx, r, c);
                 execFunctionGroup(ctx, r, c, value);
 
-                curv = _.cloneDeep(d?.[r]?.[c] || {});
+                curv = cloneDeep(d?.[r]?.[c] || {});
                 curv.v = value;
 
                 delete curv.f;
@@ -869,7 +869,7 @@ export function updateCell(
             };
         }
         // from API setCellValue,luckysheet.setCellValue(0, 0, {f: "=sum(D1)", bg:"#0188fb"}),value is an object, so get attribute f as value
-        else if (_.isPlainObject(value)) {
+        else if (isPlainObject(value)) {
             const valueFunction = value.f;
 
             if (isFormula(valueFunction)) {
@@ -891,7 +891,7 @@ export function updateCell(
                 [, value.v, value.f] = v;
             } else {
                 const v = curv;
-                if (_.isNil(value.v)) {
+                if (isNil(value.v)) {
                     value.v = v;
                 }
             }
@@ -931,7 +931,7 @@ export function updateCell(
                 ].config || {};
         if (!(cfg.columnlen?.[c] && cfg.rowlen?.[r])) {
             // let currentRowLen = defaultrowlen;
-            // if(!_.isNil(cfg["rowlen"][r])){
+            // if(!isNil(cfg["rowlen"][r])){
             //     currentRowLen = cfg["rowlen"][r];
             // }
 
@@ -951,14 +951,14 @@ export function updateCell(
             }
 
             if (currentRowLen > defaultrowlen && !cfg.customHeight?.[r]) {
-                if (_.isNil(cfg.rowlen)) cfg.rowlen = {};
+                if (isNil(cfg.rowlen)) cfg.rowlen = {};
                 cfg.rowlen[r] = currentRowLen;
             }
         }
     }
 
     if (ctx.hooks.afterUpdateCell) {
-        const newValue = _.cloneDeep(flowdata[r][c]);
+        const newValue = cloneDeep(flowdata[r][c]);
         const {afterUpdateCell} = ctx.hooks;
         setTimeout(() => {
             afterUpdateCell?.(r, c, oldValue, newValue);
@@ -971,7 +971,7 @@ export function updateCell(
 
 export function getOrigincell(ctx: Context, r: number, c: number, i: string) {
     const data = getFlowdata(ctx, i);
-    if (_.isNil(r) || _.isNil(c)) {
+    if (isNil(r) || isNil(c)) {
         return null;
     }
 
@@ -989,13 +989,13 @@ export function getcellFormula(
     data?: any
 ) {
     let cell;
-    if (_.isNil(data)) {
+    if (isNil(data)) {
         cell = getOrigincell(ctx, r, c, i);
     } else {
         cell = data[r][c];
     }
 
-    if (_.isNil(cell)) {
+    if (isNil(cell)) {
         return null;
     }
 
@@ -1003,7 +1003,7 @@ export function getcellFormula(
 }
 
 export function getRange(ctx: Context) {
-    const rangeArr = _.cloneDeep(ctx.luckysheet_select_save);
+    const rangeArr = cloneDeep(ctx.luckysheet_select_save);
     const result: Range = [];
     if (!rangeArr) return result;
 
@@ -1118,7 +1118,7 @@ export function isAllSelectedCellsInStatus(
     status: any
 ) {
     // editing mode
-    if (!_.isEmpty(ctx.luckysheetCellUpdate)) {
+    if (!isEmpty(ctx.luckysheetCellUpdate)) {
         const w = window.getSelection();
         if (!w) return false;
         if (w.rangeCount === 0) return false;
@@ -1129,9 +1129,9 @@ export function isAllSelectedCellsInStatus(
         const {endContainer} = range;
         const {startContainer} = range;
         // @ts-ignore
-        const cssField = _.camelCase(attrToCssName[attr]);
+        const cssField = camelCase(attrToCssName[attr]);
         if (startContainer === endContainer) {
-            return !_.isEmpty(
+            return !isEmpty(
                 // @ts-ignore
                 startContainer.parentElement?.style[cssField]
             );
@@ -1144,14 +1144,14 @@ export function isAllSelectedCellsInStatus(
             const endSpan = endContainer.parentNode as HTMLElement | null;
             const allSpans = startSpan?.parentNode?.querySelectorAll("span");
             if (allSpans) {
-                const startSpanIndex = _.indexOf(allSpans, startSpan);
-                const endSpanIndex = _.indexOf(allSpans, endSpan);
+                const startSpanIndex = indexOf(allSpans, startSpan);
+                const endSpanIndex = indexOf(allSpans, endSpan);
                 const rangeSpans = [];
                 for (let i = startSpanIndex; i <= endSpanIndex; i += 1) {
                     rangeSpans.push(allSpans[i]);
                 }
                 // @ts-ignore
-                return _.every(rangeSpans, (s) => !_.isEmpty(s.style[cssField]));
+                return every(rangeSpans, (s) => !isEmpty(s.style[cssField]));
             }
         }
     }
@@ -1161,7 +1161,7 @@ export function isAllSelectedCellsInStatus(
 
     return cells.every(({r, c}) => {
         const cell = flowdata?.[r]?.[c];
-        if (_.isNil(cell)) {
+        if (isNil(cell)) {
             return false;
         }
         return cell[attr] === status;
@@ -1179,7 +1179,7 @@ export function getFontStyleByCell(
         return style;
     }
     // @ts-ignore
-    _.forEach(cell, (v, key: keyof Cell) => {
+    forEach(cell, (v, key: keyof Cell) => {
         let value = cell[key];
         if (isCheck) {
             value = normalizedCellAttr(cell, key);
@@ -1281,7 +1281,7 @@ export function getStyleByCell(
         }
     }
     if (!isInline) {
-        style = _.assign(style, getFontStyleByCell(cell, checksAF, checksCF));
+        style = Object.assign(style, getFontStyleByCell(cell, checksAF, checksCF));
     }
 
     return style;
@@ -1296,8 +1296,8 @@ export function getInlineStringHTML(r: number, c: number, data: CellMatrix) {
             const strObj = strings[i];
             if (strObj.v) {
                 const style = getFontStyleByCell(strObj);
-                const styleStr = _.map(style, (v, key) => {
-                    return `${_.kebabCase(key)}:${_.isNumber(v) ? `${v}px` : v};`;
+                const styleStr = map(style, (v, key) => {
+                    return `${kebabCase(key)}:${isNumber(v) ? `${v}px` : v};`;
                 }).join("");
                 value += `<span class="luckysheet-input-span" index='${i}' style='${styleStr}'>${strObj.v}</span>`;
             }
@@ -1378,7 +1378,7 @@ export function rowlenByRange(
   r2: number,
   cfg: any
 ) {
-  const cfg_clone = _.cloneDeep(cfg);
+  const cfg_clone = cloneDeep(cfg);
   if (cfg_clone.rowlen == null) {
     cfg_clone.rowlen = {};
   }

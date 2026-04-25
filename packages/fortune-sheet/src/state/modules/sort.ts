@@ -1,5 +1,5 @@
 import numeral from "numeral";
-import _ from "lodash";
+import {clone, findIndex} from "es-toolkit/compat";
 import {execfunction, functionCopy, update} from ".";
 import type {Cell, CellMatrix} from "../../engine/types";
 import {Context, diff, getFlowdata, isdatetime, isRealNull, isRealNum,} from "..";
@@ -50,12 +50,12 @@ export function orderbydata(
         return 0;
     };
     const d = (x: any, y: any) => a(y, x);
-    const sortedData = _.clone(data);
+    const sortedData = clone(data);
     sortedData.sort(isAsc ? a : d);
 
     // calc row offsets
     const rowOffsets = sortedData.map((r, i) => {
-        const origIndex = _.findIndex(data, (origR) => origR === r);
+        const origIndex = findIndex(data, (origR) => origR === r);
         return i - origIndex;
     });
 

@@ -1,4 +1,3 @@
-import _ from "lodash";
 import type {Context} from "../context";
 import type {Rect} from "../types";
 import {columnCharToIndex, indexToColumnChar} from "../utils";
@@ -970,9 +969,9 @@ export function functionStrChange(
         }
 
         if (i === funcstack.length - 1) {
-            if (iscelldata(_.trim(str))) {
+            if (iscelldata(str.trim())) {
                 function_str += functionStrChange_range(
-                    _.trim(str),
+                    str.trim(),
                     type,
                     rc,
                     orient,
@@ -980,7 +979,7 @@ export function functionStrChange(
                     step
                 );
             } else {
-                function_str += _.trim(str);
+                function_str += str.trim();
             }
         }
 
@@ -1105,18 +1104,18 @@ export function functionCopy(
         }
 
         if (i === funcstack.length - 1) {
-            if (iscelldata(_.trim(str))) {
+            if (iscelldata(str.trim())) {
                 if (mode === "down") {
-                    function_str += downparam(_.trim(str), step);
+                    function_str += downparam(str.trim(), step);
                 } else if (mode === "up") {
-                    function_str += upparam(_.trim(str), step);
+                    function_str += upparam(str.trim(), step);
                 } else if (mode === "left") {
-                    function_str += leftparam(_.trim(str), step);
+                    function_str += leftparam(str.trim(), step);
                 } else if (mode === "right") {
-                    function_str += rightparam(_.trim(str), step);
+                    function_str += rightparam(str.trim(), step);
                 }
             } else {
-                function_str += _.trim(str);
+                function_str += str.trim();
             }
         }
 
