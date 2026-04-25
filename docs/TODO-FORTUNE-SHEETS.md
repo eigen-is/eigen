@@ -28,7 +28,7 @@ can be removed once no `.css` imports remain.
 | `SheetTab/index.css`               | 280    | TODO     | Sheet tab area, active/hover states, scroll buttons. Hardcoded colors.                    |
 | `SheetOverlay/index.css`           | 882    | TODO     | Largest file. Cell selection, drag, resize, frozen panes, cell editor, formula bar.        |
 | `SheetOverlay/ScrollBar/index.css` | 40     | TODO     | Custom scrollbar styling.                                                                 |
-| `LinkEidtCard/index.css`           | —      | **DONE** | Deleted. Migrated to Tailwind + theme tokens inline in `index.tsx`.                       |
+| `LinkEditCard/index.css`           | —      | **DONE** | Deleted. Migrated to Tailwind + theme tokens inline in `index.tsx`.                       |
 | `ContextMenu/index.css`            | —      | **DONE** | Deleted.                                                                                  |
 | `Workbook/index.css`               | —      | **DONE** | Deleted.                                                                                  |
 | `DataVerification/index.css`       | —      | **DONE** | Deleted.                                                                                  |
@@ -40,7 +40,7 @@ can be removed once no `.css` imports remain.
 - [ ] Migrate `SheetTab/index.css` → Tailwind classes
 - [ ] Migrate `SheetOverlay/index.css` → Tailwind classes (break into multiple PRs)
 - [ ] Migrate `SheetOverlay/ScrollBar/index.css` → Tailwind
-- [x] Migrate `LinkEidtCard/index.css` → Tailwind + shadcn components — done
+- [x] Migrate `LinkEditCard/index.css` → Tailwind + shadcn components — done
 - [ ] Delete `css.d.ts` once all CSS imports are removed
 
 ---
@@ -132,7 +132,7 @@ implementations:
 | Fortune-Sheet Component                | Shared Replacement                                                               | Notes                                                                                                                                                                                                     |
 |----------------------------------------|----------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `FilterMenu.tsx` filter buttons        | `@workspace/ui/components/button`                                                | **DONE** (commit `b5c3b7e7`)                                                                                                                                                                              |
-| `LinkEidtCard/index.tsx` + `index.css` | `@workspace/ui/components/dialog`, `input`, `button`, `select`                   | **DONE** — `<select>` (b5c3b7e7), then full CSS-to-Tailwind + 2 raw `<input>` → `Input`; `index.css` deleted                                                                                              |
+| `LinkEditCard/index.tsx` + `index.css` | `@workspace/ui/components/dialog`, `input`, `button`, `select`                   | **DONE** — `<select>` (b5c3b7e7), then full CSS-to-Tailwind + 2 raw `<input>` → `Input`; `index.css` deleted                                                                                              |
 | `CustomSort/index.tsx`                 | `@workspace/ui/components/checkbox`, `radio-group`, `select`, `button`, `dialog` | **DONE** (commit `b5c3b7e7`) — all native form controls migrated; buttons in `DialogFooter`                                                                                                                |
 | `DataVerification/DropdownList.tsx`    | `@workspace/ui/components/dropdown-menu`                                         | **DONE** (commit `b5c3b7e7`) — controlled `DropdownMenu` with `CheckboxItem`/`Item`. Trigger via `asChild` on the existing chevron div. Required `luckysheet-mousedown-cancel` on `DropdownMenuContent` — see `FORTUNE-SHEET-OPEN-ISSUES.md` §1 |
 | `FilterMenu.tsx` select/checkbox items | `@workspace/ui/components/checkbox` + `popover`                                  | **DONE** (commit `b5c3b7e7`) — `Checkbox` for value list, `Popover` (virtual `PopoverAnchor`) for the panel + nested `Popover` for filter-by-color                                                         |
@@ -152,7 +152,7 @@ implementations:
 - `DataVerification/index.tsx` — `Button`, `Checkbox`, `Input`, `Label`, `Select`, `DialogHeader/Footer` (post `b5c3b7e7`)
 - `DataVerification/DropdownList.tsx` — `DropdownMenu` + `DropdownMenuCheckboxItem`/`DropdownMenuItem` (post `b5c3b7e7`)
 - `FormatSearch/index.tsx` — `Button`, `Input`, `Label`, `cn`
-- `LinkEidtCard/index.tsx` — `Button`, `Select` (post `b5c3b7e7`; CSS still pending)
+- `LinkEditCard/index.tsx` — `Button`, `Select` (post `b5c3b7e7`; CSS still pending)
 - `LocationCondition/index.tsx` — `Button`, `Checkbox`, `Label`, `RadioGroup`, `DialogFooter` (post `b5c3b7e7`)
 - `SearchReplace/index.tsx` — `Button`, `Input`, `Checkbox`, `Label`, `Tabs`
 - `SplitColumn/index.tsx` — `Button`, `Checkbox`, `Input`, `Label`, `DialogFooter` (post `b5c3b7e7`)
@@ -221,10 +221,9 @@ implementations:
 - Chinese hardcoded strings: `裁剪`, `恢复原图`, `删除` — localize via `locale()`
 - Font Awesome icons (`fa fa-pencil`, `fa fa-trash`, etc.) — replace with Lucide or SVGIcon
 
-### `LinkEidtCard/` (index)
+### `LinkEditCard/` (index)
 
-- **DONE** — `<select>` → shadcn `Select` (`b5c3b7e7`); `index.css` deleted, all 182 lines migrated to Tailwind utilities + theme tokens inline; 2 raw `<input>` → shadcn `Input`. Only `fortune-link-modify-modal` + `range-selection-modal` classes preserved (DOM-targeted from `state/modules/hyperlink.ts`).
-- Typo in directory name: `LinkEidtCard` should be `LinkEditCard` — outstanding
+- **DONE** — `<select>` → shadcn `Select` (`b5c3b7e7`); `index.css` deleted, all 182 lines migrated to Tailwind utilities + theme tokens inline; 2 raw `<input>` → shadcn `Input`. Only `fortune-link-modify-modal` + `range-selection-modal` classes preserved (DOM-targeted from `state/modules/hyperlink.ts`). Directory renamed from `LinkEidtCard` to `LinkEditCard`.
 - Complex component with 3 modes (toolbar, range-selection, editing)
 - Uses Lucide icons (`Copy`, `Pencil`, `Unlink`)
 
@@ -323,7 +322,7 @@ implementations:
 
 ### Done
 
-- ~~Delete dead CSS files~~ — 6 of 9 CSS files deleted (ContextMenu, Workbook, DataVerification, SearchReplace, ConditionFormat, LinkEidtCard)
+- ~~Delete dead CSS files~~ — 6 of 9 CSS files deleted (ContextMenu, Workbook, DataVerification, SearchReplace, ConditionFormat, LinkEditCard)
 - ~~Replace `button-basic` divs with shadcn `Button`~~ — all migrated
 - ~~Fix `NameBox.tsx` export name~~ — done
 - ~~Replace hardcoded colors in components~~ — done in .tsx files (still present in remaining .css)
@@ -332,9 +331,8 @@ implementations:
 
 ### Next — Medium effort
 
-1. Fix `LinkEidtCard` directory typo → `LinkEditCard`
-2. Convert remaining `export default` → named exports (~4 components)
-3. Translate Chinese comments to English
+1. Convert remaining `export default` → named exports (~4 components)
+2. Translate Chinese comments to English
 
 ### Later — Major effort
 
