@@ -8,9 +8,20 @@ export type MountSettings = {
     s3Config?: S3Config;
 };
 
+export type EmailSignature = {
+    id: string;
+    name: string;
+    html: string;
+};
+
+export type EmailSettings = {
+    signatures?: EmailSignature[];
+};
+
 export type UserSettings = {
     theme?: 'light' | 'dark' | 'system';
     mounts?: Record<string, MountSettings>;
+    email?: EmailSettings;
 };
 
 export type TeamSettings = {
