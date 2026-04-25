@@ -43,6 +43,7 @@ type Action =
     | { type: 'remove-attachment'; index: number }
     | { type: 'add-drive-ref'; ref: AttachmentReference }
     | { type: 'remove-drive-ref'; id: string }
+    | { type: 'sync-editor'; html: string; text: string }
     | { type: 'save-completed'; sentFields: DraftFields; serverAttachments: Attachment[] };
 
 type UseDraftOptions = {
@@ -276,6 +277,14 @@ function reducer(state: DraftState, action: Action): DraftState {
                     driveReferences: state.fields.driveReferences.filter((r) => r.id !== action.id),
                 },
             };
+        case 'sync-editor': {
+            // Snapshot the editor's canonical HTML/text post-parse and reset the saved
+            // fingerprint to match. Without this, TipTap's normalisation of the seeded body
+            // (or its emission of the quoted-content text via getText) drifts from the seed
+            // on first interaction and tricks the auto-save into firing without any user edit.
+            const fields = { ...state.fields, body: action.html, bodyText: action.text };
+            return { fields, lastSavedFingerprint: fingerprintFields(fields) };
+        }
         case 'save-completed': {
             const { serverActual, localNext } = mergeServerAttachments(
                 state.fields.attachments,
@@ -390,6 +399,15 @@ export function useDraft({
         };
     }, []);
 
+    // Once the editor has parsed the seeded body and emitted its canonical HTML/text, snap
+    // them into state and reset the saved fingerprint. Fires once via LightEditor's onReady.
+    const editorReadyRef = useRef(false);
+    const markEditorReady = (html: string, text: string) => {
+        if (editorReadyRef.current) return;
+        editorReadyRef.current = true;
+        dispatch({ type: 'sync-editor', html, text });
+    };
+
     return {
         state: state.fields,
         setField: <K extends DraftEditableField>(field: K, value: string) =>
@@ -398,6 +416,7 @@ export function useDraft({
         removeAttachment: (index: number) => dispatch({ type: 'remove-attachment', index }),
         addDriveReference: (ref: AttachmentReference) => dispatch({ type: 'add-drive-ref', ref }),
         removeDriveReference: (id: string) => dispatch({ type: 'remove-drive-ref', id }),
+        markEditorReady,
         isSendable: !!state.fields.to.trim(),
 
         // Send path: flush any pending/in-flight save, disable further saves, and return a
