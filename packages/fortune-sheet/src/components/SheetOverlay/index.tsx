@@ -57,6 +57,9 @@ export const SheetOverlay: React.FC = () => {
     const cellAreaMouseDown = useCallback(
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
             const { nativeEvent } = e;
+            // Skip cell-selection logic when the click originated inside a floating UI
+            // (validation dropdown, hint box, etc.) that should not move the selection.
+            if ((e.target as HTMLElement).closest?.('.luckysheet-mousedown-cancel')) return;
             if (e.button !== 2) {
                 // onContextMenu event will not call onMouseDown
                 setContext((draftCtx) => {
