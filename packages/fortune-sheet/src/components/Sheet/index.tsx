@@ -183,21 +183,21 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
     }, [data, refs.canvas, setContext, settings.devicePixelRatio]);
 
     // Recalculate row/col info when data or config dimensions change
+    // biome-ignore lint/correctness/useExhaustiveDependencies: keys rowlen/columnlen/rowhidden/colhidden are JSON-stable derived from context.config; the source object refs would re-fire on identity churn
     useEffect(() => {
         if (!data) return;
         setContext((draftCtx) => updateContextWithSheetData(draftCtx, data));
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [rowlenKey, columnlenKey, rowhiddenKey, colhiddenKey, data, context.zoomRatio, setContext]);
 
     // Init canvas sizing
     useEffect(() => {
         setContext((draftCtx) => updateContextWithCanvas(draftCtx, refs.canvas.current!, placeholderRef.current!));
-    }, [refs.canvas, setContext, context.rowHeaderWidth, context.columnHeaderHeight, context.devicePixelRatio]);
+    }, [refs.canvas, setContext]);
 
     // Recalculate freeze data when sheet or freeze config changes
+    // biome-ignore lint/correctness/useExhaustiveDependencies: freeze re-init only on sheet switch / freeze config / row-col visibility change; passing the whole `context` would re-init on every cell edit
     useEffect(() => {
         initFreeze(context, refs.globalCache, context.currentSheetId);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [refs.globalCache, sheet.frozen, context.currentSheetId, context.visibledatacolumn, context.visibledatarow]);
 
     // -----------------------------------------------------------------------
@@ -225,6 +225,7 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
     }, [refs.canvas, refs.globalCache, sheet.id]);
 
     // Redraw on context changes (non-scroll: cell edits, selection, etc.)
+    // biome-ignore lint/correctness/useExhaustiveDependencies: full `context` is the trigger — any change should redraw the canvas
     useEffect(() => {
         scheduleRedraw();
     }, [context, scheduleRedraw]);

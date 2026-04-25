@@ -38,6 +38,7 @@ export const InputBox: React.FC = () => {
     const col_index = firstSelection?.column_focus as number;
     const preText = useRef('');
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: cell-style memo keyed on sheet/file/cellUpdate; reads helpers off `context` directly
     const inputBoxStyle = useMemo(() => {
         if (firstSelection && context.luckysheetCellUpdate.length > 0) {
             const flowdata = getFlowdata(context);
@@ -45,9 +46,9 @@ export const InputBox: React.FC = () => {
             return getStyleByCell(context, flowdata, firstSelection.row_focus!, firstSelection.column_focus!);
         }
         return {};
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [context.luckysheetfile, context.currentSheetId, context.luckysheetCellUpdate, firstSelection]);
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: cell-edit sync — collaborative-update guard relies on prev refs, not React deps; firing on every refs.* change would clobber the editor
     useLayoutEffect(() => {
         if (!context.allowEdit) {
             setContext((ctx) => {
@@ -93,7 +94,6 @@ export const InputBox: React.FC = () => {
             }
             delete refs.globalCache.doNotFocus;
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [context.luckysheetCellUpdate, context.luckysheetfile, context.currentSheetId, firstSelection]);
 
     useEffect(() => {
@@ -105,9 +105,9 @@ export const InputBox: React.FC = () => {
     }, [context.luckysheetCellUpdate]);
 
     // Disallow editing when the selected row/column is hidden
+    // biome-ignore lint/correctness/useExhaustiveDependencies: only re-checks hidden-row/col status when selection changes
     useEffect(() => {
         setIsHidenRC(isShowHidenCR(context));
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [context.luckysheet_select_save]);
 
     const getActiveFormula = useCallback(() => document.querySelector('.luckysheet-formula-search-item-active'), []);

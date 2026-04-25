@@ -121,14 +121,14 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             average: '',
         });
 
+        // biome-ignore lint/correctness/useExhaustiveDependencies: deps spread from Object.values(props) — biome can't see through the spread
         const mergedSettings = useMemo(
             () => Object.assign(cloneDeep(defaultSettings), props) as Required<Settings>,
-            // props expects data, onChange, onOp
-            // eslint-disable-next-line react-hooks/exhaustive-deps
             [...Object.values(props)],
         );
 
         // Calculate selection info
+        // biome-ignore lint/correctness/useExhaustiveDependencies: selection-info recompute is intentionally selection-only; firing on every props/context change would churn
         useEffect(() => {
             const selection = context.luckysheet_select_save;
             const { lang } = props;
@@ -136,7 +136,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 const re = calcSelectionInfo(context, lang);
                 setCalInfo(re);
             }
-            // eslint-disable-next-line react-hooks/exhaustive-deps
         }, [context.luckysheet_select_save]);
 
         const emitOp = useCallback(
@@ -199,6 +198,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             return cellData;
         }
 
+        // biome-ignore lint/correctness/useExhaustiveDependencies: FIXME audit-needed (PR 2) — see docs/FORTUNE-SHEET-EFFECT-DEPS-AUDIT.md
         const setContextWithProduce = useCallback(
             (recipe: (ctx: Context) => void, options: SetContextOptions = {}) => {
                 setContext((ctx_) => {
@@ -280,6 +280,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             [emitOp],
         );
 
+        // biome-ignore lint/correctness/useExhaustiveDependencies: FIXME audit-needed (PR 2) — see docs/FORTUNE-SHEET-EFFECT-DEPS-AUDIT.md
         const handleUndo = useCallback(() => {
             const history = globalCache.current.undoList.pop();
             if (history) {
@@ -387,6 +388,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             }
         }, [context.luckysheetfile, onChange]);
 
+        // biome-ignore lint/correctness/useExhaustiveDependencies: FIXME audit-needed (PR 2) — see docs/FORTUNE-SHEET-EFFECT-DEPS-AUDIT.md
         useEffect(() => {
             setContextWithProduce(
                 (draftCtx) => {

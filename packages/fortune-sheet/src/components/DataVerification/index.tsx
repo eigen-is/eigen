@@ -128,6 +128,7 @@ export function DataVerification() {
     );
 
     // Initialize
+    // biome-ignore lint/correctness/useExhaustiveDependencies: mount-only — initialises the data-verification dialog from current selection + rangeDialog
     useEffect(() => {
         setContext((ctx) => {
             let rangeT = '';
@@ -192,7 +193,6 @@ export function DataVerification() {
                 };
             }
         });
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const selectClass = 'h-8 w-full rounded-md border border-input bg-background px-3 text-sm';
