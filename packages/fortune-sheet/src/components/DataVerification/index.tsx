@@ -17,10 +17,11 @@ import {
     locale,
     setCellValue,
 } from '../../state';
+import { RangeDialog } from './RangeDialog';
 
 export function DataVerification() {
     const { context, setContext } = useContext(WorkbookContext);
-    const { showDialog, hideDialog } = useDialog();
+    const { showDialog, showNonModalDialog, hideDialog } = useDialog();
     const { dataVerification, toolbar, button, generalDialog } = locale(context);
     const [numberCondition] = useState<string[]>([
         'between',
@@ -47,14 +48,14 @@ export function DataVerification() {
     // Enable mouse selection
     const dataSelectRange = useCallback(
         (type: string, value: string) => {
-            hideDialog();
             setContext((ctx) => {
                 ctx.rangeDialog!.show = true;
                 ctx.rangeDialog!.type = type;
                 ctx.rangeDialog!.rangeTxt = value;
             });
+            showNonModalDialog(<RangeDialog />);
         },
-        [hideDialog, setContext],
+        [setContext, showNonModalDialog],
     );
 
     // Confirm and cancel buttons
