@@ -132,11 +132,11 @@ implementations:
 | Fortune-Sheet Component                | Shared Replacement                                                               | Notes                                                                                                                                                                                                     |
 |----------------------------------------|----------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `ContextMenu/Menu.tsx` + `Divider.tsx` | `@workspace/ui/components/context-menu`                                          | Custom context menu could use shadcn `ContextMenu` or `DropdownMenu` sub-components. **Complex** — the fortune-sheet context menu has custom positioning logic and inline inputs, so this is non-trivial. |
-| `FilterMenu.tsx` filter buttons        | `@workspace/ui/components/button`                                                | Replace `button-basic` divs                                                                                                                                                                               |
-| `LinkEidtCard/index.tsx`               | `@workspace/ui/components/dialog`, `input`, `button`, `select`                   | Full rewrite with shadcn components would eliminate `LinkEidtCard/index.css` entirely                                                                                                                     |
-| `CustomSort/index.tsx`                 | `@workspace/ui/components/checkbox`, `radio-group`, `select`, `button`, `dialog` | Replace native `<input type="checkbox/radio">` and `<select>` with shadcn equivalents                                                                                                                     |
-| `DataVerification/DropdownList.tsx`    | `@workspace/ui/components/popover` or `command`                                  | Custom dropdown could use shadcn `Popover`                                                                                                                                                                |
-| `FilterMenu.tsx` select/checkbox items | `@workspace/ui/components/checkbox`                                              | Replace native `<input type="checkbox">` with shadcn `Checkbox`                                                                                                                                           |
+| `FilterMenu.tsx` filter buttons        | `@workspace/ui/components/button`                                                | **DONE** (commit `b5c3b7e7`)                                                                                                                                                                              |
+| `LinkEidtCard/index.tsx`               | `@workspace/ui/components/dialog`, `input`, `button`, `select`                   | **Partial** — `<select>` swapped to shadcn `Select` in `b5c3b7e7`. Full rewrite (eliminating `index.css`) still pending the CSS migration sweep                                                           |
+| `CustomSort/index.tsx`                 | `@workspace/ui/components/checkbox`, `radio-group`, `select`, `button`, `dialog` | **DONE** (commit `b5c3b7e7`) — all native form controls migrated; buttons in `DialogFooter`                                                                                                                |
+| `DataVerification/DropdownList.tsx`    | `@workspace/ui/components/dropdown-menu`                                         | **DONE** (commit `b5c3b7e7`) — controlled `DropdownMenu` with `CheckboxItem`/`Item`. Trigger via `asChild` on the existing chevron div. Required `luckysheet-mousedown-cancel` on `DropdownMenuContent` — see `FORTUNE-SHEET-OPEN-ISSUES.md` §1 |
+| `FilterMenu.tsx` select/checkbox items | `@workspace/ui/components/checkbox` + `popover`                                  | **DONE** (commit `b5c3b7e7`) — `Checkbox` for value list, `Popover` (virtual `PopoverAnchor`) for the panel + nested `Popover` for filter-by-color                                                         |
 | `FormulaSearch/index.tsx`              | `@workspace/ui/components/input`, `select`                                       | Replace inline-styled `<input>` and `<select>`                                                                                                                                                            |
 | `ZoomControl/index.tsx`                | Consider `@workspace/ui/components/popover`                                      | Zoom preset menu could use shadcn `Popover` instead of custom absolute-positioned div                                                                                                                     |
 | `SheetOverlay` bottom add-row          | `@workspace/ui/components/input`, `button`                                       | If present, replace with shadcn                                                                                                                                                                           |
@@ -144,12 +144,19 @@ implementations:
 ### Already using shared UI
 
 - `ConditionFormat/ConditionRules.tsx` — `Button`, `Input`, `Checkbox`, `Label`, `Popover`, `ColorPicker`,
-  `DialogHeader/Footer`
+  `Select`, `DialogHeader/Footer` (post `b5c3b7e7`)
 - `ConditionFormat/index.tsx` — `DropdownMenu*`
 - `ChangeColor/index.tsx` — `ColorPicker`
+- `ContextMenu/FilterMenu.tsx` — `Button`, `Checkbox`, `Input`, `Popover` (post `b5c3b7e7`)
+- `ContextMenu/index.tsx` — `Button` (color-picker triggers, post `b5c3b7e7`)
+- `CustomSort/index.tsx` — `Button`, `Checkbox`, `Label`, `RadioGroup`, `Select`, `DialogFooter` (post `b5c3b7e7`)
+- `DataVerification/index.tsx` — `Button`, `Checkbox`, `Input`, `Label`, `Select`, `DialogHeader/Footer` (post `b5c3b7e7`)
+- `DataVerification/DropdownList.tsx` — `DropdownMenu` + `DropdownMenuCheckboxItem`/`DropdownMenuItem` (post `b5c3b7e7`)
 - `FormatSearch/index.tsx` — `Button`, `Input`, `Label`, `cn`
-- `DataVerification/index.tsx` — `Button`
+- `LinkEidtCard/index.tsx` — `Button`, `Select` (post `b5c3b7e7`; CSS still pending)
+- `LocationCondition/index.tsx` — `Button`, `Checkbox`, `Label`, `RadioGroup`, `DialogFooter` (post `b5c3b7e7`)
 - `SearchReplace/index.tsx` — `Button`, `Input`, `Checkbox`, `Label`, `Tabs`
+- `SplitColumn/index.tsx` — `Button`, `Checkbox`, `Input`, `Label`, `DialogFooter` (post `b5c3b7e7`)
 - `Toolbar/index.tsx` — `SharedToolbar`, `TooltipButton`, `DropdownMenu*`
 - `context/modal.tsx` — `Dialog`, `DialogContent`
 - `hooks/useDialog.tsx` — `Button`, `DialogHeader/Title/Description/Footer`
@@ -168,25 +175,24 @@ implementations:
 ### `ContextMenu/` (index, Menu, Divider, FilterMenu, SheetTab)
 
 - **CSS**: `index.css` (283 lines) imported by both `index.tsx` and `SheetTab.tsx`
-- **BTN**: FilterMenu has 4 `button-basic` divs
+- ~~**BTN**: FilterMenu has 4 `button-basic` divs~~ — done in `b5c3b7e7`
 - `Menu.tsx` still has `luckysheet-*` CSS class names mixed with Tailwind — clean up
-- `FilterMenu.tsx` is 801 lines — largest component, has Chinese comments, uses `immer` `produce` for local state
+- `FilterMenu.tsx` — fixed-position panel, manual collision detection, and flyout submenu replaced with shadcn `Popover` + nested `Popover` in `b5c3b7e7`. Remaining: Chinese comments, `immer` `produce` patterns
 - `SheetTab.tsx` uses `SVGIcon` for right arrow — could use Lucide `ChevronRight`
 - `Divider.tsx` is a simple `<div>` — already uses Tailwind, **keep as-is**
+- **Deferred:** `menuItemClass` Tailwind string is duplicated inline at several sites in `ContextMenu/index.tsx` (insert-row, insert-column, set-row-height, …). FilterMenu now extracts it to a `menuItemClass` constant; aligning them is a future cleanup
 
 ### `CustomSort/index.tsx`
 
-- Uses native `<input type="checkbox/radio">` and `<select>` — replace with shadcn
-- Uses `button-basic button-primary` div — replace with `Button`
-- Has `fortune-sort` class name but no CSS definition found — likely dead class
-- Chinese comments present — translate to English
+- **DONE** (commit `b5c3b7e7`) — `Select`, `Checkbox`, `RadioGroup`, `Button`, action buttons in `DialogFooter`
+- `fortune-sort` class name has no CSS definition — dead class, can be removed in a follow-up
 
 ### `DataVerification/` (index, DropdownList, RangeDialog)
 
-- `index.tsx` — **DONE** (buttons migrated to shadcn)
+- `index.tsx` — **DONE** — selects + range-pick buttons + dialog footer fully shadcn (commit `b5c3b7e7`)
 - `index.css` — **Delete** (no longer imported)
-- `DropdownList.tsx` — still imports `index.css`, uses custom dropdown styling, uses `SVGIcon`
-- `RangeDialog.tsx` — imports `index.css`, uses `button-basic` divs, has `#range-dialog` ID styling
+- `DropdownList.tsx` — **DONE** — controlled shadcn `DropdownMenu`. See `FORTUNE-SHEET-OPEN-ISSUES.md` §1 for the portaled-events lesson
+- `RangeDialog.tsx` — **DONE** — uses `useDialog` + shadcn (commit `0b1f3de0`)
 
 ### `FilterOption/index.tsx`
 
@@ -218,8 +224,9 @@ implementations:
 
 ### `LinkEidtCard/` (index, CSS)
 
-- **CSS**: 183 lines — full migration needed
-- **BTN**: 2 `button-basic` divs in `renderBottomButton`
+- **Partial** — 2 `<select>` migrated to shadcn `Select` in `b5c3b7e7`; dead `.fortune-link-modify-select` rule removed
+- **CSS**: 182 lines remaining — full migration still needed (16+ hardcoded hex colors). Deferred from the shadcn sweep into the broader CSS-to-Tailwind migration above
+- **BTN**: 2 `button-basic` divs in `renderBottomButton` — shadcn `Button` migration still pending
 - Typo in directory name: `LinkEidtCard` should be `LinkEditCard`
 - Complex component with 3 modes (toolbar, range-selection, editing)
 - Uses `SVGIcon` for icons — some could be Lucide
@@ -265,11 +272,12 @@ implementations:
 
 ### `SplitColumn/index.tsx`
 
-- **DONE** — buttons migrated to shadcn `Button`
+- **DONE** (commit `b5c3b7e7`) — `Checkbox`, `Input`, `Button`, action buttons in `DialogFooter`
+- `getRegStr` in `state/modules/splitColumn.ts` no longer walks `.childNodes[0].checked` — takes `(selected: ReadonlySet<string>, otherValue: string)` from React state (Radix `Checkbox` renders as `<button>`, not `<input>`)
 
 ### `LocationCondition/index.tsx`
 
-- **DONE** — buttons migrated to shadcn `Button`
+- **DONE** (commit `b5c3b7e7`) — `Checkbox`, `RadioGroup`, `Label`, `Button`, action buttons in `DialogFooter`. 5 separate radios collapsed into a single `RadioGroup` (they had unique `name` attrs before so didn't actually form a group). Inline `style={{ color: '#666' }}` replaced with `peer-disabled:opacity-50`
 
 ### `Toolbar/` (index, CustomBorder, toolbar-helpers)
 
