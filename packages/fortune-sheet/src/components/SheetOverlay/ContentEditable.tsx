@@ -47,7 +47,7 @@ export const ContentEditable: React.FC<ContentEditableProps> = ({
             }
             lastHtml.current = html || '';
         },
-        [root, onChange],
+        [onChange],
     );
 
     const allowEdit = allowEditProp ?? true;

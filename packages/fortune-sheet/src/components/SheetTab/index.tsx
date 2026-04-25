@@ -38,6 +38,7 @@ export const SheetTab: React.FC = () => {
         });
     }, []);
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: workbook-file change is the trigger — re-checks whether tab scroll buttons are needed
     useEffect(() => {
         const tabCurrent = tabContainerRef.current;
         if (!tabCurrent) return;

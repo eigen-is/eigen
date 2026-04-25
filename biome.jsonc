@@ -63,19 +63,5 @@
     "formatter": {
       "enabled": true
     }
-  },
-  "overrides": [
-    {
-      // TODO: luckysheet-fork effects deliberately omit deps to avoid render loops.
-      // Enable once effects are audited — tracked in docs/TODO-FORTUNE-SHEETS.md.
-      "includes": ["packages/fortune-sheet/src/components/**"],
-      "linter": {
-        "rules": {
-          "correctness": {
-            "useExhaustiveDependencies": "off"
-          }
-        }
-      }
-    }
-  ]
+  }
 }

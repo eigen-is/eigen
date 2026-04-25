@@ -36,6 +36,7 @@ export function FxEditor() {
     const recentText = useRef('');
     const { info } = locale(context);
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: re-renders fx box only on real cell/sheet/selection changes; prev-selection comparison avoids collaborative-update echo
     useEffect(() => {
         // If selected row/column is in hidden state, don't allow editing
         setIsHidenRC(isShowHidenCR(context));
@@ -68,9 +69,9 @@ export function FxEditor() {
         } else {
             refs.fxInput.current!.innerHTML = '';
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [context.luckysheetfile, context.currentSheetId, context.luckysheet_select_save]);
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: callback only refreshed when sheet/selection-shape changes — derived helpers (allowEdit, etc.) are read fresh from `context`
     const onFocus = useCallback(() => {
         if (context.allowEdit === false) {
             return;
@@ -92,7 +93,6 @@ export function FxEditor() {
                 // formula.rangeResizeTo = $("#luckysheet-functionbox-cell");
             });
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [
         context.config,
         context.luckysheet_select_save,
@@ -248,6 +248,7 @@ export function FxEditor() {
         }
     }, [refs.cellInput, refs.fxInput, setContext]);
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: re-evaluates allowEdit only on the listed shape changes — internals of `context` are read directly
     const allowEdit = useMemo(() => {
         if (context.allowEdit === false) {
             return false;
@@ -259,7 +260,6 @@ export function FxEditor() {
             return false;
         }
         return true;
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [context.config, context.luckysheet_select_save, context.luckysheetfile, context.currentSheetId, isHidenRC]);
 
     return (

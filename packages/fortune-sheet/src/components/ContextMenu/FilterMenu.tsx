@@ -281,6 +281,7 @@ export const FilterMenu: React.FC = () => {
     );
 
     // Reposition main container if it overflows the viewport
+    // biome-ignore lint/correctness/useExhaustiveDependencies: FIXME audit-needed (PR 2) — see docs/FORTUNE-SHEET-EFFECT-DEPS-AUDIT.md
     useLayoutEffect(() => {
         if (!containerRef.current || !filterContextMenu) return;
         const rect = containerRef.current.getBoundingClientRect();
@@ -341,7 +342,7 @@ export const FilterMenu: React.FC = () => {
         setDatesUncheck(res.datesUncheck);
         setValuesUncheck(res.valuesUncheck);
         setShowValues(res.flattenValues);
-    }, [col, endRow, startRow, startCol, hiddenRows, filterContextMenu?.hiddenRows]);
+    }, [col, endRow, startRow, startCol, filterContextMenu?.hiddenRows]);
 
     useEffect(() => {
         if (col == null) return;

@@ -46,6 +46,7 @@ export function ConditionRules({ type }: { type: string }) {
         [colorRules, conditionformat, generalDialog, hideDialog, protection, setContext],
     );
 
+    // biome-ignore lint/correctness/useExhaustiveDependencies: mount-only initialization from `type` prop and rangeDialog state
     useEffect(() => {
         setContext((ctx) => {
             ctx.conditionRules.rulesType = type;
@@ -74,7 +75,6 @@ export function ConditionRules({ type }: { type: string }) {
             ctx.rangeDialog.type = '';
             ctx.rangeDialog.rangeTxt = '';
         });
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     return (

@@ -21,6 +21,7 @@ export function DropDownList() {
     useOutsideClick(containerRef, close);
 
     // Initialize multi-select dropdown
+    // biome-ignore lint/correctness/useExhaustiveDependencies: mount-only — captures the initial cell, position, and dropdown values
     useEffect(() => {
         if (!context.luckysheet_select_save) return;
         const last = context.luckysheet_select_save[context.luckysheet_select_save.length - 1];
@@ -52,10 +53,10 @@ export function DropDownList() {
             top: row,
         });
         setIsMul(item.type2 === 'true');
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     // Update dropdown value on sheet change
+    // biome-ignore lint/correctness/useExhaustiveDependencies: re-syncs preselected values only when the workbook file changes
     useEffect(() => {
         if (!context.luckysheet_select_save) return;
         const last = context.luckysheet_select_save[context.luckysheet_select_save.length - 1];
@@ -72,8 +73,6 @@ export function DropDownList() {
         if (cellValue) {
             setSelected(cellValue.toString().split(','));
         }
-
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [context.luckysheetfile]);
 
     return (
