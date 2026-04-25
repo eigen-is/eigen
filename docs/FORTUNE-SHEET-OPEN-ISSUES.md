@@ -1,65 +1,40 @@
 # Fortune-sheet — open issues, smoke tests, shadcn backlog
 
 > Living scratch doc to pick this up after a context reset.
-> Last updated: 2026-04-25.
+> Last updated: 2026-04-25 (commit `b5c3b7e7`).
 
 ---
 
-## 1. Open bug — DataVerification dropdown click-through
+## 1. Resolved — DataVerification dropdown click-through
 
-**Symptom:** open a cell with a dropdown data-verification rule (e.g. `ja,nee`).
-The dropdown popup appears under the cell. **Clicking `ja` or `nee` selects the
-cell BELOW the popup instead of writing the value to the original cell.**
+**Status:** Fixed 2026-04-25 in commit `b5c3b7e7`. `DropdownList` rewritten as
+a controlled shadcn `DropdownMenu` (`DropdownMenuCheckboxItem` for multi-
+select, `DropdownMenuItem` for single-select). Trigger is the existing
+chevron div via `asChild` so the engine's `cellFocus` keeps positioning it.
+`SheetOverlay` now renders `<DropDownList />` once unconditionally; the
+standalone chevron div + `dataVerificationHintBoxRef` are gone.
 
-**Reproduce:**
-1. `bun run serve:sheets`
-2. Pick a cell, toolbar → ShieldCheck (data-verification)
-3. Set "Verification condition: Dropdown", value `ja,nee`, Confirm
-4. Click that cell → small ⌄ chevron appears
-5. Click chevron → popup with `ja` / `nee` opens
-6. Click `ja` → BUG: selection moves to cell below; `ja` is not written
+### Lesson — portaled events still bubble through the React tree
 
-**File involved:** `packages/fortune-sheet/src/components/DataVerification/DropdownList.tsx`
-(rendered conditionally in `SheetOverlay/index.tsx` when
-`context.dataVerificationDropDownList` is true).
+Switching to shadcn alone did **not** fix the bug. Radix portals
+`DropdownMenuContent` to `document.body` (out of `cellArea`'s DOM tree),
+but **React synthetic events still bubble through the React tree across
+portals**. So clicking a menu item still fired `cellAreaMouseDown` (an
+ancestor `onMouseDown` in `SheetOverlay`), which moved the selection to the
+cell beneath the popup before our `onSelect` could write the value.
 
-### What's been tried
-- ✗ `onMouseDown={(e) => e.stopPropagation()}` on the popup container —
-  already in place, doesn't prevent the symptom.
-- ✗ Restored upstream `luckysheet-mousedown-cancel` class guard:
-  `cellAreaMouseDown` returns early if `e.target.closest('.luckysheet-mousedown-cancel')`.
-  Tagged the DropdownList container with that class. Shipped to main as commit
-  `5f306aae`. **Did not fix the bug** — confirmed by user smoke test.
-- ✗ Tried adding `e.preventDefault(); e.stopPropagation()` on the popup item
-  itself plus immutable `arr` for `selected`. Untested, reverted (uncommitted).
+**Fix:** add `luckysheet-mousedown-cancel` to `DropdownMenuContent`. The
+DOM-level guard at `SheetOverlay/index.tsx:60`
+(`e.target.closest('.luckysheet-mousedown-cancel')`) walks the **DOM**
+(not the React tree), so it stops at the portaled content in body and
+short-circuits selection movement.
 
-### Plausible hypotheses
-1. **Selection moves on `mousedown` somewhere we haven't traced.** `cellAreaMouseDown`
-   should be the only mousedown selection mover but the React-tree
-   stopPropagation doesn't seem to actually stop it. Check whether something
-   listens at `document` capture phase, or via portal, or whether `cellArea`
-   has a native `addEventListener('mousedown', …)` we missed.
-2. **The popup item itself isn't the click target.** If the popup has a
-   stacking-context bug (`bg-background` resolving transparent? z-index inside
-   a containing block?), browser `elementFromPoint` returns the canvas/cell
-   below instead of the popup item. Test: set `console.log(e.target)` in the
-   item's onClick — if it logs the cell-area div, it's a stacking issue.
-3. **`setSelected(arr)` inside the immer recipe + array mutation
-   (`arr.push(vStr)`)**: state mutation might leave React in a weird state
-   that re-renders without `dataVerificationDropDownList = false` taking
-   effect. Reverted attempt to fix this part too.
-4. **Radix-style fix is the right call regardless.** Rewrite `DropdownList`
-   to use shadcn `Popover` + `Command` (or `DropdownMenu`). Radix portals the
-   content out of `cellArea`, manages focus + outside-click, and gives us
-   proper event isolation — same shape of fix that resolved the
-   `RangeDialog` click-through.
-
-### Recommended next step
-**Don't keep trying to plug holes — refactor `DropdownList` to a Radix
-`Popover` (or `DropdownMenu` for single-select / `Command` if we want
-keyboard search).** Trigger = the chevron div in `SheetOverlay`. Open state
-= `context.dataVerificationDropDownList` (controlled). PopoverContent =
-items. This will fix the bug AND unlock follow-on shadcn cleanup (see §3).
+**Generalize:** any future shadcn floating UI rendered as a descendant of
+`cellArea` (validation popups, color pickers, etc.) must put
+`luckysheet-mousedown-cancel` on its portaled content for the same
+reason. `FilterMenu` is mounted at the `Workbook` root (sibling of
+`<Sheet />`), so it doesn't need the class — only descendants of
+`cellArea` do.
 
 ---
 
@@ -83,8 +58,14 @@ smoke pass. Sequence to run in `apps/sheets`:
 - [ ] **`RangeDialog` shadcn refactor** — open data-verification → click
       range-pick icon → range dialog opens non-modal → click cells to fill
       → OK button writes value back to parent dialog.
-- [ ] **`data-verification` toolbar exposure** — feature works at all
-      (currently blocked by §1).
+- [x] **`data-verification` toolbar exposure** — basic single-select
+      dropdown flow verified 2026-04-25 (rule setup, chevron, popup, click
+      writes to correct cell, outside-click closes). Multi-select toggle
+      still owed.
+- [ ] **shadcn cleanup pass (commit `b5c3b7e7`)** — the §3 sweep below
+      touched `DataVerification`, `LinkEidtCard`, `ConditionFormat/ConditionRules`,
+      `ContextMenu/index.tsx`, `CustomSort`, `LocationCondition`, `SplitColumn`,
+      `FilterMenu`. Walk through each dialog/popover.
 
 ### Per-feature paths
 - [ ] **Cell editing & paste** (InputBox + FxEditor + Workbook clusters):
@@ -95,11 +76,18 @@ smoke pass. Sequence to run in `apps/sheets`:
       columns past the freeze line.
 - [ ] **Selection box** (SheetOverlay:311): switch sheets, verify a fresh
       sheet gets default A1 but a sheet with prior selection keeps it.
-- [ ] **Data-verification dropdown** (DropdownList:24+59): set up a
-      dropdown rule, click into a validated cell, change cell, verify
-      preselected values look right. (Blocked by §1.)
-- [ ] **Filter menu** (FilterMenu:333): apply filter, hide values, re-open
-      filter — should remember which rows are hidden.
+- [ ] **Data-verification dropdown** (DropdownList): single-select write
+      and outside-click close verified 2026-04-25. Still owed: multi-select
+      toggle (rule with `type2 = true`), preselect on re-open, switching to
+      another validated cell while popup is open.
+- [ ] **Filter menu** (post `b5c3b7e7` Popover refactor): apply filter,
+      hide values, re-open filter — should remember which rows are hidden.
+      By-color submenu hover (cursor crossing the `sideOffset` gap should
+      not flicker — 120ms close-debounce). filter-by-condition row should
+      look disabled, not interactive.
+- [ ] **CustomSort / LocationCondition / SplitColumn** dialogs (post
+      `b5c3b7e7`): walk through select/checkbox/radio interactions, confirm
+      `DialogFooter` layout matches RangeDialog.
 - [ ] **Link card** (LinkEidtCard:99): hyperlink a cell, click another cell
       with a different hyperlink, verify the card resets the form.
 - [ ] **Sheet tab scroll buttons** (SheetTab:41): add many sheets until the
@@ -117,47 +105,56 @@ smoke pass. Sequence to run in `apps/sheets`:
 
 ## 3. shadcn refactor backlog
 
-Scan from 2026-04-25. `@workspace/ui` is shadcn-based; these sites still use
-raw HTML.
+Initial scan 2026-04-25. `@workspace/ui` is shadcn-based; these sites used
+raw HTML. Most landed in commit `b5c3b7e7`.
 
 ### High-value (also fixes / prevents bugs)
 | Where | Currently | Should be | Notes |
 |---|---|---|---|
-| `DataVerification/DropdownList.tsx` | custom `<div className="absolute z-[10000]">` + items | `Popover` + items (or `Command` for single-select) | **Fixes §1.** Use Radix portal + event isolation |
-| `ContextMenu/FilterMenu.tsx:358` | custom `<div className="fixed rounded-md ...">` | `Popover` or `DropdownMenu` | Same shape of bug waiting to happen |
-| `ContextMenu/FilterMenu.tsx` submenus | div-positioned with manual collision | `DropdownMenuSub` | Already partially shadcn elsewhere |
+| ~~`DataVerification/DropdownList.tsx`~~ | ~~custom div + items~~ | ~~`DropdownMenu`~~ | **Done `b5c3b7e7`** — see §1 lesson |
+| ~~`ContextMenu/FilterMenu.tsx` floating panel~~ | ~~custom fixed-position div~~ | ~~`Popover` (virtual `PopoverAnchor`)~~ | **Done `b5c3b7e7`** |
+| ~~`ContextMenu/FilterMenu.tsx` submenus~~ | ~~div-positioned with manual collision~~ | ~~Nested `Popover`~~ | **Done `b5c3b7e7`** — 120ms hover-close debounce to bridge `sideOffset` gap |
 
-### `<select>` → shadcn `Select` (9 sites)
-- `DataVerification/index.tsx`: lines 237, 358, 424, 458, 521 (verification type, condition pickers)
-- `LinkEidtCard/index.tsx`: 244, 306 (link type)
-- `ConditionFormat/ConditionRules.tsx`: 150 (duplicate-value)
-- `CustomSort/index.tsx`: 90 (sort-column)
+### `<select>` → shadcn `Select` — all done
+- ~~`DataVerification/index.tsx` (5 sites)~~ — done
+- ~~`LinkEidtCard/index.tsx` (2 sites)~~ — done
+- ~~`ConditionFormat/ConditionRules.tsx` (1 site)~~ — done; also fixed a pre-existing bug where the original `<select>` wasn't passing `value`
+- ~~`CustomSort/index.tsx` (1 site)~~ — done
 
-### `<input type="checkbox">` → `Checkbox` (~10 sites)
-- `LocationCondition/index.tsx` (3)
-- `SplitColumn/index.tsx` (3)
-- `ContextMenu/FilterMenu.tsx` (3 — including filter-by-color list)
-- `CustomSort/index.tsx` (1)
+### `<input type="checkbox">` → shadcn `Checkbox` — all done
+- ~~`LocationCondition/index.tsx` (3 sites)~~ — done; 5 radios also collapsed into one `RadioGroup` (they had unique `name` attrs before so didn't actually form a group)
+- ~~`SplitColumn/index.tsx` (3 sites)~~ — done; `getRegStr` in `state/modules/splitColumn.ts` no longer walks `.childNodes[0].checked` (incompatible with Radix `Checkbox` rendering as `<button>`); now takes `(selected: ReadonlySet<string>, otherValue: string)` derived from React state
+- ~~`ContextMenu/FilterMenu.tsx` (3 sites)~~ — done
+- ~~`CustomSort/index.tsx` (1 site)~~ — done
 
-### `<input type="radio">` → `RadioGroup` (4 sites)
-- `LocationCondition/index.tsx` (2 — locationConstant / locationFormula)
-- `CustomSort/index.tsx` (2 — asc/desc)
+### `<input type="radio">` → shadcn `RadioGroup` — all done
+- ~~`LocationCondition/index.tsx` (2 sites)~~ — done
+- ~~`CustomSort/index.tsx` (2 sites)~~ — done
 
-### `<button>` → `Button` (6 sites)
-- `DataVerification/index.tsx` (2 — range-pick icon buttons; bug-prone)
-- `ConditionFormat/ConditionRules.tsx` (2 — color swatches that open Popover)
-- `ContextMenu/index.tsx` (2 — color-picker triggers)
+### `<button>` → shadcn `Button` — all done
+- ~~`DataVerification/index.tsx` (2 range-pick icon buttons)~~ — done
+- ~~`ConditionFormat/ConditionRules.tsx` (2 color-swatch buttons)~~ — done
+- ~~`ContextMenu/index.tsx` (2 color-picker triggers)~~ — done
 
 ### `<table>` (lower priority, semantic markup is fine to keep)
-- `CustomSort/index.tsx:85` — sort column/order layout
-- `SplitColumn/index.tsx:126` — preview grid
+- `CustomSort/index.tsx` — sort column/order layout. Left as-is.
+- `SplitColumn/index.tsx` — preview grid. Left as-is.
 
-### Suggested PR sequencing
-1. **`DropdownList` → `Popover`** — fixes §1, smallest-blast-radius win
-2. **`Select` sweep** (9 sites, mechanical) — single PR
-3. **`Checkbox` + `RadioGroup` sweep** (~14 sites, mechanical) — single PR
-4. **`FilterMenu` floating panel → `Popover`/`DropdownMenu`** — same class as §1
-5. **Remaining native buttons → `Button`**
+### Deliberately deferred (with reasons)
+
+- **`LinkEidtCard/index.css` color-token migration.** The CSS file has 15+
+  hardcoded hex colors (`#fff`, `#e5e5e5`, `#2674fb`, `#d9d9d9`, …). It
+  belongs to the broader CSS-to-Tailwind migration tracked under outstanding
+  item 5 in `project_fortune_sheet_followups.md` (along with `SheetTab/index.css`,
+  `SheetOverlay/index.css`, `SheetOverlay/ScrollBar/index.css`). Doing it
+  inside the shadcn sweep is scope creep into a separate sweep.
+- **`menuItemClass` propagation to `ContextMenu/index.tsx`.** `FilterMenu`
+  introduced a `menuItemClass` constant for its menu rows. The same Tailwind
+  string is hard-coded inline at several sites in the sibling
+  `ContextMenu/index.tsx` (insert-row, insert-column, set-row-height, …).
+  Aligning them would either extract to a shared sibling file or push the
+  constant into `ContextMenu/index.tsx` too. Pre-existing duplication —
+  fix when the next sweep touches `ContextMenu/index.tsx`.
 
 ---
 
