@@ -44,6 +44,7 @@ export function LinkEditCard({
     const lastCell = useRef(normalizeSelection(context, [{ row: [r, r], column: [c, c] }]));
     const skipCellRangeSet = useRef(true);
     const isLinkAddressValid = isLinkValid(context, linkType, linkAddress);
+    const invalidBorder = linkAddress && !isLinkAddressValid.isValid && 'border-destructive';
 
     const tooltip = <div className="h-[17px] my-[3px] text-xs text-destructive">{isLinkAddressValid.tooltip}</div>;
 
@@ -96,9 +97,9 @@ export function LinkEditCard({
 
     const renderToolbarButton = useCallback(
         (Icon: LucideIcon, onClick: () => void) => (
-            <div className="p-1.5 cursor-pointer hover:bg-accent" onClick={onClick} tabIndex={0}>
+            <button type="button" className="p-1.5 cursor-pointer hover:bg-accent" onClick={onClick}>
                 <Icon width={18} height={18} aria-hidden="true" />
-            </div>
+            </button>
         ),
         [],
     );
@@ -141,7 +142,8 @@ export function LinkEditCard({
                 className={cn(modalBase, 'flex flex-row items-center py-0.5 pl-4 pr-2')}
                 style={{ left: position.cellLeft + 20, top: position.cellBottom }}
             >
-                <div
+                <button
+                    type="button"
                     className="mr-1.5 cursor-pointer hover:text-primary"
                     onClick={() => {
                         setContext((draftCtx) =>
@@ -156,10 +158,9 @@ export function LinkEditCard({
                             ),
                         );
                     }}
-                    tabIndex={0}
                 >
                     {linkType === 'webpage' ? insertLink.openLink : replaceHtml(insertLink.goTo, { linkAddress })}
-                </div>
+                </button>
                 {context.allowEdit === true && <div className="w-px h-4 mx-1.5 bg-border shrink-0" />}
                 {context.allowEdit === true &&
                     linkType === 'webpage' &&
@@ -202,17 +203,17 @@ export function LinkEditCard({
                 e.stopPropagation();
             }}
         >
-            <div
+            <button
+                type="button"
                 className="absolute right-[22px] top-[22px] cursor-pointer"
                 onClick={() => setRangeModalVisible(false)}
-                tabIndex={0}
             >
                 <X aria-hidden="true" />
-            </div>
+            </button>
             <div className="mb-3 text-base font-medium leading-6 text-foreground">{insertLink.selectCellRange}</div>
             <Input
                 {...containerEvent}
-                className={cn('h-8 w-full', !linkAddress || isLinkAddressValid.isValid ? '' : 'border-destructive')}
+                className={cn('h-8 w-full', invalidBorder)}
                 placeholder={insertLink.cellRangePlaceholder}
                 onChange={(e) => setLinkAddress(e.target.value)}
                 value={linkAddress}
@@ -244,7 +245,6 @@ export function LinkEditCard({
                 <Input
                     className={inputWidth}
                     spellCheck="false"
-                    // eslint-disable-next-line jsx-a11y/no-autofocus
                     autoFocus
                     value={linkText}
                     onChange={(e) => setLinkText(e.target.value)}
@@ -284,10 +284,7 @@ export function LinkEditCard({
                     <>
                         <div className={titleClass}>{insertLink.linkAddress}</div>
                         <Input
-                            className={cn(
-                                inputWidth,
-                                !linkAddress || isLinkAddressValid.isValid ? '' : 'border-destructive',
-                            )}
+                            className={cn(inputWidth, invalidBorder)}
                             spellCheck="false"
                             value={linkAddress}
                             onChange={(e) => setLinkAddress(e.target.value)}
@@ -299,21 +296,18 @@ export function LinkEditCard({
                     <>
                         <div className={titleClass}>{insertLink.linkCell}</div>
                         <Input
-                            className={cn(
-                                inputWidth,
-                                !linkAddress || isLinkAddressValid.isValid ? '' : 'border-destructive',
-                            )}
+                            className={cn(inputWidth, invalidBorder)}
                             spellCheck="false"
                             value={linkAddress}
                             onChange={(e) => setLinkAddress(e.target.value)}
                         />
-                        <div
+                        <button
+                            type="button"
                             className="absolute right-6 inline-block w-5 p-1 cursor-pointer"
                             onClick={() => setRangeModalVisible(true)}
-                            tabIndex={0}
                         >
                             <Grid3x3 aria-hidden="true" />
-                        </div>
+                        </button>
                         {tooltip}
                     </>
                 )}

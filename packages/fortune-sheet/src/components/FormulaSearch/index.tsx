@@ -147,14 +147,14 @@ export function FormulaSearch({ onCancel: _onCancel }: { onCancel: () => void })
             </div>
             <div className="flex-1 min-h-0 border border-border rounded-md overflow-y-auto">
                 {filteredFunctionList.map((v, index) => (
-                    <div
+                    <button
+                        type="button"
                         className={cn(
-                            'px-3 py-2 cursor-pointer border-b border-border text-sm',
+                            'block w-full text-left px-3 py-2 cursor-pointer border-b border-border text-sm',
                             index === selectedFuncIndex ? 'bg-primary text-primary-foreground' : 'hover:bg-muted/50',
                         )}
                         key={v.n}
                         onClick={() => setSelectedFuncIndex(index)}
-                        tabIndex={0}
                     >
                         <div className="font-medium">{v.n}</div>
                         <div
@@ -165,7 +165,7 @@ export function FormulaSearch({ onCancel: _onCancel }: { onCancel: () => void })
                         >
                             {v.a}
                         </div>
-                    </div>
+                    </button>
                 ))}
             </div>
             <DialogFooter>
