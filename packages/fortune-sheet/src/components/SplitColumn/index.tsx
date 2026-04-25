@@ -1,18 +1,19 @@
 /* eslint-disable jsx-a11y/control-has-associated-label */
-import {getDataArr, getFlowdata, getRegStr, locale, updateMoreCell,} from "../../state";
-import {useCallback, useContext, useEffect, useRef, useState,} from "react";
-import {WorkbookContext} from "../../context";
-import {useDialog} from "../../hooks/useDialog";
-import {Button} from "@workspace/ui/components/button";
+
+import { Button } from '@workspace/ui/components/button';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { WorkbookContext } from '../../context';
+import { useDialog } from '../../hooks/useDialog';
+import { getDataArr, getFlowdata, getRegStr, locale, updateMoreCell } from '../../state';
 
 export function SplitColumn() {
-    const {context, setContext} = useContext(WorkbookContext);
-    const {splitText, button} = locale(context);
-    const [splitOperate, setSplitOperate] = useState("");
+    const { context, setContext } = useContext(WorkbookContext);
+    const { splitText, button } = locale(context);
+    const [splitOperate, setSplitOperate] = useState('');
     const [otherFlag, setOtherFlag] = useState(false);
     const [tableData, setTableData] = useState<string[][]>([]);
     const splitSymbols = useRef<HTMLDivElement>(null);
-    const {showDialog, hideDialog} = useDialog();
+    const { showDialog, hideDialog } = useDialog();
 
     // Confirm button
     const certainBtn = useCallback(() => {
@@ -35,7 +36,7 @@ export function SplitColumn() {
             }
         }
         if (dataCover) {
-            showDialog(splitText.splitConfirmToExe, "yesno", () => {
+            showDialog(splitText.splitConfirmToExe, 'yesno', () => {
                 hideDialog();
                 setContext((ctx) => {
                     updateMoreCell(r, c, dataArr, ctx);
@@ -46,14 +47,7 @@ export function SplitColumn() {
                 updateMoreCell(r, c, dataArr, ctx);
             });
         }
-    }, [
-        context,
-        hideDialog,
-        setContext,
-        showDialog,
-        splitOperate,
-        splitText.splitConfirmToExe,
-    ]);
+    }, [context, hideDialog, setContext, showDialog, splitOperate, splitText.splitConfirmToExe]);
 
     // Data preview
     useEffect(() => {
@@ -131,22 +125,24 @@ export function SplitColumn() {
             <div className="border border-[#dfdfdf] p-1.5 my-1.5 h-[100px] overflow-y-auto">
                 <table>
                     <tbody>
-                    {tableData.map((o, index) => {
-                        if (o.length >= 1) {
+                        {tableData.map((o, index) => {
+                            if (o.length >= 1) {
+                                return (
+                                    // biome-ignore lint/suspicious/noArrayIndexKey: preview rows rendered in a stable order
+                                    <tr key={index}>
+                                        {o.map((o1: string) => (
+                                            <td key={o + o1}>{o1}</td>
+                                        ))}
+                                    </tr>
+                                );
+                            }
                             return (
+                                // biome-ignore lint/suspicious/noArrayIndexKey: preview rows rendered in a stable order
                                 <tr key={index}>
-                                    {o.map((o1: string) => (
-                                        <td key={o + o1}>{o1}</td>
-                                    ))}
+                                    <td />
                                 </tr>
                             );
-                        }
-                        return (
-                            <tr>
-                                <td/>
-                            </tr>
-                        );
-                    })}
+                        })}
                     </tbody>
                 </table>
             </div>

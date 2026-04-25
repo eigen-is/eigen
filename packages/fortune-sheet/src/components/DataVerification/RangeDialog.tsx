@@ -1,19 +1,17 @@
-import {getRangetxt, locale} from "../../state";
+import { Button } from '@workspace/ui/components/button';
 
-import {useCallback, useContext, useEffect, useState} from "react";
-import {DataVerification} from ".";
-import {WorkbookContext} from "../../context";
-import {useDialog} from "../../hooks/useDialog";
-import {ConditionRules} from "../ConditionFormat/ConditionRules";
-import {Button} from "@workspace/ui/components/button";
+import { useCallback, useContext, useEffect, useState } from 'react';
+import { WorkbookContext } from '../../context';
+import { useDialog } from '../../hooks/useDialog';
+import { getRangetxt, locale } from '../../state';
+import { ConditionRules } from '../ConditionFormat/ConditionRules';
+import { DataVerification } from '.';
 
 export function RangeDialog() {
-    const {context, setContext} = useContext(WorkbookContext);
-    const {showDialog} = useDialog();
-    const {dataVerification, button} = locale(context);
-    const [rangeTxt2, setRangeTxt2] = useState<string>(
-        context.rangeDialog?.rangeTxt ?? ""
-    );
+    const { context, setContext } = useContext(WorkbookContext);
+    const { showDialog } = useDialog();
+    const { dataVerification, button } = locale(context);
+    const [rangeTxt2, setRangeTxt2] = useState<string>(context.rangeDialog?.rangeTxt ?? '');
 
     const close = useCallback(() => {
         setContext((ctx) => {
@@ -22,37 +20,26 @@ export function RangeDialog() {
         });
         if (!context.rangeDialog) return;
         const rangeDialogType = context.rangeDialog.type;
-        if (rangeDialogType.includes("between")) {
-            showDialog(<ConditionRules type="between"/>);
+        if (rangeDialogType.includes('between')) {
+            showDialog(<ConditionRules type="between" />);
             return;
         }
-        if (rangeDialogType.includes("conditionRules")) {
-            const rulesType = rangeDialogType.substring(
-                "conditionRules".length,
-                rangeDialogType.length
-            );
-            showDialog(<ConditionRules type={rulesType}/>);
+        if (rangeDialogType.includes('conditionRules')) {
+            const rulesType = rangeDialogType.substring('conditionRules'.length, rangeDialogType.length);
+            showDialog(<ConditionRules type={rulesType} />);
             return;
         }
-        showDialog(<DataVerification/>);
+        showDialog(<DataVerification />);
     }, [context.rangeDialog, setContext, showDialog]);
 
     useEffect(() => {
         setRangeTxt2((r) => {
             if (context.luckysheet_select_save) {
-                const range =
-                    context.luckysheet_select_save[
-                    context.luckysheet_select_save.length - 1
-                        ];
-                r = getRangetxt(
-                    context,
-                    context.currentSheetId,
-                    range,
-                    context.currentSheetId
-                );
+                const range = context.luckysheet_select_save[context.luckysheet_select_save.length - 1];
+                r = getRangetxt(context, context.currentSheetId, range, context.currentSheetId);
                 return r;
             }
-            return "";
+            return '';
         });
     }, [context, context.luckysheet_select_save]);
 
@@ -87,11 +74,7 @@ export function RangeDialog() {
                 >
                     {button.confirm}
                 </Button>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => close()}
-                >
+                <Button variant="outline" size="sm" onClick={() => close()}>
                     {button.close}
                 </Button>
             </div>

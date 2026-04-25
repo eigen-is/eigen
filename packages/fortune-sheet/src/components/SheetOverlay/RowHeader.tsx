@@ -1,3 +1,6 @@
+import type React from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { WorkbookContext } from '../../context';
 import {
     fixPositionOnFrozenCells,
     fixRowStyleOverflowInFreeze,
@@ -10,12 +13,10 @@ import {
     rowLocationByIndex,
     selectTitlesMap,
     selectTitlesRange,
-} from "../../state";
-import React, {useCallback, useContext, useEffect, useMemo, useRef, useState,} from "react";
-import {WorkbookContext} from "../../context";
+} from '../../state';
 
 export const RowHeader: React.FC = () => {
-    const {context, setContext, settings, refs} = useContext(WorkbookContext);
+    const { context, setContext, settings, refs } = useContext(WorkbookContext);
     const rowChangeSizeRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const [hoverLocation, setHoverLocation] = useState({
@@ -31,16 +32,13 @@ export const RowHeader: React.FC = () => {
     const sheet = sheetIndex == null ? null : context.luckysheetfile[sheetIndex];
     const freezeHandleTop = useMemo(() => {
         if (
-            sheet?.frozen?.type === "row" ||
-            sheet?.frozen?.type === "rangeRow" ||
-            sheet?.frozen?.type === "rangeBoth" ||
-            sheet?.frozen?.type === "both"
+            sheet?.frozen?.type === 'row' ||
+            sheet?.frozen?.type === 'rangeRow' ||
+            sheet?.frozen?.type === 'rangeBoth' ||
+            sheet?.frozen?.type === 'both'
         ) {
             return (
-                rowLocationByIndex(
-                    sheet?.frozen?.range?.row_focus || 0,
-                    context.visibledatarow
-                )[1] + context.scrollTop
+                rowLocationByIndex(sheet?.frozen?.range?.row_focus || 0, context.visibledatarow)[1] + context.scrollTop
             );
         }
         return context.scrollTop;
@@ -51,23 +49,14 @@ export const RowHeader: React.FC = () => {
             if (context.luckysheet_rows_change_size) {
                 return;
             }
-            const mouseY =
-                e.pageY -
-                containerRef.current!.getBoundingClientRect().top -
-                window.scrollY;
+            const mouseY = e.pageY - containerRef.current!.getBoundingClientRect().top - window.scrollY;
             const _y = mouseY + containerRef.current!.scrollTop;
             const freeze = refs.globalCache.freezen?.[context.currentSheetId];
-            const {y, inHorizontalFreeze} = fixPositionOnFrozenCells(
-                freeze,
-                0,
-                _y,
-                0,
-                mouseY
-            );
+            const { y, inHorizontalFreeze } = fixPositionOnFrozenCells(freeze, 0, _y, 0, mouseY);
             const row_location = rowLocation(y, context.visibledatarow);
             const [row_pre, row, row_index] = row_location;
             if (row_pre !== hoverLocation.row_pre || row !== hoverLocation.row) {
-                setHoverLocation({row_pre, row, row_index});
+                setHoverLocation({ row_pre, row, row_index });
                 setHoverInFreeze(inHorizontalFreeze);
             }
         },
@@ -78,12 +67,12 @@ export const RowHeader: React.FC = () => {
             hoverLocation.row_pre,
             refs.globalCache.freezen,
             context.currentSheetId,
-        ]
+        ],
     );
 
     const onMouseDown = useCallback(
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
-            const {nativeEvent} = e;
+            const { nativeEvent } = e;
             setContext((draftCtx) => {
                 handleRowHeaderMouseDown(
                     draftCtx,
@@ -91,23 +80,23 @@ export const RowHeader: React.FC = () => {
                     nativeEvent,
                     containerRef.current!,
                     refs.cellInput.current!,
-                    refs.fxInput.current!
+                    refs.fxInput.current!,
                 );
             });
         },
-        [refs.globalCache, refs.cellInput, refs.fxInput, setContext]
+        [refs.globalCache, refs.cellInput, refs.fxInput, setContext],
     );
 
     const onMouseLeave = useCallback(() => {
         if (context.luckysheet_rows_change_size) {
             return;
         }
-        setHoverLocation({row: -1, row_pre: -1, row_index: -1});
+        setHoverLocation({ row: -1, row_pre: -1, row_index: -1 });
     }, [context.luckysheet_rows_change_size]);
 
     const onRowSizeHandleMouseDown = useCallback(
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
-            const {nativeEvent} = e;
+            const { nativeEvent } = e;
             setContext((draftCtx) => {
                 handleRowSizeHandleMouseDown(
                     draftCtx,
@@ -115,17 +104,17 @@ export const RowHeader: React.FC = () => {
                     nativeEvent,
                     containerRef.current!,
                     refs.workbookContainer.current!,
-                    refs.cellArea.current!
+                    refs.cellArea.current!,
                 );
             });
             e.stopPropagation();
         },
-        [refs.cellArea, refs.globalCache, refs.workbookContainer, setContext]
+        [refs.cellArea, refs.globalCache, refs.workbookContainer, setContext],
     );
 
     const onRowFreezeHandleMouseDown = useCallback(
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
-            const {nativeEvent} = e;
+            const { nativeEvent } = e;
             setContext((draftCtx) => {
                 handleRowFreezeHandleMouseDown(
                     draftCtx,
@@ -133,17 +122,17 @@ export const RowHeader: React.FC = () => {
                     nativeEvent,
                     containerRef.current!,
                     refs.workbookContainer.current!,
-                    refs.cellArea.current!
+                    refs.cellArea.current!,
                 );
             });
             e.stopPropagation();
         },
-        [refs.cellArea, refs.globalCache, refs.workbookContainer, setContext]
+        [refs.cellArea, refs.globalCache, refs.workbookContainer, setContext],
     );
 
     const onContextMenu = useCallback(
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
-            const {nativeEvent} = e;
+            const { nativeEvent } = e;
             setContext((draftCtx) => {
                 handleContextMenu(
                     draftCtx,
@@ -151,11 +140,11 @@ export const RowHeader: React.FC = () => {
                     nativeEvent,
                     refs.workbookContainer.current!,
                     refs.cellArea.current!,
-                    "rowHeader"
+                    'rowHeader',
                 );
             });
         },
-        [refs.workbookContainer, setContext, settings, refs.cellArea]
+        [refs.workbookContainer, setContext, settings, refs.cellArea],
     );
 
     useEffect(() => {
@@ -167,15 +156,14 @@ export const RowHeader: React.FC = () => {
             rowTitleMap = selectTitlesMap(rowTitleMap, r1, r2);
         }
         const rowTitleRange = selectTitlesRange(rowTitleMap);
-        const selects: { row: number; row_pre: number; r1: number; r2: number }[] =
-            [];
+        const selects: { row: number; row_pre: number; r1: number; r2: number }[] = [];
         for (let i = 0; i < rowTitleRange.length; i += 1) {
             const r1 = rowTitleRange[i][0];
             const r2 = rowTitleRange[i][rowTitleRange[i].length - 1];
             const row = rowLocationByIndex(r2, context.visibledatarow)[1];
             const row_pre = rowLocationByIndex(r1, context.visibledatarow)[0];
-            if (typeof row_pre === "number" && typeof row === "number") {
-                selects.push({row, row_pre, r1, r2});
+            if (typeof row_pre === 'number' && typeof row === 'number') {
+                selects.push({ row, row_pre, r1, r2 });
             }
         }
         setSelectedLocation(selects);
@@ -234,44 +222,43 @@ export const RowHeader: React.FC = () => {
                         {
                             top: hoverLocation.row_pre,
                             height: hoverLocation.row - hoverLocation.row_pre - 1,
-                            display: "block",
+                            display: 'block',
                         },
                         fixRowStyleOverflowInFreeze(
                             context,
                             hoverLocation.row_index,
                             hoverLocation.row_index,
-                            refs.globalCache.freezen?.[context.currentSheetId]
-                        )
+                            refs.globalCache.freezen?.[context.currentSheetId],
+                        ),
                     )}
                 />
             ) : null}
-            {selectedLocation.map(({row, row_pre, r1, r2}, i) => (
+            {selectedLocation.map(({ row, row_pre, r1, r2 }) => (
                 <div
                     className="fortune-row-header-selected"
-                    key={i}
+                    key={`${r1}-${r2}`}
                     style={Object.assign(
                         {
                             top: row_pre,
                             height: row - row_pre - 1,
-                            display: "block",
-                            backgroundColor: "rgba(76, 76, 76, 0.1)",
+                            display: 'block',
+                            backgroundColor: 'rgba(76, 76, 76, 0.1)',
                         },
                         fixRowStyleOverflowInFreeze(
                             context,
                             r1,
                             r2,
-                            refs.globalCache.freezen?.[context.currentSheetId]
-                        )
+                            refs.globalCache.freezen?.[context.currentSheetId],
+                        ),
                     )}
                 />
             ))}
             {/* placeholder to overflow the container, making the container scrollable */}
             <div
-                style={{height: context.rh_height, width: 1}}
+                style={{ height: context.rh_height, width: 1 }}
                 id="luckysheetrowHeader_0"
                 className="luckysheetsheetchange"
             />
         </div>
     );
 };
-
