@@ -72,20 +72,30 @@ function stringToAddressObject(text: string): AddressObject | undefined {
     return { value, html: text, text };
 }
 
+// Canonical empty paragraph — matches TipTap's normalized form so the seeded body survives
+// first interaction without the editor rewriting it (which would otherwise diff as a user
+// edit and trip the auto-save fingerprint).
+const EMPTY_PARA = '<p><br></p>';
+
 function injectSignature(body: string, sig: string | undefined, kind: 'new' | 'reply'): string {
     if (!sig) return body;
-    const sep = '<p><br></p>';
-    if (kind === 'new') return body + sep + sig;
-    // formatEmailQuote prefixes the quoted body with <br><br> as breathing room above the
-    // quote. With a signature injected, the sig itself provides the visual separation, so
-    // strip one leading <br> to keep the gap at two blank lines instead of three.
-    const trimmed = body.replace(/^<br\s*\/?>/i, '');
-    return sep + sig + trimmed;
+    if (kind === 'new') return body + EMPTY_PARA + sig;
+    // formatEmailQuote prefixes the quoted body with <br><br>; bare <br>s between block
+    // elements aren't canonical and TipTap rewrites them on first edit. Strip them and use
+    // explicit empty paragraphs for the breathing room (two blank lines between sig and quote).
+    const trimmed = body.replace(/^(<br\s*\/?>)+/i, '');
+    return EMPTY_PARA + sig + EMPTY_PARA + EMPTY_PARA + trimmed;
 }
 
+// TipTap's getText() joins paragraphs with \n\n and renders <br> as \n. Mirror that so the
+// initial bodyText matches what the editor will emit, keeping the auto-save fingerprint stable.
 function plainSignature(sig: string | undefined): string {
     if (!sig) return '';
-    return sig.replace(/<[^>]+>/g, '').trim();
+    return sig
+        .replace(/<\/p>\s*<p[^>]*>/gi, '\n\n')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .trim();
 }
 
 function initFields(
