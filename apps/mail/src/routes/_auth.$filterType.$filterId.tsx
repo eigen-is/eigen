@@ -1,5 +1,6 @@
 import { createFileRoute, useLocation } from '@tanstack/react-router';
 import { useEmail, useEmails, useMailboxes } from '@workspace/lib/mail';
+import { useSpaceSettings } from '@workspace/lib/space';
 import type { Email, EmailDraft as EmailDraftType } from '@workspace/lib/types/mail';
 import { EmptyState } from '@workspace/ui';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
@@ -45,6 +46,8 @@ function MailRoute() {
     const { data: emails = [], isLoading: isEmailsLoading, error: emailsError } = useEmails(filterId);
     const { data: selectedEmail = null } = useEmail(mailId);
     const { data: mailboxes = [] } = useMailboxes();
+    const { data: spaceSettings } = useSpaceSettings();
+    const signatureHtml = spaceSettings?.email?.signatures?.[0]?.html;
 
     const actions = useMailActions();
 
@@ -168,10 +171,11 @@ function MailRoute() {
                                 }
                                 email={selectedEmail as EmailDraftType}
                                 prefillDraft={prefillDraft}
+                                to={to}
+                                signatureHtml={signatureHtml}
                                 sendDraft={actions.handleSendEmail}
                                 onAutoSave={actions.saveDraft}
                                 onDraftIdAssigned={actions.handleDraftIdAssigned}
-                                to={to}
                                 isSending={actions.isSendPending}
                                 filePickerOpen={filePickerOpen}
                                 onFilePickerOpenChange={setFilePickerOpen}

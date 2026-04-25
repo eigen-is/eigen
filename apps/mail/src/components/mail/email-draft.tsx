@@ -54,6 +54,7 @@ type EmailDraftProps = {
     // and seeds its fingerprint from it, so no save fires until the user actually edits.
     prefillDraft?: NewDraft;
     to?: string;
+    signatureHtml?: string;
     sendDraft: (mail: NewDraft) => Promise<unknown>;
     onAutoSave?: (
         mail: NewDraft,
@@ -71,6 +72,7 @@ export function EmailDraft({
     email,
     prefillDraft,
     to,
+    signatureHtml,
     sendDraft,
     onAutoSave,
     onDraftIdAssigned,
@@ -99,6 +101,7 @@ export function EmailDraft({
         email,
         prefillTo: to,
         prefillDraft,
+        signatureHtml,
         onSave: onAutoSave,
         onDraftIdAssigned,
     });
