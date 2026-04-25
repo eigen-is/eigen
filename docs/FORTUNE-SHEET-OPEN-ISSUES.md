@@ -66,6 +66,19 @@ smoke pass. Sequence to run in `apps/sheets`:
       touched `DataVerification`, `LinkEditCard`, `ConditionFormat/ConditionRules`,
       `ContextMenu/index.tsx`, `CustomSort`, `LocationCondition`, `SplitColumn`,
       `FilterMenu`. Walk through each dialog/popover.
+- [ ] **Follow-up shadcn sweep (commits `bdb71f94` + `91e28493`)** — touched
+      `LinkEditCard` (CSS migration + 2 raw `<input>` → `Input`; 4 div-buttons
+      → real `<button>`), `ZoomControl` (custom menu → Popover; +/-/trigger/
+      preset items → `<button>`), `SheetOverlay` bottom-add-row (shadcn
+      `Button` + `Input`), `ContextMenu/index.tsx` (`menuItemClass` const
+      dedupe), `FormulaSearch` (broken-window `cn()` + list rows → `<button>`).
+      Also dropped 4 dead `.luckysheet-cell-flow-*` rules from
+      `SheetOverlay/index.css`. Verify: link card open/edit/delete, zoom
+      preset menu open/select, bottom add-row click + back-to-top click,
+      formula list keyboard navigation (Enter/Space).
+- [ ] **`LinkEditCard` directory rename (commits `dd46088a` + `3b5642a2`)** —
+      `LinkEidtCard/` → `LinkEditCard/`. Trivial single-import update; should
+      be invisible at runtime. Spot-check link card still renders.
 
 ### Per-feature paths
 - [ ] **Cell editing & paste** (InputBox + FxEditor + Workbook clusters):
