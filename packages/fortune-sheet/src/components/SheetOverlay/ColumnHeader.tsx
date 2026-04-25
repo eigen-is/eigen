@@ -1,3 +1,7 @@
+import { CircleChevronDown } from 'lucide-react';
+import type React from 'react';
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { WorkbookContext } from '../../context';
 import {
     autoFitColumnWidth,
     colLocation,
@@ -13,13 +17,10 @@ import {
     isAllowEdit,
     selectTitlesMap,
     selectTitlesRange,
-} from "../../state";
-import React, {useCallback, useContext, useEffect, useMemo, useRef, useState,} from "react";
-import {WorkbookContext} from "../../context";
-import {CircleChevronDown} from "lucide-react";
+} from '../../state';
 
 export const ColumnHeader: React.FC = () => {
-    const {context, setContext, settings, refs} = useContext(WorkbookContext);
+    const { context, setContext, settings, refs } = useContext(WorkbookContext);
     const containerRef = useRef<HTMLDivElement>(null);
     const colChangeSizeRef = useRef<HTMLDivElement>(null);
     const [hoverLocation, setHoverLocation] = useState({
@@ -36,16 +37,13 @@ export const ColumnHeader: React.FC = () => {
     const sheet = sheetIndex == null ? null : context.luckysheetfile[sheetIndex];
     const freezeHandleLeft = useMemo(() => {
         if (
-            sheet?.frozen?.type === "column" ||
-            sheet?.frozen?.type === "rangeColumn" ||
-            sheet?.frozen?.type === "rangeBoth" ||
-            sheet?.frozen?.type === "both"
+            sheet?.frozen?.type === 'column' ||
+            sheet?.frozen?.type === 'rangeColumn' ||
+            sheet?.frozen?.type === 'rangeBoth' ||
+            sheet?.frozen?.type === 'both'
         ) {
             return (
-                colLocationByIndex(
-                    sheet?.frozen?.range?.column_focus || 0,
-                    context.visibledatacolumn
-                )[1] -
+                colLocationByIndex(sheet?.frozen?.range?.column_focus || 0, context.visibledatacolumn)[1] -
                 2 +
                 context.scrollLeft
             );
@@ -58,23 +56,14 @@ export const ColumnHeader: React.FC = () => {
             if (context.luckysheet_cols_change_size) {
                 return;
             }
-            const mouseX =
-                e.pageX -
-                containerRef.current!.getBoundingClientRect().left -
-                window.scrollX;
+            const mouseX = e.pageX - containerRef.current!.getBoundingClientRect().left - window.scrollX;
             const _x = mouseX + containerRef.current!.scrollLeft;
             const freeze = refs.globalCache.freezen?.[context.currentSheetId];
-            const {x, inVerticalFreeze} = fixPositionOnFrozenCells(
-                freeze,
-                _x,
-                0,
-                mouseX,
-                0
-            );
+            const { x, inVerticalFreeze } = fixPositionOnFrozenCells(freeze, _x, 0, mouseX, 0);
             const col_location = colLocation(x, context.visibledatacolumn);
             const [col_pre, col, col_index] = col_location;
             if (col_index !== hoverLocation.col_index) {
-                setHoverLocation({col_pre, col, col_index});
+                setHoverLocation({ col_pre, col, col_index });
                 setHoverInFreeze(inVerticalFreeze);
             }
             const flowdata = getFlowdata(context);
@@ -88,12 +77,12 @@ export const ColumnHeader: React.FC = () => {
                         },
                     ]);
         },
-        [context, hoverLocation.col_index, refs.globalCache.freezen]
+        [context, hoverLocation.col_index, refs.globalCache.freezen],
     );
 
     const onMouseDown = useCallback(
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
-            const {nativeEvent} = e;
+            const { nativeEvent } = e;
             setContext((draftCtx) => {
                 handleColumnHeaderMouseDown(
                     draftCtx,
@@ -101,23 +90,23 @@ export const ColumnHeader: React.FC = () => {
                     nativeEvent,
                     containerRef.current!,
                     refs.cellInput.current!,
-                    refs.fxInput.current!
+                    refs.fxInput.current!,
                 );
             });
         },
-        [refs.globalCache, refs.cellInput, refs.fxInput, setContext]
+        [refs.globalCache, refs.cellInput, refs.fxInput, setContext],
     );
 
     const onMouseLeave = useCallback(() => {
         if (context.luckysheet_cols_change_size) {
             return;
         }
-        setHoverLocation({col: -1, col_pre: -1, col_index: -1});
+        setHoverLocation({ col: -1, col_pre: -1, col_index: -1 });
     }, [context.luckysheet_cols_change_size]);
 
     const onColSizeHandleMouseDown = useCallback(
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
-            const {nativeEvent} = e;
+            const { nativeEvent } = e;
             setContext((draftCtx) => {
                 handleColSizeHandleMouseDown(
                     draftCtx,
@@ -125,32 +114,28 @@ export const ColumnHeader: React.FC = () => {
                     nativeEvent,
                     containerRef.current!,
                     refs.workbookContainer.current!,
-                    refs.cellArea.current!
+                    refs.cellArea.current!,
                 );
             });
             e.stopPropagation();
         },
-        [refs.cellArea, refs.globalCache, refs.workbookContainer, setContext]
+        [refs.cellArea, refs.globalCache, refs.workbookContainer, setContext],
     );
 
     const onColSizeHandleDoubleClick = useCallback(
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
             if (!refs.canvas.current) return;
             setContext((draftCtx) => {
-                autoFitColumnWidth(
-                    draftCtx,
-                    hoverLocation.col_index,
-                    refs.canvas.current!
-                );
+                autoFitColumnWidth(draftCtx, hoverLocation.col_index, refs.canvas.current!);
             });
             e.stopPropagation();
         },
-        [hoverLocation.col_index, refs.canvas, setContext]
+        [hoverLocation.col_index, refs.canvas, setContext],
     );
 
     const onColFreezeHandleMouseDown = useCallback(
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
-            const {nativeEvent} = e;
+            const { nativeEvent } = e;
             setContext((draftCtx) => {
                 handleColFreezeHandleMouseDown(
                     draftCtx,
@@ -158,17 +143,17 @@ export const ColumnHeader: React.FC = () => {
                     nativeEvent,
                     containerRef.current!,
                     refs.workbookContainer.current!,
-                    refs.cellArea.current!
+                    refs.cellArea.current!,
                 );
             });
             e.stopPropagation();
         },
-        [refs.cellArea, refs.globalCache, refs.workbookContainer, setContext]
+        [refs.cellArea, refs.globalCache, refs.workbookContainer, setContext],
     );
 
     const onContextMenu = useCallback(
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
-            const {nativeEvent} = e;
+            const { nativeEvent } = e;
             setContext((draftCtx) => {
                 handleContextMenu(
                     draftCtx,
@@ -176,11 +161,11 @@ export const ColumnHeader: React.FC = () => {
                     nativeEvent,
                     refs.workbookContainer.current!,
                     refs.cellArea.current!,
-                    "columnHeader"
+                    'columnHeader',
                 );
             });
         },
-        [refs.workbookContainer, setContext, settings, refs.cellArea]
+        [refs.workbookContainer, setContext, settings, refs.cellArea],
     );
 
     useEffect(() => {
@@ -194,15 +179,14 @@ export const ColumnHeader: React.FC = () => {
             columnTitleMap = selectTitlesMap(columnTitleMap, c1, c2);
         }
         const columnTitleRange = selectTitlesRange(columnTitleMap);
-        const selects: { col: number; col_pre: number; c1: number; c2: number }[] =
-            [];
+        const selects: { col: number; col_pre: number; c1: number; c2: number }[] = [];
         for (let j = 0; j < columnTitleRange.length; j += 1) {
             const c1 = columnTitleRange[j][0];
             const c2 = columnTitleRange[j][columnTitleRange[j].length - 1];
             const col = colLocationByIndex(c2, context.visibledatacolumn)[1];
             const col_pre = colLocationByIndex(c1, context.visibledatacolumn)[0];
-            if (typeof col === "number" && typeof col_pre === "number") {
-                selects.push({col, col_pre, c1, c2});
+            if (typeof col === 'number' && typeof col_pre === 'number') {
+                selects.push({ col, col_pre, c1, c2 });
             }
         }
         setSelectedLocation(selects);
@@ -251,8 +235,7 @@ export const ColumnHeader: React.FC = () => {
                 onMouseDown={onColSizeHandleMouseDown}
                 onDoubleClick={onColSizeHandleDoubleClick}
                 style={{
-                    left:
-                        hoverLocation.col - 5 + (hoverInFreeze ? context.scrollLeft : 0),
+                    left: hoverLocation.col - 5 + (hoverInFreeze ? context.scrollLeft : 0),
                     opacity: context.luckysheet_cols_change_size ? 1 : 0,
                 }}
             />
@@ -263,14 +246,14 @@ export const ColumnHeader: React.FC = () => {
                         {
                             left: hoverLocation.col_pre,
                             width: hoverLocation.col - hoverLocation.col_pre - 1,
-                            display: "block",
+                            display: 'block',
                         },
                         fixColumnStyleOverflowInFreeze(
                             context,
                             hoverLocation.col_index,
                             hoverLocation.col_index,
-                            refs.globalCache.freezen?.[context.currentSheetId]
-                        )
+                            refs.globalCache.freezen?.[context.currentSheetId],
+                        ),
                     )}
                 >
                     {allowEditRef.current && (
@@ -287,28 +270,28 @@ export const ColumnHeader: React.FC = () => {
                             }}
                             tabIndex={0}
                         >
-              <CircleChevronDown width={12} height={12} aria-hidden="true"/>
-            </span>
+                            <CircleChevronDown width={12} height={12} aria-hidden="true" />
+                        </span>
                     )}
                 </div>
             ) : null}
-            {selectedLocation.map(({col, col_pre, c1, c2}, i) => (
+            {selectedLocation.map(({ col, col_pre, c1, c2 }) => (
                 <div
                     className="fortune-col-header-selected"
-                    key={i}
+                    key={`${c1}-${c2}`}
                     style={Object.assign(
                         {
                             left: col_pre,
                             width: col - col_pre - 1,
-                            display: "block",
-                            backgroundColor: "rgba(76, 76, 76, 0.1)",
+                            display: 'block',
+                            backgroundColor: 'rgba(76, 76, 76, 0.1)',
                         },
                         fixColumnStyleOverflowInFreeze(
                             context,
                             c1,
                             c2,
-                            refs.globalCache.freezen?.[context.currentSheetId]
-                        )
+                            refs.globalCache.freezen?.[context.currentSheetId],
+                        ),
                     )}
                 />
             ))}
@@ -316,13 +299,12 @@ export const ColumnHeader: React.FC = () => {
             <div
                 className="luckysheet-cols-h-cells luckysheetsheetchange"
                 id="luckysheet-cols-h-cells_0"
-                style={{width: context.ch_width, height: 1}}
+                style={{ width: context.ch_width, height: 1 }}
             >
                 <div className="luckysheet-cols-h-cells-c">
-                    <div className="luckysheet-grdblkpush"/>
+                    <div className="luckysheet-grdblkpush" />
                 </div>
             </div>
         </div>
     );
 };
-

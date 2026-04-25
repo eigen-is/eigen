@@ -1,19 +1,17 @@
-import {useContext, useEffect, useState} from "react";
-import {Context, getSheetIndex, locale} from "../../state";
-import {WorkbookContext} from "../../context";
-import {ColorPicker} from "@workspace/ui/components/layout/media/color-picker";
+import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker';
+import { useContext, useEffect, useState } from 'react';
+import { WorkbookContext } from '../../context';
+import { type Context, getSheetIndex, locale } from '../../state';
 
 type ChangeColorProps = {
     triggerParentUpdate: (state: boolean) => void;
 };
 
-export function ChangeColor({triggerParentUpdate: _triggerParentUpdate}: ChangeColorProps) {
-    const {context, setContext} = useContext(WorkbookContext);
-    const {sheetconfig} = locale(context);
+export function ChangeColor({ triggerParentUpdate: _triggerParentUpdate }: ChangeColorProps) {
+    const { context, setContext } = useContext(WorkbookContext);
+    const { sheetconfig } = locale(context);
     const [selectColor, setSelectColor] = useState<string | undefined>(
-        context.luckysheetfile[
-            getSheetIndex(context, context.currentSheetId) as number
-            ].color
+        context.luckysheetfile[getSheetIndex(context, context.currentSheetId) as number].color,
     );
 
     useEffect(() => {
@@ -27,7 +25,7 @@ export function ChangeColor({triggerParentUpdate: _triggerParentUpdate}: ChangeC
     return (
         <div className="p-3">
             <ColorPicker
-                value={selectColor ?? ""}
+                value={selectColor ?? ''}
                 resetLabel={sheetconfig.resetColor}
                 onChange={(color) => setSelectColor(color || undefined)}
             />

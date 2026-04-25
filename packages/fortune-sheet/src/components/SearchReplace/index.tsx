@@ -1,34 +1,34 @@
+import { Button } from '@workspace/ui/components/button';
+import { Checkbox } from '@workspace/ui/components/checkbox';
+import { DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { Input } from '@workspace/ui/components/input';
+import { Label } from '@workspace/ui/components/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@workspace/ui/components/tabs';
+import { useCallback, useContext, useState } from 'react';
+import { WorkbookContext } from '../../context';
+import { useAlert } from '../../hooks/useAlert';
+import { useDialog } from '../../hooks/useDialog';
 import {
     locale,
     normalizeSelection,
     replace,
     replaceAll,
+    type SearchResult,
     scrollToHighlightCell,
     searchAll,
     searchNext,
-    SearchResult,
-} from "../../state";
-import {useCallback, useContext, useState} from "react";
-import {WorkbookContext} from "../../context";
-import {useAlert} from "../../hooks/useAlert";
-import {useDialog} from "../../hooks/useDialog";
-import {Button} from "@workspace/ui/components/button";
-import {Input} from "@workspace/ui/components/input";
-import {Checkbox} from "@workspace/ui/components/checkbox";
-import {Label} from "@workspace/ui/components/label";
-import {Tabs, TabsContent, TabsList, TabsTrigger,} from "@workspace/ui/components/tabs";
-import {DialogFooter, DialogHeader, DialogTitle,} from "@workspace/ui/components/dialog";
+} from '../../state';
 
 export function SearchReplace() {
-    const {context, setContext} = useContext(WorkbookContext);
-    const {findAndReplace, button} = locale(context);
-    const [searchText, setSearchText] = useState("");
-    const [replaceText, setReplaceText] = useState("");
+    const { context, setContext } = useContext(WorkbookContext);
+    const { findAndReplace, button } = locale(context);
+    const [searchText, setSearchText] = useState('');
+    const [replaceText, setReplaceText] = useState('');
     const [showReplace, setShowReplace] = useState(!!context.showReplace);
     const [searchResult, setSearchResult] = useState<SearchResult[]>([]);
     const [selectedCell, setSelectedCell] = useState<{ r: number; c: number }>();
-    const {showAlert} = useAlert();
-    const {hideDialog} = useDialog();
+    const { showAlert } = useAlert();
+    const { hideDialog } = useDialog();
     const [checkMode, setCheckMode] = useState({
         regCheck: false,
         wordCheck: false,
@@ -43,12 +43,9 @@ export function SearchReplace() {
         hideDialog();
     }, [setContext, hideDialog]);
 
-    const updateCheckMode = useCallback(
-        (mode: keyof typeof checkMode, value: boolean) => {
-            setCheckMode((prev) => ({...prev, [mode]: value}));
-        },
-        []
-    );
+    const updateCheckMode = useCallback((mode: keyof typeof checkMode, value: boolean) => {
+        setCheckMode((prev) => ({ ...prev, [mode]: value }));
+    }, []);
 
     const handleSearchAll = useCallback(() => {
         setContext((draftCtx) => {
@@ -71,24 +68,15 @@ export function SearchReplace() {
     const checkboxes = (
         <div className="flex gap-4 text-sm">
             <Label className="flex items-center gap-1.5">
-                <Checkbox
-                    checked={checkMode.regCheck}
-                    onCheckedChange={(v) => updateCheckMode("regCheck", !!v)}
-                />
+                <Checkbox checked={checkMode.regCheck} onCheckedChange={(v) => updateCheckMode('regCheck', !!v)} />
                 {findAndReplace.regexTextbox}
             </Label>
             <Label className="flex items-center gap-1.5">
-                <Checkbox
-                    checked={checkMode.wordCheck}
-                    onCheckedChange={(v) => updateCheckMode("wordCheck", !!v)}
-                />
+                <Checkbox checked={checkMode.wordCheck} onCheckedChange={(v) => updateCheckMode('wordCheck', !!v)} />
                 {findAndReplace.wholeTextbox}
             </Label>
             <Label className="flex items-center gap-1.5">
-                <Checkbox
-                    checked={checkMode.caseCheck}
-                    onCheckedChange={(v) => updateCheckMode("caseCheck", !!v)}
-                />
+                <Checkbox checked={checkMode.caseCheck} onCheckedChange={(v) => updateCheckMode('caseCheck', !!v)} />
                 {findAndReplace.distinguishTextbox}
             </Label>
         </div>
@@ -104,7 +92,7 @@ export function SearchReplace() {
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
                 onKeyDown={(e) => {
-                    if (e.key === "Enter") handleSearchNext();
+                    if (e.key === 'Enter') handleSearchNext();
                 }}
             />
         </div>
@@ -117,17 +105,14 @@ export function SearchReplace() {
             </DialogHeader>
 
             <div className="flex flex-col min-h-0 flex-1 gap-4">
-                <Tabs
-                    value={showReplace ? "replace" : "find"}
-                    onValueChange={(v) => setShowReplace(v === "replace")}
-                >
+                <Tabs value={showReplace ? 'replace' : 'find'} onValueChange={(v) => setShowReplace(v === 'replace')}>
                     <TabsList>
                         <TabsTrigger value="find">{findAndReplace.find}</TabsTrigger>
                         <TabsTrigger value="replace">{findAndReplace.replace}</TabsTrigger>
                     </TabsList>
 
                     <TabsContent value="find" className="space-y-4 pt-4">
-                        {searchField("searchInput", true)}
+                        {searchField('searchInput', true)}
                         {checkboxes}
                         <div className="flex gap-2">
                             <Button variant="outline" size="sm" onClick={handleSearchAll}>
@@ -149,7 +134,7 @@ export function SearchReplace() {
                                 value={searchText}
                                 onChange={(e) => setSearchText(e.target.value)}
                                 onKeyDown={(e) => {
-                                    if (e.key === "Enter") handleSearchNext();
+                                    if (e.key === 'Enter') handleSearchNext();
                                 }}
                             />
                             <Label htmlFor="replaceInput">{findAndReplace.replaceTextbox}</Label>
@@ -209,19 +194,18 @@ export function SearchReplace() {
                             <div
                                 className={`h-8 flex items-center px-2 border-b cursor-pointer text-sm ${
                                     selectedCell?.r === v.r && selectedCell?.c === v.c
-                                        ? "bg-primary text-primary-foreground"
-                                        : "hover:bg-muted/50"
+                                        ? 'bg-primary text-primary-foreground'
+                                        : 'hover:bg-muted/50'
                                 }`}
                                 key={v.cellPosition}
                                 onClick={() => {
                                     setContext((draftCtx) => {
-                                        draftCtx.luckysheet_select_save = normalizeSelection(
-                                            draftCtx,
-                                            [{row: [v.r, v.r], column: [v.c, v.c]}]
-                                        );
+                                        draftCtx.luckysheet_select_save = normalizeSelection(draftCtx, [
+                                            { row: [v.r, v.r], column: [v.c, v.c] },
+                                        ]);
                                         scrollToHighlightCell(draftCtx, v.r, v.c);
                                     });
-                                    setSelectedCell({r: v.r, c: v.c});
+                                    setSelectedCell({ r: v.r, c: v.c });
                                 }}
                                 tabIndex={0}
                             >

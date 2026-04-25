@@ -1,16 +1,17 @@
-import React, {memo, useCallback, useContext, useEffect, useRef} from "react";
+import type React from 'react';
+import { memo, useCallback, useContext, useEffect, useRef } from 'react';
+import { WorkbookContext } from '../../context';
 import {
     Canvas,
-    Context,
-    Freezen,
+    type Context,
+    type Freezen,
     handleGlobalWheel,
     initFreeze,
-    Sheet as SheetType,
+    type Sheet as SheetType,
     updateContextWithCanvas,
     updateContextWithSheetData,
-} from "../../state";
-import {WorkbookContext} from "../../context";
-import {SheetOverlay} from "../SheetOverlay";
+} from '../../state';
+import { SheetOverlay } from '../SheetOverlay';
 
 // ---------------------------------------------------------------------------
 // Canvas drawing helpers
@@ -18,13 +19,7 @@ import {SheetOverlay} from "../SheetOverlay";
 
 type ScrollPos = { scrollLeft: number; scrollTop: number };
 
-function drawFrozenBoth(
-    tc: Canvas,
-    ctx: Context,
-    scroll: ScrollPos,
-    horizontalData: any[],
-    verticalData: any[]
-) {
+function drawFrozenBoth(tc: Canvas, ctx: Context, scroll: ScrollPos, horizontalData: number[], verticalData: number[]) {
     const [hPx, , hScrollTop] = horizontalData;
     const [vPx, , vScrollWidth] = verticalData;
     const vOffset = vPx - vScrollWidth;
@@ -66,7 +61,7 @@ function drawFrozenBoth(
     });
 }
 
-function drawFrozenHorizontal(tc: Canvas, ctx: Context, scroll: ScrollPos, horizontalData: any[]) {
+function drawFrozenHorizontal(tc: Canvas, ctx: Context, scroll: ScrollPos, horizontalData: number[]) {
     const [hPx, , hScrollTop] = horizontalData;
     const hOffset = hPx - hScrollTop;
 
@@ -85,10 +80,10 @@ function drawFrozenHorizontal(tc: Canvas, ctx: Context, scroll: ScrollPos, horiz
     tc.drawColumnHeader(scroll.scrollLeft);
     tc.drawRowHeader(scroll.scrollTop + hOffset, undefined, hOffset + ctx.columnHeaderHeight);
     tc.drawRowHeader(hScrollTop, hPx);
-    tc.drawFreezeLine({horizontalTop: hOffset + ctx.columnHeaderHeight - 2});
+    tc.drawFreezeLine({ horizontalTop: hOffset + ctx.columnHeaderHeight - 2 });
 }
 
-function drawFrozenVertical(tc: Canvas, ctx: Context, scroll: ScrollPos, verticalData: any[]) {
+function drawFrozenVertical(tc: Canvas, ctx: Context, scroll: ScrollPos, verticalData: number[]) {
     const [vPx, , vScrollWidth] = verticalData;
     const vOffset = vPx - vScrollWidth;
 
@@ -106,15 +101,10 @@ function drawFrozenVertical(tc: Canvas, ctx: Context, scroll: ScrollPos, vertica
     tc.drawRowHeader(scroll.scrollTop);
     tc.drawColumnHeader(scroll.scrollLeft + vOffset, undefined, vOffset + ctx.rowHeaderWidth);
     tc.drawColumnHeader(vScrollWidth, vPx);
-    tc.drawFreezeLine({verticalLeft: vOffset + ctx.rowHeaderWidth - 2});
+    tc.drawFreezeLine({ verticalLeft: vOffset + ctx.rowHeaderWidth - 2 });
 }
 
-function drawSheet(
-    canvasEl: HTMLCanvasElement,
-    ctx: Context,
-    scroll: ScrollPos,
-    freeze: Freezen | undefined
-) {
+function drawSheet(canvasEl: HTMLCanvasElement, ctx: Context, scroll: ScrollPos, freeze: Freezen | undefined) {
     const tc = new Canvas(canvasEl, ctx);
     const horizontalData = freeze?.horizontal?.freezenhorizontaldata;
     const verticalData = freeze?.vertical?.freezenverticaldata;
@@ -126,7 +116,7 @@ function drawSheet(
     } else if (verticalData) {
         drawFrozenVertical(tc, ctx, scroll, verticalData);
     } else {
-        tc.drawMain({scrollWidth: scroll.scrollLeft, scrollHeight: scroll.scrollTop, clear: true});
+        tc.drawMain({ scrollWidth: scroll.scrollLeft, scrollHeight: scroll.scrollTop, clear: true });
         tc.drawColumnHeader(scroll.scrollLeft);
         tc.drawRowHeader(scroll.scrollTop);
     }
@@ -157,11 +147,11 @@ type Props = {
     sheet: SheetType;
 };
 
-export const Sheet: React.FC<Props> = ({sheet}) => {
-    const {data} = sheet;
+export const Sheet: React.FC<Props> = ({ sheet }) => {
+    const { data } = sheet;
     const containerRef = useRef<HTMLDivElement>(null);
     const placeholderRef = useRef<HTMLDivElement>(null);
-    const {context, setContext, refs, settings} = useContext(WorkbookContext);
+    const { context, setContext, refs, settings } = useContext(WorkbookContext);
 
     const contextRef = useRef(context);
     contextRef.current = context;
@@ -180,7 +170,7 @@ export const Sheet: React.FC<Props> = ({sheet}) => {
             setContext((draftCtx) => {
                 if (settings.devicePixelRatio === 0) {
                     draftCtx.devicePixelRatio = (
-                        typeof globalThis !== "undefined" ? globalThis : window
+                        typeof globalThis !== 'undefined' ? globalThis : window
                     ).devicePixelRatio;
                 }
                 updateContextWithSheetData(draftCtx, data);
@@ -188,8 +178,8 @@ export const Sheet: React.FC<Props> = ({sheet}) => {
             });
         }
 
-        window.addEventListener("resize", resize);
-        return () => window.removeEventListener("resize", resize);
+        window.addEventListener('resize', resize);
+        return () => window.removeEventListener('resize', resize);
     }, [data, refs.canvas, setContext, settings.devicePixelRatio]);
 
     // Recalculate row/col info when data or config dimensions change
@@ -201,9 +191,7 @@ export const Sheet: React.FC<Props> = ({sheet}) => {
 
     // Init canvas sizing
     useEffect(() => {
-        setContext((draftCtx) =>
-            updateContextWithCanvas(draftCtx, refs.canvas.current!, placeholderRef.current!)
-        );
+        setContext((draftCtx) => updateContextWithCanvas(draftCtx, refs.canvas.current!, placeholderRef.current!));
     }, [refs.canvas, setContext, context.rowHeaderWidth, context.columnHeaderHeight, context.devicePixelRatio]);
 
     // Recalculate freeze data when sheet or freeze config changes
@@ -243,7 +231,7 @@ export const Sheet: React.FC<Props> = ({sheet}) => {
 
     // Redraw on scroll changes (from globalCache listener, bypasses React)
     useEffect(() => {
-        const {scrollListeners} = refs.globalCache;
+        const { scrollListeners } = refs.globalCache;
         scrollListeners.add(scheduleRedraw);
         return () => {
             scrollListeners.delete(scheduleRedraw);
@@ -264,28 +252,23 @@ export const Sheet: React.FC<Props> = ({sheet}) => {
                 e,
                 refs.globalCache,
                 refs.scrollbarX.current!,
-                refs.scrollbarY.current!
+                refs.scrollbarY.current!,
             );
         },
-        [refs.globalCache, refs.scrollbarX, refs.scrollbarY]
+        [refs.globalCache, refs.scrollbarX, refs.scrollbarY],
     );
 
     useEffect(() => {
         const container = containerRef.current;
-        container?.addEventListener("wheel", onWheel, {passive: false});
-        return () => container?.removeEventListener("wheel", onWheel);
+        container?.addEventListener('wheel', onWheel, { passive: false });
+        return () => container?.removeEventListener('wheel', onWheel);
     }, [onWheel]);
 
     return (
         <div ref={containerRef} className="flex flex-1 flex-col min-h-0 relative">
-            <div ref={placeholderRef} className="w-full h-full block"/>
-            <canvas
-                className="w-full h-full block absolute"
-                ref={refs.canvas}
-                aria-hidden="true"
-            />
-            <MemoizedSheetOverlay/>
+            <div ref={placeholderRef} className="w-full h-full block" />
+            <canvas className="w-full h-full block absolute" ref={refs.canvas} aria-hidden="true" />
+            <MemoizedSheetOverlay />
         </div>
     );
 };
-

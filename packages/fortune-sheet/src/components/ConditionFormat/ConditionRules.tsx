@@ -1,63 +1,49 @@
-import {useCallback, useContext, useEffect, useState} from "react";
-import {locale, setConditionRules} from "../../state";
-import produce from "immer";
-import {Button} from "@workspace/ui/components/button";
-import {Input} from "@workspace/ui/components/input";
-import {Checkbox} from "@workspace/ui/components/checkbox";
-import {Label} from "@workspace/ui/components/label";
-import {Popover, PopoverContent, PopoverTrigger} from "@workspace/ui/components/popover";
-import {ColorPicker} from "@workspace/ui/components/layout/media/color-picker";
-import {DialogFooter, DialogHeader, DialogTitle} from "@workspace/ui/components/dialog";
-import {WorkbookContext} from "../../context";
-import {useDialog} from "../../hooks/useDialog";
+import { Button } from '@workspace/ui/components/button';
+import { Checkbox } from '@workspace/ui/components/checkbox';
+import { DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { Input } from '@workspace/ui/components/input';
+import { Label } from '@workspace/ui/components/label';
+import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker';
+import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
+import produce from 'immer';
+import { useCallback, useContext, useEffect, useState } from 'react';
+import { WorkbookContext } from '../../context';
+import { useDialog } from '../../hooks/useDialog';
+import { locale, setConditionRules } from '../../state';
 
-export function ConditionRules({type}: { type: string }) {
-    const {context, setContext} = useContext(WorkbookContext);
-    const {hideDialog} = useDialog();
-    const {conditionformat, button, protection, generalDialog} =
-        locale(context);
+export function ConditionRules({ type }: { type: string }) {
+    const { context, setContext } = useContext(WorkbookContext);
+    const { hideDialog } = useDialog();
+    const { conditionformat, button, protection, generalDialog } = locale(context);
     const [colorRules, setColorRules] = useState<{
         textColor: string;
         cellColor: string;
-    }>({textColor: "#009966", cellColor: "#d0fae5"});
+    }>({ textColor: '#009966', cellColor: '#d0fae5' });
 
     const close = useCallback(
         (closeType: string) => {
-            if (closeType === "confirm") {
+            if (closeType === 'confirm') {
                 setContext((ctx) => {
                     ctx.conditionRules.textColor.color = colorRules.textColor;
                     ctx.conditionRules.cellColor.color = colorRules.cellColor;
-                    setConditionRules(
-                        ctx,
-                        protection,
-                        generalDialog,
-                        conditionformat,
-                        ctx.conditionRules
-                    );
+                    setConditionRules(ctx, protection, generalDialog, conditionformat, ctx.conditionRules);
                 });
             }
             setContext((ctx) => {
                 ctx.conditionRules = {
-                    rulesType: "",
-                    rulesValue: "",
-                    textColor: {check: false, color: "#009966"},
-                    cellColor: {check: true, color: "#d0fae5"},
-                    betweenValue: {value1: "", value2: ""},
-                    dateValue: "",
-                    repeatValue: "0",
-                    projectValue: "10",
+                    rulesType: '',
+                    rulesValue: '',
+                    textColor: { check: false, color: '#009966' },
+                    cellColor: { check: true, color: '#d0fae5' },
+                    betweenValue: { value1: '', value2: '' },
+                    dateValue: '',
+                    repeatValue: '0',
+                    projectValue: '10',
                 };
             });
             hideDialog();
         },
-        [
-            colorRules,
-            conditionformat,
-            generalDialog,
-            hideDialog,
-            protection,
-            setContext,
-        ]
+        [colorRules, conditionformat, generalDialog, hideDialog, protection, setContext],
     );
 
     useEffect(() => {
@@ -67,26 +53,26 @@ export function ConditionRules({type}: { type: string }) {
             if (!ctx.rangeDialog) return;
             const rangeDialogType = ctx.rangeDialog.type;
             const rangeT = ctx.rangeDialog!.rangeTxt;
-            if (rangeDialogType === "conditionRulesbetween1") {
+            if (rangeDialogType === 'conditionRulesbetween1') {
                 ctx.conditionRules.betweenValue.value1 = rangeT;
-            } else if (rangeDialogType === "conditionRulesbetween2") {
+            } else if (rangeDialogType === 'conditionRulesbetween2') {
                 ctx.conditionRules.betweenValue.value2 = rangeT;
-            } else if (rangeDialogType.includes("conditionRules")) {
+            } else if (rangeDialogType.includes('conditionRules')) {
                 ctx.conditionRules.rulesValue = rangeT;
-            } else if (rangeDialogType === "") {
+            } else if (rangeDialogType === '') {
                 ctx.conditionRules = {
                     rulesType: type,
-                    rulesValue: "",
-                    textColor: {check: false, color: "#009966"},
-                    cellColor: {check: true, color: "#d0fae5"},
-                    betweenValue: {value1: "", value2: ""},
-                    dateValue: "",
-                    repeatValue: "0",
-                    projectValue: "10",
+                    rulesValue: '',
+                    textColor: { check: false, color: '#009966' },
+                    cellColor: { check: true, color: '#d0fae5' },
+                    betweenValue: { value1: '', value2: '' },
+                    dateValue: '',
+                    repeatValue: '0',
+                    projectValue: '10',
                 };
             }
-            ctx.rangeDialog.type = "";
-            ctx.rangeDialog.rangeTxt = "";
+            ctx.rangeDialog.type = '';
+            ctx.rangeDialog.rangeTxt = '';
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
@@ -95,25 +81,22 @@ export function ConditionRules({type}: { type: string }) {
         <div className="flex flex-col gap-4">
             <DialogHeader>
                 <DialogTitle className="text-base">
-                    {(conditionformat as any)[`conditionformat_${type}`]}
+                    {conditionformat[`conditionformat_${type}` as keyof typeof conditionformat]}
                 </DialogTitle>
             </DialogHeader>
 
             <div>
                 <p className="text-sm text-muted-foreground mb-2">
-                    {(conditionformat as any)[`conditionformat_${type}_title`]}
+                    {conditionformat[`conditionformat_${type}_title` as keyof typeof conditionformat]}
                 </p>
 
-                {(type === "greaterThan" ||
-                    type === "lessThan" ||
-                    type === "equal" ||
-                    type === "textContains") && (
+                {(type === 'greaterThan' || type === 'lessThan' || type === 'equal' || type === 'textContains') && (
                     <Input
                         className="mb-3 h-8"
                         type="text"
                         value={context.conditionRules.rulesValue}
                         onChange={(e) => {
-                            const {value} = e.target;
+                            const { value } = e.target;
                             setContext((ctx) => {
                                 ctx.conditionRules.rulesValue = value;
                             });
@@ -121,14 +104,14 @@ export function ConditionRules({type}: { type: string }) {
                     />
                 )}
 
-                {type === "between" && (
+                {type === 'between' && (
                     <div className="flex items-center gap-2 mb-3">
                         <Input
                             className="h-8 w-24"
                             type="text"
                             value={context.conditionRules.betweenValue.value1}
                             onChange={(e) => {
-                                const {value} = e.target;
+                                const { value } = e.target;
                                 setContext((ctx) => {
                                     ctx.conditionRules.betweenValue.value1 = value;
                                 });
@@ -140,7 +123,7 @@ export function ConditionRules({type}: { type: string }) {
                             type="text"
                             value={context.conditionRules.betweenValue.value2}
                             onChange={(e) => {
-                                const {value} = e.target;
+                                const { value } = e.target;
                                 setContext((ctx) => {
                                     ctx.conditionRules.betweenValue.value2 = value;
                                 });
@@ -149,13 +132,13 @@ export function ConditionRules({type}: { type: string }) {
                     </div>
                 )}
 
-                {type === "occurrenceDate" && (
+                {type === 'occurrenceDate' && (
                     <Input
                         type="date"
                         className="mb-3 h-8 w-48"
                         value={context.conditionRules.dateValue}
                         onChange={(e) => {
-                            const {value} = e.target;
+                            const { value } = e.target;
                             setContext((ctx) => {
                                 ctx.conditionRules.dateValue = value;
                             });
@@ -163,11 +146,11 @@ export function ConditionRules({type}: { type: string }) {
                     />
                 )}
 
-                {type === "duplicateValue" && (
+                {type === 'duplicateValue' && (
                     <select
                         className="mb-3 h-8 rounded-md border border-input bg-background px-3 text-sm"
                         onChange={(e) => {
-                            const {value} = e.target;
+                            const { value } = e.target;
                             setContext((ctx) => {
                                 ctx.conditionRules.repeatValue = value;
                             });
@@ -178,34 +161,25 @@ export function ConditionRules({type}: { type: string }) {
                     </select>
                 )}
 
-                {(type === "top10" ||
-                    type === "top10_percent" ||
-                    type === "last10" ||
-                    type === "last10_percent") && (
+                {(type === 'top10' || type === 'top10_percent' || type === 'last10' || type === 'last10_percent') && (
                     <div className="flex items-center gap-2 mb-3 text-sm">
-                        {type === "top10" || type === "top10_percent"
-                            ? conditionformat.top
-                            : conditionformat.last}
+                        {type === 'top10' || type === 'top10_percent' ? conditionformat.top : conditionformat.last}
                         <Input
                             className="h-8 w-16"
                             type="number"
                             value={context.conditionRules.projectValue}
                             onChange={(e) => {
-                                const {value} = e.target;
+                                const { value } = e.target;
                                 setContext((ctx) => {
                                     ctx.conditionRules.projectValue = value;
                                 });
                             }}
                         />
-                        {type === "top10" || type === "last10"
-                            ? conditionformat.oneself
-                            : "%"}
+                        {type === 'top10' || type === 'last10' ? conditionformat.oneself : '%'}
                     </div>
                 )}
 
-                <p className="text-sm text-muted-foreground mt-3 mb-2">
-                    {`${conditionformat.setAs}:`}
-                </p>
+                <p className="text-sm text-muted-foreground mt-3 mb-2">{`${conditionformat.setAs}:`}</p>
 
                 <div className="rounded-md border p-3 space-y-3 mb-4">
                     <div className="flex items-center gap-3">
@@ -226,7 +200,7 @@ export function ConditionRules({type}: { type: string }) {
                                 <button
                                     type="button"
                                     className="h-6 w-10 rounded border border-input"
-                                    style={{backgroundColor: colorRules.textColor}}
+                                    style={{ backgroundColor: colorRules.textColor }}
                                 />
                             </PopoverTrigger>
                             <PopoverContent className="w-auto p-3">
@@ -238,7 +212,7 @@ export function ConditionRules({type}: { type: string }) {
                                             setColorRules(
                                                 produce((draft) => {
                                                     draft.textColor = color;
-                                                })
+                                                }),
                                             );
                                         }
                                     }}
@@ -264,7 +238,7 @@ export function ConditionRules({type}: { type: string }) {
                                 <button
                                     type="button"
                                     className="h-6 w-10 rounded border border-input"
-                                    style={{backgroundColor: colorRules.cellColor}}
+                                    style={{ backgroundColor: colorRules.cellColor }}
                                 />
                             </PopoverTrigger>
                             <PopoverContent className="w-auto p-3">
@@ -276,7 +250,7 @@ export function ConditionRules({type}: { type: string }) {
                                             setColorRules(
                                                 produce((draft) => {
                                                     draft.cellColor = color;
-                                                })
+                                                }),
                                             );
                                         }
                                     }}
@@ -285,17 +259,15 @@ export function ConditionRules({type}: { type: string }) {
                         </Popover>
                     </div>
                 </div>
-
             </div>
             <DialogFooter>
-                <Button variant="outline" size="sm" onClick={() => close("close")}>
+                <Button variant="outline" size="sm" onClick={() => close('close')}>
                     {button.cancel}
                 </Button>
-                <Button size="sm" onClick={() => close("confirm")}>
+                <Button size="sm" onClick={() => close('confirm')}>
                     {button.confirm}
                 </Button>
             </DialogFooter>
         </div>
     );
 }
-

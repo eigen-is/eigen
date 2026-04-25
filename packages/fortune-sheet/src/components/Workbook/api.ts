@@ -1,8 +1,12 @@
+import { cloneDeep } from 'es-toolkit/compat';
+import { applyPatches } from 'immer';
+import type { SetContextOptions } from '../../context';
+import type { Cell, CellMatrix } from '../../engine/types';
 import {
     addSheet,
     api,
-    CellWithRowAndCol,
-    Context,
+    type CellWithRowAndCol,
+    type Context,
     createFilterOptions,
     deleteRowCol,
     deleteSheet,
@@ -10,36 +14,29 @@ import {
     getSheetIndex,
     insertImage,
     insertRowCol,
-    Op,
+    type Op,
     opToPatch,
-    Presence,
-    Range,
-    Selection,
-    Settings,
-    Sheet,
-    SingleRange,
-} from "../../state";
-import type {Cell, CellMatrix} from "../../engine/types";
-import {applyPatches} from "immer";
-import {cloneDeep} from "es-toolkit/compat";
-import {SetContextOptions} from "../../context";
+    type Presence,
+    type Range,
+    type Selection,
+    type Settings,
+    type Sheet,
+    type SingleRange,
+} from '../../state';
 
 export function generateAPIs(
     context: Context,
-    setContext: (
-        recipe: (ctx: Context) => void,
-        options?: SetContextOptions
-    ) => void,
+    setContext: (recipe: (ctx: Context) => void, options?: SetContextOptions) => void,
     handleUndo: () => void,
     handleRedo: () => void,
     settings: Required<Settings>,
     cellInput: HTMLDivElement | null,
     scrollbarX: HTMLDivElement | null,
-    scrollbarY: HTMLDivElement | null
+    scrollbarY: HTMLDivElement | null,
 ) {
     type ApiCall = {
         name: string;
-        args: any[];
+        args: unknown[];
     };
     return {
         applyOp: (ops: Op[]) => {
@@ -48,52 +45,35 @@ export function generateAPIs(
                     const [patches, specialOps] = opToPatch(ctx_, ops);
                     if (specialOps.length > 0) {
                         const [specialOp] = specialOps;
-                        if (specialOp.op === "insertRowCol") {
+                        if (specialOp.op === 'insertRowCol') {
                             try {
                                 insertRowCol(ctx_, specialOp.value, false);
-                            } catch (e: any) {
+                            } catch (e) {
                                 console.error(e);
                             }
-                        } else if (specialOp.op === "deleteRowCol") {
+                        } else if (specialOp.op === 'deleteRowCol') {
                             deleteRowCol(ctx_, specialOp.value);
-                        } else if (specialOp.op === "addSheet") {
-                            const name = patches.filter(
-                                (path) => path.path[0] === "name"
-                            )?.[0]?.value;
+                        } else if (specialOp.op === 'addSheet') {
+                            const name = patches.filter((path) => path.path[0] === 'name')?.[0]?.value;
                             if (specialOp.value?.id) {
-                                addSheet(
-                                    ctx_,
-                                    settings,
-                                    specialOp.value.id,
-                                    false,
-                                    name,
-                                    specialOp.value
-                                );
+                                addSheet(ctx_, settings, specialOp.value.id, false, name, specialOp.value);
                             }
                             // After adding a sheet, initialize its data
-                            const fileIndex = getSheetIndex(
-                                ctx_,
-                                specialOp.value.id
-                            ) as number;
+                            const fileIndex = getSheetIndex(ctx_, specialOp.value.id) as number;
                             api.initSheetData(ctx_, fileIndex, specialOp.value);
-                        } else if (specialOp.op === "deleteSheet") {
+                        } else if (specialOp.op === 'deleteSheet') {
                             deleteSheet(ctx_, specialOp.value.id);
                             patches.length = 0;
                         }
                     }
-                    if (ops[0]?.path?.[0] === "filter_select")
-                        ctx_.luckysheet_filter_save = ops[0].value;
-                    else if (ops[0]?.path?.[0] === "hide") {
+                    if (ops[0]?.path?.[0] === 'filter_select') ctx_.luckysheet_filter_save = ops[0].value;
+                    else if (ops[0]?.path?.[0] === 'hide') {
                         // Hide sheet
                         if (ctx_.currentSheetId === ops[0].id) {
                             const shownSheets = ctx_.luckysheetfile.filter(
-                                (sheet) =>
-                                    (sheet.hide === undefined || sheet.hide !== 1) &&
-                                    sheet.id !== ops[0].id
+                                (sheet) => (sheet.hide === undefined || sheet.hide !== 1) && sheet.id !== ops[0].id,
                             );
-                            const sorted = [...shownSheets].sort(
-                                (a, b) => (a.order ?? 0) - (b.order ?? 0)
-                            );
+                            const sorted = [...shownSheets].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
                             if (sorted.length > 0) {
                                 ctx_.currentSheetId = sorted[0].id as string;
                             }
@@ -107,25 +87,19 @@ export function generateAPIs(
                         console.error(e);
                     }
                 },
-                {noHistory: true}
+                { noHistory: true },
             );
         },
 
-        getCellValue: (
-            row: number,
-            column: number,
-            options: api.CommonOptions & { type?: keyof Cell } = {}
-        ) => api.getCellValue(context, row, column, options),
+        getCellValue: (row: number, column: number, options: api.CommonOptions & { type?: keyof Cell } = {}) =>
+            api.getCellValue(context, row, column, options),
 
         setCellValue: (
             row: number,
             column: number,
-            value: any,
-            options: api.CommonOptions & { type?: keyof Cell } = {}
-        ) =>
-            setContext((draftCtx) =>
-                api.setCellValue(draftCtx, row, column, value, cellInput, options)
-            ),
+            value: unknown,
+            options: api.CommonOptions & { type?: keyof Cell } = {},
+        ) => setContext((draftCtx) => api.setCellValue(draftCtx, row, column, value, cellInput, options)),
 
         clearCell: (row: number, column: number, options: api.CommonOptions = {}) =>
             setContext((draftCtx) => api.clearCell(draftCtx, row, column, options)),
@@ -134,79 +108,46 @@ export function generateAPIs(
             row: number,
             column: number,
             attr: keyof Cell,
-            value: any,
-            options: api.CommonOptions = {}
-        ) =>
-            setContext((draftCtx) =>
-                api.setCellFormat(draftCtx, row, column, attr, value, options)
-            ),
+            value: unknown,
+            options: api.CommonOptions = {},
+        ) => setContext((draftCtx) => api.setCellFormat(draftCtx, row, column, attr, value, options)),
 
-        autoFillCell: (
-            copyRange: SingleRange,
-            applyRange: SingleRange,
-            direction: "up" | "down" | "left" | "right"
-        ) =>
-            setContext((draftCtx) =>
-                api.autoFillCell(draftCtx, copyRange, applyRange, direction)
-            ),
+        autoFillCell: (copyRange: SingleRange, applyRange: SingleRange, direction: 'up' | 'down' | 'left' | 'right') =>
+            setContext((draftCtx) => api.autoFillCell(draftCtx, copyRange, applyRange, direction)),
 
         freeze: (
-            type: "row" | "column" | "both",
+            type: 'row' | 'column' | 'both',
             range: { row: number; column: number },
-            options: api.CommonOptions = {}
+            options: api.CommonOptions = {},
         ) => setContext((draftCtx) => api.freeze(draftCtx, type, range, options)),
 
         insertRowOrColumn: (
-            type: "row" | "column",
+            type: 'row' | 'column',
             index: number,
             count: number,
-            direction: "lefttop" | "rightbottom" = "rightbottom",
-            options: api.CommonOptions = {}
-        ) =>
-            setContext((draftCtx) =>
-                api.insertRowOrColumn(draftCtx, type, index, count, direction, options)
-            ),
-
-        deleteRowOrColumn: (
-            type: "row" | "column",
-            start: number,
-            end: number,
-            options: api.CommonOptions = {}
-        ) =>
-            setContext((draftCtx) =>
-                api.deleteRowOrColumn(draftCtx, type, start, end, options)
-            ),
-
-        hideRowOrColumn: (rowOrColInfo: string[], type: "row" | "column") =>
-            setContext((draftCtx) =>
-                api.hideRowOrColumn(draftCtx, rowOrColInfo, type)
-            ),
-
-        showRowOrColumn: (rowOrColInfo: string[], type: "row" | "column") =>
-            setContext((draftCtx) =>
-                api.showRowOrColumn(draftCtx, rowOrColInfo, type)
-            ),
-
-        setRowHeight: (
-            rowInfo: Record<string, number>,
+            direction: 'lefttop' | 'rightbottom' = 'rightbottom',
             options: api.CommonOptions = {},
-            custom: boolean = false
-        ) =>
-            setContext((draftCtx) =>
-                api.setRowHeight(draftCtx, rowInfo, options, custom)
-            ),
+        ) => setContext((draftCtx) => api.insertRowOrColumn(draftCtx, type, index, count, direction, options)),
+
+        deleteRowOrColumn: (type: 'row' | 'column', start: number, end: number, options: api.CommonOptions = {}) =>
+            setContext((draftCtx) => api.deleteRowOrColumn(draftCtx, type, start, end, options)),
+
+        hideRowOrColumn: (rowOrColInfo: string[], type: 'row' | 'column') =>
+            setContext((draftCtx) => api.hideRowOrColumn(draftCtx, rowOrColInfo, type)),
+
+        showRowOrColumn: (rowOrColInfo: string[], type: 'row' | 'column') =>
+            setContext((draftCtx) => api.showRowOrColumn(draftCtx, rowOrColInfo, type)),
+
+        setRowHeight: (rowInfo: Record<string, number>, options: api.CommonOptions = {}, custom: boolean = false) =>
+            setContext((draftCtx) => api.setRowHeight(draftCtx, rowInfo, options, custom)),
 
         setColumnWidth: (
             columnInfo: Record<string, number>,
             options: api.CommonOptions = {},
-            custom: boolean = false
-        ) =>
-            setContext((draftCtx) =>
-                api.setColumnWidth(draftCtx, columnInfo, options, custom)
-            ),
+            custom: boolean = false,
+        ) => setContext((draftCtx) => api.setColumnWidth(draftCtx, columnInfo, options, custom)),
 
-        getRowHeight: (rows: number[], options: api.CommonOptions = {}) =>
-            api.getRowHeight(context, rows, options),
+        getRowHeight: (rows: number[], options: api.CommonOptions = {}) => api.getRowHeight(context, rows, options),
 
         getColumnWidth: (columns: number[], options: api.CommonOptions = {}) =>
             api.getColumnWidth(context, columns, options),
@@ -215,44 +156,29 @@ export function generateAPIs(
 
         getFlattenRange: (range: Range) => api.getFlattenRange(context, range),
 
-        getCellsByFlattenRange: (range?: { r: number; c: number }[]) =>
-            api.getCellsByFlattenRange(context, range),
+        getCellsByFlattenRange: (range?: { r: number; c: number }[]) => api.getCellsByFlattenRange(context, range),
 
         getSelectionCoordinates: () => api.getSelectionCoordinates(context),
 
         getCellsByRange: (range: Selection, options: api.CommonOptions = {}) =>
             api.getCellsByRange(context, range, options),
 
-        getHtmlByRange: (range: Range, options: api.CommonOptions = {}) =>
-            api.getHtmlByRange(context, range, options),
+        getHtmlByRange: (range: Range, options: api.CommonOptions = {}) => api.getHtmlByRange(context, range, options),
 
         setSelection: (range: Range, options: api.CommonOptions = {}) =>
             setContext((draftCtx) => api.setSelection(draftCtx, range, options)),
 
-        setCellValuesByRange: (
-            data: any[][],
-            range: SingleRange,
-            options: api.CommonOptions = {}
-        ) =>
-            setContext((draftCtx) =>
-                api.setCellValuesByRange(draftCtx, data, range, cellInput, options)
-            ),
+        setCellValuesByRange: (data: unknown[][], range: SingleRange, options: api.CommonOptions = {}) =>
+            setContext((draftCtx) => api.setCellValuesByRange(draftCtx, data, range, cellInput, options)),
 
         setCellFormatByRange: (
             attr: keyof Cell,
-            value: any,
+            value: unknown,
             range: Range | SingleRange,
-            options: api.CommonOptions = {}
-        ) =>
-            setContext((draftCtx) =>
-                api.setCellFormatByRange(draftCtx, attr, value, range, options)
-            ),
+            options: api.CommonOptions = {},
+        ) => setContext((draftCtx) => api.setCellFormatByRange(draftCtx, attr, value, range, options)),
 
-        mergeCells: (
-            ranges: Range,
-            type: string,
-            options: api.CommonOptions = {}
-        ) =>
+        mergeCells: (ranges: Range, type: string, options: api.CommonOptions = {}) =>
             setContext((draftCtx) => api.mergeCells(draftCtx, ranges, type, options)),
 
         cancelMerge: (ranges: Range, options: api.CommonOptions = {}) =>
@@ -260,27 +186,22 @@ export function generateAPIs(
 
         getAllSheets: () => api.getAllSheets(context),
 
-        getSheet: (options: api.CommonOptions = {}) =>
-            api.getSheetWithLatestCelldata(context, options),
+        getSheet: (options: api.CommonOptions = {}) => api.getSheetWithLatestCelldata(context, options),
 
         addSheet: (sheetId?: string) => {
-            const existingSheetIds = api
-                .getAllSheets(context)
-                .map((sheet) => sheet.id || "");
+            const existingSheetIds = api.getAllSheets(context).map((sheet) => sheet.id || '');
             if (sheetId && existingSheetIds.includes(sheetId)) {
                 console.error(
-                    `Failed to add new sheet: A sheet with the id "${sheetId}" already exists. Please use a unique sheet id.`
+                    `Failed to add new sheet: A sheet with the id "${sheetId}" already exists. Please use a unique sheet id.`,
                 );
             } else {
                 setContext((draftCtx) => api.addSheet(draftCtx, settings, sheetId));
             }
         },
 
-        deleteSheet: (options: api.CommonOptions = {}) =>
-            setContext((draftCtx) => api.deleteSheet(draftCtx, options)),
+        deleteSheet: (options: api.CommonOptions = {}) => setContext((draftCtx) => api.deleteSheet(draftCtx, options)),
 
-        updateSheet: (data: Sheet[]) =>
-            setContext((draftCtx) => api.updateSheet(draftCtx, cloneDeep(data))),
+        updateSheet: (data: Sheet[]) => setContext((draftCtx) => api.updateSheet(draftCtx, cloneDeep(data))),
 
         activateSheet: (options: api.CommonOptions = {}) =>
             setContext((draftCtx) => api.activateSheet(draftCtx, options)),
@@ -291,12 +212,8 @@ export function generateAPIs(
         setSheetOrder: (orderList: Record<string, number>) =>
             setContext((draftCtx) => api.setSheetOrder(draftCtx, orderList)),
 
-        scroll: (options: {
-            scrollLeft?: number;
-            scrollTop?: number;
-            targetRow?: number;
-            targetColumn?: number;
-        }) => api.scroll(context, scrollbarX, scrollbarY, options),
+        scroll: (options: { scrollLeft?: number; scrollTop?: number; targetRow?: number; targetColumn?: number }) =>
+            api.scroll(context, scrollbarX, scrollbarY, options),
 
         addPresences: (newPresences: Presence[]) => {
             setContext((draftCtx) => {
@@ -313,16 +230,14 @@ export function generateAPIs(
             arr: {
                 username: string;
                 userId?: string;
-            }[]
+            }[],
         ) => {
             setContext((draftCtx) => {
                 if (draftCtx.presences != null) {
                     const presenceKey = (v: { username: string; userId?: string }) =>
                         v.userId == null ? v.username : v.userId;
                     const removeKeys = new Set(arr.map(presenceKey));
-                    draftCtx.presences = draftCtx.presences.filter(
-                        (v) => !removeKeys.has(presenceKey(v))
-                    );
+                    draftCtx.presences = draftCtx.presences.filter((v) => !removeKeys.has(presenceKey(v)));
                 }
             });
         },
@@ -345,20 +260,17 @@ export function generateAPIs(
             return api.dataToCelldata(data);
         },
 
-        celldataToData: (
-            celldata: CellWithRowAndCol[],
-            rowCount?: number,
-            colCount?: number
-        ) => {
+        celldataToData: (celldata: CellWithRowAndCol[], rowCount?: number, colCount?: number) => {
             return api.celldataToData(celldata, rowCount, colCount);
         },
 
         batchCallApis: (apiCalls: ApiCall[]) => {
             setContext((draftCtx) => {
                 for (const apiCall of apiCalls) {
-                    const {name, args} = apiCall;
-                    if (typeof (api as any)[name] === "function") {
-                        (api as any)[name](draftCtx, ...args);
+                    const { name, args } = apiCall;
+                    const fn = (api as unknown as Record<string, (...fnArgs: unknown[]) => unknown>)[name];
+                    if (typeof fn === 'function') {
+                        fn(draftCtx, ...args);
                     } else {
                         console.warn(`API ${name} does not exist`);
                     }

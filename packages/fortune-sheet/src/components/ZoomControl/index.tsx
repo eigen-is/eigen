@@ -1,53 +1,53 @@
-import {useCallback, useContext, useRef, useState} from "react";
-import {Context, getSheetIndex, locale, MAX_ZOOM_RATIO, MIN_ZOOM_RATIO,} from "../../state";
-import {WorkbookContext} from "../../context";
-import {Minus, Plus} from "lucide-react";
-import {useOutsideClick} from "../../hooks/useOutsideClick";
+import { Minus, Plus } from 'lucide-react';
+import { useCallback, useContext, useRef, useState } from 'react';
+import { WorkbookContext } from '../../context';
+import { useOutsideClick } from '../../hooks/useOutsideClick';
+import { type Context, getSheetIndex, locale, MAX_ZOOM_RATIO, MIN_ZOOM_RATIO } from '../../state';
 
 const presets = [
     {
-        text: "10%",
+        text: '10%',
         value: 0.1,
     },
     {
-        text: "30%",
+        text: '30%',
         value: 0.3,
     },
     {
-        text: "50%",
+        text: '50%',
         value: 0.5,
     },
     {
-        text: "70%",
+        text: '70%',
         value: 0.7,
     },
     {
-        text: "100%",
+        text: '100%',
         value: 1,
     },
     {
-        text: "150%",
+        text: '150%',
         value: 1.5,
     },
     {
-        text: "200%",
+        text: '200%',
         value: 2,
     },
     {
-        text: "300%",
+        text: '300%',
         value: 3,
     },
     {
-        text: "400%",
+        text: '400%',
         value: 4,
     },
 ];
 
 export function ZoomControl() {
-    const {context, setContext} = useContext(WorkbookContext);
+    const { context, setContext } = useContext(WorkbookContext);
     const menuRef = useRef<HTMLDivElement>(null);
     const [radioMenuOpen, setRadioMenuOpen] = useState(false);
-    const {info} = locale(context);
+    const { info } = locale(context);
 
     useOutsideClick(menuRef, () => {
         setRadioMenuOpen(false);
@@ -68,10 +68,10 @@ export function ZoomControl() {
                     ctx.luckysheetfile[index].zoomRatio = val;
                     ctx.zoomRatio = val;
                 },
-                {noHistory: true}
+                { noHistory: true },
             );
         },
-        [setContext]
+        [setContext],
     );
 
     return (
@@ -86,7 +86,7 @@ export function ZoomControl() {
                 tabIndex={0}
                 role="button"
             >
-                <Minus width={16} height={16} aria-hidden="true"/>
+                <Minus width={16} height={16} aria-hidden="true" />
             </div>
             <div className="relative flex justify-center w-12 text-xs cursor-pointer">
                 <div
@@ -99,7 +99,8 @@ export function ZoomControl() {
                 {radioMenuOpen && (
                     <div
                         className="absolute bottom-[30px] left-0 leading-6 shadow-md py-2.5 rounded-md bg-popover z-[1004]"
-                        ref={menuRef}>
+                        ref={menuRef}
+                    >
                         {presets.map((v) => (
                             <div
                                 className="hover:bg-muted"
@@ -126,9 +127,8 @@ export function ZoomControl() {
                 tabIndex={0}
                 role="button"
             >
-                <Plus width={16} height={16} aria-hidden="true"/>
+                <Plus width={16} height={16} aria-hidden="true" />
             </div>
         </aside>
     );
 }
-

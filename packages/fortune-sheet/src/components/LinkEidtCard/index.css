@@ -87,6 +87,7 @@
 
 .fortune-link-modify-input.error-input,
 .fortune-link-modify-modal .range-selection-input.error-input {
+    /* biome-ignore lint/complexity/noImportantStyles: error state must override focus border */
     border: 1px solid #ef4e2f !important;
 }
 
