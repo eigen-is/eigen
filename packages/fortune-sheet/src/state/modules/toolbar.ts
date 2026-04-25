@@ -1,4 +1,4 @@
-import _ from "lodash";
+import {cloneDeep, forEach, includes, isNil, isPlainObject, pick, round, set} from "es-toolkit/compat";
 import {mergeCells} from "./merge";
 import {Context, getFlowdata} from "../context";
 // import { locale } from "../locale";
@@ -45,12 +45,12 @@ export function updateFormatCell(
     col_ed: number,
     canvas?: CanvasRenderingContext2D
 ) {
-    if (_.isNil(d) || _.isNil(attr)) {
+    if (isNil(d) || isNil(attr)) {
         return;
     }
     if (attr === "ct") {
         for (let r = row_st; r <= row_ed; r += 1) {
-            if (!_.isNil(ctx.config.rowhidden) && !_.isNil(ctx.config.rowhidden[r])) {
+            if (!isNil(ctx.config.rowhidden) && !isNil(ctx.config.rowhidden[r])) {
                 continue;
             }
 
@@ -94,9 +94,9 @@ export function updateFormatCell(
                     type = isRealNum(value) ? "n" : "g";
                 }
 
-                if (cell && _.isPlainObject(cell)) {
+                if (cell && isPlainObject(cell)) {
                     cell.m = `${mask}`;
-                    if (_.isNil(cell.ct)) {
+                    if (isNil(cell.ct)) {
                         cell.ct = {};
                     }
                     cell.ct.fa = foucsStatus;
@@ -156,14 +156,14 @@ export function updateFormatCell(
             return;
         }
         for (let r = row_st; r <= row_ed; r += 1) {
-            if (!_.isNil(ctx.config.rowhidden) && !_.isNil(ctx.config.rowhidden[r])) {
+            if (!isNil(ctx.config.rowhidden) && !isNil(ctx.config.rowhidden[r])) {
                 continue;
             }
 
             for (let c = col_st; c <= col_ed; c += 1) {
                 const value = d[r][c];
 
-                if (value && _.isPlainObject(value)) {
+                if (value && isPlainObject(value)) {
                     // if(attr in inlineStyleAffectAttribute && isInlineStringCell(value)){
                     updateInlineStringFormatOutside(value!, attr, foucsStatus);
                     // }
@@ -183,18 +183,18 @@ export function updateFormatCell(
                             cellWidth,
                         });
                         if (!textInfo) continue;
-                        const rowHeight = _.round(textInfo.textHeightAll);
+                        const rowHeight = round(textInfo.textHeightAll);
                         const currentRowHeight =
                             cfg.rowlen?.[r] ||
                             ctx.luckysheetfile[sheetIndex].defaultRowHeight ||
                             19;
                         if (
-                            !_.isUndefined(rowHeight) &&
+                            rowHeight !== undefined &&
                             rowHeight > currentRowHeight &&
                             (!cfg.customHeight || cfg.customHeight[r] !== 1)
                         ) {
-                            if (_.isUndefined(cfg.rowlen)) cfg.rowlen = {};
-                            _.set(cfg, `rowlen.${r}`, rowHeight);
+                            if (cfg.rowlen === undefined) cfg.rowlen = {};
+                            set(cfg, `rowlen.${r}`, rowHeight);
                         }
                     }
                 } else {
@@ -204,7 +204,7 @@ export function updateFormatCell(
                     d[r][c][attr] = foucsStatus;
                 }
 
-                // if(attr === "tr" && !_.isNil(d[r][c].tb)){
+                // if(attr === "tr" && !isNil(d[r][c].tb)){
                 //     d[r][c].tb = "0";
                 // }
             }
@@ -241,12 +241,12 @@ export function updateFormat(
         }
     }
 
-    const cfg = _.cloneDeep(ctx.config);
-    if (_.isNil(cfg.rowlen)) {
+    const cfg = cloneDeep(ctx.config);
+    if (isNil(cfg.rowlen)) {
         cfg.rowlen = {};
     }
 
-    _.forEach(ctx.luckysheet_select_save, (selection) => {
+    forEach(ctx.luckysheet_select_save, (selection) => {
         const [row_st, row_ed] = selection.row;
         const [col_st, col_ed] = selection.column;
 
@@ -304,7 +304,7 @@ function setAttr(
 // @ts-ignore
 function checkNoNullValue(cell) {
     let v = cell;
-    if (_.isPlainObject(v)) {
+    if (isPlainObject(v)) {
         v = v.v;
     }
 
@@ -325,7 +325,7 @@ function checkNoNullValue(cell) {
 // @ts-ignore
 function checkNoNullValueAll(cell) {
     let v = cell;
-    if (_.isPlainObject(v)) {
+    if (isPlainObject(v)) {
         v = v.v;
     }
 
@@ -782,7 +782,7 @@ export function autoSelectionFormula(
 
     if (!ctx.luckysheet_select_save) return;
 
-    _.forEach(ctx.luckysheet_select_save, (selection) => {
+    forEach(ctx.luckysheet_select_save, (selection) => {
         const [st_r, ed_r] = selection.row;
         const [st_c, ed_c] = selection.column;
         const row_index = selection.row_focus;
@@ -1274,13 +1274,13 @@ export function handleClearFormat(ctx: Context) {
         const [rowSt, rowEd] = selection.row;
         const [colSt, colEd] = selection.column;
         for (let r = rowSt; r <= rowEd; r += 1) {
-            if (!_.isNil(ctx.config.rowhidden) && !_.isNil(ctx.config.rowhidden[r])) {
+            if (!isNil(ctx.config.rowhidden) && !isNil(ctx.config.rowhidden[r])) {
                 continue;
             }
             for (let c = colSt; c <= colEd; c += 1) {
                 const cell = flowdata[r][c];
                 if (!cell) continue;
-                flowdata[r][c] = _.pick(cell, "v", "m", "mc", "f", "ct");
+                flowdata[r][c] = pick(cell, "v", "m", "mc", "f", "ct");
             }
         }
         // When clearing table styles, also clear border styles
@@ -1412,16 +1412,16 @@ export function handleBorder(
             borderType: type,
             color,
             style,
-            range: _.cloneDeep(ctx.luckysheet_select_save) || [],
+            range: cloneDeep(ctx.luckysheet_select_save) || [],
         };
         cfg.borderInfo.push(borderInfo);
     } else {
         const rangeList: string[] = [];
-        _.forEach(ctx.luckysheet_select_save, (selection) => {
+        forEach(ctx.luckysheet_select_save, (selection) => {
             for (let r = selection.row[0]; r <= selection.row[1]; r += 1) {
                 for (let c = selection.column[0]; c <= selection.column[1]; c += 1) {
                     const range = `${r}_${c}`;
-                    if (_.includes(rangeList, range)) continue;
+                    if (includes(rangeList, range)) continue;
                     const borderInfo = {
                         rangeType: "range",
                         borderType: type,

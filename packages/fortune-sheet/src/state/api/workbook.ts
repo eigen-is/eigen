@@ -1,4 +1,4 @@
-import _ from "lodash";
+import {isNumber, sortBy} from "es-toolkit/compat";
 import {Context, Sheet} from "..";
 import {
     addSheet as addSheetInternal,
@@ -57,7 +57,7 @@ export function setSheetOrder(ctx: Context, orderList: Record<string, number>) {
         }
     });
     // re-order starting from 0
-    _.sortBy(ctx.luckysheetfile, ["order"]).forEach((sheet, i) => {
+    sortBy(ctx.luckysheetfile, ["order"]).forEach((sheet, i) => {
         sheet.order = i;
     });
 }
@@ -74,14 +74,14 @@ export function scroll(
     }
 ) {
     if (options.scrollLeft != null) {
-        if (!_.isNumber(options.scrollLeft)) {
+        if (!isNumber(options.scrollLeft)) {
             throw invalidParams();
         }
         if (scrollbarX) {
             scrollbarX.scrollLeft = options.scrollLeft;
         }
     } else if (options.targetColumn != null) {
-        if (!_.isNumber(options.targetColumn)) {
+        if (!isNumber(options.targetColumn)) {
             throw invalidParams();
         }
         const col_pre =
@@ -94,14 +94,14 @@ export function scroll(
     }
 
     if (options.scrollTop != null) {
-        if (!_.isNumber(options.scrollTop)) {
+        if (!isNumber(options.scrollTop)) {
             throw invalidParams();
         }
         if (scrollbarY) {
             scrollbarY.scrollTop = options.scrollTop;
         }
     } else if (options.targetRow != null) {
-        if (!_.isNumber(options.targetRow)) {
+        if (!isNumber(options.targetRow)) {
             throw invalidParams();
         }
         const row_pre =

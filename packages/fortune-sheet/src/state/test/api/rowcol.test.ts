@@ -1,4 +1,4 @@
-import _ from "lodash";
+import {range} from "es-toolkit/compat";
 import {contextFactory, selectionFactory} from "../factories/context";
 import {Context} from "../../context";
 import {
@@ -73,7 +73,7 @@ describe("fortune-sheet/core/api/rowcol", () => {
                         receivedValue = ctx.luckysheetfile[0]?.data?.[j]?.[k.i + i + l];
                     }
                     expect(receivedValue).toEqual(
-                        _.includes([0, 2], j) ? emptyTmpl : null
+                        [0, 2].includes(j) ? emptyTmpl : null
                     );
                 }
             }
@@ -109,8 +109,8 @@ describe("fortune-sheet/core/api/rowcol", () => {
             }
             const slen = k.end - k.start + 1;
             deleteRowOrColumn(ctx, k.type as "row" | "column", k.start, k.end);
-            _.range(0, k.rawData().length - slen).forEach((i) => {
-                _.range(0, k.rawData()[0].length - slen).forEach((j) => {
+            range(0, k.rawData().length - slen).forEach((i) => {
+                range(0, k.rawData()[0].length - slen).forEach((j) => {
                     let expectedValue;
                     if (k.type === "row") {
                         expectedValue = () => {

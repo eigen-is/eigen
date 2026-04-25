@@ -1,4 +1,4 @@
-import _ from "lodash";
+import {isNil} from "es-toolkit/compat";
 import type {CellMatrix, FormulaCellInfo, FormulaCellInfoMap, FormulaDependency} from "../../engine/types";
 import {
     Context,
@@ -25,7 +25,7 @@ export function setFormulaCellInfo(
         formulaCell.id,
         data
     );
-    if (_.isNil(calc_funcStr)) {
+    if (isNil(calc_funcStr)) {
         delete ctx.formulaCache.formulaCellInfoMap?.[key];
         return;
     }
@@ -45,8 +45,8 @@ export function setFormulaCellInfo(
             formulaCell.id,
             null,
             (str_nb: string) => {
-                const range = getcellrange(ctx, _.trim(str_nb), formulaCell.id, data);
-                if (!_.isNil(range)) {
+                const range = getcellrange(ctx, str_nb.trim(), formulaCell.id, data);
+                if (!isNil(range)) {
                     formulaDependency.push(range);
                 }
             }
@@ -153,9 +153,9 @@ export function setFormulaCellInfo(
                 continue;
             }
 
-            const range = getcellrange(ctx, _.trim(t), formulaCell.id, data);
+            const range = getcellrange(ctx, t.trim(), formulaCell.id, data);
 
-            if (_.isNil(range)) {
+            if (isNil(range)) {
                 continue;
             }
 

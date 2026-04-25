@@ -1,4 +1,4 @@
-import _ from "lodash";
+import {cloneDeep, maxBy, times} from "es-toolkit/compat";
 import {Context} from "../context";
 import type {CellMatrix} from "../../engine/types";
 import {CellWithRowAndCol, Sheet} from "../types";
@@ -28,8 +28,8 @@ export const celldataToData = (
     rowCount?: number,
     colCount?: number
 ) => {
-    const lastRow = _.maxBy<CellWithRowAndCol>(celldata, "r");
-    const lastCol = _.maxBy(celldata, "c");
+    const lastRow = maxBy<CellWithRowAndCol>(celldata, "r");
+    const lastCol = maxBy(celldata, "c");
     let lastRowNum = (lastRow?.r ?? 0) + 1;
     let lastColNum = (lastCol?.c ?? 0) + 1;
     if (rowCount != null && colCount != null && rowCount > 0 && colCount > 0) {
@@ -37,8 +37,8 @@ export const celldataToData = (
         lastColNum = Math.max(lastColNum, colCount);
     }
     if (lastRowNum && lastColNum) {
-        const expandedData: Sheet["data"] = _.times(lastRowNum, () =>
-            _.times(lastColNum, () => null)
+        const expandedData: Sheet["data"] = times(lastRowNum, () =>
+            times(lastColNum, () => null)
         );
         celldata?.forEach((d) => {
             expandedData[d.r][d.c] = d.v;
@@ -70,5 +70,5 @@ export function getSheetWithLatestCelldata(
     options: CommonOptions = {}
 ) {
     const sheet = getSheet(ctx, options);
-    return {..._.cloneDeep(sheet), celldata: dataToCelldata(sheet.data)};
+    return {...cloneDeep(sheet), celldata: dataToCelldata(sheet.data)};
 }

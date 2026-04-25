@@ -1,4 +1,4 @@
-import _ from "lodash";
+import {clone, cloneDeep, isEmpty, isNil} from "es-toolkit/compat";
 import {hideCRCount, removeActiveImage} from "..";
 import {Context, getFlowdata} from "../context";
 import {cancelNormalSelected, updateCell} from "../modules/cell";
@@ -29,7 +29,7 @@ export function handleGlobalEnter(
     if ((e.altKey || e.metaKey) && ctx.luckysheetCellUpdate.length > 0) {
         const last =
             ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1];
-        if (last && !_.isNil(last.row_focus) && !_.isNil(last.column_focus)) {
+        if (last && !isNil(last.row_focus) && !isNil(last.column_focus)) {
             // const row_index = last.row_focus;
             // const col_index = last.column_focus;
             // enterKeyControll(flowdata?.[row_index]?.[col_index]);
@@ -46,7 +46,7 @@ export function handleGlobalEnter(
         //     )
         //   );
         // } else {
-        const lastCellUpdate = _.clone(ctx.luckysheetCellUpdate);
+        const lastCellUpdate = clone(ctx.luckysheetCellUpdate);
         updateCell(
             ctx,
             ctx.luckysheetCellUpdate[0],
@@ -121,9 +121,9 @@ function moveToEdge(
 
     while (r >= 0 && c >= 0 && (colDelta === 0 ? r : c) < maxRowCol - 1) {
         if (
-            !_.isNil(sheetData?.[r]?.[c]?.v) &&
-            (_.isNil(sheetData?.[r - rowDelta]?.[c - colDelta]?.v) ||
-                _.isNil(sheetData?.[r + rowDelta]?.[c + colDelta]?.v))
+            !isNil(sheetData?.[r]?.[c]?.v) &&
+            (isNil(sheetData?.[r - rowDelta]?.[c - colDelta]?.v) ||
+                isNil(sheetData?.[r + rowDelta]?.[c + colDelta]?.v))
         ) {
             break;
         } else {
@@ -142,7 +142,7 @@ function handleControlPlusArrowKey(
     if (ctx.luckysheetCellUpdate.length > 0) return;
 
     const idx = getSheetIndex(ctx, ctx.currentSheetId);
-    if (_.isNil(idx)) return;
+    if (isNil(idx)) return;
 
     const file = ctx.luckysheetfile[idx];
     if (!file || !file.row || !file.column) return;
@@ -155,7 +155,7 @@ function handleControlPlusArrowKey(
 
     const currR = last.row_focus;
     const currC = last.column_focus;
-    if (_.isNil(currR) || _.isNil(currC)) return;
+    if (isNil(currR) || isNil(currC)) return;
 
     const startR = last.row[0];
     const endR = last.row[1];
@@ -282,7 +282,7 @@ export function handleWithCtrlOrMetaKey(
     if (!flowdata) return;
 
     if (e.shiftKey) {
-        ctx.luckysheet_shiftpositon = _.cloneDeep(
+        ctx.luckysheet_shiftpositon = cloneDeep(
             ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1]
         );
         ctx.luckysheet_shiftkeydown = true;
@@ -290,7 +290,7 @@ export function handleWithCtrlOrMetaKey(
         if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) {
             // Ctrl + Shift + Arrow key  adjust selection
             handleControlPlusArrowKey(ctx, e, true);
-        } else if (_.includes([";", '"', ":", "'"], e.key)) {
+        } else if ([";", '"', ":", "'"].includes(e.key)) {
             const last =
                 ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1];
             if (!last) return;
@@ -370,7 +370,7 @@ export function handleWithCtrlOrMetaKey(
         }
 
         const selection = ctx.luckysheet_select_save;
-        if (!selection || _.isEmpty(selection)) {
+        if (!selection || isEmpty(selection)) {
             return;
         }
 
@@ -609,7 +609,7 @@ function handleShiftWithArrowKey(ctx: Context, e: KeyboardEvent) {
         return;
     }
 
-    ctx.luckysheet_shiftpositon = _.cloneDeep(
+    ctx.luckysheet_shiftpositon = cloneDeep(
         ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1]
     );
     ctx.luckysheet_shiftkeydown = true;
@@ -687,7 +687,7 @@ export function handleGlobalKeyDown(
     ctx.luckysheet_select_status = false;
     const kcode = e.keyCode;
     const kstr = e.key;
-    if (!_.isEmpty(ctx.contextMenu) || ctx.filterContextMenu) {
+    if (!isEmpty(ctx.contextMenu) || ctx.filterContextMenu) {
         return;
     }
 
@@ -916,7 +916,7 @@ export function handleGlobalKeyDown(
             if (!allowEdit) return;
             if (
                 String.fromCharCode(kcode) != null &&
-                !_.isEmpty(ctx.luckysheet_select_save) && // $("#luckysheet-cell-selected").is(":visible") &&
+                !isEmpty(ctx.luckysheet_select_save) && // $("#luckysheet-cell-selected").is(":visible") &&
                 kstr !== "CapsLock" &&
                 kstr !== "Win" &&
                 kcode !== 18

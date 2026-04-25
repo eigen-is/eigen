@@ -1,4 +1,4 @@
-import _ from "lodash";
+import {forEach, isNil, isNumber, isPlainObject} from "es-toolkit/compat";
 import {Context} from "../context";
 import {
     delFunctionGroup,
@@ -22,7 +22,7 @@ export function getCellValue(
     column: number,
     options: CommonOptions & { type?: keyof Cell } = {}
 ) {
-    if (!_.isNumber(row) || !_.isNumber(column)) {
+    if (!isNumber(row) || !isNumber(column)) {
         throw new Error("row or column cannot be null or undefined");
     }
     const sheet = getSheet(ctx, options);
@@ -34,7 +34,7 @@ export function getCellValue(
     const cellData = targetSheetData[row][column];
     let ret;
 
-    if (cellData && _.isPlainObject(cellData)) {
+    if (cellData && isPlainObject(cellData)) {
         if (type === "f") {
             ret = cellData.f != null ? functionHTMLGenerate(cellData.f) : cellData.v;
         } else if (cellData.ct && cellData.ct.fa === "yyyy-MM-dd") {
@@ -61,7 +61,7 @@ export function setCellValue(
     cellInput: HTMLDivElement | null,
     options: CommonOptions = {}
 ) {
-    if (!_.isNumber(row) || !_.isNumber(column)) {
+    if (!isNumber(row) || !isNumber(column)) {
         throw new Error("row or column cannot be null or undefined");
     }
 
@@ -128,7 +128,7 @@ export function setCellValue(
             delFunctionGroup(ctx, row, column, sheet.id);
             setCellValueInternal(ctx, row, column, data, curv); // update text value
         }
-        _.forEach(value, (v, attr) => {
+        forEach(value, (v, attr) => {
             if (attr in formatList) {
                 updateFormatCell(
                     ctx,
@@ -165,7 +165,7 @@ export function clearCell(
     column: number,
     options: CommonOptions = {}
 ) {
-    if (!_.isNumber(row) || !_.isNumber(column)) {
+    if (!isNumber(row) || !isNumber(column)) {
         throw new Error("row or column cannot be null or undefined");
     }
 
@@ -173,7 +173,7 @@ export function clearCell(
 
     const cell = sheet.data?.[row]?.[column];
 
-    if (cell && _.isPlainObject(cell)) {
+    if (cell && isPlainObject(cell)) {
         delete cell.m;
         delete cell.v;
 
@@ -192,7 +192,7 @@ export function setCellFormat(
     value: any,
     options: CommonOptions = {}
 ) {
-    if (!_.isNumber(row) || !_.isNumber(column)) {
+    if (!isNumber(row) || !isNumber(column)) {
         throw new Error("row or column cannot be null or undefined");
     }
 
@@ -215,7 +215,7 @@ export function setCellFormat(
         throw new Error(
             "'fa' and 't' should be present in value when attr is 'ct'"
         );
-    } else if (attr === "ct" && !_.isNil(cellData.v)) {
+    } else if (attr === "ct" && !isNil(cellData.v)) {
         cellData.m = format(value.fa, cellData.v); // auto generate mask
     }
 

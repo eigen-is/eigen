@@ -1,4 +1,4 @@
-import _ from "lodash";
+import {cloneDeep, filter, isNil} from "es-toolkit/compat";
 import {Context, getFlowdata} from "../context";
 import {normalizeSelection} from "./selection";
 
@@ -39,7 +39,7 @@ export function getRangeArr(
     const flowData = getFlowdata(ctx, ctx.currentSheetId);
     for (let r = minR; r <= maxR; r += 1) {
         for (let c = minC; c <= maxC; c += 1) {
-            if (_.isNil(flowData)) break;
+            if (isNil(flowData)) break;
             const cell = flowData[r][c];
             // cellSave stores the coordinates of matching cells; look up matching cell coordinates
             if (`${r}_${c}` in cellSave) {
@@ -112,8 +112,8 @@ export function getRangeArr(
 export function getOptionValue(
     constants: Record<string, boolean>
 ): string | undefined {
-    const tempConstans = _.cloneDeep(constants);
-    const len = _.filter(tempConstans, (o) => o).length;
+    const tempConstans = cloneDeep(constants);
+    const len = filter(tempConstans, (o) => o).length;
     let value;
     if (len === 0) {
         value = "";
@@ -121,7 +121,7 @@ export function getOptionValue(
         value = "all";
     } else {
         const arr: string[] = [];
-        _.toPairs(constants).forEach((entry) => {
+        Object.entries(constants).forEach((entry) => {
             const [k, v] = entry;
             if (v) {
                 if (k === "locationDate") {
@@ -155,12 +155,12 @@ export function getSelectRange(ctx: Context) {
             ctx.luckysheet_select_save[0].column[1])
     ) {
         const flowdata = getFlowdata(ctx, ctx.currentSheetId);
-        if (_.isNil(flowdata)) return [];
+        if (isNil(flowdata)) return [];
         range = [
             {row: [0, flowdata.length - 1], column: [0, flowdata[0].length - 1]},
         ];
     } else {
-        range = _.cloneDeep(ctx.luckysheet_select_save) ?? [];
+        range = cloneDeep(ctx.luckysheet_select_save) ?? [];
     }
     return range;
 }
@@ -186,7 +186,7 @@ export function applyLocation(
         // cellSave: records coordinates of matching cells, e.g. 0_1
         const cellSave: Record<string, number> = {};
         const flowData = getFlowdata(ctx, ctx.currentSheetId);
-        if (_.isNil(flowData)) return [];
+        if (isNil(flowData)) return [];
         for (let s = 0; s < range.length; s += 1) {
             // Selection row start
             const st_r = range[s].row[0];

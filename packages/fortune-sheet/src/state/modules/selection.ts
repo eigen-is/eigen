@@ -1,4 +1,4 @@
-import _ from "lodash";
+import {cloneDeep, isEmpty, isNil, isNumber, isPlainObject, kebabCase, map} from "es-toolkit/compat";
 import type {Freezen, Range, Sheet as SheetType} from "../types";
 import {Context, getFlowdata} from "../context";
 import {
@@ -77,10 +77,10 @@ export function seletedHighlistByindex(
     const col_pre = c1 - 1 === -1 ? 0 : ctx.visibledatacolumn[c1 - 1];
 
     if (
-        _.isNumber(row) &&
-        _.isNumber(row_pre) &&
-        _.isNumber(col) &&
-        _.isNumber(col_pre)
+        isNumber(row) &&
+        isNumber(row_pre) &&
+        isNumber(col) &&
+        isNumber(col_pre)
     ) {
         return {
             left: col_pre,
@@ -109,19 +109,19 @@ export function normalizeSelection(
 
         let rf;
         let cf;
-        if (_.isNil(selection[i].row_focus)) {
+        if (isNil(selection[i].row_focus)) {
             rf = r1;
         } else {
             rf = selection[i].row_focus;
         }
 
-        if (_.isNil(selection[i].column_focus)) {
+        if (isNil(selection[i].column_focus)) {
             cf = c1;
         } else {
             cf = selection[i].column_focus;
         }
 
-        if (_.isNil(rf) || _.isNil(cf)) {
+        if (isNil(rf) || isNil(cf)) {
             console.error("normalizeSelection: rf and cf is nil");
             return selection;
         }
@@ -251,7 +251,7 @@ export function pasteHandlerOfPaintModel(
     const c_c1 = copyRange.copyRange[0].column[0];
     const c_c2 = copyRange.copyRange[0].column[1];
 
-    const copyData = _.cloneDeep(
+    const copyData = cloneDeep(
         getdatabyselection(
             ctx,
             {row: [c_r1, c_r2], column: [c_c1, c_c2]},
@@ -312,7 +312,7 @@ export function pasteHandlerOfPaintModel(
 
     const borderInfoCompute = getBorderInfoCompute(ctx, copySheetIndex);
     const c_dataVerification =
-        _.cloneDeep(
+        cloneDeep(
             ctx.luckysheetfile[getSheetIndex(ctx, copySheetIndex)!].dataVerification
         ) || {};
     let dataVerification = null;
@@ -387,7 +387,7 @@ export function pasteHandlerOfPaintModel(
                     // Data validation copy
                     if (c_dataVerification[`${c_r1 + h - mth}_${c_c1 + c - mtc}`]) {
                         if (dataVerification == null) {
-                            dataVerification = _.cloneDeep(
+                            dataVerification = cloneDeep(
                                 ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId)!]
                                     .dataVerification
                             );
@@ -397,7 +397,7 @@ export function pasteHandlerOfPaintModel(
                             c_dataVerification[`${c_r1 + h - mth}_${c_c1 + c - mtc}`];
                     }
 
-                    if (_.isPlainObject(x[c]) && x[c].mc) {
+                    if (isPlainObject(x[c]) && x[c].mc) {
                         if (x[c].mc.rs) {
                             delete cfg.merge[`${x[c].mc.r}_${x[c].mc.c}`];
                         }
@@ -409,7 +409,7 @@ export function pasteHandlerOfPaintModel(
                         value = copyData[h - mth][c - mtc];
                     }
 
-                    if (_.isPlainObject(x[c])) {
+                    if (isPlainObject(x[c])) {
                         if (x[c].ct && x[c].ct.t === "inlineStr" && value) {
                             delete value.ct;
                         } else {
@@ -444,9 +444,9 @@ export function pasteHandlerOfPaintModel(
                             delete value.ct;
                         }
 
-                        x[c] = _.assign(x[c], _.cloneDeep(value));
+                        x[c] = Object.assign(x[c], cloneDeep(value));
                         if (x[c].ct && x[c].ct.t === "inlineStr") {
-                            x[c].ct.s.forEach((item: any) => _.assign(item, value));
+                            x[c].ct.s.forEach((item: any) => Object.assign(item, value));
                         }
 
                         if (copyHasMC && x[c].mc) {
@@ -499,13 +499,13 @@ export function pasteHandlerOfPaintModel(
     let cdformat: any = null;
     const copyIndex = getSheetIndex(ctx, copySheetIndex);
     if (!copyIndex) return;
-    const ruleArr = _.cloneDeep(
+    const ruleArr = cloneDeep(
         ctx.luckysheetfile[copyIndex].luckysheet_conditionformat_save
     );
 
-    if (!_.isNil(ruleArr) && ruleArr.length > 0) {
+    if (!isNil(ruleArr) && ruleArr.length > 0) {
         const currentIndex = getSheetIndex(ctx, ctx.currentSheetId) as number;
-        cdformat = _.cloneDeep(
+        cdformat = cloneDeep(
             ctx.luckysheetfile[currentIndex].luckysheet_conditionformat_save
         );
 
@@ -601,10 +601,10 @@ export function selectionCopyShow(range: any, ctx: Context) {
 export function rowHasMerged(ctx: Context, r: number, c1: number, c2: number) {
     let hasMerged = false;
     const flowData = getFlowdata(ctx);
-    if (_.isNil(flowData) || _.isNil(flowData[r])) return false;
+    if (isNil(flowData) || isNil(flowData[r])) return false;
     for (let c = c1; c <= c2; c += 1) {
         const cell = flowData[r][c];
-        if (!_.isNil(cell) && "mc" in cell) {
+        if (!isNil(cell) && "mc" in cell) {
             hasMerged = true;
             break;
         }
@@ -616,14 +616,14 @@ export function rowHasMerged(ctx: Context, r: number, c1: number, c2: number) {
 export function colHasMerged(ctx: Context, c: number, r1: number, r2: number) {
     let hasMerged = false;
     const flowData = getFlowdata(ctx);
-    if (_.isNil(flowData)) return false;
+    if (isNil(flowData)) return false;
     for (let r = r1; r <= r2; r += 1) {
         const cell = flowData[r]?.[c];
         if (
-            !_.isNil(ctx.config.merge) &&
-            !_.isNil(cell) &&
+            !isNil(ctx.config.merge) &&
+            !isNil(cell) &&
             "mc" in cell &&
-            !_.isNil(cell.mc)
+            !isNil(cell.mc)
         ) {
             hasMerged = true;
             break;
@@ -640,7 +640,7 @@ export function getRowMerge(
     c2: number
 ) {
     const flowData = getFlowdata(ctx);
-    if (_.isNil(flowData)) return [null, null];
+    if (isNil(flowData)) return [null, null];
     // const r1 = 0;
     const r2 = flowData.length - 1;
     let str = null;
@@ -649,18 +649,18 @@ export function getRowMerge(
             for (let c = c1; c <= c2; c += 1) {
                 const cell = flowData[r][c];
                 if (
-                    !_.isNil(cell) &&
-                    !_.isNil(cell.mc) &&
+                    !isNil(cell) &&
+                    !isNil(cell.mc) &&
                     "mc" in cell &&
-                    !_.isNil(ctx.config.merge)
+                    !isNil(ctx.config.merge)
                 ) {
                     const mc = ctx.config.merge[`${cell.mc.r}_${cell.mc.c}`];
-                    if (_.isNil(str) || mc.r < str) {
+                    if (isNil(str) || mc.r < str) {
                         str = mc.r;
                     }
                 }
             }
-            if (!_.isNil(str) && rowHasMerged(ctx, str - 1, c1, c2) && str > 0) {
+            if (!isNil(str) && rowHasMerged(ctx, str - 1, c1, c2) && str > 0) {
                 r = str;
             } else {
                 break;
@@ -675,18 +675,18 @@ export function getRowMerge(
             for (let c = c1; c <= c2; c += 1) {
                 const cell = flowData[r][c];
                 if (
-                    !_.isNil(cell) &&
-                    !_.isNil(cell.mc) &&
+                    !isNil(cell) &&
+                    !isNil(cell.mc) &&
                     "mc" in cell &&
-                    !_.isNil(ctx.config.merge)
+                    !isNil(ctx.config.merge)
                 ) {
                     const mc = ctx.config.merge[`${cell.mc.r}_${cell.mc.c}`];
-                    if (_.isNil(end) || mc.r + mc.rs - 1 > end) {
+                    if (isNil(end) || mc.r + mc.rs - 1 > end) {
                         end = mc.r + mc.rs - 1;
                     }
                 }
             }
-            if (!_.isNil(end) && rowHasMerged(ctx, end + 1, c1, c2) && end < r2) {
+            if (!isNil(end) && rowHasMerged(ctx, end + 1, c1, c2) && end < r2) {
                 r = end;
             } else {
                 break;
@@ -705,7 +705,7 @@ export function getColMerge(
     r2: number
 ) {
     const flowData = getFlowdata(ctx);
-    if (_.isNil(flowData)) {
+    if (isNil(flowData)) {
         return [null, null];
     }
     // const c1 = 0;
@@ -716,18 +716,18 @@ export function getColMerge(
             for (let r = r1; r <= r2; r += 1) {
                 const cell = flowData[r][c];
                 if (
-                    !_.isNil(ctx.config.merge) &&
-                    !_.isNil(cell) &&
+                    !isNil(ctx.config.merge) &&
+                    !isNil(cell) &&
                     "mc" in cell &&
-                    !_.isNil(cell.mc)
+                    !isNil(cell.mc)
                 ) {
                     const mc = ctx.config.merge[`${cell.mc.r}_${cell.mc.c}`];
-                    if (_.isNil(str) || mc.c < str) {
+                    if (isNil(str) || mc.c < str) {
                         str = mc.c;
                     }
                 }
             }
-            if (!_.isNil(str) && colHasMerged(ctx, str - 1, r1, r2) && str > 0) {
+            if (!isNil(str) && colHasMerged(ctx, str - 1, r1, r2) && str > 0) {
                 c = str;
             } else {
                 break;
@@ -742,19 +742,19 @@ export function getColMerge(
             for (let r = r1; r <= r2; r += 1) {
                 const cell = flowData[r][c];
                 if (
-                    !_.isNil(ctx.config.merge) &&
-                    !_.isNil(cell) &&
+                    !isNil(ctx.config.merge) &&
+                    !isNil(cell) &&
                     "mc" in cell &&
-                    !_.isNil(cell.mc)
+                    !isNil(cell.mc)
                 ) {
                     const mc = ctx.config.merge[`${cell.mc.r}_${cell.mc.c}`];
-                    if (_.isNil(end) || mc.c + mc.cs - 1 > end) {
+                    if (isNil(end) || mc.c + mc.cs - 1 > end) {
                         end = mc.c + mc.cs - 1;
                     }
                 }
             }
 
-            if (!_.isNil(end) && colHasMerged(ctx, end + 1, r1, r2) && end < c2) {
+            if (!isNil(end) && colHasMerged(ctx, end + 1, r1, r2) && end < c2) {
                 c = end;
             } else {
                 break;
@@ -795,14 +795,14 @@ export function moveHighlightCell(
         }
 
         let curR;
-        if (_.isNil(last.row_focus)) {
+        if (isNil(last.row_focus)) {
             [curR] = last.row;
         } else {
             curR = last.row_focus;
         }
 
         let curC;
-        if (_.isNil(last.column_focus)) {
+        if (isNil(last.column_focus)) {
             [curC] = last.column;
         } else {
             curC = last.column_focus;
@@ -831,13 +831,13 @@ export function moveHighlightCell(
             }
         }
 
-        if (_.isNil(curR) || _.isNil(curC)) {
+        if (isNil(curR) || isNil(curC)) {
             console.error("moveHighlightCell: curR or curC is nil");
             return;
         }
 
-        let moveX = _.isNil(last.moveXY) ? curR : last.moveXY.x;
-        let moveY = _.isNil(last.moveXY) ? curC : last.moveXY.y;
+        let moveX = isNil(last.moveXY) ? curR : last.moveXY.x;
+        let moveY = isNil(last.moveXY) ? curC : last.moveXY.y;
 
         if (postion === "down") {
             curR += index;
@@ -890,10 +890,10 @@ export function moveHighlightCell(
         }
 
         if (
-            _.isNil(row_index) ||
-            _.isNil(row_index_ed) ||
-            _.isNil(col_index) ||
-            _.isNil(col_index_ed)
+            isNil(row_index) ||
+            isNil(row_index_ed) ||
+            isNil(col_index) ||
+            isNil(col_index_ed)
         ) {
             console.error(
                 "moveHighlightCell: row_index or row_index_ed or col_index or col_index_ed is nil"
@@ -916,14 +916,14 @@ export function moveHighlightCell(
         if (!last) return;
 
         let curR;
-        if (_.isNil(last.row_focus)) {
+        if (isNil(last.row_focus)) {
             [curR] = last.row;
         } else {
             curR = last.row_focus;
         }
 
         let curC;
-        if (_.isNil(last.column_focus)) {
+        if (isNil(last.column_focus)) {
             [curC] = last.column;
         } else {
             curC = last.column_focus;
@@ -952,13 +952,13 @@ export function moveHighlightCell(
             }
         }
 
-        if (_.isNil(curR) || _.isNil(curC)) {
+        if (isNil(curR) || isNil(curC)) {
             console.error("moveHighlightCell: curR or curC is nil");
             return;
         }
 
-        let moveX = _.isNil(last.moveXY) ? curR : last.moveXY.x;
-        let moveY = _.isNil(last.moveXY) ? curC : last.moveXY.y;
+        let moveX = isNil(last.moveXY) ? curR : last.moveXY.x;
+        let moveY = isNil(last.moveXY) ? curC : last.moveXY.y;
 
         if (postion === "down") {
             curR += index;
@@ -1006,14 +1006,14 @@ export function moveHighlightCell(
         }
 
         if (
-            _.isNil(col) ||
-            _.isNil(col_pre) ||
-            _.isNil(row) ||
-            _.isNil(row_pre) ||
-            _.isNil(row_index) ||
-            _.isNil(row_index_ed) ||
-            _.isNil(col_index) ||
-            _.isNil(col_index_ed)
+            isNil(col) ||
+            isNil(col_pre) ||
+            isNil(row) ||
+            isNil(row_pre) ||
+            isNil(row_index) ||
+            isNil(row_index_ed) ||
+            isNil(col_index) ||
+            isNil(col_index_ed)
         ) {
             console.error(
                 "moveHighlightCell: some values of func_selectedrange is nil"
@@ -1104,8 +1104,8 @@ export function moveHighlightRange(
     let col;
     let col_pre;
     const flowData = getFlowdata(ctx);
-    if (_.isNil(flowData)) return;
-    if (_.isNil(ctx.luckysheet_select_save)) return;
+    if (isNil(flowData)) return;
+    if (isNil(ctx.luckysheet_select_save)) return;
     if (type === "rangeOfSelect") {
         const last =
             ctx.luckysheet_select_save[ctx.luckysheet_select_save.length - 1];
@@ -1115,7 +1115,7 @@ export function moveHighlightRange(
         let endC = last.column[1];
         const rf = last.row_focus;
         const cf = last.column_focus;
-        if (_.isNil(rf) || _.isNil(cf)) return;
+        if (isNil(rf) || isNil(cf)) return;
         const datarowlen = flowData.length;
         const datacolumnlen = flowData[0].length;
         if (postion === "down") {
@@ -1125,18 +1125,18 @@ export function moveHighlightRange(
                 const rfMerge = getRowMerge(ctx, rf, curC, endC);
                 const rf_str = rfMerge[0];
                 const rf_end = rfMerge[1];
-                if (!_.isNil(rf_str) && rf_str > curR && rf_end === endR) {
+                if (!isNil(rf_str) && rf_str > curR && rf_end === endR) {
                     if (index > 0 && rowHasMerged(ctx, curR, curC, endC)) {
                         const v = getRowMerge(ctx, curR, curC, endC)[1];
-                        if (!_.isNil(v)) {
+                        if (!isNil(v)) {
                             curR = v;
                         }
                     }
                     curR += index;
-                } else if (!_.isNil(rf_end) && rf_end < endR && rf_str === curR) {
+                } else if (!isNil(rf_end) && rf_end < endR && rf_str === curR) {
                     if (index < 0 && rowHasMerged(ctx, endR, curC, endC)) {
                         const v = getRowMerge(ctx, curR, curC, endC)[0];
-                        if (!_.isNil(v)) {
+                        if (!isNil(v)) {
                             endR = v;
                         }
                     }
@@ -1152,7 +1152,7 @@ export function moveHighlightRange(
                 if (rf > curR && rf === endR) {
                     if (index > 0 && rowHasMerged(ctx, curR, curC, endC)) {
                         const v = getRowMerge(ctx, curR, curC, endC)[1];
-                        if (!_.isNil(v)) {
+                        if (!isNil(v)) {
                             curR = v;
                         }
                     }
@@ -1160,7 +1160,7 @@ export function moveHighlightRange(
                 } else if (rf < endR && rf === curR) {
                     if (index < 0 && rowHasMerged(ctx, endR, curC, endC)) {
                         const v = getRowMerge(ctx, endR, curC, endC)[0];
-                        if (!_.isNil(v)) {
+                        if (!isNil(v)) {
                             endR = v;
                         }
                     }
@@ -1190,19 +1190,19 @@ export function moveHighlightRange(
                 const cfMerge = getColMerge(ctx, cf, curR, endR);
                 const cf_str = cfMerge[0];
                 const cf_end = cfMerge[1];
-                if (!_.isNil(cf_str) && cf_str > curC && cf_end === endC) {
+                if (!isNil(cf_str) && cf_str > curC && cf_end === endC) {
                     if (index > 0 && colHasMerged(ctx, curC, curR, endR)) {
                         const v = getColMerge(ctx, curC, curR, endR)[1];
-                        if (!_.isNil(v)) {
+                        if (!isNil(v)) {
                             curC = v;
                         }
                         curC += index;
                     }
                     curC += index;
-                } else if (!_.isNil(cf_end) && cf_end < endC && cf_str === curC) {
+                } else if (!isNil(cf_end) && cf_end < endC && cf_str === curC) {
                     if (index < 0 && colHasMerged(ctx, endC, curR, endR)) {
                         const v = getColMerge(ctx, endC, curR, endR)[0];
-                        if (!_.isNil(v)) {
+                        if (!isNil(v)) {
                             endC = v;
                         }
                     }
@@ -1218,7 +1218,7 @@ export function moveHighlightRange(
                 if (cf > curC && cf === endC) {
                     if (index > 0 && colHasMerged(ctx, curC, curR, endR)) {
                         const v = getColMerge(ctx, curC, curR, endR)[1];
-                        if (!_.isNil(v)) {
+                        if (!isNil(v)) {
                             curC = v;
                         }
                         curC += index;
@@ -1227,7 +1227,7 @@ export function moveHighlightRange(
                 } else if (cf < endC && cf === curC) {
                     if (index < 0 && colHasMerged(ctx, endC, curR, endR)) {
                         const v = getColMerge(ctx, endC, curR, endR)[0];
-                        if (!_.isNil(v)) {
+                        if (!isNil(v)) {
                             endC = v;
                         }
                     }
@@ -1269,7 +1269,7 @@ export function moveHighlightRange(
             col_pre,
             col - col_pre - 1
         );
-        if (!_.isNil(changeparam)) {
+        if (!isNil(changeparam)) {
             [columnseleted, rowseleted] = changeparam;
         }
         last.row = rowseleted;
@@ -1287,7 +1287,7 @@ export function moveHighlightRange(
         }
     } else if (type === "rangeOfFormula") {
         const last = ctx.formulaCache.func_selectedrange;
-        if (_.isNil(last)) return;
+        if (isNil(last)) return;
         let curR = last.row[0];
         let endR = last.row[1];
         let curC = last.column[0];
@@ -1299,22 +1299,22 @@ export function moveHighlightRange(
         const datacolumnlen = flowData[0].length;
 
         if (postion === "down") {
-            if (!_.isNil(rf) && rowHasMerged(ctx, rf, curC, endC)) {
+            if (!isNil(rf) && rowHasMerged(ctx, rf, curC, endC)) {
                 const rfMerge = getRowMerge(ctx, rf, curC, endC);
                 const rf_str = rfMerge[0];
                 const rf_end = rfMerge[1];
-                if (!_.isNil(rf_str) && rf_str > curR && rf_end === endR) {
+                if (!isNil(rf_str) && rf_str > curR && rf_end === endR) {
                     if (index > 0 && rowHasMerged(ctx, curR, curC, endC)) {
                         const v = getRowMerge(ctx, curR, curC, endC)[1];
-                        if (!_.isNil(v)) {
+                        if (!isNil(v)) {
                             curR = v;
                         }
                     }
                     curR += index;
-                } else if (!_.isNil(rf_end) && rf_end < endR && rf_str === curR) {
+                } else if (!isNil(rf_end) && rf_end < endR && rf_str === curR) {
                     if (index < 0 && rowHasMerged(ctx, endR, curC, endC)) {
                         const v = getRowMerge(ctx, endR, curC, endC)[0];
-                        if (!_.isNil(v)) {
+                        if (!isNil(v)) {
                             endR = v;
                         }
                         endR += index;
@@ -1327,18 +1327,18 @@ export function moveHighlightRange(
                     }
                 }
             } else {
-                if (!_.isNil(rf) && rf > curR && rf === endR) {
+                if (!isNil(rf) && rf > curR && rf === endR) {
                     if (index > 0 && rowHasMerged(ctx, curR, curC, endC)) {
                         const v = getRowMerge(ctx, curR, curC, endC)[1];
-                        if (!_.isNil(v)) {
+                        if (!isNil(v)) {
                             curR = v;
                         }
                     }
                     curR += index;
-                } else if (!_.isNil(rf) && rf < endR && rf === curR) {
+                } else if (!isNil(rf) && rf < endR && rf === curR) {
                     if (index < 0 && rowHasMerged(ctx, endR, curC, endC)) {
                         const v = getRowMerge(ctx, endR, curC, endC)[0];
-                        if (!_.isNil(v)) {
+                        if (!isNil(v)) {
                             endR = v;
                         }
                     }
@@ -1364,23 +1364,23 @@ export function moveHighlightRange(
                 curR = 0;
             }
         } else {
-            if (!_.isNil(cf) && colHasMerged(ctx, cf, curR, endR)) {
+            if (!isNil(cf) && colHasMerged(ctx, cf, curR, endR)) {
                 const cfMerge = getColMerge(ctx, cf, curR, endR);
                 const cf_str = cfMerge[0];
                 const cf_end = cfMerge[1];
-                if (!_.isNil(cf_str) && cf_str > curC && cf_end === endC) {
+                if (!isNil(cf_str) && cf_str > curC && cf_end === endC) {
                     if (index > 0 && colHasMerged(ctx, curC, curR, endR)) {
                         const v = getColMerge(ctx, curC, curR, endR)[1];
-                        if (!_.isNil(v)) {
+                        if (!isNil(v)) {
                             curC = v;
                         }
                     }
 
                     curC += index;
-                } else if (!_.isNil(cf_end) && cf_end < endC && cf_str === curC) {
+                } else if (!isNil(cf_end) && cf_end < endC && cf_str === curC) {
                     if (index < 0 && colHasMerged(ctx, endC, curR, endR)) {
                         const v = getColMerge(ctx, endC, curR, endR)[0];
-                        if (!_.isNil(v)) {
+                        if (!isNil(v)) {
                             endC = v;
                         }
                     }
@@ -1394,19 +1394,19 @@ export function moveHighlightRange(
                     }
                 }
             } else {
-                if (!_.isNil(cf) && cf > curC && cf === endC) {
+                if (!isNil(cf) && cf > curC && cf === endC) {
                     if (index > 0 && colHasMerged(ctx, curC, curR, endR)) {
                         const v = getColMerge(ctx, curC, curR, endR)[1];
-                        if (!_.isNil(v)) {
+                        if (!isNil(v)) {
                             curC = v;
                         }
                     }
 
                     curC += index;
-                } else if (!_.isNil(cf) && cf < endC && cf === curC) {
+                } else if (!isNil(cf) && cf < endC && cf === curC) {
                     if (index < 0 && colHasMerged(ctx, endC, curR, endR)) {
                         const v = getColMerge(ctx, endC, curR, endR)[0];
-                        if (!_.isNil(v)) {
+                        if (!isNil(v)) {
                             endC = v;
                         }
                     }
@@ -1456,7 +1456,7 @@ export function moveHighlightRange(
             left,
             width
         );
-        if (!_.isNil(changeparam)) {
+        if (!isNil(changeparam)) {
             // @ts-ignore
             [columnseleted, rowseleted, top, height, left, width] = changeparam;
         }
@@ -1591,9 +1591,9 @@ export function rangeValueToHtml(
 
                 if (r === rowIndexArr[0]) {
                     if (
-                        _.isNil(sheet.config) ||
-                        _.isNil(sheet.config.columnlen) ||
-                        _.isNil(sheet.config.columnlen[c.toString()])
+                        isNil(sheet.config) ||
+                        isNil(sheet.config.columnlen) ||
+                        isNil(sheet.config.columnlen[c.toString()])
                     ) {
                         colgroup += '<colgroup width="72px"></colgroup>';
                     } else {
@@ -1605,9 +1605,9 @@ export function rangeValueToHtml(
 
                 if (c === colIndexArr[0]) {
                     if (
-                        _.isNil(sheet.config) ||
-                        _.isNil(sheet.config.rowlen) ||
-                        _.isNil(sheet.config.rowlen[r.toString()])
+                        isNil(sheet.config) ||
+                        isNil(sheet.config.rowlen) ||
+                        isNil(sheet.config.rowlen[r.toString()])
                     ) {
                         style += "height:19px;";
                     } else {
@@ -1618,8 +1618,8 @@ export function rangeValueToHtml(
                 const reg = /^(w|W)((0?)|(0\.0+))$/;
                 let c_value;
                 if (
-                    !_.isNil(cell.ct) &&
-                    !_.isNil(cell.ct.fa) &&
+                    !isNil(cell.ct) &&
+                    !isNil(cell.ct.fa) &&
                     cell.ct.fa.match(reg)
                 ) {
                     c_value = getCellValue(r, c, d);
@@ -1628,8 +1628,8 @@ export function rangeValueToHtml(
                 }
 
                 const styleObj = getStyleByCell(ctx, d, r, c, cfCompute);
-                style += _.map(styleObj, (v, key) => {
-                    return `${_.kebabCase(key)}:${_.isNumber(v) ? `${v}px` : v};`;
+                style += map(styleObj, (v, key) => {
+                    return `${kebabCase(key)}:${isNumber(v) ? `${v}px` : v};`;
                 }).join("");
 
                 if (cell.mc) {
@@ -1654,13 +1654,13 @@ export function rangeValueToHtml(
                                             borderInfoCompute[`${bd_r}_${bd_c}`].t.style;
                                         const bcolor = borderInfoCompute[`${bd_r}_${bd_c}`].t.color;
 
-                                        if (_.isNil(bt_obj.style[linetype])) {
+                                        if (isNil(bt_obj.style[linetype])) {
                                             bt_obj.style[linetype] = 1;
                                         } else {
                                             bt_obj.style[linetype] += 1;
                                         }
 
-                                        if (_.isNil(bt_obj.color[bcolor])) {
+                                        if (isNil(bt_obj.color[bcolor])) {
                                             bt_obj.color[bcolor] = 1;
                                         } else {
                                             bt_obj.color[bcolor] += 1;
@@ -1676,13 +1676,13 @@ export function rangeValueToHtml(
                                             borderInfoCompute[`${bd_r}_${bd_c}`].b.style;
                                         const bcolor = borderInfoCompute[`${bd_r}_${bd_c}`].b.color;
 
-                                        if (_.isNil(bb_obj.style[linetype])) {
+                                        if (isNil(bb_obj.style[linetype])) {
                                             bb_obj.style[linetype] = 1;
                                         } else {
                                             bb_obj.style[linetype] += 1;
                                         }
 
-                                        if (_.isNil(bb_obj.color[bcolor])) {
+                                        if (isNil(bb_obj.color[bcolor])) {
                                             bb_obj.color[bcolor] = 1;
                                         } else {
                                             bb_obj.color[bcolor] += 1;
@@ -1697,13 +1697,13 @@ export function rangeValueToHtml(
                                         const linetype = borderInfoCompute[`${r}_${c}`].l.style;
                                         const bcolor = borderInfoCompute[`${bd_r}_${bd_c}`].l.color;
 
-                                        if (_.isNil(bl_obj.style[linetype])) {
+                                        if (isNil(bl_obj.style[linetype])) {
                                             bl_obj.style[linetype] = 1;
                                         } else {
                                             bl_obj.style[linetype] += 1;
                                         }
 
-                                        if (_.isNil(bl_obj.color[bcolor])) {
+                                        if (isNil(bl_obj.color[bcolor])) {
                                             bl_obj.color[bcolor] = 1;
                                         } else {
                                             bl_obj.color[bcolor] += 1;
@@ -1719,13 +1719,13 @@ export function rangeValueToHtml(
                                             borderInfoCompute[`${bd_r}_${bd_c}`].r.style;
                                         const bcolor = borderInfoCompute[`${bd_r}_${bd_c}`].r.color;
 
-                                        if (_.isNil(br_obj.style[linetype])) {
+                                        if (isNil(br_obj.style[linetype])) {
                                             br_obj.style[linetype] = 1;
                                         } else {
                                             br_obj.style[linetype] += 1;
                                         }
 
-                                        if (_.isNil(br_obj.color[bcolor])) {
+                                        if (isNil(br_obj.color[bcolor])) {
                                             br_obj.color[bcolor] = 1;
                                         } else {
                                             br_obj.color[bcolor] += 1;
@@ -1753,7 +1753,7 @@ export function rangeValueToHtml(
                                     }
                                 });
 
-                                if (!_.isNil(bl_color) && !_.isNil(bl_style)) {
+                                if (!isNil(bl_color) && !isNil(bl_style)) {
                                     style += `border-left:${getHtmlBorderStyle(
                                         bl_style,
                                         bl_color
@@ -1777,7 +1777,7 @@ export function rangeValueToHtml(
                                     }
                                 });
 
-                                if (!_.isNil(br_color) && !_.isNil(br_style)) {
+                                if (!isNil(br_color) && !isNil(br_style)) {
                                     style += `border-right:${getHtmlBorderStyle(
                                         br_style,
                                         br_color
@@ -1801,7 +1801,7 @@ export function rangeValueToHtml(
                                     }
                                 });
 
-                                if (!_.isNil(bt_color) && !_.isNil(bt_style)) {
+                                if (!isNil(bt_color) && !isNil(bt_style)) {
                                     style += `border-top:${getHtmlBorderStyle(
                                         bt_style,
                                         bt_color
@@ -1825,7 +1825,7 @@ export function rangeValueToHtml(
                                     }
                                 });
 
-                                if (!_.isNil(bb_color) && !_.isNil(bb_style)) {
+                                if (!isNil(bb_color) && !isNil(bb_style)) {
                                     style += `border-bottom:${getHtmlBorderStyle(
                                         bb_style,
                                         bb_color
@@ -1871,11 +1871,11 @@ export function rangeValueToHtml(
 
                 column = replaceHtml(column, {style, span});
 
-                if (_.isNil(c_value)) {
+                if (isNil(c_value)) {
                     c_value = getCellValue(r, c, d);
                 }
                 // if (
-                //   _.isNil(c_value) &&
+                //   isNil(c_value) &&
                 //   d[r][c] &&
                 //   d[r][c].ct &&
                 //   d[r][c].ct.t === "inlineStr"
@@ -1893,7 +1893,7 @@ export function rangeValueToHtml(
                 //     .join("");
                 // }
 
-                if (_.isNil(c_value)) {
+                if (isNil(c_value)) {
                     c_value = "";
                 }
 
@@ -1936,9 +1936,9 @@ export function rangeValueToHtml(
 
                 if (r === rowIndexArr[0]) {
                     if (
-                        _.isNil(sheet.config) ||
-                        _.isNil(sheet.config.columnlen) ||
-                        _.isNil(sheet.config.columnlen[c.toString()])
+                        isNil(sheet.config) ||
+                        isNil(sheet.config.columnlen) ||
+                        isNil(sheet.config.columnlen[c.toString()])
                     ) {
                         colgroup += '<colgroup width="72px"></colgroup>';
                     } else {
@@ -1950,9 +1950,9 @@ export function rangeValueToHtml(
 
                 if (c === colIndexArr[0]) {
                     if (
-                        _.isNil(sheet.config) ||
-                        _.isNil(sheet.config.rowlen) ||
-                        _.isNil(sheet.config.rowlen[r.toString()])
+                        isNil(sheet.config) ||
+                        isNil(sheet.config.rowlen) ||
+                        isNil(sheet.config.rowlen[r.toString()])
                     ) {
                         style += "height:19px;";
                     } else {
@@ -1993,27 +1993,27 @@ export function copy(ctx: Context) {
 
         for (let copyR = r1; copyR <= r2; copyR += 1) {
             if (
-                !_.isNil(ctx.config.rowhidden) &&
-                !_.isNil(ctx.config.rowhidden[copyR])
+                !isNil(ctx.config.rowhidden) &&
+                !isNil(ctx.config.rowhidden[copyR])
             ) {
                 continue;
             }
 
-            if (!_.isNil(ctx.config.rowlen) && copyR in ctx.config.rowlen) {
+            if (!isNil(ctx.config.rowlen) && copyR in ctx.config.rowlen) {
                 RowlChange = true;
             }
 
             for (let copyC = c1; copyC <= c2; copyC += 1) {
                 if (
-                    !_.isNil(ctx.config.colhidden) &&
-                    !_.isNil(ctx.config.colhidden[copyC])
+                    !isNil(ctx.config.colhidden) &&
+                    !isNil(ctx.config.colhidden[copyC])
                 ) {
                     continue;
                 }
 
                 const cell = flowdata?.[copyR]?.[copyC];
 
-                if (!_.isNil(cell?.mc?.rs)) {
+                if (!isNil(cell?.mc?.rs)) {
                     HasMC = true;
                 }
             }
@@ -2055,7 +2055,7 @@ export function deleteSelectedCellText(ctx: Context): string {
     }
 
     const selection = ctx.luckysheet_select_save;
-    if (selection && !_.isEmpty(selection)) {
+    if (selection && !isEmpty(selection)) {
         const d = getFlowdata(ctx);
         if (!d) return "dataNullError";
 
@@ -2119,7 +2119,7 @@ export function selectIsOverlap(ctx: Context, range?: any) {
     if (range == null) {
         range = ctx.luckysheet_select_save;
     }
-    range = _.cloneDeep(range);
+    range = cloneDeep(range);
 
     let overlap = false;
     const map: any = {};

@@ -26,7 +26,7 @@ import {
     selectAll,
     showLinkCard,
 } from "../../state";
-import _ from "lodash";
+import {debounce} from "es-toolkit/compat";
 import {SetContextOptions, WorkbookContext} from "../../context";
 import {ColumnHeader} from "./ColumnHeader";
 import {RowHeader} from "./RowHeader";
@@ -132,7 +132,7 @@ export const SheetOverlay: React.FC = () => {
 
     const debouncedShowLinkCard = useMemo(
         () =>
-            _.debounce(
+            debounce(
                 (
                     globalCache: GlobalCache,
                     r: number,

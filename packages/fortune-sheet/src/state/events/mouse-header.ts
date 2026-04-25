@@ -1,4 +1,4 @@
-import _ from "lodash";
+import {cloneDeep, indexOf, isEmpty, isNil, last} from "es-toolkit/compat";
 import {Context, getFlowdata} from "../context";
 import {
     cancelActiveImgItem,
@@ -52,8 +52,7 @@ export function handleRowHeaderMouseDown(
     if (e.button === 2) {
         // If right-click is inside selection, stop mousedown handling
         const flowdata = getFlowdata(ctx);
-        const isInSelection = _.some(
-            ctx.luckysheet_select_save,
+        const isInSelection = ctx.luckysheet_select_save?.some(
             (obj_s) =>
                 obj_s.row != null &&
                 row_index >= obj_s.row[0] &&
@@ -71,7 +70,7 @@ export function handleRowHeaderMouseDown(
     ctx.luckysheet_scroll_status = true;
 
     // Formula-related
-    if (!_.isEmpty(ctx.luckysheetCellUpdate)) {
+    if (!isEmpty(ctx.luckysheetCellUpdate)) {
         if (
             ctx.formulaCache.rangestart ||
             ctx.formulaCache.rangedrag_column_start ||
@@ -163,7 +162,7 @@ export function handleRowHeaderMouseDown(
                 ctx.formulaCache.func_selectedrange = last;
             } else if (
                 e.ctrlKey &&
-                _.last(cellInput.querySelectorAll("span"))?.innerText !== ","
+                last(cellInput.querySelectorAll("span"))?.innerText !== ","
             ) {
                 // Ctrl held: finalize previous range selection first
                 let vText = `${cellInput.innerText},`;
@@ -175,7 +174,7 @@ export function handleRowHeaderMouseDown(
                         const currSelection = window.getSelection();
                         if (currSelection == null) return;
                         ctx.formulaCache.functionRangeIndex = [
-                            _.indexOf(
+                            indexOf(
                                 currSelection.anchorNode?.parentNode?.parentNode?.childNodes,
                                 // @ts-ignore
                                 currSelection.anchorNode?.parentNode
@@ -298,14 +297,14 @@ export function handleRowHeaderMouseDown(
     if (ctx.luckysheet_rows_selected_status) {
         if (e.shiftKey) {
             // Shift+click on row header to select range
-            const last = _.cloneDeep(
+            const last = cloneDeep(
                 ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1]
             ); // Last selection
             if (
                 !last ||
-                _.isNil(last.top) ||
-                _.isNil(last.height) ||
-                _.isNil(last.row_focus)
+                isNil(last.top) ||
+                isNil(last.height) ||
+                isNil(last.row_focus)
             ) {
                 return;
             }
@@ -429,8 +428,7 @@ export function handleColumnHeaderMouseDown(
     // Right-click: check if inside existing selection
     if (e.button === 2) {
         const flowdata = getFlowdata(ctx);
-        const isInSelection = _.some(
-            ctx.luckysheet_select_save,
+        const isInSelection = ctx.luckysheet_select_save?.some(
             (obj_s) =>
                 obj_s.column != null &&
                 col_index >= obj_s.column[0] &&
@@ -448,7 +446,7 @@ export function handleColumnHeaderMouseDown(
     ctx.luckysheet_scroll_status = true;
 
     // Formula-related
-    if (!_.isEmpty(ctx.luckysheetCellUpdate)) {
+    if (!isEmpty(ctx.luckysheetCellUpdate)) {
         if (
             ctx.formulaCache.rangestart ||
             ctx.formulaCache.rangedrag_column_start ||
@@ -540,7 +538,7 @@ export function handleColumnHeaderMouseDown(
                 ctx.formulaCache.func_selectedrange = last;
             } else if (
                 e.ctrlKey &&
-                _.last(cellInput.querySelectorAll("span"))?.innerText !== ","
+                last(cellInput.querySelectorAll("span"))?.innerText !== ","
             ) {
                 // Ctrl held: finalize previous range selection first
                 let vText = `${cellInput.innerText},`;
@@ -552,7 +550,7 @@ export function handleColumnHeaderMouseDown(
                         const currSelection = window.getSelection();
                         if (currSelection == null) return;
                         ctx.formulaCache.functionRangeIndex = [
-                            _.indexOf(
+                            indexOf(
                                 currSelection.anchorNode?.parentNode?.parentNode?.childNodes,
                                 // @ts-ignore
                                 currSelection.anchorNode?.parentNode
@@ -676,7 +674,7 @@ export function handleColumnHeaderMouseDown(
     if (ctx.luckysheet_cols_selected_status) {
         if (e.shiftKey) {
             // Shift+click on column header to select range
-            const last = _.cloneDeep(
+            const last = cloneDeep(
                 ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1]
             ); // Last selection
 
@@ -686,9 +684,9 @@ export function handleColumnHeaderMouseDown(
 
             if (
                 !last ||
-                _.isNil(last.left) ||
-                _.isNil(last.width) ||
-                _.isNil(last.column_focus)
+                isNil(last.left) ||
+                isNil(last.width) ||
+                isNil(last.column_focus)
             ) {
                 return;
             }
