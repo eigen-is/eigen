@@ -88,6 +88,20 @@ smoke pass. Sequence to run in `apps/sheets`:
 - [ ] **`LinkEditCard` directory rename (commits `dd46088a` + `3b5642a2`)** —
       `LinkEidtCard/` → `LinkEditCard/`. Trivial single-import update; should
       be invisible at runtime. Spot-check link card still renders.
+- [ ] **Engine cleanup batch (commits `1b2b36a0` + `2608d5f5`)** — engine
+      subpath export, `getCellTextInfo`/`getFontSet` ctx unification (3 sites
+      previously omitted locale fonts; now consistent), `colorGradation` array
+      bug fix, `applyCellStyle` helper extraction (14× dedupe), bubble sort →
+      `Array.sort`, sum loop → `reduce`, plus mechanical sweeps (22 dead
+      `console.log`, jQuery legacy comments, stale ReferenceError comments,
+      `substr` → `slice`, `indexOf > -1` → `includes`, dead try/catch around
+      internal calls). Smoke surfaces: any sheet using colorGradation /
+      dataBar conditional formatting (especially overlapping rules); cell
+      text rendering with non-default fonts (locale fontarray indices); drop
+      cell fill with type 4-8; paste flows that previously called the dead
+      `rowlenByRange` paths; right-click menus that touch number formats.
+      Engine test suite (`engine/test/conditional-format.test.ts`) and the
+      6 HTML-export tests cover the bug-fix path.
 
 ### Per-feature paths
 - [ ] **Cell editing & paste** (InputBox + FxEditor + Workbook clusters):
@@ -178,32 +192,22 @@ raw HTML. Most landed in commit `b5c3b7e7`.
 
 ## 3.6. `colorGradation` rules — `format.cellColor` / `format.textColor` reads on an array-shaped `format`
 
-In `engine/conditional-format.ts::evaluateConditionalFormat` the `colorGradation` branch (carried over
-unchanged from the old state-side `compute()`) reads `format.cellColor` and `format.textColor` on the
-`if`-arm that updates an existing computeMap entry, while the corresponding `else`-arm uses positional
-access (`format[1]`, `format[2]`). For colorGradation rules, `format` is an array of color strings (the
-gradient stops), not an object — so the property reads always yield `undefined`, blanking the cell color
-on overlapping rules. This is a latent bug present in the original luckysheet code; surfaced 2026-04-26
-during the engine extraction code review, not fixed because it requires verifying real CF rule shapes
-against multi-rule overlap scenarios in the UI. The `else`-arm positional access is correct; the
-`if`-arm should mirror it. Eight call sites in
-`engine/conditional-format.ts` (lines 264, 267, 273-4, 292, 318, 341, 367).
+**Resolved 2026-04-26 in commit `1b2b36a0`.** In `engine/conditional-format.ts::evaluateConditionalFormat`
+the `colorGradation` branch read `format.cellColor`/`format.textColor` on the `if`-arm (existing
+computeMap entry) when `format` is actually a string array of gradient stops, blanking the cell color on
+overlapping rules. Both arms now compute the gradient color once and merge through the shared
+`applyCellStyle` helper. Regression tests in `engine/test/conditional-format.test.ts` and
+`apps/api/src/test/sheets-html-export.test.ts`.
 
 ---
 
 ## 3.5. `getCellTextInfo` redundant `ctx?` parameter
 
-`text.ts::getCellTextInfo(cell, renderCtx, sheetCtx, option, ctx?: Context)` —
-the optional 5th parameter is forwarded only to `getFontSet` for locale-aware
-font-array lookup. Of 5 callers, the 2 main canvas render paths
-(`canvas.ts:1786` and `canvas.ts:1921`) pass `this.sheetCtx` as **both** the
-3rd and 5th argument (so the same context fills two slots), while the other 3
-callers (`canvas.ts:1145`, `toolbar.ts:180`, `cell.ts:941`) omit the 5th
-argument entirely — silently disabling locale fonts at those sites. Either
-the parameter should be dropped (and locale lookup unconditional from
-`sheetCtx`), or all 5 callers should pass it consistently. Surfaced 2026-04-26
-during the zoom-removal review; not touched because the change has semantic
-implications for non-canvas render sites.
+**Resolved 2026-04-26 in commit `1b2b36a0`.** The optional 5th `ctx?: Context` parameter was redundant —
+the two canvas render paths passed `this.sheetCtx` as both the 3rd and 5th argument, while three other
+callers omitted it entirely (silently disabling locale fonts). Parameter dropped; `getFontSet` now
+requires `Context` and reads it from the 3rd `sheetCtx` argument. All 5 call sites simplified to a
+single `Context`.
 
 ---
 
