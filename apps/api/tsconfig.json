@@ -10,7 +10,14 @@
     "moduleResolution": "bundler",
     "baseUrl": ".",
     "paths": {
-      "@workspace/lib/*": ["../../packages/lib/src/core/*", "../../packages/lib/src/*"]
+      "@workspace/lib/*": ["../../packages/lib/src/core/*", "../../packages/lib/src/*"],
+      // Resolve to the engine-only barrel so this app type-checks the pure subset that
+      // satisfies our stricter compiler options (verbatimModuleSyntax, noUnusedParameters,
+      // etc). Runtime (Bun) resolves to the package main as normal — the symbols apps/api
+      // imports (evaluateConditionalFormat, ComputeMap, …) exist on both.
+      // Follow-up: replace with a `@workspace/fortune-sheet/engine` subpath export once
+      // fortune-sheet's package.json `exports` field is set up.
+      "@workspace/fortune-sheet": ["../../packages/fortune-sheet/src/engine/index.ts"]
     },
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,

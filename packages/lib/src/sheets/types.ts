@@ -17,12 +17,21 @@ export type CellStyle = {
     tr?: string;
 };
 
+// Inline-string segment shape mirrors fortune-sheet's `InlineStringSegment` (engine/types.ts).
+// Defined locally so this lib stays free of a fortune-sheet dependency, while the structural
+// shape matches — Sheet snapshots can be passed straight to fortune-sheet's engine.
+export type InlineStringSegment = CellStyle & {
+    v?: string;
+    si?: number;
+    measureText?: unknown;
+};
+
 export type Cell = CellStyle & {
     v?: string | number | boolean;
     m?: string | number;
     mc?: { r: number; c: number; rs?: number; cs?: number };
     f?: string;
-    ct?: { fa?: string; t?: string; s?: unknown };
+    ct?: { fa?: string; t?: string; s?: InlineStringSegment[] };
     qp?: number;
     bg?: string;
     lo?: number;
@@ -67,4 +76,5 @@ export type Sheet = {
     celldata?: CellWithRowAndCol[];
     data?: (Cell | null)[][] | null;
     showGridLines?: boolean | number;
+    luckysheet_conditionformat_save?: unknown[];
 };
