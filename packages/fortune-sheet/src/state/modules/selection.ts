@@ -13,7 +13,8 @@ import {setPendingCopy} from "./clipboard";
 import {getBorderInfoCompute} from "./border";
 import {escapeHTMLTag, getSheetIndex, isAllowEdit, replaceHtml,} from "../utils";
 import {hasPartMC} from "./validation";
-import {cfSplitRange, getComputeMap} from "./conditionFormat";
+import {cfSplitRange} from "../../engine";
+import {getComputeMap} from "./conditionFormat";
 import {update} from "../../engine/format";
 import {format} from "numfmt";
 

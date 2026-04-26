@@ -8,7 +8,7 @@ import {locale} from "../locale";
 import {getBorderInfoCompute} from "./border";
 import {normalizeSelection} from "./selection";
 import {getSheetIndex, isAllowEdit} from "../utils";
-import {cfSplitRange} from "./conditionFormat";
+import {cfSplitRange} from "../../engine";
 import {GlobalCache} from "../types";
 import {jfrefreshgrid} from "./refresh";
 
