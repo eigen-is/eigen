@@ -10,6 +10,9 @@ import { useContext, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
 import {
+    applyColorScalePreset,
+    applyDataBarPreset,
+    CF_PRESETS,
     clearSheetRules,
     getFlowdata,
     handleBold,
@@ -523,6 +526,42 @@ function MergeCellsSubmenu() {
     );
 }
 
+const COLOR_SCALE_PRESETS = [
+    'colorGradation_1',
+    'colorGradation_2',
+    'colorGradation_3',
+    'colorGradation_4',
+    'colorGradation_5',
+    'colorGradation_6',
+    'colorGradation_7',
+    'colorGradation_8',
+    'colorGradation_9',
+    'colorGradation_10',
+    'colorGradation_11',
+    'colorGradation_12',
+] as const;
+
+const DATA_BAR_PRESETS = [
+    'solidColorDataBar_1',
+    'solidColorDataBar_2',
+    'solidColorDataBar_3',
+    'solidColorDataBar_4',
+    'solidColorDataBar_5',
+    'solidColorDataBar_6',
+] as const;
+
+function ColorScaleSwatch({ presetKey }: { presetKey: string }) {
+    const colors = CF_PRESETS[presetKey] ?? [];
+    return (
+        <div className="flex w-12 h-4 mr-2 rounded-sm overflow-hidden border border-border">
+            {colors.map((c, i) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: static palette — order is meaningful, no stable id
+                <div key={`${presetKey}-${i}`} className="flex-1" style={{ backgroundColor: c }} />
+            ))}
+        </div>
+    );
+}
+
 function ConditionalFormattingSubmenu() {
     const { context, setContext } = useContext(WorkbookContext);
     const { showDialog } = useDialog();
@@ -585,6 +624,36 @@ function ConditionalFormattingSubmenu() {
                     </DropdownMenuSubContent>
                 </DropdownMenuSub>
 
+                <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>{conditionformat.colorGradation}</DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
+                        {COLOR_SCALE_PRESETS.map((preset) => (
+                            <DropdownMenuItem
+                                key={preset}
+                                onClick={() => setContext((draftCtx) => applyColorScalePreset(draftCtx, preset))}
+                            >
+                                <ColorScaleSwatch presetKey={preset} />
+                                <span>{conditionformat[preset]}</span>
+                            </DropdownMenuItem>
+                        ))}
+                    </DropdownMenuSubContent>
+                </DropdownMenuSub>
+
+                <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>{conditionformat.dataBar}</DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
+                        {DATA_BAR_PRESETS.map((preset) => (
+                            <DropdownMenuItem
+                                key={preset}
+                                onClick={() => setContext((draftCtx) => applyDataBarPreset(draftCtx, preset))}
+                            >
+                                <ColorScaleSwatch presetKey={preset} />
+                                <span>{conditionformat[preset]}</span>
+                            </DropdownMenuItem>
+                        ))}
+                    </DropdownMenuSubContent>
+                </DropdownMenuSub>
+
                 <DropdownMenuSeparator />
 
                 <DropdownMenuItem onClick={() => showDialog(<ManageRules />)}>
@@ -609,8 +678,6 @@ function ConditionalFormattingSubmenu() {
                         </DropdownMenuItem>
                     </DropdownMenuSubContent>
                 </DropdownMenuSub>
-
-                {/* Color Scales / Data Bars — Task 9 inserts here */}
             </DropdownMenuSubContent>
         </DropdownMenuSub>
     );
