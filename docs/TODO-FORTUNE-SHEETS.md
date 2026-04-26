@@ -334,6 +334,11 @@ implementations:
 9. Localize hardcoded Chinese strings in `ImgBoxs`
 10. Evaluate replacing Font Awesome icons with Lucide
 11. Remove `css.d.ts` once all CSS imports eliminated
+12. **Wire missing Color Scales / Data Bars UI** — engine supports `colorGradation` /
+    `dataBar` rules and `state/locale/en.ts` defines 24 preset names, but the CF
+    dropdown only exposes `highlightCellRules` + `itemSelectionRules`. See
+    [PROPOSAL_FORTUNE_SHEET_CF_UI.md](PROPOSAL_FORTUNE_SHEET_CF_UI.md) for the
+    implementation plan (3 files, ~100 lines, no engine changes).
 
 ---
 
