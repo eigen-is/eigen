@@ -23,41 +23,6 @@ type SheetEditorProps = {
     initialChatName?: string;
 };
 
-const TOOLBAR_ITEMS = [
-    'undo',
-    'redo',
-    'format-painter',
-    'clear-format',
-    '|',
-    'font',
-    '|',
-    'font-size',
-    '|',
-    'format',
-    '|',
-    'bold',
-    'italic',
-    'strike-through',
-    'underline',
-    '|',
-    'font-color',
-    'background',
-    'border',
-    'merge-cell',
-    '|',
-    'horizontal-align',
-    'vertical-align',
-    'text-wrap',
-    '|',
-    'freeze',
-    'conditionFormat',
-    'filter',
-    'dataVerification',
-    'image',
-    'quick-formula',
-    'search',
-];
-
 export function SheetEditor({
     ownerId,
     path,
@@ -222,7 +187,6 @@ export function SheetEditor({
                         showFormulaBar={true}
                         showSheetTabs={true}
                         allowEdit={canWrite}
-                        toolbarItems={TOOLBAR_ITEMS}
                         toolbarLeftItems={leftItems}
                         toolbarRightItems={rightItems}
                         defaultRowHeight={20}

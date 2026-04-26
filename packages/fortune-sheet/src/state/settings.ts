@@ -1,4 +1,3 @@
-import type { LucideIcon } from "lucide-react";
 import {v4 as uuidv4} from "uuid";
 import type {Cell, CellMatrix} from "../engine/types";
 import {Selection, Sheet} from "./types";
@@ -139,19 +138,12 @@ export type Settings = {
     defaultColWidth?: number;
     defaultRowHeight?: number;
     defaultFontSize?: number;
-    toolbarItems?: string[];
     cellContextMenu?: string[];
     headerContextMenu?: string[];
     sheetTabContextMenu?: string[];
     filterContextMenu?: string[];
     generateSheetId?: () => string;
     hooks?: Hooks;
-    customToolbarItems?: {
-        key: string;
-        icon: LucideIcon;
-        tooltip?: string;
-        onClick?: () => void;
-    }[];
     currency?: string;
     fontList?: any[];
 };
@@ -174,49 +166,6 @@ export const defaultSettings: Required<Settings> = {
     defaultColWidth: 73,
     defaultRowHeight: 19,
     defaultFontSize: 10,
-    toolbarItems: [
-        "undo",
-        "redo",
-        "format-painter",
-        "clear-format",
-        "|",
-        "currency-format",
-        "percentage-format",
-        "number-decrease",
-        "number-increase",
-        "format",
-        "|",
-        "font",
-        "|",
-        "font-size",
-        "|",
-        "bold",
-        "italic",
-        "strike-through",
-        "underline",
-        "|",
-        "font-color",
-        "background",
-        "border",
-        "merge-cell",
-        "|",
-        "horizontal-align",
-        "vertical-align",
-        "text-wrap",
-        "text-rotation",
-        "|",
-        "freeze",
-        "conditionFormat",
-        "filter",
-        "link",
-        "image",
-        "quick-formula",
-        "dataVerification",
-        "splitColumn",
-        "locationCondition",
-        "screenshot",
-        "search",
-    ], // custom toolbar
     cellContextMenu: [
         "copy", // copy
         "paste", // paste
@@ -286,7 +235,6 @@ export const defaultSettings: Required<Settings> = {
     ], // filter context menu
     generateSheetId: () => uuidv4(),
     hooks: {},
-    customToolbarItems: [],
     currency: "€",
     fontList: [],
 };
