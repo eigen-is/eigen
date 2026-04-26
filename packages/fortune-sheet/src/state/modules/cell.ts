@@ -946,7 +946,7 @@ export function updateCell(
                 : null;
 
             let currentRowLen = defaultrowlen;
-            if (textInfo) {
+            if (textInfo?.textHeightAll != null) {
                 currentRowLen = textInfo.textHeightAll + 2;
             }
 

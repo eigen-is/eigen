@@ -6,6 +6,57 @@ import type {Cell} from "../../engine/types";
 import {normalizedCellAttr} from "./cell";
 import {isInlineStringCell} from "./inline-string";
 
+// Geometry the canvas painter walks back to draw text-decoration overlays.
+type LineSegment = {
+    startX: number;
+    startY: number;
+    endX: number;
+    endY: number;
+    fs: number;
+};
+
+// One styled run produced by the layout pass. `content` and `style` are heterogeneous
+// across the verticalWrap / plainWrap / plain branches — sometimes a string, sometimes a
+// shareCell object — so they remain unknown at the boundary; cellTextRender narrows.
+export type CellTextWordGroup = {
+    content: unknown;
+    style: unknown;
+    width: number;
+    height: number;
+    left: number;
+    top: number;
+    asc?: number;
+    desc?: number;
+    fs?: number;
+    inline?: boolean;
+    wrap?: boolean;
+    splitIndex?: number;
+    colIndex?: number;
+    cancelLine?: LineSegment;
+    underLine?: LineSegment[];
+};
+
+export type CellTextInfoOption = {
+    r: number;
+    c: number;
+    cellWidth?: number;
+    cellHeight?: number;
+    space_width?: number;
+    space_height?: number;
+};
+
+export type CellTextInfo = {
+    values: CellTextWordGroup[];
+    type?: "verticalWrap" | "plainWrap" | "plain";
+    textWidthAll?: number;
+    textHeightAll?: number;
+    rotate?: number;
+    textLeftAll?: number;
+    textTopAll?: number;
+    asc?: number;
+    desc?: number;
+};
+
 function checkWordByteLength(value: string) {
     return Math.ceil(value.charCodeAt(0).toString(2).length / 8);
 }
@@ -280,37 +331,27 @@ export function drawLineInfo(
     }
 }
 
-// Get rendering info for cell text content
-// option: {cellWidth, cellHeight, space_width, space_height, r, c}
+// Layout the cell's text for the canvas painter. Returns null when the cell has no value.
+// `option.cellWidth` absent → "onlyWidth" mode (row-height auto-fit); only the geometry
+// totals are computed and the layout math returns early. `option.cellHeight` absent is
+// allowed for callers that only consume textHeightAll — the layout `values` produced
+// with the default 0 are unused.
 export function getCellTextInfo(
     cell: Cell,
     renderCtx: CanvasRenderingContext2D,
     sheetCtx: Context,
-    option: any
-): any {
-    const {cellWidth} = option;
-    const {cellHeight} = option;
-    let isMode = "";
-    let isModeSplit = "";
-    if (cellWidth == null) {
-        isMode = "onlyWidth";
-        isModeSplit = "_";
-    }
+    option: CellTextInfoOption
+): CellTextInfo | null {
+    const cellWidth = option.cellWidth ?? 0;
+    const cellHeight = option.cellHeight ?? 0;
+    const space_width = option.space_width ?? 2;
+    const space_height = option.space_height ?? 2;
+    const isMode = option.cellWidth == null ? "onlyWidth" : "";
+    const isModeSplit = isMode === "onlyWidth" ? "_" : "";
     const textInfo =
         measureTextCellInfoCache[`${option.r}_${option.c}${isModeSplit}${isMode}`];
     if (textInfo) {
         return textInfo;
-    }
-
-    let {space_width} = option;
-    let {space_height} = option; // Gap in width/height direction
-
-    if (space_width === undefined) {
-        space_width = 2;
-    }
-
-    if (space_height === undefined) {
-        space_height = 2;
     }
 
     // Horizontal alignment
