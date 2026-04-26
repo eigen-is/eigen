@@ -1,9 +1,9 @@
 import {camelCase, cloneDeep, every, forEach, indexOf, isEmpty, isNil, isNumber, isPlainObject, isString, kebabCase, map} from "es-toolkit/compat";
 import {Context, getFlowdata} from "../context";
 import type {Cell, CellMatrix, FormulaDependency} from "../../engine/types";
-import {Range, Selection, SingleRange} from "../types";
+import type {Range, Selection, SingleRange} from "../types";
 import {getSheetIndex, indexToColumnChar, rgbToHex} from "../utils";
-import {checkCF, getComputeMap} from "./ConditionFormat";
+import {checkCF, getComputeMap} from "./conditionFormat";
 import {getFailureText, validateCellData} from "./dataVerification";
 import {genarate, update} from "../../engine/format";
 import {

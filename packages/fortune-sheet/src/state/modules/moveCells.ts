@@ -8,10 +8,9 @@ import {locale} from "../locale";
 import {getBorderInfoCompute} from "./border";
 import {normalizeSelection} from "./selection";
 import {getSheetIndex, isAllowEdit} from "../utils";
-import {cfSplitRange} from "./conditionalFormat";
+import {cfSplitRange} from "./conditionFormat";
 import {GlobalCache} from "../types";
 import {jfrefreshgrid} from "./refresh";
-import {CFSplitRange} from "./ConditionFormat";
 
 const dragCellThreshold = 8;
 
@@ -489,7 +488,7 @@ export function onCellsMoveEnd(
             const cdformat_cellrange = cdformat[i].cellrange;
             let emptyRange: any = [];
             for (let j = 0; j < cdformat_cellrange.length; j += 1) {
-                const range = CFSplitRange(
+                const range = cfSplitRange(
                     cdformat_cellrange[j],
                     {row: last.row, column: last.column},
                     {row: [row_s, row_e], column: [col_s, col_e]},

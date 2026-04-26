@@ -10,7 +10,7 @@ import {getBorderInfoCompute} from "./border";
 import {genarate, update} from "../../engine/format";
 import * as formula from "./formula-ui";
 import {isRealNum} from "./validation";
-import {CFSplitRange} from "./ConditionFormat";
+import {cfSplitRange} from "./conditionFormat";
 import {normalizeSelection} from "./selection";
 import {jfrefreshgrid} from "./refresh";
 
@@ -2762,7 +2762,7 @@ export function updateDropCell(ctx: Context) {
             let emptyRange: any = [];
 
             for (let j = 0; j < cdformat_cellrange.length; j += 1) {
-                const range = CFSplitRange(
+                const range = cfSplitRange(
                     cdformat_cellrange[j],
                     {row: copyRange.row, column: copyRange.column},
                     {row: applyRange.row, column: applyRange.column},

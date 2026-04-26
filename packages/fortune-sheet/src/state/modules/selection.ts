@@ -13,7 +13,7 @@ import {setPendingCopy} from "./clipboard";
 import {getBorderInfoCompute} from "./border";
 import {escapeHTMLTag, getSheetIndex, isAllowEdit, replaceHtml,} from "../utils";
 import {hasPartMC} from "./validation";
-import {CFSplitRange, getComputeMap} from "./ConditionFormat";
+import {cfSplitRange, getComputeMap} from "./conditionFormat";
 import {update} from "../../engine/format";
 import {format} from "numfmt";
 
@@ -514,7 +514,7 @@ export function pasteHandlerOfPaintModel(
             let emptyRange: any[] = [];
 
             for (let j = 0; j < cdformat_cellrange.length; j += 1) {
-                const range = CFSplitRange(
+                const range = cfSplitRange(
                     cdformat_cellrange[j],
                     {row: [c_r1, c_r2], column: [c_c1, c_c2]},
                     {row: [minh, maxh], column: [minc, maxc]},

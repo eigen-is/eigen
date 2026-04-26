@@ -1,7 +1,7 @@
 import {forEach, isNil} from "es-toolkit/compat";
 import {Context, getFlowdata} from "../context";
 import type {CellMatrix} from "../../engine/types";
-import {Sheet} from "../types";
+import type {SingleRange} from "../types";
 import {getSheetIndex} from "../utils";
 import {getCellValue, getRangeByTxt} from "./cell";
 import {genarate} from "../../engine/format";
@@ -9,29 +9,17 @@ import {execfunction, functionCopy} from "./formula-ui";
 import {checkProtectionFormatCells} from "./protection";
 import {isRealNull} from "./validation";
 
-// Get the historical rules
-export function getHistoryRules(fileH: Sheet[]) {
-    const historyRules = [];
-    for (let h = 0; h < fileH.length; h += 1) {
-        historyRules.push({
-            sheetIndex: h,
-            luckysheet_conditionformat_save: fileH[h].luckysheet_conditionformat_save,
-        });
-    }
-    return historyRules;
-}
+type DataBar =
+    | {valueType: "minus"; valueLen: number; format: string[]; minusLen: number}
+    | {valueType: "plus"; valueLen: number; format: string[]; plusLen: number; minusLen: number};
 
-// Get the current rules
-export function getCurrentRules(fileC: Sheet[]) {
-    const currentRules = [];
-    for (let c = 0; c < fileC.length; c += 1) {
-        currentRules.push({
-            sheetIndex: c,
-            luckysheet_conditionformat_save: fileC[c].luckysheet_conditionformat_save,
-        });
-    }
-    return currentRules;
-}
+type CellFormatStyle = {
+    textColor?: string | null;
+    cellColor?: string | null;
+    dataBar?: DataBar;
+};
+
+type ComputeMap = Record<string, CellFormatStyle>;
 
 // Set condition rules
 export function setConditionRules(
@@ -179,11 +167,6 @@ export function setConditionRules(
     } else {
         conditionValue.push(conditionName);
     }
-    //  else if (conditionName === "aboveAverage") {
-    //   conditionValue.push("aboveAverage");
-    // } else if (conditionName === "belowAverage") {
-    //   conditionValue.push("belowAverage");
-    // }
 
     // color
     let textColor = null;
@@ -195,10 +178,6 @@ export function setConditionRules(
     if (rules.cellColor.check) {
         cellColor = rules.cellColor.color;
     }
-
-    // get the previous rules
-    // const fileH = ctx.luckysheetfile ?? [];
-    // const historyRules = getHistoryRules(fileH);
 
     // construct the current rule
     const rule = {
@@ -218,8 +197,6 @@ export function setConditionRules(
     ruleArr?.push(rule);
 
     ctx.luckysheetfile[index].luckysheet_conditionformat_save = ruleArr;
-    // const fileC = ctx.luckysheetfile ?? [];
-    // const currentRules = getCurrentRules(fileC);
 }
 
 export function getColorGradation(
@@ -249,12 +226,12 @@ export function getColorGradation(
     return `rgb(${r}, ${g}, ${b})`;
 }
 
-export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
+export function compute(ctx: Context, ruleArr: any, d: CellMatrix): ComputeMap {
     if (isNil(ruleArr)) {
         ruleArr = [];
     }
     // conditional computation storage
-    const computeMap: any = {};
+    const computeMap: ComputeMap = {};
 
     if (ruleArr.length > 0) {
         for (let i = 0; i < ruleArr.length; i += 1) {
@@ -419,6 +396,7 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                                             computeMap[`${r}_${c}`].dataBar = {
                                                 valueType: "plus",
                                                 plusLen,
+                                                minusLen: 0,
                                                 valueLen,
                                                 format,
                                             };
@@ -427,6 +405,7 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                                                 dataBar: {
                                                     valueType: "plus",
                                                     plusLen,
+                                                    minusLen: 0,
                                                     valueLen,
                                                     format,
                                                 },
@@ -831,7 +810,7 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                         }
                     } else if (conditionName === "duplicateValue") {
                         // process cells in apply range
-                        const dmap: any = {};
+                        const dmap: Record<string, {r: number; c: number}[]> = {};
                         for (
                             let r = cellrange[s].row[0];
                             r <= cellrange[s].row[1];
@@ -892,7 +871,7 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                         conditionName === "belowAverage"
                     ) {
                         // cell values in apply range (numeric type)
-                        const dArr = [];
+                        const dArr: number[] = [];
                         for (
                             let r = cellrange[s].row[0];
                             r <= cellrange[s].row[1];
@@ -928,7 +907,7 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
                             for (let j = 0; j < dArr.length; j += 1) {
                                 for (let k = 0; k < dArr.length - 1 - j; k += 1) {
                                     if (dArr[k] < dArr[k + 1]) {
-                                        const temp: any = dArr[k];
+                                        const temp = dArr[k];
                                         dArr[k] = dArr[k + 1];
                                         dArr[k + 1] = temp;
                                     }
@@ -1119,16 +1098,16 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
 // canvas paint / getStyleByCell call. Invalidates when sheet, rules or data change.
 let _cfCache: {
     sheetId: string | undefined;
-    rules: any;
-    data: any;
-    result: any;
+    rules: any[] | undefined;
+    data: CellMatrix;
+    result: ComputeMap;
 } | null = null;
 
 export function invalidateCFCache() {
     _cfCache = null;
 }
 
-export function getComputeMap(ctx: Context) {
+export function getComputeMap(ctx: Context): ComputeMap | null {
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
     const ruleArr = ctx.luckysheetfile[index].luckysheet_conditionformat_save;
     const {data} = ctx.luckysheetfile[index];
@@ -1154,7 +1133,11 @@ export function getComputeMap(ctx: Context) {
     return computeMap;
 }
 
-export function checkCF(r: number, c: number, computeMap: any) {
+export function checkCF(
+    r: number,
+    c: number,
+    computeMap: ComputeMap | null
+): CellFormatStyle | null {
     if (!isNil(computeMap) && `${r}_${c}` in computeMap) {
         return computeMap[`${r}_${c}`];
     }
@@ -1166,10 +1149,6 @@ export function updateItem(ctx: Context, type: string) {
         return;
     }
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
-
-    // save the previous rules
-    // const fileH = ctx.luckysheetfile ?? [];
-    // const historyRules = getHistoryRules(fileH);
 
     // save the current rules
     let ruleArr = [];
@@ -1190,13 +1169,13 @@ export function updateItem(ctx: Context, type: string) {
     ctx.luckysheetfile[index].luckysheet_conditionformat_save = ruleArr;
 }
 
-export function CFSplitRange(
-    range1: any,
-    range2: any,
-    range3: any,
+export function cfSplitRange(
+    range1: SingleRange,
+    range2: SingleRange,
+    range3: SingleRange,
     type: string
-) {
-    let range: any = [];
+): SingleRange[] {
+    let range: SingleRange[] = [];
 
     const offset_r = range3.row[0] - range2.row[0];
     const offset_c = range3.column[0] - range2.column[0];
