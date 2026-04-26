@@ -735,7 +735,7 @@ class Lexer {
         return this.conditionStack.length;
     }
 
-    performAction(yy: any, yy_: any, $avoiding_name_collisions: number, _YY_START: any): any {
+    performAction(_yy: any, _yy_: any, $avoiding_name_collisions: number, _YY_START: any): any {
         switch ($avoiding_name_collisions) {
             case 0: /* skip whitespace */
                 break;

@@ -9,6 +9,14 @@ export {
     toA1,
 } from './engine/a1-notation';
 export { createArrayResolver } from './engine/cell-resolver';
+export type {
+    CellFormatStyle,
+    ComputeMap,
+    ConditionalFormatFormulaEvaluator,
+    DataBar,
+    EvaluateConditionalFormatOptions,
+} from './engine/conditional-format';
+export { evaluateConditionalFormat } from './engine/conditional-format';
 export {
     detectCycle,
     getCalculationOrder,

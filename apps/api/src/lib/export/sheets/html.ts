@@ -1,3 +1,5 @@
+import type { CellFormatStyle, ComputeMap, DataBar } from '@workspace/fortune-sheet';
+import { evaluateConditionalFormat } from '@workspace/fortune-sheet';
 import { escapeHtml } from '@workspace/lib/html';
 import type { Cell, CellBorderInfo, CellWithRowAndCol, Sheet } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -92,6 +94,14 @@ function renderSheet(sheet: Sheet, isLast: boolean): string {
     // Build a border lookup from borderInfo: "r,c" -> { l?, r?, t?, b? }
     const borderMap = buildBorderMap(config.borderInfo);
 
+    // Conditional formatting — engine produces a "r_c" -> { textColor, cellColor, dataBar } map.
+    // Evaluation needs the dense `data` matrix; loaded snapshots without it skip CF (the canvas
+    // painter does the same fallback).
+    const cfMap: ComputeMap | null =
+        sheet.luckysheet_conditionformat_save && sheet.data
+            ? evaluateConditionalFormat(sheet.luckysheet_conditionformat_save, sheet.data)
+            : null;
+
     // Find the minimal bounding box containing all visible content
     const { minRow, minCol, maxRow, maxCol } = getGridBounds(sheet, borderMap);
     if (maxRow < 0 || maxCol < 0) {
@@ -149,6 +159,7 @@ function renderSheet(sheet: Sheet, isLast: boolean): string {
             const cd = cellMap.get(key);
             const v = cd?.v ?? null;
             const merge = mergeAnchors.get(key);
+            const cfStyle = cfMap ? cfMap[`${r}_${c}`] : undefined;
 
             const attrs: string[] = [];
             if (merge) {
@@ -156,13 +167,14 @@ function renderSheet(sheet: Sheet, isLast: boolean): string {
                 if (merge.rs > 1) attrs.push(`rowspan="${merge.rs}"`);
             }
 
-            const cellStyle = buildCellStyle(v, borderMap.get(key), showGrid);
+            const cellStyle = buildCellStyle(v, borderMap.get(key), showGrid, cfStyle);
             const style = cellStyle ? `${BASE_TD_STYLE};${cellStyle}` : BASE_TD_STYLE;
             attrs.push(`style="${style}"`);
 
             const display = getCellDisplay(v);
+            const inner = cfStyle?.dataBar ? renderDataBar(cfStyle.dataBar, display) : display;
             const attrStr = attrs.length > 0 ? ` ${attrs.join(' ')}` : '';
-            cells.push(`<td${attrStr}>${display}</td>`);
+            cells.push(`<td${attrStr}>${inner}</td>`);
         }
 
         rows.push(`<tr style="height:${h}px">${cells.join('')}</tr>`);
@@ -182,10 +194,41 @@ function getCellDisplay(v: Cell | null): string {
     return escapeHtml(String(v.v));
 }
 
+// Mirrors the dataBar geometry + colors from the canvas painter
+// (packages/fortune-sheet/src/state/canvas.ts ~line 1660). For a "minus" entry the bar fills
+// the negative half (left of the zero line); for "plus" it fills the positive half.
+// Colors match canvas exactly: positive bars use `format` (user-configurable), negative
+// bars use a hardcoded red — that's a long-standing canvas behavior, intentionally
+// inherited here for visual parity. Diverging would mean the export differs from what
+// users see on screen.
+function renderDataBar(bar: DataBar, display: string): string {
+    let left: number;
+    let width: number;
+    let fill: string;
+    if (bar.valueType === 'minus') {
+        left = bar.minusLen * (1 - bar.valueLen) * 100;
+        width = bar.minusLen * bar.valueLen * 100;
+        fill = bar.format.length > 1 ? 'linear-gradient(to right, #ffffff, #ff0000)' : '#ff0000';
+    } else if (bar.plusLen === 1) {
+        left = 0;
+        width = bar.valueLen * 100;
+        fill = bar.format.length > 1 ? `linear-gradient(to right, ${bar.format[0]}, ${bar.format[1]})` : bar.format[0];
+    } else {
+        // Mixed range, positive value: bar starts at the zero line (minusLen) and extends right.
+        left = bar.minusLen * 100;
+        width = bar.plusLen * bar.valueLen * 100;
+        fill = bar.format.length > 1 ? `linear-gradient(to right, ${bar.format[0]}, ${bar.format[1]})` : bar.format[0];
+    }
+
+    const barStyle = `position:absolute;top:0;left:${left}%;width:${width}%;height:100%;background:${fill};z-index:0`;
+    return `<div style="${barStyle}"></div><span style="position:relative;z-index:1">${display}</span>`;
+}
+
 function buildCellStyle(
     v: Cell | null,
     borders: { l?: string; r?: string; t?: string; b?: string } | undefined,
     showGrid: boolean,
+    cfStyle: CellFormatStyle | undefined,
 ): string {
     const parts: string[] = [];
 
@@ -197,8 +240,17 @@ function buildCellStyle(
         if (v.bl === 1) parts.push('font-weight:bold');
         if (v.it === 1) parts.push('font-style:italic');
         if (typeof v.fs === 'number') parts.push(`font-size:${v.fs}pt`);
-        if (v.fc) parts.push(`color:${v.fc}`);
-        if (v.bg) parts.push(`background:${v.bg}`);
+        // CF colors override the static `fc`/`bg` fields, matching the canvas painter.
+        if (cfStyle?.textColor) {
+            parts.push(`color:${cfStyle.textColor}`);
+        } else if (v.fc) {
+            parts.push(`color:${v.fc}`);
+        }
+        if (cfStyle?.cellColor) {
+            parts.push(`background:${cfStyle.cellColor}`);
+        } else if (v.bg) {
+            parts.push(`background:${v.bg}`);
+        }
         if (v.ht != null && v.ht in HORIZONTAL_ALIGN) parts.push(`text-align:${HORIZONTAL_ALIGN[v.ht]}`);
         if (v.vt != null && v.vt in VERTICAL_ALIGN) parts.push(`vertical-align:${VERTICAL_ALIGN[v.vt]}`);
         if (v.tb === '2') parts.push('white-space:pre-wrap;word-wrap:break-word');
@@ -209,6 +261,11 @@ function buildCellStyle(
         } else if (v.cl === 1) {
             parts.push('text-decoration:line-through');
         }
+    } else if (cfStyle) {
+        // CF can land on a cell with no `v` (engine still emits an entry for empty cells in some
+        // rules); render its color overrides without dragging in the v-block defaults.
+        if (cfStyle.textColor) parts.push(`color:${cfStyle.textColor}`);
+        if (cfStyle.cellColor) parts.push(`background:${cfStyle.cellColor}`);
     }
 
     if (borders) {
@@ -218,6 +275,11 @@ function buildCellStyle(
         if (borders.b) parts.push(`border-bottom:${borders.b}`);
     } else if (showGrid) {
         parts.push('border:1px solid #d4d4d4');
+    }
+
+    if (cfStyle?.dataBar) {
+        // Anchor the absolutely-positioned bar div rendered by renderDataBar().
+        parts.push('position:relative');
     }
 
     return parts.join(';');
