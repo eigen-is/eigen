@@ -4,7 +4,6 @@ import {Context, getFlowdata} from "../context";
 import {cancelNormalSelected, updateCell} from "../modules/cell";
 import {handleFormulaInput} from "../modules/formula-ui";
 import {
-    copy,
     deleteSelectedCellText,
     moveHighlightCell,
     moveHighlightRange,
@@ -16,6 +15,7 @@ import {hasPartMC} from "../modules/validation";
 import type {CellMatrix} from "../../engine/types";
 import {GlobalCache} from "../types";
 import {getNowDateTime, getSheetIndex, isAllowEdit} from "../utils";
+import {handleCut} from "../modules/clipboard";
 import {handleCopy} from "./copy";
 import {jfrefreshgrid} from "../modules/refresh";
 
@@ -385,9 +385,7 @@ export function handleWithCtrlOrMetaKey(
             return;
         }
 
-        copy(ctx);
-
-        ctx.luckysheet_paste_iscut = true;
+        handleCut(ctx);
         // luckysheetactiveCell();
 
         e.stopPropagation();
