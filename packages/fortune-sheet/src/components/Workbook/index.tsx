@@ -64,6 +64,57 @@ const concatProducer = (...producers: ((ctx: Context) => void)[]) => {
     };
 };
 
+function dataToCelldata(data: CellMatrix) {
+    const cellData: CellWithRowAndCol[] = [];
+    for (let row = 0; row < data?.length; row += 1) {
+        for (let col = 0; col < data[row]?.length; col += 1) {
+            if (data[row][col] !== null) {
+                cellData.push({
+                    r: row,
+                    c: col,
+                    v: data[row][col],
+                });
+            }
+        }
+    }
+    return cellData;
+}
+
+function reduceUndoList(ctx: Context, ctxBefore: Context, globalCache: React.MutableRefObject<GlobalCache>) {
+    const sheetsId = ctx.luckysheetfile.map((sheet) => sheet.id);
+    const sheetDeletedByMe = globalCache.current.undoList
+        .filter((undo) => undo.options?.deleteSheetOp)
+        .map((item) => item.options?.deleteSheetOp?.id);
+    globalCache.current.undoList = globalCache.current.undoList.filter(
+        (undo) =>
+            undo.options?.deleteSheetOp ||
+            undo.options?.id === undefined ||
+            sheetsId.indexOf(undo.options?.id) !== -1 ||
+            sheetDeletedByMe.indexOf(undo.options?.id) !== -1,
+    );
+    if (ctxBefore.luckysheetfile.length > ctx.luckysheetfile.length) {
+        const sheetDeleted = ctxBefore.luckysheetfile
+            .filter((oneSheet) => ctx.luckysheetfile.map((item) => item.id).indexOf(oneSheet.id) === -1)
+            .map((item) => getSheetIndex(ctxBefore, item.id as string));
+        const deletedIndex = sheetDeleted[0];
+        globalCache.current.undoList = globalCache.current.undoList.map((oneStep) => {
+            oneStep.patches = oneStep.patches.map((onePatch) => {
+                if (typeof onePatch.path[1] === 'number' && onePatch.path[1] > (deletedIndex as number)) {
+                    onePatch.path[1] -= 1;
+                }
+                return onePatch;
+            });
+            oneStep.inversePatches = oneStep.inversePatches.map((onePatch) => {
+                if (typeof onePatch.path[1] === 'number' && onePatch.path[1] > (deletedIndex as number)) {
+                    onePatch.path[1] -= 1;
+                }
+                return onePatch;
+            });
+            return oneStep;
+        });
+    }
+}
+
 export const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
     (
         { onChange, onOp, toolbarLeftItems, toolbarCenterItems, toolbarRightItems, data: originalData, ...props },
@@ -147,58 +198,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             [onOp],
         );
 
-        function reduceUndoList(ctx: Context, ctxBefore: Context) {
-            const sheetsId = ctx.luckysheetfile.map((sheet) => sheet.id);
-            const sheetDeletedByMe = globalCache.current.undoList
-                .filter((undo) => undo.options?.deleteSheetOp)
-                .map((item) => item.options?.deleteSheetOp?.id);
-            globalCache.current.undoList = globalCache.current.undoList.filter(
-                (undo) =>
-                    undo.options?.deleteSheetOp ||
-                    undo.options?.id === undefined ||
-                    sheetsId.indexOf(undo.options?.id) !== -1 ||
-                    sheetDeletedByMe.indexOf(undo.options?.id) !== -1,
-            );
-            if (ctxBefore.luckysheetfile.length > ctx.luckysheetfile.length) {
-                const sheetDeleted = ctxBefore.luckysheetfile
-                    .filter((oneSheet) => ctx.luckysheetfile.map((item) => item.id).indexOf(oneSheet.id) === -1)
-                    .map((item) => getSheetIndex(ctxBefore, item.id as string));
-                const deletedIndex = sheetDeleted[0];
-                globalCache.current.undoList = globalCache.current.undoList.map((oneStep) => {
-                    oneStep.patches = oneStep.patches.map((onePatch) => {
-                        if (typeof onePatch.path[1] === 'number' && onePatch.path[1] > (deletedIndex as number)) {
-                            onePatch.path[1] -= 1;
-                        }
-                        return onePatch;
-                    });
-                    oneStep.inversePatches = oneStep.inversePatches.map((onePatch) => {
-                        if (typeof onePatch.path[1] === 'number' && onePatch.path[1] > (deletedIndex as number)) {
-                            onePatch.path[1] -= 1;
-                        }
-                        return onePatch;
-                    });
-                    return oneStep;
-                });
-            }
-        }
-
-        function dataToCelldata(data: CellMatrix) {
-            const cellData: CellWithRowAndCol[] = [];
-            for (let row = 0; row < data?.length; row += 1) {
-                for (let col = 0; col < data[row]?.length; col += 1) {
-                    if (data[row][col] !== null) {
-                        cellData.push({
-                            r: row,
-                            c: col,
-                            v: data[row][col],
-                        });
-                    }
-                }
-            }
-            return cellData;
-        }
-
-        // biome-ignore lint/correctness/useExhaustiveDependencies: FIXME audit-needed (PR 2) — see docs/FORTUNE-SHEET-EFFECT-DEPS-AUDIT.md
         const setContextWithProduce = useCallback(
             (recipe: (ctx: Context) => void, options: SetContextOptions = {}) => {
                 setContext((ctx_) => {
@@ -271,7 +270,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         }
                     } else {
                         if (patches?.[0]?.value?.length < ctx_?.luckysheetfile?.length) {
-                            reduceUndoList(result, ctx_);
+                            reduceUndoList(result, ctx_, globalCache);
                         }
                     }
                     return result;
@@ -280,7 +279,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             [emitOp],
         );
 
-        // biome-ignore lint/correctness/useExhaustiveDependencies: FIXME audit-needed (PR 2) — see docs/FORTUNE-SHEET-EFFECT-DEPS-AUDIT.md
         const handleUndo = useCallback(() => {
             const history = globalCache.current.undoList.pop();
             if (history) {
@@ -388,7 +386,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             }
         }, [context.luckysheetfile, onChange]);
 
-        // biome-ignore lint/correctness/useExhaustiveDependencies: FIXME audit-needed (PR 2) — see docs/FORTUNE-SHEET-EFFECT-DEPS-AUDIT.md
+        // biome-ignore lint/correctness/useExhaustiveDependencies: context.currentSheetId + context.luckysheetfile.length are intentional re-trigger deps — body reads via draftCtx, but we want this effect to re-sync settings whenever the user switches sheets or sheets are added/removed
         useEffect(() => {
             setContextWithProduce(
                 (draftCtx) => {
@@ -533,6 +531,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             mergedSettings.columnHeaderHeight,
             mergedSettings.addRows,
             mergedSettings.currency,
+            mergedSettings.fontList,
         ]);
 
         const onKeyDown = useCallback(

@@ -48,8 +48,16 @@ smoke pass. Sequence to run in `apps/sheets`:
       `docs/FORTUNE-SHEET-EFFECT-DEPS-AUDIT.md`. Most likely regression
       surface: drag-fill, paste, freeze + zoom, sheet-switch selection
       restore (Sheet:193, SheetOverlay:311, SheetTab/SheetItem:59 — all B-cat
-      dep removals). 7 sites tagged `FIXME audit-needed (PR 2)` are still
-      `biome-ignore`d.
+      dep removals).
+- [ ] **`useExhaustiveDependencies` PR2 (6 sites, 2026-04-26)** — Category E
+      audit-needed sites cleaned up. Real fixes: `dataToCelldata` +
+      `reduceUndoList` hoisted to module scope (Workbook:201/283 lose
+      `biome-ignore`); `clickHandler` wrapped in `useCallback` (Toolbar:890
+      loses `biome-ignore`); `mergedSettings.fontList` added as missing dep
+      to settings-sync effect (Workbook:391). Smoke paths: undo/redo of
+      sheet delete (exercises hoisted helpers), mobile toolbar at <1200px
+      (clickHandler-driven dropdowns: format-painter, search, bold/italic/etc.,
+      conditionFormat), font dropdown after a `fontList` settings change.
 - [ ] **es-toolkit / lodash migration** — drag-fill specifically (caught a
       regression last time via code-reviewer agent, not tests).
 - [ ] **Biome on `components/`** — 84 `any` swaps, locale `keyof typeof`
