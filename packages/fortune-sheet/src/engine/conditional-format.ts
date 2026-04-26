@@ -71,7 +71,9 @@ export function getColorGradation(color1: string, color2: string, value1: number
 // gated on options.evaluateFormula — when not provided, formula-based rules are
 // skipped entirely (other rule types still evaluate).
 //
-// TODO: tighten the rule shape to a discriminated union over rule.type. Producer is
+// TODO: tighten the rule shape to a discriminated union over rule.type. Note that
+// `format` is heterogeneously typed: `string[]` for `dataBar` / `colorGradation`,
+// `{textColor, cellColor}` for the `default` family. Producer is
 // state/modules/conditionFormat.ts; consumers also include apps/api HTML export.
 export function evaluateConditionalFormat(
     // biome-ignore lint/suspicious/noExplicitAny: rule shape carryover; tightening is a follow-up
