@@ -17,7 +17,7 @@ export function ViewMenu() {
 
     const dispatch = (fn: (ctx: Context) => void) => () => setContext((draftCtx) => fn(draftCtx));
 
-    const hidden = context.luckysheetfile.filter((s) => s.hide === 1);
+    const hidden = context.luckysheetfile.filter((s): s is typeof s & { id: string } => s.hide === 1 && s.id != null);
 
     return (
         <>
@@ -49,7 +49,7 @@ export function ViewMenu() {
                             {hidden.map((sheet) => (
                                 <DropdownMenuItem
                                     key={sheet.id}
-                                    onClick={() => setContext((draftCtx) => showSheet(draftCtx, sheet.id as string))}
+                                    onClick={() => setContext((draftCtx) => showSheet(draftCtx, sheet.id))}
                                 >
                                     {sheet.name}
                                 </DropdownMenuItem>
