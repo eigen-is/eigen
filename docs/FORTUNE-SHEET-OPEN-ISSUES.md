@@ -49,15 +49,16 @@ smoke pass. Sequence to run in `apps/sheets`:
       surface: drag-fill, paste, freeze + zoom, sheet-switch selection
       restore (Sheet:193, SheetOverlay:311, SheetTab/SheetItem:59 — all B-cat
       dep removals).
-- [ ] **`useExhaustiveDependencies` PR2 (6 sites, 2026-04-26)** — Category E
-      audit-needed sites cleaned up. Real fixes: `dataToCelldata` +
-      `reduceUndoList` hoisted to module scope (Workbook:201/283 lose
-      `biome-ignore`); `clickHandler` wrapped in `useCallback` (Toolbar:890
+- [x] **`useExhaustiveDependencies` PR2 (6 sites, 2026-04-26, commit
+      `d65a49fb`)** — Category E audit-needed sites cleaned up.
+      Smoke-tested by user. Real fixes: `dataToCelldata` + `reduceUndoList`
+      hoisted to module scope (Workbook lose `biome-ignore`); `clickHandler`
+      wrapped in `useCallback([setContext, refs])` (Toolbar `mobileToolbar`
       loses `biome-ignore`); `mergedSettings.fontList` added as missing dep
-      to settings-sync effect (Workbook:391). Smoke paths: undo/redo of
-      sheet delete (exercises hoisted helpers), mobile toolbar at <1200px
-      (clickHandler-driven dropdowns: format-painter, search, bold/italic/etc.,
-      conditionFormat), font dropdown after a `fontList` settings change.
+      to settings-sync effect (real bug — runtime fontList changes weren't
+      propagating to the font dropdown). Same commit also tightened
+      `Settings.customToolbarItems` type (`icon: LucideIcon`, `onClick: () =>
+      void`) — dropped 2 `noExplicitAny` ignores in `Toolbar/index.tsx`.
 - [ ] **es-toolkit / lodash migration** — drag-fill specifically (caught a
       regression last time via code-reviewer agent, not tests).
 - [ ] **Biome on `components/`** — 84 `any` swaps, locale `keyof typeof`
