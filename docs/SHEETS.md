@@ -139,10 +139,10 @@ and passing `(formula, anchorR, anchorC, r, c) => formulaEngine.evaluate(...)` a
 `evaluateFormula` option to `evaluateConditionalFormat`. The engine API is ready; the wiring is
 deferred until a sheet with a formula CF rule actually needs it server-side.
 
-**Resolution quirk**: `apps/api/tsconfig.json` resolves `@workspace/fortune-sheet` to the
-engine-only barrel via a `paths` mapping. Runtime (Bun) resolves to the package main. The
-symbols apps/api imports exist on both. Replace with a `@workspace/fortune-sheet/engine`
-subpath export once `fortune-sheet/package.json` `exports` is set up.
+The engine is exposed as a `@workspace/fortune-sheet/engine` subpath export. Server-side
+consumers (`apps/api`) import only from this subpath, which restricts type-checking to the pure
+DOM-free subset that satisfies stricter compiler options (`verbatimModuleSyntax`,
+`noUnusedParameters`).
 
 ### Constraints
 

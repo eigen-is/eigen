@@ -1783,20 +1783,14 @@ export class Canvas {
             renderCtx.clip();
 
             const textInfo = cell
-                ? getCellTextInfo(
-                    cell,
-                    renderCtx,
-                    this.sheetCtx,
-                    {
-                        cellWidth,
-                        cellHeight,
-                        space_width,
-                        space_height,
-                        r,
-                        c,
-                    },
-                    this.sheetCtx
-                )
+                ? getCellTextInfo(cell, renderCtx, this.sheetCtx, {
+                    cellWidth,
+                    cellHeight,
+                    space_width,
+                    space_height,
+                    r,
+                    c,
+                })
                 : undefined;
 
             // Cell text color
@@ -1918,20 +1912,14 @@ export class Canvas {
         renderCtx.clip();
 
         const textInfo = cell
-            ? getCellTextInfo(
-                cell,
-                renderCtx,
-                this.sheetCtx,
-                {
-                    cellWidth,
-                    cellHeight,
-                    space_width,
-                    space_height,
-                    r,
-                    c,
-                },
-                this.sheetCtx
-            )
+            ? getCellTextInfo(cell, renderCtx, this.sheetCtx, {
+                cellWidth,
+                cellHeight,
+                space_width,
+                space_height,
+                r,
+                c,
+            })
             : undefined;
 
         const checksCF = checkCF(r, c, cfCompute);

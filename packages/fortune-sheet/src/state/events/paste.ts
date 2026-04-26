@@ -293,7 +293,6 @@ function pasteHandler(ctx: Context, data: any, borderInfo?: any) {
             cfg.rowlen = {};
         }
 
-        const RowlChange = false;
         const offsetMC: any = {};
         for (let h = minh; h <= maxh; h += 1) {
             const x = d[h];
@@ -355,14 +354,6 @@ function pasteHandler(ctx: Context, data: any, borderInfo?: any) {
 
                     cfg.borderInfo?.push(bd_obj);
                 }
-
-                // const fontset = luckysheetfontformat(x[c]);
-                // const oneLineTextHeight = menuButton.getTextSize("田", fontset)[1];
-                // // compare computed height with current height and take the larger
-                // if (oneLineTextHeight > currentRowLen) {
-                //   currentRowLen = oneLineTextHeight;
-                //   RowlChange = true;
-                // }
             }
             d[h] = x;
 
@@ -373,21 +364,7 @@ function pasteHandler(ctx: Context, data: any, borderInfo?: any) {
 
         ctx.luckysheet_select_save = [{row: [minh, maxh], column: [minc, maxc]}];
 
-        if (addr > 0 || addc > 0 || RowlChange) {
-            // const allParam = {
-            //   cfg,
-            //   RowlChange: true,
-            // };
-            ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId)!].config = cfg;
-            // jfrefreshgrid(d, ctx.luckysheet_select_save, allParam);
-        } else {
-            // const allParam = {
-            //   cfg,
-            // };
-            ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId)!].config = cfg;
-            // jfrefreshgrid(d, ctx.luckysheet_select_save, allParam);
-            // selectHightlightShow();
-        }
+        ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId)!].config = cfg;
         jfrefreshgrid(ctx, null, undefined);
     } else {
         data = data.replace(/\r/g, "");
@@ -811,16 +788,6 @@ function pasteHandlerOfCutPaste(
     last.row = [minh, maxh];
     last.column = [minc, maxc];
 
-    // if row heights changed, recalculate them
-    if (copyRowlChange) {
-        // if (ctx.currentSheetId !== copySheetIndex) {
-        //   cfg = rowlenByRange(d, minh, maxh, cfg);
-        // } else {
-        //   cfg = rowlenByRange(d, c_r1, c_r2, cfg);
-        //   cfg = rowlenByRange(d, minh, maxh, cfg);
-        // }
-    }
-
     let source;
     let target;
     if (ctx.currentSheetId !== copySheetId) {
@@ -850,15 +817,6 @@ function pasteHandlerOfCutPaste(
                 }
                 sourceCurData[source_r][source_c] = null;
             }
-        }
-
-        if (copyRowlChange) {
-            // sourceCurConfig = rowlenByRange(
-            //   sourceCurData,
-            //   c_r1,
-            //   c_r2,
-            //   sourceCurConfig
-            // );
         }
 
         // borders
@@ -1090,7 +1048,6 @@ function pasteHandlerOfCopyPaste(
 
     // copy range
     const copyHasMC = copyRange.HasMC;
-    const copyRowlChange = copyRange.RowlChange;
     const copySheetIndex = copyRange.dataSheetId;
 
     const c_r1 = copyRange.copyRange[0].row[0];
@@ -1482,24 +1439,7 @@ function pasteHandlerOfCopyPaste(
         });
     }
 
-    if (copyRowlChange || addr > 0 || addc > 0) {
-        // cfg = rowlenByRange(d, minh, maxh, cfg);
-        // const allParam = {
-        //   cfg,
-        //   RowlChange: true,
-        //   cdformat,
-        //   dataVerification,
-        // };
-        jfrefreshgrid(ctx, d, ctx.luckysheet_select_save);
-    } else {
-        // const allParam = {
-        //   cfg,
-        //   cdformat,
-        //   dataVerification,
-        // };
-        jfrefreshgrid(ctx, d, ctx.luckysheet_select_save);
-        // selectHightlightShow();
-    }
+    jfrefreshgrid(ctx, d, ctx.luckysheet_select_save);
 }
 
 function handleFormulaStringPaste(ctx: Context, formulaStr: string) {
