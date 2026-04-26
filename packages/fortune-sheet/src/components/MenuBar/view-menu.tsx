@@ -1,5 +1,63 @@
-import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
+import {
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
+} from '@workspace/ui/components/dropdown-menu';
+import { useContext } from 'react';
+import { WorkbookContext } from '../../context';
+import type { Context } from '../../state';
+import { handleFreeze, locale } from '../../state';
+import { showSheet } from '../../state/api/sheet';
 
 export function ViewMenu() {
-    return <DropdownMenuItem disabled>(empty)</DropdownMenuItem>;
+    const { context, setContext } = useContext(WorkbookContext);
+    const { freezen } = locale(context);
+
+    const dispatch = (fn: (ctx: Context) => void) => () => setContext((draftCtx) => fn(draftCtx));
+
+    const hidden = context.luckysheetfile.filter((s) => s.hide === 1);
+
+    return (
+        <>
+            <DropdownMenuSub>
+                <DropdownMenuSubTrigger>{freezen.default}</DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
+                    <DropdownMenuItem onClick={dispatch((ctx) => handleFreeze(ctx, 'freeze-cancel'))}>
+                        {freezen.freezenCancel}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={dispatch((ctx) => handleFreeze(ctx, 'freeze-row'))}>
+                        {freezen.freezenRowRange}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={dispatch((ctx) => handleFreeze(ctx, 'freeze-col'))}>
+                        {freezen.freezenColumnRange}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={dispatch((ctx) => handleFreeze(ctx, 'freeze-row-col'))}>
+                        {freezen.freezenRCRange}
+                    </DropdownMenuItem>
+                </DropdownMenuSubContent>
+            </DropdownMenuSub>
+
+            {hidden.length > 0 && (
+                <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuSub>
+                        <DropdownMenuSubTrigger>Hidden sheets</DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
+                            {hidden.map((sheet) => (
+                                <DropdownMenuItem
+                                    key={sheet.id}
+                                    onClick={() => setContext((draftCtx) => showSheet(draftCtx, sheet.id as string))}
+                                >
+                                    {sheet.name}
+                                </DropdownMenuItem>
+                            ))}
+                        </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                </>
+            )}
+        </>
+    );
 }
