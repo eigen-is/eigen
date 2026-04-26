@@ -110,7 +110,6 @@ Components using `export default` that should use named function exports for con
 | `SheetList/SheetHiddenButton.tsx`    | `const SheetHiddenButton: React.FC` + `export default`   | `export function SheetHiddenButton()`           |
 | `SheetTab/index.tsx`                 | `const SheetTab: React.FC` + `export default`            | `export function SheetTab()`                    |
 | `SheetTab/SheetItem.tsx`             | `const SheetItem: React.FC` + `export default`           | `export function SheetItem()`                   |
-| `ZoomControl/index.tsx`              | `const ZoomControl: React.FC` + `export default`         | `export function ZoomControl()`                 |
 | `SVGIcon.tsx`                        | `const SVGIcon: React.FC` + `export default`             | `export function SVGIcon()`                     |
 | `SVGDefines.tsx`                     | `const SVGDefines: React.FC` + `export default`          | `export function SVGDefines()`                  |
 | `hooks/usePrevious.tsx`              | `function usePrevious` + `export default`                | `export function usePrevious()`                 |
@@ -133,7 +132,6 @@ implementations:
 | `DataVerification/DropdownList.tsx`    | `@workspace/ui/components/dropdown-menu`                                         | **DONE** (commit `b5c3b7e7`) — controlled `DropdownMenu` with `CheckboxItem`/`Item`. Trigger via `asChild` on the existing chevron div. Required `luckysheet-mousedown-cancel` on `DropdownMenuContent` — see `FORTUNE-SHEET-OPEN-ISSUES.md` §1 |
 | `FilterMenu.tsx` select/checkbox items | `@workspace/ui/components/checkbox` + `popover`                                  | **DONE** (commit `b5c3b7e7`) — `Checkbox` for value list, `Popover` (virtual `PopoverAnchor`) for the panel + nested `Popover` for filter-by-color                                                         |
 | `FormulaSearch/index.tsx`              | `@workspace/ui/components/input`, `select`                                       | **DONE** — already shadcn-migrated in an earlier commit; broken-window `cn()` fix applied this sweep                                                                                                       |
-| `ZoomControl/index.tsx`                | `@workspace/ui/components/popover`                                               | **DONE** — custom absolute-positioned preset menu replaced with shadcn `Popover`; removed `useOutsideClick`/`useRef`/`useState`                                                                            |
 | `SheetOverlay` bottom add-row          | `@workspace/ui/components/input`, `button`                                       | **DONE** — `fortune-add-row-button` divs/spans → `Button`; raw `<input>` → `Input`; dead `.fortune-add-row-button` / `#luckysheet-bottom-add-row*` / `#luckysheet-bottom-return-top` rules dropped from `index.css` |
 
 ### Already using shared UI
@@ -256,7 +254,6 @@ implementations:
 - **CSS**: `index.css` (281 lines) — tab area, active states, scroll buttons
 - Uses `luckysheet-*` class names extensively
 - `SheetItem.tsx` has drag-and-drop support, context menu, inline editing
-- Imports `ZoomControl` component
 - Chinese comments — translate
 
 ### `SplitColumn/index.tsx`
@@ -282,12 +279,6 @@ implementations:
 - `api.ts` — workbook API bridge functions
 - `index.css` — 56 lines of container layout — easy migration
 - Core component — minimal UI changes needed
-
-### `ZoomControl/index.tsx`
-
-- Uses Tailwind with theme tokens (`hover:bg-muted`, `bg-popover`) — **good**
-- Custom dropdown menu — could use shadcn `Popover` for the preset menu
-- Uses `SVGIcon` for plus/minus — could use Lucide icons
 
 ---
 

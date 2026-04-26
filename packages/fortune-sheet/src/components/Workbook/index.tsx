@@ -225,7 +225,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     );
                     if (patches.length > 0 && !options.noHistory) {
                         if (options.logPatch) {
-                            // eslint-disable-next-line no-console
                             console.info('patch', patches);
                         }
                         const filteredPatches = filterPatch(patches);
@@ -469,9 +468,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     draftCtx.insertedImgs = sheet.images;
                     draftCtx.currency = mergedSettings.currency || '€';
 
-                    draftCtx.zoomRatio = sheet.zoomRatio ?? 1;
-                    draftCtx.rowHeaderWidth = mergedSettings.rowHeaderWidth * draftCtx.zoomRatio;
-                    draftCtx.columnHeaderHeight = mergedSettings.columnHeaderHeight * draftCtx.zoomRatio;
+                    draftCtx.rowHeaderWidth = mergedSettings.rowHeaderWidth;
+                    draftCtx.columnHeaderHeight = mergedSettings.columnHeaderHeight;
 
                     if (sheet.defaultRowHeight != null) {
                         draftCtx.defaultrowlen = Number(sheet.defaultRowHeight);

@@ -121,8 +121,8 @@ export function onImageMoveEnd(ctx: Context, globalCache: GlobalCache) {
         if (position) {
             const img = find(ctx.insertedImgs, (v) => v.id === ctx.activeImg);
             if (img) {
-                img.left = position.left / ctx.zoomRatio;
-                img.top = position.top / ctx.zoomRatio;
+                img.left = position.left;
+                img.top = position.top;
                 saveImage(ctx);
             }
         }
@@ -161,8 +161,8 @@ export function onImageResize(
         let {top, left, width, height} = image.imgInitialPosition!;
         const dx = e.pageX - startX;
         const dy = e.pageY - startY;
-        const minHeight = 60 * ctx.zoomRatio;
-        const minWidth = 1.5 * 60 * ctx.zoomRatio;
+        const minHeight = 60;
+        const minWidth = 1.5 * 60;
         if (["lm", "lt", "lb"].includes(image.resizingSide)) {
             if (width - dx < minWidth) {
                 left += width - minWidth;
@@ -211,10 +211,10 @@ export function onImageResizeEnd(ctx: Context, globalCache: GlobalCache) {
         if (position) {
             const img = find(ctx.insertedImgs, (v) => v.id === ctx.activeImg);
             if (img) {
-                img.left = position.left / ctx.zoomRatio;
-                img.top = position.top / ctx.zoomRatio;
-                img.width = position.width / ctx.zoomRatio;
-                img.height = position.height / ctx.zoomRatio;
+                img.left = position.left;
+                img.top = position.top;
+                img.width = position.width;
+                img.height = position.height;
                 saveImage(ctx);
             }
         }

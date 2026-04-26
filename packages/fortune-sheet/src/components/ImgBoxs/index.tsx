@@ -1,3 +1,4 @@
+import { cn } from '@workspace/ui/lib/utils';
 import { useCallback, useContext, useMemo } from 'react';
 import { WorkbookContext } from '../../context';
 import { onImageMoveStart, onImageResizeStart } from '../../state';
@@ -25,8 +26,8 @@ function useResolvedImageUrl(mediaName: string | undefined) {
 function ActiveImage({ img }: { img: Image }) {
     const { context, refs } = useContext(WorkbookContext);
     const url = useResolvedImageUrl(img.mediaName);
-    const w = img.width * context.zoomRatio;
-    const h = img.height * context.zoomRatio;
+    const w = img.width;
+    const h = img.height;
 
     return (
         <div
@@ -36,8 +37,8 @@ function ActiveImage({ img }: { img: Image }) {
                 zIndex: 20,
                 width: w,
                 height: h,
-                left: img.left * context.zoomRatio,
-                top: img.top * context.zoomRatio,
+                left: img.left,
+                top: img.top,
                 outline: '1px solid var(--selection-handle)',
             }}
         >
@@ -59,7 +60,10 @@ function ActiveImage({ img }: { img: Image }) {
             {HANDLE_POSITIONS.map(({ key, className }) => (
                 <div
                     key={key}
-                    className={`absolute h-3 w-3 bg-background border border-selection-handle rounded-sm ${className}`}
+                    className={cn(
+                        'absolute h-3 w-3 bg-background border border-selection-handle rounded-sm',
+                        className,
+                    )}
                     data-type={key}
                     onMouseDown={(e) => {
                         onImageResizeStart(refs.globalCache, e.nativeEvent, key);
@@ -72,10 +76,10 @@ function ActiveImage({ img }: { img: Image }) {
 }
 
 function InactiveImage({ img }: { img: Image }) {
-    const { context, setContext } = useContext(WorkbookContext);
+    const { setContext } = useContext(WorkbookContext);
     const url = useResolvedImageUrl(img.mediaName);
-    const w = img.width * context.zoomRatio;
-    const h = img.height * context.zoomRatio;
+    const w = img.width;
+    const h = img.height;
 
     const handleClick = useCallback(
         (e: React.MouseEvent) => {
@@ -96,8 +100,8 @@ function InactiveImage({ img }: { img: Image }) {
             style={{
                 width: w,
                 height: h,
-                left: img.left * context.zoomRatio,
-                top: img.top * context.zoomRatio,
+                left: img.left,
+                top: img.top,
                 zIndex: 19,
             }}
             onMouseDown={(e) => e.stopPropagation()}

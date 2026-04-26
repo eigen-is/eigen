@@ -101,8 +101,8 @@ export function onCellsMove(
     const [x, y] = mousePosition(e.pageX, e.pageY, ctx);
 
     const rect = container.getBoundingClientRect();
-    const winH = rect.height - 20 * ctx.zoomRatio;
-    const winW = rect.width - 60 * ctx.zoomRatio;
+    const winH = rect.height - 20;
+    const winW = rect.width - 60;
 
     const {row: rowL, column} = getCellLocationByMouse(
         ctx,
@@ -195,18 +195,9 @@ export function onCellsMoveEnd(
 
     const [x, y] = mousePosition(e.pageX, e.pageY, ctx);
 
-    // if (
-    //   !checkProtectionLockedRangeList(
-    //     ctx.luckysheet_select_save,
-    //     ctx.currentSheetIndex
-    //   )
-    // ) {
-    //   return;
-    // }
-
     const rect = container.getBoundingClientRect();
-    const winH = rect.height - 20 * ctx.zoomRatio;
-    const winW = rect.width - 60 * ctx.zoomRatio;
+    const winH = rect.height - 20;
+    const winW = rect.width - 60;
 
     const {
         row: [, , row_index],

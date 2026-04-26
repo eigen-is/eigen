@@ -183,13 +183,6 @@ export const InputBox: React.FC = () => {
         (e: React.KeyboardEvent<HTMLDivElement>) => {
             lastKeyDownEventRef.current = new KeyboardEvent(e.type, e.nativeEvent);
             preText.current = inputRef.current!.innerText;
-            // if (
-            //   $("#luckysheet-modal-dialog-mask").is(":visible") ||
-            //   $(event.target).hasClass("luckysheet-mousedown-cancel") ||
-            //   $(event.target).hasClass("formulaInputFocus")
-            // ) {
-            //   return;
-            // }
 
             if (e.key === 'Escape' && context.luckysheetCellUpdate.length > 0) {
                 setContext((draftCtx) => {
@@ -208,7 +201,6 @@ export const InputBox: React.FC = () => {
                 selectActiveFormula(e);
                 e.preventDefault();
             } else if (e.key === 'F4' && context.luckysheetCellUpdate.length > 0) {
-                // formula.setfreezonFuc(event);
                 e.preventDefault();
             } else if (e.key === 'ArrowUp' && context.luckysheetCellUpdate.length > 0) {
                 if (document.getElementById('luckysheet-formula-search-c')) {
@@ -242,24 +234,12 @@ export const InputBox: React.FC = () => {
                 }
                 e.preventDefault();
             }
-            // else if (
-            //   e.key === "ArrowLeft" &&
-            //   draftCtx.luckysheetCellUpdate.length > 0
-            // ) {
-            //   formulaMoveEvent("left", ctrlKey, shiftKey, event);
-            // } else if (
-            //   e.key === "ArrowRight" &&
-            //   draftCtx.luckysheetCellUpdate.length > 0
-            // ) {
-            //   formulaMoveEvent("right", ctrlKey, shiftKey, event);
-            // }
         },
         [clearSearchItemActiveClass, context.luckysheetCellUpdate.length, selectActiveFormula, setContext],
     );
 
     const onChange = useCallback(
         (__: unknown, isBlur?: boolean) => {
-            // setInputHTML(html);
             const e = lastKeyDownEventRef.current;
             if (!e) return;
             const kcode = e.keyCode;
@@ -267,18 +247,13 @@ export const InputBox: React.FC = () => {
 
             if (
                 !(
-                    (
-                        (kcode >= 112 && kcode <= 123) ||
-                        kcode <= 46 ||
-                        kcode === 144 ||
-                        kcode === 108 ||
-                        e.ctrlKey ||
-                        e.altKey ||
-                        (e.shiftKey && (kcode === 37 || kcode === 38 || kcode === 39 || kcode === 40))
-                    )
-                    // kcode === keycode.WIN ||
-                    // kcode === keycode.WIN_R ||
-                    // kcode === keycode.MENU))
+                    (kcode >= 112 && kcode <= 123) ||
+                    kcode <= 46 ||
+                    kcode === 144 ||
+                    kcode === 108 ||
+                    e.ctrlKey ||
+                    e.altKey ||
+                    (e.shiftKey && (kcode === 37 || kcode === 38 || kcode === 39 || kcode === 40))
                 ) ||
                 kcode === 8 ||
                 kcode === 32 ||
@@ -297,20 +272,7 @@ export const InputBox: React.FC = () => {
                     if (!isAllowEdit(draftCtx, draftCtx.luckysheet_select_save)) {
                         return;
                     }
-                    // if(event.target.id!="luckysheet-input-box" && event.target.id!="luckysheet-rich-text-editor"){
                     handleFormulaInput(draftCtx, refs.fxInput.current, refs.cellInput.current!, kcode, preText.current);
-                    // clearSearchItemActiveClass();
-                    // formula.functionInputHanddler(
-                    //   $("#luckysheet-functionbox-cell"),
-                    //   $("#luckysheet-rich-text-editor"),
-                    //   kcode
-                    // );
-                    // setCenterInputPosition(
-                    //   draftCtx.luckysheetCellUpdate[0],
-                    //   draftCtx.luckysheetCellUpdate[1],
-                    //   draftCtx.flowdata
-                    // );
-                    // }
                 });
             }
         },
@@ -367,12 +329,6 @@ export const InputBox: React.FC = () => {
                     }}
                     className="luckysheet-cell-input"
                     id="luckysheet-rich-text-editor"
-                    style={{
-                        transform: `scale(${context.zoomRatio})`,
-                        transformOrigin: 'left top',
-                        width: `${100 / context.zoomRatio}%`,
-                        height: `${100 / context.zoomRatio}%`,
-                    }}
                     onChange={onChange}
                     onKeyDown={onKeyDown}
                     onPaste={onPaste}

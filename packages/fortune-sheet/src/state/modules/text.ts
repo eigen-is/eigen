@@ -130,11 +130,9 @@ export function getFontSet(
 }
 
 // Get text size for cells with a value
-// let measureTextCache = {}, measureTextCacheTimeOut = null;
 export function getMeasureText(
     value: any,
     renderCtx: CanvasRenderingContext2D,
-    sheetCtx: Context,
     fontset?: string
 ) {
     let mtc = measureTextCache[`${value}_${renderCtx.font}`];
@@ -151,15 +149,6 @@ export function getMeasureText(
 
     const measureText = renderCtx.measureText(value);
     const cache: any = {};
-    // var regu = "^[ ]+$";
-    // var re = new RegExp(regu);
-    // if(measureText.actualBoundingBoxRight==null || re.test(value)){
-    //     cache.width = measureText.width;
-    // }
-    // else{
-    //     //measureText.actualBoundingBoxLeft +
-    //     cache.width = measureText.actualBoundingBoxRight;
-    // }
 
     cache.width = measureText.width;
 
@@ -190,8 +179,6 @@ export function getMeasureText(
             cache.actualBoundingBoxDescent = 0;
             cache.actualBoundingBoxAscent = oneLineTextHeight;
         }
-
-        // console.log(value, oneLineTextHeight, measureText.actualBoundingBoxDescent+measureText.actualBoundingBoxAscent,ctx.font);
     }
 
     if (renderCtx.textBaseline === "alphabetic") {
@@ -226,11 +213,7 @@ export function getMeasureText(
         }
     }
 
-    cache.width *= sheetCtx.zoomRatio;
-    cache.actualBoundingBoxDescent *= sheetCtx.zoomRatio;
-    cache.actualBoundingBoxAscent *= sheetCtx.zoomRatio;
-    measureTextCache[`${value}_${sheetCtx.zoomRatio}_${renderCtx.font}`] = cache;
-    // console.log(measureText, value);
+    measureTextCache[`${value}_${renderCtx.font}`] = cache;
     return cache;
 }
 
@@ -560,7 +543,6 @@ export function getCellTextInfo(
                 const measureText = getMeasureText(
                     value1,
                     renderCtx,
-                    sheetCtx,
                     shareCell.fontset
                 );
 
@@ -617,7 +599,7 @@ export function getCellTextInfo(
                 preShareCell = shareCell;
             }
         } else {
-            const measureText = getMeasureText(value, renderCtx, sheetCtx);
+            const measureText = getMeasureText(value, renderCtx);
             const textHeight =
                 measureText.actualBoundingBoxDescent +
                 measureText.actualBoundingBoxAscent;
@@ -630,7 +612,7 @@ export function getCellTextInfo(
             } else {
                 vArr.push(value);
             }
-            const oneWordWidth = getMeasureText(vArr[0], renderCtx, sheetCtx).width;
+            const oneWordWidth = getMeasureText(vArr[0], renderCtx).width;
 
             for (let i = 0; i < vArr.length; i += 1) {
                 const textW = oneWordWidth + space_width;
@@ -814,7 +796,6 @@ export function getCellTextInfo(
                             const measureText = getMeasureText(
                                 "M",
                                 renderCtx,
-                                sheetCtx,
                                 sc.fontset
                             );
                             if (isNil(text_all_split[splitIndex])) {
@@ -853,7 +834,6 @@ export function getCellTextInfo(
                             sc.measureText = getMeasureText(
                                 sc.v,
                                 renderCtx,
-                                sheetCtx,
                                 sc.fontset
                             );
                         }
@@ -1065,7 +1045,7 @@ export function getCellTextInfo(
                 let parsedTextHeight = 0;
                 while (i <= value.length) {
                     const str = value.substring(anchor, i);
-                    const measureText = getMeasureText(str, renderCtx, sheetCtx);
+                    const measureText = getMeasureText(str, renderCtx);
                     const textWidth = measureText.width;
                     const textHeight =
                         measureText.actualBoundingBoxAscent +
@@ -1720,7 +1700,7 @@ export function getCellTextInfo(
             //     textContent.textHeightAll = textH_all;
             // }
         } else {
-            const measureText = getMeasureText(value, renderCtx, sheetCtx);
+            const measureText = getMeasureText(value, renderCtx);
             const textWidth = measureText.width;
             const textHeight =
                 measureText.actualBoundingBoxDescent +
