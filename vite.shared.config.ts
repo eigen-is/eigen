@@ -3,7 +3,6 @@ import tailwindcss from '@tailwindcss/vite';
 import { tanstackRouter } from '@tanstack/router-plugin/vite';
 import react from '@vitejs/plugin-react';
 import { defineConfig, mergeConfig, type Plugin, type UserConfig } from 'vite';
-import viteTsConfigPaths from 'vite-tsconfig-paths';
 
 // Keep in sync with applyTheme/getCachedTheme in theme-provider.tsx
 function themeFlashPlugin(): Plugin {
@@ -52,14 +51,12 @@ export function createAppConfig(appName: string, extraConfig?: UserConfig) {
                 },
             }),
             tailwindcss(),
-            viteTsConfigPaths({
-                projects: ['./tsconfig.json'],
-            }),
         ],
         resolve: {
             alias: {
                 '@': path.resolve(process.cwd(), 'src'),
             },
+            tsconfigPaths: true,
         },
         server: {
             port,
@@ -68,27 +65,28 @@ export function createAppConfig(appName: string, extraConfig?: UserConfig) {
             target: 'es2023',
             outDir: `./../../dist/${appName}`,
             emptyOutDir: true,
-            commonjsOptions: {
-                defaultIsModuleExports: 'auto',
-            },
-            rollupOptions: {
+            chunkSizeWarningLimit: 1300,
+            rolldownOptions: {
                 treeshake: {
-                    preset: 'smallest',
+                    moduleSideEffects: false,
+                    propertyReadSideEffects: false,
+                    unknownGlobalSideEffects: false,
                 },
                 output: {
-                    manualChunks(id) {
-                        if (id.includes('node_modules/react-dom') || id.includes('node_modules/react/')) {
-                            return 'react';
-                        }
-                        if (id.includes('node_modules/@radix-ui/')) {
-                            return 'radix';
-                        }
-                        if (id.includes('node_modules/@tanstack/')) {
-                            return 'tanstack';
-                        }
-                        if (id.includes('node_modules/numfmt')) {
-                            return 'numfmt';
-                        }
+                    codeSplitting: {
+                        groups: [
+                            { name: 'react', test: /node_modules[\\/]react(?:-dom)?[\\/]/, priority: 7 },
+                            { name: 'radix', test: /node_modules[\\/]@radix-ui[\\/]/, priority: 6 },
+                            { name: 'tanstack', test: /node_modules[\\/]@tanstack[\\/]/, priority: 5 },
+                            { name: 'numfmt', test: /node_modules[\\/]numfmt[\\/]/, priority: 4 },
+                            { name: 'tiptap', test: /node_modules[\\/](?:@tiptap[\\/]|prosemirror-)/, priority: 3 },
+                            { name: 'codemirror', test: /node_modules[\\/](?:@codemirror|@lezer)[\\/]/, priority: 2 },
+                            {
+                                name: 'fortune-sheet',
+                                test: /(?:packages|node_modules[\\/]@workspace)[\\/]fortune-sheet[\\/]/,
+                                priority: 1,
+                            },
+                        ],
                     },
                 },
             },

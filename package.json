@@ -65,8 +65,7 @@
     "postcss": "^8.5.3",
     "tailwindcss": "^4.2.1",
     "typescript": "^5.9.3",
-    "vite": "^7.0.0",
-    "vite-tsconfig-paths": "^6.1.1"
+    "vite": "^8.0.0"
   },
   "resolutions": {
     "react": "^19.2.4",
