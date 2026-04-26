@@ -126,20 +126,23 @@ wrapper); when omitted, formula rules are skipped. The remaining rule types — 
 State keeps the caching wrapper at `state/modules/conditionFormat.ts::getComputeMap`, which calls into
 the engine and supplies the `evaluateFormula` callback wired to `functionCopy`/`execfunction`.
 
-### Remaining Work — Wire CF into HTML/PDF export
+### HTML/PDF export
 
-`apps/api/src/lib/export/sheets/html.ts` currently renders cells with their static styles only —
-conditional formatting is ignored. To apply CF in the server-side preview/PDF export:
+`apps/api/src/lib/export/sheets/html.ts` calls `evaluateConditionalFormat` per sheet and merges
+`textColor`/`cellColor` into the cell's inline style. `dataBar` entries render as an
+absolutely-positioned `<div>` inside a `position:relative` `<td>`, with geometry mirrored from
+the canvas painter. Negative bars hardcode red (canvas legacy); positive bars use the
+user-configured `format` colors.
 
-1. Per sheet, call `evaluateConditionalFormat(sheet.luckysheet_conditionformat_save, sheet.data)`.
-2. In `renderCell` (or wherever cell `<td>` styles are composed), look up `styles[\`${r}_${c}\`]` and
-   merge `textColor`/`cellColor` into the inline style string.
-3. For `dataBar` entries, render an absolutely-positioned `<div>` inside the `<td>` (size/position
-   based on `valueLen` and `valueType`) — same approach as the canvas painter, but using HTML
-   primitives instead of `CanvasRenderingContext2D`.
-4. Formula-based CF rules require building a `CellResolver` for the sheet and passing
-   `(formula, anchorR, anchorC, r, c) => formulaEngine.evaluate(...)` as the `evaluateFormula`
-   option. Defer until other rule types are verified working.
+**Not yet wired**: formula-based CF rules. They require building a `CellResolver` for the sheet
+and passing `(formula, anchorR, anchorC, r, c) => formulaEngine.evaluate(...)` as the
+`evaluateFormula` option to `evaluateConditionalFormat`. The engine API is ready; the wiring is
+deferred until a sheet with a formula CF rule actually needs it server-side.
+
+**Resolution quirk**: `apps/api/tsconfig.json` resolves `@workspace/fortune-sheet` to the
+engine-only barrel via a `paths` mapping. Runtime (Bun) resolves to the package main. The
+symbols apps/api imports exist on both. Replace with a `@workspace/fortune-sheet/engine`
+subpath export once `fortune-sheet/package.json` `exports` is set up.
 
 ### Constraints
 
