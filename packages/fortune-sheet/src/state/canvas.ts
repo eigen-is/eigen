@@ -2,6 +2,7 @@ import {isEmpty, isPlainObject, sortedIndex} from "es-toolkit/compat";
 import {defaultContext, getFlowdata} from "./context";
 import {getRealCellValue, normalizedAttr} from "./modules/cell";
 import {clearMeasureTextCache, defaultFont, getCellTextInfo, getFontSet, getMeasureText,} from "./modules/text";
+import type {CellTextInfo} from "./modules/text";
 import {isInlineStringCell} from "./modules/inline-string";
 import {getSheetIndex, indexToColumnChar} from "./utils";
 import {getBorderInfoComputeRange} from "./modules/border";
@@ -1146,10 +1147,7 @@ export class Canvas {
                         r,
                         c,
                     });
-                    let textMetrics = 0;
-                    if (textMetricsObj) {
-                        textMetrics = textMetricsObj.textWidthAll;
-                    }
+                    const textMetrics = textMetricsObj?.textWidthAll ?? 0;
 
                     // canvas.measureText(value).width;
 
@@ -2101,40 +2099,42 @@ export class Canvas {
         };
     }
 
-    private cellTextRender(textInfo: any, ctx: CanvasRenderingContext2D, option: any) {
+    private cellTextRender(
+        textInfo: CellTextInfo | null | undefined,
+        ctx: CanvasRenderingContext2D,
+        option: {pos_x: number; pos_y: number}
+    ) {
         if (!textInfo) {
             return;
         }
-        const {values} = textInfo;
-        const {pos_x} = option;
-        const {pos_y} = option;
-        if (!values) {
-            return;
-        }
-        if (textInfo.rotate !== 0 && textInfo.type !== "verticalWrap") {
+        const {values, rotate, type, textLeftAll, textTopAll} = textInfo;
+        const {pos_x, pos_y} = option;
+        const rotated =
+            rotate !== undefined &&
+            rotate !== 0 &&
+            type !== "verticalWrap" &&
+            textLeftAll !== undefined &&
+            textTopAll !== undefined;
+        if (rotated) {
             ctx.save();
-            ctx.translate(
-                pos_x + textInfo.textLeftAll,
-                pos_y + textInfo.textTopAll
-            );
-            ctx.rotate((-textInfo.rotate * Math.PI) / 180);
-            ctx.translate(
-                -(textInfo.textLeftAll + pos_x),
-                -(pos_y + textInfo.textTopAll)
-            );
+            ctx.translate(pos_x + textLeftAll, pos_y + textTopAll);
+            ctx.rotate((-rotate * Math.PI) / 180);
+            ctx.translate(-(textLeftAll + pos_x), -(pos_y + textTopAll));
         }
 
         for (let i = 0; i < values.length; i += 1) {
             const word = values[i];
-            if (word.inline === true && word.style) {
-                ctx.font = word.style.fontset;
-                ctx.fillStyle = word.style.fc;
-            } else {
-                ctx.font = word.style;
+            const style = word.style;
+            if (word.inline === true && isInlineStyle(style)) {
+                ctx.font = style.fontset;
+                ctx.fillStyle = style.fc;
+            } else if (typeof style === "string") {
+                ctx.font = style;
             }
 
-            // Handle word.content being an object (edge case)
-            const txt = isPlainObject(word.content) ? word.content.m : word.content;
+            const txt = isPlainObject(word.content)
+                ? String((word.content as {m?: unknown}).m ?? "")
+                : String(word.content);
             ctx.fillText(txt, pos_x + word.left, pos_y + word.top);
 
             if (word.cancelLine) {
@@ -2174,8 +2174,12 @@ export class Canvas {
                 }
             }
         }
-        if (textInfo.rotate !== 0 && textInfo.type !== "verticalWrap") {
+        if (rotated) {
             ctx.restore();
         }
     }
+}
+
+function isInlineStyle(value: unknown): value is {fontset: string; fc: string} {
+    return typeof value === "object" && value !== null && "fontset" in value && "fc" in value;
 }

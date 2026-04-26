@@ -182,14 +182,13 @@ export function updateFormatCell(
                             c,
                             cellWidth,
                         });
-                        if (!textInfo) continue;
+                        if (textInfo?.textHeightAll == null) continue;
                         const rowHeight = round(textInfo.textHeightAll);
                         const currentRowHeight =
                             cfg.rowlen?.[r] ||
                             ctx.luckysheetfile[sheetIndex].defaultRowHeight ||
                             19;
                         if (
-                            rowHeight !== undefined &&
                             rowHeight > currentRowHeight &&
                             (!cfg.customHeight || cfg.customHeight[r] !== 1)
                         ) {
