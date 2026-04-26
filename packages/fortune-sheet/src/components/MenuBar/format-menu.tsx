@@ -33,7 +33,7 @@ import {
 import { ConditionRules } from '../ConditionFormat/ConditionRules';
 import { ManageRules } from '../ConditionFormat/ManageRules';
 import { FormatSearch } from '../FormatSearch';
-import { CustomBorder } from '../Toolbar/CustomBorder';
+import { CustomBorder } from './CustomBorder';
 
 function NumberFormatSubmenu() {
     const { context, setContext, refs, settings } = useContext(WorkbookContext);
@@ -482,7 +482,7 @@ function BordersSubmenu() {
                     <DropdownMenuSubTrigger>Custom border…</DropdownMenuSubTrigger>
                     <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
                         <CustomBorder
-                            onPick={(color, style) => {
+                            onPick={(color?: string, style?: string) => {
                                 if (color) setCustomColor(color);
                                 if (style) setCustomStyle(style);
                             }}
