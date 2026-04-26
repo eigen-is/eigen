@@ -1,10 +1,10 @@
 import {isEmpty, isNil} from "es-toolkit/compat";
 import {cancelPaintModel, checkCF, getComputeMap, getSheetIndex} from "..";
-import {Context} from "../context";
+import type {Context} from "../context";
 import {copy, selectIsOverlap} from "../modules/selection";
 import {hasPartMC} from "../modules/validation";
 
-export function handleCopy(ctx: Context) {
+export function handleCopy(ctx: Context): boolean {
     // if (imageCtrl.currentImgId != null) {
     //   imageCtrl.copyImgItem(event);
     //   return;
@@ -17,7 +17,7 @@ export function handleCopy(ctx: Context) {
 
     const selection = ctx.luckysheet_select_save;
     if (!selection || isEmpty(selection)) {
-        return;
+        return false;
     }
 
     // warn if the copy range contains partially merged cells
@@ -43,7 +43,7 @@ export function handleCopy(ctx: Context) {
             // } else {
             //   tooltip.info(locale_drag.noMerge, "");
             // }
-            return;
+            return false;
         }
     }
 
@@ -90,7 +90,7 @@ export function handleCopy(ctx: Context) {
             // } else {
             //   tooltip.info(locale_drag.noMulti, "");
             // }
-            return;
+            return false;
         }
     }
 
@@ -121,11 +121,12 @@ export function handleCopy(ctx: Context) {
             // } else {
             //   tooltip.info(locale_drag.noMulti, "");
             // }
-            return;
+            return false;
         }
     }
 
     copy(ctx);
 
     ctx.luckysheet_paste_iscut = false;
+    return true;
 }

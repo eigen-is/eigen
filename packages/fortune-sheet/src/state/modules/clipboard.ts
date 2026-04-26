@@ -1,12 +1,10 @@
 import type {Context} from "../context";
-import {copy} from "./selection";
+import {handleCopy} from "../events/copy";
 
-// Keyboard Ctrl+X and the Edit > Cut menu item both call this. Equivalent to
-// copy-then-mark-as-cut: handlePaste reads luckysheet_paste_iscut to decide
-// whether to clear the source range after writing.
 export function handleCut(ctx: Context) {
-    copy(ctx);
-    ctx.luckysheet_paste_iscut = true;
+    if (handleCopy(ctx)) {
+        ctx.luckysheet_paste_iscut = true;
+    }
 }
 
 // Pending copy data — set by the copy handler, consumed by the native copy event listener

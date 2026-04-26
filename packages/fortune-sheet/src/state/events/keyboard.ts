@@ -2,7 +2,9 @@ import {clone, cloneDeep, isEmpty, isNil} from "es-toolkit/compat";
 import {hideCRCount, removeActiveImage} from "..";
 import {Context, getFlowdata} from "../context";
 import {cancelNormalSelected, updateCell} from "../modules/cell";
+import {handleCut} from "../modules/clipboard";
 import {handleFormulaInput} from "../modules/formula-ui";
+import {jfrefreshgrid} from "../modules/refresh";
 import {
     deleteSelectedCellText,
     moveHighlightCell,
@@ -10,14 +12,11 @@ import {
     selectAll,
     selectionCache,
 } from "../modules/selection";
-import {cancelPaintModel, handleBold} from "../modules/toolbar";
-import {hasPartMC} from "../modules/validation";
+import {handleBold} from "../modules/toolbar";
 import type {CellMatrix} from "../../engine/types";
 import {GlobalCache} from "../types";
 import {getNowDateTime, getSheetIndex, isAllowEdit} from "../utils";
-import {handleCut} from "../modules/clipboard";
 import {handleCopy} from "./copy";
-import {jfrefreshgrid} from "../modules/refresh";
 
 export function handleGlobalEnter(
     ctx: Context,
@@ -337,57 +336,7 @@ export function handleWithCtrlOrMetaKey(
         e.stopPropagation();
         return;
     } else if (e.code === "KeyX") {
-        // Ctrl + X  cut
-        // if format-painter is active during cut, cancel it
-        if (ctx.luckysheetPaintModelOn) {
-            cancelPaintModel(ctx);
-        }
-
-        const selection = ctx.luckysheet_select_save;
-        if (!selection || isEmpty(selection)) {
-            return;
-        }
-
-        // warn if the cut range contains partially merged cells
-        if (ctx.config.merge != null) {
-            let has_PartMC = false;
-
-            for (let s = 0; s < selection.length; s += 1) {
-                const r1 = selection[s].row[0];
-                const r2 = selection[s].row[1];
-                const c1 = selection[s].column[0];
-                const c2 = selection[s].column[1];
-
-                has_PartMC = hasPartMC(ctx, ctx.config, r1, r2, c1, c2);
-
-                if (has_PartMC) {
-                    break;
-                }
-            }
-
-            if (has_PartMC) {
-                // if (luckysheetConfigsetting.editMode) {
-                //   alert(_locale_drag.noMerge);
-                // } else {
-                //   tooltip.info(_locale_drag.noMerge, "");
-                // }
-                return;
-            }
-        }
-
-        // warn when multiple selections are active
-        if (selection.length > 1) {
-            // if (isEditMode()) {
-            //   alert(locale_drag.noMulti);
-            // } else {
-            //   tooltip.info(locale_drag.noMulti, "");
-            // }
-            return;
-        }
-
         handleCut(ctx);
-        // luckysheetactiveCell();
-
         e.stopPropagation();
         return;
     } else if (e.code === "KeyZ") {
