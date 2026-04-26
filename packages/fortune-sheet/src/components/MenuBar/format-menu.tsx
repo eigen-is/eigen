@@ -6,7 +6,7 @@ import {
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker';
-import { useContext } from 'react';
+import { useContext, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
 import {
@@ -30,6 +30,7 @@ import {
 import { ConditionRules } from '../ConditionFormat/ConditionRules';
 import { ManageRules } from '../ConditionFormat/ManageRules';
 import { FormatSearch } from '../FormatSearch';
+import { CustomBorder } from '../Toolbar/CustomBorder';
 
 function NumberFormatSubmenu() {
     const { context, setContext, refs, settings } = useContext(WorkbookContext);
@@ -168,7 +169,7 @@ function TextSubmenu() {
                 </DropdownMenuSub>
 
                 <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>{toolbar['font-color'] ?? 'Font color'}</DropdownMenuSubTrigger>
+                    <DropdownMenuSubTrigger>{toolbar['font-color']}</DropdownMenuSubTrigger>
                     <DropdownMenuSubContent className="luckysheet-mousedown-cancel p-3">
                         <ColorPicker
                             value=""
@@ -354,6 +355,8 @@ function FillColorItem() {
 function BordersSubmenu() {
     const { context, setContext } = useContext(WorkbookContext);
     const { border } = locale(context);
+    const [customColor, setCustomColor] = useState('#000000');
+    const [customStyle, setCustomStyle] = useState('1');
 
     const borderItems = [
         { text: border.borderTop, value: 'border-top' },
@@ -369,7 +372,6 @@ function BordersSubmenu() {
         { text: border.borderHorizontal, value: 'border-horizontal' },
         { text: border.borderVertical, value: 'border-vertical' },
         { text: border.borderSlash, value: 'border-slash' },
-        { text: '', value: 'divider' },
     ];
 
     return (
@@ -382,7 +384,7 @@ function BordersSubmenu() {
                             key={value}
                             onClick={() => {
                                 setContext((ctx) => {
-                                    handleBorder(ctx, value);
+                                    handleBorder(ctx, value, customColor, customStyle);
                                 });
                             }}
                         >
@@ -393,6 +395,18 @@ function BordersSubmenu() {
                         <DropdownMenuSeparator key={`divider-${ii}`} />
                     ),
                 )}
+                <DropdownMenuSeparator />
+                <DropdownMenuSub>
+                    <DropdownMenuSubTrigger>Custom border…</DropdownMenuSubTrigger>
+                    <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
+                        <CustomBorder
+                            onPick={(color, style) => {
+                                if (color) setCustomColor(color);
+                                if (style) setCustomStyle(style);
+                            }}
+                        />
+                    </DropdownMenuSubContent>
+                </DropdownMenuSub>
             </DropdownMenuSubContent>
         </DropdownMenuSub>
     );
