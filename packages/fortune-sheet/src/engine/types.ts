@@ -61,6 +61,9 @@ export type Cell = {
 
 export type CellMatrix = (Cell | null)[][];
 
+export type SingleRange = { row: number[]; column: number[] };
+export type Range = SingleRange[];
+
 export type FormulaDependency = {
     row: [number, number];
     column: [number, number];

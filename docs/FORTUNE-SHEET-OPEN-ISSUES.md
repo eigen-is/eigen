@@ -176,6 +176,21 @@ raw HTML. Most landed in commit `b5c3b7e7`.
 
 ---
 
+## 3.6. `colorGradation` rules — `format.cellColor` / `format.textColor` reads on an array-shaped `format`
+
+In `engine/conditional-format.ts::evaluateConditionalFormat` the `colorGradation` branch (carried over
+unchanged from the old state-side `compute()`) reads `format.cellColor` and `format.textColor` on the
+`if`-arm that updates an existing computeMap entry, while the corresponding `else`-arm uses positional
+access (`format[1]`, `format[2]`). For colorGradation rules, `format` is an array of color strings (the
+gradient stops), not an object — so the property reads always yield `undefined`, blanking the cell color
+on overlapping rules. This is a latent bug present in the original luckysheet code; surfaced 2026-04-26
+during the engine extraction code review, not fixed because it requires verifying real CF rule shapes
+against multi-rule overlap scenarios in the UI. The `else`-arm positional access is correct; the
+`if`-arm should mirror it. Eight call sites in
+`engine/conditional-format.ts` (lines 264, 267, 273-4, 292, 318, 341, 367).
+
+---
+
 ## 3.5. `getCellTextInfo` redundant `ctx?` parameter
 
 `text.ts::getCellTextInfo(cell, renderCtx, sheetCtx, option, ctx?: Context)` —

@@ -77,9 +77,10 @@ engine/
 ├── dependency-graph.ts     # Topological sort + cycle detection
 ├── cell-resolver.ts        # CellResolver interface + createArrayResolver
 ├── format.ts               # Format type inference (uses numfmt for rendering)
+├── conditional-format.ts   # Pure CF evaluator (evaluateConditionalFormat, cfSplitRange, getColorGradation)
 ├── a1-notation.ts          # A1 ↔ row/col parsing
 ├── validation.ts           # Data validation helpers
-├── types.ts                # CellResolver, EvaluationResult, FormulaEngineState
+├── types.ts                # CellResolver, EvaluationResult, FormulaEngineState, SingleRange, Range
 ├── parser/                 # Pure formula parser (JISON + @formulajs/formulajs, zero DOM)
 └── index.ts                # Barrel exports
 ```
@@ -100,6 +101,45 @@ The engine is extracted, but `readSheetContent()` (see [DOCUMENT-CONTENT-LAYER.m
 still returns the last-saved `cell.v` from the snapshot. To get fresh values, load the snapshot + replay
 pending ops, build a `CellResolver` over the resulting `Sheet[]`, and call `engine.recalculateAll(resolver)`
 before mapping to `SheetContent`. Consumers (export, search indexing, scripting) pick this up transparently.
+
+## Headless Conditional Formatting
+
+`engine/conditional-format.ts` exposes a pure `evaluateConditionalFormat(rules, data, options?)` that
+returns a `ComputeMap` of `"r_c" → { textColor?, cellColor?, dataBar? }` style entries — the same map the
+canvas painter uses on the client.
+
+```ts
+import { evaluateConditionalFormat } from '@workspace/fortune-sheet/engine';
+
+const styles = evaluateConditionalFormat(
+    sheet.luckysheet_conditionformat_save,
+    sheet.data,
+);
+// styles["3_4"] === { cellColor: "#ff8888" }
+```
+
+Formula-based rules require an `evaluateFormula` callback (same shape as the state-side `getComputeMap`
+wrapper); when omitted, formula rules are skipped. The remaining rule types — `dataBar`,
+`colorGradation`, `greaterThan`/`lessThan`/`equal`, `between`, `textContains`, `occurrenceDate`,
+`duplicateValue`, `top10`, `aboveAverage`, etc. — evaluate without any context.
+
+State keeps the caching wrapper at `state/modules/conditionFormat.ts::getComputeMap`, which calls into
+the engine and supplies the `evaluateFormula` callback wired to `functionCopy`/`execfunction`.
+
+### Remaining Work — Wire CF into HTML/PDF export
+
+`apps/api/src/lib/export/sheets/html.ts` currently renders cells with their static styles only —
+conditional formatting is ignored. To apply CF in the server-side preview/PDF export:
+
+1. Per sheet, call `evaluateConditionalFormat(sheet.luckysheet_conditionformat_save, sheet.data)`.
+2. In `renderCell` (or wherever cell `<td>` styles are composed), look up `styles[\`${r}_${c}\`]` and
+   merge `textColor`/`cellColor` into the inline style string.
+3. For `dataBar` entries, render an absolutely-positioned `<div>` inside the `<td>` (size/position
+   based on `valueLen` and `valueType`) — same approach as the canvas painter, but using HTML
+   primitives instead of `CanvasRenderingContext2D`.
+4. Formula-based CF rules require building a `CellResolver` for the sheet and passing
+   `(formula, anchorR, anchorC, r, c) => formulaEngine.evaluate(...)` as the `evaluateFormula`
+   option. Defer until other rule types are verified working.
 
 ### Constraints
 

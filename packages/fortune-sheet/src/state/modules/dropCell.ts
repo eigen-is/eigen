@@ -10,7 +10,7 @@ import {getBorderInfoCompute} from "./border";
 import {genarate, update} from "../../engine/format";
 import * as formula from "./formula-ui";
 import {isRealNum} from "./validation";
-import {cfSplitRange} from "./conditionFormat";
+import {cfSplitRange} from "../../engine";
 import {normalizeSelection} from "./selection";
 import {jfrefreshgrid} from "./refresh";
 

@@ -8,6 +8,14 @@ export {
     toA1,
 } from './a1-notation';
 export { createArrayResolver } from './cell-resolver';
+export type {
+    CellFormatStyle,
+    ComputeMap,
+    ConditionalFormatFormulaEvaluator,
+    DataBar,
+    EvaluateConditionalFormatOptions,
+} from './conditional-format';
+export { cfSplitRange, evaluateConditionalFormat, getColorGradation } from './conditional-format';
 export {
     detectCycle,
     getCalculationOrder,

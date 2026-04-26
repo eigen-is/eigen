@@ -12,7 +12,7 @@ import {getBorderInfoCompute} from "../modules/border";
 import {expandRowsAndColumns, storeSheetParamALL} from "../modules/sheet";
 import {jfrefreshgrid} from "../modules/refresh";
 import {setRowHeight} from "../api";
-import {cfSplitRange} from "../modules";
+import {cfSplitRange} from "../../engine";
 import {setFormulaCellInfo} from "../modules/formulaHelper";
 
 function postPasteCut(

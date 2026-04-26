@@ -259,8 +259,7 @@ export type GlobalCache = {
     };
 };
 
-export type SingleRange = { row: number[]; column: number[] };
-export type Range = SingleRange[];
+export type {SingleRange, Range} from "../engine/types";
 
 // FORMULA
 type AncestorFormulaCell = {
