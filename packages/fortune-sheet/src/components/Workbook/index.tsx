@@ -33,9 +33,9 @@ import { consumePendingCopy } from '../../state/modules/clipboard';
 import { ContextMenu } from '../ContextMenu';
 import { FilterMenu } from '../ContextMenu/FilterMenu';
 import { FxEditor } from '../FxEditor';
+import { MenuBar } from '../MenuBar';
 import { Sheet } from '../Sheet';
 import { SheetTab } from '../SheetTab';
-import { Toolbar } from '../Toolbar';
 import { generateAPIs } from './api';
 
 enablePatches();
@@ -752,13 +752,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                             </ul>
                         </section>
                         <div className="w-full">
-                            {mergedSettings.showToolbar && (
-                                <Toolbar
-                                    leftItems={toolbarLeftItems}
-                                    centerItems={toolbarCenterItems}
-                                    rightItems={toolbarRightItems}
-                                />
-                            )}
+                            {mergedSettings.showToolbar && <MenuBar />}
                             {mergedSettings.showFormulaBar && <FxEditor />}
                         </div>
                         <Sheet sheet={sheet} />
