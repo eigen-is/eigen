@@ -1,5 +1,5 @@
+import type { LucideIcon } from "lucide-react";
 import {v4 as uuidv4} from "uuid";
-import React from "react";
 import type {Cell, CellMatrix} from "../engine/types";
 import {Selection, Sheet} from "./types";
 
@@ -148,11 +148,9 @@ export type Settings = {
     hooks?: Hooks;
     customToolbarItems?: {
         key: string;
+        icon: LucideIcon;
         tooltip?: string;
-        children?: React.ReactNode;
-        iconName?: string;
-        icon?: React.ReactNode;
-        onClick?: (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => void;
+        onClick?: () => void;
     }[];
     currency?: string;
     fontList?: any[];

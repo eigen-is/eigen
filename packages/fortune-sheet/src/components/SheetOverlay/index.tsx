@@ -414,13 +414,13 @@ export const SheetOverlay: React.FC = () => {
 
     const computedCellValue = cellValue();
 
-    // biome-ignore lint/correctness/useExhaustiveDependencies: FIXME audit-needed (PR 2) — see docs/FORTUNE-SHEET-EFFECT-DEPS-AUDIT.md (intentional snapshot on focus toggle)
+    // biome-ignore lint/correctness/useExhaustiveDependencies: intentional one-shot snapshot on focus toggle — adding rangeText/cellValue as deps would re-snapshot on every selection change and overwrite the cached "last" values
     useEffect(() => {
         if (context.sheetFocused) {
             setLastRangeText(String(rangeText));
             setLastCellValue(String(cellValue()));
         }
-    }, [context.sheetFocused]); // Runs only when sheet focus toggles
+    }, [context.sheetFocused]);
 
     useEffect(() => {
         if (context.showSearch || context.showReplace) {

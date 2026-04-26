@@ -96,7 +96,7 @@ export function Toolbar({
     const [customColor, setCustomColor] = useState('#000000');
     const [customStyle, setCustomStyle] = useState('1');
 
-    // biome-ignore lint/correctness/useExhaustiveDependencies: FIXME audit-needed (PR 2) — see docs/FORTUNE-SHEET-EFFECT-DEPS-AUDIT.md
+    // biome-ignore lint/correctness/useExhaustiveDependencies: settings is deliberately excluded — it's recreated on every props change in Workbook (Object.values(props) spread) and would invalidate every toolbar item memo. settings.hooks?.onInsertImage is read from closure when the user clicks insert-image, which is acceptable for an unchanging hook reference
     const getToolbarItem = useCallback(
         (name: string, i: number) => {
             // @ts-expect-error
@@ -884,10 +884,12 @@ export function Toolbar({
         ],
     );
 
-    const clickHandler = (name: string) => () =>
-        setContext((ctx) => toolbarItemClickHandler(name)?.(ctx, refs.cellInput.current!, refs.globalCache));
+    const clickHandler = useCallback(
+        (name: string) => () =>
+            setContext((ctx) => toolbarItemClickHandler(name)?.(ctx, refs.cellInput.current!, refs.globalCache)),
+        [setContext, refs],
+    );
 
-    // biome-ignore lint/correctness/useExhaustiveDependencies: FIXME audit-needed (PR 2) — see docs/FORTUNE-SHEET-EFFECT-DEPS-AUDIT.md (clickHandler recreated each render — adding it would defeat the memo)
     const mobileToolbar = useMemo(
         () => (
             <div className="bg-background h-12 flex items-center justify-between px-4 border-b no-print">
@@ -1346,6 +1348,7 @@ export function Toolbar({
             handleRedo,
             refs,
             setContext,
+            clickHandler,
         ],
     );
 
@@ -1368,11 +1371,9 @@ export function Toolbar({
                                 {settings.customToolbarItems.map((n) => (
                                     <TooltipButton
                                         key={n.key}
-                                        // biome-ignore lint/suspicious/noExplicitAny: customToolbarItems.icon is typed ReactNode but TooltipButton expects LucideIcon — caller contract mismatch
-                                        icon={n.icon as any}
+                                        icon={n.icon}
                                         tooltipText={n.tooltip ?? ''}
-                                        // biome-ignore lint/suspicious/noExplicitAny: synthetic event to satisfy customToolbarItems handler signature from TooltipButton's no-arg onClick
-                                        onClick={() => n.onClick?.({} as any)}
+                                        onClick={n.onClick}
                                     />
                                 ))}
                                 <ToolbarSeparator />
