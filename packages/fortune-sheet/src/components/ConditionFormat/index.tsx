@@ -8,7 +8,7 @@ import {
 import { useCallback, useContext } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
-import { locale, updateItem } from '../../state';
+import { clearSheetRules, locale } from '../../state';
 import { ConditionRules } from './ConditionRules';
 import { ManageRules } from './ManageRules';
 
@@ -89,7 +89,7 @@ export function ConditionalFormat({ items }: { items: string[] }) {
                             <DropdownMenuItem
                                 onClick={() => {
                                     setContext((ctx) => {
-                                        updateItem(ctx, 'delSheet');
+                                        clearSheetRules(ctx);
                                     });
                                 }}
                             >
