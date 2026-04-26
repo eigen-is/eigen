@@ -45,6 +45,28 @@ describe('engine/conditional-format — colorGradation', () => {
         expect(styles['0_0']?.cellColor).toBe('#00ff00');
     });
 
+    test('interpolates between hex stops (regression for getColorGradation hex parsing)', () => {
+        // The CF preset table stores hex (#rrggbb); the engine must interpolate them
+        // without the original rgb(R, G, B)-only parser blowing up on .split.
+        const data = buildMatrix([[0], [5], [10]]);
+        const styles = evaluateConditionalFormat(
+            [
+                {
+                    type: 'colorGradation',
+                    cellrange: [{ row: [0, 2], column: [0, 0] }],
+                    format: ['#ff0000', '#00ff00'], // 2-color: max=red, min=green
+                },
+            ],
+            data,
+        );
+        expect(styles['0_0']?.cellColor).toBe('#00ff00'); // min
+        expect(styles['2_0']?.cellColor).toBe('#ff0000'); // max
+        // value 5 is halfway between 0 and 10 → interpolated rgb(128, 128, 0)-ish
+        const mid = styles['1_0']?.cellColor;
+        expect(mid).toMatch(/^rgb\(/);
+        expect(mid).toBe('rgb(128, 128, 0)');
+    });
+
     test('overlapping rules layer onto existing computeMap entries (regression for the format.cellColor-on-array bug)', () => {
         // Bug: when a prior rule populated computeMap[`${r}_${c}`], the colorGradation if-arm read
         // `format.cellColor` on an array-shaped format and blanked the cell color. The else-arm used

@@ -45,16 +45,19 @@ function applyCellStyle(map: ComputeMap, r: number, c: number, style: CellFormat
     }
 }
 
-export function getColorGradation(color1: string, color2: string, value1: number, value2: number, value: number) {
-    const rgb1 = color1.split(',');
-    const r1 = parseInt(rgb1[0].split('(')[1], 10);
-    const g1 = parseInt(rgb1[1], 10);
-    const b1 = parseInt(rgb1[2].split(')')[0], 10);
+// Parse "#rrggbb" or "rgb(R, G, B)" into [r, g, b].
+function parseColorChannels(color: string): [number, number, number] {
+    if (color.startsWith('#')) {
+        const hex = color.slice(1);
+        return [parseInt(hex.slice(0, 2), 16), parseInt(hex.slice(2, 4), 16), parseInt(hex.slice(4, 6), 16)];
+    }
+    const parts = color.split(',');
+    return [parseInt(parts[0].split('(')[1], 10), parseInt(parts[1], 10), parseInt(parts[2].split(')')[0], 10)];
+}
 
-    const rgb2 = color2.split(',');
-    const r2 = parseInt(rgb2[0].split('(')[1], 10);
-    const g2 = parseInt(rgb2[1], 10);
-    const b2 = parseInt(rgb2[2].split(')')[0], 10);
+export function getColorGradation(color1: string, color2: string, value1: number, value2: number, value: number) {
+    const [r1, g1, b1] = parseColorChannels(color1);
+    const [r2, g2, b2] = parseColorChannels(color2);
 
     const v12 = value1 - value2;
     const v10 = value1 - value;
