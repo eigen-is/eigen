@@ -1,3 +1,4 @@
+import { escapeHtml } from '@workspace/lib/html';
 import {
     DRIVE_TYPE_CHAT,
     DRIVE_TYPE_DOC,
@@ -10,7 +11,6 @@ import {
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import type { AddressObject } from '@workspace/lib/types/mail';
 import MailComposer from 'nodemailer/lib/mail-composer';
-import { escapeHtml } from '../core';
 
 export type EmlAttachment = {
     filename: string;

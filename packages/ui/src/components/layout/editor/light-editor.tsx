@@ -17,6 +17,10 @@ type LightEditorProps = {
     toolbar?: 'floating' | 'fixed' | 'none';
     className?: string;
     editable?: boolean;
+    // false: skip eigen-prose so caller's font/size/color inherit
+    proseStyle?: boolean;
+    // Drop `h-full` from the default when the parent should size to content (e.g. for vertical alignment).
+    containerClassName?: string;
 };
 
 // StarterKit configured for "light" rich text: bold, italic, lists, blockquote, hard break, link.
@@ -42,6 +46,8 @@ export function LightEditor({
     toolbar = 'floating',
     className,
     editable = true,
+    proseStyle = true,
+    containerClassName = 'relative flex flex-col h-full',
 }: LightEditorProps) {
     const editor = useEditor({
         extensions: LIGHT_EXTENSIONS,
@@ -49,7 +55,7 @@ export function LightEditor({
         editable,
         editorProps: {
             attributes: {
-                class: cn('eigen-prose outline-none min-h-[100px]', className),
+                class: cn(proseStyle && 'eigen-prose', 'outline-none min-h-[100px]', className),
                 ...(placeholder ? { 'data-placeholder': placeholder } : {}),
             },
         },
@@ -69,7 +75,7 @@ export function LightEditor({
     if (!editor) return null;
 
     return (
-        <div className="relative flex flex-col h-full">
+        <div className={containerClassName}>
             {toolbar === 'fixed' && (
                 <div className="mb-2">
                     <LightEditorToolbar editor={editor} />

@@ -1,4 +1,5 @@
 import { formatEventWhen } from '@workspace/lib/date';
+import { escapeHtml } from '@workspace/lib/html';
 import {
     type Attendee,
     type CalendarEvent,
@@ -11,7 +12,6 @@ import { externalOwnerId } from '@workspace/lib/types/owner';
 import { parseIcs } from '../caldav/ical-parse';
 import { serializeEventForImip } from '../caldav/ical-serialize';
 import { getDomain } from '../config/server-config';
-import { escapeHtml } from '../core';
 import type { OutboundICalEvent, OutboundMail } from '../core/mailer';
 import type { Home } from '../home';
 import type { ReceiveInvitationPayload } from './calendar';

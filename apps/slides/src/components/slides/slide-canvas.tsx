@@ -16,7 +16,6 @@ type SlideCanvasProps = {
     onSelectObject: (objId: string | null, additive?: boolean) => void;
     onSelectObjects: (objIds: string[]) => void;
     onStartEditing: (objId: string) => void;
-    onStopEditing: () => void;
     onUpdateObject: (objId: string, updates: Partial<SlideObject>) => void;
     onDropImage?: (file: File) => void;
     onCopyObject?: (objId: string) => void;
@@ -44,7 +43,6 @@ export function SlideCanvas({
     onSelectObject,
     onSelectObjects,
     onStartEditing,
-    onStopEditing,
     onUpdateObject,
     onDropImage,
     onCopyObject,
@@ -210,7 +208,6 @@ export function SlideCanvas({
                             isMultiSelected={selectedObjectIds.length > 1 && selectedObjectIds.includes(obj.id)}
                             onSelect={onSelectObject}
                             onStartEditing={onStartEditing}
-                            onStopEditing={onStopEditing}
                             onUpdate={onUpdateObject}
                             onDragStart={handleDragStart}
                             onResizeStart={handleResizeStart}

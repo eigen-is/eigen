@@ -153,6 +153,11 @@ GET /drive/:ownerId/:mountId/file/:pathId/export/:format
 Both formats embed WOFF2 fonts (via shared `export/fonts.ts`) and base64 images. The `SizeUnit` abstraction
 in `render.ts` lets the same render functions produce either responsive or fixed-size output.
 
+Text objects store HTML (TipTap output). `render.ts` runs `obj.text` through `DOMPurify` and `escapeHtml`s
+the highlight color before embedding, so the same value that's safely shown by the FE canvas is also safe
+inside the export. The `.slide-text` typography rules live in `packages/ui/src/styles/slide-text.css` and
+are imported via `with { type: 'text' }` from `html.ts` so canvas and export render identically.
+
 ### File Structure
 
 ```

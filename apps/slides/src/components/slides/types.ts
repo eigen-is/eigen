@@ -23,7 +23,7 @@ export const DEFAULT_TEXT_OBJECT: Omit<TextObject, 'id' | 'slideId'> = {
     w: 1536,
     h: 162,
     rotation: 0,
-    text: 'New text',
+    text: '<p>New text</p>',
     fontFamily: 'Inter',
     fontSize: 48,
     fontWeight: 'normal',

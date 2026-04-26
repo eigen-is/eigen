@@ -1,4 +1,5 @@
 import { getFontFamily } from '@workspace/lib/constants/fonts';
+import { escapeHtml } from '@workspace/lib/html';
 import {
     BORDER_RADIUS_ROUND,
     type DeckData,
@@ -8,7 +9,7 @@ import {
     type SlideItem,
     type SlideObject,
 } from '@workspace/lib/slides';
-import { escapeHtml } from '../../core';
+import DOMPurify from 'isomorphic-dompurify';
 
 export type SizeUnit = (px: number, axis: 'x' | 'y') => string;
 export type ImgSrcResolver = (mediaName: string) => string | null;
@@ -67,12 +68,12 @@ export function renderSlideObjectHtml(obj: SlideObject, sizeUnit: SizeUnit, reso
         if (obj.textAlign) textStyles.push(`text-align:${obj.textAlign}`);
         if (obj.letterSpacing) textStyles.push(`letter-spacing:${sizeUnit(obj.letterSpacing, 'x')}`);
 
-        const text = escapeHtml(obj.text);
+        const safeText = DOMPurify.sanitize(obj.text);
         const textContent = obj.highlightColor
-            ? `<span style="background-color:${obj.highlightColor};box-decoration-break:clone;-webkit-box-decoration-break:clone">${text}</span>`
-            : text;
+            ? `<span style="background-color:${escapeHtml(obj.highlightColor)};box-decoration-break:clone;-webkit-box-decoration-break:clone">${safeText}</span>`
+            : safeText;
 
-        return `<div style="${styles.join(';')}"><div style="width:100%;height:100%;display:flex;align-items:${alignItems}"><p style="white-space:pre-wrap;word-break:break-word;width:100%;margin:0;${textStyles.join(';')}">${textContent}</p></div></div>`;
+        return `<div style="${styles.join(';')}"><div style="width:100%;height:100%;display:flex;align-items:${alignItems}"><div class="slide-text" style="white-space:pre-wrap;word-break:break-word;width:100%;${textStyles.join(';')}">${textContent}</div></div></div>`;
     }
 
     if (obj.type === 'image') {

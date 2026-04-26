@@ -1,7 +1,7 @@
+import { escapeHtml } from '@workspace/lib/html';
 import type { Cell, CellBorderInfo, CellWithRowAndCol, Sheet } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import DOMPurify from 'isomorphic-dompurify';
-import { escapeHtml } from '../../core';
 import type { Mount } from '../../mount';
 import type { ExportResult } from '../export-document';
 import { getFontCSS } from '../fonts';

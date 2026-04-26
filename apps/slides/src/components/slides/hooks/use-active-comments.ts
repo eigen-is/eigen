@@ -1,3 +1,4 @@
+import { htmlToPlainText } from '@workspace/lib/html';
 import { useMemo } from 'react';
 import type { DeckData } from '../types';
 
@@ -18,7 +19,7 @@ export function useActiveComments(deck: DeckData): ActiveComments {
             for (const chatName of obj.commentChatNames) {
                 ids.add(chatName);
                 if (!anchorTexts.has(chatName)) {
-                    anchorTexts.set(chatName, obj.type === 'text' ? obj.text.slice(0, 100) : 'Image');
+                    anchorTexts.set(chatName, obj.type === 'text' ? htmlToPlainText(obj.text).slice(0, 100) : 'Image');
                 }
             }
         }

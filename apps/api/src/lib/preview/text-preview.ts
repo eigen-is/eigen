@@ -1,6 +1,6 @@
 import { getTextPreviewMode, type TextPreviewMode } from '@workspace/lib/constants';
+import { escapeHtml } from '@workspace/lib/html';
 import DOMPurify from 'isomorphic-dompurify';
-import { escapeHtml } from '../core';
 
 const LANGUAGE_MAP: Record<string, string> = {
     '.js': 'javascript',
