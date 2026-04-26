@@ -315,6 +315,11 @@ implementations:
 - ~~Rename `LinkEidtCard/` → `LinkEditCard/`~~ — done (`dd46088a` + `3b5642a2`)
 - ~~9 `<div role="button">` pseudo-buttons → real `<button type="button">`~~ — done (`91e28493`)
 - ~~Dedupe `ConditionFormat.ts` vs `conditionalFormat.ts`~~ — merged into `conditionFormat.ts` (camelCase). `cfSplitRange` properly typed with `SingleRange`, dead code removed, boundary types tightened (`DataBar` discriminated union, `CellFormatStyle`, `ComputeMap`)
+- ~~`@workspace/fortune-sheet/engine` subpath export~~ — done in commit `1b2b36a0`. `apps/api/tsconfig.json` `paths` kludge removed; consumers import from `@workspace/fortune-sheet/engine` directly.
+- ~~`colorGradation` `format.cellColor`-on-array bug~~ — fixed in commit `1b2b36a0`. The if-arm now mirrors the else-arm's positional access; both arms compute the gradient color once via a shared helper. Regression tests in `engine/test/conditional-format.test.ts` and `apps/api/src/test/sheets-html-export.test.ts`.
+- ~~`getCellTextInfo` redundant `ctx?` parameter~~ — fixed in commit `1b2b36a0`. Parameter dropped; `getFontSet` now requires `Context`. All 5 call sites use `sheetCtx` consistently — locale fonts no longer silently disabled at the 3 sites that previously omitted the 5th argument.
+- ~~Translate Chinese comments to English~~ — done in commits `1b2b36a0` + `2608d5f5`. Remaining CJK is in test fixtures and measurement glyphs (`"田"`); user-facing strings flagged for separate `locale()` migration.
+- ~~Mechanical broken-windows sweep~~ — done in commit `2608d5f5`. Dropped 22 commented `console.log` debug lines, 11-line dead fill-type comment, jQuery legacy comments, stale ReferenceError comments, unnecessary `try/catch` around internal calls. `substr` → `slice`, `indexOf > -1` → `includes` modernizations.
 
 ### Next — Medium effort
 
