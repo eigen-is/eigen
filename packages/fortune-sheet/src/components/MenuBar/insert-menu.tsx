@@ -21,15 +21,27 @@ export function InsertMenu() {
     const columnFocus = selection?.column_focus;
 
     const last = context.luckysheet_select_save?.[context.luckysheet_select_save.length - 1];
-    let commentRow = last?.row_focus;
-    let commentCol = last?.column_focus;
-    if (!last) {
-        commentRow = 0;
-        commentCol = 0;
-    } else {
-        if (commentRow == null) [commentRow] = last.row;
-        if (commentCol == null) [commentCol] = last.column;
-    }
+    const commentRow = last?.row_focus ?? last?.row[0] ?? 0;
+    const commentCol = last?.column_focus ?? last?.column[0] ?? 0;
+
+    const insertHandler = (type: 'row' | 'column', direction: 'lefttop' | 'rightbottom') => {
+        const focus = type === 'row' ? rowFocus : columnFocus;
+        if (focus == null) return;
+        const insertRowColOp = {
+            type,
+            index: focus,
+            count: 1,
+            direction,
+            id: context.currentSheetId,
+        };
+        setContext(
+            (draftCtx) => {
+                insertRowCol(draftCtx, insertRowColOp);
+            },
+            { insertRowColOp },
+        );
+    };
+
     const fd = getFlowdata(context);
     const commentCell = fd?.[commentRow]?.[commentCol];
     const hasComment = (commentCell?.commentChatNames?.length ?? 0) > 0;
@@ -39,46 +51,10 @@ export function InsertMenu() {
             <DropdownMenuSub>
                 <DropdownMenuSubTrigger>{rightclick.row}</DropdownMenuSubTrigger>
                 <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
-                    <DropdownMenuItem
-                        disabled={rowFocus == null}
-                        onClick={() => {
-                            if (rowFocus == null) return;
-                            const insertRowColOp = {
-                                type: 'row' as const,
-                                index: rowFocus,
-                                count: 1,
-                                direction: 'lefttop' as const,
-                                id: context.currentSheetId,
-                            };
-                            setContext(
-                                (draftCtx) => {
-                                    insertRowCol(draftCtx, insertRowColOp);
-                                },
-                                { insertRowColOp },
-                            );
-                        }}
-                    >
+                    <DropdownMenuItem disabled={rowFocus == null} onClick={() => insertHandler('row', 'lefttop')}>
                         Insert 1 row above
                     </DropdownMenuItem>
-                    <DropdownMenuItem
-                        disabled={rowFocus == null}
-                        onClick={() => {
-                            if (rowFocus == null) return;
-                            const insertRowColOp = {
-                                type: 'row' as const,
-                                index: rowFocus,
-                                count: 1,
-                                direction: 'rightbottom' as const,
-                                id: context.currentSheetId,
-                            };
-                            setContext(
-                                (draftCtx) => {
-                                    insertRowCol(draftCtx, insertRowColOp);
-                                },
-                                { insertRowColOp },
-                            );
-                        }}
-                    >
+                    <DropdownMenuItem disabled={rowFocus == null} onClick={() => insertHandler('row', 'rightbottom')}>
                         Insert 1 row below
                     </DropdownMenuItem>
                 </DropdownMenuSubContent>
@@ -87,45 +63,12 @@ export function InsertMenu() {
             <DropdownMenuSub>
                 <DropdownMenuSubTrigger>{rightclick.column}</DropdownMenuSubTrigger>
                 <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
-                    <DropdownMenuItem
-                        disabled={columnFocus == null}
-                        onClick={() => {
-                            if (columnFocus == null) return;
-                            const insertRowColOp = {
-                                type: 'column' as const,
-                                index: columnFocus,
-                                count: 1,
-                                direction: 'lefttop' as const,
-                                id: context.currentSheetId,
-                            };
-                            setContext(
-                                (draftCtx) => {
-                                    insertRowCol(draftCtx, insertRowColOp);
-                                },
-                                { insertRowColOp },
-                            );
-                        }}
-                    >
+                    <DropdownMenuItem disabled={columnFocus == null} onClick={() => insertHandler('column', 'lefttop')}>
                         Insert 1 column left
                     </DropdownMenuItem>
                     <DropdownMenuItem
                         disabled={columnFocus == null}
-                        onClick={() => {
-                            if (columnFocus == null) return;
-                            const insertRowColOp = {
-                                type: 'column' as const,
-                                index: columnFocus,
-                                count: 1,
-                                direction: 'rightbottom' as const,
-                                id: context.currentSheetId,
-                            };
-                            setContext(
-                                (draftCtx) => {
-                                    insertRowCol(draftCtx, insertRowColOp);
-                                },
-                                { insertRowColOp },
-                            );
-                        }}
+                        onClick={() => insertHandler('column', 'rightbottom')}
                     >
                         Insert 1 column right
                     </DropdownMenuItem>
@@ -253,7 +196,7 @@ export function InsertMenu() {
                 <DropdownMenuItem
                     disabled={!settings.hooks?.onViewComment}
                     onClick={() => {
-                        settings.hooks?.onViewComment?.(commentRow!, commentCol!);
+                        settings.hooks?.onViewComment?.(commentRow, commentCol);
                     }}
                 >
                     View comment
@@ -262,7 +205,7 @@ export function InsertMenu() {
                 <DropdownMenuItem
                     disabled={!settings.hooks?.onAddComment}
                     onClick={() => {
-                        settings.hooks?.onAddComment?.(commentRow!, commentCol!);
+                        settings.hooks?.onAddComment?.(commentRow, commentCol);
                     }}
                 >
                     Comment

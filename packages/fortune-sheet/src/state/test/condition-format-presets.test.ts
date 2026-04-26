@@ -43,6 +43,12 @@ describe("applyDataBarPreset", () => {
         expect(rules[0].type).toBe("dataBar");
         expect(rules[0].format).toEqual(CF_PRESETS.solidColorDataBar_1);
     });
+
+    it("ignores unknown preset keys", () => {
+        const ctx = contextFactory() as Context;
+        applyDataBarPreset(ctx, "nonsense_key");
+        expect(ctx.luckysheetfile[0].luckysheet_conditionformat_save ?? []).toHaveLength(0);
+    });
 });
 
 describe("clearSheetRules", () => {

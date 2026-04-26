@@ -181,7 +181,7 @@ export function setConditionRules(
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
     const ruleArr =
         ctx.luckysheetfile[index].luckysheet_conditionformat_save ?? [];
-    ruleArr?.push(rule);
+    ruleArr.push(rule);
 
     ctx.luckysheetfile[index].luckysheet_conditionformat_save = ruleArr;
 }
