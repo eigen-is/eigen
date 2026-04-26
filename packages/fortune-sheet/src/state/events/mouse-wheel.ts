@@ -39,44 +39,16 @@ export function handleGlobalWheel(
 
     const row_st = sortedIndex(visibledatarow_c, scrollTop) + 1;
 
-    let rowscroll = 0;
-
-    const scrollNum = 1;
-
-    // Scroll three rows or columns at a time
+    // Scroll one row or 20px at a time; the scrollbar clamps to bounds
     if (e.deltaY !== 0 && !cache.verticalScrollLock) {
         cache.horizontalScrollLock = true;
-        let row_ed;
-        let step = Math.round(scrollNum / ctx.zoomRatio);
-        step = step < 1 ? 1 : step;
-        if (e.deltaY > 0) {
-            row_ed = row_st + step;
-
-            if (row_ed >= visibledatarow_c.length) {
-                row_ed = visibledatarow_c.length - 1;
-            }
-        } else {
-            row_ed = row_st - step;
-
-            if (row_ed < 0) {
-                row_ed = 0;
-            }
-        }
-
-        rowscroll = row_ed === 0 ? 0 : visibledatarow_c[row_ed - 1];
-
-        // Let the browser control scroll boundaries via the scrollbar
-        scrollbarY.scrollTop = rowscroll;
+        let row_ed = e.deltaY > 0 ? row_st + 1 : row_st - 1;
+        if (row_ed >= visibledatarow_c.length) row_ed = visibledatarow_c.length - 1;
+        if (row_ed < 0) row_ed = 0;
+        scrollbarY.scrollTop = row_ed === 0 ? 0 : visibledatarow_c[row_ed - 1];
     } else if (e.deltaX !== 0 && !cache.horizontalScrollLock) {
         cache.verticalScrollLock = true;
-        if (e.deltaX > 0) {
-            scrollLeft += 20 * ctx.zoomRatio;
-        } else {
-            scrollLeft -= 20 * ctx.zoomRatio;
-        }
-
-        // Let the browser control scroll boundaries via the scrollbar
-        scrollbarX.scrollLeft = scrollLeft;
+        scrollbarX.scrollLeft = scrollLeft + (e.deltaX > 0 ? 20 : -20);
     }
 
     mouseWheelUniqueTimeout = setTimeout(() => {

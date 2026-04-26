@@ -351,8 +351,8 @@ function mouseRender(
         const top = ctx.scrollTop;
         const x = e.pageX - rect.left - window.scrollX;
         const y = e.pageY - rect.top - window.scrollY;
-        const winH = rect.height - 20 * ctx.zoomRatio;
-        const winW = rect.width - 60 * ctx.zoomRatio;
+        const winH = rect.height - 20;
+        const winW = rect.width - 60;
 
         if (y < 0 || y > winH) {
             let stop;
@@ -594,13 +594,11 @@ export function handleOverlayMouseUp(
                 ?.filter((select) => select.row_select)
                 ?.forEach((select) => {
                     for (let r = select.row[0]; r <= select.row[1]; r += 1) {
-                        cfg.rowlen![r] = Math.ceil(size / ctx.zoomRatio);
+                        cfg.rowlen![r] = Math.ceil(size);
                     }
                 });
         } else {
-            cfg.rowlen[ctx.luckysheet_rows_change_size_start[1]] = Math.ceil(
-                size / ctx.zoomRatio
-            );
+            cfg.rowlen[ctx.luckysheet_rows_change_size_start[1]] = Math.ceil(size);
         }
 
         // config
@@ -625,8 +623,6 @@ export function handleOverlayMouseUp(
             delta =
                 winW - 100 - ctx.luckysheet_cols_change_size_start[0] + scrollLeft;
         }
-
-        delta /= ctx.zoomRatio;
 
         const cfg = ctx.config;
         if (cfg.columnlen == null) {
@@ -680,13 +676,11 @@ export function handleOverlayMouseUp(
                 ?.filter((select) => select.column_select)
                 ?.forEach((select) => {
                     for (let r = select.column[0]; r <= select.column[1]; r += 1) {
-                        cfg.columnlen![r] = Math.ceil(size / ctx.zoomRatio);
+                        cfg.columnlen![r] = Math.ceil(size);
                     }
                 });
         } else {
-            cfg.columnlen[ctx.luckysheet_cols_change_size_start[1]] = Math.ceil(
-                size / ctx.zoomRatio
-            );
+            cfg.columnlen[ctx.luckysheet_cols_change_size_start[1]] = Math.ceil(size);
         }
 
         // config

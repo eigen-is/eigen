@@ -90,7 +90,6 @@ export type Sheet = {
     celldata?: CellWithRowAndCol[];
     id?: string;
     images?: Image[];
-    zoomRatio?: number;
     column?: number;
     row?: number;
     addRows?: number;

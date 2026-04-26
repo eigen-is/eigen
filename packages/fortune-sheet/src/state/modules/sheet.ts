@@ -14,13 +14,8 @@ function storeSheetParam(ctx: Context) {
     if (index == null) return;
     const file = ctx.luckysheetfile[index];
     file.config = ctx.config;
-    // file.visibledatarow = ctx.visibledatarow;
-    // file.visibledatacolumn = ctx.visibledatacolumn;
-    // file.ch_width = ctx.ch_width;
-    // file.rh_height = ctx.rh_height;
     file.luckysheet_select_save = ctx.luckysheet_select_save;
     file.luckysheet_selection_range = ctx.luckysheet_selection_range;
-    file.zoomRatio = ctx.zoomRatio;
 }
 
 export function storeSheetParamALL(ctx: Context) {
@@ -33,18 +28,10 @@ export function storeSheetParamALL(ctx: Context) {
 export function changeSheet(
     ctx: Context,
     id: string,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    isPivotInitial?: boolean,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    isNewSheet?: boolean,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    isCopySheet?: boolean
+    _isPivotInitial?: boolean,
+    _isNewSheet?: boolean,
+    _isCopySheet?: boolean
 ) {
-    //   if (isEditMode()) {
-    //     // alert("This operation is not allowed in non-edit mode!");
-    //     return;
-    //   }
-
     if (id === ctx.currentSheetId) {
         return;
     }
@@ -58,23 +45,8 @@ export function changeSheet(
     storeSheetParamALL(ctx);
 
     ctx.currentSheetId = id;
+    ctx.luckysheetcurrentisPivotTable = !!file.isPivotTable;
 
-    if (file.isPivotTable) {
-        ctx.luckysheetcurrentisPivotTable = true;
-        //     if (!isPivotInitial) {
-        //       pivotTable.changePivotTable(index);
-        //     }
-    } else {
-        ctx.luckysheetcurrentisPivotTable = false;
-        //     $("#luckysheet-modal-dialog-slider-pivot").hide();
-        //     luckysheetsizeauto(false);
-    }
-
-    // Hide charts from other sheets, show charts for the current sheet (chartMix)
-    //   renderChartShow(index);
-
-    //   luckysheetFreezen.initialFreezen(index);
-    //   _this.restoreselect();
     if (ctx.hooks.afterActivateSheet) {
         setTimeout(() => {
             ctx.hooks.afterActivateSheet?.(id);
@@ -90,8 +62,7 @@ export function addSheet(
     sheetName: string | undefined = undefined,
     sheetData: Sheet | undefined = undefined
 ) {
-    if (/* isEditMode() || */ ctx.allowEdit === false) {
-        // alert("This operation is not allowed in non-edit mode!");
+    if (ctx.allowEdit === false) {
         return;
     }
     const order = ctx.luckysheetfile.length;
@@ -119,7 +90,6 @@ export function addSheet(
             config: {},
             pivotTable: null,
             isPivotTable: !!isPivotTable,
-            zoomRatio: 1,
         }
         : sheetData;
     if (sheetName !== undefined) sheetconfig.name = sheetName;
@@ -129,8 +99,6 @@ export function addSheet(
     }
 
     ctx.luckysheetfile.push(sheetconfig);
-
-    //   server.saveParam("sha", null, $.extend(true, {}, sheetconfig));
 
     if (!newSheetID) {
         changeSheet(ctx, id, isPivotTable, true);
@@ -154,16 +122,10 @@ export function deleteSheet(ctx: Context, id: string) {
         return;
     }
 
-    // const file = ctx.luckysheetfile[arrIndex];
-
     if (ctx.hooks.beforeDeleteSheet?.(id) === false) {
         return;
     }
 
-    // _this.setSheetHide(index, true);
-
-    // $(`#luckysheet-sheets-item${index}`).remove();
-    // $(`#luckysheet-datavisual-selection-set-${index}`).remove();
     ctx.luckysheetfile = ctx.luckysheetfile.map((sheet) => {
         sheet.order =
             (sheet.order as number) < (ctx.luckysheetfile[arrIndex].order as number)
@@ -173,9 +135,6 @@ export function deleteSheet(ctx: Context, id: string) {
     });
 
     ctx.luckysheetfile.splice(arrIndex, 1);
-    // _this.reOrderAllSheet();
-
-    // server.saveParam("shd", null, { deleIndex: index });
     if (id === ctx.currentSheetId) {
         const shownSheets = cloneDeep(ctx.luckysheetfile).filter(
             (singleSheet) => singleSheet.hide === undefined || singleSheet.hide !== 1
@@ -275,24 +234,12 @@ export function editSheetName(ctx: Context, editable: HTMLSpanElement) {
 
     for (let i = 0; i < ctx.luckysheetfile.length; i += 1) {
         if (index !== i && ctx.luckysheetfile[i].name === txt) {
-            // if (isEditMode()) {
-            //   alert(locale_sheetconfig.tipNameRepeat);
-            // } else {
-            //   tooltip.info("", locale_sheetconfig.tipNameRepeat);
-            // }
             editable.innerText = oldtxt;
             return;
         }
     }
 
-    // sheetmanage.sheetArrowShowAndHide();
-
     ctx.luckysheetfile[index].name = txt;
-    // server.saveParam("all", ctx.currentSheetId, txt, { k: "name" });
-
-    // $t.attr("contenteditable", "false").removeClass(
-    //   "luckysheet-mousedown-cancel"
-    // );
 
     if (ctx.hooks.afterUpdateSheetName) {
         setTimeout(() => {

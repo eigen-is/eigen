@@ -77,20 +77,12 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
     useEffect(() => {
         if (!editable.current) return;
         if (editing) {
-            if (window.getSelection) {
-                const range = document.createRange();
-                range.selectNodeContents(editable.current);
-                if (range.startContainer && document.body.contains(range.startContainer)) {
-                    const selection = window.getSelection();
-                    selection?.removeAllRanges();
-                    selection?.addRange(range);
-                }
-                // @ts-expect-error
-            } else if (document.selection) {
-                // @ts-expect-error
-                const range = document.body.createTextRange();
-                range.moveToElementText(editable.current);
-                range.select();
+            const range = document.createRange();
+            range.selectNodeContents(editable.current);
+            if (range.startContainer && document.body.contains(range.startContainer)) {
+                const selection = window.getSelection();
+                selection?.removeAllRanges();
+                selection?.addRange(range);
             }
         }
         editable.current.dataset.oldText = editable.current.innerText;
@@ -309,7 +301,6 @@ export const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
             };
             draftCtx.dataVerificationDropDownList = false;
             draftCtx.currentSheetId = sheet.id!;
-            draftCtx.zoomRatio = sheet.zoomRatio ?? 1;
             cancelActiveImgItem(draftCtx, refs.globalCache);
             cancelNormalSelected(draftCtx);
         });

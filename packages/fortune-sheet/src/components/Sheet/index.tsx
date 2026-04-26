@@ -187,7 +187,7 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
     useEffect(() => {
         if (!data) return;
         setContext((draftCtx) => updateContextWithSheetData(draftCtx, data));
-    }, [rowlenKey, columnlenKey, rowhiddenKey, colhiddenKey, data, context.zoomRatio, setContext]);
+    }, [rowlenKey, columnlenKey, rowhiddenKey, colhiddenKey, data, setContext]);
 
     // Init canvas sizing
     useEffect(() => {
@@ -204,7 +204,7 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
     // Canvas redraw – rAF-throttled, reads scroll from globalCache.
     //
     // Two triggers:
-    //   1. context changes (cell edits, selection, zoom, etc.) → useEffect
+    //   1. context changes (cell edits, selection, etc.) → useEffect
     //   2. scroll changes (wheel/scrollbar) → globalCache scroll listener
     // Both call scheduleRedraw which coalesces to one paint per frame.
     // -----------------------------------------------------------------------

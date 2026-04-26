@@ -9261,8 +9261,6 @@ export default {
         newSheet: "New sheet",
         sheetOptions: "Sheet options",
         Dropdown: "Dropdown",
-        zoomIn: "Zoom in",
-        zoomOut: "Zoom out",
         toggleSheetFocusShortcut: "Toggle sheet focus lock: Shift, Control, F.",
         selectRangeShortcut: "Select range: Shift, arrow keys.",
         autoFillDownShortcut:

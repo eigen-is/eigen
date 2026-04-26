@@ -61,7 +61,6 @@ export function contextFactory({
         scrollLeft: 0,
         scrollTop: 0,
         luckysheet_shiftkeydown: false,
-        zoomRatio: 1,
         groupValuesRefreshData: [],
         formulaCache: new FormulaCache(),
         defaultCell: {},

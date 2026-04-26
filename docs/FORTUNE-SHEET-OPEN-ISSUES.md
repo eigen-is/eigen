@@ -46,7 +46,7 @@ smoke pass. Sequence to run in `apps/sheets`:
 ### Recently merged (need verification)
 - [ ] **`useExhaustiveDependencies` PR1 (29 sites)** — see
       `docs/FORTUNE-SHEET-EFFECT-DEPS-AUDIT.md`. Most likely regression
-      surface: drag-fill, paste, freeze + zoom, sheet-switch selection
+      surface: drag-fill, paste, freeze, sheet-switch selection
       restore (Sheet:193, SheetOverlay:311, SheetTab/SheetItem:59 — all B-cat
       dep removals).
 - [x] **`useExhaustiveDependencies` PR2 (6 sites, 2026-04-26, commit
@@ -78,12 +78,12 @@ smoke pass. Sequence to run in `apps/sheets`:
 - [ ] **Follow-up shadcn sweep (commits `bdb71f94` + `91e28493`)** — touched
       `LinkEditCard` (CSS migration + 2 raw `<input>` → `Input`; 4 div-buttons
       → real `<button>`), `ZoomControl` (custom menu → Popover; +/-/trigger/
-      preset items → `<button>`), `SheetOverlay` bottom-add-row (shadcn
-      `Button` + `Input`), `ContextMenu/index.tsx` (`menuItemClass` const
-      dedupe), `FormulaSearch` (broken-window `cn()` + list rows → `<button>`).
-      Also dropped 4 dead `.luckysheet-cell-flow-*` rules from
-      `SheetOverlay/index.css`. Verify: link card open/edit/delete, zoom
-      preset menu open/select, bottom add-row click + back-to-top click,
+      preset items → `<button>`; component since removed entirely),
+      `SheetOverlay` bottom-add-row (shadcn `Button` + `Input`),
+      `ContextMenu/index.tsx` (`menuItemClass` const dedupe), `FormulaSearch`
+      (broken-window `cn()` + list rows → `<button>`). Also dropped 4 dead
+      `.luckysheet-cell-flow-*` rules from `SheetOverlay/index.css`. Verify:
+      link card open/edit/delete, bottom add-row click + back-to-top click,
       formula list keyboard navigation (Enter/Space).
 - [ ] **`LinkEditCard` directory rename (commits `dd46088a` + `3b5642a2`)** —
       `LinkEidtCard/` → `LinkEditCard/`. Trivial single-import update; should
@@ -94,8 +94,8 @@ smoke pass. Sequence to run in `apps/sheets`:
       type a value, paste a multi-line range, formula entry, switch sheets
       mid-edit, Esc to cancel.
 - [ ] **Sheet redraw + freeze** (Sheet:186, 193, 198, 228 — biggest dep
-      cleanup): scroll, resize, change zoom, freeze a row + column, add
-      columns past the freeze line.
+      cleanup): scroll, resize, freeze a row + column, add columns past the
+      freeze line.
 - [ ] **Selection box** (SheetOverlay:311): switch sheets, verify a fresh
       sheet gets default A1 but a sheet with prior selection keeps it.
 - [ ] **Data-verification dropdown** (DropdownList): single-select write
@@ -173,6 +173,22 @@ raw HTML. Most landed in commit `b5c3b7e7`.
   Module-level const extracted; 4 inline duplicates replaced. Note: kept
   `gap-2` (which `FilterMenu`'s version omits) because the ContextMenu
   call sites have inline `<input>` next to text and need the spacing.
+
+---
+
+## 3.5. `getCellTextInfo` redundant `ctx?` parameter
+
+`text.ts::getCellTextInfo(cell, renderCtx, sheetCtx, option, ctx?: Context)` —
+the optional 5th parameter is forwarded only to `getFontSet` for locale-aware
+font-array lookup. Of 5 callers, the 2 main canvas render paths
+(`canvas.ts:1786` and `canvas.ts:1921`) pass `this.sheetCtx` as **both** the
+3rd and 5th argument (so the same context fills two slots), while the other 3
+callers (`canvas.ts:1145`, `toolbar.ts:180`, `cell.ts:941`) omit the 5th
+argument entirely — silently disabling locale fonts at those sites. Either
+the parameter should be dropped (and locale lookup unconditional from
+`sheetCtx`), or all 5 callers should pass it consistently. Surfaced 2026-04-26
+during the zoom-removal review; not touched because the change has semantic
+implications for non-canvas render sites.
 
 ---
 

@@ -206,7 +206,7 @@ export class Canvas {
                 renderCtx.fillStyle = "#000000";
 
                 // Row header sequence number
-                const textMetrics = getMeasureText(r + 1, renderCtx, this.sheetCtx);
+                const textMetrics = getMeasureText(r + 1, renderCtx);
 
                 const horizonAlignPos =
                     (this.sheetCtx.rowHeaderWidth - textMetrics.width) / 2;
@@ -394,7 +394,7 @@ export class Canvas {
                 renderCtx.fillStyle = "#000000";
 
                 // Column header sequence number
-                const textMetrics = getMeasureText(abc, renderCtx, this.sheetCtx);
+                const textMetrics = getMeasureText(abc, renderCtx);
 
                 const horizonAlignPos = Math.round(
                     start_c + (end_c - start_c) / 2 + offsetLeft - textMetrics.width / 2
@@ -1598,7 +1598,7 @@ export class Canvas {
             renderCtx.rect(pos_x, pos_y, cellWidth, cellHeight);
             renderCtx.clip();
 
-            const measureText = getMeasureText(value, renderCtx, this.sheetCtx);
+            const measureText = getMeasureText(value, renderCtx);
             const textMetrics = measureText.width + 14;
             const oneLineTextHeight =
                 measureText.actualBoundingBoxDescent +

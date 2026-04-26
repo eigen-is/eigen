@@ -22,7 +22,6 @@ import {
     handleCellAreaDoubleClick,
     handleCellAreaMouseDown,
     handleContextMenu,
-    handleKeydownForZoom,
     handleOverlayMouseMove,
     handleOverlayMouseUp,
     handleOverlayTouchEnd,
@@ -53,7 +52,6 @@ export const SheetOverlay: React.FC = () => {
     const [lastRangeText, setLastRangeText] = useState('');
     const [lastCellValue, setLastCellValue] = useState('');
     const { showAlert } = useAlert();
-    // const isMobile = browser.mobilecheck();
     const cellAreaMouseDown = useCallback(
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
             const { nativeEvent } = e;
@@ -239,19 +237,6 @@ export const SheetOverlay: React.FC = () => {
         ],
     );
 
-    const onKeyDownForZoom = useCallback(
-        (ev: KeyboardEvent) => {
-            const newZoom = handleKeydownForZoom(ev, context.zoomRatio);
-            if (newZoom !== context.zoomRatio) {
-                setContext((ctx) => {
-                    ctx.zoomRatio = newZoom;
-                    ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId)!].zoomRatio = newZoom;
-                });
-            }
-        },
-        [context.zoomRatio, setContext],
-    );
-
     const onTouchStart = useCallback(
         (e: React.TouchEvent<HTMLDivElement>) => {
             const { nativeEvent } = e;
@@ -337,7 +322,6 @@ export const SheetOverlay: React.FC = () => {
     useEffect(() => {
         refs.cellArea.current!.scrollLeft = context.scrollLeft;
         refs.cellArea.current!.scrollTop = context.scrollTop;
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [context.scrollLeft, context.scrollTop, refs.cellArea]);
 
     // Sync cellArea scroll position imperatively from globalCache,
@@ -370,13 +354,6 @@ export const SheetOverlay: React.FC = () => {
             document.removeEventListener('mouseup', onMouseUp);
         };
     }, [onMouseUp]);
-
-    useEffect(() => {
-        document.addEventListener('keydown', onKeyDownForZoom);
-        return () => {
-            document.removeEventListener('keydown', onKeyDownForZoom);
-        };
-    }, [onKeyDownForZoom]);
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: range text recomputed on selection/sheet changes; context.config.merge is read but stable per sheet
     const rangeText = useMemo(() => {

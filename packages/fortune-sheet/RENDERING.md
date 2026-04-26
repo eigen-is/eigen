@@ -27,7 +27,6 @@
           <DropDownList>                        DataVerification/DropdownList.tsx
       <SheetTab>                                SheetTab/index.tsx         (React)
         <SheetItem> per sheet                   SheetTab/SheetItem.tsx
-        <ZoomControl>                           ZoomControl/index.tsx
       <ContextMenu>                             ContextMenu/index.tsx      (React + shadcn DropdownMenu)
       <FilterMenu>                              ContextMenu/FilterMenu.tsx
       <SheetTabContextMenu>                     ContextMenu/SheetTab.tsx
@@ -116,7 +115,6 @@ Positioned with `left_move` / `top_move` / `width_move` / `height_move` from the
 When you double-click or type into a cell, InputBox appears:
 - A ContentEditable div positioned at the cell's location
 - `z-index: 19` when editing, `-1` when hidden
-- Scaled with `transform: scale(zoomRatio)`, origin top-left
 - Renders `FormulaSearch` dropdown and `FormulaHint` tooltip below when editing formulas
 
 ### 5. Formula Bar — FxEditor (React)
@@ -144,7 +142,6 @@ Small divs positioned over filtered column header cells:
 
 - Active image: `z-index: 300`, with resize handles (8-point) and control buttons (Crop, Restore, Delete)
 - Inactive images: `z-index: 200`, just `<img>` in a bordered div
-- All dimensions scaled by `zoomRatio`
 - ID: `luckysheet-modal-dialog-activeImage` (queried by `state/modules/image.ts`)
 
 ### 8. Comments (React DOM + Canvas arrow)
@@ -197,14 +194,13 @@ Pure React UI — no overlays:
 - shadcn `DropdownMenu` for formatting submenus
 - Tailwind styling
 
-### 13. Sheet Tabs + Zoom (React)
+### 13. Sheet Tabs (React)
 
-**Files**: `SheetTab/index.tsx`, `SheetTab/SheetItem.tsx`, `ZoomControl/index.tsx`
+**Files**: `SheetTab/index.tsx`, `SheetTab/SheetItem.tsx`
 
 Bottom bar:
 - Sheet tabs with drag-and-drop reordering
 - Scroll buttons (ChevronsLeft/Right) when tabs overflow
-- ZoomControl with +/- buttons and preset dropdown
 - Add sheet button, all-sheets list button
 
 ## Scrolling
@@ -217,16 +213,6 @@ Uses native browser scroll:
 - Scroll state lives in `globalCache` (NOT React context) to avoid re-rendering
 - Canvas redraws triggered via `globalCache.notifyScrollListeners()`
 - Headers sync scroll position imperatively
-
-## Zoom
-
-**File**: `ZoomControl/index.tsx`, applied throughout
-
-- Stored in `context.zoomRatio` (range 0.1 to 4.0)
-- Canvas: font sizes and row/column dimensions scaled
-- InputBox: `transform: scale(zoomRatio)` with `transform-origin: left top`
-- Images: width/height multiplied by `zoomRatio`
-- Presets: 10%, 30%, 50%, 70%, 100%, 150%, 200%, 300%, 400%
 
 ## Z-Index Stack
 

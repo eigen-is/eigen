@@ -187,8 +187,6 @@ export type Context = {
 
     chart_selection: any;
 
-    zoomRatio: number;
-
     showGridLines: boolean;
     allowEdit: boolean;
 
@@ -476,8 +474,6 @@ export function defaultContext(refs: RefValues): Context {
         lang: null, // language
         chart_selection: {},
 
-        zoomRatio: 1,
-
         showGridLines: true,
         allowEdit: true,
 
@@ -536,24 +532,11 @@ function calcRowColSize(ctx: Context, rowCount: number, colCount: number) {
             continue;
         }
 
-        // auto row height calculation
-        // if (rowlen === "auto") {
-        //   rowlen = computeRowlenByContent(ctx.flowdata, r);
-        // }
-        ctx.rh_height += Math.round(((rowlen as number) + 1) * ctx.zoomRatio);
+        ctx.rh_height += (rowlen as number) + 1;
 
         ctx.visibledatarow.push(ctx.rh_height); // temporary row height distribution
     }
 
-    // if add-row and back-to-top buttons are hidden, reduce the bottom blank area,
-    // but keep enough space for cell dropdown buttons
-    // if (
-    //   !luckysheetConfigsetting.enableAddRow &&
-    //   !luckysheetConfigsetting.enableAddBackTop
-    // ) {
-    //   ctx.rh_height += 29;
-    // } else {
-    // }
     ctx.rh_height += 80; // add blank space at the very bottom
 
     ctx.visibledatacolumn = [];
@@ -590,17 +573,7 @@ function calcRowColSize(ctx: Context, rowCount: number, colCount: number) {
             continue;
         }
 
-        // auto column width calculation
-        // if (firstcolumnlen === "auto") {
-        //   firstcolumnlen = computeColWidthByContent(
-        //     ctx.flowdata,
-        //     c,
-        //     rowCount
-        //   );
-        // }
-        ctx.ch_width += Math.round(
-            ((firstcolumnlen as number) + 1) * ctx.zoomRatio
-        );
+        ctx.ch_width += (firstcolumnlen as number) + 1;
 
         ctx.visibledatacolumn.push(ctx.ch_width); // temporary column width distribution
     }

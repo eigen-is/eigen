@@ -10,7 +10,6 @@ import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { addSheet, cancelActiveImgItem, cancelNormalSelected, locale, updateCell } from '../../state';
 import './index.css';
-import { ZoomControl } from '../ZoomControl';
 import { SheetItem } from './SheetItem';
 
 export const SheetTab: React.FC = () => {
@@ -118,7 +117,6 @@ export const SheetTab: React.FC = () => {
                                                         luckysheet_selection_range: draftCtx.luckysheet_selection_range,
                                                     };
                                                     draftCtx.currentSheetId = singleSheet.id!;
-                                                    draftCtx.zoomRatio = singleSheet.zoomRatio || 1;
                                                     cancelActiveImgItem(draftCtx, refs.globalCache);
                                                     cancelNormalSelected(draftCtx);
                                                 });
@@ -142,9 +140,6 @@ export const SheetTab: React.FC = () => {
                         </DropdownMenu>
                     </div>
                 )}
-                <div id="luckysheet-sheets-m" className="luckysheet-sheets-m lucky-button-custom">
-                    <i className="iconfont luckysheet-iconfont-caidan2" />
-                </div>
                 <div className="fortune-sheettab-container" id="fortune-sheettab-container">
                     {!isShowBoundary && <div className="boundary boundary-left" />}
                     <div
@@ -154,13 +149,9 @@ export const SheetTab: React.FC = () => {
                     >
                         {[...context.luckysheetfile]
                             .sort((a, b) => Number(a.order) - Number(b.order))
-                            .map((sheet) => {
-                                return <SheetItem key={sheet.id} sheet={sheet} />;
-                            })}
-                        {/* <SheetItem
-              isDropPlaceholder
-              sheet={{ name: "", id: "drop-placeholder" }}
-            /> */}
+                            .map((sheet) => (
+                                <SheetItem key={sheet.id} sheet={sheet} />
+                            ))}
                     </div>
                     {isShowBoundary && isShowScrollBtn && <div className="boundary boundary-right" />}
                 </div>
@@ -190,9 +181,6 @@ export const SheetTab: React.FC = () => {
                         <ChevronsRight width={12} height={12} aria-hidden="true" />
                     </div>
                 )}
-            </div>
-            <div className="fortune-sheet-area-right">
-                <ZoomControl />
             </div>
         </div>
     );
