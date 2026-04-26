@@ -177,8 +177,8 @@ type EigenChartProps = {
 ```
 
 When `width` and `height` are omitted, the component fills its parent via `<ResponsiveContainer>`. When provided, it
-renders at fixed dimensions. This dual mode covers all three contexts: sheets (fixed, zoom-scaled), docs (width from
-resize handles, height from aspect ratio), slides (fills bounding box).
+renders at fixed dimensions. This dual mode covers all three contexts: sheets (fixed), docs (width from resize handles,
+height from aspect ratio), slides (fills bounding box).
 
 Internally, `EigenChart` is a switch on `definition.type`:
 
@@ -257,8 +257,8 @@ CSS variables adapt to dark/light mode automatically.
 **Storage:** Charts live in `Y.Map("charts")` in the Yjs document. Each entry is a JSON string keyed by chart ID.
 
 **Overlay:** A new `ChartOverlay` component, sibling to `ImgBoxs` in the sheet overlay DOM. Each chart has
-`{id, left, top, width, height, definition}` stored in the Yjs map. Rendered with absolute positioning, scaled by
-`context.zoomRatio`, with z-index 250 (between images at 200 and active images at 300).
+`{id, left, top, width, height, definition}` stored in the Yjs map. Rendered with absolute positioning, with z-index
+250 (between images at 200 and active images at 300).
 
 **Move/resize:** Follow the `ImgBoxs` pattern: mousedown on the chart body starts a move; mousedown on corner handles
 starts a resize. Store updated position back to the Yjs map.
@@ -451,7 +451,7 @@ Horizontal bar charts are a `layout="vertical"` prop on `<BarChart>` in Recharts
 ### Phase 3: Sheets Integration
 
 - Add `Y.Map("charts")` to the sheets Yjs document
-- Create `chart-overlay.tsx` with absolute positioning, zoom scaling, move/resize
+- Create `chart-overlay.tsx` with absolute positioning, move/resize
 - Data extraction via `extractChartData()` from `WorkbookInstance`
 - "Insert Chart" button in toolbar
 - Debounced live updates when cell data changes
