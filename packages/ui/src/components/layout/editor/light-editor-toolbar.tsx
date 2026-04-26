@@ -41,7 +41,7 @@ export function LightEditorToolbar({ editor }: { editor: Editor }) {
     }, [editor, linkUrl]);
 
     return (
-        <div className="flex items-center gap-0.5 p-1 rounded-md border bg-popover shadow-md">
+        <div className="flex items-center gap-0.5 p-1 rounded-md border bg-popover text-popover-foreground shadow-md">
             <ToolbarButton
                 icon={Bold}
                 isActive={editor.isActive('bold')}

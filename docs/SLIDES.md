@@ -23,8 +23,10 @@ container rather than the browser viewport. The helpers `pxToPercentHeight(val)`
 
 ### Object Types
 
-**Text**: `text`, `fontFamily`, `fontSize`, `fontWeight`, `fontStyle`, `textDecoration`, `textAlign`, `verticalAlign`,
-`color`, `letterSpacing`, `lineHeight`, `highlightColor`, `backgroundColor`
+**Text**: `text` (TipTap HTML — edited via the shared `LightEditor`; use `htmlToPlainText` from
+`@workspace/lib/html` for plain-text previews like comment anchors and OS-clipboard text), `fontFamily`,
+`fontSize`, `fontWeight`, `fontStyle`, `textDecoration`, `textAlign`, `verticalAlign`, `color`,
+`letterSpacing`, `lineHeight`, `highlightColor`, `backgroundColor`
 **Image**: `mediaName` (file name, resolved at render time), `objectFit`
 **Common (BaseObject)**: `x`, `y`, `w`, `h`, `rotation`, `borderColor`, `borderWidth`, `borderRadius`,
 `commentChatNames` (plain string array — chat folder names linking to `.eigenchat` threads)

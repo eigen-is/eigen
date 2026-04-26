@@ -1,6 +1,7 @@
 import { useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
 import { formatFullDateTime } from '@workspace/lib/date';
+import { escapeHtml } from '@workspace/lib/html';
 import {
     createDraftEmail,
     useDeleteEmail,
@@ -148,9 +149,6 @@ export function useMailActions() {
         await Promise.allSettled(emails.map((mail) => moveMail.mutateAsync({ email: mail, mailbox: 'Junk' })));
         navigateToList();
     };
-
-    const escapeHtml = (s: string) =>
-        s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
     const formatEmailQuote = (email: Email) => {
         const fromName = escapeHtml(email.from?.value[0]?.name || '');

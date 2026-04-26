@@ -6,3 +6,9 @@ export function escapeHtml(text: string): string {
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;');
 }
+
+export function htmlToPlainText(html: string): string {
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    return div.textContent ?? '';
+}

@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "./fonts.css";
 @import "./eigen-prose.css";
+@import "./slide-text.css";
 
 @source "../../../apps/**/*.{ts,tsx}";
 @source "../../../packages/fortune-sheet/src/components/**/*.{ts,tsx}";

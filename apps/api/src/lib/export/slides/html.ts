@@ -1,5 +1,7 @@
+import { escapeHtml } from '@workspace/lib/html';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { escapeHtml } from '../../core';
+// CSS embedded as string at build time by Bun's bundler — no runtime file resolution needed
+import slideTextCSSRaw from '../../../../../../packages/ui/src/styles/slide-text.css' with { type: 'text' };
 import type { Mount } from '../../mount';
 import type { ExportResult } from '../export-document';
 import { getFontCSS } from '../fonts';
@@ -57,7 +59,7 @@ function wrapInDocument(title: string, slidesHtml: string, mode: 'html' | 'pdf')
 <head>
     <meta charset="utf-8">
     <title>${escapeHtml(title)}</title>
-    <style>${getFontCSS()}${css}</style>
+    <style>${getFontCSS()}${css}${slideTextCSSRaw}</style>
 </head>
 <body>
     ${mode === 'html' ? `<div class="deck">${slidesHtml}</div>` : slidesHtml}

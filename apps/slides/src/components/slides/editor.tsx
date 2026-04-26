@@ -11,6 +11,7 @@ import {
 import { restoreYjsDoc } from '@workspace/lib/collab';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants/colors';
 import { MediaResolverProvider, useCopyToMediaFolder, useMediaResolver, useUploadFile } from '@workspace/lib/drive';
+import { escapeHtml, htmlToPlainText } from '@workspace/lib/html';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -332,7 +333,7 @@ function SlideEditorInner({
             e.preventDefault();
             const data: EigenClipboardData = { version: 1, items };
             const firstObj = selectedObjectIds.length === 1 ? deck.objects[selectedObjectIds[0]] : undefined;
-            const textPreview = firstObj?.type === 'text' ? firstObj.text : undefined;
+            const textPreview = firstObj?.type === 'text' ? htmlToPlainText(firstObj.text) : undefined;
             writeEigenClipboard(e, data, textPreview);
         };
         const handlePaste = (e: ClipboardEvent) => {
@@ -432,7 +433,7 @@ function SlideEditorInner({
                 e.preventDefault();
                 addObject(activeSlideId, {
                     ...DEFAULT_TEXT_OBJECT,
-                    text: text.trim(),
+                    text: `<p>${escapeHtml(text.trim()).replace(/\n/g, '<br>')}</p>`,
                 } as Omit<SlideObject, 'id' | 'slideId'>);
             }
         };
@@ -466,10 +467,6 @@ function SlideEditorInner({
         setEditingObjectId(objId);
     }, []);
 
-    const handleStopEditing = useCallback(() => {
-        setEditingObjectId(null);
-    }, []);
-
     const handleCopyObject = useCallback(
         (objId: string) => {
             const obj = deck.objects[objId];
@@ -477,7 +474,7 @@ function SlideEditorInner({
             const item = buildClipboardItem(obj, resolveMediaPath);
             if (!item) return;
             const data: EigenClipboardData = { version: 1, items: [item] };
-            writeEigenClipboardAsync(data, obj.type === 'text' ? obj.text : undefined);
+            writeEigenClipboardAsync(data, obj.type === 'text' ? htmlToPlainText(obj.text) : undefined);
         },
         [deck.objects, resolveMediaPath],
     );
@@ -486,6 +483,7 @@ function SlideEditorInner({
         (objId: string) => {
             deleteObject(objId);
             setSelectedObjectIds((prev) => prev.filter((id) => id !== objId));
+            setEditingObjectId((prev) => (prev === objId ? null : prev));
         },
         [deleteObject],
     );
@@ -494,6 +492,7 @@ function SlideEditorInner({
         (ids: string[]) => {
             deleteObjects(ids);
             setSelectedObjectIds([]);
+            setEditingObjectId((prev) => (prev && ids.includes(prev) ? null : prev));
         },
         [deleteObjects],
     );
@@ -544,6 +543,7 @@ function SlideEditorInner({
     );
 
     const handlePresent = useCallback(() => {
+        setEditingObjectId(null);
         const el = document.documentElement;
         if (el.requestFullscreen) {
             el.requestFullscreen().then(() => setIsPresenting(true));
@@ -553,6 +553,8 @@ function SlideEditorInner({
     const handleRestore = useCallback(
         (state: Uint8Array) => {
             if (!yjsDoc) return;
+            setEditingObjectId(null);
+            setSelectedObjectIds([]);
             restoreYjsDoc(yjsDoc, state);
         },
         [yjsDoc],
@@ -563,7 +565,7 @@ function SlideEditorInner({
             const obj = deck.objects[objId];
             if (!obj) return;
             setCommentObjectId(objId);
-            setCommentSelectedText(obj.type === 'text' ? obj.text.slice(0, 100) : 'Image');
+            setCommentSelectedText(obj.type === 'text' ? htmlToPlainText(obj.text).slice(0, 100) : 'Image');
             setCommentDialogOpen(true);
         },
         [deck.objects],
@@ -668,6 +670,7 @@ function SlideEditorInner({
                         onSelectSlide={(id) => {
                             setActiveSlideId(id);
                             setSelectedObjectIds([]);
+                            setEditingObjectId(null);
                         }}
                         onDragStart={handleDragStart}
                         onDragEnd={handleDragEnd}
@@ -688,7 +691,6 @@ function SlideEditorInner({
                                         onSelectObject={handleSelectObject}
                                         onSelectObjects={setSelectedObjectIds}
                                         onStartEditing={handleStartEditing}
-                                        onStopEditing={handleStopEditing}
                                         onUpdateObject={updateObject}
                                         onDropImage={canWrite ? handleDropImage : undefined}
                                         onCopyObject={handleCopyObject}
@@ -734,6 +736,7 @@ function SlideEditorInner({
                                                 if (obj.commentChatNames?.includes(chatName)) {
                                                     setActiveSlideId(obj.slideId);
                                                     setSelectedObjectIds([obj.id]);
+                                                    setEditingObjectId(null);
                                                     break;
                                                 }
                                             }

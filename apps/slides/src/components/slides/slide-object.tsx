@@ -2,6 +2,7 @@ import { isLightColor } from '@workspace/lib/constants';
 import { EIGEN_STICKIES_COLORS } from '@workspace/lib/constants/colors';
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import { useMediaResolver } from '@workspace/lib/drive';
+import { escapeHtml } from '@workspace/lib/html';
 import {
     ContextMenu,
     ContextMenuContent,
@@ -12,6 +13,7 @@ import {
     ContextMenuSubTrigger,
     ContextMenuTrigger,
 } from '@workspace/ui/components/context-menu';
+import { LightEditor } from '@workspace/ui/components/layout/editor';
 import {
     ArrowDownToLine,
     ArrowUpToLine,
@@ -25,7 +27,7 @@ import {
     RotateCcw,
     Trash2,
 } from 'lucide-react';
-import { memo, useEffect, useRef } from 'react';
+import { memo } from 'react';
 import { BORDER_RADIUS_ROUND, pxToPercent, SLIDE_BASE_HEIGHT, SLIDE_BASE_WIDTH, type SlideObject } from './types';
 
 function pxToPercentHeight(val: number): string {
@@ -77,6 +79,12 @@ export function getVerticalAlignStyle(verticalAlign: string | undefined): React.
     };
 }
 
+function buildTextHtml(obj: SlideObject & { type: 'text' }): string {
+    // highlightColor lands inside a style="..." attribute; escape so it can't break out.
+    if (!obj.highlightColor) return obj.text;
+    return `<span style="background-color:${escapeHtml(obj.highlightColor)};box-decoration-break:clone;-webkit-box-decoration-break:clone">${obj.text}</span>`;
+}
+
 export function ReadOnlySlideObject({ obj }: { obj: SlideObject }) {
     const { resolveMediaUrl } = useMediaResolver();
     const vAlign = obj.type === 'text' ? obj.verticalAlign || 'top' : undefined;
@@ -84,21 +92,11 @@ export function ReadOnlySlideObject({ obj }: { obj: SlideObject }) {
         <div className="absolute" style={getObjectPositionStyle(obj)}>
             {obj.type === 'text' && (
                 <div className="w-full h-full flex" style={getVerticalAlignStyle(vAlign)}>
-                    <p className="whitespace-pre-wrap break-words w-full" style={getTextStyle(obj)}>
-                        {obj.highlightColor ? (
-                            <span
-                                style={{
-                                    backgroundColor: obj.highlightColor,
-                                    boxDecorationBreak: 'clone',
-                                    WebkitBoxDecorationBreak: 'clone',
-                                }}
-                            >
-                                {obj.text}
-                            </span>
-                        ) : (
-                            obj.text
-                        )}
-                    </p>
+                    <div
+                        className="slide-text break-words w-full"
+                        style={getTextStyle(obj)}
+                        dangerouslySetInnerHTML={{ __html: buildTextHtml(obj) }}
+                    />
                 </div>
             )}
             {obj.type === 'image' && (
@@ -122,7 +120,6 @@ type SlideObjectViewProps = {
     isMultiSelected: boolean;
     onSelect: (objId: string, additive?: boolean) => void;
     onStartEditing: (objId: string) => void;
-    onStopEditing: () => void;
     onUpdate: (objId: string, updates: Partial<SlideObject>) => void;
     onDragStart: (e: React.MouseEvent, objId: string, mode: 'move', x: number, y: number, w: number, h: number) => void;
     onResizeStart: (
@@ -170,7 +167,6 @@ export const SlideObjectView = memo(function SlideObjectView({
     isMultiSelected,
     onSelect,
     onStartEditing,
-    onStopEditing,
     onUpdate,
     onDragStart,
     onResizeStart,
@@ -191,14 +187,6 @@ export const SlideObjectView = memo(function SlideObjectView({
     onCommentDelete,
 }: SlideObjectViewProps) {
     const { resolveMediaUrl } = useMediaResolver();
-    const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-    useEffect(() => {
-        if (editing && textareaRef.current) {
-            textareaRef.current.focus();
-            textareaRef.current.select();
-        }
-    }, [editing]);
 
     const handleMouseDown = (e: React.MouseEvent) => {
         if (editing) return;
@@ -237,40 +225,31 @@ export const SlideObjectView = memo(function SlideObjectView({
                     className="w-full h-full flex overflow-hidden select-none pointer-events-none"
                     style={getVerticalAlignStyle(verticalAlign)}
                 >
-                    <p className="whitespace-pre-wrap break-words w-full" style={textStyle}>
-                        {obj.highlightColor ? (
-                            <span
-                                style={{
-                                    backgroundColor: obj.highlightColor,
-                                    boxDecorationBreak: 'clone',
-                                    WebkitBoxDecorationBreak: 'clone',
-                                }}
-                            >
-                                {obj.text}
-                            </span>
-                        ) : (
-                            obj.text
-                        )}
-                    </p>
+                    <div
+                        className="slide-text break-words w-full"
+                        style={textStyle}
+                        dangerouslySetInnerHTML={{ __html: buildTextHtml(obj) }}
+                    />
                 </div>
             )}
 
             {obj.type === 'text' && editing && (
-                <div className="w-full h-full flex overflow-hidden" style={getVerticalAlignStyle(verticalAlign)}>
-                    <textarea
-                        ref={textareaRef}
-                        className="w-full resize-none bg-transparent border-none outline-none whitespace-pre-wrap break-words p-0"
-                        style={{ ...textStyle, height: 'auto', maxHeight: '100%' }}
-                        rows={1}
-                        value={obj.text}
-                        onChange={(e) => onUpdate(obj.id, { text: e.target.value })}
-                        onBlur={onStopEditing}
-                        onKeyDown={(e) => {
-                            if (e.key === 'Escape') onStopEditing();
-                            e.stopPropagation();
-                        }}
-                        onMouseDown={(e) => e.stopPropagation()}
-                    />
+                <div
+                    className="w-full h-full flex overflow-hidden"
+                    style={getVerticalAlignStyle(verticalAlign)}
+                    onMouseDown={(e) => e.stopPropagation()}
+                >
+                    <div className="slide-text w-full max-h-full overflow-hidden" style={textStyle}>
+                        <LightEditor
+                            content={obj.text}
+                            onChange={(html) => onUpdate(obj.id, { text: html })}
+                            toolbar="floating"
+                            proseStyle={false}
+                            className="min-h-0 break-words"
+                            containerClassName="relative flex flex-col w-full"
+                            onReady={(e) => e.chain().focus().selectAll().run()}
+                        />
+                    </div>
                 </div>
             )}
 

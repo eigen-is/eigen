@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { escapeHtml } from '@workspace/lib/html';
 
 type BlogPostMeta = {
     title: string;
@@ -10,10 +11,6 @@ type BlogPostMeta = {
 const DEFAULT_DESCRIPTION =
     'Eigen is your minimal, secure workspace in the cloud. Simple and secure. You control your data.';
 const BASE_URL = 'https://eigen.is';
-
-function escapeHtml(str: string): string {
-    return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
 
 // Replace OG/meta tag values in the base HTML template for a specific route.
 // The template is the Vite-generated index.html with hashed asset paths.
