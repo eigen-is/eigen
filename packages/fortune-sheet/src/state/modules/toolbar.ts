@@ -22,7 +22,7 @@ import {normalizeSelection, selectionCopyShow, selectIsOverlap,} from "./selecti
 import {sortSelection} from "./sort";
 import {hasPartMC, isdatatypemulti, isRealNull, isRealNum,} from "./validation";
 import {showLinkCard} from "./hyperlink";
-import {cfSplitRange} from "./conditionalFormat";
+import {cfSplitRange} from "./conditionFormat";
 import {getCellTextInfo} from "./text";
 import {setFormulaCellInfo} from "./formulaHelper";
 

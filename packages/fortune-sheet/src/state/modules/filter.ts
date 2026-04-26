@@ -8,7 +8,7 @@ import {normalizeSelection} from "./selection";
 import {isRealNull} from "./validation";
 import {normalizedAttr} from "./cell";
 import {sortDataRange} from "./sort";
-import {checkCF, getComputeMap} from "./ConditionFormat";
+import {checkCF, getComputeMap} from "./conditionFormat";
 
 // Filter configuration state
 export function labelFilterOptionState(

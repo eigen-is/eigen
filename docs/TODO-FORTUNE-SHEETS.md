@@ -314,6 +314,7 @@ implementations:
 - ~~`FormulaSearch`, `ZoomControl`, `SheetOverlay` bottom-add-row shadcn migrations~~ — done
 - ~~Rename `LinkEidtCard/` → `LinkEditCard/`~~ — done (`dd46088a` + `3b5642a2`)
 - ~~9 `<div role="button">` pseudo-buttons → real `<button type="button">`~~ — done (`91e28493`)
+- ~~Dedupe `ConditionFormat.ts` vs `conditionalFormat.ts`~~ — merged into `conditionFormat.ts` (camelCase). `cfSplitRange` properly typed with `SingleRange`, dead code removed, boundary types tightened (`DataBar` discriminated union, `CellFormatStyle`, `ComputeMap`)
 
 ### Next — Medium effort
 
@@ -343,8 +344,14 @@ API bridge. Outstanding work:
   preserve lodash's null-safety.
 - **`any` annotations**: ~210 across `state/` (30 in `rowcol.ts` alone). Tightening enables strictness.
 - **`@ts-ignore` debt**: ~80 directives across `state/` + `components/` — each hides a typing gap.
-- **`ConditionFormat.ts` (1,768 lines) vs `conditionalFormat.ts` (578 lines)**: both live in
-  `state/modules/` with unclear separation. Audit then merge or rename.
+- ~~**`ConditionFormat.ts` (1,768 lines) vs `conditionalFormat.ts` (578 lines)**~~: done.
+  `conditionalFormat.ts` deleted (its only function `cfSplitRange` was a duplicate of
+  `CFSplitRange` with proper `SingleRange` typing). `ConditionFormat.ts` renamed to
+  `conditionFormat.ts` (camelCase to match neighbors), `CFSplitRange` renamed to
+  `cfSplitRange` and properly typed. Dead code removed (`getHistoryRules`,
+  `getCurrentRules`, four commented blocks). Cache/lookup boundary types tightened
+  (`DataBar` discriminated union, `CellFormatStyle`, `ComputeMap`). All importers
+  updated (cell, dropCell, filter, moveCells, selection, toolbar, paste).
 - **Enable biome on `state/`**: now unblocked; ~210 `any` annotations will surface as the main
   fix-up work.
 - **Enable biome on `components/`**: **done** — covered by biome lint/format. The

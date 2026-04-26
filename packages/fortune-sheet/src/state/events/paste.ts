@@ -12,7 +12,7 @@ import {getBorderInfoCompute} from "../modules/border";
 import {expandRowsAndColumns, storeSheetParamALL} from "../modules/sheet";
 import {jfrefreshgrid} from "../modules/refresh";
 import {setRowHeight} from "../api";
-import {CFSplitRange} from "../modules";
+import {cfSplitRange} from "../modules";
 import {setFormulaCellInfo} from "../modules/formulaHelper";
 
 function postPasteCut(
@@ -674,7 +674,7 @@ function pasteHandlerOfCutPaste(
 
                     for (let j = 0; j < bd_range.length; j += 1) {
                         bd_emptyRange = bd_emptyRange.concat(
-                            CFSplitRange(
+                            cfSplitRange(
                                 bd_range[j],
                                 {row: [c_r1, c_r2], column: [c_c1, c_c2]},
                                 {row: [minh, maxh], column: [minc, maxc]},
@@ -874,7 +874,7 @@ function pasteHandlerOfCutPaste(
 
                     for (let j = 0; j < bd_range.length; j += 1) {
                         bd_emptyRange = bd_emptyRange.concat(
-                            CFSplitRange(
+                            cfSplitRange(
                                 bd_range[j],
                                 {row: [c_r1, c_r2], column: [c_c1, c_c2]},
                                 {row: [minh, maxh], column: [minc, maxc]},
@@ -914,7 +914,7 @@ function pasteHandlerOfCutPaste(
                 let emptyRange2: any = [];
 
                 for (let j = 0; j < source_curCdformat_cellrange.length; j += 1) {
-                    const range = CFSplitRange(
+                    const range = cfSplitRange(
                         source_curCdformat_cellrange[j],
                         {row: [c_r1, c_r2], column: [c_c1, c_c2]},
                         {row: [minh, maxh], column: [minc, maxc]},
@@ -923,7 +923,7 @@ function pasteHandlerOfCutPaste(
 
                     emptyRange = emptyRange.concat(range);
 
-                    const range2 = CFSplitRange(
+                    const range2 = cfSplitRange(
                         source_curCdformat_cellrange[j],
                         {row: [c_r1, c_r2], column: [c_c1, c_c2]},
                         {row: [minh, maxh], column: [minc, maxc]},
@@ -1008,7 +1008,7 @@ function pasteHandlerOfCutPaste(
                 const {cellrange} = curCdformat[i];
                 let emptyRange: any = [];
                 for (let j = 0; j < cellrange.length; j += 1) {
-                    const range = CFSplitRange(
+                    const range = cfSplitRange(
                         cellrange[j],
                         {row: [c_r1, c_r2], column: [c_c1, c_c2]},
                         {row: [minh, maxh], column: [minc, maxc]},
@@ -1422,7 +1422,7 @@ function pasteHandlerOfCopyPaste(
                         maxcellCahe = minc + tc * copyc;
 
                         for (let j = 0; j < cf_range.length; j += 1) {
-                            const range = CFSplitRange(
+                            const range = cfSplitRange(
                                 cf_range[j],
                                 {row: [c_r1, c_r2], column: [c_c1, c_c2]},
                                 {row: [mth, maxrowCache - 1], column: [mtc, maxcellCahe - 1]},
