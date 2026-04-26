@@ -135,17 +135,24 @@ In rough priority order:
    per-site judgement and matching smoke-test path. Remove the
    `biome.jsonc` override entirely once this lands. **Shipped 2026-04-26.**
 
-## PR 2 outcomes (2026-04-26)
+## PR 2 outcomes (2026-04-26, commit `d65a49fb`)
 
 The 6 remaining sites (`FilterMenu.tsx:284` was resolved earlier when the
-floating panel was rewritten as a shadcn `Popover`). 4 fixed by code refactor,
-2 kept as `biome-ignore` (legitimate intentional patterns).
+floating panel was rewritten as a shadcn `Popover`). 3 sites lose
+`biome-ignore` entirely via real refactor; 1 site is also fixed (real bug)
+but keeps `biome-ignore` for a separate trigger-as-dep pattern; 2 sites
+keep `biome-ignore` with permanent reasons.
 
 | Site | Resolution |
 |---|---|
 | `SheetOverlay/index.tsx:417` | `biome-ignore` — intentional one-shot snapshot on focus toggle. Adding `rangeText`/`cellValue()` would re-snapshot continuously. |
 | `Toolbar/index.tsx:99` (`getToolbarItem`) | `biome-ignore` — `settings` is recreated on every props change in Workbook (`Object.values(props)` spread); adding it would invalidate every toolbar item memo. `settings.hooks?.onInsertImage` is read from closure at click time. |
-| `Toolbar/index.tsx:890` (`mobileToolbar`) | **Fixed** — wrapped `clickHandler` in `useCallback([setContext, refs.cellInput, refs.globalCache])` and added it to `mobileToolbar`'s deps. No `biome-ignore` needed. |
-| `Workbook/index.tsx:201` (`setContextWithProduce`) | **Fixed** — hoisted `dataToCelldata` (pure) and `reduceUndoList` (takes `globalCache` ref as 3rd param) to module scope. Both are now stable. No `biome-ignore` needed. |
-| `Workbook/index.tsx:283` (`handleUndo`) | **Fixed** — same as above; `dataToCelldata` is now module-scoped. No `biome-ignore` needed. |
-| `Workbook/index.tsx:391` (settings-sync effect) | **Fixed** — added `mergedSettings.fontList` to deps (real missing read at line 420). `context.currentSheetId` + `context.luckysheetfile.length` retained as intentional re-trigger deps (body reads via `draftCtx`); `biome-ignore` documents the trigger-as-dep pattern. |
+| `Toolbar/index.tsx` (`mobileToolbar` memo) | **Fixed** — wrapped `clickHandler` in `useCallback(..., [setContext, refs])` and added it to `mobileToolbar`'s deps. No `biome-ignore` needed. |
+| `Workbook/index.tsx` (`setContextWithProduce`) | **Fixed** — hoisted `dataToCelldata` (pure) and `reduceUndoList` (takes `globalCache` ref as 3rd param) to module scope. Both are now stable. No `biome-ignore` needed. |
+| `Workbook/index.tsx` (`handleUndo`) | **Fixed** — same as above; `dataToCelldata` is now module-scoped. No `biome-ignore` needed. |
+| `Workbook/index.tsx` (settings-sync `useEffect`) | **Fixed** (real bug) — added `mergedSettings.fontList` to deps (real missing read; `draftCtx.fontList = mergedSettings.fontList` was not picked up on runtime fontList changes). `context.currentSheetId` + `context.luckysheetfile.length` retained as intentional re-trigger deps (body reads via `draftCtx`); `biome-ignore` documents the trigger-as-dep pattern. |
+
+Also tightened in the same commit: `Settings.customToolbarItems` type
+(`icon: LucideIcon` required, `onClick: () => void`) — drops 2
+`noExplicitAny` ignores in `Toolbar/index.tsx`. No internal callers, safe
+public-type narrowing.
