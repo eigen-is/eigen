@@ -42,8 +42,8 @@ import { DataVerification } from '../DataVerification';
 import { FormatSearch } from '../FormatSearch';
 import { FormulaSearch } from '../FormulaSearch';
 import { LocationCondition } from '../LocationCondition';
+import { CustomBorder } from '../MenuBar/CustomBorder';
 import { SplitColumn } from '../SplitColumn';
-import { CustomBorder } from './CustomBorder';
 import {
     ColorCombo,
     ICON_MAP,
