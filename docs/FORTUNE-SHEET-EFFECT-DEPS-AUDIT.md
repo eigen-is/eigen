@@ -111,8 +111,8 @@ In rough priority order:
    edit, formula entry with arrow-key range selection, paste from
    clipboard, Esc to cancel edit, switch sheets while editing.
 2. **Sheet redraw / freeze** (Sheet:186, 193, 198, 228 + SheetOverlay
-   scroll sync): scroll, resize, change zoom, freeze a row + a column,
-   add columns past the freeze line.
+   scroll sync): scroll, resize, freeze a row + a column, add columns
+   past the freeze line.
 3. **DropdownList & DataVerification** (7+6+3 diags): set up a
    data-validation dropdown, switch sheets, change validation type,
    verify pre-selected values.
