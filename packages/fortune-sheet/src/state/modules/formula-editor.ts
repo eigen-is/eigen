@@ -16,8 +16,8 @@ import {
 import {createRangeHightlight, setCaretPosition} from "./formula-range";
 
 function functionHTML(txt: string) {
-    if (txt.substr(0, 1) === "=") {
-        txt = txt.substr(1);
+    if (txt[0] === "=") {
+        txt = txt.slice(1);
     }
 
     const funcstack = txt.split("");
@@ -211,7 +211,7 @@ function functionHTML(txt: string) {
                     let alltxt = "";
 
                     if (arraystart > 0) {
-                        alltxt += `<span dir="auto" class="luckysheet-formula-text-color">${str.substr(
+                        alltxt += `<span dir="auto" class="luckysheet-formula-text-color">${str.slice(
                             0,
                             arraystart
                         )}</span>`;
@@ -220,9 +220,8 @@ function functionHTML(txt: string) {
                     alltxt += `<span dir="auto" style="color:#959a05" class="luckysheet-formula-text-array">${arraytxt}</span>`;
 
                     if (arraystart + arraytxt.length < str.length) {
-                        alltxt += `<span dir="auto" class="luckysheet-formula-text-color">${str.substr(
-                            arraystart + arraytxt.length,
-                            str.length
+                        alltxt += `<span dir="auto" class="luckysheet-formula-text-color">${str.slice(
+                            arraystart + arraytxt.length
                         )}</span>`;
                     }
 

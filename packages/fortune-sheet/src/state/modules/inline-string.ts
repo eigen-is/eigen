@@ -140,7 +140,6 @@ export function convertSpanToShareString(
         ) as Cell;
 
         const curStyleListString = JSON.stringify(styleList);
-        // let v = span.innerHTML;
         let v = span.innerText;
         v = v.replace(/\n/g, "\r\n");
         if (i === $dom.length - 1) {

@@ -1215,17 +1215,6 @@ function getDataByType(
 
             applyData = fillCopy(data, len);
         }
-        // } else if (type === "2") {
-        //   // fill format only
-        //   if (direction === "up" || direction === "left") {
-        //     data.reverse();
-        //   }
-
-        //   applyData = fillOnlyFormat(data, len);
-        // } else if (type === "3") {
-        //   // fill without format
-        //   const dataArr = getDataByType(data, len, direction, "1", dataType);
-        //   applyData = fillWithoutFormat(dataArr);
     } else if (type === "4") {
         // fill by days
         if (data.length === 2) {
@@ -2993,11 +2982,7 @@ export function onDropCellSelectEnd(
             },
         ]);
 
-        try {
-            updateDropCell(ctx);
-        } catch (err) {
-            console.error(err);
-        }
+        updateDropCell(ctx);
         // createIcon();
 
         const selectedMoveEle = container.querySelector(
