@@ -46,7 +46,6 @@ type AdditionalProps = {
     onChange?: (data: SheetType[]) => void;
     onOp?: (op: Op[]) => void;
     toolbarLeftItems?: React.ReactNode;
-    toolbarCenterItems?: React.ReactNode;
     toolbarRightItems?: React.ReactNode;
 };
 
@@ -116,10 +115,7 @@ function reduceUndoList(ctx: Context, ctxBefore: Context, globalCache: React.Mut
 }
 
 export const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
-    (
-        { onChange, onOp, toolbarLeftItems, toolbarCenterItems, toolbarRightItems, data: originalData, ...props },
-        ref,
-    ) => {
+    ({ onChange, onOp, toolbarLeftItems, toolbarRightItems, data: originalData, ...props }, ref) => {
         const scrollListeners = useRef(new Set<() => void>());
         const globalCache = useRef<GlobalCache>({
             undoList: [],
@@ -752,7 +748,9 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                             </ul>
                         </section>
                         <div className="w-full">
-                            {mergedSettings.showToolbar && <MenuBar />}
+                            {mergedSettings.showToolbar && (
+                                <MenuBar leftItems={toolbarLeftItems} rightItems={toolbarRightItems} />
+                            )}
                             {mergedSettings.showFormulaBar && <FxEditor />}
                         </div>
                         <Sheet sheet={sheet} />
