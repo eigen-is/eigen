@@ -958,7 +958,7 @@ export function handleNumberDecrease(ctx: Context, cellInput: HTMLDivElement) {
     // Wan/Yi (10,000/100,000,000) number format
     const reg = /^(w|W)((0?)|(0\.0+))$/;
     if (reg.test(foucsStatus.fa)) {
-        if (foucsStatus.fa.indexOf(".") > -1) {
+        if (foucsStatus.fa.includes(".")) {
             if (foucsStatus.fa.substr(-2) === ".0") {
                 updateFormat(
                     ctx,
@@ -982,11 +982,10 @@ export function handleNumberDecrease(ctx: Context, cellInput: HTMLDivElement) {
 
         return;
     }
-    // Uncaught ReferenceError: Cannot access 'fa' before initialization
     let prefix = "";
     let main = "";
     let fa = [];
-    if (foucsStatus.fa.indexOf(".") > -1) {
+    if (foucsStatus.fa.includes(".")) {
         fa = foucsStatus.fa.split(".");
         [prefix, main] = fa;
     } else {
@@ -1005,7 +1004,7 @@ export function handleNumberDecrease(ctx: Context, cellInput: HTMLDivElement) {
     }
 
     let fmt = "";
-    if (foucsStatus.fa.indexOf(".") > -1) {
+    if (foucsStatus.fa.includes(".")) {
         let suffix = main;
         if (tail.length > 0) {
             suffix = main.replace(tail, "");
@@ -1050,7 +1049,7 @@ export function handleNumberIncrease(ctx: Context, cellInput: HTMLDivElement) {
     // Wan/Yi (10,000/100,000,000) number format
     const reg = /^(w|W)((0?)|(0\.0+))$/;
     if (reg.test(foucsStatus.fa)) {
-        if (foucsStatus.fa.indexOf(".") > -1) {
+        if (foucsStatus.fa.includes(".")) {
             updateFormat(ctx, cellInput, flowdata, "ct", `${foucsStatus.fa}0`);
         } else {
             if (foucsStatus.fa.substr(-1) === "0") {
@@ -1063,12 +1062,11 @@ export function handleNumberIncrease(ctx: Context, cellInput: HTMLDivElement) {
         return;
     }
 
-    // Uncaught ReferenceError: Cannot access 'fa' before initialization
     let prefix = "";
     let main = "";
     let fa = [];
 
-    if (foucsStatus.fa.indexOf(".") > -1) {
+    if (foucsStatus.fa.includes(".")) {
         fa = foucsStatus.fa.split(".");
         [prefix, main] = fa;
     } else {
@@ -1087,7 +1085,7 @@ export function handleNumberIncrease(ctx: Context, cellInput: HTMLDivElement) {
     }
 
     let fmt = "";
-    if (foucsStatus.fa.indexOf(".") > -1) {
+    if (foucsStatus.fa.includes(".")) {
         let suffix = main;
         if (tail.length > 0) {
             suffix = main.replace(tail, "");

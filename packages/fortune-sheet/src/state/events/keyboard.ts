@@ -36,16 +36,6 @@ export function handleGlobalEnter(
         }
         e.preventDefault();
     } else if (ctx.luckysheetCellUpdate.length > 0) {
-        // if (
-        //   $("#luckysheet-formula-search-c").is(":visible") &&
-        //   formula.searchFunctionCell != null
-        // ) {
-        //   formula.searchFunctionEnter(
-        //     $("#luckysheet-formula-search-c").find(
-        //       ".luckysheet-formula-search-item-active"
-        //     )
-        //   );
-        // } else {
         const lastCellUpdate = clone(ctx.luckysheetCellUpdate);
         updateCell(
             ctx,
@@ -64,24 +54,8 @@ export function handleGlobalEnter(
             },
         ];
         moveHighlightCell(ctx, "down", 1, "rangeOfSelect");
-        // }
-
-        // // if the parameter popup is visible, hide it
-        // if ($("#luckysheet-search-formula-parm").is(":visible")) {
-        //   $("#luckysheet-search-formula-parm").hide();
-        // }
-        // // if the parameter range-selection popup is visible, hide it
-        // if ($("#luckysheet-search-formula-parm-select").is(":visible")) {
-        //   $("#luckysheet-search-formula-parm-select").hide();
-        // }
         e.preventDefault();
     } else {
-        // if (
-        //   $(event.target).hasClass("formulaInputFocus") ||
-        //   $("#luckysheet-conditionformat-dialog").is(":visible")
-        // ) {
-        //   return;
-        // }
         if ((ctx.luckysheet_select_save?.length ?? 0) > 0) {
             const last =
                 ctx.luckysheet_select_save![ctx.luckysheet_select_save!.length - 1];

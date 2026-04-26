@@ -54,13 +54,13 @@ function setLineDash(
     try {
         if (type === "Hair") {
             canvasborder.setLineDash([1, 2]);
-        } else if (type.indexOf("DashDotDot") > -1) {
+        } else if (type.includes("DashDotDot")) {
             canvasborder.setLineDash([2, 2, 5, 2, 2]);
-        } else if (type.indexOf("DashDot") > -1) {
+        } else if (type.includes("DashDot")) {
             canvasborder.setLineDash([2, 5, 2]);
-        } else if (type.indexOf("Dotted") > -1) {
+        } else if (type.includes("Dotted")) {
             canvasborder.setLineDash([2]);
-        } else if (type.indexOf("Dashed") > -1) {
+        } else if (type.includes("Dashed")) {
             canvasborder.setLineDash([3]);
         } else {
             canvasborder.setLineDash([0]);
@@ -71,7 +71,7 @@ function setLineDash(
 
     canvasborder.beginPath();
 
-    if (type.indexOf("Medium") > -1) {
+    if (type.includes("Medium")) {
         if (hv === "h") {
             canvasborder.moveTo(moveX, moveY - 0.5);
             canvasborder.lineTo(toX, toY - 0.5);
