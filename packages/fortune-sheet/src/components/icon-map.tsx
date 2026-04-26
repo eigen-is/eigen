@@ -9,7 +9,6 @@ import {
     ArrowUpNarrowWide,
     Baseline,
     Bold,
-    Camera,
     Check,
     ChevronDown,
     ChevronRight,
@@ -32,7 +31,6 @@ import {
     Italic,
     LayoutGrid,
     Link,
-    Locate,
     type LucideIcon,
     type LucideProps,
     Minus,
@@ -118,13 +116,11 @@ export const ICON_MAP: Record<string, LucideIcon> = {
 
     // Tools
     search: Search,
-    screenshot: Camera,
     splitColumn: Columns3,
     dataVerification: ShieldCheck,
     image: ImagePlus,
     'formula-sum': Sigma,
     conditionFormat: FileCode2,
-    locationCondition: Locate,
 
     // Colors
     'font-color': Baseline,

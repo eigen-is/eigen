@@ -9154,7 +9154,6 @@ export default {
         conditionalFormat: "Conditional format",
         pivotTable: "Pivot Table",
         chart: "Chart",
-        screenshot: "Screenshot",
         splitColumn: "Split text",
         insertImage: "Insert image",
         insertLink: "Insert link",
@@ -9749,23 +9748,6 @@ export default {
         rowOverLimit: "10000 row limit exceeded",
         columnOverLimit: "1000 column limit exceeded",
     },
-    screenshot: {
-        screenshotTipNoSelection: "Please select the scope of the screenshot",
-        screenshotTipTitle: "Warning！",
-        screenshotTipHasMerge: "This operation cannot be performed on merged cells",
-        screenshotTipHasMulti:
-            "This operation cannot be performed on multiple selection regions",
-        screenshotTipSuccess: "Successful",
-        screenshotImageName: "Screenshot",
-
-        downLoadClose: "Close",
-        downLoadCopy: "Copy to clipboard",
-        downLoadBtn: "Download",
-        browserNotTip: "not supported by IE browser!",
-        rightclickTip: 'Please right-click "copy" on the picture',
-        successTip:
-            'Successfully (if pasting fails, please right-click on the image to "copy image")',
-    },
     splitText: {
         splitDelimiters: "Delimiters",
         splitOther: "Other",
@@ -9861,7 +9843,6 @@ export default {
         locationBool: "Logical",
         locationError: "Error",
         locationNull: "Null",
-        locationCondition: "Conditional format",
         locationRowSpan: "Row span",
         locationColumnSpan: "Column span",
 
