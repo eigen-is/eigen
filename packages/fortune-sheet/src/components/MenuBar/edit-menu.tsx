@@ -20,6 +20,7 @@ import {
     isAllowEdit,
     jfrefreshgrid,
     locale,
+    removeActiveImage,
 } from '../../state';
 
 export function EditMenu() {
@@ -92,19 +93,23 @@ export function EditMenu() {
 
             <DropdownMenuSub>
                 <DropdownMenuSubTrigger>{button.delete}</DropdownMenuSubTrigger>
-                <DropdownMenuSubContent>
+                <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
                     <DropdownMenuItem
                         onClick={() => {
                             setContext((draftCtx) => {
                                 const allowEdit = isAllowEdit(draftCtx);
                                 if (!allowEdit) return;
-                                const msg = deleteSelectedCellText(draftCtx);
-                                if (msg === 'partMC') {
-                                    showDialog(generalDialog.partiallyError, 'ok');
-                                } else if (msg === 'allowEdit') {
-                                    showDialog(generalDialog.readOnlyError, 'ok');
-                                } else if (msg === 'dataNullError') {
-                                    showDialog(generalDialog.dataNullError, 'ok');
+                                if (draftCtx.activeImg != null) {
+                                    removeActiveImage(draftCtx);
+                                } else {
+                                    const msg = deleteSelectedCellText(draftCtx);
+                                    if (msg === 'partMC') {
+                                        showDialog(generalDialog.partiallyError, 'ok');
+                                    } else if (msg === 'allowEdit') {
+                                        showDialog(generalDialog.readOnlyError, 'ok');
+                                    } else if (msg === 'dataNullError') {
+                                        showDialog(generalDialog.dataNullError, 'ok');
+                                    }
                                 }
                                 jfrefreshgrid(draftCtx, null, undefined);
                             });
