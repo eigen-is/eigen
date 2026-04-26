@@ -58,75 +58,44 @@ export function defaultFont(defaultFontSize: number) {
 export function getFontSet(
     format: any,
     defaultFontSize: number,
-    ctx?: Context
+    ctx: Context
 ) {
-    if (isPlainObject(format)) {
-        const fontAttr: string[] = [];
-
-        // font-style
-        if (format.it === "0" || format.it === 0 || isNil(format.it)) {
-            fontAttr.push("normal");
-        } else {
-            fontAttr.push("italic");
-        }
-
-        // font-variant
-        fontAttr.push("normal");
-
-        // font-weight
-        if (format.bl === "0" || format.bl === 0 || isNil(format.bl)) {
-            fontAttr.push("normal");
-        } else {
-            fontAttr.push("bold");
-        }
-
-        // font-size/line-height
-        if (!format.fs) {
-            fontAttr.push(`${defaultFontSize}pt`);
-        } else {
-            fontAttr.push(`${Math.ceil(format.fs)}pt`);
-        }
-
-        let fontSet = `"Helvetica Neue", Helvetica, Arial, "PingFang SC", "Hiragino Sans GB", "Heiti SC", "Microsoft YaHei", "WenQuanYi Micro Hei", sans-serif`;
-        if (ctx) {
-            const {fontarray} = locale(ctx);
-            if (!format.ff) {
-                fontSet = `${fontarray[0]},${fontSet}`;
-            } else {
-                let fontfamily = null;
-                if (ctx) {
-                    if (isdatatypemulti(format.ff).num) {
-                        fontfamily = fontarray[parseInt(format.ff, 10)];
-                    } else {
-                        // fontfamily = fontarray[fontjson[format.ff]];
-                        fontfamily = format.ff;
-
-                        fontfamily = fontfamily.replace(/"/g, "").replace(/'/g, "");
-
-                        if (fontfamily.indexOf(" ") > -1) {
-                            fontfamily = `"${fontfamily}"`;
-                        }
-
-                        // if (
-                        //   fontfamily != null &&
-                        //   document.fonts &&
-                        //   !document.fonts.check(`12px ${fontfamily}`)
-                        // ) {
-                        //   menuButton.addFontTolist(fontfamily);
-                        // }
-                    }
-
-                    // if (fontfamily == null) {
-                    //   fontfamily = fontarray[0];
-                    // }
-                }
-
-                fontSet = `${fontfamily},${fontSet}`;
-            }
-        }
-        return `${fontAttr.join(" ")} ${fontSet}`;
+    if (!isPlainObject(format)) {
+        return defaultFont(defaultFontSize);
     }
-    return defaultFont(defaultFontSize);
+
+    const fontAttr: string[] = [];
+
+    // font-style
+    fontAttr.push(
+        format.it === "0" || format.it === 0 || isNil(format.it) ? "normal" : "italic"
+    );
+
+    // font-variant
+    fontAttr.push("normal");
+
+    // font-weight
+    fontAttr.push(
+        format.bl === "0" || format.bl === 0 || isNil(format.bl) ? "normal" : "bold"
+    );
+
+    // font-size
+    fontAttr.push(`${format.fs ? Math.ceil(format.fs) : defaultFontSize}pt`);
+
+    const {fontarray} = locale(ctx);
+    const fallback = `"Helvetica Neue", Helvetica, Arial, "PingFang SC", "Hiragino Sans GB", "Heiti SC", "Microsoft YaHei", "WenQuanYi Micro Hei", sans-serif`;
+
+    let primary: string;
+    if (!format.ff) {
+        primary = fontarray[0];
+    } else if (isdatatypemulti(format.ff).num) {
+        primary = fontarray[parseInt(format.ff, 10)];
+    } else {
+        const stripped = format.ff.replace(/["']/g, "");
+        primary = stripped.includes(" ") ? `"${stripped}"` : stripped;
+    }
+
+    return `${fontAttr.join(" ")} ${primary},${fallback}`;
 }
 
 // Get text size for cells with a value
@@ -151,10 +120,6 @@ export function getMeasureText(
     const cache: any = {};
 
     cache.width = measureText.width;
-
-    if (fontset) {
-        renderCtx.font = fontset;
-    }
 
     cache.actualBoundingBoxDescent = measureText.actualBoundingBoxDescent;
     cache.actualBoundingBoxAscent = measureText.actualBoundingBoxAscent;
@@ -316,20 +281,17 @@ export function drawLineInfo(
 }
 
 // Get rendering info for cell text content
-// let measureTextCache = {}, measureTextCacheTimeOut = null;
-// option {cellWidth,cellHeight,space_width,space_height}
+// option: {cellWidth, cellHeight, space_width, space_height, r, c}
 export function getCellTextInfo(
     cell: Cell,
     renderCtx: CanvasRenderingContext2D,
     sheetCtx: Context,
-    option: any,
-    ctx?: Context
+    option: any
 ): any {
     const {cellWidth} = option;
     const {cellHeight} = option;
     let isMode = "";
     let isModeSplit = "";
-    // console.log("initialinfo", cell, option);
     if (cellWidth == null) {
         isMode = "onlyWidth";
         isModeSplit = "_";
@@ -340,7 +302,6 @@ export function getCellTextInfo(
         return textInfo;
     }
 
-    // let cell = sheetCtx.flowdata[r][c];
     let {space_width} = option;
     let {space_height} = option; // Gap in width/height direction
 
@@ -418,7 +379,7 @@ export function getCellTextInfo(
         let similarIndex = 0;
         for (let i = 0; i < sharedStrings.length; i += 1) {
             const shareCell = sharedStrings[i];
-            const scfontset = getFontSet(shareCell, sheetCtx.defaultFontSize, ctx);
+            const scfontset = getFontSet(shareCell, sheetCtx.defaultFontSize, sheetCtx);
             const {fc} = shareCell;
             const {cl} = shareCell;
             const {un} = shareCell;
@@ -484,7 +445,7 @@ export function getCellTextInfo(
         }
         isInline = true;
     } else {
-        fontset = getFontSet(cell, sheetCtx.defaultFontSize, ctx);
+        fontset = getFontSet(cell, sheetCtx.defaultFontSize, sheetCtx);
         renderCtx.font = fontset;
 
         cancelLine = normalizedCellAttr(cell, "cl"); // cancelLine

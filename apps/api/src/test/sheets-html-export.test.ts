@@ -83,6 +83,54 @@ describe('Sheets HTML export — conditional formatting', () => {
         expect(html).toMatch(/<span style="position:relative;z-index:1">10<\/span>/);
     });
 
+    test('colorGradation 2-color rule paints min/max cells with the configured stops', () => {
+        const sheet = makeSheet(
+            [
+                { r: 0, c: 0, v: { v: 1, ct: { t: 'n', fa: 'General' } } },
+                { r: 1, c: 0, v: { v: 10, ct: { t: 'n', fa: 'General' } } },
+            ],
+            [
+                {
+                    type: 'colorGradation',
+                    cellrange: [{ row: [0, 1], column: [0, 0] }],
+                    format: ['#00ff00', '#ff0000'],
+                },
+            ],
+        );
+        const html = renderSheetsHtml([sheet]);
+        expect(html).toContain('background:#ff0000');
+        expect(html).toContain('background:#00ff00');
+    });
+
+    test('colorGradation update on existing computeMap entry keeps the gradient color', () => {
+        // Regression: the colorGradation if-arm used to read format.cellColor on an
+        // array-shaped format, blanking the cell color when a prior rule had already
+        // populated computeMap[`${r}_${c}`]. Two overlapping rules force that path —
+        // greaterThan seeds the entry, then colorGradation must overwrite it with the
+        // 2-color min stop (format[1]).
+        const sheet = makeSheet(
+            [{ r: 0, c: 0, v: { v: 1, ct: { t: 'n', fa: 'General' } } }],
+            [
+                {
+                    type: 'default',
+                    cellrange: [{ row: [0, 0], column: [0, 0] }],
+                    format: { cellColor: '#888888' },
+                    conditionName: 'greaterThan',
+                    conditionRange: [],
+                    conditionValue: [0],
+                },
+                {
+                    type: 'colorGradation',
+                    cellrange: [{ row: [0, 0], column: [0, 0] }],
+                    format: ['#00ff00', '#0000ff'],
+                },
+            ],
+        );
+        const html = renderSheetsHtml([sheet]);
+        expect(html).toContain('background:#0000ff');
+        expect(html).not.toContain('background:#888888');
+    });
+
     test('dataBar with mixed positive/negative values uses red for the negative bar', () => {
         const sheet = makeSheet(
             [

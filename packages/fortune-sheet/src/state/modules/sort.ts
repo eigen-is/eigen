@@ -94,16 +94,6 @@ export function sortDataRange(
         }
     }
 
-    // let allParam = {};
-    // if (ctx.config.rowlen != null) {
-    //   let cfg = _.assign({}, ctx.config);
-    //   cfg = rowlenByRange(d, str, edr, cfg);
-
-    //   allParam = {
-    //     cfg,
-    //     RowlChange: true,
-    //   };
-    // }
     jfrefreshgrid(ctx, sheetData, [{row: [str, edr], column: [stc, edc]}]);
 }
 

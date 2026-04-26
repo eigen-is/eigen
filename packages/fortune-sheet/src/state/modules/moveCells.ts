@@ -475,10 +475,6 @@ export function onCellsMoveEnd(
         }
     }
 
-    // if (RowlChange) {
-    //   cfg = rowlenByRange(d, last.row[0], last.row[1], cfg);
-    //   cfg = rowlenByRange(d, row_s, row_e, cfg);
-    // }
     // Conditional format
     const cdformat =
         ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId) as number]

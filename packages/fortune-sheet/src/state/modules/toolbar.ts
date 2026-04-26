@@ -261,21 +261,7 @@ export function updateFormat(
             col_ed,
             canvas
         );
-
-        // if (attr === "tb" || attr === "tr" || attr === "fs") {
-        //   cfg = rowlenByRange(ctx, d, row_st, row_ed, cfg);
-        // }
     });
-
-    //   let allParam = {};
-    //   if (attr === "tb" || attr === "tr" || attr === "fs") {
-    //     allParam = {
-    //       cfg,
-    //       RowlChange: true,
-    //     };
-    //   }
-
-    //   jfrefreshgrid(d, ctx.luckysheet_select_save, allParam, false);
 }
 
 function toggleAttr(ctx: Context, cellInput: HTMLDivElement, attr: keyof Cell) {

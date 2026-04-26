@@ -195,18 +195,6 @@ function isExtendNumber(txt: string | number | undefined) {
     return [result];
 }
 
-// function isChnWeek1(txt: string | number) {
-//   if (typeof txt === "number") {
-//     txt = `${txt}`;
-//   }
-//   let result = false;
-//   if (txt.length === 1 && (txt === "日" || chineseToNumber(txt) < 7)) {
-//     result = true;
-//   }
-
-//   return result;
-// }
-
 function isChnWeek2(txt: string | number | undefined) {
     let result = false;
     if (typeof txt === "number") {
@@ -2102,7 +2090,6 @@ function getApplyData(
         }
     }
 
-    // Chinese lowercase numbers or 一~日
     const copyD_chnNumber = copyD.chnNumber;
     const applyD_chnNumber = [];
     if (copyD_chnNumber) {
@@ -2380,7 +2367,6 @@ export function updateDropCell(ctx: Context) {
                                     } else {
                                         let mask;
                                         if (cell.ct?.fa === "##0.00") {
-                                            /* 如果是数字类型 */
                                             mask = genarate(
                                                 `${
                                                     Math.round((cell.v as number) * 1000000000) /

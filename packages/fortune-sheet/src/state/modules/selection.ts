@@ -535,39 +535,6 @@ export function pasteHandlerOfPaintModel(
     }
 }
 
-// }
-
-// last["row"] = [minh, maxh];
-// last["column"] = [minc, maxc];
-
-// if (copyRowlChange) {
-//   cfg = rowlenByRange(flowdata, minh, maxh, cfg);
-
-//   let allParam = {
-//     "cfg": cfg,
-//     "RowlChange": true,
-//     "cdformat": cdformat,
-//     "dataVerification": dataVerification
-//   }
-//   jfrefreshgrid(flowdata, ctx.luckysheet_select_save, allParam);
-// }
-// else {
-//   // The selection format painter may exceed the boundary
-//   if (maxh >= flowdata.length) {
-//     maxh = flowdata.length - 1;
-//   }
-//   cfg = rowlenByRange(flowdata, minh, maxh, cfg); // update row heights
-//   let allParam = {
-//     "cfg": cfg,
-//     "RowlChange": true,
-//     "cdformat": cdformat,
-//     "dataVerification": dataVerification
-//   }
-//   jfrefreshgrid(flowdata, ctx.luckysheet_select_save, allParam);
-
-//   selectHightlightShow();
-// }
-// }
 export function selectionCopyShow(range: any, ctx: Context) {
     // $("#fortune-selection-copy").empty();
 
