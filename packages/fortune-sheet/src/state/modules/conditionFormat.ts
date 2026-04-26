@@ -249,27 +249,61 @@ export function checkCF(
     return null;
 }
 
-export function updateItem(ctx: Context, type: string) {
-    if (!checkProtectionFormatCells(ctx)) {
-        return;
-    }
-    const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
+// 12 color-scale + 6 solid-data-bar presets, ported from luckysheet upstream.
+// Numbers match the locale keys colorGradation_1..12 / solidColorDataBar_1..6
+// in state/locale/en.ts.
+export const CF_PRESETS: Record<string, string[]> = {
+    // 3-color gradients (max → mid → min)
+    colorGradation_1: ["#f8696b", "#ffeb84", "#63be7b"],
+    colorGradation_2: ["#63be7b", "#ffeb84", "#f8696b"],
+    colorGradation_3: ["#f8696b", "#ffffff", "#63be7b"],
+    colorGradation_4: ["#63be7b", "#ffffff", "#f8696b"],
+    colorGradation_5: ["#f8696b", "#ffffff", "#5a8ac6"],
+    colorGradation_6: ["#5a8ac6", "#ffffff", "#f8696b"],
+    // 2-color gradients (max → min)
+    colorGradation_7: ["#f8696b", "#ffffff"],
+    colorGradation_8: ["#ffffff", "#f8696b"],
+    colorGradation_9: ["#ffffff", "#63be7b"],
+    colorGradation_10: ["#63be7b", "#ffffff"],
+    colorGradation_11: ["#ffeb84", "#63be7b"],
+    colorGradation_12: ["#63be7b", "#ffeb84"],
+    // Solid data-bar colors (single bar color; negative bars hardcode red)
+    solidColorDataBar_1: ["#638ec6"],
+    solidColorDataBar_2: ["#63be7b"],
+    solidColorDataBar_3: ["#f8696b"],
+    solidColorDataBar_4: ["#ffb628"],
+    solidColorDataBar_5: ["#a3c8ff"],
+    solidColorDataBar_6: ["#a085ff"],
+};
 
-    // save the current rules
-    let ruleArr = [];
-    if (type === "delSheet") {
-        ruleArr = [];
-    } else {
-        const rule = {
-            type,
-            cellrange: ctx.luckysheet_select_save ?? [],
-            format: {
-                textColor: ctx.conditionRules.textColor,
-                cellColor: ctx.conditionRules.cellColor,
-            },
-        };
-        ruleArr = ctx.luckysheetfile[index].luckysheet_conditionformat_save ?? [];
-        ruleArr.push(rule);
-    }
-    ctx.luckysheetfile[index].luckysheet_conditionformat_save = ruleArr;
+export function clearSheetRules(ctx: Context) {
+    if (!checkProtectionFormatCells(ctx)) return;
+    const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
+    ctx.luckysheetfile[index].luckysheet_conditionformat_save = [];
+}
+
+export function applyColorScalePreset(ctx: Context, presetKey: string) {
+    if (!checkProtectionFormatCells(ctx)) return;
+    const format = CF_PRESETS[presetKey];
+    if (!format) return;
+    appendRule(ctx, "colorGradation", format);
+}
+
+export function applyDataBarPreset(ctx: Context, presetKey: string) {
+    if (!checkProtectionFormatCells(ctx)) return;
+    const format = CF_PRESETS[presetKey];
+    if (!format) return;
+    appendRule(ctx, "dataBar", format);
+}
+
+function appendRule(ctx: Context, type: "colorGradation" | "dataBar", format: string[]) {
+    const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
+    const rule = {
+        type,
+        cellrange: ctx.luckysheet_select_save ?? [],
+        format,
+    };
+    const existing = ctx.luckysheetfile[index].luckysheet_conditionformat_save ?? [];
+    existing.push(rule);
+    ctx.luckysheetfile[index].luckysheet_conditionformat_save = existing;
 }
