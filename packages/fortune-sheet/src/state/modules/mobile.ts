@@ -1,13 +1,6 @@
 import {Context} from "..";
 import {GlobalCache} from "../types";
 
-// export default function mobileinit(ctx: Context) {
-//   ctx.cellMainSrollBarSize = 0;
-//   // let luckysheet_touchmove_status = false;
-//   // let luckysheet_touchmove_startPos = {};
-//   // const luckysheet_touchhandle_status = false;
-// }
-
 export function handleOverlayTouchStart(
     ctx: Context,
     e: TouchEvent,

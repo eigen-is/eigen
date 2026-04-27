@@ -1,4 +1,4 @@
-export default {
+export const en = {
     generalDialog: {
         partiallyError: "Cannot perform this operation on partially merged cells",
         readOnlyError: "Cannot perform this operation in read-only mode",
