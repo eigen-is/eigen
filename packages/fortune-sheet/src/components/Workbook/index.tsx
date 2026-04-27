@@ -178,9 +178,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         // biome-ignore lint/correctness/useExhaustiveDependencies: selection-info recompute is intentionally selection-only; firing on every props/context change would churn
         useEffect(() => {
             const selection = context.luckysheet_select_save;
-            const { lang } = props;
             if (selection) {
-                const re = calcSelectionInfo(context, lang);
+                const re = calcSelectionInfo(context);
                 setCalInfo(re);
             }
         }, [context.luckysheet_select_save]);
@@ -407,7 +406,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     if (mergedSettings.devicePixelRatio > 0) {
                         draftCtx.devicePixelRatio = mergedSettings.devicePixelRatio;
                     }
-                    draftCtx.lang = mergedSettings.lang;
                     draftCtx.allowEdit = mergedSettings.allowEdit;
                     draftCtx.hooks = mergedSettings.hooks;
                     draftCtx.fontList = mergedSettings.fontList;
@@ -495,14 +493,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     } else {
                         draftCtx.showGridLines = true;
                     }
-                    if (mergedSettings.lang == null) {
-                        const lang =
-                            navigator.languages?.[0] ||
-                            navigator.language ||
-                            // @ts-expect-error
-                            navigator.userLanguage;
-                        draftCtx.lang = lang;
-                    }
                 },
                 { noHistory: true },
             );
@@ -516,7 +506,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             mergedSettings.row,
             mergedSettings.defaultFontSize,
             mergedSettings.devicePixelRatio,
-            mergedSettings.lang,
             mergedSettings.allowEdit,
             mergedSettings.hooks,
             mergedSettings.generateSheetId,
