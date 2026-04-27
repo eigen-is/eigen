@@ -151,6 +151,88 @@ describe('Sheets HTML export — conditional formatting', () => {
         expect(html).toContain('#ff0000');
         expect(html).toContain('#638ec6');
     });
+
+    test('formula rule with relative refs fires per-cell after anchor-relative shifting', () => {
+        // 2x2 grid; CF formula `A1>10` is anchor-relative — each target cell evaluates the
+        // formula with refs shifted from the anchor (0,0). Cells (0,1) and (1,0) hold values
+        // > 10 so the rule fires; (0,0) and (1,1) hold ≤ 10 so it does not.
+        const sheet = makeSheet(
+            [
+                { r: 0, c: 0, v: { v: 5, ct: { t: 'n', fa: 'General' } } },
+                { r: 0, c: 1, v: { v: 50, ct: { t: 'n', fa: 'General' } } },
+                { r: 1, c: 0, v: { v: 25, ct: { t: 'n', fa: 'General' } } },
+                { r: 1, c: 1, v: { v: 3, ct: { t: 'n', fa: 'General' } } },
+            ],
+            [
+                {
+                    type: 'default',
+                    cellrange: [{ row: [0, 1], column: [0, 1] }],
+                    format: { textColor: '#ffffff', cellColor: '#00aa00' },
+                    conditionName: 'formula',
+                    conditionRange: [],
+                    conditionValue: ['A1>10'],
+                },
+            ],
+        );
+        const html = renderSheetsHtml([sheet]);
+        // Two cells fire — match the green cellColor twice in the output.
+        const matches = html.match(/background:#00aa00/g) ?? [];
+        expect(matches.length).toBe(2);
+        expect(html).toContain('color:#ffffff');
+    });
+
+    test('formula rule with absolute refs uses the anchor value for every target cell', () => {
+        // `$A$1>10` — A1 is frozen, so all four cells in the range evaluate the same
+        // condition (A1=15 > 10 → true → all four cells get the style).
+        const sheet = makeSheet(
+            [
+                { r: 0, c: 0, v: { v: 15, ct: { t: 'n', fa: 'General' } } },
+                { r: 0, c: 1, v: { v: 1, ct: { t: 'n', fa: 'General' } } },
+                { r: 1, c: 0, v: { v: 1, ct: { t: 'n', fa: 'General' } } },
+                { r: 1, c: 1, v: { v: 1, ct: { t: 'n', fa: 'General' } } },
+            ],
+            [
+                {
+                    type: 'default',
+                    cellrange: [{ row: [0, 1], column: [0, 1] }],
+                    format: { textColor: '#000000', cellColor: '#ffaa00' },
+                    conditionName: 'formula',
+                    conditionRange: [],
+                    conditionValue: ['$A$1>10'],
+                },
+            ],
+        );
+        const html = renderSheetsHtml([sheet]);
+        const matches = html.match(/background:#ffaa00/g) ?? [];
+        expect(matches.length).toBe(4);
+    });
+
+    test('formula rule using AND() across two columns shifts both refs together', () => {
+        // Verifies the token-aware shift inside function calls — `=AND(A1>0, B1>0)` on a 2-row
+        // range becomes `=AND(A2>0, B2>0)` for row 1. Only row 0 has both columns > 0.
+        const sheet = makeSheet(
+            [
+                { r: 0, c: 0, v: { v: 5, ct: { t: 'n', fa: 'General' } } },
+                { r: 0, c: 1, v: { v: 5, ct: { t: 'n', fa: 'General' } } },
+                { r: 1, c: 0, v: { v: 5, ct: { t: 'n', fa: 'General' } } },
+                { r: 1, c: 1, v: { v: -5, ct: { t: 'n', fa: 'General' } } },
+            ],
+            [
+                {
+                    type: 'default',
+                    cellrange: [{ row: [0, 1], column: [0, 0] }],
+                    format: { textColor: '#000000', cellColor: '#88ccff' },
+                    conditionName: 'formula',
+                    conditionRange: [],
+                    conditionValue: ['AND(A1>0, B1>0)'],
+                },
+            ],
+        );
+        const html = renderSheetsHtml([sheet]);
+        // Only the (0,0) cell satisfies; (1,0) reads A2/B2 where B2=-5 fails.
+        const matches = html.match(/background:#88ccff/g) ?? [];
+        expect(matches.length).toBe(1);
+    });
 });
 
 describe('Sheets HTML export — cell styling', () => {

@@ -1,8 +1,13 @@
 import {
     type CellFormatStyle,
+    type CellResolver,
     type ComputeMap,
+    type ConditionalFormatFormulaEvaluator,
+    createArrayResolver,
     type DataBar,
     evaluateConditionalFormat,
+    FormulaEngine,
+    functionCopy,
 } from '@workspace/fortune-sheet/engine';
 import { escapeHtml } from '@workspace/lib/html';
 import type { Cell, CellBorderInfo, CellWithRowAndCol, Sheet } from '@workspace/lib/sheets';
@@ -69,7 +74,40 @@ export async function generateSheetsExportHtml(mount: Mount, drivePath: DrivePat
 }
 
 export function renderSheetsHtml(sheets: Sheet[]): string {
-    return sheets.map((sheet, i) => renderSheet(sheet, i === sheets.length - 1)).join('\n');
+    // One engine + resolver per export, shared across sheets so cross-sheet refs in
+    // formula CF rules (e.g. `=Sheet2!A1>10`) resolve correctly. The resolver reads
+    // saved `cell.v` values from the snapshot — formulas are not recomputed, only the
+    // CF rule's own formula is evaluated against existing cell values.
+    const engine = new FormulaEngine();
+    const resolver = createArrayResolver(
+        sheets.map((s) => ({
+            id: s.id ?? s.name,
+            name: s.name,
+            data: s.data ?? null,
+            calculationChain: [],
+            dynamicArrayCompute: [],
+        })),
+    );
+    return sheets.map((sheet, i) => renderSheet(sheet, i === sheets.length - 1, engine, resolver)).join('\n');
+}
+
+// Builds the `evaluateFormula` callback for a single sheet's CF formula rules. The
+// engine evaluates the rule's formula at each target cell with refs shifted by the
+// offset from the rule's anchor — same shape as the state-side wiring in
+// state/modules/conditionFormat.ts::getComputeMap.
+function buildCfFormulaEvaluator(
+    engine: FormulaEngine,
+    resolver: CellResolver,
+    sheetId: string,
+): ConditionalFormatFormulaEvaluator {
+    return (formula, anchorRow, anchorCol, targetRow, targetCol) => {
+        const offsetRow = targetRow - anchorRow;
+        const offsetCol = targetCol - anchorCol;
+        let shifted = formula;
+        if (offsetRow > 0) shifted = `=${functionCopy(shifted, 'down', offsetRow)}`;
+        if (offsetCol > 0) shifted = `=${functionCopy(shifted, 'right', offsetCol)}`;
+        return engine.evaluate(shifted, sheetId, anchorRow, anchorCol, resolver).value;
+    };
 }
 
 export function getSheetContentSize(sheet: Sheet): { width: number; height: number } {
@@ -93,7 +131,7 @@ export function getSheetContentSize(sheet: Sheet): { width: number; height: numb
     return { width, height };
 }
 
-function renderSheet(sheet: Sheet, isLast: boolean): string {
+function renderSheet(sheet: Sheet, isLast: boolean, engine: FormulaEngine, resolver: CellResolver): string {
     const config = sheet.config ?? {};
     const showGrid = sheet.showGridLines !== false && sheet.showGridLines !== 0;
 
@@ -102,10 +140,13 @@ function renderSheet(sheet: Sheet, isLast: boolean): string {
 
     // Conditional formatting — engine produces a "r_c" -> { textColor, cellColor, dataBar } map.
     // Evaluation needs the dense `data` matrix; loaded snapshots without it skip CF (the canvas
-    // painter does the same fallback).
+    // painter does the same fallback). Formula-based rules get a resolver-backed evaluator so
+    // `=A1>10` style rules can fire server-side.
     const cfMap: ComputeMap | null =
         sheet.luckysheet_conditionformat_save && sheet.data
-            ? evaluateConditionalFormat(sheet.luckysheet_conditionformat_save, sheet.data)
+            ? evaluateConditionalFormat(sheet.luckysheet_conditionformat_save, sheet.data, {
+                  evaluateFormula: buildCfFormulaEvaluator(engine, resolver, sheet.id ?? sheet.name),
+              })
             : null;
 
     // Find the minimal bounding box containing all visible content
