@@ -50,7 +50,7 @@ Additional deletions:
 - `Settings.toolbarItems` / `Settings.customToolbarItems` removed from `state/settings.ts`
 
 New UI wired:
-- `Format > Rotation ▶` — 6 modes via engine `tr` field (was unexosed in toolbar)
+- `Format > Rotation ▶` — 6 modes via cell `rt` field, signed degrees (was unexposed in toolbar)
 - `Format > Conditional formatting > Color scales ▶` — 12 presets (`applyColorScalePreset`)
 - `Format > Conditional formatting > Data bars ▶` — 6 solid presets (`applyDataBarPreset`)
 - `Edit > Cut` — extracted to `state/modules/clipboard.ts::handleCut`; keyboard.ts cut branch collapsed from ~50 → 3 lines

@@ -4,6 +4,7 @@ import type { Border, Cell as XlsxCell } from 'exceljs';
 import type { Mount } from '../../mount';
 import type { ExportResult } from '../export-document';
 import { loadSheetsContent } from './content';
+import { resolveFontFamily } from './fonts';
 
 // Excel's date epoch is 1899-12-30 (Lotus 1-2-3 1900 leap-year bug).
 const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);
@@ -133,7 +134,7 @@ function applyCellValue(cell: XlsxCell, v: FortuneCell): void {
 }
 
 function applyCellStyle(cell: XlsxCell, v: FortuneCell): void {
-    const fontName = typeof v.ff === 'string' && v.ff.length > 0 ? v.ff : null;
+    const fontName = resolveFontFamily(v.ff);
     if (v.bl === 1 || v.it === 1 || v.un === 1 || v.cl === 1 || typeof v.fs === 'number' || v.fc || fontName) {
         cell.font = {
             ...(v.bl === 1 && { bold: true }),
