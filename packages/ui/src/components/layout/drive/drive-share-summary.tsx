@@ -44,7 +44,7 @@ export function DriveShareSummary({
                         <Tooltip delayDuration={300}>
                             <TooltipTrigger asChild>
                                 <span
-                                    className="-ml-4 h-6 w-6 rounded-full flex items-center justify-center bg-muted position-relative"
+                                    className="h-6 w-6 rounded-full flex items-center justify-center bg-muted relative"
                                     style={{ zIndex: 1 }}
                                 >
                                     <Unlock className="h-3 w-3 text-primary" />
@@ -58,7 +58,7 @@ export function DriveShareSummary({
                             key={access.id}
                             email={access.id}
                             size="sm"
-                            className="-ml-4 position-relative"
+                            className={cn('relative', (index > 0 || isPublic) && '-ml-4')}
                             style={{ zIndex: (isPublic ? 2 : 1) + index }}
                             tooltip={true}
                         />
