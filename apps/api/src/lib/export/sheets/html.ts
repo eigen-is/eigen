@@ -12,6 +12,7 @@ import type { Mount } from '../../mount';
 import type { ExportResult } from '../export-document';
 import { getFontCSS } from '../fonts';
 import { loadSheetsContent } from './content';
+import { resolveFontFamily } from './fonts';
 
 const DEFAULT_COL_WIDTH = 73;
 const DEFAULT_ROW_HEIGHT = 19;
@@ -20,9 +21,6 @@ const DEFAULT_ROW_HEIGHT = 19;
 // always emits one (`middle`, `top`, `bottom`, …) so we never end up with two competing
 // declarations in a single style attribute.
 const BASE_TD_STYLE = 'overflow:hidden;white-space:nowrap;padding:1px 2px';
-
-// Matches fortune-sheet locale fontarray — index maps to font family name.
-const FONT_ARRAY = ['Inter', 'Source Serif 4', 'JetBrains Mono', 'Excalifont'];
 
 const HORIZONTAL_ALIGN: Record<number, string> = {
     0: 'center',
@@ -244,14 +242,12 @@ function buildCellStyle(
     const rotated = isNumericRotation(v);
 
     if (v) {
-        if (v.ff != null) {
-            const family = typeof v.ff === 'number' ? FONT_ARRAY[v.ff] : v.ff;
-            // The style attribute is wrapped in double quotes by the caller, so the
-            // font-family quotes must be HTML-encoded (`&quot;`) — using literal `"`
-            // here closes the attribute early and silently drops every later declaration
-            // (color, background, etc.). Family name is escaped to defang stray quotes.
-            if (family) parts.push(`font-family:&quot;${escapeHtml(String(family))}&quot;,sans-serif`);
-        }
+        const family = resolveFontFamily(v.ff);
+        // The style attribute is wrapped in double quotes by the caller, so the
+        // font-family quotes must be HTML-encoded (`&quot;`) — using literal `"`
+        // here closes the attribute early and silently drops every later declaration
+        // (color, background, etc.). Family name is escaped to defang stray quotes.
+        if (family) parts.push(`font-family:&quot;${escapeHtml(family)}&quot;,sans-serif`);
         if (v.bl === 1) parts.push('font-weight:bold');
         if (v.it === 1) parts.push('font-style:italic');
         if (typeof v.fs === 'number') parts.push(`font-size:${v.fs}pt`);
@@ -309,7 +305,7 @@ function buildCellStyle(
     return parts.join(';');
 }
 
-function isNumericRotation(v: Cell | null): boolean {
+function isNumericRotation(v: Cell | null): v is Cell & { rt: number } {
     return !!v && typeof v.rt === 'number' && v.rt !== 0 && v.rt >= -90 && v.rt <= 90;
 }
 
@@ -342,7 +338,7 @@ function wrapForRotation(v: Cell | null, inner: string): string {
         return `<span style="writing-mode:vertical-rl;text-orientation:upright">${inner}</span>`;
     }
     if (isNumericRotation(v)) {
-        const rt = v.rt as number;
+        const { rt } = v;
         const cssAngle = -rt;
         const yPin = rt > 0 ? 'bottom:0' : 'top:0';
         const origin = rt > 0 ? 'left bottom' : 'left top';
@@ -465,13 +461,6 @@ body {
 
 .sheet {
     margin-bottom: 2rem;
-}
-
-td {
-    padding: 1px 2px;
-    overflow: hidden;
-    vertical-align: middle;
-    white-space: nowrap;
 }
 `;
 

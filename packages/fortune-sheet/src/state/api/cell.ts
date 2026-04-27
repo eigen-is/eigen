@@ -86,12 +86,8 @@ export function setCellValue(
         vt: 1, // Vertical alignment, 0 middle, 1 up, 2 down
         ht: 1, // Horizontal alignment,0 center, 1 left, 2 right
         mc: 1, // Merge Cells
-        tr: 1, // Text rotation,0: 0、1: 45 、2: -45、3 Vertical text、4: 90 、5: -90
         tb: 1, // Text wrap,0 truncation, 1 overflow, 2 word wrap
-        // v: 1, //Original value
-        // m: 1, //Display value
-        rt: 1, // text rotation angle 0-180 alignment
-        // f: 1, //formula
+        rt: 1, // Text rotation: signed degrees [-90, 90] or 'vertical'
         qp: 1, // quotePrefix, show number as string
     };
 

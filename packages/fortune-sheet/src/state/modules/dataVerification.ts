@@ -484,27 +484,32 @@ export function cellFocus(
         dropDownBtn.style.top = `${row_pre + (row - row_pre - 20) / 2 - 2}px`;
     }
 
-    // hint text
+    // hint text — checkbox rules have no hint copy, so skip the popup entirely
+    // rather than rendering a stranded `Hint: ` label with empty body.
     if (item.hintShow) {
-        const hintText = `<span style="color:#f5a623;">Hint: </span>${getHintText(ctx, item)}`;
-        showHintBox.innerHTML = hintText;
-        showHintBox.style.display = "block";
-        showHintBox.style.left = `${col_pre}px`;
-        showHintBox.style.top = `${row}px`;
+        const hintBody = getHintText(ctx, item);
+        if (hintBody) {
+            showHintBox.innerHTML = `<span style="color:#f5a623;">Hint: </span>${hintBody}`;
+            showHintBox.style.display = "block";
+            showHintBox.style.left = `${col_pre}px`;
+            showHintBox.style.top = `${row}px`;
+        }
     }
 
-    // data validation failed — show failure reminder
+    // data validation failed — show failure reminder (same empty-body guard)
     const cellValue = getCellValue(r, c, d);
     if (isRealNull(cellValue)) {
         return;
     }
     const validate = validateCellData(ctx, item, cellValue);
     if (!validate) {
-        const failureText = `<span style="color:#f72626;">Failure: </span>${getFailureText(ctx, item)}`;
-        showHintBox.innerHTML = failureText;
-        showHintBox.style.display = "block";
-        showHintBox.style.left = `${col_pre}px`;
-        showHintBox.style.top = `${row}px`;
+        const failureBody = getFailureText(ctx, item);
+        if (failureBody) {
+            showHintBox.innerHTML = `<span style="color:#f72626;">Failure: </span>${failureBody}`;
+            showHintBox.style.display = "block";
+            showHintBox.style.left = `${col_pre}px`;
+            showHintBox.style.top = `${row}px`;
+        }
     }
 }
 
