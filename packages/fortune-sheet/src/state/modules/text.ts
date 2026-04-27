@@ -360,38 +360,14 @@ export function getCellTextInfo(
     const verticalAlign = normalizedCellAttr(cell, "vt");
 
     const tb = normalizedCellAttr(cell, "tb"); // wrap overflow
-    const tr = normalizedCellAttr(cell, "tr"); // rotate
-    let rt = normalizedCellAttr(cell, "rt"); // rotate angle
-
-    let isRotateUp = 1;
-
-    if (isNil(rt)) {
-        if (tr === "0") {
-            rt = 0;
-        } else if (tr === "1") {
-            rt = 45;
-        } else if (tr === "4") {
-            rt = 90;
-        } else if (tr === "2") {
-            rt = 135;
-        } else if (tr === "5") {
-            rt = 180;
-        }
-
-        if (isNil(rt)) {
-            rt = 0;
-        }
-    }
-
-    if (rt > 180 || rt < 0) {
-        rt = 0;
-    }
-
-    rt = parseInt(rt, 10);
-    if (rt > 90) {
-        rt = 90 - rt;
-        isRotateUp = 0;
-    }
+    // rt: signed degrees in [-90, 90] (positive = CCW / "up", negative = CW / "down"),
+    // or 'vertical' for stacked text. The two branches that follow (vertical-stack vs.
+    // diagonal/horizontal) stay separate; only the diagonal branch needs the magnitude
+    // and direction split into Math.abs(rt) + isRotateUp.
+    const rtRaw = normalizedCellAttr(cell, "rt");
+    const isVertical = rtRaw === "vertical";
+    let rt: number = typeof rtRaw === "number" && rtRaw >= -90 && rtRaw <= 90 ? rtRaw : 0;
+    const isRotateUp = rt >= 0 ? 1 : 0;
 
     renderCtx.textAlign = "start";
 
@@ -507,8 +483,8 @@ export function getCellTextInfo(
         }
     }
 
-    if (tr === "3") {
-        // vertical text
+    if (isVertical) {
+        // vertical text (stacked top-to-bottom characters)
         renderCtx.textBaseline = "top";
 
         let textW_all = 0; // Total width/height after splitting

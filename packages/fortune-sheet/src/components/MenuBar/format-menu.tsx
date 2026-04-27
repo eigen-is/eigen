@@ -266,76 +266,35 @@ function RotationSubmenu() {
     const { context, setContext, refs } = useContext(WorkbookContext);
     const { toolbar, rotation } = locale(context);
 
+    // Each preset writes Cell.rt directly: signed degrees in [-90, 90] or 'vertical'.
+    // Positive = CCW / "up", negative = CW / "down". 0 clears rotation.
+    const presets: { label: string; value: number | 'vertical' }[] = [
+        { label: rotation.none, value: 0 },
+        { label: rotation.angleup, value: 45 },
+        { label: rotation.angledown, value: -45 },
+        { label: rotation.vertical, value: 'vertical' },
+        { label: rotation.rotationUp, value: 90 },
+        { label: rotation.rotationDown, value: -90 },
+    ];
+
     return (
         <DropdownMenuSub>
             <DropdownMenuSubTrigger>{toolbar.textRotate}</DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="luckysheet-mousedown-cancel">
-                <DropdownMenuItem
-                    onClick={() => {
-                        setContext((ctx) => {
-                            const d = getFlowdata(ctx);
-                            if (d == null) return;
-                            updateFormat(ctx, refs.cellInput.current!, d, 'tr', 'none');
-                        });
-                    }}
-                >
-                    {rotation.none}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                    onClick={() => {
-                        setContext((ctx) => {
-                            const d = getFlowdata(ctx);
-                            if (d == null) return;
-                            updateFormat(ctx, refs.cellInput.current!, d, 'tr', 'angleup');
-                        });
-                    }}
-                >
-                    {rotation.angleup}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                    onClick={() => {
-                        setContext((ctx) => {
-                            const d = getFlowdata(ctx);
-                            if (d == null) return;
-                            updateFormat(ctx, refs.cellInput.current!, d, 'tr', 'angledown');
-                        });
-                    }}
-                >
-                    {rotation.angledown}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                    onClick={() => {
-                        setContext((ctx) => {
-                            const d = getFlowdata(ctx);
-                            if (d == null) return;
-                            updateFormat(ctx, refs.cellInput.current!, d, 'tr', 'vertical');
-                        });
-                    }}
-                >
-                    {rotation.vertical}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                    onClick={() => {
-                        setContext((ctx) => {
-                            const d = getFlowdata(ctx);
-                            if (d == null) return;
-                            updateFormat(ctx, refs.cellInput.current!, d, 'tr', 'rotation-up');
-                        });
-                    }}
-                >
-                    {rotation.rotationUp}
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                    onClick={() => {
-                        setContext((ctx) => {
-                            const d = getFlowdata(ctx);
-                            if (d == null) return;
-                            updateFormat(ctx, refs.cellInput.current!, d, 'tr', 'rotation-down');
-                        });
-                    }}
-                >
-                    {rotation.rotationDown}
-                </DropdownMenuItem>
+                {presets.map(({ label, value }) => (
+                    <DropdownMenuItem
+                        key={label}
+                        onClick={() => {
+                            setContext((ctx) => {
+                                const d = getFlowdata(ctx);
+                                if (d == null) return;
+                                updateFormat(ctx, refs.cellInput.current!, d, 'rt', value);
+                            });
+                        }}
+                    >
+                        {label}
+                    </DropdownMenuItem>
+                ))}
             </DropdownMenuSubContent>
         </DropdownMenuSub>
     );

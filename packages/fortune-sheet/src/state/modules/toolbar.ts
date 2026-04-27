@@ -135,20 +135,6 @@ export function updateFormatCell(
             } else if (foucsStatus === "wrap") {
                 foucsStatus = "2";
             }
-        } else if (attr === "tr") {
-            if (foucsStatus === "none") {
-                foucsStatus = "0";
-            } else if (foucsStatus === "angleup") {
-                foucsStatus = "1";
-            } else if (foucsStatus === "angledown") {
-                foucsStatus = "2";
-            } else if (foucsStatus === "vertical") {
-                foucsStatus = "3";
-            } else if (foucsStatus === "rotation-up") {
-                foucsStatus = "4";
-            } else if (foucsStatus === "rotation-down") {
-                foucsStatus = "5";
-            }
         }
 
         const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
@@ -202,10 +188,6 @@ export function updateFormatCell(
                     // @ts-ignore
                     d[r][c][attr] = foucsStatus;
                 }
-
-                // if(attr === "tr" && !isNil(d[r][c].tb)){
-                //     d[r][c].tb = "0";
-                // }
             }
         }
     }

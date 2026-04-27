@@ -154,7 +154,12 @@ function applyCellStyle(cell: XlsxCell, v: FortuneCell): void {
         };
     }
 
-    const textRotation = resolveTextRotation(v);
+    const textRotation =
+        v.rt === 'vertical'
+            ? ('vertical' as const)
+            : typeof v.rt === 'number' && v.rt !== 0 && v.rt >= -90 && v.rt <= 90
+              ? v.rt
+              : null;
     if (v.ht != null || v.vt != null || v.tb === '2' || textRotation != null) {
         cell.alignment = {
             ...(v.ht != null && v.ht in REVERSE_HORIZONTAL && { horizontal: REVERSE_HORIZONTAL[v.ht] }),
@@ -163,25 +168,6 @@ function applyCellStyle(cell: XlsxCell, v: FortuneCell): void {
             ...(textRotation != null && { textRotation }),
         };
     }
-}
-
-// Map fortune-sheet (tr, rt) back to ExcelJS textRotation. tr='3' is vertical-stacked
-// text; otherwise the precise angle comes from rt (0–180, with 91–180 encoding downward
-// rotation), falling back to the menu preset stored in tr. Returns null when there is
-// no rotation to write.
-const TR_TO_RT: Record<string, number> = { '0': 0, '1': 45, '2': 135, '4': 90, '5': 180 };
-
-function resolveTextRotation(v: FortuneCell): number | 'vertical' | null {
-    if (v.tr === '3') return 'vertical';
-
-    let rt: number | undefined;
-    if (typeof v.rt === 'number') {
-        rt = v.rt;
-    } else if (typeof v.tr === 'string' && v.tr in TR_TO_RT) {
-        rt = TR_TO_RT[v.tr];
-    }
-    if (rt == null || rt === 0 || rt < 0 || rt > 180) return null;
-    return rt <= 90 ? rt : 90 - rt; // 135 → -45, 180 → -90
 }
 
 function toBorderSide(side: BorderSide): Partial<Border> {

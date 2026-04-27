@@ -30,7 +30,6 @@ export type CellStyle = {
     tb?: string;
     cl?: number;
     un?: number;
-    tr?: string;
 };
 
 export type InlineStringSegment = {
@@ -54,7 +53,10 @@ export type Cell = {
     qp?: number;
     bg?: string;
     lo?: number;
-    rt?: number;
+    // Text rotation: signed degrees in [-90, 90] (positive = CCW / "up", negative = CW
+    // / "down"), or 'vertical' for stacked top-to-bottom characters. Matches Excel /
+    // OOXML's textRotation. Undefined or 0 means no rotation.
+    rt?: number | 'vertical';
     hl?: { r: number; c: number; id: string };
     commentChatNames?: string[];
 } & CellStyle;
