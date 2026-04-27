@@ -168,18 +168,23 @@ describe('Sheets HTML export — cell styling', () => {
         expect(html).not.toMatch(/font-family:"[^&]/);
     });
 
-    test('rt as a positive angle produces a CSS rotate transform', () => {
+    test('rt as a positive angle produces a CSS rotate transform anchored at bottom-left', () => {
         const sheet = makeSheet([{ r: 0, c: 0, v: { v: 'up', rt: 45 } }]);
         const html = renderSheetsHtml([sheet]);
         // rt is CCW-positive (matches Excel/OOXML); CSS rotate is CW-positive — so the
-        // emitted angle is the negation.
+        // emitted angle is the negation. Upward rotation anchors at the cell's baseline
+        // so the text fans up from there, mirroring Excel's behaviour.
         expect(html).toContain('transform:rotate(-45deg)');
+        expect(html).toContain('transform-origin:left bottom');
+        expect(html).toMatch(/left:0;bottom:0/);
     });
 
-    test('rt as a negative angle produces a positive CSS rotate transform', () => {
+    test('rt as a negative angle anchors the rotation at top-left', () => {
         const sheet = makeSheet([{ r: 0, c: 0, v: { v: 'down', rt: -90 } }]);
         const html = renderSheetsHtml([sheet]);
         expect(html).toContain('transform:rotate(90deg)');
+        expect(html).toContain('transform-origin:left top');
+        expect(html).toMatch(/left:0;top:0/);
     });
 
     test('rt = "vertical" produces vertical writing-mode', () => {

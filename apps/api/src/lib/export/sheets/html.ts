@@ -294,17 +294,31 @@ function buildCellStyle(
     return parts.join(';');
 }
 
-// Wrap cell content in a span that applies CSS rotation / vertical-stacked writing mode
-// when the cell has `rt` set. CSS `rotate()` is CW-positive while our `rt` is CCW-positive
-// (matching Excel/OOXML), so the angle is negated. The span uses `display:inline-block`
-// so the transform takes effect on inline content.
+// Wrap cell content in a positioned container + transformed span when the cell has `rt`.
+// The two-element layering lets us anchor the rotation pivot at the cell edge that should
+// stay put (bottom-left for upward rotation, top-left for downward) instead of pivoting
+// around the span's centre, which made wide rotated headers drift away from their cell.
+//
+// Layout: the outer div fills the cell and positions the rotation anchor; the inner span
+// rotates around `transform-origin`. CSS `rotate()` is CW-positive while our `rt` is
+// CCW-positive (matching Excel/OOXML), so the emitted angle is the negation.
 function wrapForRotation(v: Cell | null, inner: string): string {
     if (!v || v.rt == null) return inner;
     if (v.rt === 'vertical') {
         return `<span style="writing-mode:vertical-rl;text-orientation:upright">${inner}</span>`;
     }
     if (typeof v.rt === 'number' && v.rt !== 0 && v.rt >= -90 && v.rt <= 90) {
-        return `<span style="display:inline-block;transform:rotate(${-v.rt}deg);transform-origin:center center">${inner}</span>`;
+        const cssAngle = -v.rt;
+        // Positive rt (CCW / upward lean) → anchor at bottom-left so the text fans up
+        // from the cell's baseline. Negative rt → anchor at top-left so it fans down.
+        const anchor = v.rt > 0 ? 'left:0;bottom:0' : 'left:0;top:0';
+        const origin = v.rt > 0 ? 'left bottom' : 'left top';
+        return (
+            `<div style="position:relative;width:100%;height:100%">` +
+            `<span style="position:absolute;${anchor};display:inline-block;white-space:nowrap;` +
+            `transform-origin:${origin};transform:rotate(${cssAngle}deg)">${inner}</span>` +
+            `</div>`
+        );
     }
     return inner;
 }

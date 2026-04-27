@@ -495,7 +495,53 @@ describe('Sheets xlsx import/convert', () => {
         expect(byCoord.get('2:0')?.rt).toBe(-45);
         expect(byCoord.get('3:0')?.rt).toBe(-90);
         expect(byCoord.get('4:0')?.rt).toBe('vertical');
-        expect(byCoord.get('0:1')?.ff).toBe('Georgia');
+        // Georgia is a serif font → mapped to the bundled Source Serif 4. See FONT_MAP
+        // in apps/api/src/lib/import/sheets/from-xlsx.ts; only the four supported faces
+        // ship as embedded webfonts, so unsupported families collapse to the closest one.
+        expect(byCoord.get('0:1')?.ff).toBe('Source Serif 4');
+    });
+
+    test('convert maps common xlsx fonts into the four supported families', async () => {
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Fonts');
+        ws.getCell('A1').value = 'sans';
+        ws.getCell('A1').font = { name: 'Calibri' };
+        ws.getCell('A2').value = 'serif';
+        ws.getCell('A2').font = { name: 'Times New Roman' };
+        ws.getCell('A3').value = 'mono';
+        ws.getCell('A3').font = { name: 'Courier New' };
+        ws.getCell('A4').value = 'unknown';
+        ws.getCell('A4').font = { name: 'Wingdings' };
+        ws.getCell('A5').value = 'native';
+        ws.getCell('A5').font = { name: 'Inter' };
+        const buf = await workbook.xlsx.writeBuffer();
+        const view = new Uint8Array(buf);
+        const out = new ArrayBuffer(view.byteLength);
+        new Uint8Array(out).set(view);
+        const xlsxFile = new File([out], 'fonts.xlsx', {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+        const uploaded = await driveUpload<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            rootId,
+            xlsxFile,
+        );
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
+            { method: 'POST' },
+        );
+        const converted = await assertJson<DrivePath>(res);
+        const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+        const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
+        expect(byCoord.get('0:0')?.ff).toBe('Inter');
+        expect(byCoord.get('1:0')?.ff).toBe('Source Serif 4');
+        expect(byCoord.get('2:0')?.ff).toBe('JetBrains Mono');
+        // Unrecognized → no ff (falls back to body default, which is Inter).
+        expect(byCoord.get('3:0')?.ff).toBeUndefined();
+        expect(byCoord.get('4:0')?.ff).toBe('Inter');
     });
 
     test('convert handles multi-sheet workbooks', async () => {
