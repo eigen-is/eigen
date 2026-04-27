@@ -358,251 +358,37 @@ export function checkboxChange(ctx: Context, r: number, c: number) {
 // error message when data is invalid
 export function getFailureText(ctx: Context, item: any) {
     let failureText = "";
-    const {lang} = ctx;
-
     const {type, type2, value1, value2} = item;
-    if (lang === "zh" || lang === "zh-CN") {
-        const optionLabel_zh = ctx.dataVerification?.optionLabel_zh;
-        if (type === "dropdown") {
-            failureText += "你选择的不是下拉列表中的选项";
-        } else if (type === "checkbox") {
-        } else if (
-            type === "number" ||
-            type === "number_integer" ||
-            type === "number_decimal"
-        ) {
-            failureText += `你输入的不是${optionLabel_zh[type2]}${value1}`;
+    const optionLabel = ctx.dataVerification?.optionLabel;
+    if (!optionLabel) return failureText;
 
-            if (type2 === "between" || type2 === "notBetween") {
-                failureText += `和${value2}之间`;
-            }
-
-            failureText += `的${optionLabel_zh[type]}`;
-        } else if (type === "text_content") {
-            failureText += `你输入的不是内容${optionLabel_zh[type2]}${value1}的文本`;
-        } else if (type === "text_length") {
-            failureText += `你输入的不是长度${optionLabel_zh[type2]}${value1}`;
-
-            if (type2 === "between" || type2 === "notBetween") {
-                failureText += `和${value2}之间`;
-            }
-
-            failureText += "的文本";
-        } else if (type === "date") {
-            failureText += `你输入的不是${optionLabel_zh[type2]}${value1}`;
-
-            if (type2 === "between" || type2 === "notBetween") {
-                failureText += `和${value2}之间`;
-            }
-
-            failureText += "的日期";
-        } else if (type === "validity") {
-            failureText += `你输入的不是一个正确的${optionLabel_zh[type2]}`;
+    if (type === "dropdown") {
+        failureText += "what you selected is not an option in the drop-down list";
+    } else if (type === "checkbox") {
+        // checkbox cells can never be invalid — no message
+    } else if (
+        type === "number" ||
+        type === "number_integer" ||
+        type === "number_decimal"
+    ) {
+        failureText += `what you entered is not a ${optionLabel[type]} ${optionLabel[type2]} ${value1}`;
+        if (type2 === "between" || type2 === "notBetween") {
+            failureText += ` and ${value2}`;
         }
-    } else if (lang === "zh-TW") {
-        const optionLabel_zh_tw = ctx.dataVerification?.optionLabel_zh_tw;
-        if (type === "dropdown") {
-            failureText += "你選擇的不是下拉清單中的選項";
-        } else if (type === "checkbox") {
-        } else if (
-            type === "number" ||
-            type === "number_integer" ||
-            type === "number_decimal"
-        ) {
-            failureText += `你輸入的不是${optionLabel_zh_tw[type2]}${value1}`;
-
-            if (type2 === "between" || type2 === "notBetween") {
-                failureText += `和${value2}之間`;
-            }
-
-            failureText += `的${optionLabel_zh_tw[type]}`;
-        } else if (type === "text_content") {
-            failureText += `你輸入的不是內容${optionLabel_zh_tw[type2]}${value1}的文本`;
-        } else if (type === "text_length") {
-            failureText += `你輸入的不是長度${optionLabel_zh_tw[type2]}${value1}`;
-
-            if (type2 === "between" || type2 === "notBetween") {
-                failureText += `和${value2}之间`;
-            }
-
-            failureText += "的文本";
-        } else if (type === "date") {
-            failureText += `你輸入的不是${optionLabel_zh_tw[type2]}${value1}`;
-
-            if (type2 === "between" || type2 === "notBetween") {
-                failureText += `和${value2}之间`;
-            }
-
-            failureText += "的日期";
-        } else if (type === "validity") {
-            failureText += `你輸入的不是一個正確的${optionLabel_zh_tw[type2]}`;
+    } else if (type === "text_content") {
+        failureText += `what you entered is not text that ${optionLabel[type2]} ${value1}`;
+    } else if (type === "text_length") {
+        failureText += `the text you entered is not length ${optionLabel[type2]} ${value1}`;
+        if (type2 === "between" || type2 === "notBetween") {
+            failureText += ` and ${value2}`;
         }
-    } else if (lang === "es") {
-        const optionLabel_es = ctx.dataVerification?.optionLabel_es;
-        if (type === "dropdown") {
-            failureText += "No elegiste una opción en la lista desplegable";
-        } else if (type === "checkbox") {
-        } else if (
-            type === "number" ||
-            type === "number_integer" ||
-            type === "number_decimal"
-        ) {
-            failureText += `Lo que introduciste no es${optionLabel_es[type2]}${value1}`;
-
-            if (type2 === "between" || type2 === "notBetween") {
-                failureText += `Y${value2}Entre`;
-            }
-
-            failureText += `De${optionLabel_es[type]}`;
-        } else if (type === "text_content") {
-            failureText += `Lo que introduciste no fue contenido${optionLabel_es[type2]}${value1}Texto`;
-        } else if (type === "text_length") {
-            failureText += `No introduciste la longitud${optionLabel_es[type2]}${value1}`;
-
-            if (type2 === "between" || type2 === "notBetween") {
-                failureText += `Y${value2}Entre`;
-            }
-
-            failureText += "Texto";
-        } else if (type === "date") {
-            failureText += `Lo que introduciste no es${optionLabel_es[type2]}${value1}`;
-
-            if (type2 === "between" || type2 === "notBetween") {
-                failureText += `Y${value2}Entre`;
-            }
-
-            failureText += "Fecha";
-        } else if (type === "validity") {
-            failureText += `Lo que ingresas no es correcto${optionLabel_es[type2]}`;
+    } else if (type === "date") {
+        failureText += `the date you entered is not ${optionLabel[type2]} ${value1}`;
+        if (type2 === "between" || type2 === "notBetween") {
+            failureText += ` and ${value2}`;
         }
-    } else if (lang === "hi") {
-        const optionLabel_hi = ctx.dataVerification?.optionLabel_hi;
-        if (type === "dropdown") {
-            failureText +=
-                "आपने जो चयन किया है वह ड्रॉप-डाउन सूची में एक विकल्प नहीं है";
-        } else if (type === "checkbox") {
-        } else if (
-            type === "number" ||
-            type === "number_integer" ||
-            type === "number_decimal"
-        ) {
-            failureText += `आपने जो दर्ज किया है वह ${optionLabel_hi[item.type]} ${
-                optionLabel_hi[item.type2]
-            } ${item.value1} नहीं है`;
-
-            if (item.type2 === "between" || item.type2 === "notBetween") {
-                failureText += ` and ${item.value2}`;
-            }
-        } else if (type === "text_content") {
-            failureText += `आपने जो दर्ज किया है वह पाठ नहीं है जो ${
-                optionLabel_hi[item.type2]
-            } ${item.value1} है`;
-        } else if (type === "text_length") {
-            failureText += `आपके द्वारा दर्ज किया गया पाठ की लंबाई ${
-                optionLabel_hi[item.type2]
-            } ${item.value1} नहीं है`;
-
-            if (item.type2 === "between" || item.type2 === "notBetween") {
-                failureText += ` और ${item.value2}`;
-            }
-        } else if (type === "date") {
-            failureText += `आपके द्वारा दर्ज की गई तिथि ${
-                optionLabel_hi[item.type2]
-            } ${item.value1} नहीं है।`;
-
-            if (type2 === "between" || type2 === "notBetween") {
-                failureText += ` और ${item.value2}`;
-            }
-        } else if (type === "validity") {
-            failureText += `आपने जो दर्ज किया है वह सही ${
-                optionLabel_hi[item.type2]
-            } नहीं है।`;
-        }
-    } else if (lang === "ru") {
-        const optionLabel_ru = ctx.dataVerification?.optionLabel_ru;
-        if (type === "dropdown") {
-            failureText += "выбранный вами вариант отсутствует в выпадающем списке";
-        } else if (type === "checkbox") {
-        } else if (
-            type === "number" ||
-            type === "number_integer" ||
-            type === "number_decimal"
-        ) {
-            failureText += `введённое значение не является ${
-                optionLabel_ru[item.type]
-            } ${optionLabel_ru[item.type2]} ${item.value1}`;
-
-            if (item.type2 === "between" || item.type2 === "notBetween") {
-                failureText += ` и ${item.value2}`;
-            }
-        } else if (type === "text_content") {
-            failureText += `введённый текст не соответствует условию: ${
-                optionLabel_ru[item.type2]
-            } ${item.value1}`;
-        } else if (type === "text_length") {
-            failureText += `длина введённого текста не ${
-                optionLabel_ru[item.type2]
-            } ${item.value1} `;
-
-            if (item.type2 === "between" || item.type2 === "notBetween") {
-                failureText += `и ${item.value2}`;
-            }
-        } else if (type === "date") {
-            failureText += `введённая дата не ${
-                optionLabel_ru[item.type2][item.type2]
-            } ${item.value1} `;
-
-            if (type2 === "between" || type2 === "notBetween") {
-                failureText += `и ${item.value2}`;
-            }
-        } else if (type === "validity") {
-            failureText += `введённое значение некорректно: ${
-                optionLabel_ru[item.type2][item.type2]
-            } `;
-        }
-    } else {
-        // default language english (en, en-US, en-GB, etc.)
-        const optionLabel_en = ctx.dataVerification?.optionLabel_en;
-        if (type === "dropdown") {
-            failureText += "what you selected is not an option in the drop-down list";
-        } else if (type === "checkbox") {
-        } else if (
-            type === "number" ||
-            type === "number_integer" ||
-            type === "number_decimal"
-        ) {
-            failureText += `what you entered is not a ${optionLabel_en[item.type]} ${
-                optionLabel_en[item.type2]
-            } ${item.value1}`;
-
-            if (item.type2 === "between" || item.type2 === "notBetween") {
-                failureText += ` and ${item.value2}`;
-            }
-        } else if (type === "text_content") {
-            failureText += `what you entered is not text that ${
-                optionLabel_en[item.type2]
-            } ${item.value1}`;
-        } else if (type === "text_length") {
-            failureText += `the text you entered is not length ${
-                optionLabel_en[item.type2]
-            } ${item.value1}`;
-
-            if (item.type2 === "between" || item.type2 === "notBetween") {
-                failureText += ` and ${item.value2}`;
-            }
-        } else if (type === "date") {
-            failureText += `the date you entered is not ${
-                optionLabel_en[item.type2]
-            } ${item.value1}`;
-
-            if (type2 === "between" || type2 === "notBetween") {
-                failureText += ` and ${item.value2}`;
-            }
-        } else if (type === "validity") {
-            failureText += `what you entered is not a correct ${
-                optionLabel_en[item.type2]
-            }`;
-        }
+    } else if (type === "validity") {
+        failureText += `what you entered is not a correct ${optionLabel[type2]}`;
     }
     return failureText;
 }
@@ -610,180 +396,40 @@ export function getFailureText(ctx: Context, item: any) {
 // get the hint text
 export function getHintText(ctx: Context, item: any) {
     let hintValue = item.hintValue || "";
+    if (hintValue) return hintValue;
+
     const {type, type2, value1, value2} = item;
-    const {lang} = ctx;
+    const optionLabel = ctx.dataVerification?.optionLabel;
+    if (!optionLabel) return hintValue;
 
-    if (!hintValue) {
-        if (lang === "en") {
-            const optionLabel_en = ctx.dataVerification?.optionLabel_en;
-            if (type === "dropdown") {
-                hintValue += "please select an option in the drop-down list";
-            } else if (type === "checkbox") {
-            } else if (
-                type === "number" ||
-                type === "number_integer" ||
-                type === "number_decimal"
-            ) {
-                hintValue += `please enter a ${optionLabel_en[type]} ${optionLabel_en[type2]} ${item.value1}`;
-
-                if (type2 === "between" || type2 === "notBetween") {
-                    hintValue += ` and ${value2}`;
-                }
-            } else if (type === "text_content") {
-                hintValue += `please enter text ${optionLabel_en[type2]} ${value1}`;
-            } else if (type === "date") {
-                hintValue += `please enter a date ${optionLabel_en[type2]} ${value1}`;
-
-                if (type2 === "between" || type2 === "notBetween") {
-                    hintValue += ` and ${value2}`;
-                }
-            } else if (type === "validity") {
-                hintValue += `please enter the correct ${optionLabel_en[type2]}`;
-            }
-        } else if (lang === "zh" || lang === "zh-CN") {
-            const optionLabel_zh = ctx.dataVerification?.optionLabel_zh;
-            if (type === "dropdown") {
-                hintValue += "请选择下拉列表中的选项";
-            } else if (type === "checkbox") {
-            } else if (
-                type === "number" ||
-                type === "number_integer" ||
-                type === "number_decimal"
-            ) {
-                hintValue += `请输入${optionLabel_zh[type2]}${value1}`;
-
-                if (type2 === "between" || type2 === "notBetween") {
-                    hintValue += `和${value2}之间`;
-                }
-
-                hintValue += `的${optionLabel_zh[type]}`;
-            } else if (type === "text_content") {
-                hintValue += `请输入内容${optionLabel_zh[type2]}${value1}的文本`;
-            } else if (type === "text_length") {
-                hintValue += `请输入长度${optionLabel_zh[type2]}${value1}`;
-
-                if (type2 === "between" || type2 === "notBetween") {
-                    hintValue += `和${value2}之间`;
-                }
-
-                hintValue += "的文本";
-            } else if (type === "date") {
-                hintValue += `请输入${optionLabel_zh[type2]}${value1}`;
-
-                if (type2 === "between" || type2 === "notBetween") {
-                    hintValue += `和${value2}之间`;
-                }
-
-                hintValue += "的日期";
-            } else if (type === "validity") {
-                hintValue += `请输入正确的${optionLabel_zh[type2]}`;
-            }
-        } else if (lang === "zh-TW") {
-            const optionLabel_zh_tw = ctx.dataVerification?.optionLabel_zh_tw;
-            if (type === "dropdown") {
-                hintValue += "請選擇下拉清單中的選項";
-            } else if (type === "checkbox") {
-            } else if (
-                type === "number" ||
-                type === "number_integer" ||
-                type === "number_decimal"
-            ) {
-                hintValue += `請輸入${optionLabel_zh_tw[type2]}${value1}`;
-
-                if (type2 === "between" || type2 === "notBetween") {
-                    hintValue += `和${value2}之間`;
-                }
-
-                hintValue += `的${optionLabel_zh_tw[type]}`;
-            } else if (type === "text_content") {
-                hintValue += `請輸入內容${optionLabel_zh_tw[type2]}${value1}的文本`;
-            } else if (type === "text_length") {
-                hintValue += `請輸入長度${optionLabel_zh_tw[type2]}${value1}`;
-
-                if (type2 === "between" || type2 === "notBetween") {
-                    hintValue += `和${value2}之間`;
-                }
-
-                hintValue += "的文本";
-            } else if (type === "date") {
-                hintValue += `請輸入${optionLabel_zh_tw[type2]}${value1}`;
-
-                if (type2 === "between" || type2 === "notBetween") {
-                    hintValue += `和${value2}之間`;
-                }
-
-                hintValue += "的日期";
-            } else if (type === "validity") {
-                hintValue += `請輸入正確的${optionLabel_zh_tw[type2]}`;
-            }
-        } else if (lang === "es") {
-            const optionLabel_es = ctx.dataVerification?.optionLabel_es;
-            if (type === "dropdown") {
-                hintValue += "Por favor, elija una opción en la lista desplegable";
-            } else if (type === "checkbox") {
-            } else if (
-                type === "number" ||
-                type === "number_integer" ||
-                type === "number_decimal"
-            ) {
-                hintValue += `Por favor, introduzca${optionLabel_es[type2]}${value1}`;
-
-                if (type2 === "between" || type2 === "notBetween") {
-                    hintValue += `Y${value2}Entre`;
-                }
-
-                hintValue += `De${optionLabel_es[type]}`;
-            } else if (type === "text_content") {
-                hintValue += `Por favor, introduzca el contenido${optionLabel_es[type2]}${value1}Texto`;
-            } else if (type === "text_length") {
-                hintValue += `Por favor, introduzca la longitud${optionLabel_es[type2]}${value1}`;
-
-                if (type2 === "between" || type2 === "notBetween") {
-                    hintValue += `Y${value2}Entre`;
-                }
-
-                hintValue += "Texto";
-            } else if (type === "date") {
-                hintValue += `Por favor, introduzca${optionLabel_es[type2]}${value1}`;
-
-                if (type2 === "between" || type2 === "notBetween") {
-                    hintValue += `Y${value2}Entre`;
-                }
-
-                hintValue += "Fecha";
-            } else if (type === "validity") {
-                hintValue += `Por favor, introduzca lo correcto.${optionLabel_es[type2]}`;
-            }
-        } else if (lang === "ru") {
-            const optionLabel_ru = ctx.dataVerification?.optionLabel_ru;
-
-            if (type === "dropdown") {
-                hintValue += "пожалуйста, выберите вариант из выпадающего списка";
-            } else if (type === "checkbox") {
-            } else if (
-                type === "number" ||
-                type === "number_integer" ||
-                type === "number_decimal"
-            ) {
-                hintValue += `пожалуйста, введите ${optionLabel_ru[type]} значение, которое ${optionLabel_ru[type2]} ${item.value1}`;
-
-                if (type2 === "between" || type2 === "notBetween") {
-                    hintValue += ` и ${value2}`;
-                }
-            } else if (type === "text_content") {
-                hintValue += `пожалуйста, введите текст, который ${optionLabel_ru[type2]} ${value1}`;
-            } else if (type === "date") {
-                hintValue += `пожалуйста, введите дату, которая ${optionLabel_ru[type2]} ${value1}`;
-
-                if (type2 === "between" || type2 === "notBetween") {
-                    hintValue += ` и ${value2}`;
-                }
-            } else if (type === "validity") {
-                hintValue += `пожалуйста, введите корректный ${optionLabel_ru[type2]}`;
-            }
+    if (type === "dropdown") {
+        hintValue += "please select an option in the drop-down list";
+    } else if (type === "checkbox") {
+        // checkbox cells need no hint
+    } else if (
+        type === "number" ||
+        type === "number_integer" ||
+        type === "number_decimal"
+    ) {
+        hintValue += `please enter a ${optionLabel[type]} ${optionLabel[type2]} ${value1}`;
+        if (type2 === "between" || type2 === "notBetween") {
+            hintValue += ` and ${value2}`;
         }
+    } else if (type === "text_content") {
+        hintValue += `please enter text ${optionLabel[type2]} ${value1}`;
+    } else if (type === "text_length") {
+        hintValue += `please enter text of length ${optionLabel[type2]} ${value1}`;
+        if (type2 === "between" || type2 === "notBetween") {
+            hintValue += ` and ${value2}`;
+        }
+    } else if (type === "date") {
+        hintValue += `please enter a date ${optionLabel[type2]} ${value1}`;
+        if (type2 === "between" || type2 === "notBetween") {
+            hintValue += ` and ${value2}`;
+        }
+    } else if (type === "validity") {
+        hintValue += `please enter the correct ${optionLabel[type2]}`;
     }
-
     return hintValue;
 }
 
@@ -840,22 +486,7 @@ export function cellFocus(
 
     // hint text
     if (item.hintShow) {
-        let hintText = "";
-        const {lang} = ctx;
-        if (lang === "en") {
-            hintText = '<span style="color:#f5a623;">Hint: </span>';
-        } else if (lang === "ru") {
-            hintText = '<span style="color:#f5a623;">Подсказка: </span>';
-        } else if (lang === "zh" || lang === "zh-CN") {
-            hintText = '<span style="color:#f5a623;">提示：</span>';
-        } else if (lang === "zh-TW") {
-            hintText = '<span style="color:#f5a623;">提示：</span>';
-        } else if (lang === "es") {
-            hintText = '<span style="color:#f5a623;">Consejos：</span>';
-        } else if (lang === "hi") {
-            hintText = '<span style="color:#f5a623;">सुझाव: </span>';
-        }
-        hintText += getHintText(ctx, item);
+        const hintText = `<span style="color:#f5a623;">Hint: </span>${getHintText(ctx, item)}`;
         showHintBox.innerHTML = hintText;
         showHintBox.style.display = "block";
         showHintBox.style.left = `${col_pre}px`;
@@ -869,22 +500,7 @@ export function cellFocus(
     }
     const validate = validateCellData(ctx, item, cellValue);
     if (!validate) {
-        let failureText = "";
-        const {lang} = ctx;
-        if (lang === "en") {
-            failureText = '<span style="color:#f72626;">Failure: </span>';
-        } else if (lang === "ru") {
-            failureText = '<span style="color:#f72626;">Ошибка: </span>';
-        } else if (lang === "zh" || lang === "zh-CN") {
-            failureText = '<span style="color:#f72626;">失效：</span>';
-        } else if (lang === "zh-TW") {
-            failureText = '<span style="color:#f72626;">失效：</span>';
-        } else if (lang === "es") {
-            failureText = '<span style="color:#f72626;">Caducidad: </span>';
-        } else if (lang === "hi") {
-            failureText = '<span style="color:#f72626;">असफलता: </span>';
-        }
-        failureText += getFailureText(ctx, item);
+        const failureText = `<span style="color:#f72626;">Failure: </span>${getFailureText(ctx, item)}`;
         showHintBox.innerHTML = failureText;
         showHintBox.style.display = "block";
         showHintBox.style.left = `${col_pre}px`;

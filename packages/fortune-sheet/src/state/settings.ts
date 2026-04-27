@@ -131,7 +131,6 @@ export type Settings = {
     data: Sheet[];
     config?: any;
     devicePixelRatio?: number;
-    lang?: string | null;
     forceCalculation?: boolean;
     rowHeaderWidth?: number;
     columnHeaderHeight?: number;
@@ -159,7 +158,6 @@ export const defaultSettings: Required<Settings> = {
     config: {}, // settings for row height, column width, merged cells, formulas, etc.
     devicePixelRatio: 0, // device pixel ratio; higher value gives sharper rendering, 0 means auto
     allowEdit: true, // whether to allow editing in the frontend
-    lang: null, // language
     forceCalculation: false, // force formula recalculation; may cause performance issues with many formulas, use with caution
     rowHeaderWidth: 46,
     columnHeaderHeight: 20,
