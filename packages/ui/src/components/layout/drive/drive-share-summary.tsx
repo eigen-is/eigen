@@ -10,6 +10,7 @@ export type DriveShareSummaryProps = {
     onClick?: () => void;
     showIconOnHover?: boolean;
     ancestorBreadcrumb?: DrivePath[];
+    className?: string;
 };
 
 export function DriveShareSummary({
@@ -17,6 +18,7 @@ export function DriveShareSummary({
     onClick,
     showIconOnHover = true,
     ancestorBreadcrumb,
+    className,
 }: DriveShareSummaryProps) {
     const { allEntries } = useDriveAccess(path, undefined, ancestorBreadcrumb);
 
@@ -26,7 +28,7 @@ export function DriveShareSummary({
 
     return (
         <div
-            className={cn('flex items-center gap-1', onClick && 'cursor-pointer')}
+            className={cn('flex items-center gap-1', onClick && 'cursor-pointer', className)}
             onClick={
                 onClick
                     ? (e) => {

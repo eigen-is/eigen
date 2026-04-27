@@ -1,9 +1,9 @@
 import { useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
 import { useChats, useUnreadChatIds } from '@workspace/lib/chat';
+import { useDriveAccess } from '@workspace/lib/drive';
 import { useMyTeams } from '@workspace/lib/home';
-import { usePublicUser } from '@workspace/lib/public';
-import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
+import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { EigenLoader, UnreadDot, UserAvatar } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
@@ -14,7 +14,7 @@ import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-
 import { Separator } from '@workspace/ui/components/separator';
 import { cn } from '@workspace/ui/lib/utils';
 import { MessageSquare, Plus } from 'lucide-react';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 
 const MAX_AVATARS = 4;
 
@@ -33,41 +33,10 @@ type ChatItemProps = {
     hasUnread?: boolean;
 };
 
-function useChatAvatarIds(chat: DrivePath): string[] {
-    const isTeam = parseOwnerId(chat.ownerId).type === 'team';
-    const owner = usePublicUser(isTeam ? undefined : chat.ownerId);
-
-    return useMemo(() => {
-        if (isTeam) return [chat.ownerId];
-
-        const ids: string[] = [];
-        const ownerEmail = owner.data?.email;
-        if (ownerEmail) ids.push(ownerEmail);
-
-        if (chat.acl) {
-            for (const access of chat.acl) {
-                if (ids.length >= MAX_AVATARS) break;
-                const lower = access.id.toLowerCase();
-                if (ids.some((id) => id.toLowerCase() === lower)) continue;
-                ids.push(access.id);
-            }
-        }
-        return ids;
-    }, [isTeam, chat.ownerId, chat.acl, owner.data?.email]);
-}
-
-function ChatAvatars({ chat }: { chat: DrivePath }) {
-    const ids = useChatAvatarIds(chat);
-    return (
-        <div className="flex items-center">
-            {ids.map((id, i) => (
-                <UserAvatar key={id} email={id} className={cn('h-4 w-4', i > 0 && '-ml-2')} />
-            ))}
-        </div>
-    );
-}
-
 function ChatItem({ chat, condensed, hasUnread }: ChatItemProps) {
+    // Empty preloadedBreadcrumb skips the (irrelevant) inherited-access fetch — sidebar
+    // only cares about owner + direct ACL, never ancestor folders.
+    const { allEntries } = useDriveAccess(chat, undefined, []);
     const label = (chat.name || 'Unnamed chat').replace(/\.eigenchat$/, '');
     const to = `/${chat.ownerId}/${chat.mountId}/${chat.id}`;
 
@@ -84,8 +53,10 @@ function ChatItem({ chat, condensed, hasUnread }: ChatItemProps) {
             condensed={condensed}
         >
             {!condensed && (
-                <div className="ml-auto">
-                    <ChatAvatars chat={chat} />
+                <div className="flex items-center ml-auto">
+                    {allEntries.slice(0, MAX_AVATARS).map((entry, i) => (
+                        <UserAvatar key={entry.id} email={entry.id} className={cn('h-4 w-4', i > 0 && '-ml-2')} />
+                    ))}
                 </div>
             )}
         </SidebarItem>

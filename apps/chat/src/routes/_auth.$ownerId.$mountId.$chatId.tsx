@@ -42,19 +42,17 @@ function ChatView() {
 
     const toolbar = (
         <Toolbar>
-            {chat.chatPath && (
-                <div className="ml-2">
-                    {isTeam ? (
-                        <UserAvatar email={ownerId} size="sm" tooltip />
-                    ) : (
-                        <DriveShareSummary
-                            path={chat.chatPath}
-                            onClick={() => setAccessDialogOpen(true)}
-                            showIconOnHover={false}
-                        />
-                    )}
-                </div>
-            )}
+            {chat.chatPath &&
+                (isTeam ? (
+                    <UserAvatar email={ownerId} size="sm" tooltip className="ml-2" />
+                ) : (
+                    <DriveShareSummary
+                        path={chat.chatPath}
+                        onClick={() => setAccessDialogOpen(true)}
+                        showIconOnHover={false}
+                        className="ml-2"
+                    />
+                ))}
             {chat.chatPath && <span className="font-semibold text-sm truncate">{chat.chatName}</span>}
             <div className="flex items-center gap-1">
                 <TooltipButton
