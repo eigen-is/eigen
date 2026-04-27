@@ -30,7 +30,6 @@ export function SidebarItem({
     className,
     children,
 }: SidebarItemProps) {
-    // Common styling for both button and link variants
     const baseStyles = cn(
         'flex items-center rounded-md px-3 py-2 text-sm font-medium select-none',
         condensed ? 'justify-center' : 'gap-3',
@@ -38,24 +37,15 @@ export function SidebarItem({
         className,
     );
 
-    // Content to render inside the button or link
     const content = (
         <>
-            {/* Color dot for labels */}
             {colorDot && <span className="h-3 w-3 rounded-full" style={{ backgroundColor: colorDot }} />}
-
-            {/* Icon */}
             {icon}
-
-            {/* Label text (only shown when not condensed) */}
             {!condensed && label && <span>{label}</span>}
-
-            {/* Additional children */}
             {children}
         </>
     );
 
-    // Render as a Link if 'to' is provided, an anchor if 'href', otherwise a Button
     if (to) {
         return (
             <Link
