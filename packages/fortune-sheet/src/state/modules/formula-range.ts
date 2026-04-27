@@ -1,6 +1,7 @@
 import type {Context} from "../context";
 import type {Rect} from "../types";
 import {columnCharToIndex, indexToColumnChar} from "../utils";
+import {detectAbsolute} from "../../engine/formula-shift";
 import {getRangetxt, mergeMoveMain} from "./cell";
 import {error} from "./validation";
 import {moveToEnd} from "./cursor";
@@ -481,153 +482,6 @@ export function rangeDragRow(
     setRangeSelect(container, col_pre, top, height, col - col_pre - 1);
 }
 
-function isfreezonFuc(txt: string) {
-    const row = txt.replace(/[^0-9]/g, "");
-    const col = txt.replace(/[^A-Za-z]/g, "");
-    const row$ = txt.substr(txt.indexOf(row) - 1, 1);
-    const col$ = txt.substr(txt.indexOf(col) - 1, 1);
-    const ret = [false, false];
-
-    if (row$ === "$") {
-        ret[0] = true;
-    }
-    if (col$ === "$") {
-        ret[1] = true;
-    }
-
-    return ret;
-}
-
-function updateparam(orient: string, txt: string, step: number) {
-    const val = txt.split("!");
-    let rangetxt;
-    let prefix = "";
-
-    if (val.length > 1) {
-        [, rangetxt] = val;
-        prefix = `${val[0]}!`;
-    } else {
-        [rangetxt] = val;
-    }
-
-    if (rangetxt.indexOf(":") === -1) {
-        let row = parseInt(rangetxt.replace(/[^0-9]/g, ""), 10);
-        let col = columnCharToIndex(rangetxt.replace(/[^A-Za-z]/g, ""));
-        const freezonFuc = isfreezonFuc(rangetxt);
-        const $row = freezonFuc[0] ? "$" : "";
-        const $col = freezonFuc[1] ? "$" : "";
-
-        if (orient === "u" && !freezonFuc[0]) {
-            row -= step;
-        } else if (orient === "r" && !freezonFuc[1]) {
-            col += step;
-        } else if (orient === "l" && !freezonFuc[1]) {
-            col -= step;
-        } else if (orient === "d" && !freezonFuc[0]) {
-            row += step;
-        }
-
-        if (!Number.isNaN(row) && !Number.isNaN(col)) {
-            return prefix + $col + indexToColumnChar(col) + $row + row;
-        }
-        if (!Number.isNaN(row)) {
-            return prefix + $row + row;
-        }
-        if (!Number.isNaN(col)) {
-            return prefix + $col + indexToColumnChar(col);
-        }
-        return txt;
-    }
-    rangetxt = rangetxt.split(":");
-    const row = [];
-    const col = [];
-
-    row[0] = parseInt(rangetxt[0].replace(/[^0-9]/g, ""), 10);
-    row[1] = parseInt(rangetxt[1].replace(/[^0-9]/g, ""), 10);
-    if (row[0] > row[1]) {
-        return txt;
-    }
-
-    col[0] = columnCharToIndex(rangetxt[0].replace(/[^A-Za-z]/g, ""));
-    col[1] = columnCharToIndex(rangetxt[1].replace(/[^A-Za-z]/g, ""));
-    if (col[0] > col[1]) {
-        return txt;
-    }
-
-    const freezonFuc0 = isfreezonFuc(rangetxt[0]);
-    const freezonFuc1 = isfreezonFuc(rangetxt[1]);
-    const $row0 = freezonFuc0[0] ? "$" : "";
-    const $col0 = freezonFuc0[1] ? "$" : "";
-    const $row1 = freezonFuc1[0] ? "$" : "";
-    const $col1 = freezonFuc1[1] ? "$" : "";
-
-    if (orient === "u") {
-        if (!freezonFuc0[0]) {
-            row[0] -= step;
-        }
-
-        if (!freezonFuc1[0]) {
-            row[1] -= step;
-        }
-    } else if (orient === "r") {
-        if (!freezonFuc0[1]) {
-            col[0] += step;
-        }
-
-        if (!freezonFuc1[1]) {
-            col[1] += step;
-        }
-    } else if (orient === "l") {
-        if (!freezonFuc0[1]) {
-            col[0] -= step;
-        }
-
-        if (!freezonFuc1[1]) {
-            col[1] -= step;
-        }
-    } else if (orient === "d") {
-        if (!freezonFuc0[0]) {
-            row[0] += step;
-        }
-
-        if (!freezonFuc1[0]) {
-            row[1] += step;
-        }
-    }
-
-    if (row[0] < 0 || col[0] < 0) {
-        return error.r;
-    }
-
-    if (Number.isNaN(col[0]) && Number.isNaN(col[1])) {
-        return `${prefix + $row0 + row[0]}:${$row1}${row[1]}`;
-    }
-    if (Number.isNaN(row[0]) && Number.isNaN(row[1])) {
-        return `${
-            prefix + $col0 + indexToColumnChar(col[0])
-        }:${$col1}${indexToColumnChar(col[1])}`;
-    }
-    return `${
-        prefix + $col0 + indexToColumnChar(col[0]) + $row0 + row[0]
-    }:${$col1}${indexToColumnChar(col[1])}${$row1}${row[1]}`;
-}
-
-function downparam(txt: string, step: number) {
-    return updateparam("d", txt, step);
-}
-
-function upparam(txt: string, step: number) {
-    return updateparam("u", txt, step);
-}
-
-function leftparam(txt: string, step: number) {
-    return updateparam("l", txt, step);
-}
-
-function rightparam(txt: string, step: number) {
-    return updateparam("r", txt, step);
-}
-
 function functionStrChange_range(
     txt: string,
     type: string,
@@ -662,7 +516,7 @@ function functionStrChange_range(
         c1 = columnCharToIndex(rangetxt.replace(/[^A-Za-z]/g, ""));
         c2 = c1;
 
-        const freezonFuc = isfreezonFuc(rangetxt);
+        const freezonFuc = detectAbsolute(rangetxt);
 
         $row0 = freezonFuc[0] ? "$" : "";
         $row1 = $row0;
@@ -683,11 +537,11 @@ function functionStrChange_range(
             return txt;
         }
 
-        const freezonFuc0 = isfreezonFuc(rangetxt[0]);
+        const freezonFuc0 = detectAbsolute(rangetxt[0]);
         $row0 = freezonFuc0[0] ? "$" : "";
         $col0 = freezonFuc0[1] ? "$" : "";
 
-        const freezonFuc1 = isfreezonFuc(rangetxt[1]);
+        const freezonFuc1 = detectAbsolute(rangetxt[1]);
         $row1 = freezonFuc1[0] ? "$" : "";
         $col1 = freezonFuc1[1] ? "$" : "";
     }
@@ -978,142 +832,6 @@ export function functionStrChange(
                     stindex,
                     step
                 );
-            } else {
-                function_str += str.trim();
-            }
-        }
-
-        i += 1;
-    }
-
-    return function_str;
-}
-
-export function functionCopy(
-    ctx: Context,
-    txt: string,
-    mode: string,
-    step: number
-) {
-    if (mode == null) {
-        mode = "down";
-    }
-
-    if (step == null) {
-        step = 1;
-    }
-
-    if (txt.substring(0, 1) === "=") {
-        txt = txt.substring(1);
-    }
-
-    const funcstack = txt.split("");
-    let i = 0;
-    let str = "";
-    let function_str = "";
-
-    const matchConfig = {
-        bracket: 0,
-        comma: 0,
-        squote: 0,
-        dquote: 0,
-    };
-
-    while (i < funcstack.length) {
-        const s = funcstack[i];
-
-        if (s === "(" && matchConfig.dquote === 0) {
-            matchConfig.bracket += 1;
-
-            if (str.length > 0) {
-                function_str += `${str}(`;
-            } else {
-                function_str += "(";
-            }
-
-            str = "";
-        } else if (s === ")" && matchConfig.dquote === 0) {
-            matchConfig.bracket -= 1;
-            function_str += `${functionCopy(ctx, str, mode, step)})`;
-            str = "";
-        } else if (s === '"' && matchConfig.squote === 0) {
-            if (matchConfig.dquote > 0) {
-                function_str += `${str}"`;
-                matchConfig.dquote -= 1;
-                str = "";
-            } else {
-                matchConfig.dquote += 1;
-                str += '"';
-            }
-        } else if (s === "," && matchConfig.dquote === 0) {
-            function_str += `${functionCopy(ctx, str, mode, step)},`;
-            str = "";
-        } else if (s === "&" && matchConfig.dquote === 0) {
-            if (str.length > 0) {
-                function_str += `${functionCopy(ctx, str, mode, step)}&`;
-                str = "";
-            } else {
-                function_str += "&";
-            }
-        } else if (s in operatorjson && matchConfig.dquote === 0) {
-            let s_next = "";
-
-            if (i + 1 < funcstack.length) {
-                s_next = funcstack[i + 1];
-            }
-
-            let p = i - 1;
-            let s_pre = null;
-
-            if (p >= 0) {
-                do {
-                    s_pre = funcstack[p];
-                    p -= 1;
-                } while (p >= 0 && s_pre === " ");
-            }
-
-            if (s + s_next in operatorjson) {
-                if (str.length > 0) {
-                    function_str += functionCopy(ctx, str, mode, step) + s + s_next;
-                    str = "";
-                } else {
-                    function_str += s + s_next;
-                }
-
-                i += 1;
-            } else if (
-                !/[^0-9]/.test(s_next) &&
-                s === "-" &&
-                (s_pre === "(" ||
-                    s_pre == null ||
-                    s_pre === "," ||
-                    s_pre === " " ||
-                    s_pre in operatorjson)
-            ) {
-                str += s;
-            } else {
-                if (str.length > 0) {
-                    function_str += functionCopy(ctx, str, mode, step) + s;
-                    str = "";
-                } else {
-                    function_str += s;
-                }
-            }
-        } else {
-            str += s;
-        }
-
-        if (i === funcstack.length - 1) {
-            if (iscelldata(str.trim())) {
-                if (mode === "down") {
-                    function_str += downparam(str.trim(), step);
-                } else if (mode === "up") {
-                    function_str += upparam(str.trim(), step);
-                } else if (mode === "left") {
-                    function_str += leftparam(str.trim(), step);
-                } else if (mode === "right") {
-                    function_str += rightparam(str.trim(), step);
-                }
             } else {
                 function_str += str.trim();
             }

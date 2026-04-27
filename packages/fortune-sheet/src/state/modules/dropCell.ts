@@ -2322,7 +2322,6 @@ export function updateDropCell(ctx: Context) {
 
                     if (cell?.f != null) {
                         const f = `=${formula.functionCopy(
-                            ctx,
                             cell.f,
                             "down",
                             j - apply_str_r + 1
@@ -2431,7 +2430,6 @@ export function updateDropCell(ctx: Context) {
 
                     if (cell?.f != null) {
                         const f = `=${formula.functionCopy(
-                            ctx,
                             cell.f,
                             "up",
                             apply_end_r - j + 1
@@ -2538,7 +2536,6 @@ export function updateDropCell(ctx: Context) {
 
                     if (cell?.f != null) {
                         const f = `=${formula.functionCopy(
-                            ctx,
                             cell.f,
                             "right",
                             j - apply_str_c + 1
@@ -2635,7 +2632,6 @@ export function updateDropCell(ctx: Context) {
 
                     if (cell?.f != null) {
                         const f = `=${formula.functionCopy(
-                            ctx,
                             cell.f,
                             "left",
                             apply_end_c - j + 1

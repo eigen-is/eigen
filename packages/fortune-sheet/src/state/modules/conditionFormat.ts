@@ -221,10 +221,10 @@ export function getComputeMap(ctx: Context): ComputeMap | null {
             const offsetCol = targetCol - anchorCol;
             let shifted = formula;
             if (offsetRow > 0) {
-                shifted = `=${functionCopy(ctx, shifted, "down", offsetRow)}`;
+                shifted = `=${functionCopy(shifted, "down", offsetRow)}`;
             }
             if (offsetCol > 0) {
-                shifted = `=${functionCopy(ctx, shifted, "right", offsetCol)}`;
+                shifted = `=${functionCopy(shifted, "right", offsetCol)}`;
             }
             return execfunction(ctx, shifted, targetRow, targetCol)[1];
         },

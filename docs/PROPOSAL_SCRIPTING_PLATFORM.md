@@ -1,47 +1,65 @@
 # Eigen Scripting Platform
 
 A server-side scripting and extension system for eigen, enabling users to write scripts that extend functionality.
-Scripts run in sandboxed Deno subprocesses, communicate with eigen via JSON-RPC, and can integrate with any
-frontend app through a shared sidebar. Inspired by Google Apps Script.
+Scripts run in long-lived Deno worker processes, communicate with eigen via Content-Length-framed JSON-RPC,
+and integrate with frontend apps through a shared sidebar. Inspired by Google Apps Script.
+
+## Trust Model
+
+Scripts are **trusted-by-author** code. The author can already do everything in their workspace via the API; a
+script just lets them automate it. The boundary we enforce is:
+
+- Scripts execute as the user who triggered them. SDK calls go through the same ACL checks as regular API calls,
+  so a script cannot read data its triggering user couldn't read by hand
+- Permission tokens declared in the manifest scope what the script *can* request. Manifest changes require a
+  re-confirmation in the UI
+- Process-level isolation contains crashes, runaway loops, and unintended resource use — not hostile escapes
+- Workers run with `--no-prompt --deny-write --deny-env --deny-ffi --deny-run` plus a network allowlist derived
+  from the manifest
+
+We do NOT promise:
+
+- Containment of code that *tries* to escape the runtime. Deno's permission model has had multiple bypass CVEs
+  in the last six months (CVE-2025-61786, -61785, -61787, -55182). DNS rebinding against `--allow-net` allowlists
+  is a known unfixed gap. `--v8-flags=--max-heap-size=N` is enforced by aborting the process, not by throwing,
+  and external memory (TypedArrays from Rust, V8 LOS) is not counted toward the cap
+- Containment of malicious scripts authored elsewhere and pasted in. Phase 1 scope is "I write scripts to extend
+  my own workspace"
+
+If a future Phase ever supports a public marketplace, the runtime will need OS-level controls (cgroups, network
+namespaces, separate Linux user). Phase 1 builds the Deno-subprocess model because it is the right least-privilege
+*convenience* for trusted code, not because it is a real sandbox.
 
 ## Core Decisions
 
-- **Runtime**: Deno subprocess — each script runs in a sandboxed Deno process with granular permissions
-- **Sandboxing**: Process-level isolation via Deno's permission flags. No access to eigen's filesystem, memory,
-  or process. SDK calls bridge back to eigen via stdin/stdout JSON-RPC
-- **Execution model**: Fully asynchronous — POST /execute returns immediately with an execution ID, progress
-  and results are delivered via SSE. No HTTP request blocks on script execution
-- **SDK design**: Google Apps Script–inspired object model. Document types (docs, sheets) use
-  `eigen.docs.getActive()` / `eigen.docs.getById({...})` returning document proxies with chainable methods.
-  Flat domains (drive, mail, calendar) use `eigen.drive.method(params)`. All data access goes through the
-  backend — no dual frontend/backend paths. Proxy-based: adding new SDK methods requires zero runner changes,
-  only a backend handler
-- **API access**: Scripts declare permissions in a manifest, enforced at two levels (Deno flags + SDK call
-  validation)
-- **Triggers**: Manual (Phase 1), cron-based and event-driven (future)
-- **Distribution**: Personal scope (Phase 1), team and org scoping (future)
-- **UI integration**: Shared `ScriptsPanel` sidebar in all apps (like the comments panel), plus context-aware
-  script actions
+- **Runtime**: Deno worker pool — each pool slot is a long-lived Deno process; one execution at a time per slot,
+  killed and respawned between executions to enforce wall-clock timeouts
+- **Sandboxing**: Process-level isolation plus Deno permission flags. SDK calls bridge back to eigen via
+  stdin/stdout JSON-RPC framed with `Content-Length` headers (LSP-style)
+- **Execution model**: Fully asynchronous — `POST /execute` returns immediately with an execution ID; progress
+  and results arrive via SSE. No HTTP request blocks on script execution
+- **SDK design**: Google Apps Script–inspired object model. Document types (docs, sheets, slides) use
+  `eigen.docs.getActive()` / `eigen.docs.getById({...})` returning document proxies with chainable methods. Flat
+  domains (drive, mail, calendar) use `eigen.drive.method(params)`. All data access goes through the backend —
+  scripts always read via the SDK, never via a frontend cache
+- **API access**: Scripts declare permissions in a manifest, enforced at three levels (Deno flags, SDK call
+  validation, ACL checks against executing user)
+- **Triggers**: Manual (Phase 1), cron-based and event-driven (Phase 2)
+- **Distribution**: Personal scope (Phase 1), team and org scoping (Phase 2)
+- **UI integration**: Shared `ScriptsPanel` sidebar in apps that opt in (like the comments panel), plus
+  context-aware script actions
 
-### Why Deno Subprocess
+### Why Deno Worker Pool
 
-- **Node.js `vm`** is explicitly not a security mechanism — code escapes the sandbox via prototype chain
-  traversal (`this.constructor.constructor('return process')()`)
-- **`isolated-vm`** is a native C++ V8 addon — incompatible with Bun's JavaScriptCore engine
-- **Deno subprocess** provides real process-level isolation with built-in permission flags that map directly to
-  manifest permissions. Single binary dependency, works regardless of eigen's runtime
-
-### Worker Process — Deferred to Phase 2
-
-Script execution involves spawning subprocesses, managing I/O, enforcing timeouts, and processing SDK calls.
-At scale (cron triggers, event-driven execution, many concurrent users), offloading this to a dedicated Bun
-worker process makes sense. But Phase 1 is manual-trigger only — a handful of executions per day. The Deno
-subprocess itself provides process isolation (a crashing script can't take down the API), so the worker's
-isolation benefit is redundant.
-
-Phase 1 spawns Deno directly from the main API via a `ScriptRunner` class. The code is structured so that
-extracting it into a worker process in Phase 2 is a mechanical refactor: move the Deno management code, add
-an IPC bridge. No architectural changes needed.
+- **Node `vm`** is explicitly not a security mechanism — code escapes via prototype-chain traversal
+- **`isolated-vm`** is a native V8 addon, incompatible with Bun's JavaScriptCore engine
+- **Deno subprocess** gives us a separate OS process with permission flags that map to manifest tokens. Single
+  binary dependency, works regardless of eigen's runtime
+- **Long-lived workers vs spawn-per-execution**: cold start of `deno run` is ≈130–150 ms before the first JS line
+  runs (Deno's own AWS Lambda benchmarks). For sidebar UX where a user clicks "Translate selection" and waits, a
+  per-execution spawn adds 150–400 ms of dead time before the script does anything. A pre-warmed pool of N
+  worker processes amortizes cold start across many executions; killing and respawning the slot after each
+  execution preserves the timeout guarantee
 
 ## Architecture
 
@@ -51,15 +69,21 @@ an IPC bridge. No architectural changes needed.
 Main API (Bun, port 8000)
 ├── Scripts domain class        (CRUD for scripts/executions, personal DB)
 ├── Script routes               (HTTP API — create, edit, run, list extensions)
-└── ScriptRunner                (spawns Deno subprocesses directly, manages lifecycle,
-                                 fulfills SDK calls against Home instances)
+├── ScriptWorkerPool            (manages N pre-warmed Deno workers, dispatches
+│                                executions, kills+respawns slots between runs)
+└── SDK handler                 (fulfills RPC calls against Home instances)
 
-Deno Runner (one per script execution, sandboxed)
+Deno worker (one per pool slot)
 ├── Build SDK via Proxy          (eigen.docs.getActive(), eigen.drive.*, etc.)
-├── Override console.log/warn/error → capture locally in logLines
-├── Import + execute script source via data URI
-└── Return result or error via stdout JSON-RPC
+├── Override console.log/warn/error → capture in capped logLines buffer
+├── Execute script source via new Function() (string) when "exec" message arrives
+└── Return result or error via Content-Length-framed JSON
 ```
+
+The pool is a `Map<slotId, { proc, busy, currentExecutionId }>`. `runScript()` picks an idle slot, sends an
+`exec` message, awaits completion, then kills and respawns the slot. Killing between executions guarantees the
+timeout, prevents memory accumulation, and avoids state leakage across users (since one user's script ran in
+that slot last). The respawn happens in the background while the next request can pick a different idle slot.
 
 ### Process Model (Phase 2 — Worker Extraction)
 
@@ -70,13 +94,15 @@ Main API (Bun, port 8000)
 └── ScriptBridge                (IPC bridge to worker)
 
 Script Worker (separate Bun process, spawned at API startup)
-├── Execution queue             (per-user concurrency limit, FIFO)
-├── Timeout manager
-└── Per-execution Deno management (moved from ScriptRunner)
+├── ScriptWorkerPool             (moved from main API)
+├── Execution queue              (per-user concurrency limit, FIFO)
+├── Cron scheduler               (Bun.cron handlers in this process)
+└── SDK handler                  (still calls back into main API for Home access)
 ```
 
-The worker extraction adds: per-user concurrency limits, execution queuing, and CPU isolation for the main
-API. The Deno management code moves unchanged; only the communication layer changes (direct calls → IPC).
+Phase 2 extracts the pool and queue into a separate Bun process so script CPU and memory don't compete with
+HTTP request handling. The Deno-management code moves unchanged; only the communication layer changes from
+direct calls to IPC.
 
 ### Data Flow — Script Execution
 
@@ -86,29 +112,33 @@ Execution is fully asynchronous. The HTTP request never blocks on script executi
 1. User clicks "Run" → POST /scripts/:ownerId/execute/:scriptId
    → Response: { executionId, status: "running" }  (returned immediately)
 
-2. Main API: Scripts.createExecution() writes to DB
-   ScriptRunner.spawn() launches Deno subprocess, sends init via stdin
+2. Main API: Scripts.createExecution() writes a row with status="running"
+   ScriptWorkerPool.dispatch() picks an idle worker slot, sends exec init
 
-3. Deno: runner.ts builds SDK via Proxy, executes script
+3. Deno worker: receives init, builds SDK via Proxy, executes script
 
    SDK call flow (e.g. eigen.drive.listFolder({ mountId, pathId })):
    a. Script calls eigen.drive.listFolder({ mountId, pathId })
-   b. Proxy intercepts → RPC stdout: { id: 1, method: "drive.listFolder", params: { ownerId, mountId, pathId } }
+   b. Proxy intercepts → RPC stdout: { id: 1, method: "drive.listFolder",
+                                       params: { ownerId, mountId, pathId } }
       (ownerId auto-injected from eigen.user.id)
-   c. ScriptRunner reads stdout, resolves via SDK handler:
-      getHome(params.ownerId) → handler function → result
-   d. ScriptRunner writes to Deno stdin: { id: 1, result: [...] }
-   e. Runner resolves RPC promise → script receives file list
+   c. ScriptWorkerPool reader resolves via SDK handler:
+      validateOwnerAccess(executingUser, params.ownerId) → getHome(params.ownerId) →
+      handler function → result
+   d. Pool writes Content-Length-framed response to worker stdin: { id: 1, result: [...] }
+   e. Worker resolves RPC promise → script receives file list
 
    Document call flow (e.g. eigen.docs.getActive().getText()):
    a. eigen.docs.getActive() returns a Proxy with mountId/pathId baked in from context
-   b. .getText() → RPC stdout: { id: 2, method: "docs.getText", params: { ownerId, mountId, pathId } }
-   c. ScriptRunner: getHome(ownerId) → readDocContent(drive, mountId, pathId) → { text, json }
-   d. Returns text to runner
+   b. .getText() → RPC stdout: { id: 2, method: "docs.getText",
+                                 params: { ownerId, mountId, pathId } }
+   c. Pool: validate access → getHome(ownerId) → readDocContent(...) → { text, json }
+   d. Returns text to worker
 
-4. Script finishes → runner sends { type: "done", result, log }
-5. ScriptRunner: Scripts.completeExecution() updates DB
+4. Script finishes → worker sends { type: "done", result, log }
+5. ScriptWorkerPool: Scripts.completeExecution() updates DB row
    home.broadcast(buildScriptEvent("scripts:completed", { executionId }))
+   → kill the slot, respawn a fresh worker in the background
 
 6. Frontend: SSE handler invalidates execution queries
    → ScriptsPanel fetches result → calls applyResults() on context provider
@@ -124,22 +154,22 @@ Execution is fully asynchronous. The HTTP request never blocks on script executi
 4. POST /scripts/:ownerId/execute/:scriptId with context body
    → Returns { executionId, status: "running" } immediately
 5. Sidebar shows spinner, tracks executionId
-6. [Script runs — calls eigen.fetch() to translate. All document reads go through backend SDK.]
+6. [Script runs — calls eigen.fetch() to translate. Document reads go through backend SDK.]
 7. SSE event: scripts:completed { executionId }
 8. Sidebar fetches execution result: [{ action: "replaceSelection", value: "Bonjour le monde" }]
 9. Sidebar calls docsContextProvider.applyResults(results)
    → dispatches ProseMirror transaction replacing selection
 ```
 
-Note: the frontend context provides only **selection state** (what the user has selected, which only the
-frontend knows). All document content reads go through the backend SDK, which reads from Yjs. This means
-the same script code works identically whether triggered from a sidebar or a cron job.
+The frontend context provides only **selection state** (what the user has selected, which only the frontend
+knows). Document content reads always go through the backend SDK, which reads from Yjs. This means the same
+script code works identically whether triggered from a sidebar or a cron job.
 
 ## Data Model
 
 Per-user database at `{home}/eigen.scripts/scripts.db`, managed via `ManagedDatabase` with versioned migrations.
-For future team/org scope, the same DB structure lives in TeamHome/OrgHome — team scripts in the team's DB, org
-scripts in the org's DB. This follows the existing Home ownership model (like Drive mounts and Calendar).
+Path follows the existing eigen convention (`eigen.mail/mail.db`, `eigen.calendar/calendar.db`, etc.). For
+future team/org scope, the same DB structure lives in TeamHome/OrgHome.
 
 ### `scripts`
 
@@ -156,10 +186,8 @@ scripts in the org's DB. This follows the existing Home ownership model (like Dr
 | createdAt | integer | Epoch ms |
 | updatedAt | integer | Epoch ms |
 
-The `config` column stores user-provided values that persist across executions (e.g. API keys, default
-settings). These are merged into `eigen.config` at runtime so scripts don't prompt for the same values
-every time. Config values are stored as plaintext in the user's personal DB — a dedicated secrets store is a
-future enhancement.
+The `config` column stores user-provided values that persist across executions. Stored as plaintext in the
+user's personal DB — a dedicated secrets store is a future enhancement.
 
 ### `executions`
 
@@ -171,14 +199,18 @@ future enhancement.
 | startedAt | integer | Epoch ms |
 | finishedAt | integer | Epoch ms, nullable |
 | durationMs | integer | Nullable |
-| log | text | Captured console output |
-| error | text | Error message if failed, nullable |
+| log | text | Captured console output (truncated to 64 KB) |
+| error | text | Error message + code if failed, nullable |
 | result | text (JSON) | Return value from script, nullable |
 
 Execution records are pruned automatically: max 200 per script, oldest deleted first. Pruning runs on
 `completeExecution()`.
 
-### `triggers` (Future — Phase 2)
+**Recovery on startup**: when `Scripts.init()` runs (Home cold-start), every `running` or `pending` execution
+in the DB is marked `failed` with `error: "API restarted before completion"`. Without this, an API restart
+mid-execution leaves the row "running" forever.
+
+### `triggers` (Phase 2)
 
 | Column | Type | Notes |
 |--------|------|-------|
@@ -199,12 +231,12 @@ data stays in the user's `scripts.db`; this is a lookup table only.
 | triggerId | text PK | References triggers.id in user's scripts.db |
 | scriptId | text | |
 | ownerId | text | Home that owns the script |
-| cron | text | Cron expression (e.g. `"0 9 * * MON-FRI"`) |
+| cron | text | Cron expression (e.g. `"0 9 * * MON-FRI"`) — interpreted as UTC |
 | enabled | integer | |
 
 CRUD operations on triggers update both the user's `scripts.db` and this server-level index atomically.
 
-### `installations` (Future — Phase 2)
+### `installations` (Phase 2)
 
 | Column | Type | Notes |
 |--------|------|-------|
@@ -219,193 +251,231 @@ Personal scripts don't need installation records — the author has implicit acc
 
 ## Execution Environment
 
-### ScriptRunner
+### ScriptWorkerPool
 
-The `ScriptRunner` class manages Deno subprocess lifecycle directly from the main API process. Each execution
-gets its own Deno process with a wall-clock timeout.
+The pool maintains N pre-warmed Deno worker processes. Each worker reads
+Content-Length-framed JSON-RPC messages from stdin and writes results to stdout. Workers are killed and
+respawned between executions to enforce wall-clock timeouts and prevent state leakage.
 
 ```typescript
-// apps/api/src/lib/scripts/script-runner.ts
+// apps/api/src/lib/scripts/script-worker-pool.ts
 
-const activeExecutions = new Map<string, { proc: Subprocess; timer: Timer }>();
+const POOL_SIZE = 4;  // Phase 1 default; tune later
 
-export async function runScript(req: ExecutionRequest): Promise<void> {
-    const { executionId, source, context, permissions, timeout, ownerId } = req;
-    const runnerPath = path.resolve(import.meta.dir, "runner.ts");
-    const allowedDomains = getNetworkAllowlist(permissions);
+type Slot = {
+    id: number;
+    proc: Subprocess;
+    busy: boolean;
+    currentExecutionId: string | null;
+    pending: Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>;
+};
 
+const slots: Slot[] = [];
+
+export async function initPool(): Promise<void> {
+    for (let i = 0; i < POOL_SIZE; i++) {
+        slots.push(await spawnSlot(i));
+    }
+}
+
+async function spawnSlot(id: number): Promise<Slot> {
+    const runnerPath = path.resolve(import.meta.dir, "runner.js");
+    // Process group via setsid so we can kill grandchildren if the worker spawns any
     const proc = Bun.spawn([
-        "deno", "run",
+        "setsid", "deno", "run",
         `--allow-read=${runnerPath}`,
         "--deny-write",
         "--deny-env",
         "--deny-ffi",
+        "--deny-run",
         "--no-prompt",
         "--v8-flags=--max-heap-size=128",
-        ...(allowedDomains.length
-            ? [`--allow-net=${allowedDomains.join(",")}`]
-            : ["--deny-net"]),
+        "--allow-net",  // Network gating happens per-execution; see below
         runnerPath,
-    ], {
-        stdin: "pipe",
-        stdout: "pipe",
-        stderr: "pipe",
-    });
+    ], { stdin: "pipe", stdout: "pipe", stderr: "pipe" });
 
-    const timer = setTimeout(() => {
-        proc.kill();
-        completeExecution(executionId, "timeout");
-    }, timeout);
+    const slot: Slot = { id, proc, busy: false, currentExecutionId: null, pending: new Map() };
+    readSlotStdout(slot);
+    return slot;
+}
 
-    activeExecutions.set(executionId, { proc, timer });
+export async function runScript(req: ExecutionRequest): Promise<void> {
+    const slot = await acquireIdleSlot();
+    slot.busy = true;
+    slot.currentExecutionId = req.executionId;
 
-    // Send init
-    proc.stdin.write(JSON.stringify({
-        type: "init",
-        source,
-        context: { user: context.user, config: context.config, ...context },
-        function: context.function || "onRun",
-    }) + "\n");
+    const timer = setTimeout(() => completeExecution(req.executionId, "timeout"), req.timeout);
 
-    // Read stdout (JSON-RPC from runner)
-    handleRunnerOutput(executionId, proc, ownerId, permissions);
+    try {
+        await sendFramed(slot.proc.stdin, {
+            type: "exec",
+            executionId: req.executionId,
+            source: req.source,
+            context: req.context,
+            permissions: req.permissions,
+            allowedDomains: getNetworkAllowlist(req.permissions),
+            function: req.function ?? "onRun",
+        });
+        // result comes back via readSlotStdout → completeExecution()
+    } finally {
+        // Slot is recycled (killed + respawned) inside completeExecution()
+        clearTimeout(timer);
+    }
 }
 
 export function cancelExecution(executionId: string): boolean {
-    const entry = activeExecutions.get(executionId);
-    if (!entry) return false;
-    entry.proc.kill();
-    clearTimeout(entry.timer);
-    activeExecutions.delete(executionId);
+    const slot = slots.find(s => s.currentExecutionId === executionId);
+    if (!slot) return false;
+    recycleSlot(slot, "cancelled");
     return true;
+}
+
+async function recycleSlot(slot: Slot, reason: ExecutionStatus): Promise<void> {
+    if (slot.currentExecutionId) {
+        await completeExecution(slot.currentExecutionId, reason);
+    }
+    // Kill the entire process group to clean up any grandchildren
+    process.kill(-slot.proc.pid!, "SIGKILL");
+    slot.proc.kill();
+    const newSlot = await spawnSlot(slot.id);
+    Object.assign(slot, newSlot);
 }
 ```
 
 **Lifecycle:**
-- `runScript()` spawns Deno, starts timeout, begins reading stdout
-- SDK calls from the runner are handled inline: `getHome(params.ownerId)` → domain method → write result to stdin
-- Progress messages from the runner are broadcast via SSE for real-time sidebar updates
-- On completion/error/timeout: update execution record, broadcast SSE, clean up
-- `cancelExecution()` kills the Deno process and marks the execution as `cancelled`
-- On API shutdown (`shutdownAllHomes()`): kill all active Deno processes
+- `initPool()` runs at API startup, spawns N workers
+- `runScript()` acquires an idle slot, sends the `exec` message via Content-Length framing
+- SDK calls from the worker are read by `readSlotStdout`, dispatched through the SDK handler
+- On completion/error/timeout/cancel: `recycleSlot()` kills the slot's process group and respawns
+- On API shutdown: kill all slots cleanly
 
-### Deno Subprocess
+### Deno Worker Constraints
 
-Each script execution gets its own Deno process with strict sandboxing:
+| Constraint | Value | Rationale |
+|---|---|---|
+| Wall clock timeout | 120 s default | `recycleSlot()` on `setTimeout` |
+| Heap memory (advisory) | 128 MB | `--v8-flags=--max-heap-size=128`. Process aborts on overflow — not catchable |
+| Filesystem read | runner.js only | `--allow-read=<runner-path>` |
+| Filesystem write | none | `--deny-write` |
+| Environment vars | none | `--deny-env` |
+| FFI | none | `--deny-ffi` |
+| Subprocess spawn | none | `--deny-run` |
+| Network | per-execution allowlist | `--allow-net` is broad at process startup; per-execution we wrap `fetch` in the SDK to check the manifest's `fetch` permission and a domain allowlist before dispatching the request |
 
-**Constraints:**
-- Wall clock timeout: 120s default (configurable per org in future)
-- Memory limit: 128MB via `--v8-flags=--max-heap-size=128`
-- `proc.kill()` on timeout — clean OS-level termination, execution marked `timeout`
-- `--allow-read` restricted to runner.ts path only — script cannot read eigen's filesystem
-- `--deny-write` prevents any filesystem writes
-- `--deny-env` prevents reading server secrets
-- Network only via Deno's native `fetch`, restricted to allowlisted domains by `--allow-net`
-- ~50ms subprocess startup overhead — acceptable for manual triggers, optimizable with process pooling later
+The `--allow-net` flag at process start is intentionally broad; effective allowlisting happens in
+`eigen.fetch()`'s SDK wrapper, which checks the manifest. This keeps the worker binary identical across
+executions while letting per-script permissions vary.
 
-### Runner (`runner.ts`)
+### Runner (`runner.js`)
 
-The runner executes inside the Deno subprocess. It provides a Google Apps Script–inspired SDK with two patterns:
+The runner executes inside the Deno worker. It is shipped as plain JavaScript (no TypeScript compile cost on
+worker startup) and stays alive across executions. It provides a Google Apps Script–inspired SDK with two
+patterns:
 
-- **Document domains** (docs, sheets): `eigen.docs.getActive()` / `eigen.docs.getById({...})` return
-  document proxies with methods like `.getText()`, `.getCell("A1")`. The proxy auto-injects mountId/pathId
+- **Document domains** (docs, sheets, slides): `eigen.docs.getActive()` / `eigen.docs.getById({...})` return
+  document proxies. The proxy auto-injects `mountId/pathId`
 - **Flat domains** (drive, mail, calendar, contacts): `eigen.drive.method(params)` — direct RPC dispatch
 
 All SDK calls go through the same JSON-RPC bridge. The runner never enumerates methods — adding new backend
 capabilities requires zero runner changes.
 
-Console output (`console.log/warn/error`) is captured locally in `logLines` and sent with the final
-done/error message. Objects are serialized via `JSON.stringify` for readable output.
+Console output is captured locally in a capped `logLines` buffer (max 64 KB, lines beyond that replaced with
+`[…log truncated]`). Objects are serialized via `JSON.stringify` for readable output.
 
-```typescript
-// apps/api/src/lib/scripts/runner.ts — runs inside Deno subprocess
+```javascript
+// apps/api/src/lib/scripts/runner.js — runs inside the Deno worker, lives across executions
 
-// --- I/O helpers (newline-delimited JSON over stdin/stdout) ---
+// --- Content-Length framed I/O (LSP-style, immune to embedded newlines) ---
 
 const encoder = new TextEncoder();
-const decoder = new TextDecoder();
-let stdinBuffer = "";
+const decoder = new TextDecoder("utf-8", { fatal: false });
 
-function write(data: unknown) {
-    Deno.stdout.writeSync(encoder.encode(JSON.stringify(data) + "\n"));
+function writeFramed(data) {
+    const body = encoder.encode(JSON.stringify(data));
+    const header = encoder.encode(`Content-Length: ${body.byteLength}\r\n\r\n`);
+    Deno.stdout.writeSync(header);
+    Deno.stdout.writeSync(body);
 }
 
-async function readLine(): Promise<string> {
-    const buf = new Uint8Array(4096);
-    while (!stdinBuffer.includes("\n")) {
-        const n = await Deno.stdin.read(buf);
-        if (n === null) throw new Error("stdin closed");
-        stdinBuffer += decoder.decode(buf.subarray(0, n));
+let buf = new Uint8Array(0);
+async function readFramed() {
+    while (true) {
+        const sep = findSeparator(buf);
+        if (sep >= 0) {
+            const headerStr = decoder.decode(buf.subarray(0, sep));
+            const m = headerStr.match(/Content-Length:\s*(\d+)/i);
+            if (!m) throw new Error("missing Content-Length");
+            const len = parseInt(m[1], 10);
+            const start = sep + 4;
+            while (buf.byteLength < start + len) buf = await readMore(buf);
+            const body = JSON.parse(decoder.decode(buf.subarray(start, start + len)));
+            buf = buf.subarray(start + len);
+            return body;
+        }
+        buf = await readMore(buf);
     }
-    const idx = stdinBuffer.indexOf("\n");
-    const line = stdinBuffer.slice(0, idx);
-    stdinBuffer = stdinBuffer.slice(idx + 1);
-    return line;
 }
 
-// --- Init ---
+// --- Per-execution state ---
 
-const init = JSON.parse(await readLine());
 let nextId = 1;
-const pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
-const logLines: string[] = [];
+let pending = new Map();
+let logLines = [];
+let logBytes = 0;
+const LOG_CAP = 64 * 1024;
 
-// --- JSON-RPC bridge ---
-
-async function rpc(method: string, params: unknown): Promise<unknown> {
+function rpc(method, params) {
     const id = nextId++;
-    write({ id, method, params });
-    return new Promise((resolve, reject) => {
-        pending.set(id, { resolve, reject });
-    });
+    writeFramed({ id, method, params });
+    return new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
 }
 
-// Background reader for SDK responses
+// Background reader for SDK responses + control messages
 (async () => {
     while (true) {
-        try {
-            const line = await readLine();
-            const msg = JSON.parse(line);
-            const p = pending.get(msg.id);
-            if (p) {
-                pending.delete(msg.id);
-                if (msg.error) {
-                    const err = new Error(msg.error.message);
-                    (err as any).code = msg.error.code;
-                    p.reject(err);
-                } else {
-                    p.resolve(msg.result);
-                }
-            }
-        } catch {
-            break;  // stdin closed
+        const msg = await readFramed();
+        if (msg.type === "exec") { runExecution(msg); continue; }
+        const p = pending.get(msg.id);
+        if (!p) continue;
+        pending.delete(msg.id);
+        if (msg.error) {
+            const err = new Error(msg.error.message);
+            err.code = msg.error.code;
+            p.reject(err);
+        } else {
+            p.resolve(msg.result);
         }
     }
 })();
 
-// --- Console capture (local only, no RPC) ---
+// --- Console capture ---
 
-const stringify = (v: unknown) =>
+const stringify = (v) =>
     typeof v === "object" && v !== null ? JSON.stringify(v, null, 2) : String(v);
+
+function appendLog(prefix, args) {
+    if (logBytes >= LOG_CAP) return;
+    const line = prefix + args.map(stringify).join(" ");
+    logBytes += line.length + 1;
+    logLines.push(logBytes >= LOG_CAP ? "[…log truncated]" : line);
+}
 
 globalThis.console = {
     ...console,
-    log: (...args: unknown[]) => logLines.push(args.map(stringify).join(" ")),
-    warn: (...args: unknown[]) => logLines.push(`[warn] ${args.map(stringify).join(" ")}`),
-    error: (...args: unknown[]) => logLines.push(`[error] ${args.map(stringify).join(" ")}`),
+    log: (...args) => appendLog("", args),
+    warn: (...args) => appendLog("[warn] ", args),
+    error: (...args) => appendLog("[error] ", args),
 };
 
-// --- SDK: Document proxy (docs, sheets) ---
-// Returns an object with getActive() and getById() that produce document proxies.
-// The proxy auto-injects mountId/pathId into every RPC call.
+// --- SDK: Document proxy (docs, sheets, slides) ---
 // Mirrors Google Apps Script: SpreadsheetApp.getActive() / SpreadsheetApp.openById()
 
-function createDocProxy(domain: string, mountId: string, pathId: string, ownerId: string) {
-    return new Proxy({} as Record<string, (...args: unknown[]) => Promise<unknown>>, {
-        get(_, method: string) {
-            return (params: Record<string, unknown> | string = {}) => {
+function createDocProxy(domain, mountId, pathId, ownerId) {
+    return new Proxy({}, {
+        get(_, method) {
+            if (typeof method !== "string") return undefined;
+            return (params = {}) => {
                 const base = { ownerId, mountId, pathId };
-                // String arg = shorthand (e.g., A1 notation for sheets)
                 if (typeof params === "string") return rpc(`${domain}.${method}`, { ...base, cell: params });
                 return rpc(`${domain}.${method}`, { ...base, ...params });
             };
@@ -413,203 +483,271 @@ function createDocProxy(domain: string, mountId: string, pathId: string, ownerId
     });
 }
 
-function createDocDomain(domain: string) {
+function createDocDomain(domain, ctx) {
     return {
         getActive() {
-            const { mountId, pathId } = init.context;
-            if (!mountId || !pathId) throw new Error(`No active ${domain} document in current context`);
-            return createDocProxy(domain, mountId, pathId, init.context.user.id);
+            if (!ctx.mountId || !ctx.pathId) {
+                throw new Error(`No active ${domain} document in current context`);
+            }
+            return createDocProxy(domain, ctx.mountId, ctx.pathId, ctx.user.id);
         },
-        getById(ids: { ownerId?: string; mountId: string; pathId: string }) {
-            return createDocProxy(domain, ids.mountId, ids.pathId, ids.ownerId || init.context.user.id);
+        getById(ids) {
+            return createDocProxy(domain, ids.mountId, ids.pathId, ids.ownerId || ctx.user.id);
         },
     };
 }
 
-// --- SDK: Flat domain proxy (drive, mail, calendar, contacts) ---
-
-function createDomainProxy(domain: string) {
-    return new Proxy({} as Record<string, (params?: Record<string, unknown>) => Promise<unknown>>, {
-        get(_, method: string) {
-            return (params: Record<string, unknown> = {}) =>
-                rpc(`${domain}.${method}`, { ownerId: init.context.user.id, ...params });
+function createDomainProxy(domain, ctx) {
+    return new Proxy({}, {
+        get(_, method) {
+            if (typeof method !== "string") return undefined;
+            return (params = {}) =>
+                rpc(`${domain}.${method}`, { ownerId: ctx.user.id, ...params });
         },
     });
 }
 
-// --- SDK object ---
+// --- Per-execution entry point ---
 
-const eigen = {
-    // Document domains — object model with getActive() / getById()
-    docs: createDocDomain("docs"),
-    sheets: createDocDomain("sheets"),
-    slides: createDocDomain("slides"),
+async function runExecution(msg) {
+    nextId = 1;
+    pending = new Map();
+    logLines = [];
+    logBytes = 0;
 
-    // Flat domains — direct method dispatch
-    drive: createDomainProxy("drive"),
-    calendar: createDomainProxy("calendar"),
-    mail: createDomainProxy("mail"),
-    contacts: createDomainProxy("contacts"),
+    const ctx = msg.context;
+    const eigen = Object.freeze({
+        docs: createDocDomain("docs", ctx),
+        sheets: createDocDomain("sheets", ctx),
+        slides: createDocDomain("slides", ctx),
+        drive: createDomainProxy("drive", ctx),
+        calendar: createDomainProxy("calendar", ctx),
+        mail: createDomainProxy("mail", ctx),
+        contacts: createDomainProxy("contacts", ctx),
+        fetch: (url, opts) => rpc("net.fetch", { url, opts }),  // gated by SDK handler
+        progress: (message) => writeFramed({ type: "progress", executionId: msg.executionId, message }),
+        utils: Object.freeze({
+            sleep: (ms) => new Promise(r => setTimeout(r, ms)),
+        }),
+        context: ctx,
+        config: ctx.config || {},
+        user: ctx.user,
+    });
+    Object.defineProperty(globalThis, "eigen", {
+        value: eigen, writable: false, configurable: false,
+    });
 
-    // Utilities
-    fetch: (url: string, opts?: RequestInit) => fetch(url, opts),  // Deno native, domain-restricted
-    progress: (message: string) => { write({ type: "progress", message }); },
-    utils: {
-        sleep: (ms: number) => new Promise(resolve => setTimeout(resolve, ms)),
-    },
-
-    // Context and config
-    context: init.context,
-    config: init.context.config || {},
-    user: init.context.user,
-};
-
-globalThis.eigen = eigen;
-
-// --- Execute ---
-
-try {
-    const mod = await import(`data:text/javascript,${encodeURIComponent(init.source)}`);
-    const fn = init.function || "onRun";
-    const result = typeof mod[fn] === "function" ? await mod[fn]() : undefined;
-    write({ type: "done", result, log: logLines.join("\n") });
-} catch (e) {
-    write({ type: "error", error: e.message, stack: e.stack, log: logLines.join("\n") });
+    try {
+        // new Function avoids data-URI size limits and TS-compile cost
+        const fn = new Function(`${msg.source}; return typeof ${msg.function} === "function" ? ${msg.function} : null;`);
+        const userFn = fn();
+        if (!userFn) throw new Error(`Script does not export a function named "${msg.function}"`);
+        const result = await userFn();
+        writeFramed({ type: "done", executionId: msg.executionId, result, log: logLines.join("\n") });
+    } catch (e) {
+        writeFramed({
+            type: "error",
+            executionId: msg.executionId,
+            error: e.message,
+            code: e.code,
+            stack: e.stack,
+            log: logLines.join("\n"),
+        });
+    }
+    // The pool will kill+respawn this slot regardless; no need to clean up state here.
 }
 ```
 
 **Key design points:**
-- **Document domains** (`eigen.docs`, `eigen.sheets`): `getActive()` returns a Proxy with context
-  mountId/pathId baked in — `doc.getText()` becomes `rpc("docs.getText", { ownerId, mountId, pathId })`.
-  `getById({ mountId, pathId })` returns a Proxy with explicit IDs. Same Proxy, different IDs.
-  Mirrors `SpreadsheetApp.getActive()` / `SpreadsheetApp.openById()`
-- **Flat domains** (`eigen.drive`, `eigen.calendar`, etc.): `eigen.drive.listFolder({ mountId, pathId })`
-  becomes `rpc("drive.listFolder", { ownerId: user.id, mountId, pathId })`. ownerId can be overridden
-  for team data
+- **Frozen `eigen` global** with `defineProperty({ writable: false, configurable: false })` — script code cannot
+  reassign or delete it. Same for `eigen.utils`
+- **`fetch` is RPC'd, not native** — the host enforces per-script domain allowlist before issuing the actual
+  request. This is the security gate, not the Deno `--allow-net` flag
+- **Document domains**: `getActive()` returns a Proxy with context `mountId/pathId` baked in. `getById({...})`
+  returns a Proxy with explicit IDs. Mirrors `SpreadsheetApp.getActive()` / `SpreadsheetApp.openById()`
+- **Flat domains**: `eigen.drive.listFolder({ mountId, pathId })` becomes
+  `rpc("drive.listFolder", { ownerId: user.id, mountId, pathId })`. ownerId can be overridden for team data,
+  but the host validates the executing user has access to that owner
 - **String shorthand**: `sheet.getCell("A1")` auto-wraps as `{ cell: "A1" }` in the RPC params
-- Console capture uses `JSON.stringify` for objects — no more `[object Object]`
-- `eigen.progress(message)` sends a `{ type: "progress" }` message that the host broadcasts via SSE
-- `eigen.utils.sleep(ms)` wraps `setTimeout` (available in Deno, unlike Google Apps Script)
+- **`new Function(source)` over `import("data:...")`** — avoids data-URI size limits and parse overhead
 
 ### SDK Handler
 
-The main API fulfills SDK calls from the runner. Each method is registered in a single map with its
-permission requirement and handler function. Method names arrive as `"domain.method"` from the Proxy.
+The main API fulfills SDK calls from the worker. Each method is registered with its permission requirement,
+a Zod schema for params, and a typed handler. Method names arrive as `"domain.method"`.
 
 ```typescript
 // apps/api/src/lib/scripts/sdk-handler.ts
 
+import { z } from "zod";
+import { getSharedDrive } from "../drive";
+import { resolveCalendar } from "../calendar/get-calendar";
+import { requireOwnerAccess } from "../core/access";
+import { readDocContent, readSheetContent, readSlidesContent,
+         readSheetCellValue, readSheetRange } from "../document";
+
 const SDK_ERROR = {
     NOT_FOUND: "NOT_FOUND",
-    PERMISSION_DENIED: "PERMISSION_DENIED",
+    SCRIPT_PERMISSION_DENIED: "SCRIPT_PERMISSION_DENIED",  // manifest token missing
+    RESOURCE_PERMISSION_DENIED: "RESOURCE_PERMISSION_DENIED",  // ACL denial — no access to this resource for this user
     QUOTA_EXCEEDED: "QUOTA_EXCEEDED",
     INVALID_PARAMS: "INVALID_PARAMS",
     INTERNAL: "INTERNAL",
 } as const;
 
-type SDKMethod = (home: Home, params: Record<string, unknown>) => Promise<unknown>;
+type SDKMethod<P> = {
+    permission: string;
+    params: z.ZodType<P>;
+    // Handlers receive the executing User and choose the right per-domain resolver
+    // (getSharedDrive, resolveCalendar, requireOwnerAccess + getHome). The SDK
+    // layer doesn't reimplement ACL — it delegates to the same helpers routes use.
+    handler: (user: User, params: P) => Promise<unknown>;
+};
 
-const SDK_METHODS: Record<string, { permission: string; handler: SDKMethod }> = {
-    // Drive (flat domain)
+const ownerScoped = z.object({ ownerId: z.string() });
+const docScoped = ownerScoped.extend({ mountId: z.string(), pathId: z.string() });
+
+const SDK_METHODS: Record<string, SDKMethod<unknown>> = {
+    // Drive — getSharedDrive enforces ACL (own drive vs shared-with-me) the same
+    // way drive routes do. Returns Drive | SharedDrive transparently.
     "drive.listFolder": {
         permission: "drive:read",
-        handler: (home, p) => home.drive.list(p.mountId as string, p.pathId as string | undefined),
+        params: ownerScoped.extend({ mountId: z.string(), pathId: z.string().optional() }),
+        handler: async (user, p) => {
+            const drive = await getSharedDrive(p.ownerId, user);
+            return drive.list(p.mountId, p.pathId);
+        },
     },
     "drive.getPath": {
         permission: "drive:read",
-        handler: (home, p) => home.drive.getPath(p.mountId as string, p.pathId as string),
+        params: ownerScoped.extend({ mountId: z.string(), pathId: z.string() }),
+        handler: async (user, p) => {
+            const drive = await getSharedDrive(p.ownerId, user);
+            return drive.getPath(p.mountId, p.pathId);
+        },
     },
     "drive.readFile": {
         permission: "drive:read",
-        handler: (home, p) => home.drive.readFile(p.mountId as string, p.pathId as string),
+        params: ownerScoped.extend({ mountId: z.string(), pathId: z.string() }),
+        handler: async (user, p) => {
+            const drive = await getSharedDrive(p.ownerId, user);
+            return drive.readFile(p.mountId, p.pathId);
+        },
     },
 
-    // Docs (document domain — mountId/pathId injected by document proxy)
+    // Document readers — pass user through so they go via getSharedDrive internally,
+    // matching how editor routes (apps/api/src/routes/editor.ts) read documents.
     "docs.getText": {
         permission: "drive:read",
-        handler: (home, p) =>
-            readDocContent(p.ownerId as string, p.mountId as string, p.pathId as string).then(c => c.text),
+        params: docScoped,
+        handler: async (user, p) => (await readDocContent(user, p.ownerId, p.mountId, p.pathId)).text,
     },
     "docs.getJson": {
         permission: "drive:read",
-        handler: (home, p) =>
-            readDocContent(p.ownerId as string, p.mountId as string, p.pathId as string).then(c => c.json),
+        params: docScoped,
+        handler: async (user, p) => (await readDocContent(user, p.ownerId, p.mountId, p.pathId)).json,
     },
 
-    // Sheets (document domain — mountId/pathId injected by document proxy)
     "sheets.getCell": {
         permission: "drive:read",
-        handler: (home, p) =>
-            readSheetCellValue(p.ownerId as string, p.mountId as string, p.pathId as string,
-                p.cell as string, p.render as string | undefined),
+        params: docScoped.extend({ cell: z.string(), render: z.enum(["value","formula","formatted"]).optional() }),
+        handler: (user, p) => readSheetCellValue(user, p.ownerId, p.mountId, p.pathId, p.cell, p.render),
     },
     "sheets.getRange": {
         permission: "drive:read",
-        handler: (home, p) =>
-            readSheetRange(p.ownerId as string, p.mountId as string, p.pathId as string,
-                p.cell as string, p.render as string | undefined),
+        params: docScoped.extend({ cell: z.string(), render: z.enum(["value","formula","formatted"]).optional() }),
+        handler: (user, p) => readSheetRange(user, p.ownerId, p.mountId, p.pathId, p.cell, p.render),
     },
     "sheets.getSheetData": {
         permission: "drive:read",
-        handler: (home, p) =>
-            readSheetContent(p.ownerId as string, p.mountId as string, p.pathId as string)
-                .then(c => c.sheets[p.sheet as number]),
+        params: docScoped.extend({ sheet: z.number().optional() }),
+        handler: async (user, p) =>
+            (await readSheetContent(user, p.ownerId, p.mountId, p.pathId)).sheets[p.sheet ?? 0],
     },
 
-    // Slides (document domain — mountId/pathId injected by document proxy)
     "slides.getDeck": {
         permission: "drive:read",
-        handler: (home, p) =>
-            readSlidesContent(p.ownerId as string, p.mountId as string, p.pathId as string).then(c => c.deck),
+        params: docScoped,
+        handler: async (user, p) => (await readSlidesContent(user, p.ownerId, p.mountId, p.pathId)).deck,
     },
 
-    // Phase 2: "drive.writeFile", "drive.create", "docs.insertContent", "sheets.setCell", ...
-    // Phase 2: "mail.list", "mail.send", "calendar.listEvents", "calendar.createEvent", ...
+    // Network — no ownerId, no ACL; manifest domain allowlist is enforced inside proxyFetch.
+    "net.fetch": {
+        permission: "fetch",
+        params: z.object({ url: z.string(), opts: z.unknown().optional() }),
+        handler: (_, p) => proxyFetch(p.url, p.opts),
+    },
+
+    // Phase 2 examples — calendar uses resolveCalendar (mirrors apps/api/src/routes/calendar.ts):
+    //   "calendar.listEvents": {
+    //       permission: "calendar:read",
+    //       params: ownerScoped.extend({ calendarId: z.string() }),
+    //       handler: async (user, p) => {
+    //           const cal = await resolveCalendar(user, p.ownerId);
+    //           return cal.listEvents(p.calendarId);
+    //       },
+    //   },
 };
 
 export async function executeSDKMethod(
     method: string,
     params: Record<string, unknown>,
     permissions: string[],
+    executingUser: User,
 ): Promise<unknown> {
     const entry = SDK_METHODS[method];
     if (!entry) {
-        return { error: { code: SDK_ERROR.INVALID_PARAMS, message: `Unknown method: ${method}` } };
+        return errorResponse(SDK_ERROR.INVALID_PARAMS, `Unknown method: ${method}`);
+    }
+    if (!permissions.includes(entry.permission)) {
+        return errorResponse(SDK_ERROR.SCRIPT_PERMISSION_DENIED,
+            `${method} requires permission "${entry.permission}"`);
     }
 
-    if (!permissions.includes(entry.permission)) {
-        return { error: { code: SDK_ERROR.PERMISSION_DENIED, message: `${method} requires ${entry.permission}` } };
+    const parsed = entry.params.safeParse(params);
+    if (!parsed.success) {
+        return errorResponse(SDK_ERROR.INVALID_PARAMS, parsed.error.message);
     }
 
     try {
-        const home = await getHome(params.ownerId as string);
-        return entry.handler(home, params);
+        return { result: await entry.handler(executingUser, parsed.data as never) };
     } catch (e) {
         if (e instanceof ApiError) {
             const code = e.status === 404 ? SDK_ERROR.NOT_FOUND
-                : e.status === 403 ? SDK_ERROR.PERMISSION_DENIED
+                : e.status === 403 ? SDK_ERROR.RESOURCE_PERMISSION_DENIED
                 : e.status === 413 ? SDK_ERROR.QUOTA_EXCEEDED
                 : SDK_ERROR.INTERNAL;
-            return { error: { code, message: e.message } };
+            return errorResponse(code, e.message);
         }
-        return { error: { code: SDK_ERROR.INTERNAL, message: "Internal error" } };
+        return errorResponse(SDK_ERROR.INTERNAL, "Internal error");
     }
+}
+
+function errorResponse(code: string, message: string) {
+    return { error: { code, message } };
 }
 ```
 
-**Adding a new SDK method** is one entry in `SDK_METHODS`:
-```typescript
-"calendar.listEvents": {
-    permission: "calendar:read",
-    handler: (home, p) => home.calendar.listEvents(p.calendarId as string),
-},
-```
+**No new ACL implementation.** The SDK handler delegates to the same primitives the route layer uses today,
+so a script's view of resources is identical to a hand-crafted API call from the same user:
 
-The runner needs no changes — the Proxy already forwards `eigen.calendar.listEvents(...)` as
-`rpc("calendar.listEvents", ...)`.
+| Domain | Resolver | Where routes use it today |
+|---|---|---|
+| Drive (incl. doc/sheets/slides readers) | `getSharedDrive(ownerId, user)` | `apps/api/src/routes/drive.ts`, `apps/api/src/routes/editor.ts` |
+| Calendar | `resolveCalendar(user, ownerId)` | `apps/api/src/routes/calendar.ts` |
+| Personal-only domains (notifications, settings, scripts itself) | `requireOwnerAccess(user.id, ownerId)` then `getHome(ownerId)` | A new helper in `apps/api/src/lib/core/access.ts` that dispatches via `parseOwnerId`: user → `requireSelf`, team → `requireTeamAccess`, org → org-membership check |
 
-Document-aware SDK methods (`docs.getText`, `sheets.getCell`) use the shared Document Content Layer (see
-below) — the same readers that power export, preview, and import.
+`requireOwnerAccess(userId, ownerId)` is the only **new** code, and it's a thin dispatcher over the existing
+`requireSelf` / `requireTeamAccess` / `requireAdmin` helpers in `apps/api/src/lib/core/access.ts`. It's
+useful both inside the SDK (for personal-only domains) and outside it (any future route that's owner-scoped
+across multiple home types).
+
+Cross-user shares work for free: a script run by user A reading a document user B has shared with A
+succeeds — `getSharedDrive("user_b_id", userA)` returns a SharedDrive scoped to A's grants. The same code
+path that powers the existing share UI powers the SDK.
+
+**Adding a new SDK method** is one entry in `SDK_METHODS`. Pick the right resolver for the domain
+(`getSharedDrive`, `resolveCalendar`, or `requireOwnerAccess`) — don't write new ACL logic.
 
 ### SDK Error Contract
 
@@ -617,20 +755,25 @@ Scripts receive structured errors with a `code` field. This contract is stable f
 rely on error codes for control flow.
 
 ```javascript
-// In a user script
 try {
     const doc = eigen.docs.getById({ mountId, pathId });
     const text = await doc.getText();
 } catch (e) {
-    if (e.code === "NOT_FOUND") {
-        console.log("Document not found");
-    } else if (e.code === "PERMISSION_DENIED") {
-        console.log("No access to this document");
-    }
+    if (e.code === "NOT_FOUND") console.log("Document not found");
+    else if (e.code === "RESOURCE_PERMISSION_DENIED") console.log("No access to this document for the current user");
+    else if (e.code === "SCRIPT_PERMISSION_DENIED") console.log("Script manifest lacks drive:read");
 }
 ```
 
-Error codes: `NOT_FOUND`, `PERMISSION_DENIED`, `QUOTA_EXCEEDED`, `INVALID_PARAMS`, `INTERNAL`.
+| Code | Meaning |
+|---|---|
+| `NOT_FOUND` | The requested resource does not exist |
+| `SCRIPT_PERMISSION_DENIED` | The script's manifest does not include the required permission token |
+| `RESOURCE_PERMISSION_DENIED` | The executing user has no ACL access to the requested resource (covers both "not a member of that owner" and "owner exists but no share for this resource") |
+| `QUOTA_EXCEEDED` | A storage or rate limit was hit |
+| `INVALID_PARAMS` | Method name unknown or params failed schema validation |
+| `INTERNAL` | Unexpected server error |
+
 New codes may be added in future SDK versions, but existing codes are never removed or renamed.
 
 ### Permission Tokens
@@ -640,82 +783,120 @@ Phase 1:
 ```
 drive:read                  # drive.listFolder, drive.getPath, drive.readFile,
                             # docs.getText, docs.getJson,
-                            # sheets.getCell, sheets.getRange, sheets.getSheetData
-fetch                       # eigen.fetch() — Deno native, domain-restricted
+                            # sheets.getCell, sheets.getRange, sheets.getSheetData,
+                            # slides.getDeck
+fetch                       # eigen.fetch() — domain allowlist enforced in net.fetch handler
 ```
 
-Document read methods (`docs.*`, `sheets.*`) use the `drive:read` permission because documents are drive
-items — reading their content is reading drive data. This keeps the permission model simple: one token
-covers all read access to a user's files, whether raw or structured.
+Document read methods use the `drive:read` permission because documents are drive items — reading their
+content is reading drive data. One token covers all read access.
 
 Phase 2+:
 
 ```
 drive:write                 # drive.writeFile, drive.create, docs.insertContent,
-                            # sheets.setCell, sheets.setCellRange
+                            # sheets.setCell, sheets.setCellRange, slides.insertSlide
 mail:read   | mail:send
 calendar:read | calendar:write
 chat:read   | chat:send
 contacts:read | contacts:write
 ```
 
-Enforced at two levels:
-1. **Deno permissions** — `--allow-net` only granted if script has `fetch` permission. Filesystem access is
-   always denied
-2. **SDK call validation** — each RPC call in `executeSDKMethod()` checks the script's granted permissions
-   before executing
+Enforced at three levels:
+1. **Deno permissions** at process startup — coarse-grained (filesystem off, env off, etc.)
+2. **SDK manifest check** — `executeSDKMethod` verifies the script's manifest grants the required token
+3. **ACL via existing resolvers** — handlers call `getSharedDrive(ownerId, user)`, `resolveCalendar(user, ownerId)`,
+   or `requireOwnerAccess(user.id, ownerId)` (per-domain choice). These are the same helpers route handlers
+   use, so the script sees exactly what a hand-crafted API request from the same user would see — including
+   cross-user shares. Failures throw `ApiError(403)`, which the SDK maps to `RESOURCE_PERMISSION_DENIED`
 
 ## Triggers
 
 ### Manual (Phase 1)
 
 - User clicks "Run" in the Scripts app, or clicks a script action in the scripts sidebar
-- Scripts export named functions: `export function onRun() { ... }` is the default entry point
-- Named exports like `export function translateSelection() { ... }` appear as separate actions in the sidebar
-- Context-aware: when triggered from a host app's sidebar, the app's current selection state is passed to
-  the script via `eigen.context`
+- Scripts export named functions: `function onRun() { ... }` is the default entry point
+- Named functions like `function translateSelection() { ... }` appear as separate actions in the sidebar
+- Context-aware: when triggered from a host app's sidebar, the app's current selection state is passed via
+  `eigen.context`
 
 ### Cron (Phase 2)
 
-Uses Bun's built-in `Bun.cron()` — no custom scheduler, no external dependencies.
+Uses Bun's built-in `Bun.cron()` (https://bun.com/docs/runtime/cron). In-process scheduling is sufficient
+since Phase 2 also extracts script management to a dedicated worker process.
 
-**Server-level cron index**: `cron_triggers` table in `eigen.db` (alongside the share registry). This is a
-lookup table so the scheduler doesn't need to scan every user's DB on startup. The canonical trigger data
-stays in the user's `scripts.db`.
+**Important Bun.cron semantics to honour:**
+- In-process schedules are interpreted in **UTC**. Display in the UI as UTC, document this clearly. (Local-time
+  cron is only available via the OS-level form `Bun.cron(path, schedule, title)`, which we don't use.)
+- Invocations **never overlap**: the next fire time is computed only after the handler's promise settles. A
+  90-second handler on a `* * * * *` schedule fires at the next minute boundary *after* completion, not 60 s
+  after start. This matches what we want — no per-script duplicate execution
+- Schedules are lost on process restart; canonical state lives in `cron_triggers` and is re-registered on
+  startup
+- 5-field cron format: `minute hour day-of-month month day-of-week` — same as standard crontab. Named
+  expressions (`@hourly`, `@daily`, `@weekly`) supported
+
+**Server-level cron index**: `cron_triggers` table in `eigen.db` (alongside the share registry). Lookup table
+so the scheduler doesn't scan every user's DB on startup.
 
 **Lifecycle:**
 1. **API startup**: load all enabled triggers from `cron_triggers` in `eigen.db`, register each with
-   `Bun.cron(name, schedule, callback)`
-2. **Callback fires**: `getHome(ownerId)` (cold-starts Home if needed) → `runScript()`
-3. **Trigger CRUD**: update both user's `scripts.db` and server-level `cron_triggers`, then
-   register/unregister the `Bun.cron()` in the same operation
-4. **API shutdown**: Bun handles cleanup of registered crons
+   `Bun.cron(schedule, callback)`. Keep handles in a `Map<triggerId, CronJob>` for cancellation
+2. **Callback fires**: `getHome(ownerId)` → `runScript()`
+3. **Trigger CRUD**: update both user's `scripts.db` and server-level `cron_triggers`, then register
+   `Bun.cron()` (or call `.stop()` on the existing handle for disable/delete) atomically
+4. **API shutdown**: iterate the registered job map and call `.stop()` on each
 
 ```typescript
-// On startup
-const triggers = await loadEnabledCronTriggers();  // from eigen.db
-for (const trigger of triggers) {
-    Bun.cron(trigger.triggerId, trigger.cron, async () => {
-        const home = await getHome(trigger.ownerId);
-        const script = await home.scripts.get(trigger.scriptId);
-        if (script?.enabled) {
-            await runScript({ ...script, ownerId: trigger.ownerId });
-        }
-    });
+// Phase 2 sketch — runs in the script worker process
+const cronJobs = new Map<string, CronJob>();
+
+async function startCron() {
+    const triggers = await loadEnabledCronTriggers();  // from eigen.db
+    for (const trigger of triggers) {
+        const job = Bun.cron(trigger.cron, async () => {
+            const home = await getHome(trigger.ownerId);
+            const script = await home.scripts.get(trigger.scriptId);
+            if (script?.enabled) {
+                await runScript({ ...script, ownerId: trigger.ownerId });
+            }
+        });
+        cronJobs.set(trigger.triggerId, job);
+    }
+}
+
+async function stopTrigger(triggerId: string) {
+    cronJobs.get(triggerId)?.stop();
+    cronJobs.delete(triggerId);
 }
 ```
 
-Bun handles cron expression evaluation and timing. Missed runs (server down) are skipped, not queued.
-Home cold-start on cron trigger is the same as any request after idle — `getHome()` reconstructs on demand.
+Missed runs (server down) are skipped, not queued.
 
-### Event-Driven (Future — Phase 2)
+### Cron Execution Identity
+
+Personal cron triggers run **as the author**. Because no user is "active," `eigen.context.mountId/pathId`
+is undefined — calls like `eigen.docs.getActive()` throw with `"No active docs document in current context"`.
+Cron scripts must use `eigen.docs.getById({...})` with explicit IDs (typically stored in `eigen.config`).
+
+Team/org cron triggers in Phase 2: pick one approach when implementing. Either run as a designated team admin
+(simple, but one-user-of-record) or run as the trigger creator with team-scope ownerId access (more flexible,
+needs careful permission audit).
+
+### Event-Driven (Phase 2)
 
 - Subscribe to existing `SSEventType` events: `drive:created`, `mail:created`, `chat:message`, etc.
 - Optional filter: `{ event: "mail:created", filter: { from: "*@github.com" } }`
 - Scripts service registers a listener on `Home.broadcast()` — on event, checks enabled triggers for matches
   and dispatches execution
-- Asynchronous — original action (mail delivery, file upload) is never blocked by script execution
+- Asynchronous — original action is never blocked
 - Deduplication: if a script is already running for the same trigger+event, the new execution is skipped
+
+### Failure Notifications
+
+When a cron- or event-triggered script fails, the user has no UI in front of them. The trigger callback
+calls `home.notifications.persist({ type: 'scripts:failed', title, body, scriptId, executionId })` so the
+user sees it in their notification center. Manual runs already surface failures via the sidebar/output panel.
 
 ## Permissions & Scoping
 
@@ -724,7 +905,7 @@ Home cold-start on cron trigger is the same as any request after idle — `getHo
 All scripts are personal — created by the user, visible only to the author, stored in the author's
 `eigen.scripts/scripts.db`. No installation required.
 
-### Team & Org Scope (Future — Phase 2)
+### Team & Org Scope (Phase 2)
 
 Team scripts live in TeamHome's `eigen.scripts/scripts.db`, org scripts in OrgHome's. This follows the existing
 Home ownership model — team data lives in the team's Home, not the author's. Benefits:
@@ -741,19 +922,22 @@ Home ownership model — team data lives in the team's Home, not the author's. B
 
 For team scripts, `eigen.config` stores per-script config set by the script author/installer. Phase 2 should
 add user-scoped properties (like Google's `PropertiesService.getUserProperties()`) so each user running a
-shared script can have their own settings (API keys, preferences).
+shared script can have their own settings.
 
 ### Execution Identity
 
 Scripts execute **as the user who triggered them**, not the author:
 - Manual run → runs as the user who clicked "Run"
-- Personal cron trigger → runs as author
-- Team script triggered by User B → runs as User B, accessing User B's data
+- Personal cron trigger → runs as author (only user who could have created it)
+- Team script triggered manually by User B → runs as User B, with User B's ACL view
 - Event trigger → runs as the user whose event fired
 
-No privilege escalation — SDK calls go through the same permission checks as regular API calls.
+The SDK handler enforces this by passing the executing `User` into every `executeSDKMethod` call. Each
+handler then resolves the resource via the same helper its corresponding routes use — `getSharedDrive`,
+`resolveCalendar`, or `requireOwnerAccess` — and any ACL failure surfaces as
+`RESOURCE_PERMISSION_DENIED` to the script.
 
-### Admin Controls (Future)
+### Admin Controls (Phase 2+)
 
 - Org admins can disable scripting for the org
 - Org admins can view all scripts in their org
@@ -761,7 +945,7 @@ No privilege escalation — SDK calls go through the same permission checks as r
 
 ## Frontend — Scripts App
 
-New `apps/scripts/` app following standard eigen app patterns.
+New `apps/scripts/` app following standard eigen app patterns (`AppShell` + sidebar + routes).
 
 ### Script List
 
@@ -771,21 +955,21 @@ New `apps/scripts/` app following standard eigen app patterns.
 
 ### Script Editor
 
-- Code editor panel (CodeMirror) with JS syntax highlighting
-- Right sidebar: name, description, permission checkboxes, extensions editor, config key-value editor
+- Code editor panel (CodeMirror 6, already used in `apps/drive`) with JS syntax highlighting
+- Right `PropertiesPanel`: name, description, permission checkboxes, extensions editor, config key-value editor
 - "Run" button with output panel below the editor (console log + result JSON)
 - Future: trigger management (cron, event)
 
 ### Execution Log
 
 - Per-script history: status, duration, timestamp
-- Expandable rows: full console log, error details, result JSON
+- Expandable rows: full console log, error code + message, result JSON
 - "Run Now" button
 
 ## Frontend — Scripts Sidebar (`ScriptsPanel`)
 
 A shared component in `packages/ui`, following the same `PropertiesPanel` pattern as `CommentPanel`. Each app
-can show a scripts sidebar via a toolbar toggle button.
+opts in via a toolbar toggle button.
 
 ### ScriptsPanel Component
 
@@ -807,11 +991,9 @@ PropertiesPanel (w-64, right side)
 
 ### Integration Pattern
 
-Each app integrates the sidebar the same way as `CommentPanel` — a toolbar toggle button and conditional
-rendering:
+Each app integrates the sidebar the same way as `CommentPanel`:
 
 ```tsx
-// In any app's editor component
 const [scriptsPanelOpen, setScriptsPanelOpen] = useState(false);
 
 // In toolbar
@@ -822,7 +1004,7 @@ const [scriptsPanelOpen, setScriptsPanelOpen] = useState(false);
     active={scriptsPanelOpen}
 />
 
-// In layout (next to or replacing the comment panel area)
+// In layout
 {scriptsPanelOpen && (
     <ScriptsPanel
         ownerId={ownerId}
@@ -835,44 +1017,39 @@ const [scriptsPanelOpen, setScriptsPanelOpen] = useState(false);
 ### Context Provider Interface
 
 Each host app implements a context provider. The sidebar uses it to gather selection state before execution
-and apply results after. All document **content** reads go through the backend SDK — the context provider
-only provides what the frontend uniquely knows (user selection, UI state).
+and apply results after. All document **content** reads go through the backend SDK.
 
 ```typescript
 // packages/lib/src/core/scripts/context-provider.ts
 
 type ScriptContextProvider = {
-    app: string;                                          // "docs", "sheets", "drive", etc.
-    getContext: () => ScriptContext;                       // gather current selection state
-    applyResults: (results: ScriptAction[]) => Promise<void>; // apply script output back to the app
+    app: string;
+    getContext: () => ScriptContext;
+    applyResults: (results: ScriptAction[]) => Promise<void>;
 };
 
 type ScriptContext = {
     app: string;
     mountId?: string;
     pathId?: string;
-    // Selection state — only things the frontend uniquely knows
-    selection?: string;                                    // Selected text (Docs, Sheets, Slides, Mail)
+    selection?: string;                                    // Docs, Sheets, Slides, Mail, Chat
     selectedFiles?: { id: string; name: string; mimeType: string }[];  // Drive
 };
 ```
 
 The sidebar shows all scripts registered for the current `app` (via extensions). Scripts that need specific
-context (e.g. selected text) handle missing context gracefully in their code — no dynamic capability
-filtering.
+context handle missing context gracefully in their code — no dynamic capability filtering.
 
 ### ScriptAction (returned by scripts)
 
-Scripts return an **array** of actions to apply. This allows a script to both modify content and show a
-notification in a single execution.
+Scripts return an **array** of actions to apply, allowing both content modification and notification in one run.
 
 ```typescript
-// Discriminated union — exhaustive, type-safe
 type ScriptAction =
     | { action: "replaceSelection"; value: string }
     | { action: "insertText"; value: string; position?: "before" | "after" }
-    | { action: "insertContent"; content: JSONContent }                           // Docs: structured ProseMirror node
-    | { action: "setCellValue"; sheet: number; row: number; col: number; value: unknown }  // Sheets
+    | { action: "insertContent"; content: JSONContent }
+    | { action: "setCellValue"; sheet: number; row: number; col: number; value: unknown }
     | { action: "setCellRange"; sheet: number; row: number; col: number; values: unknown[][] }
     | { action: "notify"; message: string };
 ```
@@ -880,37 +1057,29 @@ type ScriptAction =
 `applyResults()` processes the array in order. Unknown actions return a structured error shown in the
 scripts panel — not silently ignored.
 
-### Context Per App
-
-Each app provides selection state and supports result actions:
-
-| App | Context (selection state) | Result actions |
-|-----|--------------------------|----------------|
-| Docs | `selection`, `mountId`, `pathId` | `replaceSelection`, `insertText`, `insertContent`, `notify` |
-| Drive | `selectedFiles`, `mountId` | `notify` |
-| Sheets | `selection`, `mountId`, `pathId` | `replaceSelection`, `setCellValue`, `setCellRange`, `notify` |
-| Slides | `selection`, `mountId`, `pathId` | `replaceSelection`, `notify` |
-| Mail | `selection` | `replaceSelection`, `notify` |
-| Chat | `selection` | `replaceSelection`, `notify` |
-| Calendar | — | `notify` |
-
-Document content (full text, cell values, JSON) is always read via the backend SDK (`eigen.docs.getActive().getText()`,
-`eigen.sheets.getActive().getCell("A1")`), not via context. This means scripts work identically whether triggered
-from a sidebar, a cron job, or an event — same API, same data source.
-
-**Phase 1 implements: Docs + Drive.** These exercise different capabilities (text selection + document reading vs
-file selection) and prove the pattern works across different app types. Other apps add context providers later,
-following the same interface.
-
 ### Phase 1 Context Providers
+
+Phase 1 ships **Docs + Drive**. Other apps add context providers later, following the same interface.
 
 - **Docs**: `getContext()` reads `editor.state.selection` for selected text, provides mountId/pathId.
   `applyResults()` dispatches ProseMirror transactions for `replaceSelection`, `insertText`, `insertContent`.
   Document content reads go through `eigen.docs.getActive().getText()` / `.getJson()` on the backend
 - **Drive**: `getContext()` reads selected file list from DriveTable state, `applyResults()` supports `notify`
   only. Useful for file-processing scripts (analyze metadata, check naming, list contents)
-- **Slides** (Phase 2): `getContext()` provides mountId/pathId and current slide selection.
-  Document content reads go through `eigen.slides.getActive().getDeck()` on the backend
+
+### Context Per App (Eventual)
+
+Each app eventually provides selection state and supports result actions. The Phase-1 apps are bold:
+
+| App | Context (selection state) | Result actions |
+|-----|--------------------------|----------------|
+| **Docs** | `selection`, `mountId`, `pathId` | `replaceSelection`, `insertText`, `insertContent`, `notify` |
+| **Drive** | `selectedFiles`, `mountId` | `notify` |
+| Sheets | `selection`, `mountId`, `pathId` | `replaceSelection`, `setCellValue`, `setCellRange`, `notify` |
+| Slides | `selection`, `mountId`, `pathId` | `replaceSelection`, `notify` |
+| Mail | `selection` | `replaceSelection`, `notify` |
+| Chat | `selection` | `replaceSelection`, `notify` |
+| Calendar | — | `notify` |
 
 ## App Extensions
 
@@ -922,20 +1091,18 @@ Scripts declare how they integrate with host apps via the `extensions` array in 
 type ScriptExtension = {
     app: "docs" | "sheets" | "slides" | "mail" | "chat" | "calendar" | "drive" | "*";
     type: "context-action";
-    label: string;                    // Display name in sidebar
-    icon: string;                     // Lucide icon name
-    function: string;                 // Exported function name to call
+    label: string;
+    icon: string;       // Lucide icon name
+    function: string;   // Function name to call
 };
 ```
 
 The `"*"` app value means the script appears in all apps. This enables generic scripts like "Translate
-selection" that work anywhere selection is available (the script checks `eigen.context.selection` and handles
-the missing case).
+selection" that work anywhere selection is available.
 
-### Prompt-Based Scripts (Future — Phase 2)
+### Prompt-Based Scripts (Phase 2)
 
-Some scripts need user input before running (e.g. target language, rewrite prompt). Scripts signal this via
-`input` fields in their extension:
+Some scripts need user input before running (e.g. target language). Scripts signal this via `input` fields:
 
 ```typescript
 type ScriptExtension = {
@@ -946,9 +1113,8 @@ type ScriptExtension = {
 };
 ```
 
-When a user clicks a script with `input`, the sidebar shows an inline form. On submit, field values merge into
-`eigen.context.input`. For Phase 1, scripts that need parameters use `eigen.config` (persisted per-script
-config) instead.
+When a user clicks a script with `input`, the sidebar shows an inline form. On submit, field values merge
+into `eigen.context.input`. For Phase 1, scripts that need parameters use `eigen.config` instead.
 
 ### Example: Translate Script
 
@@ -957,13 +1123,13 @@ A script that works in any app supporting selection + replaceSelection:
 ```javascript
 // Name: "Translate to French"
 // Permissions: ["fetch"]
-// Config: { apiKey: "sk-..." }  (saved once, persisted in script config)
+// Config: { apiKey: "sk-..." }
 // Extensions: [
 //   { app: "*", type: "context-action", label: "Translate to French", icon: "languages",
 //     function: "onRun" }
 // ]
 
-export async function onRun() {
+async function onRun() {
     const text = eigen.context.selection;
     if (!text) return [{ action: "notify", message: "No text selected" }];
 
@@ -992,34 +1158,17 @@ export async function onRun() {
 }
 ```
 
-**Flow in Docs:**
-1. User selects text in a document
-2. Opens scripts sidebar, sees "Translate to French"
-3. Clicks it → sidebar calls `docsContextProvider.getContext()` → `{ selection: "Hello world", mountId, pathId }`
-4. `POST /scripts/:ownerId/execute/:scriptId` with context → `{ executionId, status: "running" }`
-5. Sidebar shows spinner, displays progress messages from `eigen.progress()`
-6. [Deno spawns → script calls OpenAI → returns `[{ action: "replaceSelection", ... }, { action: "notify", ... }]`]
-7. SSE event `scripts:completed` → sidebar fetches result
-8. Sidebar calls `docsContextProvider.applyResults(results)` → ProseMirror transaction replaces selection, toast shown
-
 ### Example: Drive File Processing Script
-
-A script that uses the SDK to read drive contents:
 
 ```javascript
 // Name: "List folder sizes"
 // Permissions: ["drive:read"]
-// Extensions: [
-//   { app: "drive", type: "context-action", label: "List folder sizes", icon: "hard-drive",
-//     function: "onRun" }
-// ]
 
-export async function onRun() {
+async function onRun() {
     const files = eigen.context.selectedFiles;
     if (!files?.length) return [{ action: "notify", message: "No files selected" }];
 
     for (const file of files) {
-        // ownerId auto-injected from eigen.user.id
         const path = await eigen.drive.getPath({ mountId: eigen.context.mountId, pathId: file.id });
         console.log(`${path.name}: ${path.size} bytes`);
     }
@@ -1030,74 +1179,49 @@ export async function onRun() {
 
 ### Example: Document Analysis Script
 
-A script using the document object model to read content from the active document and another document:
-
 ```javascript
 // Name: "Compare with template"
 // Permissions: ["drive:read"]
-// Extensions: [
-//   { app: "docs", type: "context-action", label: "Compare with template", icon: "file-diff",
-//     function: "onRun" }
-// ]
 
-export async function onRun() {
-    // Read the active document (sidebar context — mountId/pathId auto-injected)
+async function onRun() {
     const doc = eigen.docs.getActive();
     const currentText = await doc.getText();
 
-    // Read a different document by explicit IDs
-    const template = eigen.docs.getById({ mountId: eigen.config.templateMountId, pathId: eigen.config.templatePathId });
+    const template = eigen.docs.getById({
+        mountId: eigen.config.templateMountId,
+        pathId: eigen.config.templatePathId,
+    });
     const templateText = await template.getText();
 
-    // Compare
     const currentWords = currentText.split(/\s+/).length;
     const templateWords = templateText.split(/\s+/).length;
-
     console.log(`Current: ${currentWords} words`);
     console.log(`Template: ${templateWords} words`);
-    console.log(`Difference: ${currentWords - templateWords} words`);
 
     return [{ action: "notify", message: `${currentWords} words (template: ${templateWords})` }];
 }
 ```
 
-### Example: Sheets Script
-
-A script reading and processing spreadsheet data using A1 notation:
+### Example: Sheets Read Script
 
 ```javascript
-// Name: "Sum column"
+// Name: "Sum column A"
 // Permissions: ["drive:read"]
-// Extensions: [
-//   { app: "sheets", type: "context-action", label: "Sum column A", icon: "calculator",
-//     function: "onRun" }
-// ]
 
-export async function onRun() {
+async function onRun() {
     const sheet = eigen.sheets.getActive();
-
-    // A1 notation — mirrors Google Sheets API
     const values = await sheet.getRange("A1:A100");
     const sum = values.flat().filter(v => typeof v === "number").reduce((a, b) => a + b, 0);
-
     console.log(`Sum of column A: ${sum}`);
-
-    // Read a specific cell's formula
-    const formula = await sheet.getCell("B1", { render: "formula" });
-    console.log(`B1 formula: ${formula}`);
-
-    return [
-        { action: "setCellValue", sheet: 0, row: 0, col: 1, value: sum },
-        { action: "notify", message: `Sum: ${sum}` },
-    ];
+    return [{ action: "notify", message: `Sum: ${sum}` }];
 }
 ```
 
+A1 notation parsing is non-trivial — sheet names with quotes (`'Bob''s Sheet'!A1`), absolute refs (`$A$1`),
+open ranges (`A:A`, `1:1`), and `Sheet1!A1:Z` (no row number) all need handling. We use a real lexer in
+`a1-notation.ts`, not a regex.
+
 ## SSE Events
-
-Script execution integrates with the existing SSE system for real-time updates.
-
-### Event Types
 
 ```typescript
 // In packages/lib/src/types/sse.ts
@@ -1109,10 +1233,8 @@ type ScriptSSEvent =
     | { type: "scripts:failed"; script: { executionId: string } };
 ```
 
-Events are minimal (just `executionId` + optional `message`) — consistent with other domain SSE events. The
-frontend invalidates execution queries on any script SSE event. Progress events update the sidebar inline.
-
-### SSE Handler
+Events are minimal (just `executionId` + optional `message`). The frontend invalidates execution queries on
+any script SSE event. Progress events update the sidebar inline.
 
 ```typescript
 // packages/lib/src/core/scripts/sse-handlers.ts
@@ -1125,30 +1247,36 @@ export function handleScriptSSEvent(event: ScriptSSEvent, queryClient: QueryClie
             queryClient.invalidateQueries({ queryKey: scriptKeys.executions() });
             break;
         case "scripts:progress":
-            // Progress messages are handled by the sidebar directly via SSE listener
+            // Sidebar listens directly via useSSE for inline progress display
             break;
     }
 }
 ```
+
+Progress events broadcast to all the user's open SSE connections. Multiple sidebars/tabs filter by
+`executionId` — that's the receiver's job, not the broadcast layer's.
 
 ## Backend Structure
 
 ```
 apps/api/src/lib/document/                  # Document Content Layer (shared by SDK, export, import, preview)
   doc-reader.ts         # readDocContent(ownerId, mountId, pathId) — Yjs → ProseMirror JSON + plain text
-  doc-writer.ts         # writeDocContent(ownerId, mountId, pathId, content) — ProseMirror JSON → Yjs update
-  sheets-reader.ts      # readSheetContent(ownerId, mountId, pathId) — Yjs → SheetContent with cells/formulas
-  sheets-writer.ts      # writeSheetContent(ownerId, mountId, pathId, content) — SheetContent → Yjs update
-  slides-reader.ts      # readSlidesContent(ownerId, mountId, pathId) — Yjs → DeckData
-  slides-writer.ts      # writeSlidesContent(ownerId, mountId, pathId, content) — DeckData → Yjs update
+  doc-writer.ts         # writeDocContent(...) — for SDK writes (Phase 2) and import
+  sheets-reader.ts      # readSheetContent(...) — Yjs → SheetContent (uses Yjs ops layer below)
+  sheets-writer.ts      # writeSheetContent(...) / setCellValue(...) — emits ops via Yjs ops layer
+  slides-reader.ts      # readSlidesContent(...) — Yjs → DeckData
+  slides-writer.ts      # writeSlidesContent(...)
+  a1-notation.ts        # parseA1Notation() — A1 → numeric row/col conversion (real lexer)
 
 apps/api/src/lib/scripts/
   scripts.ts            # Scripts domain class (CRUD, execution lifecycle)
   db-config.ts          # Drizzle schema + versioned migrations
   schema.ts             # Drizzle table definitions
-  script-runner.ts      # Spawns + manages Deno subprocesses directly
-  runner.ts             # Deno runner (Proxy SDK + console capture + script execution)
-  sdk-handler.ts        # SDK_METHODS registry — delegates to document readers + domain classes
+  script-worker-pool.ts # Manages N pre-warmed Deno workers, dispatches executions, recycles slots
+  runner.js             # Deno worker (Proxy SDK + console capture + script execution) — plain JS
+  sdk-handler.ts        # SDK_METHODS registry — Zod schemas + delegation to getSharedDrive /
+                        # resolveCalendar / requireOwnerAccess + ApiError → SDK error code mapping
+  proxy-fetch.ts        # net.fetch handler — checks manifest domain allowlist
   sse-events.ts         # SSE event builders for script domain
 
 apps/api/src/routes/
@@ -1157,6 +1285,10 @@ apps/api/src/routes/
 packages/lib/src/types/
   script.ts             # Shared types: Script, Execution, ScriptExtension, ScriptContext, ScriptAction
   document.ts           # Shared content types: DocContent, SheetContent, SlidesContent, CellData
+
+packages/lib/src/sheets/
+  yjs-ops.ts            # Pure ops module — applyOpsToSheets(), pushOpsToYDoc(), readSheetsFromYDoc()
+                        # Used by both fortune-sheet client AND backend sheets-writer
 
 packages/lib/src/core/scripts/
   hooks/
@@ -1170,9 +1302,6 @@ packages/ui/src/components/layout/scripts/
   script-action-card.tsx
 
 apps/scripts/           # Frontend app (editor, list, logs)
-  src/
-    routes/
-    components/
 ```
 
 ### Home Integration
@@ -1195,19 +1324,20 @@ same lazy-init pattern.
 
 ### Docker Integration
 
-Deno must be available in the API container:
+Deno must be available in the API container. The `runner.js` lives alongside the script runner and is **copied,
+not bundled**, into the Docker image — Deno needs an actual file on disk to read.
 
 ```dockerfile
 # In docker/api/Dockerfile
 RUN curl -fsSL https://deno.land/install.sh | sh
 ENV DENO_DIR=/tmp/deno
 ENV PATH="/root/.deno/bin:${PATH}"
+COPY apps/api/src/lib/scripts/runner.js /opt/eigen/runner.js
 ```
 
-The `runner.ts` file lives alongside the script runner in `apps/api/src/lib/scripts/` and is copied into the
-Docker image with the rest of the API build.
+The script worker pool resolves the runner via an env var or fixed path; it's not part of the JS bundle.
 
-## Home-Relay Integration (Future — Phase 2)
+## Home-Relay Integration (Phase 2)
 
 The scripts system respects the sharding seam in `home-relay.ts`.
 
@@ -1220,60 +1350,73 @@ The scripts system respects the sharding seam in `home-relay.ts`.
 ### Event trigger routing
 
 When a user's Home broadcasts an event, the Scripts service checks for matching triggers. If a team/org script
-needs to execute in another user's Home context, it sends a `scripts:execute` message via `sendToHome()` rather
-than directly accessing the target Home.
+needs to execute in another user's Home context, it sends a `scripts:execute` message via `sendToHome()`
+rather than directly accessing the target Home.
 
 ### SDK data access
 
 SDK calls include `ownerId` explicitly. When a script accesses shared data (e.g. a team mount via
-`eigen.drive.listFolder({ ownerId: "team_abc", mountId, pathId })`), the SDK handler calls
-`getHome("team_abc")` — which in a sharded deployment routes through `home-relay.ts` automatically. No
-special handling needed in the scripts system.
+`eigen.drive.listFolder({ ownerId: "team_abc", mountId, pathId })`), the SDK handler validates the executing
+user's access then calls `getHome("team_abc")` — which in a sharded deployment routes through `home-relay.ts`
+automatically. No special handling needed in the scripts system.
 
 ## Limits & Safety
 
 | Limit | Value | Enforced by |
 |-------|-------|-------------|
 | Script source size | 256 KB | API route validation |
-| Execution timeout | 120 s | ScriptRunner (wall-clock `proc.kill()`) |
-| Heap memory | 128 MB | Deno `--v8-flags=--max-heap-size=128` |
+| Execution timeout | 120 s | `setTimeout` in pool, `recycleSlot()` on fire |
+| Heap memory (advisory) | 128 MB | Deno `--v8-flags=--max-heap-size=128`. **Aborts the process on overflow, not a catchable error** |
+| Console log buffer | 64 KB per execution | Capped in runner |
 | Execution history | 200 per script | `completeExecution()` pruning |
-| Filesystem access | None | Deno `--deny-write`, `--allow-read` restricted to runner |
-| Environment variables | None | Deno `--deny-env` |
-| FFI | None | Deno `--deny-ffi` |
-| Network | Allowlisted domains only | Deno `--allow-net` / `--deny-net` |
+| Filesystem read | runner.js only | Deno `--allow-read=<runner-path>` |
+| Filesystem write | none | Deno `--deny-write` |
+| Environment variables | none | Deno `--deny-env` |
+| FFI | none | Deno `--deny-ffi` |
+| Subprocess spawn | none | Deno `--deny-run` |
+| Network | per-script domain allowlist | SDK `net.fetch` handler checks manifest |
 
 Phase 2 adds: per-user concurrency limit (5), execution queue in worker process, per-org scripting toggle.
 
+### Known Soft Boundaries
+
+- `--max-heap-size` is V8 *advisory*: the process aborts when V8 cannot stay under the limit. External memory
+  (TypedArrays from Rust, V8 LOS) is not counted. For real bounding, run the script worker process under a
+  cgroup memory limit. Not in Phase 1.
+- `--allow-net` does not protect against DNS rebinding to internal addresses. Domain allowlist in `net.fetch`
+  resolves to a DNS lookup that an attacker-controlled DNS could answer with an RFC1918 address. For
+  hardening, route `eigen.fetch` through a forward proxy that re-resolves and rejects RFC1918. Not in Phase 1.
+- `proc.kill()` does not reach grandchildren on Linux. We mitigate by running workers under `setsid` and
+  killing the process group. `--deny-run` prevents the worker from spawning subprocesses in the first place.
+
 ## Script Imports (Future)
 
-Phase 1 scripts are self-contained — no external imports. Deno supports URL imports (`import ... from
-"https://..."`) but these require `--allow-net`, which is coupled to the `fetch` permission and restricted to
-allowlisted domains.
+Phase 1 scripts are self-contained — no external imports. Deno supports URL imports but we deny them by not
+granting `--allow-import` to the worker. Future options:
 
-Future options:
 - **Bundling step**: pre-bundle scripts with their dependencies before execution
-- **Curated standard library**: inject common utilities (date formatting, CSV parsing) into the runner
+- **Curated standard library**: inject common utilities into the runner
 - **Import maps**: Deno import maps pointing to approved package URLs
 
-This is a Phase 2+ concern. Phase 1 scripts handle enough with the SDK + `eigen.fetch()`.
+This is a Phase 2+ concern.
 
 ## Document Content Layer
 
-Collaborative document types (eigendoc, eigensheets, eigenslides) store content as Yjs databases, not plain
-files. Multiple systems need to read and write their structured content: the scripting SDK, export, import,
-preview, and future search indexing. The Document Content Layer is a shared abstraction that serves all of them.
+Collaborative document types (eigendoc, eigensheets, eigenslides) store content as Yjs databases. Multiple
+systems need structured access: the scripting SDK, export, import, preview, and future search indexing. The
+Document Content Layer is a shared abstraction that serves all of them.
 
-This is **the** path for accessing document content — both from scripts and from other backend systems.
-There is no separate frontend path for reading document data. Scripts always read via the backend SDK
-(which uses this layer), ensuring consistent behavior whether triggered from a sidebar, cron job, or event.
+This is **the** path for accessing document content from any backend system. Scripts always read via the
+backend SDK (which uses this layer), ensuring consistent behavior whether triggered from a sidebar, cron, or
+event.
 
 ### The Problem
 
 `drive.readFile()` returns raw file data — useless for Yjs-backed documents. A scripting SDK that can only
-read binary Yjs blobs is not a real API. Export, preview, and import all need the same thing: structured
-access to document content. Today, `loadEigendocContent()` in the export system does this for docs only. No
-equivalent exists for sheets, slides, or stickies.
+read binary Yjs blobs is not a real API. Today, `loadEigendocContent()` (in the export system) does this for
+docs, `loadSlidesContent()` for slides, and `loadSheetsContent()` for sheets — three separate readers in
+`apps/api/src/lib/export/`. The Document Content Layer consolidates them into a single, well-tested module
+with consistent addressing.
 
 ### Architecture
 
@@ -1282,29 +1425,27 @@ SDK / Export / Preview / Import / Search
           ↓
 Document Content Layer (backend)
   readDocContent() / readSheetContent() / readSlidesContent()
+  writeDocContent() / writeSheetContent() / writeSlidesContent()  (Phase 2)
           ↓
 Yjs database (data.db) → yjs-loader.ts → Y.Doc → structured content
 ```
 
-All readers take `(ownerId, mountId, pathId)` — consistent with every other API surface in Eigen. The reader
-resolves `ownerId` → Home → Drive internally. For the scripting SDK, `ownerId` defaults to the executing
-user's ID when not specified, matching the flat-domain proxy pattern (`eigen.drive.*` auto-injects ownerId).
+All readers and writers take `(user, ownerId, mountId, pathId)` and route through `getSharedDrive(ownerId, user)`
+internally — the same ACL path that drive and editor routes already use. This means scripts (and the export,
+preview, and import systems once they migrate) automatically respect cross-user shares: a user can read a
+document that another user has shared with them, the same way they can in the UI.
 
 ### Shared Content Types
 
 ```typescript
 // packages/lib/src/types/document.ts
 
-// --- Docs ---
-
 type DocContent = {
     type: 'doc';
     json: JSONContent;                // ProseMirror JSON (canonical intermediate)
     text: string;                     // Plain text extraction
-    media: Map<string, MediaRef>;     // Referenced images/files
+    media: Map<string, MediaRef>;
 };
-
-// --- Sheets ---
 
 type SheetContent = {
     type: 'sheets';
@@ -1315,128 +1456,191 @@ type SheetData = {
     id: string;
     name: string;
     cells: CellData[];                // Sparse — only non-empty cells
-    config?: SheetConfig;             // Merges, row/col sizing
+    config?: SheetConfig;
 };
 
 type CellData = {
     row: number;
     col: number;
     value: unknown;                   // Computed value (fortune-sheet `v`)
-    formula?: string;                 // Formula string (fortune-sheet `f`), omitted if none
+    formula?: string;                 // Formula (fortune-sheet `f`)
     display?: string;                 // Formatted display (fortune-sheet `m`)
     type?: 'number' | 'string' | 'boolean' | 'date' | 'error';
 };
 
-// --- Slides ---
-
 type SlidesContent = {
     type: 'slides';
-    deck: DeckData;                   // { slides, objects, slideOrder }
-    media: Map<string, MediaRef>;     // Referenced images/files
+    deck: DeckData;
+    media: Map<string, MediaRef>;
 };
 
-// --- Union ---
-
-type DocumentContent = DocContent | SheetContent | SlidesContent;   // grows with stickies
+type DocumentContent = DocContent | SheetContent | SlidesContent;
 ```
-
-These types map directly to the underlying storage:
-
-| Content field | Fortune-sheet | Google Sheets API equivalent |
-|---|---|---|
-| `CellData.value` | `cell.v` | `effectiveValue` (computed) |
-| `CellData.formula` | `cell.f` | `userEnteredValue.formulaValue` |
-| `CellData.display` | `cell.m` | `formattedValue` |
-| `CellData.type` | `cell.ct.t` | `ExtendedValue` discriminant |
 
 ### Document Readers
 
-All readers take `(ownerId, mountId, pathId)` and resolve the Home → Drive → Mount internally.
+All readers take `(user, ownerId, mountId, pathId)` and resolve via `getSharedDrive(ownerId, user)` so ACL is
+consistent with the route layer. The existing `loadEigendocContent()`
+(`apps/api/src/lib/export/doc/content.ts`) and `loadSlidesContent()` (`apps/api/src/lib/export/slides/content.ts`)
+are refactored from "open mount + load Yjs + parse" into thin adapters around the new readers — same logic,
+share-aware addressing.
 
 ```typescript
 // apps/api/src/lib/document/doc-reader.ts
-// Refactored from existing loadEigendocContent() in export/doc/content.ts
-
-async function readDocContent(ownerId: string, mountId: string, pathId: string): Promise<DocContent> {
-    // 1. getHome(ownerId) → home.drive → mount
-    // 2. Open data.db via mount system
-    // 3. Load Yjs state (existing yjs-loader.ts — snapshots + incremental updates)
-    // 4. Y.XmlFragment → ProseMirror JSON (existing @tiptap/y-tiptap)
-    // 5. Extract plain text (ProseMirror textBetween or static render)
-    // 6. Build media map
+async function readDocContent(
+    user: User, ownerId: string, mountId: string, pathId: string,
+): Promise<DocContent> {
+    // 1. getSharedDrive(ownerId, user) — Drive | SharedDrive, ACL enforced
+    // 2. drive.getMount(mountId) → mount.openDatabase(COLLAB_DB_CONFIG, dataDbPath.id)
+    // 3. loadYjsState() (existing yjs-loader.ts)
+    // 4. ydoc.getXmlFragment('default') → yXmlFragmentToProsemirrorJSON()
+    // 5. Plain text from PM JSON
+    // 6. Build media map from mount.getChildByName(pathId, 'media')
 }
 
 // apps/api/src/lib/document/sheets-reader.ts
-
-async function readSheetContent(ownerId: string, mountId: string, pathId: string): Promise<SheetContent> {
-    // 1. getHome(ownerId) → home.drive → mount
-    // 2. Open data.db via mount system
-    // 3. Load Yjs state → Y.Map('state') → parse JSON snapshot → Sheet[]
-    // 4. Map fortune-sheet cells to CellData[] (sparse, non-empty only)
-    //    cell.v → value, cell.f → formula, cell.m → display, cell.ct.t → type
-    // 5. Optionally recalculate formulas via headless FormulaEngine (see below)
+async function readSheetContent(
+    user: User, ownerId: string, mountId: string, pathId: string,
+): Promise<SheetContent> {
+    // 1. getSharedDrive(ownerId, user) → mount.openDatabase + loadYjsState
+    // 2. readSheetsFromYDoc(ydoc) — uses the shared Yjs ops module (see below)
+    // 3. Map fortune-sheet Sheet[] → SheetContent.sheets[].cells (sparse, non-empty only)
+    // 4. Optionally recalculate formulas via headless FormulaEngine (in place — see SHEETS.md)
 }
 
 // apps/api/src/lib/document/slides-reader.ts
-// Refactored from existing loadSlidesContent() in export/slides/content.ts
-
-async function readSlidesContent(ownerId: string, mountId: string, pathId: string): Promise<SlidesContent> {
-    // 1. getHome(ownerId) → home.drive → mount
-    // 2. Open data.db via mount system
-    // 3. Load Yjs state → ydoc.getMap('slides'), ydoc.getMap('objects'), ydoc.getArray('slideOrder')
-    // 4. Map Y.Map entries to typed SlideObject[] via field extraction
-    // 5. Build media map
+async function readSlidesContent(
+    user: User, ownerId: string, mountId: string, pathId: string,
+): Promise<SlidesContent> {
+    // 1. getSharedDrive(ownerId, user) → mount.openDatabase + loadYjsState
+    // 2. ydoc.getMap('slides'), ydoc.getMap('objects'), ydoc.getArray('slideOrder')
+    // 3. yMapToSlideObject() (existing helper) → typed SlideObject[]
 }
 ```
 
-**Sheets formula recalculation:** Fortune-sheet calculates formulas client-side only. The Yjs snapshot
-contains last-saved computed values (`cell.v`), which are synced whenever fortune-sheet flushes its
-snapshot (on save, on `beforeunload`, periodically during editing). For Phase 1, this is sufficient.
+**Cron/event triggers**: when there is no live user (a personal cron trigger runs as the script author), the
+caller passes the author's `User` object, fetched via the auth layer at trigger registration time. Every
+reader and writer always has a `User` in scope; there is no "headless" code path with a different ACL.
 
-Server-side formula recalculation is tracked in [SHEETS.md](SHEETS.md#remaining-work--server-side-recalc).
-The headless `FormulaEngine` (`packages/fortune-sheet/src/engine/`) and its `CellResolver` interface are
-in place, and number formatting runs on `numfmt`. What remains is wiring `engine.recalculateAll()` into
-`readSheetContent()` — transparent to all consumers (scripting, export, import).
+**Sheets formula recalculation**: tracked in [SHEETS.md](SHEETS.md). The headless `FormulaEngine` exists in
+`packages/fortune-sheet/src/engine/` with `numfmt` integrated. Wiring `engine.recalculateAll()` into
+`readSheetContent()` is a separate task that benefits all consumers automatically.
 
-**Sheets A1 notation:** The SDK handler parses A1 notation (e.g., `"A1"`, `"B2:D10"`, `"Sheet2!A1:C5"`)
-into numeric row/col/range and delegates to `readSheetContent()`. Parsing is trivial
-(`/^([A-Z]+)(\d+)$/` → col/row conversion) and lives in a shared utility.
+**Sheets A1 notation**: parsed by `a1-notation.ts` with a real lexer (not a regex). Handles sheet names with
+quotes, absolute refs (`$A$1`), open ranges (`A:A`, `1:1`), and tab-prefixed ranges (`Sheet1!A1:Z`).
 
-### Document Writers (for import)
+### Sheets Yjs Ops Layer (shared with the frontend)
 
-All writers take `(ownerId, mountId, pathId, content)` — same addressing as readers.
+Fortune-sheet's Yjs document has two structures:
+- `state.snapshot` (Y.Map entry): JSON-serialized `Sheet[]` representing the last-flushed full state
+- `ops` (Y.Array): array of `Op[]` batches representing edits since the last snapshot
+
+The frontend (`apps/sheets/src/components/sheets/hooks/use-sheet.ts`) writes ops by pushing `[ops]` onto the
+Y.Array; remote clients observe the array and replay ops via `workbookRef.current.applyOp(ops)`. On
+`beforeunload` the leaving client flushes a fresh snapshot and clears the ops array.
+
+Backend writes from the script SDK must use the **same ops mechanism**, not a snapshot-replace. Otherwise:
+- Concurrent live edits get clobbered (snapshot is a single Y.Map.set, last-write-wins)
+- The fortune-sheet client's pending ops are wiped server-side
+- Live observers don't see the script's edit as a discrete change
+
+The fix is a shared module used by both sides:
+
+```typescript
+// packages/lib/src/sheets/yjs-ops.ts
+
+import * as Y from 'yjs';
+import { applyOpsToSheets } from '@workspace/fortune-sheet/state';  // pure function, extracted from Workbook
+import type { Op, Sheet } from '@workspace/fortune-sheet';
+
+// Read the current Sheet[] state from a Y.Doc by replaying snapshot + pending ops
+export function readSheetsFromYDoc(doc: Y.Doc): Sheet[] {
+    const snapshot = doc.getMap('state').get('snapshot') as string | undefined;
+    let sheets: Sheet[] = snapshot ? JSON.parse(snapshot) : [DEFAULT_SHEET];
+    const ops = doc.getArray<Op[]>('ops').toArray();
+    for (const opBatch of ops) {
+        sheets = applyOpsToSheets(sheets, opBatch);
+    }
+    return sheets;
+}
+
+// Push an op batch onto the Y.Doc's ops array — same mechanism the frontend uses
+export function pushOpsToYDoc(doc: Y.Doc, ops: Op[]): void {
+    doc.transact(() => doc.getArray('ops').push([ops]));
+}
+
+// High-level builders for SDK writes — produce ops in fortune-sheet's native shape
+export function buildSetCellValueOp(
+    sheetIndex: number, row: number, col: number, value: unknown
+): Op[] { /* … */ }
+
+export function buildSetCellRangeOp(
+    sheetIndex: number, row: number, col: number, values: unknown[][]
+): Op[] { /* … */ }
+```
+
+`applyOpsToSheets()` is extracted from fortune-sheet's existing op-application logic
+(currently embedded in `WorkbookInstance.applyOp` in `packages/fortune-sheet/src/components/Workbook/api.ts`)
+into a pure function that takes `Sheet[]` and returns `Sheet[]`. The Workbook component continues to use it,
+but now the backend writer can call the same logic.
+
+The backend writer becomes:
+
+```typescript
+// apps/api/src/lib/document/sheets-writer.ts
+import { pushOpsToYDoc, buildSetCellValueOp } from '@workspace/lib/sheets/yjs-ops';
+
+export async function setCellValue(
+    user: User, ownerId: string, mountId: string, pathId: string,
+    sheetIndex: number, row: number, col: number, value: unknown,
+): Promise<void> {
+    // ACL via the same path as drive routes — write permission is part of SharedDrive
+    const drive = await getSharedDrive(ownerId, user);
+    // Use the live CollabDocument if editors are connected; otherwise open a fresh Y.Doc
+    // tied to data.db via the existing collab infrastructure.
+    const collabDoc = await getOrLoadCollabDocument(drive, mountId, pathId);
+    const ops = buildSetCellValueOp(sheetIndex, row, col, value);
+    pushOpsToYDoc(collabDoc.doc, ops);
+    // CollabDocument's existing update listener broadcasts to connected WebSocket clients
+    // and persists the update via DbProvider.
+}
+```
+
+This means:
+- **Live editors see the script's edit just like another user's edit** — the Y.Array observer fires, fortune-sheet
+  applies the op, the cell updates in real time
+- **Concurrent edits merge cleanly** — Yjs Array.push is a CRDT operation
+- **No snapshot clobbering** — the script never touches `state.snapshot`. Snapshot consolidation continues to
+  happen on `beforeunload` from the leaving client
+- **One mental model** — the FE op handler and the BE writer both call `pushOpsToYDoc(doc, ops)`
+
+The same shared-ops pattern applies to docs (TipTap/y-prosemirror has `prosemirrorJSONToYDoc` for full-doc
+operations and `Y.applyUpdate(doc, update)` for incremental — these are already used in
+`apps/api/src/lib/import/doc/writer.ts`) and slides (Y.Map mutations on `slides`/`objects`/`slideOrder` —
+straightforward Yjs ops, no separate ops array).
+
+### Document Writers (Phase 2)
 
 ```typescript
 // apps/api/src/lib/document/doc-writer.ts
-
-async function writeDocContent(ownerId: string, mountId: string, pathId: string, content: DocContent): Promise<void> {
-    // 1. getHome(ownerId) → home.drive → mount
-    // 2. ProseMirror JSON → Y.XmlFragment (prosemirrorJSONToYDoc from y-prosemirror)
-    // 3. Write Yjs update via CollabDocument
-    // 4. Store media files in document container
-}
+async function writeDocContent(user: User, ownerId: string, mountId: string, pathId: string, content: DocContent) { /* … */ }
 
 // apps/api/src/lib/document/sheets-writer.ts
+async function writeSheetContent(user: User, ownerId: string, mountId: string, pathId: string, content: SheetContent) { /* … */ }
 
-async function writeSheetContent(ownerId: string, mountId: string, pathId: string, content: SheetContent): Promise<void> {
-    // 1. getHome(ownerId) → home.drive → mount
-    // 2. CellData[] → fortune-sheet Sheet[] JSON
-    // 3. Write to Y.Map('state') as snapshot
-    // 4. Write Yjs update via CollabDocument
-}
+async function setCellValue(user: User, ownerId: string, mountId: string, pathId: string,
+    sheetIndex: number, row: number, col: number, value: unknown) { /* … */ }
+
+async function setCellRange(user: User, ownerId: string, mountId: string, pathId: string,
+    sheetIndex: number, row: number, col: number, values: unknown[][]) { /* … */ }
 
 // apps/api/src/lib/document/slides-writer.ts
-
-async function writeSlidesContent(ownerId: string, mountId: string, pathId: string, content: SlidesContent): Promise<void> {
-    // 1. getHome(ownerId) → home.drive → mount
-    // 2. DeckData → Y.Map('slides') + Y.Map('objects') + Y.Array('slideOrder')
-    // 3. Write Yjs update via CollabDocument
-    // 4. Store media files in document container
-}
+async function writeSlidesContent(user: User, ownerId: string, mountId: string, pathId: string, content: SlidesContent) { /* … */ }
 ```
 
-If other editors are connected when a write happens, the Yjs update syncs automatically via the existing
-WebSocket collaboration. If nobody's editing, the update is written directly to the database.
+If editors are connected, all writers route through the live `CollabDocument`. If not, the writer obtains a
+Y.Doc through the same collab infrastructure (which then persists the update via `DbProvider`). There is no
+separate "offline" write path.
 
 ### Scripting SDK Methods
 
@@ -1444,65 +1648,29 @@ Following Google Sheets API patterns — default to computed values, optional `r
 
 ```javascript
 // --- Docs ---
-
 const doc = eigen.docs.getActive();
 const text = await doc.getText();
-// → "Hello world\nSecond paragraph..."
-
 const json = await doc.getJson();
-// → { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "Hello world" }] }] }
-
-// Read a different document
 const other = eigen.docs.getById({ mountId: "...", pathId: "..." });
-const otherText = await other.getText();
-
-// Team document
 const teamDoc = eigen.docs.getById({ ownerId: "team_abc", mountId: "...", pathId: "..." });
 
 // --- Sheets ---
-
 const sheet = eigen.sheets.getActive();
-
-// A1 notation — mirrors Google Sheets
-const val = await sheet.getCell("A1");
-// → 42
-
-// With render option (like Google's ValueRenderOption)
-const formula = await sheet.getCell("A1", { render: "formula" });
-// → "=SUM(A1:A5)"
-
-const display = await sheet.getCell("A1", { render: "formatted" });
-// → "$42.00"
-
-// Range — returns 2D array of computed values
-const values = await sheet.getRange("A1:D10");
-// → [[1, "Alice", 95], [2, "Bob", 87], ...]
-
-// Full sheet data — returns all non-empty cells with value + formula + display
+const val = await sheet.getCell("A1");                       // → 42
+const formula = await sheet.getCell("A1", { render: "formula" });   // → "=SUM(A1:A5)"
+const display = await sheet.getCell("A1", { render: "formatted" }); // → "$42.00"
+const values = await sheet.getRange("A1:D10");               // → [[1, "Alice", 95], ...]
 const data = await sheet.getSheetData({ sheet: 0 });
-// → { id, name, cells: [{ row, col, value, formula, display, type }], config }
-
-// Read a different spreadsheet
-const other = eigen.sheets.getById({ mountId: "...", pathId: "..." });
-const otherValues = await other.getRange("A1:B5");
 
 // --- Slides ---
-
 const slides = eigen.slides.getActive();
 const deck = await slides.getDeck();
-// → { slides: { [id]: { id, objectIds, backgroundColor, ... } },
-//     objects: { [id]: { id, slideId, type, x, y, w, h, text, ... } },
-//     slideOrder: ["slide1", "slide2", ...] }
-
-// Read a different presentation
-const otherDeck = eigen.slides.getById({ mountId: "...", pathId: "..." });
-const otherData = await otherDeck.getDeck();
 ```
 
-### ScriptActions for Document Writes
+### ScriptActions for Document Writes (Phase 2)
 
 Write operations on the currently-open document go through `applyResults()` on the context provider. The
-provider dispatches to the live editor — no backend round-trip needed.
+provider dispatches to the live editor — same mechanism that drives a user's interactive edit, no special path.
 
 ```javascript
 // Docs — insert structured ProseMirror content
@@ -1511,144 +1679,129 @@ return [{ action: "insertContent", content: {
     content: [{ type: "text", text: "Generated by script" }]
 }}];
 
-// Sheets — set a single cell
+// Sheets — set cells (the editor pushes the op via the Yjs ops layer above)
 return [{ action: "setCellValue", sheet: 0, row: 5, col: 0, value: 42 }];
 
-// Sheets — set a range (row-major 2D array)
 return [{ action: "setCellRange", sheet: 0, row: 0, col: 0, values: [
     ["Name", "Score", "Grade"],
     ["Alice", 95, "A"],
     ["Bob", 87, "B+"],
 ]}];
-
-// Multiple actions in one execution
-return [
-    { action: "setCellValue", sheet: 0, row: 5, col: 0, value: 42 },
-    { action: "notify", message: "Updated cell A6" },
-];
 ```
 
-Backend SDK write methods (`docs.insertContent`, `sheets.setCell`) are Phase 2 — they apply Yjs
-updates through the Collab system and are needed for cron/event-triggered scripts that run without a frontend.
+For cron/event-triggered scripts (no live editor), the SDK exposes backend write methods (Phase 2):
+`docs.insertContent`, `sheets.setCell`, `sheets.setCellRange`, etc. These call the writers above, which
+emit ops through the same shared module. Live editors connected at the time observe the change in real time.
 
 ### Consumers
 
-| Consumer | Doc reader | Sheet reader | Slides reader | Writers | Exists today? |
-|----------|-----------|-------------|--------------|---------|---------------|
-| **Scripting SDK** | `getText`, `getJson` | `getCell`, `getRange`, `getSheetData` | `getDeck` | Phase 2 | No — built in Phase 1 |
-| **Export** (DOCX, PDF, HTML) | Yes | Phase 1 | Yes | — | Docs + Slides (`loadEigendocContent`, `loadSlidesContent`) |
-| **Preview** (HTML rendering) | Yes | Phase 1 | Yes | — | Docs + Slides |
-| **Import** (DOCX, XLSX, PPTX) | — | — | — | Yes | No |
+| Consumer | Doc reader | Sheet reader | Slides reader | Writers | Today |
+|----------|-----------|-------------|--------------|---------|-------|
+| **Scripting SDK** | `getText`, `getJson` | `getCell`, `getRange`, `getSheetData` | `getDeck` | Phase 2 | Built in Phase 1 (read), Phase 2 (write) |
+| **Export** (DOCX, PDF, HTML) | Yes | Yes | Yes | — | Docs + Slides + Sheets exist (`loadEigendocContent`, `loadSlidesContent`, `loadSheetsContent`) |
+| **Preview** (HTML rendering) | Yes | Yes | Yes | — | Same as export |
+| **Import** (DOCX, XLSX, PPTX) | — | — | — | Yes | Doc writer + sheet writer exist (`apps/api/src/lib/import/`) |
 | **Search indexing** (future) | Yes | Yes | Yes | — | No |
 
-The existing `loadEigendocContent()` in `apps/api/src/lib/export/doc/content.ts` and `loadSlidesContent()`
-in `apps/api/src/lib/export/slides/content.ts` become thin wrappers around `readDocContent()` and
-`readSlidesContent()`. The export system, preview system, and scripting SDK all use the same readers.
-
-### File Structure
-
-```
-apps/api/src/lib/document/
-  doc-reader.ts         # readDocContent(ownerId, mountId, pathId) — refactored from export/doc/content.ts
-  doc-writer.ts         # writeDocContent(ownerId, mountId, pathId, content) — for import (Phase 2)
-  sheets-reader.ts      # readSheetContent(ownerId, mountId, pathId) — new
-  sheets-writer.ts      # writeSheetContent(ownerId, mountId, pathId, content) — for import (Phase 2)
-  slides-reader.ts      # readSlidesContent(ownerId, mountId, pathId) — refactored from export/slides/content.ts
-  slides-writer.ts      # writeSlidesContent(ownerId, mountId, pathId, content) — for import (Phase 2)
-  a1-notation.ts        # parseA1Notation() — A1 → numeric row/col conversion
-
-packages/lib/src/types/
-  document.ts           # DocContent, SheetContent, SlidesContent, CellData — shared FE + BE
-
-apps/api/src/lib/export/
-  doc/content.ts        # → becomes thin wrapper around doc-reader.ts
-  slides/content.ts     # → becomes thin wrapper around slides-reader.ts
-
-apps/api/src/lib/import/                    # Future
-  docx-import.ts        # DOCX → DocContent → writeDocContent()
-  xlsx-import.ts        # XLSX → SheetContent → writeSheetContent()
-  pptx-import.ts        # PPTX → SlidesContent → writeSlidesContent()
-```
+Existing callers of `loadEigendocContent()`, `loadSheetsContent()`, and `loadSlidesContent()` in the export
+system become thin wrappers around `readDocContent()`, `readSheetContent()`, and `readSlidesContent()`.
 
 ## Implementation Phases
 
 ### Phase 1 — MVP
 
-The minimum that proves the full pipeline end-to-end:
+The minimum that proves the full pipeline end-to-end, with read-only SDK and a worker pool from day one.
 
 **Backend:**
-- `Scripts` domain class (CRUD + execute + cancel)
+- `Scripts` domain class (CRUD + execute + cancel + recovery-on-startup)
 - `db-config.ts` with `scripts` + `executions` tables
-- `ScriptRunner` (direct Deno subprocess management from main API)
-- `runner.ts` (Proxy SDK with document object model + flat domain proxies + console capture + utils)
-- `sdk-handler.ts` (single `SDK_METHODS` registry)
+- `ScriptWorkerPool` (N pre-warmed Deno workers, kill+respawn between executions)
+- `runner.js` (Proxy SDK with document object model + flat domain proxies + console capture + utils,
+  Content-Length JSON-RPC framing, frozen `eigen` global, capped log buffer)
+- `sdk-handler.ts` (typed `SDK_METHODS` registry with Zod schemas, handler-side ACL via existing
+  `getSharedDrive` / `resolveCalendar` / new `requireOwnerAccess` helper, split error codes)
+- `requireOwnerAccess(userId, ownerId)` added to `apps/api/src/lib/core/access.ts` — thin dispatcher over
+  existing `requireSelf` / `requireTeamAccess` / org-membership primitives
+- `proxy-fetch.ts` (manifest domain allowlist enforcement)
 - SSE events for execution lifecycle (including progress)
 - Routes: CRUD, execute, cancel, list
 - Personal scope only
 
 **Document Content Layer:**
-- `readDocContent(ownerId, mountId, pathId)` — refactored from existing `loadEigendocContent()` (Yjs → PM JSON + text)
-- `readSheetContent(ownerId, mountId, pathId)` — new (Yjs → SheetContent with cell values/formulas/display)
-- `readSlidesContent(ownerId, mountId, pathId)` — refactored from existing `loadSlidesContent()` (Yjs → DeckData)
-- `a1-notation.ts` — A1 notation parser for sheets SDK methods
+- `readDocContent(ownerId, mountId, pathId)` — refactored from existing `loadEigendocContent()`
+- `readSheetContent(ownerId, mountId, pathId)` — refactored from existing `loadSheetsContent()` and integrated
+  with the new shared Yjs ops module
+- `readSlidesContent(ownerId, mountId, pathId)` — refactored from existing `loadSlidesContent()`
+- `a1-notation.ts` — A1 notation parser (real lexer, not regex)
 - Shared types: `DocContent`, `SheetContent`, `SlidesContent`, `CellData` in `packages/lib/src/types/document.ts`
-- Export system refactored to use `readDocContent()` and `readSlidesContent()` as shared readers
+- Existing export-system readers become thin wrappers around the new readers
+
+**Shared Sheets Yjs Ops Module (`packages/lib/src/sheets/yjs-ops.ts`):**
+- `readSheetsFromYDoc(doc)` — replay snapshot + ops, used by both FE and BE
+- `pushOpsToYDoc(doc, ops)` — push an op batch, used by both FE and BE (Phase 2 BE writes)
+- `buildSetCellValueOp`, `buildSetCellRangeOp` — high-level op builders (used in Phase 2 BE writes; defined
+  in Phase 1 alongside the read path so the module is one cohesive piece)
+- Extract `applyOpsToSheets(sheets, ops)` from `WorkbookInstance.applyOp` into a pure function and have the
+  Workbook component delegate to it
 
 **SDK (read-only):**
-- `eigen.docs.getActive()` / `eigen.docs.getById({...})` — document proxies. Methods: `getText`, `getJson`
-- `eigen.sheets.getActive()` / `eigen.sheets.getById({...})` — sheet proxies. Methods: `getCell` (A1 notation),
-  `getRange` (A1 notation), `getSheetData`. Render options: `"value"` (default), `"formula"`, `"formatted"`
-- `eigen.slides.getActive()` / `eigen.slides.getById({...})` — slides proxies. Methods: `getDeck`
-- `eigen.drive.*` — flat proxy, auto-injects ownerId. Methods: `listFolder`, `getPath`, `readFile`
-- `eigen.fetch()` — external API calls (domain-restricted via Deno `--allow-net`)
+- `eigen.docs.getActive()` / `eigen.docs.getById({...})` — methods: `getText`, `getJson`
+- `eigen.sheets.getActive()` / `eigen.sheets.getById({...})` — methods: `getCell` (A1), `getRange` (A1),
+  `getSheetData`. Render options: `"value"` (default), `"formula"`, `"formatted"`
+- `eigen.slides.getActive()` / `eigen.slides.getById({...})` — methods: `getDeck`
+- `eigen.drive.*` — methods: `listFolder`, `getPath`, `readFile`
+- `eigen.fetch()` — manifest-allowlisted domains
 - `eigen.progress(message)` — real-time progress via SSE
-- `eigen.utils.sleep(ms)` — pause execution
-- `console.log/warn/error` — captured locally with `JSON.stringify` for objects
-- `eigen.context` — selection state from frontend (not document content)
+- `eigen.utils.sleep(ms)` — pause execution (counts against timeout)
+- `console.log/warn/error` — captured locally (capped 64 KB)
+- `eigen.context` — selection state from frontend
 - `eigen.config` — persisted per-script config
 - `eigen.user` — current user
-- Structured error codes: `NOT_FOUND`, `PERMISSION_DENIED`, `QUOTA_EXCEEDED`, `INVALID_PARAMS`, `INTERNAL`
+- Structured error codes: `NOT_FOUND`, `SCRIPT_PERMISSION_DENIED`, `RESOURCE_PERMISSION_DENIED`,
+  `QUOTA_EXCEEDED`, `INVALID_PARAMS`, `INTERNAL`
 
 **Frontend:**
 - Scripts app: list view + CodeMirror editor + "Run" button + output panel
 - `ScriptsPanel` in `packages/ui` (PropertiesPanel-based sidebar)
 - `ScriptContextProvider` interface (selection state only, no document content)
-- Context providers for Docs (`selection` + `replaceSelection`, `insertText`, `insertContent`)
-  and Drive (`selectedFiles` + `notify`)
+- Context providers for **Docs** (`selection` + `replaceSelection`, `insertText`, `insertContent`)
+  and **Drive** (`selectedFiles` + `notify`)
 - Toolbar integration: `Code` icon button (alongside existing comment button)
 
-### Phase 2 — Worker + Triggers + Writes + Import
+### Phase 2 — Worker Process + Triggers + Writes + Import
 
-- **Worker process extraction** — move Deno management to dedicated Bun worker with IPC, add execution queue
-  and per-user concurrency limits
-- **Cron triggers** — `Bun.cron()` per trigger, server-level `cron_triggers` index in `eigen.db`
+- **Worker process extraction** — move pool, queue, and cron scheduler to a dedicated Bun worker process
+  with IPC. Add per-user concurrency limit (5)
+- **Cron triggers** — `Bun.cron(schedule, callback)` per trigger, server-level `cron_triggers` index in
+  `eigen.db`. UTC schedules, no-overlap semantics, lost-on-restart re-registration
 - **Event-driven triggers** — listener on `Home.broadcast()`, dispatches matching script executions
-- **Write SDK operations**: `drive.writeFile`, `drive.create`, `docs.insertContent`,
-  `sheets.setCell`, `sheets.setCellRange` — with quota enforcement and ACL validation
-- **DocumentWriters**: `writeDocContent()`, `writeSheetContent()`, `writeSlidesContent()` — for SDK writes and import
+- **Failure notifications** — cron/event failures call `home.notifications.persist({ type: 'scripts:failed', ... })`
+- **Write SDK operations**: `drive.writeFile`, `drive.create`, `docs.insertContent`, `sheets.setCell`,
+  `sheets.setCellRange`, `slides.insertSlide` — with quota enforcement and ACL validation, all routed
+  through the same Yjs ops modules used by live editors
+- **DocumentWriters**: `writeDocContent()`, `writeSheetContent()`, `writeSlidesContent()`
 - **File import**: DOCX → `DocContent` → `writeDocContent()`, XLSX → `SheetContent` → `writeSheetContent()`,
   PPTX → `SlidesContent` → `writeSlidesContent()`
 - **User-scoped properties** — per-user config for shared scripts (like Google's `UserProperties`)
 - Team/org script scope (Scripts domain in TeamHome/OrgHome)
 - Installation/permission approval flow
 - Prompt-based script inputs (`input` field in extensions)
-- Extended SDK: `eigen.mail.*`, `eigen.calendar.*` (Proxy makes these instant to add)
+- Extended SDK: `eigen.mail.*`, `eigen.calendar.*` (Proxy makes these one-line additions in `SDK_METHODS`)
 - Context providers for remaining apps (Sheets, Slides, Mail, Chat, Calendar)
 - Admin controls (disable scripting, view/kill executions)
 
-### Phase 3 — Rich Extensions
+### Phase 3 — Hardening + Rich Extensions
 
+- **OS-level isolation** for hostile-code scenarios: cgroup memory enforcement, network namespace,
+  forward-proxy enforcement of the fetch domain allowlist (defends against DNS rebinding), separate Linux user
 - `sidebar-panel` extension type (custom HTML rendered in host apps)
 - Script secrets/config store (encrypted, separate from script source)
 - Execution metrics and quota enforcement
 - Script versioning with rollback UI
 - Script module/import mechanism (bundling or import maps)
 - Sheets export (HTML, XLSX) via `readSheetContent()` + format-specific serializers
-- Custom sheet functions (batch evaluation of `=EIGEN_FUNC()` cells via scripting engine)
-
-Note: server-side formula recalculation is tracked separately in [SHEETS.md](SHEETS.md#remaining-work--server-side-recalc)
-as part of the fortune-sheet cleanup effort. When that work lands, `readSheetContent()` gains accurate
-formula values automatically — no scripting-side changes needed.
+- Custom sheet functions (batch evaluation of `=EIGEN_FUNC()` cells)
+- Public marketplace / script registry — only viable after Phase 3 OS-level isolation lands
 
 ## Google Apps Script Comparison
 
@@ -1656,23 +1809,24 @@ Key design decisions mapped to Google's equivalents:
 
 | Concept | Google Apps Script | Eigen SDK | Notes |
 |---|---|---|---|
-| Active document | `SpreadsheetApp.getActive()` | `eigen.sheets.getActive()` | Same pattern |
-| Open by ID | `SpreadsheetApp.openById(id)` | `eigen.sheets.getById({mountId, pathId})` | Eigen uses mountId+pathId instead of single ID |
-| Cell access | `sheet.getRange("A1").getValue()` | `sheet.getCell("A1")` | Simpler — no intermediate Range object |
+| Active document | `SpreadsheetApp.getActive()` | `eigen.sheets.getActive()` | Same pattern. GAS limitation: only works in container-bound scripts; standalone scripts must `openById`. Eigen has the same context distinction (sidebar context vs cron) |
+| Open by ID | `SpreadsheetApp.openById(id)` | `eigen.sheets.getById({mountId, pathId})` | Eigen uses (mountId, pathId) instead of a single ID |
+| Cell access | `sheet.getRange("A1").getValue()` | `sheet.getCell("A1")` | Simpler — no intermediate Range object. We don't need GAS's batch-cache architecture because each call is one RPC, not 100 |
 | Range access | `sheet.getRange("A1:C10").getValues()` | `sheet.getRange("A1:C10")` | Returns 2D array directly |
-| Display values | `range.getDisplayValues()` | `sheet.getCell("A1", { render: "formatted" })` | Param-based vs separate method |
+| Display values | `range.getDisplayValues()` | `sheet.getCell("A1", { render: "formatted" })` | Param-based vs separate method. We do not split into 3 methods (value/display/formula) — one method, render parameter |
 | Document text | `doc.getBody().getText()` | `doc.getText()` | Flatter — no Body intermediate |
-| HTTP requests | `UrlFetchApp.fetch(url, params)` | `eigen.fetch(url, opts)` | Standard fetch API (Deno native) |
+| HTTP requests | `UrlFetchApp.fetch(url, params)` | `eigen.fetch(url, opts)` | Standard fetch API. Manifest allowlist is similar to GAS's `urlFetchAllowlist` |
 | Script storage | `PropertiesService` (3 scopes) | `eigen.config` (script scope) | Phase 2 adds user scope |
-| Sleep | `Utilities.sleep(ms)` | `eigen.utils.sleep(ms)` | Async (Promise-based) vs synchronous |
-| Triggers | `ScriptApp.newTrigger().timeBased().everyHours(1).create()` | Cron expressions in manifest | Cron is more powerful, builder is more ergonomic |
-| Custom functions | `@customfunction` in cells | Phase 3 | Hard with subprocess model |
-| Runtime | V8 (synchronous, no modules, no fetch) | Deno (async, modern JS, native fetch) | Eigen's runtime is strictly superior |
+| Sleep | `Utilities.sleep(ms)` | `eigen.utils.sleep(ms)` | Async (Promise-based) vs synchronous; counts against timeout in both |
+| Triggers | `ScriptApp.newTrigger().timeBased().everyHours(1).create()` | Cron expressions in trigger config | Cron is more powerful, builder is more ergonomic. We may add a builder later |
+| Custom functions in cells | `@customfunction` tag | Phase 3 | Hard with subprocess model — every cell evaluation pays cold-start. Likely batch-evaluation API instead of real-time |
+| Runtime | V8 (sync-only despite async syntax) | Deno (real async, modern JS, native fetch) | Real difference. Trade-off: GAS doesn't need a permission model; Deno does and we have to design around its imperfections |
 
 ## What Is NOT In Scope
 
-- Public marketplace / script registry
+- Public marketplace / script registry (would require Phase 3 isolation)
 - Collaborative script editing (single author edits at a time)
-- TypeScript in-browser (scripts are plain JS; TS support is future)
+- TypeScript in-browser (scripts are plain JS; users can transpile externally)
 - Script-to-script communication
 - Billing/quota per script execution
+- Encrypted secrets storage (Phase 3)

@@ -1290,19 +1290,19 @@ function pasteHandlerOfCopyPaste(
                         let func = value.f;
 
                         if (offsetRow > 0) {
-                            func = `=${functionCopy(ctx, func, "down", offsetRow)}`;
+                            func = `=${functionCopy(func, "down", offsetRow)}`;
                         }
 
                         if (offsetRow < 0) {
-                            func = `=${functionCopy(ctx, func, "up", Math.abs(offsetRow))}`;
+                            func = `=${functionCopy(func, "up", Math.abs(offsetRow))}`;
                         }
 
                         if (offsetCol > 0) {
-                            func = `=${functionCopy(ctx, func, "right", offsetCol)}`;
+                            func = `=${functionCopy(func, "right", offsetCol)}`;
                         }
 
                         if (offsetCol < 0) {
-                            func = `=${functionCopy(ctx, func, "left", Math.abs(offsetCol))}`;
+                            func = `=${functionCopy(func, "left", Math.abs(offsetCol))}`;
                         }
 
                         const funcV = execfunction(
