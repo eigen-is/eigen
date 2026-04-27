@@ -239,26 +239,17 @@ export const SheetOverlay: React.FC = () => {
 
     const onTouchStart = useCallback(
         (e: React.TouchEvent<HTMLDivElement>) => {
-            const { nativeEvent } = e;
-            setContext((draftContext) => {
-                handleOverlayTouchStart(draftContext, nativeEvent, refs.globalCache);
-            });
+            handleOverlayTouchStart(e.nativeEvent, refs.globalCache);
             e.stopPropagation();
         },
-        [refs.globalCache, setContext],
+        [refs.globalCache],
     );
 
     const onTouchMove = useCallback(
         (e: React.TouchEvent<HTMLDivElement>) => {
-            handleOverlayTouchMove(
-                context,
-                e.nativeEvent,
-                refs.globalCache,
-                refs.scrollbarX.current!,
-                refs.scrollbarY.current!,
-            );
+            handleOverlayTouchMove(e.nativeEvent, refs.globalCache, refs.scrollbarX.current!, refs.scrollbarY.current!);
         },
-        [context, refs.globalCache, refs.scrollbarX, refs.scrollbarY],
+        [refs.globalCache, refs.scrollbarX, refs.scrollbarY],
     );
 
     const onTouchEnd = useCallback(() => {

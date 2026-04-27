@@ -526,9 +526,6 @@ export function updateInlineStringFormat(
 
                 $textEditor.innerHTML = cont;
 
-                // console.log(replaceSpans, cont);
-                // replaceSpans.replaceWith(cont);
-
                 let startSeletedNodeIndex;
                 let endSeletedNodeIndex;
                 if (s1 === s2) {
