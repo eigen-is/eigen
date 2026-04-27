@@ -152,3 +152,50 @@ describe('Sheets HTML export — conditional formatting', () => {
         expect(html).toContain('#638ec6');
     });
 });
+
+describe('Sheets HTML export — cell styling', () => {
+    test('ff (font family) is HTML-escaped so it does not break the style attribute', () => {
+        // Regression: emitting `font-family:"Georgia"` with literal quotes inside the
+        // style="..." attribute closed the attribute early, dropping every later
+        // declaration (color, background, etc.). The fix encodes the quotes as &quot;.
+        const sheet = makeSheet([{ r: 0, c: 0, v: { v: 'styled', ff: 'Georgia', fc: '#ff0000', bg: '#0000ff' } }]);
+        const html = renderSheetsHtml([sheet]);
+        expect(html).toContain('font-family:&quot;Georgia&quot;');
+        // The crucial assertion: declarations after font-family must survive.
+        expect(html).toContain('color:#ff0000');
+        expect(html).toContain('background:#0000ff');
+        // No raw double-quote inside a font-family declaration.
+        expect(html).not.toMatch(/font-family:"[^&]/);
+    });
+
+    test('rt as a positive angle produces a CSS rotate transform', () => {
+        const sheet = makeSheet([{ r: 0, c: 0, v: { v: 'up', rt: 45 } }]);
+        const html = renderSheetsHtml([sheet]);
+        // rt is CCW-positive (matches Excel/OOXML); CSS rotate is CW-positive — so the
+        // emitted angle is the negation.
+        expect(html).toContain('transform:rotate(-45deg)');
+    });
+
+    test('rt as a negative angle produces a positive CSS rotate transform', () => {
+        const sheet = makeSheet([{ r: 0, c: 0, v: { v: 'down', rt: -90 } }]);
+        const html = renderSheetsHtml([sheet]);
+        expect(html).toContain('transform:rotate(90deg)');
+    });
+
+    test('rt = "vertical" produces vertical writing-mode', () => {
+        const sheet = makeSheet([{ r: 0, c: 0, v: { v: 'stacked', rt: 'vertical' } }]);
+        const html = renderSheetsHtml([sheet]);
+        expect(html).toContain('writing-mode:vertical-rl');
+        expect(html).toContain('text-orientation:upright');
+    });
+
+    test('rt = 0 or unset emits no rotation wrapper', () => {
+        const sheet = makeSheet([
+            { r: 0, c: 0, v: { v: 'plain' } },
+            { r: 1, c: 0, v: { v: 'zero', rt: 0 } },
+        ]);
+        const html = renderSheetsHtml([sheet]);
+        expect(html).not.toContain('transform:rotate');
+        expect(html).not.toContain('writing-mode:vertical');
+    });
+});

@@ -176,7 +176,8 @@ function renderSheet(sheet: Sheet, isLast: boolean): string {
             attrs.push(`style="${style}"`);
 
             const display = getCellDisplay(v);
-            const inner = cfStyle?.dataBar ? renderDataBar(cfStyle.dataBar, display) : display;
+            const dataBarLayer = cfStyle?.dataBar ? renderDataBar(cfStyle.dataBar, display) : null;
+            const inner = wrapForRotation(v, dataBarLayer ?? display);
             const attrStr = attrs.length > 0 ? ` ${attrs.join(' ')}` : '';
             cells.push(`<td${attrStr}>${inner}</td>`);
         }
@@ -239,7 +240,11 @@ function buildCellStyle(
     if (v) {
         if (v.ff != null) {
             const family = typeof v.ff === 'number' ? FONT_ARRAY[v.ff] : v.ff;
-            if (family) parts.push(`font-family:"${family}",sans-serif`);
+            // The style attribute is wrapped in double quotes by the caller, so the
+            // font-family quotes must be HTML-encoded (`&quot;`) — using literal `"`
+            // here closes the attribute early and silently drops every later declaration
+            // (color, background, etc.). Family name is escaped to defang stray quotes.
+            if (family) parts.push(`font-family:&quot;${escapeHtml(String(family))}&quot;,sans-serif`);
         }
         if (v.bl === 1) parts.push('font-weight:bold');
         if (v.it === 1) parts.push('font-style:italic');
@@ -287,6 +292,21 @@ function buildCellStyle(
     }
 
     return parts.join(';');
+}
+
+// Wrap cell content in a span that applies CSS rotation / vertical-stacked writing mode
+// when the cell has `rt` set. CSS `rotate()` is CW-positive while our `rt` is CCW-positive
+// (matching Excel/OOXML), so the angle is negated. The span uses `display:inline-block`
+// so the transform takes effect on inline content.
+function wrapForRotation(v: Cell | null, inner: string): string {
+    if (!v || v.rt == null) return inner;
+    if (v.rt === 'vertical') {
+        return `<span style="writing-mode:vertical-rl;text-orientation:upright">${inner}</span>`;
+    }
+    if (typeof v.rt === 'number' && v.rt !== 0 && v.rt >= -90 && v.rt <= 90) {
+        return `<span style="display:inline-block;transform:rotate(${-v.rt}deg);transform-origin:center center">${inner}</span>`;
+    }
+    return inner;
 }
 
 function buildBorderMap(
