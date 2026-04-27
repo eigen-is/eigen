@@ -4,6 +4,12 @@
 > biome-clean end to end, lodash-free, CSS fully migrated to Tailwind, shadcn adopted, typing tightened.
 > See priority phases at bottom.
 
+> **Recently shipped (2026-04-26):** The icon-row `Toolbar/` (~1395 LOC) was replaced with a Google-Sheets-style
+> `MenuBar/` (Edit / View / Insert / Format / Data menus + `CustomBorder.tsx`). Previously missing UI for text
+> Rotation (`tr` field), CF Color Scales (12 presets), and CF Data Bars (6 solid presets) shipped in the Format
+> menu. `Screenshot` and `LocationCondition` were deleted entirely. Net ~−1500 LOC across the package.
+> Spec: [`PROPOSAL_FORTUNE_SHEET_TOOLBAR.md`](PROPOSAL_FORTUNE_SHEET_TOOLBAR.md).
+
 The package is a full fork of fortune-sheet + luckysheet (no external `@fortune-sheet/core` dependency).
 Treat it as owned code: fix broken windows when touching it, prefer modern patterns over preserving legacy.
 
@@ -60,27 +66,29 @@ CustomSort, RangeDialog, LinkEditCard). **DONE.**
 The `useDialog` hook (in `hooks/useDialog.tsx`) wraps `ModalContext` to show/hide dialogs using shadcn `Dialog`. The
 `useAlert` hook builds on top of it for simple ok/yesno alerts.
 
-| Component                            | Uses `useDialog` | Uses `useAlert` | Notes                                                    |
-|--------------------------------------|------------------|-----------------|----------------------------------------------------------|
-| `ConditionFormat/index.tsx`          | Yes              | No              | Shows `ConditionRules` dialog                            |
-| `ConditionFormat/ConditionRules.tsx` | Yes (hideDialog) | No              | Dialog content itself                                    |
-| `ContextMenu/index.tsx`              | Yes              | Yes             | Shows `CustomSort` dialog, alerts for errors             |
-| `ContextMenu/FilterMenu.tsx`         | No               | Yes             | Sort error alerts                                        |
-| `CustomSort/index.tsx`               | Yes (hideDialog) | No              | Dialog content, closes on confirm                        |
-| `DataVerification/index.tsx`         | Yes              | No              | Shows RangeDialog                                        |
-| `DataVerification/RangeDialog.tsx`   | Yes              | No              | Navigates back to parent dialogs                         |
-| `FormatSearch/index.tsx`             | Yes              | No              | Decimal places validation alert                          |
-| `FormulaSearch/index.tsx`            | No               | No              | **Could use `useDialog`** — currently standalone         |
-| `LocationCondition/index.tsx`        | No               | No              | **Could use `useDialog`** — currently standalone         |
-| `SplitColumn/index.tsx`              | No               | No              | **Could use `useDialog`** — currently standalone         |
-| `SearchReplace/index.tsx`            | No               | No              | Rendered inline, not a dialog                            |
-| `SheetOverlay/index.tsx`             | Yes              | Yes             | Main overlay, shows various dialogs                      |
-| `Toolbar/index.tsx`                  | Yes              | No              | Shows formula/format/location/split/verification dialogs |
+| Component                            | Uses `useDialog` | Uses `useAlert` | Notes                                                             |
+|--------------------------------------|------------------|-----------------|-------------------------------------------------------------------|
+| `ConditionFormat/index.tsx`          | Yes              | No              | Shows `ConditionRules` dialog                                     |
+| `ConditionFormat/ConditionRules.tsx` | Yes (hideDialog) | No              | Dialog content itself                                             |
+| `ContextMenu/index.tsx`              | Yes              | Yes             | Shows `CustomSort` dialog, alerts for errors                      |
+| `ContextMenu/FilterMenu.tsx`         | No               | Yes             | Sort error alerts                                                 |
+| `CustomSort/index.tsx`               | Yes (hideDialog) | No              | Dialog content, closes on confirm                                 |
+| `DataVerification/index.tsx`         | Yes              | No              | Shows RangeDialog                                                 |
+| `DataVerification/RangeDialog.tsx`   | Yes              | No              | Navigates back to parent dialogs                                  |
+| `FormatSearch/index.tsx`             | Yes              | No              | Decimal places validation alert                                   |
+| `FormulaSearch/index.tsx`            | No               | No              | Shown via `showDialog()` from `MenuBar/insert-menu.tsx`           |
+| `SplitColumn/index.tsx`              | No               | No              | Shown via `showDialog()` from `MenuBar/data-menu.tsx`             |
+| `SearchReplace/index.tsx`            | No               | No              | Rendered inline, not a dialog                                     |
+| `SheetOverlay/index.tsx`             | Yes              | Yes             | Main overlay, shows various dialogs                               |
+| `MenuBar/edit-menu.tsx`              | Yes              | Yes             | Shows `FormulaSearch` (find/replace), alerts                      |
+| `MenuBar/insert-menu.tsx`            | Yes              | No              | Shows `FormulaSearch` dialog (More functions…), `LinkEditCard`    |
+| `MenuBar/format-menu.tsx`            | Yes              | No              | Shows `FormatSearch`, `ConditionRules`, `ManageRules` dialogs     |
+| `MenuBar/data-menu.tsx`              | Yes              | No              | Shows `CustomSort`, `SplitColumn` dialogs                         |
 
 ### Observations
 
 - `useDialog` / `useAlert` pattern is well-established and consistent
-- `FormulaSearch`, `LocationCondition`, `SplitColumn` are shown via `showDialog()` from the Toolbar but don't use
+- `FormulaSearch` and `SplitColumn` are shown via `showDialog()` from the MenuBar but don't use
   `useDialog` themselves — this is fine since they receive `onCancel` prop
 - No custom dialog implementations found — all go through `ModalContext`
 
@@ -114,8 +122,8 @@ Components using `export default` that should use named function exports for con
 | `SVGDefines.tsx`                     | `const SVGDefines: React.FC` + `export default`          | `export function SVGDefines()`                  |
 | `hooks/usePrevious.tsx`              | `function usePrevious` + `export default`                | `export function usePrevious()`                 |
 
-**Already using named exports:** `ChangeColor`, `ConditionRules`, `FormatSearch`, `FormulaSearch`, `LocationCondition`,
-`SplitColumn`, `LinkEditCard`, `Toolbar`, `useDialog`, `useAlert`, `useOutsideClick`.
+**Already using named exports:** `ChangeColor`, `ConditionRules`, `FormatSearch`, `FormulaSearch`,
+`SplitColumn`, `LinkEditCard`, `useDialog`, `useAlert`, `useOutsideClick`.
 
 ---
 
@@ -147,10 +155,9 @@ implementations:
 - `DataVerification/DropdownList.tsx` — `DropdownMenu` + `DropdownMenuCheckboxItem`/`DropdownMenuItem` (post `b5c3b7e7`)
 - `FormatSearch/index.tsx` — `Button`, `Input`, `Label`, `cn`
 - `LinkEditCard/index.tsx` — `Button`, `Select` (post `b5c3b7e7`; CSS still pending)
-- `LocationCondition/index.tsx` — `Button`, `Checkbox`, `Label`, `RadioGroup`, `DialogFooter` (post `b5c3b7e7`)
+- `MenuBar/index.tsx` + menu files — `DropdownMenu*`, `Popover`, `ColorPicker`
 - `SearchReplace/index.tsx` — `Button`, `Input`, `Checkbox`, `Label`, `Tabs`
 - `SplitColumn/index.tsx` — `Button`, `Checkbox`, `Input`, `Label`, `DialogFooter` (post `b5c3b7e7`)
-- `Toolbar/index.tsx` — `SharedToolbar`, `TooltipButton`, `DropdownMenu*`
 - `context/modal.tsx` — `Dialog`, `DialogContent`
 - `hooks/useDialog.tsx` — `Button`, `DialogHeader/Title/Description/Footer`
 
@@ -265,13 +272,13 @@ implementations:
 
 - **DONE** (commit `b5c3b7e7`) — `Checkbox`, `RadioGroup`, `Label`, `Button`, action buttons in `DialogFooter`. 5 separate radios collapsed into a single `RadioGroup` (they had unique `name` attrs before so didn't actually form a group). Inline `style={{ color: '#666' }}` replaced with `peer-disabled:opacity-50`
 
-### `Toolbar/` (index, CustomBorder, toolbar-helpers)
+### `MenuBar/` (index, edit-menu, view-menu, insert-menu, format-menu, data-menu, CustomBorder)
 
-- Already uses shared `Toolbar` and `TooltipButton` from `@workspace/ui`
-- Uses `DropdownMenu*` from shadcn
-- `toolbar-helpers.tsx` — helper components for toolbar items
-- `CustomBorder.tsx` — border style picker, uses shadcn `Popover`
-- Well-migrated, minimal cleanup needed
+- Replaced the old `Toolbar/` (deleted 2026-04-26). Five `DropdownMenu`s for Edit / View / Insert / Format / Data.
+- Uses `DropdownMenu*` from shadcn — same primitives as `ConditionFormat/index.tsx`
+- `CustomBorder.tsx` — border style picker, moved from `Toolbar/CustomBorder.tsx`; uses shadcn `Popover`
+- `luckysheet-mousedown-cancel` must be on any `DropdownMenuSubContent` inside `cellArea` — same rule as
+  `DataVerification/DropdownList.tsx` (see `FORTUNE-SHEET-OPEN-ISSUES.md` §1)
 
 ### `Workbook/` (index, api, CSS)
 
@@ -334,11 +341,6 @@ implementations:
 9. Localize hardcoded Chinese strings in `ImgBoxs`
 10. Evaluate replacing Font Awesome icons with Lucide
 11. Remove `css.d.ts` once all CSS imports eliminated
-12. **Wire missing Color Scales / Data Bars UI** — engine supports `colorGradation` /
-    `dataBar` rules and `state/locale/en.ts` defines 24 preset names, but the CF
-    dropdown only exposes `highlightCellRules` + `itemSelectionRules`. See
-    [PROPOSAL_FORTUNE_SHEET_CF_UI.md](PROPOSAL_FORTUNE_SHEET_CF_UI.md) for the
-    implementation plan (3 files, ~100 lines, no engine changes).
 
 ---
 
