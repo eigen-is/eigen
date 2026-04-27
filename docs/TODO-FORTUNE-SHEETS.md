@@ -96,34 +96,10 @@ The `useDialog` hook (in `hooks/useDialog.tsx`) wraps `ModalContext` to show/hid
 
 ## 4. Export Style Audit (`default` → named export)
 
-Components using `export default` that should use named function exports for consistency:
-
-| File                                 | Current                                                  | Proposed                                        |
-|--------------------------------------|----------------------------------------------------------|-------------------------------------------------|
-| `ConditionFormat/index.tsx`          | `const ConditionalFormat: React.FC` + `export default`   | `export function ConditionalFormat()`           |
-| `ConditionFormat/ConditionRules.tsx` | Named + default                                          | Remove redundant default                        |
-| `ContextMenu/index.tsx`              | `const ContextMenu: React.FC` + `export default`         | `export function ContextMenu()`                 |
-| `ContextMenu/FilterMenu.tsx`         | `const FilterMenu: React.FC` + `export default`          | `export function FilterMenu()`                  |
-| `CustomSort/index.tsx`               | `const CustomSort: React.FC` + `export default`          | `export function CustomSort()`                  |
-| `DataVerification/DropdownList.tsx`  | `const DropDownList: React.FC` + `export default`        | `export function DropDownList()`                |
-| `DataVerification/RangeDialog.tsx`   | `const RangeDialog: React.FC` + `export default`         | `export function RangeDialog()`                 |
-| `FilterOption/index.tsx`             | `const FilterOptions: React.FC` + `export default`       | `export function FilterOptions()`               |
-| `FxEditor/index.tsx`                 | `const FxEditor: React.FC` + `export default`            | `export function FxEditor()`                    |
-| `FxEditor/NameBox.tsx`               | `const LocationBox: React.FC` + `export default`         | `export function NameBox()` (fix name mismatch) |
-| `ImgBoxs/index.tsx`                  | `const ImgBoxs: React.FC` + `export default`             | `export function ImgBoxs()`                     |
-| `NotationBoxes/index.tsx`            | `const NotationBoxes: React.FC` + `export default`       | `export function NotationBoxes()`               |
-| `Sheet/index.tsx`                    | `const Sheet: React.FC` + `export default`               | `export function Sheet()`                       |
-| `SheetList/index.tsx`                | `const SheetList: React.FC` + `export default`           | `export function SheetList()`                   |
-| `SheetList/SheetListItem.tsx`        | `const SheetListItem: React.FC` + `export default`       | `export function SheetListItem()`               |
-| `SheetList/SheetHiddenButton.tsx`    | `const SheetHiddenButton: React.FC` + `export default`   | `export function SheetHiddenButton()`           |
-| `SheetTab/index.tsx`                 | `const SheetTab: React.FC` + `export default`            | `export function SheetTab()`                    |
-| `SheetTab/SheetItem.tsx`             | `const SheetItem: React.FC` + `export default`           | `export function SheetItem()`                   |
-| `SVGIcon.tsx`                        | `const SVGIcon: React.FC` + `export default`             | `export function SVGIcon()`                     |
-| `SVGDefines.tsx`                     | `const SVGDefines: React.FC` + `export default`          | `export function SVGDefines()`                  |
-| `hooks/usePrevious.tsx`              | `function usePrevious` + `export default`                | `export function usePrevious()`                 |
-
-**Already using named exports:** `ChangeColor`, `ConditionRules`, `FormatSearch`, `FormulaSearch`,
-`SplitColumn`, `LinkEditCard`, `useDialog`, `useAlert`, `useOutsideClick`.
+**DONE** — all `components/` and `hooks/` files now use named exports. `state/locale/en.ts`
+converted in commit `d0b6d564`. The only remaining `export default` lines in the package are in
+`engine/parser/` (operator implementations + grammar parser) — those are slated for regeneration
+from upstream jison rather than hand-editing, see §5 in `engine/parser/`.
 
 ---
 
@@ -170,14 +146,13 @@ implementations:
 - `SVGIcon` is a thin wrapper around `<svg><use xlinkHref>` — **keep**, it's used everywhere
 - `SVGDefines.tsx` is 1254 lines of inline SVG symbol definitions — consider extracting to a separate SVG sprite file or
   using Lucide icons where possible
-- Some SVG icons have hardcoded Chinese labels (`裁剪`, `恢复原图`, `删除`) in `ImgBoxs/index.tsx` — should be localized
 
 ### `ContextMenu/` (index, FilterMenu)
 
 - ~~**CSS**: `index.css` (283 lines)~~ — deleted
 - ~~**BTN**: FilterMenu has 4 `button-basic` divs~~ — done in `b5c3b7e7`
 - ~~**Deferred:** `menuItemClass` Tailwind string duplicated~~ — done in `bdb71f94`; const extracted, 4 inline duplicates deduped
-- `FilterMenu.tsx` — fixed-position panel, manual collision detection, and flyout submenu replaced with shadcn `Popover` + nested `Popover` in `b5c3b7e7`. Remaining: Chinese comments, `immer` `produce` patterns
+- `FilterMenu.tsx` — fixed-position panel, manual collision detection, and flyout submenu replaced with shadcn `Popover` + nested `Popover` in `b5c3b7e7`. Remaining: `immer` `produce` patterns
 
 ### `CustomSort/index.tsx`
 
@@ -215,9 +190,10 @@ implementations:
 
 ### `ImgBoxs/index.tsx`
 
-- Heavy use of `luckysheet-modal-dialog-*` CSS classes (from `SheetOverlay/index.css`)
-- Chinese hardcoded strings: `裁剪`, `恢复原图`, `删除` — localize via `locale()`
-- Font Awesome icons (`fa fa-pencil`, `fa fa-trash`, etc.) — replace with Lucide or SVGIcon
+- **DONE** — rewritten as a clean Tailwind component. No Chinese strings, no Font Awesome
+  icons. Still references `luckysheet-modal-dialog-activeImage` (DOM-targeted from
+  `state/modules/image.ts`) and the `luckysheet-modal-dialog-content` cursor class — preserve
+  those when migrating `SheetOverlay/index.css`.
 
 ### `LinkEditCard/` (index)
 
@@ -261,7 +237,6 @@ implementations:
 - **CSS**: `index.css` (281 lines) — tab area, active states, scroll buttons
 - Uses `luckysheet-*` class names extensively
 - `SheetItem.tsx` has drag-and-drop support, context menu, inline editing
-- Chinese comments — translate
 
 ### `SplitColumn/index.tsx`
 
@@ -296,7 +271,7 @@ implementations:
 | `useDialog`       | `hooks/useDialog.tsx`      | 10+ components | Well-designed, wraps `ModalContext`. **Keep.**             |
 | `useAlert`        | `hooks/useAlert.tsx`       | 4 components   | Thin wrapper on `useDialog` for ok/yesno alerts. **Keep.** |
 | `useOutsideClick` | `hooks/useOutsideClick.ts` | 5 components   | Standard pattern. **Keep.**                                |
-| `usePrevious`     | `hooks/usePrevious.tsx`    | 2 components   | Standard ref-based hook. Change to named export.           |
+| `usePrevious`     | `hooks/usePrevious.tsx`    | 2 components   | Standard ref-based hook. **Keep.**                         |
 
 ---
 
@@ -330,8 +305,12 @@ implementations:
 
 ### Next — Medium effort
 
-1. Convert remaining `export default` → named exports (~4 components)
-2. Translate Chinese comments to English
+1. Migrate `dataVerification.ts` user-facing strings to `locale()` — three large `lang ==='zh' / 'zh-TW' / 'en'` switch blocks (`failureText` ~360-440, `hintValue` ~645-720,
+   `hintText`/`failureText` HTML prefixes ~850-885) build validation messages by string-concat
+   with hardcoded fragments. Refactor to template-driven generation: move strings into the
+   locale data, build messages generically, drop the language branching.
+2. Broken-window sweep through `state/` — opportunistic `any` / `@ts-ignore` / dead-code cleanup
+   as files are touched, to shrink debt before biome enablement.
 
 ### Later — Major effort
 
