@@ -6,7 +6,6 @@ import {
     fixRowStyleOverflowInFreeze,
     getSheetIndex,
 } from '../../state';
-import { SVGIcon } from '../icon-map';
 
 export function FilterOptions() {
     const { context, setContext, refs } = useContext(WorkbookContext);
@@ -157,7 +156,15 @@ export function FilterOptions() {
                         {filterParam == null ? (
                             <div className="caret down" />
                         ) : (
-                            <SVGIcon name="filter-fill-white" style={{ width: 15, height: 15 }} />
+                            <svg
+                                viewBox="0 0 24 24"
+                                fill="white"
+                                stroke="none"
+                                style={{ width: 15, height: 15 }}
+                                aria-hidden="true"
+                            >
+                                <path d="M18.14 4a1.5 1.5 0 0 1 1.16 2.44L14.7 12.15v6.4l-5.37-2.56v-3.96L4.5 6.31A1.5 1.5 0 0 1 5.76 4h12.38z" />
+                            </svg>
                         )}
                     </div>
                 );
