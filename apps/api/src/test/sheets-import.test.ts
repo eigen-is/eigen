@@ -453,6 +453,56 @@ describe('Sheets xlsx import/convert', () => {
         expect(byCoord.get('0:1')?.bg).toBeUndefined();
     });
 
+    test('convert preserves text rotation and font family', async () => {
+        const workbook = new ExcelJS.Workbook();
+        const ws = workbook.addWorksheet('Styled');
+        ws.getCell('A1').value = '45-up';
+        ws.getCell('A1').alignment = { textRotation: 45 };
+        ws.getCell('A2').value = '90-up';
+        ws.getCell('A2').alignment = { textRotation: 90 };
+        ws.getCell('A3').value = '45-down';
+        ws.getCell('A3').alignment = { textRotation: -45 };
+        ws.getCell('A4').value = '90-down';
+        ws.getCell('A4').alignment = { textRotation: -90 };
+        ws.getCell('A5').value = 'vertical';
+        ws.getCell('A5').alignment = { textRotation: 'vertical' };
+        ws.getCell('B1').value = 'georgia';
+        ws.getCell('B1').font = { name: 'Georgia' };
+        const buf = await workbook.xlsx.writeBuffer();
+        const view = new Uint8Array(buf);
+        const out = new ArrayBuffer(view.byteLength);
+        new Uint8Array(out).set(view);
+        const xlsxFile = new File([out], 'styled.xlsx', {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+        const uploaded = await driveUpload<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            rootId,
+            xlsxFile,
+        );
+        const res = await authedRequest(
+            ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${mountId}/file/${uploaded.id}/convert/eigensheets`,
+            { method: 'POST' },
+        );
+        const converted = await assertJson<DrivePath>(res);
+        const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+        const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
+        expect(byCoord.get('0:0')?.rt).toBe(45);
+        expect(byCoord.get('0:0')?.tr).toBe('1');
+        expect(byCoord.get('1:0')?.rt).toBe(90);
+        expect(byCoord.get('1:0')?.tr).toBe('4');
+        expect(byCoord.get('2:0')?.rt).toBe(135);
+        expect(byCoord.get('2:0')?.tr).toBe('2');
+        expect(byCoord.get('3:0')?.rt).toBe(180);
+        expect(byCoord.get('3:0')?.tr).toBe('5');
+        expect(byCoord.get('4:0')?.tr).toBe('3');
+        expect(byCoord.get('4:0')?.rt).toBeUndefined();
+        expect(byCoord.get('0:1')?.ff).toBe('Georgia');
+    });
+
     test('convert handles multi-sheet workbooks', async () => {
         const workbook = new ExcelJS.Workbook();
         workbook.addWorksheet('Sheet A').getCell('A1').value = 'Alpha';

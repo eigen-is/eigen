@@ -1,12 +1,5 @@
 /// <reference path="../modules.d.ts" />
-import type {
-    BorderSide,
-    CellBorderInfo,
-    CellStyle,
-    Cell as FortuneCell,
-    Sheet,
-    SheetConfig,
-} from '@workspace/lib/sheets';
+import type { BorderSide, CellBorderInfo, Cell as FortuneCell, Sheet, SheetConfig } from '@workspace/lib/sheets';
 import type { Alignment, Border, CellValue, Workbook, Worksheet, Cell as XlsxCell } from 'exceljs';
 
 // Excel's date epoch is 1899-12-30 (not 1900-01-01 — Lotus 1-2-3 1900 leap-year bug).
@@ -378,6 +371,7 @@ function applyStyle(cell: XlsxCell, target: FortuneCell, theme: ThemePalette): v
         if (font.underline) target.un = 1;
         if (font.strike) target.cl = 1;
         if (typeof font.size === 'number') target.fs = font.size;
+        if (typeof font.name === 'string' && font.name.length > 0) target.ff = font.name;
         const fc = resolveColor(font.color, theme);
         if (fc) target.fc = fc;
     }
@@ -394,7 +388,7 @@ function applyStyle(cell: XlsxCell, target: FortuneCell, theme: ThemePalette): v
     }
 }
 
-function applyAlignment(alignment: Partial<Alignment>, target: CellStyle): void {
+function applyAlignment(alignment: Partial<Alignment>, target: FortuneCell): void {
     if (alignment.horizontal && alignment.horizontal in HORIZONTAL_MAP) {
         target.ht = HORIZONTAL_MAP[alignment.horizontal];
     }
@@ -403,6 +397,32 @@ function applyAlignment(alignment: Partial<Alignment>, target: CellStyle): void 
     }
     if (alignment.wrapText) {
         target.tb = '2';
+    }
+    applyRotation(alignment.textRotation, target);
+}
+
+// Map ExcelJS textRotation to fortune-sheet (tr, rt). ExcelJS exposes `'vertical'` for
+// stacked text and a number in [-90, 90] for diagonal/sideways: positive = CCW, negative = CW.
+// Fortune-sheet stores `tr` ∈ {"0","1","2","3","4","5"} for menu presets and `rt` for the
+// raw angle in [0, 180] (rt > 90 encodes downward rotation). The renderer prefers `rt`
+// when set, with `tr` as fallback. We set `rt` for the precise angle and also set `tr`
+// when the angle matches a preset so round-trips through the menu stay stable.
+function applyRotation(textRotation: number | 'vertical' | undefined, target: FortuneCell): void {
+    if (textRotation == null) return;
+    if (textRotation === 'vertical') {
+        target.tr = '3';
+        return;
+    }
+    if (textRotation === 0) return;
+
+    if (textRotation > 0 && textRotation <= 90) {
+        target.rt = textRotation;
+        if (textRotation === 45) target.tr = '1';
+        else if (textRotation === 90) target.tr = '4';
+    } else if (textRotation < 0 && textRotation >= -90) {
+        target.rt = 90 - textRotation; // -45 → 135, -90 → 180
+        if (textRotation === -45) target.tr = '2';
+        else if (textRotation === -90) target.tr = '5';
     }
 }
 
