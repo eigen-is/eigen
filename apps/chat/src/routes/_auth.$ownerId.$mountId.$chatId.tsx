@@ -44,13 +44,12 @@ function ChatView() {
         <Toolbar>
             {chat.chatPath &&
                 (isTeam ? (
-                    <UserAvatar email={ownerId} size="sm" tooltip className="ml-2" />
+                    <UserAvatar email={ownerId} size="sm" tooltip />
                 ) : (
                     <DriveShareSummary
                         path={chat.chatPath}
                         onClick={() => setAccessDialogOpen(true)}
                         showIconOnHover={false}
-                        className="ml-2"
                     />
                 ))}
             {chat.chatPath && <span className="font-semibold text-sm truncate">{chat.chatName}</span>}
