@@ -176,7 +176,10 @@ describe('Sheets HTML export — cell styling', () => {
         // so the text fans up from there, mirroring Excel's behaviour.
         expect(html).toContain('transform:rotate(-45deg)');
         expect(html).toContain('transform-origin:left bottom');
-        expect(html).toMatch(/left:0;bottom:0/);
+        // Td alignment pins the inline-block span at the cell's bottom-left, so the
+        // span's transform-origin lands flush with the cell corner.
+        expect(html).toContain('text-align:left');
+        expect(html).toContain('vertical-align:bottom');
     });
 
     test('rt as a negative angle anchors the rotation at top-left', () => {
@@ -184,7 +187,20 @@ describe('Sheets HTML export — cell styling', () => {
         const html = renderSheetsHtml([sheet]);
         expect(html).toContain('transform:rotate(90deg)');
         expect(html).toContain('transform-origin:left top');
-        expect(html).toMatch(/left:0;top:0/);
+        expect(html).toContain('text-align:left');
+        expect(html).toContain('vertical-align:top');
+    });
+
+    test('rotation forces left/bottom alignment over the user-set ht/vt', () => {
+        // A rotated cell with ht=center (0) / vt=middle (0) still pins to left+bottom
+        // (or left+top) so the rotation pivot stays at the cell corner — Excel does the
+        // same. The user's ht/vt is ignored only for rotated cells.
+        const sheet = makeSheet([{ r: 0, c: 0, v: { v: 'centered', rt: 45, ht: 0, vt: 0 } }]);
+        const html = renderSheetsHtml([sheet]);
+        expect(html).toContain('text-align:left');
+        expect(html).toContain('vertical-align:bottom');
+        expect(html).not.toContain('text-align:center');
+        expect(html).not.toContain('vertical-align:middle');
     });
 
     test('rt = "vertical" produces vertical writing-mode', () => {
