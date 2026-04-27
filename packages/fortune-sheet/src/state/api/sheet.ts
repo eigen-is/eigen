@@ -1,4 +1,4 @@
-import {cloneDeep, isNumber, isUndefined, maxBy, times} from "es-toolkit/compat";
+import {cloneDeep, isUndefined, maxBy, times} from "es-toolkit/compat";
 import {v4 as uuidv4} from "uuid";
 import {dataToCelldata, getSheet} from "./common";
 import {Context} from "../context";
@@ -91,12 +91,13 @@ function generateCopySheetName(ctx: Context, sheetId: string) {
         if (st_i === 0) {
             index = index || 2;
             const ed_i = fileName.indexOf(")", st_i + nameCopy.length);
-            const num = fileName.substring(st_i + nameCopy.length, ed_i);
-
-            if (isNumber(num)) {
-                if (Number.parseInt(num, 10) >= index) {
-                    index = Number.parseInt(num, 10) + 1;
-                }
+            // Excel-style copy suffix: "Sheet1 (2)". Extract and bump.
+            const num = Number.parseInt(
+                fileName.substring(st_i + nameCopy.length, ed_i),
+                10,
+            );
+            if (Number.isFinite(num) && num >= index) {
+                index = num + 1;
             }
         }
     }

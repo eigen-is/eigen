@@ -139,12 +139,6 @@ export const ContextMenu: React.FC = () => {
                                   );
                               }}
                           >
-                              {(context.lang ?? '').startsWith('zh') && (
-                                  <>
-                                      {rightclick.to}
-                                      <span className={`luckysheet-cols-rows-shift-${dir}`}>{rightclick[dir]}</span>
-                                  </>
-                              )}
                               {`${rightclick.insert}  `}
                               <input
                                   onClick={(e) => e.stopPropagation()}
@@ -158,9 +152,7 @@ export const ContextMenu: React.FC = () => {
                               <span className="luckysheet-cols-rows-shift-word luckysheet-mousedown-cancel">
                                   {`${rightclick.column}  `}
                               </span>
-                              {!(context.lang ?? '').startsWith('zh') && (
-                                  <span className={`luckysheet-cols-rows-shift-${dir}`}>{rightclick[dir]}</span>
-                              )}
+                              <span className={`luckysheet-cols-rows-shift-${dir}`}>{rightclick[dir]}</span>
                           </div>
                       ));
             }
@@ -203,12 +195,6 @@ export const ContextMenu: React.FC = () => {
                                   );
                               }}
                           >
-                              {(context.lang ?? '').startsWith('zh') && (
-                                  <>
-                                      {rightclick.to}
-                                      <span className={`luckysheet-cols-rows-shift-${dir}`}>{rightclick[dir]}</span>
-                                  </>
-                              )}
                               {`${rightclick.insert}  `}
                               <input
                                   onClick={(e) => e.stopPropagation()}
@@ -222,9 +208,7 @@ export const ContextMenu: React.FC = () => {
                               <span className="luckysheet-cols-rows-shift-word luckysheet-mousedown-cancel">
                                   {`${rightclick.row}  `}
                               </span>
-                              {!(context.lang ?? '').startsWith('zh') && (
-                                  <span className={`luckysheet-cols-rows-shift-${dir}`}>{rightclick[dir]}</span>
-                              )}
+                              <span className={`luckysheet-cols-rows-shift-${dir}`}>{rightclick[dir]}</span>
                           </div>
                       ));
             }
@@ -735,7 +719,6 @@ export const ContextMenu: React.FC = () => {
         [
             context,
             context.currentSheetId,
-            context.lang,
             context.luckysheet_select_save,
             context.defaultrowlen,
             context.defaultcollen,

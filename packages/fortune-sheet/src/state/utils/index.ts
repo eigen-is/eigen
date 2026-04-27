@@ -83,7 +83,6 @@ export function columnCharToIndex(a: string) {
         charnum = getCharNumber(str[i]);
         numout += charnum * 26 ** (al - i - 1);
     }
-    // console.log(a, numout-1);
     if (numout === 0) {
         return NaN;
     }

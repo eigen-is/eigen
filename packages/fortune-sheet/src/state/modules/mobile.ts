@@ -1,8 +1,6 @@
-import {Context} from "..";
 import {GlobalCache} from "../types";
 
 export function handleOverlayTouchStart(
-    ctx: Context,
     e: TouchEvent,
     globalCache: GlobalCache
 ) {
@@ -17,7 +15,6 @@ export function handleOverlayTouchStart(
 }
 
 export function handleOverlayTouchMove(
-    ctx: Context,
     e: TouchEvent,
     globalCache: GlobalCache,
     scrollbarX: HTMLDivElement,
