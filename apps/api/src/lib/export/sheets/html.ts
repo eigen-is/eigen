@@ -15,7 +15,11 @@ import { loadSheetsContent } from './content';
 
 const DEFAULT_COL_WIDTH = 73;
 const DEFAULT_ROW_HEIGHT = 19;
-const BASE_TD_STYLE = 'overflow:hidden;white-space:nowrap;padding:1px 2px;vertical-align:middle';
+// Inline defaults applied to every td so the markup renders without the document <head>
+// CSS (preview embedders strip it). Vertical-align is intentionally absent — buildCellStyle
+// always emits one (`middle`, `top`, `bottom`, …) so we never end up with two competing
+// declarations in a single style attribute.
+const BASE_TD_STYLE = 'overflow:hidden;white-space:nowrap;padding:1px 2px';
 
 // Matches fortune-sheet locale fontarray — index maps to font family name.
 const FONT_ARRAY = ['Inter', 'Source Serif 4', 'JetBrains Mono', 'Excalifont'];
@@ -237,6 +241,8 @@ function buildCellStyle(
 ): string {
     const parts: string[] = [];
 
+    const rotated = isNumericRotation(v);
+
     if (v) {
         if (v.ff != null) {
             const family = typeof v.ff === 'number' ? FONT_ARRAY[v.ff] : v.ff;
@@ -260,18 +266,14 @@ function buildCellStyle(
         } else if (v.bg) {
             parts.push(`background:${v.bg}`);
         }
-        // Rotated cells are anchored at the corner the rotation pivots around so the
-        // span's natural inline position lands flush with the pivot, regardless of the
-        // user's ht/vt. This mirrors Excel's behaviour: rotated text always reads from
-        // the cell's left edge, anchored to the bottom for upward rotation and the top
-        // for downward.
-        const rotationAnchor = getRotationAnchor(v);
-        if (rotationAnchor) {
-            parts.push('text-align:left');
-            parts.push(`vertical-align:${rotationAnchor}`);
-        } else {
+        // Rotated cells skip ht/vt — the rotated span is absolutely-positioned in the
+        // cell (see wrapForRotation) so neither alignment property has anything to act
+        // on. Non-rotated cells emit text-align if the user picked one, plus a single
+        // vertical-align (default `middle`, matching the canvas painter).
+        if (!rotated) {
             if (v.ht != null && v.ht in HORIZONTAL_ALIGN) parts.push(`text-align:${HORIZONTAL_ALIGN[v.ht]}`);
-            if (v.vt != null && v.vt in VERTICAL_ALIGN) parts.push(`vertical-align:${VERTICAL_ALIGN[v.vt]}`);
+            const valign = v.vt != null && v.vt in VERTICAL_ALIGN ? VERTICAL_ALIGN[v.vt] : 'middle';
+            parts.push(`vertical-align:${valign}`);
         }
         if (v.tb === '2') parts.push('white-space:pre-wrap;word-wrap:break-word');
         if (v.un === 1 && v.cl === 1) {
@@ -297,39 +299,45 @@ function buildCellStyle(
         parts.push('border:1px solid #d4d4d4');
     }
 
-    if (cfStyle?.dataBar) {
-        // Anchor the absolutely-positioned bar div rendered by renderDataBar().
+    // `position:relative` is the cell's contribution to two unrelated overlay patterns:
+    // the absolutely-positioned data-bar div from renderDataBar() and the rotated span
+    // from wrapForRotation(). One declaration covers both.
+    if (rotated || cfStyle?.dataBar) {
         parts.push('position:relative');
     }
 
     return parts.join(';');
 }
 
-// Tells the cell-style builder which corner to pin a rotated cell to. The td's own
-// vertical-align / text-align positions the inline-block span at that corner, and the
-// span then rotates around its matching transform-origin — so the pivot stays put as
-// the text fans out. Returns null for cells without a numeric rotation (vertical-stacked
-// text and unrotated cells respect the user's ht/vt).
-function getRotationAnchor(v: Cell | null): 'bottom' | 'top' | null {
-    if (!v || typeof v.rt !== 'number' || v.rt === 0 || v.rt < -90 || v.rt > 90) return null;
-    return v.rt > 0 ? 'bottom' : 'top';
+function isNumericRotation(v: Cell | null): boolean {
+    return !!v && typeof v.rt === 'number' && v.rt !== 0 && v.rt >= -90 && v.rt <= 90;
 }
 
-// Wrap cell content in a span that applies CSS rotation / vertical-stacked writing mode
-// when the cell has `rt` set. CSS `rotate()` is CW-positive while our `rt` is CCW-positive
-// (matching Excel/OOXML), so the emitted angle is negated. The span pivots from its own
-// corner; getRotationAnchor() above pins the span to that corner via td alignment, so
-// the pivot stays anchored to the cell edge as the text fans out — no wrapper div with
-// `height:100%` (which collapses to 0 inside a table cell) needed.
+// Render the cell's content with rotation applied. The td has `position:relative` (set in
+// buildCellStyle), so the span anchors itself absolutely at the cell corner the rotation
+// pivots around — no inline-flow / vertical-align gymnastics, no zero-height wrapper.
+//
+// Pivot rules: positive rt (CCW / "up") anchors at left+bottom; negative rt (CW / "down")
+// anchors at left+top. The transform-origin matches the same corner so the pivot point
+// stays exactly on the cell edge. CSS rotate() is CW-positive while our `rt` is CCW-positive
+// (matching Excel/OOXML), so the emitted angle is negated.
+//
+// `rt: 'vertical'` uses CSS writing-mode for stacked top-to-bottom characters; the span
+// flows naturally without absolute positioning since writing-mode handles the layout.
 function wrapForRotation(v: Cell | null, inner: string): string {
     if (!v || v.rt == null) return inner;
     if (v.rt === 'vertical') {
         return `<span style="writing-mode:vertical-rl;text-orientation:upright">${inner}</span>`;
     }
-    if (typeof v.rt === 'number' && v.rt !== 0 && v.rt >= -90 && v.rt <= 90) {
-        const cssAngle = -v.rt;
-        const origin = v.rt > 0 ? 'left bottom' : 'left top';
-        return `<span style="display:inline-block;white-space:nowrap;transform-origin:${origin};transform:rotate(${cssAngle}deg)">${inner}</span>`;
+    if (isNumericRotation(v)) {
+        const rt = v.rt as number;
+        const cssAngle = -rt;
+        const yPin = rt > 0 ? 'bottom:0' : 'top:0';
+        const origin = rt > 0 ? 'left bottom' : 'left top';
+        return (
+            `<span style="position:absolute;left:0;${yPin};display:inline-block;white-space:nowrap;` +
+            `transform-origin:${origin};transform:rotate(${cssAngle}deg)">${inner}</span>`
+        );
     }
     return inner;
 }
