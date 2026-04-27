@@ -300,16 +300,15 @@ implementations:
 - ~~`@workspace/fortune-sheet/engine` subpath export~~ — done in commit `1b2b36a0`. `apps/api/tsconfig.json` `paths` kludge removed; consumers import from `@workspace/fortune-sheet/engine` directly.
 - ~~`colorGradation` `format.cellColor`-on-array bug~~ — fixed in commit `1b2b36a0`. The if-arm now mirrors the else-arm's positional access; both arms compute the gradient color once via a shared helper. Regression tests in `engine/test/conditional-format.test.ts` and `apps/api/src/test/sheets-html-export.test.ts`.
 - ~~`getCellTextInfo` redundant `ctx?` parameter~~ — fixed in commit `1b2b36a0`. Parameter dropped; `getFontSet` now requires `Context`. All 5 call sites use `sheetCtx` consistently — locale fonts no longer silently disabled at the 3 sites that previously omitted the 5th argument.
-- ~~Translate Chinese comments to English~~ — done in commits `1b2b36a0` + `2608d5f5`. Remaining CJK is in test fixtures and measurement glyphs (`"田"`); user-facing strings flagged for separate `locale()` migration.
+- ~~Translate Chinese comments to English~~ — done in commits `1b2b36a0` + `2608d5f5`. Remaining CJK is in test fixtures, measurement glyphs (`"田"`), and the Chinese number/weekday detection literals in `dropCell.ts` (functional, keep).
 - ~~Mechanical broken-windows sweep~~ — done in commit `2608d5f5`. Dropped 22 commented `console.log` debug lines, 11-line dead fill-type comment, jQuery legacy comments, stale ReferenceError comments, unnecessary `try/catch` around internal calls. `substr` → `slice`, `indexOf > -1` → `includes` modernizations.
+- ~~Last `export default` in components/hooks/state~~ — `state/locale/en.ts` converted in commit `d0b6d564` (2026-04-27). Remaining `export default` lines are all in `engine/parser/` (slated for regeneration from upstream jison, not hand-edited).
+- ~~Drop multi-language support entirely~~ — done in commit `edb89d78` (2026-04-27). Eigen ships English only. `Settings.lang`, `ctx.lang`, the browser-language fallback in Workbook init, and `calcSelectionInfo`'s `lang?` parameter are all gone. `dataVerification.ts` collapsed three 6-way `if (lang === ...)` blocks (in `getFailureText`, `getHintText`, and the `cellFocus` HTML prefixes) into single English paths — net −365 LOC in that file alone, and the missing `text_length` case in `getHintText` was filled in along the way. `ContextMenu/index.tsx` lost the zh/non-zh word-order branches in the insert-row / insert-column popovers. `context.ts` shed the 5 unused option-label dictionaries (zh, zh-TW, es, hi, ru); `optionLabel_en` renamed to `optionLabel: Record<string, string>` (drops `any`). `calcSelectionInfo` now hardcodes `"0.00"` — previously defaulted to `"w0.00"` (Chinese number format) for any non-zh lang because `lang` was always null in this codebase, so most users saw wrong output.
+- ~~Broken-window sweep round 2~~ — done in commit `84c3e272` (2026-04-27). `state/modules/mobile.ts` lost unused `ctx` params on `handleOverlayTouchStart` / `handleOverlayTouchMove`; `SheetOverlay/index.tsx` simplified the matching call sites (the `setContext` wrapper around `onTouchStart` was wrapping a pure `globalCache` mutation, dropped). `state/api/sheet.ts` fixed a dead `isNumber(string)` branch on the Excel-style "(n)" copy-suffix bump (es-toolkit's `isNumber`, like lodash's, only accepts the number primitive — always returned false on the substring), now uses `Number.parseInt` + `Number.isFinite`. Two stray commented `console.log` debug lines dropped from `state/utils/index.ts` and `state/modules/inline-string.ts`.
 
 ### Next — Medium effort
 
-1. Migrate `dataVerification.ts` user-facing strings to `locale()` — three large `lang ==='zh' / 'zh-TW' / 'en'` switch blocks (`failureText` ~360-440, `hintValue` ~645-720,
-   `hintText`/`failureText` HTML prefixes ~850-885) build validation messages by string-concat
-   with hardcoded fragments. Refactor to template-driven generation: move strings into the
-   locale data, build messages generically, drop the language branching.
-2. Broken-window sweep through `state/` — opportunistic `any` / `@ts-ignore` / dead-code cleanup
+1. Broken-window sweep through `state/` — opportunistic `any` / `@ts-ignore` / dead-code cleanup
    as files are touched, to shrink debt before biome enablement.
 
 ### Later — Major effort
@@ -317,9 +316,7 @@ implementations:
 6. Migrate `SheetTab/index.css` to Tailwind (280 lines)
 7. Migrate `SheetOverlay/index.css` to Tailwind (882 lines) — split into sub-tasks
 8. Migrate `SheetOverlay/ScrollBar/index.css` to Tailwind (40 lines)
-9. Localize hardcoded Chinese strings in `ImgBoxs`
-10. Evaluate replacing Font Awesome icons with Lucide
-11. Remove `css.d.ts` once all CSS imports eliminated
+9. Remove `css.d.ts` once all CSS imports eliminated
 
 ---
 

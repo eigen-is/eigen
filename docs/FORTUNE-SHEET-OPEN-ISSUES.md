@@ -1,7 +1,7 @@
 # Fortune-sheet — open issues, smoke tests, shadcn backlog
 
 > Living scratch doc to pick this up after a context reset.
-> Last updated: 2026-04-27.
+> Last updated: 2026-04-27 (multi-language support removed; broken-window sweep).
 
 ---
 
@@ -64,6 +64,41 @@ New UI wired:
 - **`apps/sheets` Workbook props renamed:** `toolbarLeftItems` / `toolbarRightItems` were always the correct props
   (wired as `MenuBar.leftItems` / `rightItems` internally). The `toolbarItems` / `customToolbarItems` settings fields
   on the fortune-sheet `Settings` type are gone — they had no `apps/sheets` consumers.
+
+---
+
+## 2.5. Resolved — Multi-language support removed (2026-04-27)
+
+**Status:** Shipped in commit `edb89d78` (with follow-up sweep `84c3e272`). Eigen ships English only.
+
+The fork carried plumbing for 6 languages (en, zh, zh-CN, zh-TW, es, hi, ru) but no consumer ever
+set `Settings.lang`. The browser-language fallback in Workbook init produced values like `"en-US"`
+that matched none of the hardcoded branches, so `getHintText` silently returned empty strings
+(no English fallthrough — required `lang === "en"` exactly), and `calcSelectionInfo` defaulted to
+`"w0.00"` (Chinese number format) whenever `lang` was null — visible to most users.
+
+Removed:
+- `Settings.lang`, `Context.lang`, the navigator-language fallback block in `Workbook/index.tsx`
+- `calcSelectionInfo`'s `lang?` parameter — now hardcodes `"0.00"`
+- The 5 unused option-label dictionaries in `state/context.ts` (zh, zh-TW, es, hi, ru). `optionLabel_en`
+  renamed to `optionLabel: Record<string, string>` (drops `any`)
+- The 6-way `if (lang === ...)` blocks in `dataVerification.ts::getFailureText` /
+  `::getHintText` / `::cellFocus` HTML prefix builders — all collapsed to single English paths
+- The zh / non-zh word-order branches in `ContextMenu/index.tsx` insert-row + insert-column popovers
+
+`getHintText` previously had no `text_length` case in its `lang === "en"` branch — added during the
+collapse, so the bug is fixed in passing.
+
+### Smoke surfaces (still owed)
+- [ ] Insert N rows / columns (above/below/left/right) — confirm word order reads correctly
+- [ ] Data validation rules: trigger a failure (out-of-range number, wrong text length, bad date,
+      validity violation) — confirm the failureText/hintText reads in English without truncation,
+      especially the `text_length` case which was previously silent on `lang === "en"`
+- [ ] Cell-selection sum/avg/min/max in the bottom status bar — should now show "1234.56" not
+      "1,234.56" or Chinese number form
+- [ ] Touch-mode scrolling on `apps/sheets` mobile (the broken-window sweep simplified
+      `onTouchStart` / `onTouchMove` in `SheetOverlay/index.tsx` — pure cleanup, no behavior change
+      expected)
 
 ---
 
