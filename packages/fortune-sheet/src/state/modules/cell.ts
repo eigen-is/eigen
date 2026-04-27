@@ -52,7 +52,7 @@ export function normalizedCellAttr(
         }
     } else if (attr === "fs") {
         value ||= defaultFontSize.toString();
-    } else if (attr === "tb" || attr === "tr") {
+    } else if (attr === "tb") {
         value ||= "0";
     }
 

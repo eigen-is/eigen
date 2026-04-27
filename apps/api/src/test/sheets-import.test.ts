@@ -491,15 +491,10 @@ describe('Sheets xlsx import/convert', () => {
         const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
         const byCoord = new Map((sheets[0].celldata ?? []).map((c) => [`${c.r}:${c.c}`, c.v] as const));
         expect(byCoord.get('0:0')?.rt).toBe(45);
-        expect(byCoord.get('0:0')?.tr).toBe('1');
         expect(byCoord.get('1:0')?.rt).toBe(90);
-        expect(byCoord.get('1:0')?.tr).toBe('4');
-        expect(byCoord.get('2:0')?.rt).toBe(135);
-        expect(byCoord.get('2:0')?.tr).toBe('2');
-        expect(byCoord.get('3:0')?.rt).toBe(180);
-        expect(byCoord.get('3:0')?.tr).toBe('5');
-        expect(byCoord.get('4:0')?.tr).toBe('3');
-        expect(byCoord.get('4:0')?.rt).toBeUndefined();
+        expect(byCoord.get('2:0')?.rt).toBe(-45);
+        expect(byCoord.get('3:0')?.rt).toBe(-90);
+        expect(byCoord.get('4:0')?.rt).toBe('vertical');
         expect(byCoord.get('0:1')?.ff).toBe('Georgia');
     });
 

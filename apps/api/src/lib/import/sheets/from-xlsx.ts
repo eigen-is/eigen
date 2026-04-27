@@ -398,31 +398,15 @@ function applyAlignment(alignment: Partial<Alignment>, target: FortuneCell): voi
     if (alignment.wrapText) {
         target.tb = '2';
     }
-    applyRotation(alignment.textRotation, target);
-}
-
-// Map ExcelJS textRotation to fortune-sheet (tr, rt). ExcelJS exposes `'vertical'` for
-// stacked text and a number in [-90, 90] for diagonal/sideways: positive = CCW, negative = CW.
-// Fortune-sheet stores `tr` ∈ {"0","1","2","3","4","5"} for menu presets and `rt` for the
-// raw angle in [0, 180] (rt > 90 encodes downward rotation). The renderer prefers `rt`
-// when set, with `tr` as fallback. We set `rt` for the precise angle and also set `tr`
-// when the angle matches a preset so round-trips through the menu stay stable.
-function applyRotation(textRotation: number | 'vertical' | undefined, target: FortuneCell): void {
-    if (textRotation == null) return;
-    if (textRotation === 'vertical') {
-        target.tr = '3';
-        return;
-    }
-    if (textRotation === 0) return;
-
-    if (textRotation > 0 && textRotation <= 90) {
-        target.rt = textRotation;
-        if (textRotation === 45) target.tr = '1';
-        else if (textRotation === 90) target.tr = '4';
-    } else if (textRotation < 0 && textRotation >= -90) {
-        target.rt = 90 - textRotation; // -45 → 135, -90 → 180
-        if (textRotation === -45) target.tr = '2';
-        else if (textRotation === -90) target.tr = '5';
+    if (alignment.textRotation === 'vertical') {
+        target.rt = 'vertical';
+    } else if (
+        typeof alignment.textRotation === 'number' &&
+        alignment.textRotation >= -90 &&
+        alignment.textRotation <= 90 &&
+        alignment.textRotation !== 0
+    ) {
+        target.rt = alignment.textRotation;
     }
 }
 

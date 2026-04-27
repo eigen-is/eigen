@@ -14,7 +14,6 @@ export type CellStyle = {
     tb?: string;
     cl?: number;
     un?: number;
-    tr?: string;
 };
 
 // Inline-string segment shape mirrors fortune-sheet's `InlineStringSegment` (engine/types.ts).
@@ -35,7 +34,10 @@ export type Cell = CellStyle & {
     qp?: number;
     bg?: string;
     lo?: number;
-    rt?: number;
+    // Text rotation: signed degrees in [-90, 90] (positive = counter-clockwise / "up",
+    // negative = clockwise / "down"), or 'vertical' for stacked top-to-bottom characters.
+    // Matches Excel/OOXML's textRotation. Undefined or 0 = no rotation.
+    rt?: number | 'vertical';
     hl?: { r: number; c: number; id: string };
     commentChatNames?: string[];
 };
