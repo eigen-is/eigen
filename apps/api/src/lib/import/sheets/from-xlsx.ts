@@ -24,6 +24,52 @@ const VERTICAL_MAP: Record<NonNullable<Alignment['vertical']>, 0 | 1 | 2> = {
     justify: 0,
 };
 
+// XLSX cells routinely carry fonts we don't bundle (Calibri, Arial, Times, Courier, …).
+// Only Inter / Source Serif 4 / JetBrains Mono / Excalifont have face data inlined into
+// the HTML / PDF export, so unmapped fonts fall back to the browser's generic family —
+// inconsistent with the editor. Map common Office defaults into the closest of the four;
+// anything unrecognized leaves `ff` unset so the document default (Inter) is used.
+const FONT_MAP: Record<string, string> = {
+    inter: 'Inter',
+    'source serif 4': 'Source Serif 4',
+    'source serif pro': 'Source Serif 4',
+    'jetbrains mono': 'JetBrains Mono',
+    excalifont: 'Excalifont',
+    // sans-serif → Inter
+    calibri: 'Inter',
+    'calibri light': 'Inter',
+    arial: 'Inter',
+    helvetica: 'Inter',
+    'helvetica neue': 'Inter',
+    verdana: 'Inter',
+    tahoma: 'Inter',
+    'segoe ui': 'Inter',
+    'trebuchet ms': 'Inter',
+    // serif → Source Serif 4
+    'times new roman': 'Source Serif 4',
+    times: 'Source Serif 4',
+    georgia: 'Source Serif 4',
+    cambria: 'Source Serif 4',
+    garamond: 'Source Serif 4',
+    'book antiqua': 'Source Serif 4',
+    palatino: 'Source Serif 4',
+    'palatino linotype': 'Source Serif 4',
+    // monospace → JetBrains Mono
+    'courier new': 'JetBrains Mono',
+    courier: 'JetBrains Mono',
+    consolas: 'JetBrains Mono',
+    monaco: 'JetBrains Mono',
+    'lucida console': 'JetBrains Mono',
+    menlo: 'JetBrains Mono',
+    // handwritten → Excalifont
+    'comic sans ms': 'Excalifont',
+    'comic sans': 'Excalifont',
+};
+
+function mapToSupportedFont(name: string): string | null {
+    return FONT_MAP[name.trim().toLowerCase()] ?? null;
+}
+
 const BORDER_STYLE_MAP: Record<string, number> = {
     thin: 1,
     hair: 2,
@@ -371,7 +417,10 @@ function applyStyle(cell: XlsxCell, target: FortuneCell, theme: ThemePalette): v
         if (font.underline) target.un = 1;
         if (font.strike) target.cl = 1;
         if (typeof font.size === 'number') target.fs = font.size;
-        if (typeof font.name === 'string' && font.name.length > 0) target.ff = font.name;
+        if (typeof font.name === 'string' && font.name.length > 0) {
+            const mapped = mapToSupportedFont(font.name);
+            if (mapped) target.ff = mapped;
+        }
         const fc = resolveColor(font.color, theme);
         if (fc) target.fc = fc;
     }
