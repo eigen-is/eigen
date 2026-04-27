@@ -1,3 +1,5 @@
+> **Status:** Shipped 2026-04-26 across commits `09b3edbf` (Task 1) … `f3b4b71e` (Task 15 cleanup). The plan is at `docs/superpowers/plans/2026-04-26-fortune-sheet-toolbar.md` (gitignored). Followups (e.g., `apps/sheets` regression fixed during Task 12) are tracked in `docs/FORTUNE-SHEET-OPEN-ISSUES.md`.
+
 # Fortune-Sheet Menu-Bar Toolbar
 
 Replace fortune-sheet's two-mode toolbar (a 34-icon desktop row + a small mobile menu)

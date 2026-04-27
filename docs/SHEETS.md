@@ -8,11 +8,12 @@
 
 ```
 packages/fortune-sheet/     # Forked React UI + core engine + formula parser (full source control)
+├── components/MenuBar/         # Google-Sheets-style menu bar (Edit/View/Insert/Format/Data + CustomBorder)
 apps/sheets/src/components/sheets/
 ├── hooks/use-sheet.ts          # Yjs integration (op-based sync)
 ├── hooks/use-active-comments.ts # Scan cell matrix for comment IDs + anchor texts
-├── editor.tsx                  # Workbook config + toolbar items + comment panel/dialog
-└── toolbar.tsx                 # File menu + share/mode + comment toggle buttons
+├── editor.tsx                  # Workbook config + MenuBar left/right items + comment panel/dialog
+└── toolbar.tsx                 # File menu + share/mode + comment toggle buttons (passed as leftItems/rightItems)
 ```
 
 ## Yjs Sync

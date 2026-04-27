@@ -1,3 +1,5 @@
+> **Status:** Shipped 2026-04-26 as part of the menu-bar rewrite. The Color Scales (12 presets) and Data Bars (6 solid presets, gradient variants intentionally dropped) are now in Format > Conditional formatting. The producer functions (`applyColorScalePreset`, `applyDataBarPreset`, `clearSheetRules`) replaced the broken `updateItem`. The hex-stop parsing bug in `getColorGradation` was fixed in commit `bc2a21ec`. See `docs/PROPOSAL_FORTUNE_SHEET_TOOLBAR.md` for the wider rewrite.
+
 # Proposal — wire the missing Color Scales / Data Bars UI in fortune-sheet
 
 > **Status:** Drafted 2026-04-26 after the colorGradation engine bug fix

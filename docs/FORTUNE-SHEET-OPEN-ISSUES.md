@@ -1,7 +1,7 @@
 # Fortune-sheet — open issues, smoke tests, shadcn backlog
 
 > Living scratch doc to pick this up after a context reset.
-> Last updated: 2026-04-25 (commit `b5c3b7e7`).
+> Last updated: 2026-04-27.
 
 ---
 
@@ -38,7 +38,36 @@ reason. `FilterMenu` is mounted at the `Workbook` root (sibling of
 
 ---
 
-## 2. Smoke tests still owed
+## 2. Resolved — Menu-bar rewrite (2026-04-26)
+
+**Status:** Shipped across commits `09b3edbf` … `f3b4b71e`. Spec: `docs/PROPOSAL_FORTUNE_SHEET_TOOLBAR.md`.
+
+`Toolbar/index.tsx` (~1395 LOC) + `toolbar-helpers.tsx` (~169 LOC) deleted. Replaced with `components/MenuBar/`
+(index + 5 menu files + `CustomBorder.tsx` moved from Toolbar). Net ~−1500 LOC across the package.
+
+Additional deletions:
+- `state/modules/screenshot.ts` (~136 LOC) + `state/modules/locationCondition.ts` (~299 LOC) + `components/LocationCondition/` (~189 LOC)
+- `Settings.toolbarItems` / `Settings.customToolbarItems` removed from `state/settings.ts`
+
+New UI wired:
+- `Format > Rotation ▶` — 6 modes via engine `tr` field (was unexosed in toolbar)
+- `Format > Conditional formatting > Color scales ▶` — 12 presets (`applyColorScalePreset`)
+- `Format > Conditional formatting > Data bars ▶` — 6 solid presets (`applyDataBarPreset`)
+- `Edit > Cut` — extracted to `state/modules/clipboard.ts::handleCut`; keyboard.ts cut branch collapsed from ~50 → 3 lines
+- `engine/conditional-format.ts::getColorGradation` fixed to accept `#rrggbb` hex stops (commit `bc2a21ec`)
+
+### Lessons
+
+- **`luckysheet-mousedown-cancel` extends to all `DropdownMenuSubContent`** rendered inside `cellArea`-adjacent menus
+  (not just `DropdownMenuContent` for data-verification). The DOM guard at `SheetOverlay:60` walks the DOM tree, so
+  any Radix portal content inside the cellArea subtree needs the class.
+- **`apps/sheets` Workbook props renamed:** `toolbarLeftItems` / `toolbarRightItems` were always the correct props
+  (wired as `MenuBar.leftItems` / `rightItems` internally). The `toolbarItems` / `customToolbarItems` settings fields
+  on the fortune-sheet `Settings` type are gone — they had no `apps/sheets` consumers.
+
+---
+
+## 3. Smoke tests still owed
 
 The repo has merged a stack of fortune-sheet refactors without an end-to-end
 smoke pass. Sequence to run in `apps/sheets`:
@@ -71,10 +100,10 @@ smoke pass. Sequence to run in `apps/sheets`:
       dropdown flow verified 2026-04-25 (rule setup, chevron, popup, click
       writes to correct cell, outside-click closes). Multi-select toggle
       still owed.
-- [ ] **shadcn cleanup pass (commit `b5c3b7e7`)** — the §3 sweep below
+- [ ] **shadcn cleanup pass (commit `b5c3b7e7`)** — the §4 sweep below
       touched `DataVerification`, `LinkEditCard`, `ConditionFormat/ConditionRules`,
-      `ContextMenu/index.tsx`, `CustomSort`, `LocationCondition`, `SplitColumn`,
-      `FilterMenu`. Walk through each dialog/popover.
+      `ContextMenu/index.tsx`, `CustomSort`, `SplitColumn`,
+      `FilterMenu`. Walk through each dialog/popover. (`LocationCondition` deleted in the 2026-04-26 rewrite.)
 - [ ] **Follow-up shadcn sweep (commits `bdb71f94` + `91e28493`)** — touched
       `LinkEditCard` (CSS migration + 2 raw `<input>` → `Input`; 4 div-buttons
       → real `<button>`), `ZoomControl` (custom menu → Popover; +/-/trigger/
@@ -121,9 +150,9 @@ smoke pass. Sequence to run in `apps/sheets`:
       By-color submenu hover (cursor crossing the `sideOffset` gap should
       not flicker — 120ms close-debounce). filter-by-condition row should
       look disabled, not interactive.
-- [ ] **CustomSort / LocationCondition / SplitColumn** dialogs (post
-      `b5c3b7e7`): walk through select/checkbox/radio interactions, confirm
-      `DialogFooter` layout matches RangeDialog.
+- [ ] **CustomSort / SplitColumn** dialogs (post
+      `b5c3b7e7`, now opened from MenuBar): walk through select/checkbox/radio interactions, confirm
+      `DialogFooter` layout matches RangeDialog. (`LocationCondition` deleted.)
 - [ ] **Link card** (LinkEditCard:99): hyperlink a cell, click another cell
       with a different hyperlink, verify the card resets the form.
 - [ ] **Sheet tab scroll buttons** (SheetTab:41): add many sheets until the
@@ -139,7 +168,7 @@ smoke pass. Sequence to run in `apps/sheets`:
 
 ---
 
-## 3. shadcn refactor backlog
+## 4. shadcn refactor backlog
 
 Initial scan 2026-04-25. `@workspace/ui` is shadcn-based; these sites used
 raw HTML. Most landed in commit `b5c3b7e7`.
@@ -190,7 +219,7 @@ raw HTML. Most landed in commit `b5c3b7e7`.
 
 ---
 
-## 3.6. `colorGradation` rules — `format.cellColor` / `format.textColor` reads on an array-shaped `format`
+## 4.6. `colorGradation` rules — `format.cellColor` / `format.textColor` reads on an array-shaped `format`
 
 **Resolved 2026-04-26 in commit `1b2b36a0`.** In `engine/conditional-format.ts::evaluateConditionalFormat`
 the `colorGradation` branch read `format.cellColor`/`format.textColor` on the `if`-arm (existing
@@ -201,7 +230,7 @@ overlapping rules. Both arms now compute the gradient color once and merge throu
 
 ---
 
-## 3.5. `getCellTextInfo` redundant `ctx?` parameter
+## 4.5. `getCellTextInfo` redundant `ctx?` parameter
 
 **Resolved 2026-04-26 in commit `1b2b36a0`.** The optional 5th `ctx?: Context` parameter was redundant —
 the two canvas render paths passed `this.sheetCtx` as both the 3rd and 5th argument, while three other
@@ -211,7 +240,7 @@ single `Context`.
 
 ---
 
-## 4. Reference
+## 5. Reference
 
 - Full audit: `docs/FORTUNE-SHEET-EFFECT-DEPS-AUDIT.md`
 - Master TODO (also covers CSS migration, naming, exports): `docs/TODO-FORTUNE-SHEETS.md`
