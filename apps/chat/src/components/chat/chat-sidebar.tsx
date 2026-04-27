@@ -2,7 +2,8 @@ import { useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
 import { useChats, useUnreadChatIds } from '@workspace/lib/chat';
 import { useMyTeams } from '@workspace/lib/home';
-import { teamOwnerId } from '@workspace/lib/types';
+import { usePublicUser } from '@workspace/lib/public';
+import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { EigenLoader, UnreadDot, UserAvatar } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
@@ -11,8 +12,11 @@ import { SidebarHeader } from '@workspace/ui/components/layout/sidebar/sidebar-h
 import { SidebarItem } from '@workspace/ui/components/layout/sidebar/sidebar-item';
 import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import { Separator } from '@workspace/ui/components/separator';
+import { cn } from '@workspace/ui/lib/utils';
 import { MessageSquare, Plus } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+
+const MAX_AVATARS = 4;
 
 type ChatSidebarProps = {
     condensed?: boolean;
@@ -26,29 +30,65 @@ type ChatSidebarProps = {
 type ChatItemProps = {
     chat: DrivePath;
     condensed: boolean;
-    teamId?: string;
     hasUnread?: boolean;
 };
 
-function ChatItem({ chat, condensed, teamId, hasUnread }: ChatItemProps) {
-    const baseIcon = teamId ? (
-        <UserAvatar email={teamOwnerId(teamId)} className="h-4 w-4" />
-    ) : (
-        <MessageSquare className="h-4 w-4" />
+function useChatAvatarIds(chat: DrivePath): string[] {
+    const isTeam = parseOwnerId(chat.ownerId).type === 'team';
+    const owner = usePublicUser(isTeam ? undefined : chat.ownerId);
+
+    return useMemo(() => {
+        if (isTeam) return [chat.ownerId];
+
+        const ids: string[] = [];
+        const ownerEmail = owner.data?.email;
+        if (ownerEmail) ids.push(ownerEmail);
+
+        if (chat.acl) {
+            for (const access of chat.acl) {
+                if (ids.length >= MAX_AVATARS) break;
+                const lower = access.id.toLowerCase();
+                if (ids.some((id) => id.toLowerCase() === lower)) continue;
+                ids.push(access.id);
+            }
+        }
+        return ids;
+    }, [isTeam, chat.ownerId, chat.acl, owner.data?.email]);
+}
+
+function ChatAvatars({ chat }: { chat: DrivePath }) {
+    const ids = useChatAvatarIds(chat);
+    return (
+        <div className="flex items-center">
+            {ids.map((id, i) => (
+                <UserAvatar key={id} email={id} className={cn('h-4 w-4', i > 0 && '-ml-2')} />
+            ))}
+        </div>
     );
+}
+
+function ChatItem({ chat, condensed, hasUnread }: ChatItemProps) {
+    const label = (chat.name || 'Unnamed chat').replace(/\.eigenchat$/, '');
+    const to = `/${chat.ownerId}/${chat.mountId}/${chat.id}`;
 
     return (
         <SidebarItem
             icon={
                 <div className="relative">
-                    {baseIcon}
+                    <MessageSquare className="h-4 w-4" />
                     {hasUnread && <UnreadDot />}
                 </div>
             }
-            label={(chat.name || 'Unnamed chat').replace(/\.eigenchat$/, '')}
-            to={`/${chat.ownerId}/${chat.mountId}/${chat.id}`}
+            label={label}
+            to={to}
             condensed={condensed}
-        />
+        >
+            {!condensed && (
+                <div className="ml-auto">
+                    <ChatAvatars chat={chat} />
+                </div>
+            )}
+        </SidebarItem>
     );
 }
 
@@ -64,13 +104,7 @@ function TeamChatItems({ teamId, condensed, unreadChatIds }: TeamChatItemsProps)
     return (
         <>
             {chats.map((chat) => (
-                <ChatItem
-                    key={chat.id}
-                    chat={chat}
-                    condensed={condensed}
-                    teamId={teamId}
-                    hasUnread={unreadChatIds.has(chat.id)}
-                />
+                <ChatItem key={chat.id} chat={chat} condensed={condensed} hasUnread={unreadChatIds.has(chat.id)} />
             ))}
         </>
     );

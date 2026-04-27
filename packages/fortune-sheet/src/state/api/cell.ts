@@ -16,6 +16,14 @@ import {CommonOptions, getSheet} from "./common";
 import {sheetNotFound} from "./errors";
 import {format} from "numfmt";
 
+// Cell keys handled by `updateFormatCell` (range-aware style writes) rather than
+// by direct assignment in setCellValue. Order is documentation-only — the lookup
+// is by `.has()`. Comments on the cell shape live on the Cell/CellStyle types.
+const FORMAT_KEYS: ReadonlySet<string> = new Set([
+    'bg', 'ff', 'fc', 'bl', 'it', 'fs',
+    'cl', 'un', 'vt', 'ht', 'mc', 'tb', 'rt', 'qp',
+]);
+
 export function getCellValue(
     ctx: Context,
     row: number,
@@ -68,28 +76,6 @@ export function setCellValue(
     const sheet = getSheet(ctx, options);
 
     const {data} = sheet;
-    // if (data.length === 0) {
-    //   data = sheetmanage.buildGridData(file);
-    // }
-
-    // luckysheetformula.updatecell(row, column, value);
-    const formatList = {
-        // ct:1, //celltype,Cell value format: text, time, etc.
-        bg: 1, // background,#fff000
-        ff: 1, // fontfamily,
-        fc: 1, // fontcolor
-        bl: 1, // Bold
-        it: 1, // italic
-        fs: 1, // font size
-        cl: 1, // Cancelline, 0 Regular, 1 Cancelline
-        un: 1, // underline, 0 Regular, 1 underlines, fonts
-        vt: 1, // Vertical alignment, 0 middle, 1 up, 2 down
-        ht: 1, // Horizontal alignment,0 center, 1 left, 2 right
-        mc: 1, // Merge Cells
-        tb: 1, // Text wrap,0 truncation, 1 overflow, 2 word wrap
-        rt: 1, // Text rotation: signed degrees [-90, 90] or 'vertical'
-        qp: 1, // quotePrefix, show number as string
-    };
 
     if (value == null || value.toString().length === 0) {
         delFunctionGroup(ctx, row, column, sheet.id);
@@ -125,7 +111,7 @@ export function setCellValue(
             setCellValueInternal(ctx, row, column, data, curv); // update text value
         }
         forEach(value, (v, attr) => {
-            if (attr in formatList) {
+            if (FORMAT_KEYS.has(attr)) {
                 updateFormatCell(
                     ctx,
                     data!,
