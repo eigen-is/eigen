@@ -68,7 +68,7 @@ export function DriveAccessDialog({ open, onOpenChange, path, prefillEmail }: Dr
                             <p className="text-sm text-muted-foreground shrink-0 mb-3">
                                 Sharing is restricted by the owner.
                             </p>
-                            <DriveAccessList path={path} />
+                            <DriveAccessList path={path} scrollable />
                         </div>
                     ) : (
                         <DriveAccessListEdit

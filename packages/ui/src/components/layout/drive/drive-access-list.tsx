@@ -12,6 +12,7 @@ export type DriveAccessListProps = {
     path: DrivePath;
     className?: string;
     onShareClick?: (path: DrivePath) => void;
+    scrollable?: boolean;
 };
 
 function buildSummary(entries: { owner?: boolean; write?: boolean; read?: boolean }[]): string {
@@ -30,7 +31,7 @@ function buildSummary(entries: { owner?: boolean; write?: boolean; read?: boolea
     return parts.join(', ');
 }
 
-export function DriveAccessList({ path, className, onShareClick }: DriveAccessListProps) {
+export function DriveAccessList({ path, className, onShareClick, scrollable }: DriveAccessListProps) {
     const { allEntries } = useDriveAccess(path);
 
     const isPublic = path.visibility !== 'private';
@@ -40,7 +41,7 @@ export function DriveAccessList({ path, className, onShareClick }: DriveAccessLi
 
     return (
         <div className={cn('flex flex-col min-h-0', className)}>
-            <div className="border-t py-4">
+            <div className={cn('border-t py-4', scrollable && 'min-h-0 overflow-y-auto')}>
                 <CollapsibleUserList
                     title={title}
                     summaryLines={summary ? [summary] : undefined}
