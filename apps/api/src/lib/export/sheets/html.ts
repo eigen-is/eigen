@@ -317,10 +317,22 @@ function isNumericRotation(v: Cell | null): boolean {
 // buildCellStyle), so the span anchors itself absolutely at the cell corner the rotation
 // pivots around — no inline-flow / vertical-align gymnastics, no zero-height wrapper.
 //
-// Pivot rules: positive rt (CCW / "up") anchors at left+bottom; negative rt (CW / "down")
-// anchors at left+top. The transform-origin matches the same corner so the pivot point
-// stays exactly on the cell edge. CSS rotate() is CW-positive while our `rt` is CCW-positive
-// (matching Excel/OOXML), so the emitted angle is negated.
+// Geometry mirrors the canvas painter (text.ts ~line 1692). Three pieces:
+//
+//   1. Anchor: positive rt (CCW / "up") pins to left+bottom; negative rt (CW / "down")
+//      pins to left+top. transform-origin matches the same corner so the pivot stays
+//      exactly on the cell edge.
+//
+//   2. Rotation: CSS `rotate()` is CW-positive while our `rt` is CCW-positive (matching
+//      Excel/OOXML), so the emitted angle is negated.
+//
+//   3. Counter-translation: rotating around a corner makes the character tops (positive
+//      rt) or character bottoms (negative rt) swing past the cell's left edge — at
+//      rt = ±90 the whole rotated bbox sits OUTSIDE the cell and `overflow:hidden`
+//      eats it. Canvas adds a `textHeight * sin(rt)` rightward offset to the pivot for
+//      the same reason; in CSS we get the same effect with `translateX(|sin(rt)| em)`
+//      applied AFTER rotation (the transform reads right-to-left). 1em ≈ font-size ≈
+//      canvas's textHeight, so the offset scales naturally with the cell's font.
 //
 // `rt: 'vertical'` uses CSS writing-mode for stacked top-to-bottom characters; the span
 // flows naturally without absolute positioning since writing-mode handles the layout.
@@ -334,9 +346,10 @@ function wrapForRotation(v: Cell | null, inner: string): string {
         const cssAngle = -rt;
         const yPin = rt > 0 ? 'bottom:0' : 'top:0';
         const origin = rt > 0 ? 'left bottom' : 'left top';
+        const overhangEm = Math.abs(Math.sin((rt * Math.PI) / 180)).toFixed(3);
         return (
             `<span style="position:absolute;left:0;${yPin};display:inline-block;white-space:nowrap;` +
-            `transform-origin:${origin};transform:rotate(${cssAngle}deg)">${inner}</span>`
+            `transform-origin:${origin};transform:translateX(${overhangEm}em) rotate(${cssAngle}deg)">${inner}</span>`
         );
     }
     return inner;
