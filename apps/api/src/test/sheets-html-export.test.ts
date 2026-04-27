@@ -168,39 +168,40 @@ describe('Sheets HTML export — cell styling', () => {
         expect(html).not.toMatch(/font-family:"[^&]/);
     });
 
-    test('rt as a positive angle produces a CSS rotate transform anchored at bottom-left', () => {
+    test('rt as a positive angle produces a CSS rotate anchored at bottom-left', () => {
         const sheet = makeSheet([{ r: 0, c: 0, v: { v: 'up', rt: 45 } }]);
         const html = renderSheetsHtml([sheet]);
         // rt is CCW-positive (matches Excel/OOXML); CSS rotate is CW-positive — so the
-        // emitted angle is the negation. Upward rotation anchors at the cell's baseline
-        // so the text fans up from there, mirroring Excel's behaviour.
-        expect(html).toContain('transform:rotate(-45deg)');
+        // emitted angle is the negation. Positive rt anchors at the cell's bottom-left;
+        // the td gets `position:relative` so the span absolute-positions to that corner.
+        expect(html).toContain('position:relative');
+        expect(html).toContain('position:absolute;left:0;bottom:0');
         expect(html).toContain('transform-origin:left bottom');
-        // Td alignment pins the inline-block span at the cell's bottom-left, so the
-        // span's transform-origin lands flush with the cell corner.
-        expect(html).toContain('text-align:left');
-        expect(html).toContain('vertical-align:bottom');
+        // translateX runs after rotate (CSS reads right-to-left), and equals
+        // |sin(rt)|em — the same `textHeight * sin(rt)` left offset canvas uses.
+        expect(html).toContain('transform:translateX(0.707em) rotate(-45deg)');
     });
 
     test('rt as a negative angle anchors the rotation at top-left', () => {
         const sheet = makeSheet([{ r: 0, c: 0, v: { v: 'down', rt: -90 } }]);
         const html = renderSheetsHtml([sheet]);
-        expect(html).toContain('transform:rotate(90deg)');
+        expect(html).toContain('position:relative');
+        expect(html).toContain('position:absolute;left:0;top:0');
         expect(html).toContain('transform-origin:left top');
-        expect(html).toContain('text-align:left');
-        expect(html).toContain('vertical-align:top');
+        // |sin(-90°)|em = 1.000em, exactly one line-height of compensation.
+        expect(html).toContain('transform:translateX(1.000em) rotate(90deg)');
     });
 
-    test('rotation forces left/bottom alignment over the user-set ht/vt', () => {
-        // A rotated cell with ht=center (0) / vt=middle (0) still pins to left+bottom
-        // (or left+top) so the rotation pivot stays at the cell corner — Excel does the
-        // same. The user's ht/vt is ignored only for rotated cells.
+    test('rotated cells skip ht/vt in favour of position:relative', () => {
+        // The rotated span is absolutely-positioned in the cell, so emitting text-align
+        // or vertical-align on the td has nothing to act on. Confirms we don't drag the
+        // user's ht=center / vt=middle into a now-meaningless td-level declaration.
         const sheet = makeSheet([{ r: 0, c: 0, v: { v: 'centered', rt: 45, ht: 0, vt: 0 } }]);
         const html = renderSheetsHtml([sheet]);
-        expect(html).toContain('text-align:left');
-        expect(html).toContain('vertical-align:bottom');
+        expect(html).toContain('position:relative');
         expect(html).not.toContain('text-align:center');
         expect(html).not.toContain('vertical-align:middle');
+        expect(html).not.toContain('text-align:left');
     });
 
     test('rt = "vertical" produces vertical writing-mode', () => {
