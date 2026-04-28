@@ -208,6 +208,16 @@ priority — rename-only.
 
 ### 2026-04-28
 
+- **Shared type consolidation**: `Cell`, `CellMatrix`, `CellStyle`, `CellType`,
+  `InlineStringSegment`, `SingleRange`, `Range` and the `ConditionalFormatRule`
+  family are now canonical in `@workspace/lib/sheets`. Engine + state re-export
+  from there — single source of truth, zero parallel definitions. Added
+  `BorderInfo` discriminated union (`CellBorderInfo | RangeBorderInfo`); apps/api
+  HTML export and import test narrow on `rangeType === 'cell'` before reading
+  `value`. State's `Sheet`/`SheetConfig` retain editor-runtime extras and keep
+  `borderInfo: any[]` + `luckysheet_conditionformat_save: any[]` (producer code
+  in state pushes untyped rules) — collapse via `Omit<lib.Sheet, …> & {extras}`
+  is part of TODO #1 once state-side typing tightens.
 - **TODO #3, #7, #8, #9, #10**: cleanup pass.
   - **#3**: tightened `evaluateConditionalFormat` to a `ConditionalFormatRule`
     discriminated union over `type` (`DataBarRule`, `ColorGradationRule`,
