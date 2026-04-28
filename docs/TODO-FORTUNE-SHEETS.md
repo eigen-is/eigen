@@ -20,7 +20,11 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
 1. **Enable biome on `state/`** — biggest lift. Currently excluded in `biome.jsonc`
    line 14. Will surface ~232 `any` annotations (31 in `rowcol.ts` alone) and ~60
    `@ts-ignore` directives. ~90 files / 48k LOC. Open this incrementally — each
-   file's typing gaps are independent.
+   file's typing gaps are independent. Once typing tightens, collapse state's
+   `Sheet` / `SheetConfig` (`state/types.ts`) into `Omit<lib.Sheet, …> & {editor
+   extras}` — the shared shapes already live in `@workspace/lib/sheets`; only
+   `borderInfo: any[]` and `luckysheet_conditionformat_save: any[]` keep state
+   from extending lib directly today.
 
 2. **CSS migrations** — 3 files remain (size verified 2026-04-28); then delete
    `src/css.d.ts`:
