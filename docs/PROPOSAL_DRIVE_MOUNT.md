@@ -89,6 +89,22 @@ The cleanest FUSE story for our users is **`rclone-mount`** — a single Go bina
 WebDAV endpoint via FUSE-T / WinFsp / native Linux FUSE. We ship a one-page recipe for it as a Phase 5
 deliverable rather than building our own native binary.
 
+### Recommended desktop clients
+
+In practice three options cover the realistic user paths. None require Eigen to ship code or take a
+native-FS dependency — Eigen exposes WebDAV over HTTPS, and the client carries its own
+FUSE-T / WinFsp / `webdavfs` layer.
+
+| Client | License | Native-FS layer | Use case |
+|---|---|---|---|
+| **Mountain Duck** ([mountainduck.io](https://mountainduck.io)) | $39 one-time per platform | Bundles WinFsp on Windows; uses FUSE-T on Mac automatically | Polished GUI; recommended commercial pick |
+| **rclone-mount** ([rclone.org](https://rclone.org)) | Free / open source | User installs FUSE-T (`.pkg`) on Mac or WinFsp (`.msi`) on Win | Recommended free / scriptable pick |
+| **Built-in Finder / Explorer** | Built into the OS | Apple's `webdavfs` / Microsoft's WebClient | Supported with caveats (Finder is slow; Win 11 needs registry edits for >50 MB and HTTPS-Basic) |
+
+Less common but viable cross-platform: **ExpanDrive**, **CloudMounter**. Mac power-users may also
+reach for **Forklift**. The Phase 4 WebDAV-credentials panel links to the first two; the Phase 5 docs
+page provides config recipes for both.
+
 ## Architecture
 
 ```
