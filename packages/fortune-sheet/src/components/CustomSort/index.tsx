@@ -48,7 +48,7 @@ export function CustomSort() {
     }, [col_end, col_start, context.luckysheetfile, isTitleChange, row_start, sheetIndex, sort.columnOperation]);
 
     return (
-        <div className="fortune-sort">
+        <>
             <div className="text-base mb-4">
                 <span>
                     <span>{sort.sortRangeTitle}</span>
@@ -116,6 +116,6 @@ export function CustomSort() {
                     {sort.confirm}
                 </Button>
             </DialogFooter>
-        </div>
+        </>
     );
 }
