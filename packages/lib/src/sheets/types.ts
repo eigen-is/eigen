@@ -70,6 +70,43 @@ export type SheetConfig = {
     borderInfo?: CellBorderInfo[];
 };
 
+// Conditional-format rule shape, mirrors fortune-sheet's engine type so this lib
+// stays free of a fortune-sheet dependency. Rules are produced by the editor's
+// state layer (state/modules/conditionFormat.ts) and consumed by the engine's
+// `evaluateConditionalFormat` (called from canvas painter + apps/api HTML export).
+export type ConditionalFormatRange = { row: number[]; column: number[] };
+
+export type ConditionalFormatConditionName =
+    | 'greaterThan'
+    | 'lessThan'
+    | 'equal'
+    | 'textContains'
+    | 'between'
+    | 'occurrenceDate'
+    | 'duplicateValue'
+    | 'top10'
+    | 'top10_percent'
+    | 'last10'
+    | 'last10_percent'
+    | 'aboveAverage'
+    | 'belowAverage'
+    | 'formula';
+
+type CFRuleBase = { cellrange: ConditionalFormatRange[] };
+
+export type DataBarRule = CFRuleBase & { type: 'dataBar'; format: string[] };
+export type ColorGradationRule = CFRuleBase & { type: 'colorGradation'; format: string[] };
+export type IconsRule = CFRuleBase & { type: 'icons' };
+export type DefaultConditionalFormatRule = CFRuleBase & {
+    type: 'default';
+    format: { textColor?: string | null; cellColor?: string | null };
+    conditionName: ConditionalFormatConditionName;
+    conditionRange?: ConditionalFormatRange[];
+    conditionValue: (string | number)[];
+};
+
+export type ConditionalFormatRule = DataBarRule | ColorGradationRule | IconsRule | DefaultConditionalFormatRule;
+
 export type Sheet = {
     name: string;
     id?: string;
@@ -78,5 +115,5 @@ export type Sheet = {
     celldata?: CellWithRowAndCol[];
     data?: (Cell | null)[][] | null;
     showGridLines?: boolean | number;
-    luckysheet_conditionformat_save?: unknown[];
+    luckysheet_conditionformat_save?: ConditionalFormatRule[];
 };
