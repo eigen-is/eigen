@@ -1,3 +1,4 @@
+import { cn } from '@workspace/ui/lib/utils';
 import type React from 'react';
 import { useContext } from 'react';
 import { WorkbookContext } from '../../../context';
@@ -10,18 +11,15 @@ export const FormulaSearch: React.FC<React.HTMLAttributes<HTMLDivElement>> = (pr
         <div
             {...props}
             id="luckysheet-formula-search-c"
-            className="absolute border border-black/20 shadow-md text-xs bg-background z-[1003] w-[300px]"
+            className="absolute z-[1003] w-[300px] border border-border bg-background shadow-md text-xs"
         >
             {context.functionCandidates.map((v, index) => (
                 <div
                     key={v.n}
-                    data-func={v.n}
-                    className={`bg-background px-2.5 py-1.5 cursor-pointer ${
-                        index === 0 ? 'block border-y border-[#ebebeb] bg-[#f5f5f5]' : ''
-                    }`}
+                    className={cn('cursor-pointer px-2.5 py-1.5', index === 0 && 'border-y border-border bg-muted')}
                 >
-                    <div className="text-sm text-[#222]">{v.n}</div>
-                    <div className={`text-[#444] ${index === 0 ? 'block' : 'hidden'}`}>{v.d}</div>
+                    <div className="text-sm">{v.n}</div>
+                    {index === 0 && <div className="text-muted-foreground">{v.d}</div>}
                 </div>
             ))}
         </div>

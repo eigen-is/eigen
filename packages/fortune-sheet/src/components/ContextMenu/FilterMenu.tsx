@@ -3,8 +3,7 @@ import { Checkbox } from '@workspace/ui/components/checkbox';
 import { Input } from '@workspace/ui/components/input';
 import { Popover, PopoverAnchor, PopoverContent } from '@workspace/ui/components/popover';
 import { cn } from '@workspace/ui/lib/utils';
-import { concat, debounce, omit, pull, union, without, xor } from 'es-toolkit/compat';
-import produce from 'immer';
+import { concat, debounce, omit, union, without, xor } from 'es-toolkit/compat';
 import { ChevronDown, ChevronRight, Filter as FilterIcon } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -213,18 +212,16 @@ export const FilterMenu: React.FC = () => {
     }, [data.dateRowMap, data.valueRowMap, data.visibleRows]);
 
     const inverseSelect = useCallback(() => {
-        setDatesUncheck(produce((draft) => xor(draft, Object.keys(data.dateRowMap))));
-        setValuesUncheck(produce((draft) => xor(draft, Object.keys(data.valueRowMap))));
+        setDatesUncheck((prev) => xor(prev, Object.keys(data.dateRowMap)));
+        setValuesUncheck((prev) => xor(prev, Object.keys(data.valueRowMap)));
         hiddenRows.current = xor(hiddenRows.current, data.visibleRows);
     }, [data.dateRowMap, data.valueRowMap, data.visibleRows]);
 
     const onColorSelectChange = useCallback((key: ColorKind, color: string, checked: boolean) => {
-        setFilterColors(
-            produce((draft) => {
-                const colorData = draft[key].find((v) => v.color === color);
-                if (colorData) colorData.checked = checked;
-            }),
-        );
+        setFilterColors((prev) => ({
+            ...prev,
+            [key]: prev[key].map((v) => (v.color === color ? { ...v, checked } : v)),
+        }));
     }, []);
 
     const sortData = useCallback(
@@ -482,12 +479,10 @@ export const FilterMenu: React.FC = () => {
                                             hiddenRows.current = checked
                                                 ? without(rows, ...item.rows)
                                                 : union(rows, item.rows);
-                                            setDatesUncheck(
-                                                produce((draft) =>
-                                                    checked
-                                                        ? without(draft, ...item.dateValues)
-                                                        : union(draft, item.dateValues),
-                                                ),
+                                            setDatesUncheck((prev) =>
+                                                checked
+                                                    ? without(prev, ...item.dateValues)
+                                                    : union(prev, item.dateValues),
                                             );
                                         }}
                                         isItemVisible={(item) =>
@@ -506,14 +501,8 @@ export const FilterMenu: React.FC = () => {
                                                 hiddenRows.current = checked
                                                     ? without(rows, ...item.rows)
                                                     : concat(rows, item.rows);
-                                                setValuesUncheck(
-                                                    produce((draft) => {
-                                                        if (checked) {
-                                                            pull(draft, item.key);
-                                                        } else {
-                                                            draft.push(item.key);
-                                                        }
-                                                    }),
+                                                setValuesUncheck((prev) =>
+                                                    checked ? prev.filter((v) => v !== item.key) : [...prev, item.key],
                                                 );
                                             }}
                                             isItemVisible={(item) =>
