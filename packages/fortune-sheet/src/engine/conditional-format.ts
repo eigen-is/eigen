@@ -250,66 +250,36 @@ export function evaluateConditionalFormat(
                     }
                 }
             }
-            if (!isNil(max) && !isNil(min)) {
-                if (format.length === 3) {
-                    // 3-color scale
-                    const avg = Math.floor(sum / count);
-
-                    for (let s = 0; s < cellrange.length; s += 1) {
-                        for (let r = cellrange[s].row[0]; r <= cellrange[s].row[1]; r += 1) {
-                            for (let c = cellrange[s].column[0]; c <= cellrange[s].column[1]; c += 1) {
-                                if (isNil(data[r]) || isNil(data[r][c])) {
-                                    continue;
-                                }
-
-                                const cell = data[r][c];
-
-                                if (!isNil(cell) && !isNil(cell.ct) && cell.ct.t === 'n' && !isNil(cell.v)) {
-                                    const numVal = Number(cell.v);
-                                    let cellColor: string | null = null;
-                                    if (numVal === min) {
-                                        cellColor = format[2];
-                                    } else if (numVal > min && numVal < avg) {
-                                        cellColor = getColorGradation(format[2], format[1], min, avg, numVal);
-                                    } else if (numVal === avg) {
-                                        cellColor = format[1];
-                                    } else if (numVal > avg && numVal < max) {
-                                        cellColor = getColorGradation(format[1], format[0], avg, max, numVal);
-                                    } else if (numVal === max) {
-                                        cellColor = format[0];
-                                    }
-                                    if (cellColor !== null) {
-                                        applyCellStyle(computeMap, r, c, { cellColor });
-                                    }
-                                }
-                            }
-                        }
+            if (!isNil(max) && !isNil(min) && (format.length === 2 || format.length === 3)) {
+                // Per-cell color picker — interpolates between max/min (2-color) or
+                // max/avg/min (3-color) stops. Returns null for cells outside the
+                // bracketed range, mirroring the original branch behavior.
+                const avg = format.length === 3 ? Math.floor(sum / count) : 0;
+                const stopFor = (numVal: number): string | null => {
+                    if (format.length === 3) {
+                        if (numVal === min) return format[2];
+                        if (numVal < avg) return getColorGradation(format[2], format[1], min, avg, numVal);
+                        if (numVal === avg) return format[1];
+                        if (numVal < max) return getColorGradation(format[1], format[0], avg, max, numVal);
+                        if (numVal === max) return format[0];
+                        return null;
                     }
-                } else if (format.length === 2) {
-                    // 2-color scale
-                    for (let s = 0; s < cellrange.length; s += 1) {
-                        for (let r = cellrange[s].row[0]; r <= cellrange[s].row[1]; r += 1) {
-                            for (let c = cellrange[s].column[0]; c <= cellrange[s].column[1]; c += 1) {
-                                if (isNil(data[r]) || isNil(data[r][c])) {
-                                    continue;
-                                }
+                    if (numVal === min) return format[1];
+                    if (numVal < max) return getColorGradation(format[1], format[0], min, max, numVal);
+                    if (numVal === max) return format[0];
+                    return null;
+                };
 
-                                const cell = data[r][c];
-
-                                if (!isNil(cell) && !isNil(cell.ct) && cell.ct.t === 'n' && !isNil(cell.v)) {
-                                    const numVal = Number(cell.v);
-                                    let cellColor: string | null = null;
-                                    if (numVal === min) {
-                                        cellColor = format[1];
-                                    } else if (numVal > min && numVal < max) {
-                                        cellColor = getColorGradation(format[1], format[0], min, max, numVal);
-                                    } else if (numVal === max) {
-                                        cellColor = format[0];
-                                    }
-                                    if (cellColor !== null) {
-                                        applyCellStyle(computeMap, r, c, { cellColor });
-                                    }
-                                }
+                for (let s = 0; s < cellrange.length; s += 1) {
+                    for (let r = cellrange[s].row[0]; r <= cellrange[s].row[1]; r += 1) {
+                        for (let c = cellrange[s].column[0]; c <= cellrange[s].column[1]; c += 1) {
+                            const cell = data[r]?.[c];
+                            if (isNil(cell) || isNil(cell.ct) || cell.ct.t !== 'n' || isNil(cell.v)) {
+                                continue;
+                            }
+                            const cellColor = stopFor(Number(cell.v));
+                            if (cellColor !== null) {
+                                applyCellStyle(computeMap, r, c, { cellColor });
                             }
                         }
                     }
