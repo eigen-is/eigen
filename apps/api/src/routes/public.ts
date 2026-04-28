@@ -45,7 +45,13 @@ export const publicRouter = new Elysia({ name: 'public' })
         const entry = await validateInviteToken(params.token);
         if (!entry) return { valid: false };
         const config = getPublicConfig();
-        return { valid: true, email: entry.email, orgName: config?.orgName ?? '', domain: config?.domain ?? '' };
+        return {
+            valid: true,
+            email: entry.email,
+            orgName: config?.orgName ?? '',
+            domain: config?.domain ?? '',
+            mailDomain: config?.mailDomain ?? '',
+        };
     })
     .post(
         '/p/invite/:token/register',

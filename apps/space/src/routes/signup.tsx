@@ -113,7 +113,7 @@ function SignupPage() {
                                             required
                                         />
                                         <InputGroupAddon align="inline-end">
-                                            <InputGroupText>@{invite.domain}</InputGroupText>
+                                            <InputGroupText>@{invite.mailDomain || invite.domain}</InputGroupText>
                                         </InputGroupAddon>
                                     </InputGroup>
                                 </FieldContent>
