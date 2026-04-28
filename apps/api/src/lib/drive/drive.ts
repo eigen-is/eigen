@@ -28,7 +28,7 @@ import { createAsyncSingleton } from '../../utils/singleton';
 import { ChatRoom } from '../chat';
 import CollabDocument from '../collab/collabDocument';
 import { isProduction } from '../config/env';
-import { getDomain } from '../config/server-config';
+import { getDomain, getMailDomain } from '../config/server-config';
 import { ApiError, type DatabaseConfig, type ManagedDatabase, type SchemaType } from '../core';
 import { contentDisposition } from '../core/http';
 import { sendMail } from '../core/mailer';
@@ -603,8 +603,9 @@ export default class Drive {
         senderEmail: string,
         senderName: string,
     ): Promise<{ sent: number }> {
-        // Validate URL belongs to this server's domain to prevent phishing
+        // Validate URL belongs to this server's web domain to prevent phishing.
         const domain = getDomain();
+        const mailDomain = getMailDomain();
         try {
             const parsed = new URL(documentUrl);
             const host = parsed.hostname;
@@ -622,7 +623,7 @@ export default class Drive {
 
         const results = await Promise.allSettled(
             recipients.map((member) => {
-                const isExternal = !member.email.endsWith(`@${domain}`);
+                const isExternal = !member.email.endsWith(`@${mailDomain}`);
                 const link = isExternal
                     ? `${documentUrl}${documentUrl.includes('?') ? '&' : '?'}email=${encodeURIComponent(member.email)}`
                     : documentUrl;

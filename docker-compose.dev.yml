@@ -1,10 +1,13 @@
 # Dev overrides: HTTP-only, mailpit for catching mail, self-signed certs.
 # DOMAIN=localhost is the hostname for TLS certs and Postfix. Email addresses use a separate
 # domain configured during setup (e.g., eigen.localhost) — see LOCAL-TESTING.md.
+#
+# Dev runs all profiles by default: COMPOSE_PROFILES=edge,mail.
 services:
   caddy:
     environment:
       DOMAIN: localhost
+      MAIL_DOMAIN: localhost
       CADDY_ACME_EMAIL: ""
     ports:
       - "80:80"
@@ -16,6 +19,7 @@ services:
       PRODUCTION: 0
       EIGEN_DATA_ROOT: /app/data
       DOMAIN: localhost
+      MAIL_DOMAIN: localhost
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
       COOKIE_DOMAIN: localhost
@@ -28,6 +32,7 @@ services:
       - postfix-queue:/var/spool/postfix
     environment:
       DOMAIN: localhost
+      MAIL_DOMAIN: localhost
       SMTP_RELAY_HOST: ""
 
   dovecot:
@@ -36,6 +41,7 @@ services:
       - ./data/certs/dev:/certs
     environment:
       DOMAIN: localhost
+      MAIL_DOMAIN: localhost
 
   mailpit:
     image: axllent/mailpit
