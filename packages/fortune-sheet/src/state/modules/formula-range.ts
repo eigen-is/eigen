@@ -1,6 +1,6 @@
 import type {Context} from "../context";
 import type {Rect} from "../types";
-import {columnCharToIndex, indexToColumnChar} from "../utils";
+import {columnIndexToLabel, columnLabelToIndex} from "../../engine/a1-notation";
 import {detectAbsolute} from "../../engine/formula-shift";
 import {getRangetxt, mergeMoveMain} from "./cell";
 import {error} from "./validation";
@@ -482,6 +482,13 @@ export function rangeDragRow(
     setRangeSelect(container, col_pre, top, height, col - col_pre - 1);
 }
 
+// Shifts a single cell or range ref like "A1", "A1:B3", "1:3", "A:C",
+// "Sheet1!A1:B3" in response to a row/column insert or delete. The
+// `rowsMissing` / `colsMissing` flags gate the row/col shift and formatting
+// branches so row-only / column-only ranges round-trip unchanged when the
+// orthogonal axis changes — without them, `columnLabelToIndex("")` returning
+// `-1` (instead of the legacy `NaN`) would let the `< 0` clamp corrupt e.g.
+// "1:3" del col into "A1:A3".
 function functionStrChange_range(
     txt: string,
     type: string,
@@ -491,7 +498,7 @@ function functionStrChange_range(
     step: number
 ) {
     const val = txt.split("!");
-    let rangetxt;
+    let rangetxt: string;
     let prefix = "";
 
     if (val.length > 1) {
@@ -501,189 +508,152 @@ function functionStrChange_range(
         [rangetxt] = val;
     }
 
-    let r1;
-    let r2;
-    let c1;
-    let c2;
-    let $row0;
-    let $row1;
-    let $col0;
-    let $col1;
+    let r1: number;
+    let r2: number;
+    let c1: number;
+    let c2: number;
+    let $row0: string;
+    let $row1: string;
+    let $col0: string;
+    let $col1: string;
+    let rowsMissing: boolean;
+    let colsMissing: boolean;
 
     if (rangetxt.indexOf(":") === -1) {
-        r1 = parseInt(rangetxt.replace(/[^0-9]/g, ""), 10) - 1;
+        const rowPart = rangetxt.replace(/[^0-9]/g, "");
+        const colPart = rangetxt.replace(/[^A-Za-z]/g, "");
+        rowsMissing = rowPart.length === 0;
+        colsMissing = colPart.length === 0;
+        r1 = rowsMissing ? -1 : parseInt(rowPart, 10) - 1;
         r2 = r1;
-        c1 = columnCharToIndex(rangetxt.replace(/[^A-Za-z]/g, ""));
+        c1 = colsMissing ? -1 : columnLabelToIndex(colPart);
         c2 = c1;
 
         const freezonFuc = detectAbsolute(rangetxt);
-
         $row0 = freezonFuc[0] ? "$" : "";
         $row1 = $row0;
         $col0 = freezonFuc[1] ? "$" : "";
         $col1 = $col0;
     } else {
-        rangetxt = rangetxt.split(":");
+        const parts = rangetxt.split(":");
+        const rowPart0 = parts[0].replace(/[^0-9]/g, "");
+        const rowPart1 = parts[1].replace(/[^0-9]/g, "");
+        const colPart0 = parts[0].replace(/[^A-Za-z]/g, "");
+        const colPart1 = parts[1].replace(/[^A-Za-z]/g, "");
+        rowsMissing = rowPart0.length === 0 && rowPart1.length === 0;
+        colsMissing = colPart0.length === 0 && colPart1.length === 0;
 
-        r1 = parseInt(rangetxt[0].replace(/[^0-9]/g, ""), 10) - 1;
-        r2 = parseInt(rangetxt[1].replace(/[^0-9]/g, ""), 10) - 1;
-        if (r1 > r2) {
+        r1 = rowsMissing ? -1 : parseInt(rowPart0, 10) - 1;
+        r2 = rowsMissing ? -1 : parseInt(rowPart1, 10) - 1;
+        if (!rowsMissing && r1 > r2) {
             return txt;
         }
 
-        c1 = columnCharToIndex(rangetxt[0].replace(/[^A-Za-z]/g, ""));
-        c2 = columnCharToIndex(rangetxt[1].replace(/[^A-Za-z]/g, ""));
-        if (c1 > c2) {
+        c1 = colsMissing ? -1 : columnLabelToIndex(colPart0);
+        c2 = colsMissing ? -1 : columnLabelToIndex(colPart1);
+        if (!colsMissing && c1 > c2) {
             return txt;
         }
 
-        const freezonFuc0 = detectAbsolute(rangetxt[0]);
+        const freezonFuc0 = detectAbsolute(parts[0]);
         $row0 = freezonFuc0[0] ? "$" : "";
         $col0 = freezonFuc0[1] ? "$" : "";
 
-        const freezonFuc1 = detectAbsolute(rangetxt[1]);
+        const freezonFuc1 = detectAbsolute(parts[1]);
         $row1 = freezonFuc1[0] ? "$" : "";
         $col1 = freezonFuc1[1] ? "$" : "";
     }
 
+    const formatRange = () => {
+        if (r1 === r2 && c1 === c2) {
+            if (!rowsMissing && !colsMissing) {
+                return prefix + $col0 + columnIndexToLabel(c1) + $row0 + (r1 + 1);
+            }
+            if (!rowsMissing) {
+                return prefix + $row0 + (r1 + 1);
+            }
+            if (!colsMissing) {
+                return prefix + $col0 + columnIndexToLabel(c1);
+            }
+            return txt;
+        }
+        if (colsMissing) {
+            return `${prefix + $row0 + (r1 + 1)}:${$row1}${r2 + 1}`;
+        }
+        if (rowsMissing) {
+            return `${prefix + $col0 + columnIndexToLabel(c1)}:${$col1}${columnIndexToLabel(c2)}`;
+        }
+        return `${
+            prefix + $col0 + columnIndexToLabel(c1) + $row0 + (r1 + 1)
+        }:${$col1}${columnIndexToLabel(c2)}${$row1}${r2 + 1}`;
+    };
+
     if (type === "del") {
-        if (rc === "row") {
+        if (rc === "row" && !rowsMissing) {
             if (r1 >= stindex && r2 <= stindex + step - 1) {
                 return error.r;
             }
-
             if (r1 > stindex + step - 1) {
                 r1 -= step;
             } else if (r1 >= stindex) {
                 r1 = stindex;
             }
-
             if (r2 > stindex + step - 1) {
                 r2 -= step;
             } else if (r2 >= stindex) {
                 r2 = stindex - 1;
             }
-
             if (r1 < 0) {
                 r1 = 0;
             }
-
             if (r2 < r1) {
                 r2 = r1;
             }
-        } else if (rc === "col") {
+        } else if (rc === "col" && !colsMissing) {
             if (c1 >= stindex && c2 <= stindex + step - 1) {
                 return error.r;
             }
-
             if (c1 > stindex + step - 1) {
                 c1 -= step;
             } else if (c1 >= stindex) {
                 c1 = stindex;
             }
-
             if (c2 > stindex + step - 1) {
                 c2 -= step;
             } else if (c2 >= stindex) {
                 c2 = stindex - 1;
             }
-
             if (c1 < 0) {
                 c1 = 0;
             }
-
             if (c2 < c1) {
                 c2 = c1;
             }
         }
-
-        if (r1 === r2 && c1 === c2) {
-            if (!Number.isNaN(r1) && !Number.isNaN(c1)) {
-                return prefix + $col0 + indexToColumnChar(c1) + $row0 + (r1 + 1);
-            }
-            if (!Number.isNaN(r1)) {
-                return prefix + $row0 + (r1 + 1);
-            }
-            if (!Number.isNaN(c1)) {
-                return prefix + $col0 + indexToColumnChar(c1);
-            }
-            return txt;
-        }
-        if (Number.isNaN(c1) && Number.isNaN(c2)) {
-            return `${prefix + $row0 + (r1 + 1)}:${$row1}${r2 + 1}`;
-        }
-        if (Number.isNaN(r1) && Number.isNaN(r2)) {
-            return `${
-                prefix + $col0 + indexToColumnChar(c1)
-            }:${$col1}${indexToColumnChar(c2)}`;
-        }
-        return `${
-            prefix + $col0 + indexToColumnChar(c1) + $row0 + (r1 + 1)
-        }:${$col1}${indexToColumnChar(c2)}${$row1}${r2 + 1}`;
+        return formatRange();
     }
+
     if (type === "add") {
-        if (rc === "row") {
+        if (rc === "row" && !rowsMissing) {
             if (orient === "lefttop") {
-                if (r1 >= stindex) {
-                    r1 += step;
-                }
-
-                if (r2 >= stindex) {
-                    r2 += step;
-                }
+                if (r1 >= stindex) r1 += step;
+                if (r2 >= stindex) r2 += step;
             } else if (orient === "rightbottom") {
-                if (r1 > stindex) {
-                    r1 += step;
-                }
-
-                if (r2 > stindex) {
-                    r2 += step;
-                }
+                if (r1 > stindex) r1 += step;
+                if (r2 > stindex) r2 += step;
             }
-        } else if (rc === "col") {
+        } else if (rc === "col" && !colsMissing) {
             if (orient === "lefttop") {
-                if (c1 >= stindex) {
-                    c1 += step;
-                }
-
-                if (c2 >= stindex) {
-                    c2 += step;
-                }
+                if (c1 >= stindex) c1 += step;
+                if (c2 >= stindex) c2 += step;
             } else if (orient === "rightbottom") {
-                if (c1 > stindex) {
-                    c1 += step;
-                }
-
-                if (c2 > stindex) {
-                    c2 += step;
-                }
+                if (c1 > stindex) c1 += step;
+                if (c2 > stindex) c2 += step;
             }
         }
-
-        if (r1 === r2 && c1 === c2) {
-            if (!Number.isNaN(r1) && !Number.isNaN(c1)) {
-                return prefix + $col0 + indexToColumnChar(c1) + $row0 + (r1 + 1);
-            }
-            if (!Number.isNaN(r1)) {
-                return prefix + $row0 + (r1 + 1);
-            }
-            if (!Number.isNaN(c1)) {
-                return prefix + $col0 + indexToColumnChar(c1);
-            }
-            return txt;
-        }
-        if (Number.isNaN(c1) && Number.isNaN(c2)) {
-            return `${prefix + $row0 + (r1 + 1)}:${$row1}${r2 + 1}`;
-        }
-        if (Number.isNaN(r1) && Number.isNaN(r2)) {
-            return `${
-                prefix + $col0 + indexToColumnChar(c1)
-            }:${$col1}${indexToColumnChar(c2)}`;
-        }
-        return `${
-            prefix + $col0 + indexToColumnChar(c1) + $row0 + (r1 + 1)
-        }:${$col1}${indexToColumnChar(c2)}${$row1}${r2 + 1}`;
+        return formatRange();
     }
+
     return "";
 }
 
