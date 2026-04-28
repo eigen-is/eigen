@@ -1,5 +1,12 @@
 # Proposal: Split Instance Host from Mail Domain (and Allow Multiple Mail Domains)
 
+> **STATUS (2026-04-28)**: Phase 1 (single-mail-domain split) shipped under different names — the
+> env vars are `DOMAIN` (kept for backward compat, plays the `INSTANCE_HOST` role from this doc)
+> and `MAIL_DOMAIN`. See [DEPLOYMENT.md](DEPLOYMENT.md) and
+> [PROPOSAL_OPTIONAL_SERVICES.md](PROPOSAL_OPTIONAL_SERVICES.md). Phase 2 (multi-domain mail —
+> array of domains, per-domain DKIM, per-user aliases) is still future work; the data model still
+> assumes a single mail domain.
+
 > **TLDR**: A single `DOMAIN` env var currently drives both *where the eigen UI/API lives* (e.g.
 > `eigen.example.com`) and *what suffix users have on their email addresses* (e.g. `@example.com`).
 > These are different concepts and should be separate config: `INSTANCE_HOST` (web origin) and

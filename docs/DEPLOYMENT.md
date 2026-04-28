@@ -1,7 +1,10 @@
 # Eigen Deployment
 
-Docker-based deployment for Eigen. Five containers: Caddy (reverse proxy + HTTPS), Eigen API (Bun),
-Unbound (DNS resolver), Postfix (email), Dovecot (IMAP).
+Docker-based deployment for Eigen. Five containers in the default shape: Caddy (reverse proxy + HTTPS),
+Eigen API (Bun), Unbound (DNS resolver), Postfix (email), Dovecot (IMAP). Caddy and the mail trio are
+gated by Compose profiles (`edge`, `mail`) so deployments can opt out of either when the host already
+runs its own webserver or mail server. The mail address suffix (`MAIL_DOMAIN`) is decoupled from the
+web hostname (`DOMAIN`), so the apps can live at `eigen.example.com` while addresses stay `@example.com`.
 
 **Guides:**
 - [VPS Setup Guide](../docker/SETUP-GUIDE.md) — step-by-step server deployment
@@ -55,8 +58,13 @@ Unbound (DNS resolver), Postfix (email), Dovecot (IMAP).
 | **Internal auth endpoint** | Done | `POST /internal/auth/verify` — verifies app password or primary password |
 | **Cert export** | Done | Background script copies Caddy certs to shared volume |
 | **Dev mode** | Done | `docker-compose.dev.yml` with mailpit + self-signed certs |
-| **Env generator** | Done | `scripts/generate-env.sh` derives all vars from DOMAIN |
-| **Operational scripts** | Done | `scripts/update.sh`, `scripts/backup.sh` |
+| **Interactive setup** | Done | `bun run setup` — 4 questions, writes `.env.production`, optional host nginx/Caddy snippets, prints DNS records |
+| **Env generator (CI)** | Done | `scripts/generate-env.sh DOMAIN` — non-interactive alternative for scripted installs |
+| **Compose profiles** | Done | `edge` (Caddy) + `mail` (Postfix/Dovecot/Unbound) gates; `COMPOSE_PROFILES=edge,mail` is the default |
+| **Mail-domain split** | Done | `MAIL_DOMAIN` env var decouples address suffix from web hostname; defaults to `${DOMAIN}` |
+| **Host-proxy bind** | Done | `EIGEN_API_BIND` exposes the API on `127.0.0.1:8000` for a host reverse proxy |
+| **SSE hardening** | Done | `X-Accel-Buffering: no` response header defends against buffering proxies |
+| **Operational scripts** | Done | `scripts/update.sh` (auto-migrating env), `scripts/backup.sh` |
 
 ### Code changes (backward-compatible)
 
@@ -95,8 +103,9 @@ All changes are backward-compatible: without the new env vars, behavior is ident
 |   +-- SETUP-GUIDE.md               # VPS deployment guide
 |   +-- LOCAL-TESTING.md             # Local Docker testing guide
 +-- scripts/
-|   +-- generate-env.sh              # Generate .env.production from DOMAIN
-|   +-- update.sh                    # Pull + sequential build + restart
+|   +-- setup.ts                     # Interactive setup (`bun run setup`) — primary path
+|   +-- generate-env.sh              # Non-interactive env generation (CI / scripted)
+|   +-- update.sh                    # Pull + auto-migrate env + sequential build + restart
 |   +-- backup.sh                    # Backup data directory
 ```
 
