@@ -33,7 +33,7 @@ export function CreateUserDialog({ open, onOpenChange }: CreateUserDialogProps) 
             return;
         }
         setUsernameError('');
-        const email = `${normalized}@${config?.mailDomain ?? config?.domain ?? 'eigen.is'}`;
+        const email = `${normalized}@${config?.mailDomain ?? 'eigen.is'}`;
         if (!name || !username || !password) return;
 
         await createUser.mutateAsync({ name, email, password, role });
@@ -71,9 +71,7 @@ export function CreateUserDialog({ open, onOpenChange }: CreateUserDialogProps) 
                                         required
                                     />
                                     <InputGroupAddon align="inline-end">
-                                        <InputGroupText>
-                                            @{config?.mailDomain ?? config?.domain ?? 'eigen.is'}
-                                        </InputGroupText>
+                                        <InputGroupText>@{config?.mailDomain ?? 'eigen.is'}</InputGroupText>
                                     </InputGroupAddon>
                                 </InputGroup>
                                 {usernameError && <p className="text-sm text-destructive">{usernameError}</p>}

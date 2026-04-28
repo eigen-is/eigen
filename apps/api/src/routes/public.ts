@@ -49,7 +49,6 @@ export const publicRouter = new Elysia({ name: 'public' })
             valid: true,
             email: entry.email,
             orgName: config?.orgName ?? '',
-            domain: config?.domain ?? '',
             mailDomain: config?.mailDomain ?? '',
         };
     })

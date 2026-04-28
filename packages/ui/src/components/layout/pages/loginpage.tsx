@@ -42,7 +42,7 @@ function PasswordLoginForm() {
         setIsLoading(true);
         setError('');
 
-        const loginDomain = config?.mailDomain ?? config?.domain ?? window.location.hostname;
+        const loginDomain = config?.mailDomain ?? window.location.hostname;
         values.email = `${values.email.toLowerCase().split('@')[0]}@${loginDomain}`;
 
         try {
@@ -82,7 +82,7 @@ function PasswordLoginForm() {
                                         <InputGroupInput placeholder="username" autoFocus {...field} />
                                         <InputGroupAddon align="inline-end">
                                             <InputGroupText>
-                                                @{config?.mailDomain ?? config?.domain ?? window.location.hostname}
+                                                @{config?.mailDomain ?? window.location.hostname}
                                             </InputGroupText>
                                         </InputGroupAddon>
                                     </InputGroup>

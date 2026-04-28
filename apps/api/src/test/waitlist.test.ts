@@ -155,7 +155,7 @@ describe('Waitlist', () => {
         const data = await res.json();
         expect(data.valid).toBe(true);
         expect(data.email).toBe('waitlist-user@example.com');
-        expect(data.domain).toBeTruthy();
+        expect(data.mailDomain).toBeTruthy();
     });
 
     test('invalid token returns valid: false', async () => {
