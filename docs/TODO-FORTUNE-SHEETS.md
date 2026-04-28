@@ -1,389 +1,314 @@
-# Fortune-Sheet Audit & Refactor TODO
+# Fortune-Sheet TODO
 
-> **TLDR**: Consolidated cleanup list for `packages/fortune-sheet/`. Goal: make the package "ours" —
-> biome-clean end to end, lodash-free, CSS fully migrated to Tailwind, shadcn adopted, typing tightened.
-> See priority phases at bottom.
+Single source of truth for `packages/fortune-sheet/` pending work. Goal: make the
+package "ours" — biome-clean end to end, lodash-free (done), CSS fully migrated
+to Tailwind, shadcn adopted (done), typing tightened.
 
-> **Recently shipped (2026-04-26):** The icon-row `Toolbar/` (~1395 LOC) was replaced with a Google-Sheets-style
-> `MenuBar/` (Edit / View / Insert / Format / Data menus + `CustomBorder.tsx`). Previously missing UI for text
-> Rotation (`tr` field), CF Color Scales (12 presets), and CF Data Bars (6 solid presets) shipped in the Format
-> menu. `Screenshot` and `LocationCondition` were deleted entirely. Net ~−1500 LOC across the package.
-> Spec: [`PROPOSAL_FORTUNE_SHEET_TOOLBAR.md`](PROPOSAL_FORTUNE_SHEET_TOOLBAR.md).
+The package is a full fork of fortune-sheet + luckysheet — no external
+`@fortune-sheet/core` dependency. Treat it as **owned code**: fix broken
+windows when touching it, prefer modern patterns over preserving legacy.
 
-The package is a full fork of fortune-sheet + luckysheet (no external `@fortune-sheet/core` dependency).
-Treat it as owned code: fix broken windows when touching it, prefer modern patterns over preserving legacy.
-
-## Legend
-
-- **CSS** = has legacy `.css` file to migrate to Tailwind
-- **BTN** = uses `div` buttons instead of shadcn `Button`
-- **DLG** = uses or should use `useDialog` hook
-- **WRAP** = thin wrapper, candidate for removal or simplification
-- **EXP** = should be exported as named function (not `default`)
-- **DONE** = already migrated in previous session
+For architecture see [SHEETS.md](SHEETS.md). For component layering see
+[`packages/fortune-sheet/RENDERING.md`](../packages/fortune-sheet/RENDERING.md).
 
 ---
 
-## 1. CSS Files to Migrate
+## Outstanding
 
-All remaining `.css` files should be converted to Tailwind utilities and then deleted. The `css.d.ts` module declaration
-can be removed once no `.css` imports remain.
+### Core technical debt
 
-| File                               | Lines  | Status   | Notes                                                                                     |
-|------------------------------------|--------|----------|-------------------------------------------------------------------------------------------|
-| `SheetTab/index.css`               | 280    | TODO     | Sheet tab area, active/hover states, scroll buttons. Hardcoded colors.                    |
-| `SheetOverlay/index.css`           | 882    | TODO     | Largest file. Cell selection, drag, resize, frozen panes, cell editor, formula bar.        |
-| `SheetOverlay/ScrollBar/index.css` | 40     | TODO     | Custom scrollbar styling.                                                                 |
-| `LinkEditCard/index.css`           | —      | **DONE** | Deleted. Migrated to Tailwind + theme tokens inline in `index.tsx`.                       |
-| `ContextMenu/index.css`            | —      | **DONE** | Deleted.                                                                                  |
-| `Workbook/index.css`               | —      | **DONE** | Deleted.                                                                                  |
-| `DataVerification/index.css`       | —      | **DONE** | Deleted.                                                                                  |
-| `SearchReplace/index.css`          | —      | **DONE** | Deleted.                                                                                  |
-| `ConditionFormat/index.css`        | —      | **DONE** | Deleted.                                                                                  |
+1. **Enable biome on `state/`** — biggest lift. Currently excluded in `biome.jsonc`
+   line 14. Will surface ~232 `any` annotations (31 in `rowcol.ts` alone) and ~60
+   `@ts-ignore` directives. ~90 files / 48k LOC. Open this incrementally — each
+   file's typing gaps are independent.
 
-### Action items
+2. **CSS migrations** — 3 files remain (size verified 2026-04-28); then delete
+   `src/css.d.ts`:
+   - `SheetOverlay/index.css` (812 LOC, largest — split into multiple PRs).
+   - `SheetTab/index.css` (272 LOC).
+   - `SheetOverlay/ScrollBar/index.css` (40 LOC).
+   Before removing any class, grep `state/` for `luckysheet-*` selectors — see
+   [DOM Selector Coupling](#dom-selector-coupling).
 
-- [ ] Migrate `SheetTab/index.css` → Tailwind classes
-- [ ] Migrate `SheetOverlay/index.css` → Tailwind classes (break into multiple PRs)
-- [ ] Migrate `SheetOverlay/ScrollBar/index.css` → Tailwind
-- [x] Migrate `LinkEditCard/index.css` → Tailwind + shadcn components — done
-- [ ] Delete `css.d.ts` once all CSS imports are removed
+3. **Tighten `evaluateConditionalFormat` rule shape** — still `any[]` with a
+   `biome-ignore` at the public boundary in `engine/conditional-format.ts:82`.
+   Hard because `format` is heterogeneous: `string[]` for `dataBar` /
+   `colorGradation`, `{textColor, cellColor}` for the `default` family. Producer
+   is `state/modules/conditionFormat.ts`; consumers also include the apps/api
+   HTML export. Lib type at `packages/lib/src/sheets/types.ts:81` is also
+   `unknown[]`. Unblocks #4.
 
----
+4. **Regenerate `engine/parser/grammar-parser/grammar-parser.ts`** from upstream
+   jison rather than hand-editing. Currently biome-excluded. No urgency. The
+   only remaining `export default` lines in the package live under
+   `engine/parser/` and will be regenerated together.
 
-## 2. Div Buttons → shadcn `Button`
+### Server-side features
 
-Components using styled `<div>` elements as buttons instead of shadcn `Button`:
+5. **xlsx CF export** — `apps/api/src/lib/export/sheets/xlsx.ts` doesn't write
+   conditional-format rules. Translate fortune-sheet rules into ExcelJS native
+   `worksheet.addConditionalFormatting` so Excel evaluates them on file open
+   (no formula engine needed for xlsx — Excel does it natively). Blocked by #3.
 
-All `button-basic` div buttons have been migrated to shadcn `Button` across all components
-(DataVerification, FormulaSearch, LocationCondition, SplitColumn, SearchReplace, FilterMenu,
-CustomSort, RangeDialog, LinkEditCard). **DONE.**
+6. **Server-side recalc in `readSheetContent()`** — engine API ready
+   (`engine.recalculateAll(resolver)`); `apps/api` consumer just needs the
+   wiring. Defer until export, search indexing, or scripting actually needs
+   fresh values; today the consumer reads the last-saved `cell.v` from the
+   snapshot, which is fine. See [SHEETS.md § Headless Formula Engine](SHEETS.md#headless-formula-engine).
 
----
+### Misc cleanups
 
-## 3. `useDialog` Usage Audit
+7. `state/modules/formula-range.ts` still imports `columnCharToIndex` /
+   `indexToColumnChar` from state utils. Engine has equivalents
+   (`columnLabelToIndex` / `columnIndexToLabel`) but with different
+   missing-input semantics: engine returns `-1`, state returns `NaN`. Migrating
+   requires updating the `Number.isNaN(col)` checks in `functionStrChange_range`.
+   The 2026-04-28 row-only-range fix in `engine/formula-shift.ts` is the
+   template.
 
-The `useDialog` hook (in `hooks/useDialog.tsx`) wraps `ModalContext` to show/hide dialogs using shadcn `Dialog`. The
-`useAlert` hook builds on top of it for simple ok/yesno alerts.
+8. `FormulaSearch/index.tsx` and `FormulaHint/index.tsx` are the last sites
+   with hardcoded inline colors (`border-[#d4d4d4]`, `bg-[#8c89fe]`). Replace
+   with theme tokens.
 
-| Component                            | Uses `useDialog` | Uses `useAlert` | Notes                                                             |
-|--------------------------------------|------------------|-----------------|-------------------------------------------------------------------|
-| `ConditionFormat/index.tsx`          | Yes              | No              | Shows `ConditionRules` dialog                                     |
-| `ConditionFormat/ConditionRules.tsx` | Yes (hideDialog) | No              | Dialog content itself                                             |
-| `ContextMenu/index.tsx`              | Yes              | Yes             | Shows `CustomSort` dialog, alerts for errors                      |
-| `ContextMenu/FilterMenu.tsx`         | No               | Yes             | Sort error alerts                                                 |
-| `CustomSort/index.tsx`               | Yes (hideDialog) | No              | Dialog content, closes on confirm                                 |
-| `DataVerification/index.tsx`         | Yes              | No              | Shows RangeDialog                                                 |
-| `DataVerification/RangeDialog.tsx`   | Yes              | No              | Navigates back to parent dialogs                                  |
-| `FormatSearch/index.tsx`             | Yes              | No              | Decimal places validation alert                                   |
-| `FormulaSearch/index.tsx`            | No               | No              | Shown via `showDialog()` from `MenuBar/insert-menu.tsx`           |
-| `SplitColumn/index.tsx`              | No               | No              | Shown via `showDialog()` from `MenuBar/data-menu.tsx`             |
-| `SearchReplace/index.tsx`            | No               | No              | Rendered inline, not a dialog                                     |
-| `SheetOverlay/index.tsx`             | Yes              | Yes             | Main overlay, shows various dialogs                               |
-| `MenuBar/edit-menu.tsx`              | Yes              | Yes             | Shows `FormulaSearch` (find/replace), alerts                      |
-| `MenuBar/insert-menu.tsx`            | Yes              | No              | Shows `FormulaSearch` dialog (More functions…), `LinkEditCard`    |
-| `MenuBar/format-menu.tsx`            | Yes              | No              | Shows `FormatSearch`, `ConditionRules`, `ManageRules` dialogs     |
-| `MenuBar/data-menu.tsx`              | Yes              | No              | Shows `CustomSort`, `SplitColumn` dialogs                         |
+9. `CustomSort/index.tsx:51` has a dead `fortune-sort` className with no CSS
+   definition. Remove.
 
-### Observations
+10. `ContextMenu/FilterMenu.tsx` uses `immer` `produce` patterns at 4 sites for
+    set-toggle operations. Could simplify to plain state updates if it reads
+    cleaner; not a regression risk either way.
 
-- `useDialog` / `useAlert` pattern is well-established and consistent
-- `FormulaSearch` and `SplitColumn` are shown via `showDialog()` from the MenuBar but don't use
-  `useDialog` themselves — this is fine since they receive `onCancel` prop
-- No custom dialog implementations found — all go through `ModalContext`
-
----
-
-## 4. Export Style Audit (`default` → named export)
-
-**DONE** — all `components/` and `hooks/` files now use named exports. `state/locale/en.ts`
-converted in commit `d0b6d564`. The only remaining `export default` lines in the package are in
-`engine/parser/` (operator implementations + grammar parser) — those are slated for regeneration
-from upstream jison rather than hand-editing, see §5 in `engine/parser/`.
+11. Move package to `apps/sheets/src/fortune-sheet/` — only `apps/sheets/`
+    consumes it. Low priority, rename-only with no code impact.
 
 ---
 
-## 5. Shared UI Component Adoption
+## Smoke tests still owed
 
-Components from `packages/ui/` (documented in `docs/LAYOUT-SHARED-COMPONENTS.md`) that could replace inline
-implementations:
+These were merged without an end-to-end pass in `apps/sheets`. Most have been
+running in normal use for days now and are likely fine, but no one has signed
+off. Walk through if you touch the related surface.
 
-| Fortune-Sheet Component                | Shared Replacement                                                               | Notes                                                                                                                                                                                                     |
-|----------------------------------------|----------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `FilterMenu.tsx` filter buttons        | `@workspace/ui/components/button`                                                | **DONE** (commit `b5c3b7e7`)                                                                                                                                                                              |
-| `LinkEditCard/index.tsx` + `index.css` | `@workspace/ui/components/dialog`, `input`, `button`, `select`                   | **DONE** — `<select>` (b5c3b7e7), then full CSS-to-Tailwind + 2 raw `<input>` → `Input`; `index.css` deleted                                                                                              |
-| `CustomSort/index.tsx`                 | `@workspace/ui/components/checkbox`, `radio-group`, `select`, `button`, `dialog` | **DONE** (commit `b5c3b7e7`) — all native form controls migrated; buttons in `DialogFooter`                                                                                                                |
-| `DataVerification/DropdownList.tsx`    | `@workspace/ui/components/dropdown-menu`                                         | **DONE** (commit `b5c3b7e7`) — controlled `DropdownMenu` with `CheckboxItem`/`Item`. Trigger via `asChild` on the existing chevron div. Required `luckysheet-mousedown-cancel` on `DropdownMenuContent` — see `FORTUNE-SHEET-OPEN-ISSUES.md` §1 |
-| `FilterMenu.tsx` select/checkbox items | `@workspace/ui/components/checkbox` + `popover`                                  | **DONE** (commit `b5c3b7e7`) — `Checkbox` for value list, `Popover` (virtual `PopoverAnchor`) for the panel + nested `Popover` for filter-by-color                                                         |
-| `FormulaSearch/index.tsx`              | `@workspace/ui/components/input`, `select`                                       | **DONE** — already shadcn-migrated in an earlier commit; broken-window `cn()` fix applied this sweep                                                                                                       |
-| `SheetOverlay` bottom add-row          | `@workspace/ui/components/input`, `button`                                       | **DONE** — `fortune-add-row-button` divs/spans → `Button`; raw `<input>` → `Input`; dead `.fortune-add-row-button` / `#luckysheet-bottom-add-row*` / `#luckysheet-bottom-return-top` rules dropped from `index.css` |
-
-### Already using shared UI
-
-- `ConditionFormat/ConditionRules.tsx` — `Button`, `Input`, `Checkbox`, `Label`, `Popover`, `ColorPicker`,
-  `Select`, `DialogHeader/Footer` (post `b5c3b7e7`)
-- `ConditionFormat/index.tsx` — `DropdownMenu*`
-- `ChangeColor/index.tsx` — `ColorPicker`
-- `ContextMenu/FilterMenu.tsx` — `Button`, `Checkbox`, `Input`, `Popover` (post `b5c3b7e7`)
-- `ContextMenu/index.tsx` — `Button` (color-picker triggers, post `b5c3b7e7`)
-- `CustomSort/index.tsx` — `Button`, `Checkbox`, `Label`, `RadioGroup`, `Select`, `DialogFooter` (post `b5c3b7e7`)
-- `DataVerification/index.tsx` — `Button`, `Checkbox`, `Input`, `Label`, `Select`, `DialogHeader/Footer` (post `b5c3b7e7`)
-- `DataVerification/DropdownList.tsx` — `DropdownMenu` + `DropdownMenuCheckboxItem`/`DropdownMenuItem` (post `b5c3b7e7`)
-- `FormatSearch/index.tsx` — `Button`, `Input`, `Label`, `cn`
-- `LinkEditCard/index.tsx` — `Button`, `Select` (post `b5c3b7e7`; CSS still pending)
-- `MenuBar/index.tsx` + menu files — `DropdownMenu*`, `Popover`, `ColorPicker`
-- `SearchReplace/index.tsx` — `Button`, `Input`, `Checkbox`, `Label`, `Tabs`
-- `SplitColumn/index.tsx` — `Button`, `Checkbox`, `Input`, `Label`, `DialogFooter` (post `b5c3b7e7`)
-- `context/modal.tsx` — `Dialog`, `DialogContent`
-- `hooks/useDialog.tsx` — `Button`, `DialogHeader/Title/Description/Footer`
-
----
-
-## 6. Component-Level Notes
-
-### `SVGIcon.tsx` / `SVGDefines.tsx`
-
-- `SVGIcon` is a thin wrapper around `<svg><use xlinkHref>` — **keep**, it's used everywhere
-- `SVGDefines.tsx` is 1254 lines of inline SVG symbol definitions — consider extracting to a separate SVG sprite file or
-  using Lucide icons where possible
-
-### `ContextMenu/` (index, FilterMenu)
-
-- ~~**CSS**: `index.css` (283 lines)~~ — deleted
-- ~~**BTN**: FilterMenu has 4 `button-basic` divs~~ — done in `b5c3b7e7`
-- ~~**Deferred:** `menuItemClass` Tailwind string duplicated~~ — done in `bdb71f94`; const extracted, 4 inline duplicates deduped
-- `FilterMenu.tsx` — fixed-position panel, manual collision detection, and flyout submenu replaced with shadcn `Popover` + nested `Popover` in `b5c3b7e7`. Remaining: `immer` `produce` patterns
-
-### `CustomSort/index.tsx`
-
-- **DONE** (commit `b5c3b7e7`) — `Select`, `Checkbox`, `RadioGroup`, `Button`, action buttons in `DialogFooter`
-- `fortune-sort` class name has no CSS definition — dead class, can be removed in a follow-up
-
-### `DataVerification/` (index, DropdownList, RangeDialog)
-
-- `index.tsx` — **DONE** — selects + range-pick buttons + dialog footer fully shadcn (commit `b5c3b7e7`)
-- `index.css` — **Delete** (no longer imported)
-- `DropdownList.tsx` — **DONE** — controlled shadcn `DropdownMenu`. See `FORTUNE-SHEET-OPEN-ISSUES.md` §1 for the portaled-events lesson
-- `RangeDialog.tsx` — **DONE** — uses `useDialog` + shadcn (commit `0b1f3de0`)
-
-### `FilterOption/index.tsx`
-
-- Uses `luckysheet-*` CSS class names from `SheetOverlay/index.css`
-- No own CSS file — depends on parent styles
-- Clean component, no major issues
-
-### `FormatSearch/index.tsx`
-
-- **DONE** — already uses shadcn `Button`, `Input`, `Label`, `cn`
-
-### `FormulaSearch/index.tsx`
-
-- **DONE** — buttons migrated to shadcn `Button`
-- Still uses inline border/color styles (`border-[#d4d4d4]`, `bg-[#8c89fe]`) — replace with theme tokens
-
-### `FxEditor/` (index, NameBox)
-
-- Uses inline Tailwind but with hardcoded colors (`border-[#d4d4d4]`, `border-[#e5e5e5]`)
-- `NameBox.tsx` exported as `LocationBox` but file is `NameBox.tsx` — fix naming inconsistency
-- Uses `SVGIcon` for fx icon
-- No CSS file — clean
-
-### `ImgBoxs/index.tsx`
-
-- **DONE** — rewritten as a clean Tailwind component. No Chinese strings, no Font Awesome
-  icons. Still references `luckysheet-modal-dialog-activeImage` (DOM-targeted from
-  `state/modules/image.ts`) and the `luckysheet-modal-dialog-content` cursor class — preserve
-  those when migrating `SheetOverlay/index.css`.
-
-### `LinkEditCard/` (index)
-
-- **DONE** — `<select>` → shadcn `Select` (`b5c3b7e7`); `index.css` deleted, all 182 lines migrated to Tailwind utilities + theme tokens inline; 2 raw `<input>` → shadcn `Input`. Only `fortune-link-modify-modal` + `range-selection-modal` classes preserved (DOM-targeted from `state/modules/hyperlink.ts`). Directory renamed from `LinkEidtCard` to `LinkEditCard`.
-- Complex component with 3 modes (toolbar, range-selection, editing)
-- Uses Lucide icons (`Copy`, `Pencil`, `Unlink`)
-
-### `NotationBoxes/index.tsx`
-
-- Inline styles for comment box positioning — required for dynamic positioning
-- Uses `ContentEditable` from SheetOverlay — good reuse
-- No CSS file — clean
-
-### `SearchReplace/index.tsx`
-
-- **DONE** — fully migrated to shadcn `Tabs`, `Button`, `Input`, `Checkbox`, `Label`
-
-### `Sheet/index.tsx`
-
-- Core canvas rendering component — no UI migration needed
-- Uses Tailwind flex utilities — clean
-- No CSS file
-
-### `SheetList/` (index, SheetListItem, SheetHiddenButton)
-
-- Uses Tailwind with hardcoded colors (`hover:bg-[#efefef]`, `hover:bg-[#d0d0d0]`)
-- Replace with theme tokens (`hover:bg-accent`, `hover:bg-muted`)
-- Still uses `fortune-context-menu luckysheet-cols-menu` from ContextMenu CSS
-- `SheetHiddenButton` uses `SVGIcon`
-
-### `SheetOverlay/` (index, ColumnHeader, RowHeader, InputBox, ContentEditable, ScrollBar, FormulaHint, FormulaSearch)
-
-- **CSS**: `index.css` (957 lines) — the largest CSS file, shared by many components
-- Core spreadsheet interaction layer — migration must be careful
-- `ContentEditable.tsx` — custom contenteditable div, **keep**
-- `FormulaSearch/` and `FormulaHint/` — formula autocomplete UI, uses inline styles
-- `ScrollBar/` — custom scrollbar with its own CSS
-
-### `SheetTab/` (index, SheetItem)
-
-- **CSS**: `index.css` (281 lines) — tab area, active states, scroll buttons
-- Uses `luckysheet-*` class names extensively
-- `SheetItem.tsx` has drag-and-drop support, context menu, inline editing
-
-### `SplitColumn/index.tsx`
-
-- **DONE** (commit `b5c3b7e7`) — `Checkbox`, `Input`, `Button`, action buttons in `DialogFooter`
-- `getRegStr` in `state/modules/splitColumn.ts` no longer walks `.childNodes[0].checked` — takes `(selected: ReadonlySet<string>, otherValue: string)` from React state (Radix `Checkbox` renders as `<button>`, not `<input>`)
-
-### `LocationCondition/index.tsx`
-
-- **DONE** (commit `b5c3b7e7`) — `Checkbox`, `RadioGroup`, `Label`, `Button`, action buttons in `DialogFooter`. 5 separate radios collapsed into a single `RadioGroup` (they had unique `name` attrs before so didn't actually form a group). Inline `style={{ color: '#666' }}` replaced with `peer-disabled:opacity-50`
-
-### `MenuBar/` (index, edit-menu, view-menu, insert-menu, format-menu, data-menu, CustomBorder)
-
-- Replaced the old `Toolbar/` (deleted 2026-04-26). Five `DropdownMenu`s for Edit / View / Insert / Format / Data.
-- Uses `DropdownMenu*` from shadcn — same primitives as `ConditionFormat/index.tsx`
-- `CustomBorder.tsx` — border style picker, moved from `Toolbar/CustomBorder.tsx`; uses shadcn `Popover`
-- `luckysheet-mousedown-cancel` must be on any `DropdownMenuSubContent` inside `cellArea` — same rule as
-  `DataVerification/DropdownList.tsx` (see `FORTUNE-SHEET-OPEN-ISSUES.md` §1)
-
-### `Workbook/` (index, api, CSS)
-
-- `index.tsx` — main workbook component, handles context/state
-- `api.ts` — workbook API bridge functions
-- `index.css` — 56 lines of container layout — easy migration
-- Core component — minimal UI changes needed
+- **Cell editing & paste** (InputBox + FxEditor + Workbook): type a value,
+  paste a multi-line range, formula entry, switch sheets mid-edit, Esc to
+  cancel.
+- **Sheet redraw + freeze**: scroll, resize, freeze a row + column, add
+  columns past the freeze line.
+- **Selection box** (post-`useExhaustiveDependencies` cleanup): switch sheets,
+  verify a fresh sheet gets default A1 but a sheet with prior selection keeps
+  it.
+- **Drag-fill** (post-lodash-to-es-toolkit migration): regression caught by
+  reviewer once already.
+- **Data-verification dropdown** — multi-select toggle (single-select verified
+  2026-04-25).
+- **Filter menu** — apply filter, hide values, re-open filter; by-color hover
+  should not flicker on the `sideOffset` gap (120ms close-debounce).
+- **CustomSort / SplitColumn** dialogs (post `b5c3b7e7`): walk through
+  select / checkbox / radio interactions, confirm `DialogFooter` layout.
+- **Link card** (`LinkEditCard:99`): hyperlink a cell, click another with a
+  different hyperlink, verify the card resets the form.
+- **Sheet tab scroll buttons** (`SheetTab:41`): add many sheets until the tab
+  bar overflows, verify scroll arrows appear.
+- **Right-click insert/delete row & column**: single-row insert; multi-select
+  2+ rows → "noMulti" alert; delete-all-rows → alert.
+- **Sheet tab operations**: rename, delete (verify can't delete last sheet),
+  hover/active styling.
+- **Multi-language removal regressions** (commit `edb89d78`): insert N rows /
+  columns word order; data validation `failureText` / `hintText` (esp.
+  `text_length` previously silent on `lang === "en"`); status-bar sum/avg
+  shows "1234.56" not "w0.00"; touch-mode scrolling.
+- **Visual sanity**: selection box border/color, marching ants on Ctrl+C copy.
+- **Server-side formula CF** (commit `2a38e2aa`): export a sheet with a
+  formula CF rule (e.g. `=A1>10` over a range) to HTML/PDF. Verify cells fire
+  per-cell after relative-ref shifting; absolute `$A$1` rules anchor; cross-
+  sheet refs resolve. Engine + html-export tests cover this; manual export
+  smoke is the gap.
 
 ---
 
-## 7. Hooks Audit
+## Architecture & invariants
 
-| Hook              | File                       | Used By        | Notes                                                      |
-|-------------------|----------------------------|----------------|------------------------------------------------------------|
-| `useDialog`       | `hooks/useDialog.tsx`      | 10+ components | Well-designed, wraps `ModalContext`. **Keep.**             |
-| `useAlert`        | `hooks/useAlert.tsx`       | 4 components   | Thin wrapper on `useDialog` for ok/yesno alerts. **Keep.** |
-| `useOutsideClick` | `hooks/useOutsideClick.ts` | 5 components   | Standard pattern. **Keep.**                                |
-| `usePrevious`     | `hooks/usePrevious.tsx`    | 2 components   | Standard ref-based hook. **Keep.**                         |
+### Engine boundary
 
----
+`engine/` is pure, DOM-free, and has zero imports from `state/`. State imports
+freely from engine. Server-side consumers (`apps/api`) import from the
+`@workspace/fortune-sheet/engine` subpath export, which restricts type-checking
+to the engine subset — keeps `verbatimModuleSyntax` + `noUnusedParameters`
+happy.
 
-## 8. Context Audit
+The boundary is deliberate. Pure formula evaluation, CF rule evaluation, ref
+shifting (`functionCopy`), parsing, dependency graph, formatting — all engine.
+Context-coupled orchestration (`execFunctionGroup`, `groupValuesRefresh`,
+`insertUpdateFunctionGroup`, `getAllFunctionGroup`) lives in
+`state/modules/formula-exec.ts`. The `formula-ui.ts` barrel re-exports both so
+UI consumers don't see the split.
 
-| File                | Notes                                                                                 |
-|---------------------|---------------------------------------------------------------------------------------|
-| `context/index.ts`  | `WorkbookContext` — core React context for fortune-sheet state. **Keep.**             |
-| `context/modal.tsx` | `ModalContext` + `ModalProvider` — dialog management. Uses shadcn `Dialog`. **Keep.** |
+### Cell / Sheet invariants for external producers
 
----
+When generating fortune-sheet `Cell` / `Sheet` data outside the package
+(xlsx importers, migrations, seed data), three invariants are assumed but not
+documented by the types:
 
-## 9. Priority Order
+1. **`ct.fa` must be set whenever `ct` is set.** `setCellValue` calls
+   `update(cell.ct.fa!, v_p)` → `SSF.format(undefined, n)` returns `""`,
+   blanking the cell on recalc. Default to `'General'`.
+2. **`sheet.calcChain` must be populated when cells have `f`.**
+   `setFormulaCellInfoMap` early-returns on null `calcChain`, leaving
+   `formulaCellInfoMap` empty. `Workbook/index.tsx` derives `calcChain` from
+   data on mount and runs `api.calculateFormula(draftCtx)` once to reconcile
+   imports — but importers should still populate it.
+3. **`api.calculateFormula` relies on `ctx.currentSheetId`.** Call
+   `initSheetIndex(draftCtx)` first when calling it in the init produce.
 
-### Done
+### DOM selector coupling
 
-- ~~Delete dead CSS files~~ — 6 of 9 CSS files deleted (ContextMenu, Workbook, DataVerification, SearchReplace, ConditionFormat, LinkEditCard)
-- ~~Replace `button-basic` divs with shadcn `Button`~~ — all migrated
-- ~~Fix `NameBox.tsx` export name~~ — done
-- ~~Replace hardcoded colors in components~~ — done in .tsx files (still present in remaining .css)
-- ~~Replace native `<input>`/`<select>`/`<checkbox>` with shadcn equivalents in CustomSort, FilterMenu~~ — done
-- ~~`FormulaSearch`, `ZoomControl`, `SheetOverlay` bottom-add-row shadcn migrations~~ — done
-- ~~Rename `LinkEidtCard/` → `LinkEditCard/`~~ — done (`dd46088a` + `3b5642a2`)
-- ~~9 `<div role="button">` pseudo-buttons → real `<button type="button">`~~ — done (`91e28493`)
-- ~~Dedupe `ConditionFormat.ts` vs `conditionalFormat.ts`~~ — merged into `conditionFormat.ts` (camelCase). `cfSplitRange` properly typed with `SingleRange`, dead code removed, boundary types tightened (`DataBar` discriminated union, `CellFormatStyle`, `ComputeMap`)
-- ~~`@workspace/fortune-sheet/engine` subpath export~~ — done in commit `1b2b36a0`. `apps/api/tsconfig.json` `paths` kludge removed; consumers import from `@workspace/fortune-sheet/engine` directly.
-- ~~`colorGradation` `format.cellColor`-on-array bug~~ — fixed in commit `1b2b36a0`. The if-arm now mirrors the else-arm's positional access; both arms compute the gradient color once via a shared helper. Regression tests in `engine/test/conditional-format.test.ts` and `apps/api/src/test/sheets-html-export.test.ts`.
-- ~~`getCellTextInfo` redundant `ctx?` parameter~~ — fixed in commit `1b2b36a0`. Parameter dropped; `getFontSet` now requires `Context`. All 5 call sites use `sheetCtx` consistently — locale fonts no longer silently disabled at the 3 sites that previously omitted the 5th argument.
-- ~~Translate Chinese comments to English~~ — done in commits `1b2b36a0` + `2608d5f5`. Remaining CJK is in test fixtures, measurement glyphs (`"田"`), and the Chinese number/weekday detection literals in `dropCell.ts` (functional, keep).
-- ~~Mechanical broken-windows sweep~~ — done in commit `2608d5f5`. Dropped 22 commented `console.log` debug lines, 11-line dead fill-type comment, jQuery legacy comments, stale ReferenceError comments, unnecessary `try/catch` around internal calls. `substr` → `slice`, `indexOf > -1` → `includes` modernizations.
-- ~~Last `export default` in components/hooks/state~~ — `state/locale/en.ts` converted in commit `d0b6d564` (2026-04-27). Remaining `export default` lines are all in `engine/parser/` (slated for regeneration from upstream jison, not hand-edited).
-- ~~Drop multi-language support entirely~~ — done in commit `edb89d78` (2026-04-27). Eigen ships English only. `Settings.lang`, `ctx.lang`, the browser-language fallback in Workbook init, and `calcSelectionInfo`'s `lang?` parameter are all gone. `dataVerification.ts` collapsed three 6-way `if (lang === ...)` blocks (in `getFailureText`, `getHintText`, and the `cellFocus` HTML prefixes) into single English paths — net −365 LOC in that file alone, and the missing `text_length` case in `getHintText` was filled in along the way. `ContextMenu/index.tsx` lost the zh/non-zh word-order branches in the insert-row / insert-column popovers. `context.ts` shed the 5 unused option-label dictionaries (zh, zh-TW, es, hi, ru); `optionLabel_en` renamed to `optionLabel: Record<string, string>` (drops `any`). `calcSelectionInfo` now hardcodes `"0.00"` — previously defaulted to `"w0.00"` (Chinese number format) for any non-zh lang because `lang` was always null in this codebase, so most users saw wrong output.
-- ~~Broken-window sweep round 2~~ — done in commit `84c3e272` (2026-04-27). `state/modules/mobile.ts` lost unused `ctx` params on `handleOverlayTouchStart` / `handleOverlayTouchMove`; `SheetOverlay/index.tsx` simplified the matching call sites (the `setContext` wrapper around `onTouchStart` was wrapping a pure `globalCache` mutation, dropped). `state/api/sheet.ts` fixed a dead `isNumber(string)` branch on the Excel-style "(n)" copy-suffix bump (es-toolkit's `isNumber`, like lodash's, only accepts the number primitive — always returned false on the substring), now uses `Number.parseInt` + `Number.isFinite`. Two stray commented `console.log` debug lines dropped from `state/utils/index.ts` and `state/modules/inline-string.ts`.
+`state/` has ~365 references to `luckysheet-*` class names and IDs as DOM
+selectors (`getElementById`, `querySelector`, `getElementsByClassName`).
+Removing a selector-referenced class during CSS migration silently breaks
+behavior. Always grep `state/` for the class first.
 
-### Next — Medium effort
-
-1. Broken-window sweep through `state/` — opportunistic `any` / `@ts-ignore` / dead-code cleanup
-   as files are touched, to shrink debt before biome enablement.
-
-### Later — Major effort
-
-6. Migrate `SheetTab/index.css` to Tailwind (280 lines)
-7. Migrate `SheetOverlay/index.css` to Tailwind (882 lines) — split into sub-tasks
-8. Migrate `SheetOverlay/ScrollBar/index.css` to Tailwind (40 lines)
-9. Remove `css.d.ts` once all CSS imports eliminated
-
----
-
-## 10. State Directory (biome excluded)
-
-The `state/` directory (renamed from `core/` during the engine extraction) is currently excluded from
-biome linting. It holds the context-coupled runtime — canvas renderer, event handlers, modules, public
-API bridge. Outstanding work:
-
-- ~~**Lodash removal**~~: Done. Migrated to `es-toolkit/compat` with named imports and conservative
-  native replacements (`Array.isArray`, `Object.keys/entries`, `.map/.filter`, etc.) where target
-  types were unambiguous. Null-sensitive calls like `trim(textContent)` stay on es-toolkit to
-  preserve lodash's null-safety.
-- **`any` annotations**: ~210 across `state/` (30 in `rowcol.ts` alone). Tightening enables strictness.
-- **`@ts-ignore` debt**: ~80 directives across `state/` + `components/` — each hides a typing gap.
-- ~~**`ConditionFormat.ts` (1,768 lines) vs `conditionalFormat.ts` (578 lines)**~~: done.
-  `conditionalFormat.ts` deleted (its only function `cfSplitRange` was a duplicate of
-  `CFSplitRange` with proper `SingleRange` typing). `ConditionFormat.ts` renamed to
-  `conditionFormat.ts` (camelCase to match neighbors), `CFSplitRange` renamed to
-  `cfSplitRange` and properly typed. Dead code removed (`getHistoryRules`,
-  `getCurrentRules`, four commented blocks). Cache/lookup boundary types tightened
-  (`DataBar` discriminated union, `CellFormatStyle`, `ComputeMap`). All importers
-  updated (cell, dropCell, filter, moveCells, selection, toolbar, paste).
-- **Enable biome on `state/`**: now unblocked; ~210 `any` annotations will surface as the main
-  fix-up work.
-- **Enable biome on `components/`**: **done** — covered by biome lint/format. The
-  `useExhaustiveDependencies` rule is on (no per-file override) and all 36 hook sites
-  surfaced by the original audit are either fixed (real missing deps added; helpers hoisted
-  to module scope; one-off callbacks wrapped in `useCallback`) or carry a permanent
-  `biome-ignore` with a per-site reason. See `docs/FORTUNE-SHEET-EFFECT-DEPS-AUDIT.md`.
-
-The old monolithic `mouse.ts` (5k+ lines) and `formula.ts` (3.5k lines) have already been split —
-`state/events/mouse.ts` is now a 5-line re-export barrel, and `formula.ts` is gone (replaced by
-`formula-cache`, `formula-editor`, `formula-exec`, `formula-range`, `formula-ui`, `formulaHelper`).
-
-## 11. DOM Selector Coupling
-
-The `state/` code has ~365 references to `luckysheet-*` class names and IDs, many used as DOM selectors
-(`getElementById`, `querySelector`, `getElementsByClassName`). Before removing any class name during CSS
-migration, grep `state/` for the class — removing a selector-referenced class silently breaks behavior.
-
-Key IDs/classes that MUST be preserved on component elements:
-
+Critical IDs/classes that MUST be preserved:
 - `fortune-cell-selected-move` (`moveCells.ts`)
 - `luckysheet-modal-dialog-activeImage` (`image.ts`)
 - `luckysheet-formula-text-lpar` (`formula-exec.ts`)
 - `fortune-search-replace` (`searchReplace.ts`)
 - `fortune-freeze-drag-line` (`mouse-*.ts`)
-- Many `luckysheet-cell-*` selection classes (165 references in `mouse-cell.ts`)
+- 165 `luckysheet-cell-*` selection classes in `mouse-cell.ts`
 
-## 12. Dialog System — intentional bypasses
+### Dialog system intentional bypasses
 
-These components use absolute-positioned divs instead of `useDialog`. This is intentional — they need
-drag/resize behavior or cell-anchored positioning the dialog system doesn't support:
+These components use absolute-positioned divs instead of `useDialog`. Required
+for drag/resize behavior or cell-anchored positioning:
 
 - `ImgBoxs` — image drag/resize with 8-point handles
-- `NotationBoxes` — comment boxes anchored to cells, draggable/resizable
 - `LinkEditCard` — cell-relative positioning
 - `DataVerification/DropdownList` — cell-attached dropdown
 
-## 13. Keyboard Handlers
+### Keyboard handlers
 
-All keyboard shortcuts are manual implementations in `state/events/keyboard.ts` (~950 lines). Most are
-too complex/stateful for `@tanstack/react-hotkeys` (arrow navigation with hidden row/col awareness,
-formula editing, etc.). Only Ctrl+Z/Y (undo/redo) might be extractable.
+All shortcuts are manual implementations in `state/events/keyboard.ts` (~950
+LOC). Most are too complex/stateful for `@tanstack/react-hotkeys` (arrow
+navigation with hidden row/col awareness, formula editing). Only Ctrl+Z/Y
+(undo/redo) might be extractable.
 
-## 14. Package Location
+### Floating UI inside `cellArea`
 
-This package is only used by `apps/sheets/`. Could be moved to `apps/sheets/src/fortune-sheet/` to make
-the dependency explicit. Low priority — a rename-only change with no code impact.
+Any shadcn floating UI (`DropdownMenuContent`, `DropdownMenuSubContent`,
+`PopoverContent`, etc.) rendered as a descendant of `cellArea` must put
+`luckysheet-mousedown-cancel` on its portaled content. Radix portals out of
+the cellArea DOM, but React synthetic events still bubble through the React
+tree across portals — without the class, `cellAreaMouseDown` (an ancestor
+`onMouseDown` in `SheetOverlay`) fires before the menu's `onSelect`, moving
+the selection to the cell beneath the popup. The DOM-level guard at
+`SheetOverlay/index.tsx:60` (`e.target.closest('.luckysheet-mousedown-cancel')`)
+walks the DOM (not the React tree) and short-circuits selection movement.
+
+`FilterMenu` is exempt — it mounts at the `Workbook` root, sibling of
+`<Sheet />`, not a `cellArea` descendant.
+
+### Package location
+
+Only `apps/sheets/` consumes the package. Could move to
+`apps/sheets/src/fortune-sheet/` to make the dependency explicit. Low
+priority — rename-only.
+
+---
+
+## Recently shipped
+
+### 2026-04-28
+
+- **`8c8f4436`**: doc updates — formula CF wiring marked shipped in `SHEETS.md`;
+  `RENDERING.md` `Toolbar/` → `MenuBar/*` and `LinkEidtCard` typo → `LinkEditCard`.
+- **`2a38e2aa`**: ported `functionCopy` (formula relative-ref shifter) from
+  `state/modules/formula-range.ts` (290 LOC removed) to a new
+  `engine/formula-shift.ts` (192 LOC). Modernization: dropped unused `ctx:
+  Context` first param (state-side dead arg threaded through every recursive
+  call); `substr` → `charAt`/`slice`; dead `bracket`/`comma`/`squote` state
+  tracking removed; `mode` narrowed from `string` to
+  `'up'|'down'|'left'|'right'`; `down/up/left/rightparam` wrappers folded into
+  `shiftRef(mode[0], …)`; `isfreezonFuc` renamed `detectAbsolute` and exported.
+  State callers updated in `paste.ts` (4 sites), `conditionFormat.ts` (2),
+  `sort.ts` (2), `dropCell.ts` (4) — all dropped the dead `ctx` arg. Latent
+  bug fixed: switching from state's `columnCharToIndex` (returns NaN) to
+  engine's `columnLabelToIndex` (returns -1) plus continuing to test
+  missing-axis with `Number.isNaN` would have silently corrupted row-only /
+  col-only ranges (`=SUM(1:3)` shifted right → `=SUM(A1:A3)`, fabricating a
+  column). Fix: derive `rowsMissing`/`colsMissing` from the source substrings
+  up front. Engine now has zero imports from state. Wired formula CF in
+  `apps/api/src/lib/export/sheets/html.ts`: `renderSheetsHtml` builds one
+  `FormulaEngine` + `createArrayResolver` per export (cross-sheet refs work),
+  threads them to `renderSheet`, which uses new helper
+  `buildCfFormulaEvaluator(engine, resolver, sheetId)` to produce the per-sheet
+  `evaluateFormula` callback. PDF inherits this for free since `pdf.ts` reuses
+  `renderSheetsHtml`. New tests: `engine/test/formula-shift.test.ts` (21
+  cases), `apps/api/src/test/sheets-html-export.test.ts` (3 cases).
+
+### 2026-04-27
+
+- **`edb89d78`**: dropped multi-language plumbing entirely. `Settings.lang`,
+  `ctx.lang`, the browser-language fallback in `Workbook/index.tsx`, and
+  `calcSelectionInfo`'s `lang?` parameter all gone. `dataVerification.ts`
+  collapsed three 6-way `if (lang === ...)` blocks (in `getFailureText`,
+  `getHintText`, and the `cellFocus` HTML prefixes) to single English paths —
+  net −365 LOC in that file alone, missing `text_length` case in `getHintText`
+  fixed in passing. Net −512 LOC across 5 files.
+- **`d0b6d564`**: `state/locale/en.ts` → named export. Last live `export
+  default` in `components/` / `hooks/` / `state/` (only `engine/parser/`
+  remains).
+- **`84c3e272`**: broken-window sweep. `state/modules/mobile.ts` lost unused
+  `ctx` params on touch handlers; `state/api/sheet.ts` fixed a dead
+  `isNumber(string)` branch on the Excel-style "(n)" copy-suffix bump (always
+  returned false on the substring; now uses `Number.parseInt` +
+  `Number.isFinite`). Two stray commented `console.log` debug lines dropped.
+
+### 2026-04-26
+
+- **`09b3edbf` … `f3b4b71e`**: Toolbar → MenuBar rewrite. Deleted
+  `components/Toolbar/` (~1564 LOC) plus `state/modules/screenshot.ts`,
+  `state/modules/locationCondition.ts`, `components/LocationCondition/`. New
+  `components/MenuBar/` (Edit / View / Insert / Format / Data + CustomBorder).
+  Wired previously missing UI: text Rotation submenu, CF Color Scales (12
+  presets), CF Data Bars (6 solid presets). Net ~−1500 LOC. Spec:
+  [`PROPOSAL_FORTUNE_SHEET_TOOLBAR.md`](PROPOSAL_FORTUNE_SHEET_TOOLBAR.md).
+- **`24e82652`**: zoom feature removed entirely. Browser zoom (Cmd/Ctrl ±)
+  covers the use case. ~62 `zoomRatio` refs purged across 27 files. Net −490
+  LOC. Surfaced one follow-up — `text.ts::getCellTextInfo` had an unused
+  optional `ctx?` param silently disabling locale fonts at 3 of 5 call sites,
+  fixed in `1b2b36a0`.
+- **`134bd1d1`**: pure CF eval extracted to `engine/conditional-format.ts`
+  (1236 LOC). Latent bug fixed in pass: `occurrenceDate` was comparing
+  formatted `.m` strings to numeric serials lexicographically; now compares
+  numeric `.v` serials.
+- **`5856853c`**: CF wired into HTML/PDF export (`textColor`/`cellColor` +
+  `dataBar` rendering). Formula-based CF rules deferred (now done in
+  `2a38e2aa`).
+- **`1b2b36a0` + `2608d5f5` + `2e1ab223` + `7b5ad44c`**: engine cleanup batch.
+  `@workspace/fortune-sheet/engine` subpath export added. `colorGradation`
+  `format.cellColor`-on-array bug fixed at all 8 sites. `applyCellStyle`
+  helper extracted (14× dedupe). CF evaluator: 1236 → 985 LOC. `bc2a21ec`:
+  `getColorGradation` accepts `#rrggbb` hex stops.
+
+### 2026-04-25
+
+- **`b5c3b7e7`**: shadcn cleanup pass. DataVerification dropdown click-through
+  bug fixed (`DropdownList` rewritten as controlled shadcn `DropdownMenu`;
+  `luckysheet-mousedown-cancel` required on portaled content — see
+  [Floating UI inside `cellArea`](#floating-ui-inside-cellarea)). All
+  `<select>` / `<input type="checkbox">` / `<input type="radio">` migrated to
+  shadcn equivalents. ConditionFormat dedup, FilterMenu Popover refactor,
+  CustomSort / SplitColumn / LocationCondition dialog migrations. lodash
+  fully removed; `es-toolkit/compat` is the only utils dep.
+- **`bdb71f94` + `91e28493`**: shadcn follow-up sweep. `LinkEditCard` CSS to
+  Tailwind (deleted `index.css`); `SheetOverlay` bottom-add-row; ZoomControl
+  Popover. 9 `<div role="button">` → real `<button>`. Net −290 LOC.
+
+### Earlier
+
+Engine extraction: `formula-engine.ts`, `cell-resolver.ts`,
+`dependency-graph.ts` (with cycle detection), `format.ts` (numfmt-backed),
+`a1-notation.ts`. `formula.ts` (3550 LOC) and `mouse.ts` (5k+ LOC) split into
+focused modules — `state/events/mouse.ts` is now a 5-line re-export barrel.
+`core/` renamed to `state/`. `formula-parser/` moved to `engine/parser/`.
+Biome on `components/` enabled; `useExhaustiveDependencies` rule on. CSS files
+deleted: `Workbook/`, `ContextMenu/`, `DataVerification/`, `SearchReplace/`,
+`ConditionFormat/`, `LinkEditCard/`.
