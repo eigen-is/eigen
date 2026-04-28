@@ -23,6 +23,7 @@ export function SetupWizard() {
 
     const [domain, setDomain] = useState('');
     const [domainFromEnv, setDomainFromEnv] = useState(false);
+    const [mailDomain, setMailDomain] = useState('');
     const [orgName, setOrgName] = useState('');
     const [storageType, setStorageType] = useState<ServerStorageType>('local-fullnames');
     const [s3Config, setS3Config] = useState<S3Config>(EMPTY_S3);
@@ -38,7 +39,7 @@ export function SetupWizard() {
         setupApi.status
             .get()
             .then((res) => {
-                const data = res.data as { setupRequired: boolean; domain?: string };
+                const data = res.data as { setupRequired: boolean; domain?: string; mailDomain?: string };
                 if (!data?.setupRequired) {
                     setStep('already-setup');
                 } else {
@@ -46,6 +47,7 @@ export function SetupWizard() {
                         setDomain(data.domain === 'localhost' ? 'eigen.localhost' : data.domain);
                         setDomainFromEnv(data.domain !== 'localhost');
                     }
+                    setMailDomain(data.mailDomain || data.domain || '');
                     setStep('config');
                 }
             })
@@ -66,7 +68,7 @@ export function SetupWizard() {
                 domain,
                 orgName,
                 storageType,
-                adminEmail: `${adminUsername}@${domain}`,
+                adminEmail: `${adminUsername}@${mailDomain || domain}`,
                 adminPassword,
                 adminName,
                 ...(storageType === 's3'
@@ -235,7 +237,7 @@ export function SetupWizard() {
                                         className="rounded-r-none"
                                     />
                                     <span className="inline-flex items-center px-3 rounded-r-md border border-l-0 border-input bg-muted text-muted-foreground text-sm">
-                                        @{domain}
+                                        @{mailDomain || domain}
                                     </span>
                                 </div>
                             </div>

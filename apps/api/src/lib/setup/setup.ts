@@ -6,6 +6,7 @@ import { auth } from '../auth/auth';
 import { getServerDataPath } from '../config/paths';
 import {
     isSetupRequired as checkSetupRequired,
+    getMailDomain,
     getServerConfig,
     type ServerConfig,
     saveServerConfig,
@@ -212,16 +213,25 @@ export type SetupResult = {
     user?: { id: string; email: string; name: string };
 };
 
-export async function getSetupStatus(): Promise<{ setupRequired: boolean; domain?: string }> {
+export async function getSetupStatus(): Promise<{
+    setupRequired: boolean;
+    domain?: string;
+    mailDomain?: string;
+}> {
     const setupRequired = isSetupRequired();
 
     if (!setupRequired) {
         const config = getServerConfig();
-        return { setupRequired: false, domain: config?.domain };
+        return { setupRequired: false, domain: config?.domain, mailDomain: getMailDomain() };
     }
 
     const envDomain = process.env['DOMAIN'];
-    return { setupRequired: true, ...(envDomain ? { domain: envDomain } : {}) };
+    const envMailDomain = process.env['MAIL_DOMAIN'] || envDomain;
+    return {
+        setupRequired: true,
+        ...(envDomain ? { domain: envDomain } : {}),
+        ...(envMailDomain ? { mailDomain: envMailDomain } : {}),
+    };
 }
 
 export async function completeSetup(input: SetupInput): Promise<SetupResult> {

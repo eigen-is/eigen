@@ -8,7 +8,8 @@ export function useContactSuggestions(query: string, onlyEigenIsMails: boolean =
     const { data: contacts, isLoading: contactsLoading } = useContacts();
     const { data: myTeams } = useMyTeams();
     const { data: config } = usePublicConfig();
-    const domain = config?.domain ?? 'eigen.is';
+    // 'Internal' suggestions are scoped by the mail domain — same suffix the user's address has.
+    const domain = config?.mailDomain ?? config?.domain ?? 'eigen.is';
 
     // Collect all unique team members across teams, deduped by email
     const teamMembers = useMemo(() => {
