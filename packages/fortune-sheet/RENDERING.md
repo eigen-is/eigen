@@ -22,7 +22,6 @@
           <InputBox>                            SheetOverlay/InputBox.tsx   (ContentEditable over canvas)
           <FilterOptions>                       FilterOption/index.tsx
           <ImgBoxs>                             ImgBoxs/index.tsx
-          <NotationBoxes>                       NotationBoxes/index.tsx     (React + arrow canvas)
           <LinkEditCard>                        LinkEditCard/index.tsx
           <DropDownList>                        DataVerification/DropdownList.tsx
       <SheetTab>                                SheetTab/index.tsx         (React)
@@ -30,7 +29,6 @@
       <ContextMenu>                             ContextMenu/index.tsx      (React + shadcn DropdownMenu)
       <FilterMenu>                              ContextMenu/FilterMenu.tsx
       <SheetTabContextMenu>                     ContextMenu/SheetTab.tsx
-      <SheetList>                               SheetList/index.tsx
       backdrop div (z-1003)
 ```
 
@@ -144,15 +142,12 @@ Small divs positioned over filtered column header cells:
 - Inactive images: `z-index: 200`, just `<img>` in a bordered div
 - ID: `luckysheet-modal-dialog-activeImage` (queried by `state/modules/image.ts`)
 
-### 8. Comments (React DOM + Canvas arrow)
+### 8. Comments
 
-**File**: `NotationBoxes/index.tsx`
-
-- Comment box: yellow div (`rgb(255,255,225)`) with black border, ContentEditable text
-- Arrow: `<canvas>` element draws a connector line from cell to comment box
-- Normal: `z-index: 100`, editing: `z-index: 200`
-- 8 resize handles + 4 move indicators when editing
-- Box IDs: `comment-box-{r}{c}` (queried by `state/modules/comment.ts`)
+The fortune-sheet built-in comment system (NotationBoxes + `state/modules/comment.ts`) has been
+fully removed. Comments now anchor to cells via `commentChatNames?: string[]` on `Cell` and use
+the shared Eigen comment infrastructure — see [`docs/SHEETS.md` § Comments](../../docs/SHEETS.md#comments)
+and [`docs/COMMENTS.md`](../../docs/COMMENTS.md).
 
 ### 9. Hyperlink Editor (React DOM)
 
@@ -195,7 +190,7 @@ Pure React UI — no overlays. Google-Sheets-style menu bar (Edit / View / Inser
 - shadcn `Popover` for `CustomBorder` (border style picker)
 - Tailwind styling
 - `luckysheet-mousedown-cancel` must be on any `DropdownMenuSubContent` rendered inside
-  `cellArea` (see `docs/FORTUNE-SHEET-OPEN-ISSUES.md` §1)
+  `cellArea` (see [`docs/TODO-FORTUNE-SHEETS.md` § Floating UI inside `cellArea`](../../docs/TODO-FORTUNE-SHEETS.md#floating-ui-inside-cellarea))
 
 ### 13. Sheet Tabs (React)
 
@@ -230,8 +225,7 @@ Uses native browser scroll:
 | 16 | Move / extend indicators | SheetOverlay |
 | 18 | Copy selection borders (dashed) | SheetOverlay |
 | 19 | Cell editor (InputBox) | SheetOverlay/InputBox |
-| 100 | Comments + arrows (normal) | NotationBoxes |
-| 200 | Images (inactive) / Comments (editing) | ImgBoxs / NotationBoxes |
+| 200 | Images (inactive) | ImgBoxs |
 | 300 | Active image (with resize handles) | ImgBoxs |
 | 1003 | Context menu backdrop | Workbook |
 | 10000 | Data verification dropdown | DataVerification/DropdownList |
