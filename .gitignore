@@ -62,6 +62,7 @@ next-env.d.ts
 .worktrees/
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+.claude/worktrees/
 .env.eigen
 /docs/superpowers/
 /data/guest/
