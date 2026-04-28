@@ -175,8 +175,9 @@ if (useHostProxy) {
     const nginxConf = `# Eigen reverse-proxy snippet for nginx.
 # Symlink: ln -s ${resolve(NGINX_OUT)} /etc/nginx/sites-enabled/eigen.conf
 server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
     server_name ${domain};
 
     ssl_certificate     /etc/letsencrypt/live/${domain}/fullchain.pem;
