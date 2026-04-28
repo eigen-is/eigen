@@ -6,7 +6,7 @@
 <Workbook>                                      Workbook/index.tsx
   <WorkbookContext.Provider>
     <ModalProvider>                              context/modal.tsx
-      <Toolbar>                                 Toolbar/index.tsx          (React + shadcn)
+      <MenuBar>                                 MenuBar/index.tsx          (React + shadcn)
       <FxEditor>                                FxEditor/index.tsx         (React + ContentEditable)
       <Sheet>                                   Sheet/index.tsx
         <canvas>                                                           (HTML5 Canvas — cells, grid, borders)
@@ -23,7 +23,7 @@
           <FilterOptions>                       FilterOption/index.tsx
           <ImgBoxs>                             ImgBoxs/index.tsx
           <NotationBoxes>                       NotationBoxes/index.tsx     (React + arrow canvas)
-          <LinkEditCard>                        LinkEidtCard/index.tsx
+          <LinkEditCard>                        LinkEditCard/index.tsx
           <DropDownList>                        DataVerification/DropdownList.tsx
       <SheetTab>                                SheetTab/index.tsx         (React)
         <SheetItem> per sheet                   SheetTab/SheetItem.tsx
@@ -156,7 +156,7 @@ Small divs positioned over filtered column header cells:
 
 ### 9. Hyperlink Editor (React DOM)
 
-**File**: `LinkEidtCard/index.tsx`
+**File**: `LinkEditCard/index.tsx`
 
 Three modes:
 1. **Read-only toolbar**: shows link text + copy/edit/delete buttons, positioned near cell
@@ -184,15 +184,18 @@ Positioned absolutely near the active cell. Class: `.fortune-link-modify-modal` 
 - Sheet tab menu: rename, delete, hide, show, color options
 - Backdrop div at `z-index: 1003` captures outside clicks
 
-### 12. Toolbar (React + shadcn)
+### 12. MenuBar (React + shadcn)
 
-**File**: `Toolbar/index.tsx`
+**Files**: `MenuBar/index.tsx`, `MenuBar/edit-menu.tsx`, `MenuBar/view-menu.tsx`,
+`MenuBar/insert-menu.tsx`, `MenuBar/format-menu.tsx`, `MenuBar/data-menu.tsx`,
+`MenuBar/CustomBorder.tsx`
 
-Pure React UI — no overlays:
-- Uses `Toolbar` from `@workspace/ui`
-- `TooltipButton` components with Lucide/SVG icons
-- shadcn `DropdownMenu` for formatting submenus
+Pure React UI — no overlays. Google-Sheets-style menu bar (Edit / View / Insert / Format / Data):
+- shadcn `DropdownMenu` for each top-level menu
+- shadcn `Popover` for `CustomBorder` (border style picker)
 - Tailwind styling
+- `luckysheet-mousedown-cancel` must be on any `DropdownMenuSubContent` rendered inside
+  `cellArea` (see `docs/FORTUNE-SHEET-OPEN-ISSUES.md` §1)
 
 ### 13. Sheet Tabs (React)
 
