@@ -1,5 +1,13 @@
 # Proposal: Optional Caddy + Mail Stack for Existing-Server Deployments
 
+> **STATUS (2026-04-28)**: Phases 1 + 3 shipped (Compose profiles, `EIGEN_API_BIND`, `MAIL_DOMAIN`,
+> `bun run setup`, SSE `X-Accel-Buffering`, host-proxy + split-domain docs in
+> [SETUP-GUIDE.md](../docker/SETUP-GUIDE.md)). Phase 2 (`MAIL_APP_ENABLED` flag — gating the in-app
+> Mail UI when host runs the mail server) is **deferred**; scenarios C/D today still expose a Mail
+> tile that 5xx's because `mailRouter` and the launcher entry haven't been gated. Phase 4 (host-cert
+> overlay), Phase 5 (per-app feature flags in `settings.json`), Phase 6 (Flavor 2 — host-postfix
+> LMTP forwarding into Eigen), and Phase 7 (Flavor 3 — multi-domain mail) remain future work.
+
 > **TLDR**: Make the Docker stack composable so users with an existing webserver and/or mail server on the
 > host can opt out of Eigen's `caddy`, `postfix`, and `dovecot` containers, and decouple the mail domain
 > from the web domain so the apps can live at `eigen.example.com` while mail stays at `@example.com`. Two
