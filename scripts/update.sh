@@ -1,9 +1,32 @@
 #!/bin/bash
 set -e
-cd "$(dirname "$0")/.."
+SCRIPT="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+cd "$(dirname "$SCRIPT")/.."
 
-echo "Pulling latest changes..."
-git pull
+# Pull first, then re-exec under the (possibly newly-pulled) version of this script. This
+# ensures any new migration logic added in a future update runs on that same update — not
+# only on the next one.
+if [ "$1" != "--post-pull" ]; then
+    echo "Pulling latest changes..."
+    git pull
+    exec "$SCRIPT" --post-pull
+fi
+
+# --- migration: backfill env vars introduced since the user last ran update ---
+add_var_if_missing() {
+    local key="$1" default="$2"
+    if ! grep -q "^${key}=" .env.production; then
+        echo "${key}=${default}" >> .env.production
+        echo "  Migrated: appended ${key}=${default}"
+    fi
+}
+
+if [ -f .env.production ]; then
+    echo "Checking .env.production for new variables..."
+    add_var_if_missing COMPOSE_PROFILES "edge,mail"
+    add_var_if_missing EIGEN_API_BIND "127.0.0.1:8000"
+    add_var_if_missing MAIL_DOMAIN "$(grep '^DOMAIN=' .env.production | cut -d= -f2-)"
+fi
 
 echo "Loading environment..."
 set -a && source .env.production && set +a
