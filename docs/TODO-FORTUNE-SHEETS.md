@@ -30,27 +30,21 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
    Before removing any class, grep `state/` for `luckysheet-*` selectors — see
    [DOM Selector Coupling](#dom-selector-coupling).
 
-3. **Tighten `evaluateConditionalFormat` rule shape** — still `any[]` with a
-   `biome-ignore` at the public boundary in `engine/conditional-format.ts:82`.
-   Hard because `format` is heterogeneous: `string[]` for `dataBar` /
-   `colorGradation`, `{textColor, cellColor}` for the `default` family. Producer
-   is `state/modules/conditionFormat.ts`; consumers also include the apps/api
-   HTML export. Lib type at `packages/lib/src/sheets/types.ts:81` is also
-   `unknown[]`. Unblocks #4.
-
-4. **Regenerate `engine/parser/grammar-parser/grammar-parser.ts`** from upstream
+3. **Regenerate `engine/parser/grammar-parser/grammar-parser.ts`** from upstream
    jison rather than hand-editing. Currently biome-excluded. No urgency. The
    only remaining `export default` lines in the package live under
    `engine/parser/` and will be regenerated together.
 
 ### Server-side features
 
-5. **xlsx CF export** — `apps/api/src/lib/export/sheets/xlsx.ts` doesn't write
+4. **xlsx CF export** — `apps/api/src/lib/export/sheets/xlsx.ts` doesn't write
    conditional-format rules. Translate fortune-sheet rules into ExcelJS native
    `worksheet.addConditionalFormatting` so Excel evaluates them on file open
-   (no formula engine needed for xlsx — Excel does it natively). Blocked by #3.
+   (no formula engine needed for xlsx — Excel does it natively). The
+   `ConditionalFormatRule` discriminated union (engine + lib) gives the rule
+   shape needed to introspect each rule type.
 
-6. **Server-side recalc in `readSheetContent()`** — engine API ready
+5. **Server-side recalc in `readSheetContent()`** — engine API ready
    (`engine.recalculateAll(resolver)`); `apps/api` consumer just needs the
    wiring. Defer until export, search indexing, or scripting actually needs
    fresh values; today the consumer reads the last-saved `cell.v` from the
@@ -58,27 +52,20 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
 
 ### Misc cleanups
 
-7. `state/modules/formula-range.ts` still imports `columnCharToIndex` /
-   `indexToColumnChar` from state utils. Engine has equivalents
-   (`columnLabelToIndex` / `columnIndexToLabel`) but with different
-   missing-input semantics: engine returns `-1`, state returns `NaN`. Migrating
-   requires updating the `Number.isNaN(col)` checks in `functionStrChange_range`.
-   The 2026-04-28 row-only-range fix in `engine/formula-shift.ts` is the
-   template.
+6. `apps/sheets/src/components/sheets/SheetOverlay/InputBox.tsx`'s arrow-key
+   handler manipulates `.luckysheet-formula-search-item-active` on the formula
+   autocomplete popup (lines 113, 115, 122–125, 206–235), but
+   `SheetOverlay/FormulaSearch/index.tsx` never sets the
+   `luckysheet-formula-search-item` / `luckysheet-formula-search-func` /
+   `luckysheet-formula-search-item-active` classes — keyboard navigation +
+   Enter/Tab selection in the autocomplete have been silently broken since the
+   shadcn migration. Fix by lifting the active index into FormulaSearch state
+   and threading callbacks through `WorkbookContext`, or (less work) just
+   re-add the classes plus the `index === 0` initial active marker. Mouse
+   click selection still works.
 
-8. `FormulaSearch/index.tsx` and `FormulaHint/index.tsx` are the last sites
-   with hardcoded inline colors (`border-[#d4d4d4]`, `bg-[#8c89fe]`). Replace
-   with theme tokens.
-
-9. `CustomSort/index.tsx:51` has a dead `fortune-sort` className with no CSS
-   definition. Remove.
-
-10. `ContextMenu/FilterMenu.tsx` uses `immer` `produce` patterns at 4 sites for
-    set-toggle operations. Could simplify to plain state updates if it reads
-    cleaner; not a regression risk either way.
-
-11. Move package to `apps/sheets/src/fortune-sheet/` — only `apps/sheets/`
-    consumes it. Low priority, rename-only with no code impact.
+7. Move package to `apps/sheets/src/fortune-sheet/` — only `apps/sheets/`
+   consumes it. Low priority, rename-only with no code impact.
 
 ---
 
@@ -217,6 +204,34 @@ priority — rename-only.
 
 ### 2026-04-28
 
+- **TODO #3, #7, #8, #9, #10**: cleanup pass.
+  - **#3**: tightened `evaluateConditionalFormat` to a `ConditionalFormatRule`
+    discriminated union over `type` (`DataBarRule`, `ColorGradationRule`,
+    `IconsRule`, `DefaultConditionalFormatRule`). Engine narrows on `rule.type`
+    per branch so `format` is correctly typed in each (string[] vs
+    `{textColor, cellColor}`). `conditionValue` is `(string | number)[]` with
+    explicit `String()` / `Number()` coercion at use sites. Lib mirrors the
+    union structurally; `Sheet.luckysheet_conditionformat_save` is now
+    `ConditionalFormatRule[]` instead of `unknown[]`. Unblocks #4 (xlsx CF
+    export).
+  - **#7**: `state/modules/formula-range.ts::functionStrChange_range` migrated
+    to engine's `columnLabelToIndex` / `columnIndexToLabel` with a derived
+    `rowsMissing`/`colsMissing` flag pair gating the row/col shift logic and
+    the output formatter. New `state/test/formula-range.test.ts` (18 cases)
+    covers the regression that the engine port would otherwise re-introduce
+    (`del col 0,1` on `1:3` corrupting to `A1:A3` via the `c1 < 0` clamp).
+  - **#8**: replaced the last hardcoded inline colors in
+    `SheetOverlay/FormulaSearch` and `SheetOverlay/FormulaHint` with theme
+    tokens, dropped dead `data-func` / `luckysheet-arguments-*` /
+    `luckysheet-formula-help-*` classnames (kept the
+    `id="luckysheet-formula-search-c"` since `InputBox` uses it as a DOM
+    selector). Surfaced #6 above (broken arrow-key navigation in the formula
+    autocomplete) as a follow-up.
+  - **#9**: dropped the dead `fortune-sort` className wrapper in `CustomSort`
+    (no CSS, no layout role) — uses a Fragment now.
+  - **#10**: replaced 4 `produce(draft => …)` callbacks in
+    `ContextMenu/FilterMenu` with plain functional updates; dropped the
+    `immer` import and `pull` from `es-toolkit/compat` for that file.
 - **`8c8f4436`**: doc updates — formula CF wiring marked shipped in `SHEETS.md`;
   `RENDERING.md` `Toolbar/` → `MenuBar/*` and `LinkEidtCard` typo → `LinkEditCard`.
 - **`2a38e2aa`**: ported `functionCopy` (formula relative-ref shifter) from
