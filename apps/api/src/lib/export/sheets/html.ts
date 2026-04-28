@@ -10,7 +10,7 @@ import {
     functionCopy,
 } from '@workspace/fortune-sheet/engine';
 import { escapeHtml } from '@workspace/lib/html';
-import type { Cell, CellBorderInfo, CellWithRowAndCol, Sheet } from '@workspace/lib/sheets';
+import type { BorderInfo, Cell, CellWithRowAndCol, Sheet } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import DOMPurify from 'isomorphic-dompurify';
 import type { Mount } from '../../mount';
@@ -392,9 +392,7 @@ function wrapForRotation(v: Cell | null, inner: string): string {
     return inner;
 }
 
-function buildBorderMap(
-    borderInfo?: CellBorderInfo[],
-): Map<string, { l?: string; r?: string; t?: string; b?: string }> {
+function buildBorderMap(borderInfo?: BorderInfo[]): Map<string, { l?: string; r?: string; t?: string; b?: string }> {
     const map = new Map<string, { l?: string; r?: string; t?: string; b?: string }>();
     if (!borderInfo) return map;
 
