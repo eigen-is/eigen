@@ -47,7 +47,7 @@ export function SetupWizard() {
                         setDomain(data.domain === 'localhost' ? 'eigen.localhost' : data.domain);
                         setDomainFromEnv(data.domain !== 'localhost');
                     }
-                    setMailDomain(data.mailDomain || data.domain || '');
+                    setMailDomain(data.mailDomain ?? '');
                     setStep('config');
                 }
             })
@@ -68,7 +68,7 @@ export function SetupWizard() {
                 domain,
                 orgName,
                 storageType,
-                adminEmail: `${adminUsername}@${mailDomain || domain}`,
+                adminEmail: `${adminUsername}@${mailDomain}`,
                 adminPassword,
                 adminName,
                 ...(storageType === 's3'
@@ -237,7 +237,7 @@ export function SetupWizard() {
                                         className="rounded-r-none"
                                     />
                                     <span className="inline-flex items-center px-3 rounded-r-md border border-l-0 border-input bg-muted text-muted-foreground text-sm">
-                                        @{mailDomain || domain}
+                                        @{mailDomain}
                                     </span>
                                 </div>
                             </div>
