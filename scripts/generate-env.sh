@@ -22,22 +22,29 @@ if [ -z "$DOMAIN" ] || [ "$DOMAIN" = "eigen.example.com" ]; then
     exit 1
 fi
 
-# Read optional relay vars from existing .env.production
+# Read optional vars from existing .env.production so re-runs preserve hand-edits.
 ACME_EMAIL=""
+MAIL_DOMAIN=""
+COMPOSE_PROFILES=""
+EIGEN_API_BIND=""
 SMTP_RELAY_HOST=""
 SMTP_RELAY_PORT=""
 SMTP_RELAY_USER=""
 SMTP_RELAY_PASSWORD=""
 
 if [ -f .env.production ]; then
-    eval "$(grep -E '^(ACME_EMAIL|SMTP_RELAY_HOST|SMTP_RELAY_PORT|SMTP_RELAY_USER|SMTP_RELAY_PASSWORD)=' .env.production)"
+    eval "$(grep -E '^(ACME_EMAIL|MAIL_DOMAIN|COMPOSE_PROFILES|EIGEN_API_BIND|SMTP_RELAY_HOST|SMTP_RELAY_PORT|SMTP_RELAY_USER|SMTP_RELAY_PASSWORD)=' .env.production)"
 fi
 
 cat <<EOF
 PRODUCTION=1
 
 DOMAIN=${DOMAIN}
+MAIL_DOMAIN=${MAIL_DOMAIN:-${DOMAIN}}
 ACME_EMAIL=${ACME_EMAIL:-admin@${DOMAIN}}
+
+COMPOSE_PROFILES=${COMPOSE_PROFILES:-edge,mail}
+EIGEN_API_BIND=${EIGEN_API_BIND:-127.0.0.1:8000}
 
 API_URL=https://${DOMAIN}
 VITE_API_HOST=https://${DOMAIN}/eigen
