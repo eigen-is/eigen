@@ -73,42 +73,53 @@ git clone <eigen-repo-url> /opt/eigen
 cd /opt/eigen
 ```
 
-Generate your configuration file:
+Install Bun (needed for both setup and the frontend build):
 
 ```bash
-./scripts/generate-env.sh eigen.example.com > .env.production
+curl -fsSL https://bun.sh/install | bash
+source ~/.bashrc
+ln -sf ~/.bun/bin/bun  /usr/local/bin/bun
+ln -sf ~/.bun/bin/bunx /usr/local/bin/bunx
 ```
 
-This creates `.env.production` with all URLs derived from your domain. Now edit it to add your SMTP relay credentials:
+Run the interactive setup. It asks four questions, writes `.env.production`, prints the
+DNS records to add, and (if you say you have a host webserver) generates ready-to-use
+nginx and Caddy snippets:
 
 ```bash
-nano .env.production
+bun install
+bun run setup
 ```
 
-Find and fill in:
+**Want mail at a different domain than the web URL?** When the script asks "Mail domain",
+enter the domain you want addresses on (e.g. `example.com`) while keeping the web URL on
+its subdomain (e.g. `eigen.example.com`). MX, SPF, DMARC, DKIM all get printed against the
+mail domain.
+
+**Already running nginx/Caddy on the host?** Answer "yes" to the reverse-proxy question.
+The script writes `eigen.nginx.conf` and `eigen.Caddyfile` you can drop into your existing
+config; the bundled Caddy container is automatically left out.
+
+Open the generated `.env.production` to add SMTP relay credentials if your VPS blocks
+outbound port 25:
+
 ```
 SMTP_RELAY_HOST=smtp-relay.brevo.com
 SMTP_RELAY_USER=your-api-key@brevo.com
 SMTP_RELAY_PASSWORD=your-smtp-key
 ```
 
-If you don't have an SMTP relay yet, leave these empty — you can add them later.
+If you don't have a relay yet, leave them empty — you can add them later.
+
+> Non-interactive alternative: `./scripts/generate-env.sh eigen.example.com > .env.production`
+> still works for CI / scripted installs. It doesn't ask about mail domain or host
+> webserver — those settings stay at defaults.
 
 ## Step 4: Build the Frontend
 
 The frontend apps (mail, drive, docs, etc.) need to be compiled with your domain baked in:
 
 ```bash
-# Install Bun (JavaScript runtime)
-curl -fsSL https://bun.sh/install | bash
-source ~/.bashrc
-
-# Ensure bunx is available system-wide
-ln -sf ~/.bun/bin/bunx /usr/local/bin/bunx
-ln -sf ~/.bun/bin/bun /usr/local/bin/bun
-
-# Install dependencies and build
-bun install
 set -a && source .env.production && set +a
 bun run --sequential --filter './apps/*' build
 bun --filter '@apps/api' buildfordocker
@@ -116,8 +127,6 @@ bun --filter '@apps/api' buildfordocker
 
 This compiles 13 frontend apps into the `dist/` directory. The `--sequential` flag builds one app
 at a time to avoid running out of memory on small servers (2-4GB RAM).
-
-> **Note:** You only need Bun for building the frontend. Docker handles everything at runtime.
 
 ## Step 5: Start Eigen
 

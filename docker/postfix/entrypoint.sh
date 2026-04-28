@@ -1,13 +1,19 @@
 #!/bin/bash
 set -e
 
+# MAIL_DOMAIN defaults to DOMAIN when not split. Used for envelope sender, virtual mailbox
+# acceptance, and DKIM signing — see main.cf.template.
+: "${MAIL_DOMAIN:=$DOMAIN}"
+export MAIL_DOMAIN
+
 echo "=== Eigen Postfix Container ==="
-echo "Domain: ${DOMAIN}"
+echo "Hostname:    ${DOMAIN}"
+echo "Mail domain: ${MAIL_DOMAIN}"
 
 # --- Config templating ---
-# Only substitute $DOMAIN — leave Postfix's own variables ($mydomain, ${recipient}) alone
-envsubst '$DOMAIN' < /etc/postfix/main.cf.template > /etc/postfix/main.cf
-envsubst '$DOMAIN' < /etc/postfix/master.cf.template > /etc/postfix/master.cf
+# Substitute $DOMAIN and $MAIL_DOMAIN; leave Postfix's own variables ($mydomain, ${recipient}) alone.
+envsubst '$DOMAIN $MAIL_DOMAIN' < /etc/postfix/main.cf.template > /etc/postfix/main.cf
+envsubst '$DOMAIN $MAIL_DOMAIN' < /etc/postfix/master.cf.template > /etc/postfix/master.cf
 
 # --- TLS cert fallback ---
 if [ ! -f /certs/cert.pem ]; then
@@ -39,11 +45,12 @@ fi
 # --- DKIM ---
 mkdir -p /data/dkim
 if [ ! -f "/data/dkim/eigen.private" ]; then
-    echo "Generating DKIM key for ${DOMAIN}..."
-    opendkim-genkey -b 2048 -d "${DOMAIN}" -s eigen -D /data/dkim/
+    echo "Generating DKIM key for ${MAIL_DOMAIN}..."
+    opendkim-genkey -b 2048 -d "${MAIL_DOMAIN}" -s eigen -D /data/dkim/
     echo ""
     echo "============================================"
     echo "=== Add this DNS TXT record for DKIM:    ==="
+    echo "=== Host: eigen._domainkey.${MAIL_DOMAIN}"
     echo "============================================"
     cat /data/dkim/eigen.txt
     echo "============================================"
@@ -53,13 +60,13 @@ fi
 # Ensure correct ownership for OpenDKIM
 chown opendkim:opendkim /data/dkim /data/dkim/eigen.private /data/dkim/eigen.txt 2>/dev/null || true
 
-# OpenDKIM config
+# OpenDKIM config — signs outbound mail as ${MAIL_DOMAIN}.
 cat > /etc/opendkim.conf <<EOF
 Syslog              yes
 LogWhy              yes
 Mode                sv
 Socket              inet:8891@127.0.0.1
-Domain              ${DOMAIN}
+Domain              ${MAIL_DOMAIN}
 Selector            eigen
 KeyFile             /data/dkim/eigen.private
 Canonicalization    relaxed/simple

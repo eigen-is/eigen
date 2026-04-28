@@ -1,5 +1,6 @@
 services:
   caddy:
+    profiles: ["edge"]
     image: caddy:2-alpine
     ports:
       - "80:80"
@@ -14,6 +15,7 @@ services:
     env_file: .env.production
     environment:
       DOMAIN: ${DOMAIN}
+      MAIL_DOMAIN: ${MAIL_DOMAIN:-${DOMAIN}}
       CADDY_ACME_EMAIL: "email ${ACME_EMAIL:-admin@${DOMAIN}}"
     command: sh -c "/usr/local/bin/export-certs.sh & caddy run --config /etc/caddy/Caddyfile --adapter caddyfile"
     restart: unless-stopped
@@ -27,14 +29,17 @@ services:
       context: .
       dockerfile: docker/api/Dockerfile
     user: "1000:1000"
+    ports:
+      - "${EIGEN_API_BIND:-127.0.0.1:8000}:8000"
     volumes:
       - ./data:/app/data
     environment:
       PRODUCTION: 1
       EIGEN_DATA_ROOT: /app/data
       DOMAIN: ${DOMAIN}
-      SMTP_HOST: postfix
-      SMTP_PORT: 25
+      MAIL_DOMAIN: ${MAIL_DOMAIN:-${DOMAIN}}
+      SMTP_HOST: ${SMTP_HOST:-postfix}
+      SMTP_PORT: ${SMTP_PORT:-25}
       COOKIE_DOMAIN: .${DOMAIN}
       TRUSTED_NETWORKS: "127.0.0.0/8,::1,172.16.0.0/12"
     restart: unless-stopped
@@ -49,6 +54,7 @@ services:
       options: { max-size: "10m", max-file: "3" }
 
   unbound:
+    profiles: ["mail"]
     image: mvance/unbound:latest
     restart: unless-stopped
     networks:
@@ -65,6 +71,7 @@ services:
       options: { max-size: "10m", max-file: "3" }
 
   postfix:
+    profiles: ["mail"]
     build:
       context: docker/postfix
     ports:
@@ -78,6 +85,7 @@ services:
       - postfix-queue:/var/spool/postfix
     environment:
       DOMAIN: ${DOMAIN}
+      MAIL_DOMAIN: ${MAIL_DOMAIN:-${DOMAIN}}
       SMTP_RELAY_HOST: ${SMTP_RELAY_HOST:-}
       SMTP_RELAY_PORT: ${SMTP_RELAY_PORT:-587}
       SMTP_RELAY_USER: ${SMTP_RELAY_USER:-}
@@ -96,6 +104,7 @@ services:
       options: { max-size: "10m", max-file: "3" }
 
   dovecot:
+    profiles: ["mail"]
     build:
       context: docker/dovecot
     ports:
@@ -105,6 +114,7 @@ services:
       - ./data/certs:/certs
     environment:
       DOMAIN: ${DOMAIN}
+      MAIL_DOMAIN: ${MAIL_DOMAIN:-${DOMAIN}}
     depends_on:
       eigen-api:
         condition: service_healthy

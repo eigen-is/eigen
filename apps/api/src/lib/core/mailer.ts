@@ -2,7 +2,7 @@ import type { ImipMethod } from '@workspace/lib/types/calendar';
 import nodemailer from 'nodemailer';
 import type Mail from 'nodemailer/lib/mailer';
 import { isProduction } from '../config/env';
-import { getDomain } from '../config/server-config';
+import { getMailDomain } from '../config/server-config';
 
 // Outbound email types — the inbound parsing types live in packages/lib/types/mail.ts
 type OutboundAddress = {
@@ -51,11 +51,9 @@ export function createTransport(): Mail {
 }
 
 export async function sendMail(message: OutboundMail): Promise<boolean> {
-    const from = message.from ?? { name: '', address: `noreply@${getDomain()}` };
+    const from = message.from ?? { name: '', address: `noreply@${getMailDomain()}` };
 
     // Skip outbound delivery in dev/test unless an SMTP host is explicitly configured.
-    // Previously this required getDomain()==='localhost', which made CI (test.eigen.is) try to
-    // actually send via sendmail(1) and fail.
     if (!isProduction() && !process.env['SMTP_HOST']) {
         console.log('[DEV] Skipping email:', { from, to: message.to, subject: message.subject });
         return true;

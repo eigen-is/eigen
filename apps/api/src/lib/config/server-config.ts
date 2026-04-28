@@ -73,10 +73,17 @@ export function getDomain(): string {
     return store.get().domain || envDomain || 'localhost';
 }
 
+// Mail address suffix — defaults to the web domain. Set MAIL_DOMAIN to decouple, e.g. web at
+// eigen.example.com but mail at @example.com.
+export function getMailDomain(): string {
+    return process.env['MAIL_DOMAIN'] || getDomain();
+}
+
 export function getPublicConfig() {
     const config = store.get();
     return {
         domain: getDomain(),
+        mailDomain: getMailDomain(),
         orgName: config.orgName,
         orgId: config.orgId,
     };
