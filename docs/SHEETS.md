@@ -119,13 +119,15 @@ const styles = evaluateConditionalFormat(
 // styles["3_4"] === { cellColor: "#ff8888" }
 ```
 
-Formula-based rules require an `evaluateFormula` callback (same shape as the state-side `getComputeMap`
-wrapper); when omitted, formula rules are skipped. The remaining rule types — `dataBar`,
-`colorGradation`, `greaterThan`/`lessThan`/`equal`, `between`, `textContains`, `occurrenceDate`,
-`duplicateValue`, `top10`, `aboveAverage`, etc. — evaluate without any context.
+Formula-based rules require an `evaluateFormula` callback; when omitted, formula rules are skipped. The
+remaining rule types — `dataBar`, `colorGradation`, `greaterThan`/`lessThan`/`equal`, `between`,
+`textContains`, `occurrenceDate`, `duplicateValue`, `top10`, `aboveAverage`, etc. — evaluate without
+any context.
 
-State keeps the caching wrapper at `state/modules/conditionFormat.ts::getComputeMap`, which calls into
-the engine and supplies the `evaluateFormula` callback wired to `functionCopy`/`execfunction`.
+The callback shifts the rule's formula by `(targetRow - anchorRow, targetCol - anchorCol)` via the
+shared `functionCopy` ref shifter (in `engine/formula-shift.ts`), then evaluates against a
+`CellResolver`. Both state (`state/modules/conditionFormat.ts::getComputeMap`) and the server-side
+HTML/PDF export use this same shape — see § HTML/PDF export below.
 
 ### HTML/PDF export
 
@@ -135,10 +137,11 @@ absolutely-positioned `<div>` inside a `position:relative` `<td>`, with geometry
 the canvas painter. Negative bars hardcode red (canvas legacy); positive bars use the
 user-configured `format` colors.
 
-**Not yet wired**: formula-based CF rules. They require building a `CellResolver` for the sheet
-and passing `(formula, anchorR, anchorC, r, c) => formulaEngine.evaluate(...)` as the
-`evaluateFormula` option to `evaluateConditionalFormat`. The engine API is ready; the wiring is
-deferred until a sheet with a formula CF rule actually needs it server-side.
+Formula-based CF rules are wired too: `renderSheetsHtml` builds a single `FormulaEngine` plus a
+`createArrayResolver` over all loaded sheets (so cross-sheet refs like `=Sheet2!A1>10` resolve),
+threads them to `renderSheet`, and the per-sheet `buildCfFormulaEvaluator` produces the
+`evaluateFormula` callback. Cell values come from the saved snapshot's `cell.v` — formulas inside
+the sheet aren't recomputed; only the CF rule's own formula is evaluated against existing values.
 
 The engine is exposed as a `@workspace/fortune-sheet/engine` subpath export. Server-side
 consumers (`apps/api`) import only from this subpath, which restricts type-checking to the pure
