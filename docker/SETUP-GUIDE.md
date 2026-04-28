@@ -166,18 +166,22 @@ After setup, you're redirected to the login page. Sign in and you're ready to go
 After Postfix starts for the first time, it generates a DKIM key. Check the logs:
 
 ```bash
-docker compose --env-file .env.production logs postfix | grep "DKIM"
+docker compose --env-file .env.production logs postfix | grep -A1 "DKIM"
 ```
 
-Now add these DNS records:
+Now add these DNS records. **Records sit on `MAIL_DOMAIN`, not `DOMAIN`** — for a typical
+single-domain deploy they're the same; for split deployments (web on `eigen.example.com`,
+mail at `@example.com`) the records go on `example.com`. The setup script printed the exact
+host names for your config; this table shows the shape:
 
 | Type | Name | Value |
 |------|------|-------|
-| TXT | `eigen.example.com` | `"v=spf1 a mx include:your-relay.com ~all"` |
-| TXT | `eigen._domainkey.eigen.example.com` | *(the DKIM key from the logs)* |
-| TXT | `_dmarc.eigen.example.com` | `"v=DMARC1; p=quarantine; rua=mailto:postmaster@eigen.example.com"` |
+| TXT | `<MAIL_DOMAIN>` | `"v=spf1 mx include:your-relay.com ~all"` |
+| TXT | `eigen._domainkey.<MAIL_DOMAIN>` | *(the DKIM key from the logs)* |
+| TXT | `_dmarc.<MAIL_DOMAIN>` | `"v=DMARC1; p=quarantine; rua=mailto:postmaster@<MAIL_DOMAIN>"` |
 
-Also set the **rDNS (PTR) record** in your VPS provider's control panel — it should resolve to your domain.
+Also set the **rDNS (PTR) record** in your VPS provider's control panel — it should resolve
+to your web domain (the host the mail server actually runs on).
 
 ### What these do:
 - **SPF** — tells receiving servers which IPs are allowed to send email for your domain
@@ -191,11 +195,14 @@ To use Thunderbird, Apple Mail, or any IMAP client alongside the web interface:
 
 | Setting | Value |
 |---------|-------|
-| Server | `eigen.example.com` |
+| Server | your web URL (`DOMAIN`) — e.g. `eigen.example.com` |
 | Port | `993` |
 | Security | SSL/TLS |
-| Username | Your email (e.g., `you@eigen.example.com`) |
-| Password | Your Eigen password |
+| Username | your email (`you@<MAIL_DOMAIN>`) |
+| Password | your Eigen password |
+
+Note the split: addresses live on `MAIL_DOMAIN` but the IMAP server hostname is the web
+`DOMAIN` (that's where Dovecot runs). Same shape for SMTP submission on port 587.
 
 Your IMAP client and the Eigen web interface share the same mailbox — changes sync both ways.
 

@@ -20,16 +20,22 @@ const CADDY_OUT = 'eigen.Caddyfile';
 const rl = createInterface({ input: stdin });
 const buffered: string[] = [];
 const pending: ((line: string) => void)[] = [];
+let closed = false;
 rl.on('line', (line) => {
     const next = pending.shift();
     if (next) next(line);
     else buffered.push(line);
 });
 rl.on('close', () => {
+    closed = true;
     while (pending.length) pending.shift()?.('');
 });
 
 function prompt(text: string): Promise<string> {
+    if (closed && !buffered.length) {
+        console.error('\nSetup aborted: stdin closed before all questions answered.');
+        process.exit(1);
+    }
     stdout.write(text);
     if (buffered.length) return Promise.resolve(buffered.shift() as string);
     return new Promise((res) => pending.push(res));
@@ -59,20 +65,14 @@ function cleanDomain(s: string): string {
         .toLowerCase();
 }
 
-// Suggest the parent domain when the input looks like a subdomain.
-// Heuristic only — the user can override. Doesn't try to handle public-suffix edge cases
-// like co.uk; close enough since this is just a default.
-function inferApex(host: string): string {
-    const labels = host.split('.');
-    return labels.length >= 3 ? labels.slice(1).join('.') : host;
-}
-
+// Strip surrounding quotes the user may have hand-added. Docker env-file format treats them
+// literally, so unquoted is the safe shape on round-trip.
 function readExisting(): Record<string, string> {
     if (!existsSync(ENV_PATH)) return {};
     const out: Record<string, string> = {};
     for (const line of readFileSync(ENV_PATH, 'utf8').split('\n')) {
         const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
-        if (m) out[m[1]] = m[2];
+        if (m) out[m[1]] = m[2].replace(/^["']|["']$/g, '');
     }
     return out;
 }
@@ -105,7 +105,10 @@ if (Object.keys(existing).length) {
 }
 
 const domain = await promptDomain('Web URL (e.g. eigen.example.com)', existing.DOMAIN);
-const mailDefault = existing.MAIL_DOMAIN || inferApex(domain);
+// When the web URL has 3+ labels, suggest the parent as the default mail domain. Heuristic
+// only (no public-suffix awareness — doesn't matter, the user confirms).
+const labels = domain.split('.');
+const mailDefault = existing.MAIL_DOMAIN || (labels.length >= 3 ? labels.slice(1).join('.') : domain);
 const mailDomain = await promptDomain('Mail domain (addresses end @<this>)', mailDefault);
 const useHostProxy = await askYesNo(
     'Run Eigen behind an existing webserver on this host (nginx, Caddy, …)?',
