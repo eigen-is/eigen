@@ -210,7 +210,7 @@
     }
 
     :root {
-        --app-mail-color: var(--color-rose-600);
+        --app-mail-color: var(--color-amber-600);
         --app-drive-color: var(--color-yellow-600);
         --app-sheets-color: var(--color-lime-600);
         --app-stickies-color: var(--color-emerald-600);
