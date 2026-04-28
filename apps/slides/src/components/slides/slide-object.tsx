@@ -79,10 +79,17 @@ export function getVerticalAlignStyle(verticalAlign: string | undefined): React.
     };
 }
 
+// TipTap leaves a trailing empty <p></p> behind when the user presses Enter at the end and
+// then leaves the field. ProseMirror renders that as a visible blank line in edit mode.
+function stripTrailingEmptyBlocks(html: string): string {
+    return html.replace(/(?:<p>(?:\s|&nbsp;|<br\s*\/?>)*<\/p>\s*)+$/gi, '');
+}
+
 function buildTextHtml(obj: SlideObject & { type: 'text' }): string {
+    const text = stripTrailingEmptyBlocks(obj.text);
     // highlightColor lands inside a style="..." attribute; escape so it can't break out.
-    if (!obj.highlightColor) return obj.text;
-    return `<span style="background-color:${escapeHtml(obj.highlightColor)};box-decoration-break:clone;-webkit-box-decoration-break:clone">${obj.text}</span>`;
+    if (!obj.highlightColor) return text;
+    return `<span style="background-color:${escapeHtml(obj.highlightColor)};box-decoration-break:clone;-webkit-box-decoration-break:clone">${text}</span>`;
 }
 
 export function ReadOnlySlideObject({ obj }: { obj: SlideObject }) {
@@ -241,13 +248,13 @@ export const SlideObjectView = memo(function SlideObjectView({
                 >
                     <div className="slide-text w-full max-h-full overflow-hidden" style={textStyle}>
                         <LightEditor
-                            content={obj.text}
-                            onChange={(html) => onUpdate(obj.id, { text: html })}
+                            content={stripTrailingEmptyBlocks(obj.text)}
+                            onChange={(html) => onUpdate(obj.id, { text: stripTrailingEmptyBlocks(html) })}
                             toolbar="floating"
                             proseStyle={false}
                             className="min-h-0 break-words"
                             containerClassName="relative flex flex-col w-full"
-                            onReady={(e) => e.chain().focus().selectAll().run()}
+                            onReady={(e) => e.chain().focus('end').run()}
                         />
                     </div>
                 </div>
