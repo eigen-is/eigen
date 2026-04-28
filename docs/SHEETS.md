@@ -81,7 +81,7 @@ engine/
 ├── conditional-format.ts   # Pure CF evaluator (evaluateConditionalFormat, cfSplitRange, getColorGradation)
 ├── a1-notation.ts          # A1 ↔ row/col parsing
 ├── validation.ts           # Data validation helpers
-├── types.ts                # CellResolver, EvaluationResult, FormulaEngineState, SingleRange, Range
+├── types.ts                # CellResolver, EvaluationResult, FormulaEngineState (+ re-exports of shared shapes from @workspace/lib/sheets)
 ├── parser/                 # Pure formula parser (JISON + @formulajs/formulajs, zero DOM)
 └── index.ts                # Barrel exports
 ```

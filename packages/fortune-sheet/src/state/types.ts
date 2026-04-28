@@ -1,6 +1,12 @@
 import type {Patch as ImmerPatch} from "immer";
-import type {Cell, CellMatrix} from "../engine/types";
+import type {Cell, CellMatrix, CellWithRowAndCol, Range, SingleRange} from "../engine/types";
 import type {PatchOptions} from "./utils";
+
+// Shared sheet data shapes (Cell, CellMatrix, CellWithRowAndCol, SingleRange,
+// Range, …) live in @workspace/lib/sheets and are re-exported through
+// ../engine/types — surfaced here so state-side consumers don't have to know
+// the canonical home.
+export type {Cell, CellMatrix, CellWithRowAndCol, Range, SingleRange};
 
 export type Op = {
     op:
@@ -21,12 +27,6 @@ export type Rect = {
     left: number;
     width: number;
     height: number;
-};
-
-export type CellWithRowAndCol = {
-    r: number;
-    c: number;
-    v: Cell | null;
 };
 
 export type Selection = {
@@ -58,6 +58,12 @@ export type Presence = {
     };
 };
 
+// Editor-runtime SheetConfig. Some fields (merge / rowlen / columnlen / rowhidden /
+// colhidden / borderInfo) overlap with lib's API-shape `SheetConfig`; the editor
+// keeps borderInfo loosely typed (`any[]`) since state code constructs both 'cell'
+// and 'range' BorderInfo variants without `as const` discriminators. Tightening
+// this is part of TODO #1 (enable biome on state/) — at which point this type
+// should collapse into `Omit<ApiSheetConfig, ...> & { editor extras }`.
 export type SheetConfig = {
     merge?: Record<string, { r: number; c: number; rs: number; cs: number }>; // merged cells
     rowlen?: Record<string, number>; // row heights
@@ -66,7 +72,7 @@ export type SheetConfig = {
     colhidden?: Record<string, number>; // hidden columns
     customHeight?: Record<string, number>;
     customWidth?: Record<string, number>;
-    borderInfo?: any[]; // border info
+    borderInfo?: any[]; // tighten to lib's BorderInfo[] under TODO #1
     authority?: any;
     rowReadOnly?: Record<number, number>;
     colReadOnly?: Record<number, number>;
@@ -81,6 +87,11 @@ export type Image = {
     mediaName: string;
 };
 
+// Editor-runtime Sheet. Field overlap with lib's `Sheet` (name / id / config /
+// data / celldata / showGridLines / luckysheet_conditionformat_save) — same TODO
+// #1 caveat as SheetConfig. State producer code in conditionFormat.ts pushes
+// untyped rules, hence the `any[]` on luckysheet_conditionformat_save; the wire
+// shape is `ConditionalFormatRule[]` in lib.
 export type Sheet = {
     name: string;
     config?: SheetConfig;
@@ -258,8 +269,6 @@ export type GlobalCache = {
         scrollLeft?: number;
     };
 };
-
-export type {SingleRange, Range} from "../engine/types";
 
 // FORMULA
 type AncestorFormulaCell = {

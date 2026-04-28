@@ -1,7 +1,8 @@
-// Structural subset of fortune-sheet's types. Lives in @workspace/lib so the backend
-// import pipeline can reference sheet shapes without pulling in fortune-sheet (React).
-// The frontend editor keeps fortune-sheet's richer internal types; this subset is the
-// API shape used at the backend/frontend contract.
+// Canonical sheet data shapes shared between the fortune-sheet engine, the editor's
+// state layer, and the apps/api backend. Lives here (not in fortune-sheet) because
+// fortune-sheet depends on @workspace/lib, not the other way around — keeping these
+// in lib avoids a workspace cycle and lets the backend import them without pulling
+// in React.
 
 export type CellStyle = {
     bl?: number;
@@ -16,13 +17,16 @@ export type CellStyle = {
     un?: number;
 };
 
-// Inline-string segment shape mirrors fortune-sheet's `InlineStringSegment` (engine/types.ts).
-// Defined locally so this lib stays free of a fortune-sheet dependency, while the structural
-// shape matches — Sheet snapshots can be passed straight to fortune-sheet's engine.
 export type InlineStringSegment = CellStyle & {
     v?: string;
     si?: number;
     measureText?: unknown;
+};
+
+export type CellType = {
+    fa?: string;
+    t?: string;
+    s?: InlineStringSegment[];
 };
 
 export type Cell = CellStyle & {
@@ -30,7 +34,7 @@ export type Cell = CellStyle & {
     m?: string | number;
     mc?: { r: number; c: number; rs?: number; cs?: number };
     f?: string;
-    ct?: { fa?: string; t?: string; s?: InlineStringSegment[] };
+    ct?: CellType;
     qp?: number;
     bg?: string;
     lo?: number;
@@ -42,11 +46,18 @@ export type Cell = CellStyle & {
     commentChatNames?: string[];
 };
 
+export type CellMatrix = (Cell | null)[][];
+
 export type CellWithRowAndCol = {
     r: number;
     c: number;
     v: Cell | null;
 };
+
+// Single rectangular range in row/column coordinates. Used both as a CF rule's
+// `cellrange` element and as the engine's range descriptor.
+export type SingleRange = { row: number[]; column: number[] };
+export type Range = SingleRange[];
 
 export type BorderSide = { style: number; color: string };
 export type CellBorderInfo = {
@@ -60,6 +71,14 @@ export type CellBorderInfo = {
         b?: BorderSide;
     };
 };
+export type RangeBorderInfo = {
+    rangeType: 'range';
+    borderType: string;
+    color: string;
+    style: number;
+    range: SingleRange[];
+};
+export type BorderInfo = CellBorderInfo | RangeBorderInfo;
 
 export type SheetConfig = {
     merge?: Record<string, { r: number; c: number; rs: number; cs: number }>;
@@ -67,8 +86,42 @@ export type SheetConfig = {
     columnlen?: Record<string, number>;
     rowhidden?: Record<string, number>;
     colhidden?: Record<string, number>;
-    borderInfo?: CellBorderInfo[];
+    borderInfo?: BorderInfo[];
 };
+
+// Conditional-format rule shape, produced by the editor's state layer
+// (state/modules/conditionFormat.ts) and consumed by the engine's
+// `evaluateConditionalFormat` (canvas painter + apps/api HTML export).
+export type ConditionalFormatConditionName =
+    | 'greaterThan'
+    | 'lessThan'
+    | 'equal'
+    | 'textContains'
+    | 'between'
+    | 'occurrenceDate'
+    | 'duplicateValue'
+    | 'top10'
+    | 'top10_percent'
+    | 'last10'
+    | 'last10_percent'
+    | 'aboveAverage'
+    | 'belowAverage'
+    | 'formula';
+
+type CFRuleBase = { cellrange: SingleRange[] };
+
+export type DataBarRule = CFRuleBase & { type: 'dataBar'; format: string[] };
+export type ColorGradationRule = CFRuleBase & { type: 'colorGradation'; format: string[] };
+export type IconsRule = CFRuleBase & { type: 'icons' };
+export type DefaultConditionalFormatRule = CFRuleBase & {
+    type: 'default';
+    format: { textColor?: string | null; cellColor?: string | null };
+    conditionName: ConditionalFormatConditionName;
+    conditionRange?: SingleRange[];
+    conditionValue: (string | number)[];
+};
+
+export type ConditionalFormatRule = DataBarRule | ColorGradationRule | IconsRule | DefaultConditionalFormatRule;
 
 export type Sheet = {
     name: string;
@@ -76,7 +129,7 @@ export type Sheet = {
     order?: number;
     config?: SheetConfig;
     celldata?: CellWithRowAndCol[];
-    data?: (Cell | null)[][] | null;
+    data?: CellMatrix;
     showGridLines?: boolean | number;
-    luckysheet_conditionformat_save?: unknown[];
+    luckysheet_conditionformat_save?: ConditionalFormatRule[];
 };

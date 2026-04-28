@@ -380,13 +380,16 @@ describe('Sheets xlsx import/convert', () => {
         const sheets = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
         const bi = sheets[0].config?.borderInfo;
         expect(bi).toBeDefined();
-        const a1Border = bi?.find((b) => b.value.row_index === 0 && b.value.col_index === 0);
+        const a1Border = bi?.find((b) => b.rangeType === 'cell' && b.value.row_index === 0 && b.value.col_index === 0);
         expect(a1Border).toBeDefined();
-        expect(a1Border?.value.l).toEqual({ style: 1, color: '#000000' });
-        expect(a1Border?.value.r).toEqual({ style: 1, color: '#000000' });
-        expect(a1Border?.value.t).toEqual({ style: 1, color: '#000000' });
-        expect(a1Border?.value.b).toEqual({ style: 1, color: '#000000' });
-        expect(bi?.find((b) => b.value.row_index === 0 && b.value.col_index === 1)).toBeUndefined();
+        if (a1Border?.rangeType !== 'cell') throw new Error('expected cell-rangeType BorderInfo');
+        expect(a1Border.value.l).toEqual({ style: 1, color: '#000000' });
+        expect(a1Border.value.r).toEqual({ style: 1, color: '#000000' });
+        expect(a1Border.value.t).toEqual({ style: 1, color: '#000000' });
+        expect(a1Border.value.b).toEqual({ style: 1, color: '#000000' });
+        expect(
+            bi?.find((b) => b.rangeType === 'cell' && b.value.row_index === 0 && b.value.col_index === 1),
+        ).toBeUndefined();
     });
 
     test('convert right-aligns numbers without explicit alignment', async () => {

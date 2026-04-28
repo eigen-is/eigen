@@ -6,7 +6,6 @@ import { Label } from '@workspace/ui/components/label';
 import { ColorPicker } from '@workspace/ui/components/layout/media/color-picker';
 import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
-import produce from 'immer';
 import { useCallback, useContext, useEffect, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
@@ -215,11 +214,7 @@ export function ConditionRules({ type }: { type: string }) {
                                     showReset={false}
                                     onChange={(color) => {
                                         if (color) {
-                                            setColorRules(
-                                                produce((draft) => {
-                                                    draft.textColor = color;
-                                                }),
-                                            );
+                                            setColorRules((prev) => ({ ...prev, textColor: color }));
                                         }
                                     }}
                                 />
@@ -254,11 +249,7 @@ export function ConditionRules({ type }: { type: string }) {
                                     showReset={false}
                                     onChange={(color) => {
                                         if (color) {
-                                            setColorRules(
-                                                produce((draft) => {
-                                                    draft.cellColor = color;
-                                                }),
-                                            );
+                                            setColorRules((prev) => ({ ...prev, cellColor: color }));
                                         }
                                     }}
                                 />

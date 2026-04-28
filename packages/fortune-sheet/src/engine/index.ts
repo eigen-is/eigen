@@ -16,6 +16,8 @@ export type {
     EvaluateConditionalFormatOptions,
 } from './conditional-format';
 export { cfSplitRange, evaluateConditionalFormat, getColorGradation } from './conditional-format';
+// CF rule shapes (`ConditionalFormatRule` etc.) live in `@workspace/lib/sheets` and
+// are surfaced through `./types` re-exports below.
 export {
     detectCycle,
     getCalculationOrder,

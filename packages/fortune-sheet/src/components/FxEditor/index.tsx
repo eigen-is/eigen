@@ -117,16 +117,6 @@ export function FxEditor() {
                 if (context.luckysheetCellUpdate.length > 0) {
                     switch (key) {
                         case 'Enter': {
-                            // if (
-                            //   $("#luckysheet-formula-search-c").is(":visible") &&
-                            //   formula.searchFunctionCell != null
-                            // ) {
-                            //   formula.searchFunctionEnter(
-                            //     $("#luckysheet-formula-search-c").find(
-                            //       ".luckysheet-formula-search-item-active"
-                            //     )
-                            //   );
-                            // } else {
                             const lastCellUpdate = [...draftCtx.luckysheetCellUpdate];
                             updateCell(
                                 draftCtx,
@@ -143,8 +133,6 @@ export function FxEditor() {
                                 },
                             ];
                             moveHighlightCell(draftCtx, 'down', 1, 'rangeOfSelect');
-                            // $("#luckysheet-rich-text-editor").focus();
-                            // }
                             e.preventDefault();
                             e.stopPropagation();
                             break;
@@ -152,58 +140,10 @@ export function FxEditor() {
                         case 'Escape': {
                             cancelNormalSelected(draftCtx);
                             moveHighlightCell(draftCtx, 'down', 0, 'rangeOfSelect');
-                            // $("#luckysheet-functionbox-cell").blur();
-                            // $("#luckysheet-rich-text-editor").focus();
                             e.preventDefault();
                             e.stopPropagation();
                             break;
                         }
-                        /*
-                          case "F4": {
-                            formula.setfreezonFuc(event);
-                            e.preventDefault();
-                            e.stopPropagation();
-                            break;
-                          }
-                          case "ArrowUp": {
-                            if ($("#luckysheet-formula-search-c").is(":visible")) {
-                              let $up = $("#luckysheet-formula-search-c")
-                                .find(".luckysheet-formula-search-item-active")
-                                .prev();
-                              if ($up.length === 0) {
-                                $up = $("#luckysheet-formula-search-c")
-                                  .find(".luckysheet-formula-search-item")
-                                  .last();
-                              }
-                              $("#luckysheet-formula-search-c")
-                                .find(".luckysheet-formula-search-item")
-                                .removeClass("luckysheet-formula-search-item-active");
-                              $up.addClass("luckysheet-formula-search-item-active");
-                            }
-                            e.preventDefault();
-                            e.stopPropagation();
-                            break;
-                          }
-                          case "ArrowDown": {
-                            if ($("#luckysheet-formula-search-c").is(":visible")) {
-                              let $up = $("#luckysheet-formula-search-c")
-                                .find(".luckysheet-formula-search-item-active")
-                                .next();
-                              if ($up.length === 0) {
-                                $up = $("#luckysheet-formula-search-c")
-                                  .find(".luckysheet-formula-search-item")
-                                  .first();
-                              }
-                              $("#luckysheet-formula-search-c")
-                                .find(".luckysheet-formula-search-item")
-                                .removeClass("luckysheet-formula-search-item-active");
-                              $up.addClass("luckysheet-formula-search-item-active");
-                            }
-                            e.preventDefault();
-                            e.stopPropagation();
-                            break;
-                          }
-                          */
                         case 'ArrowLeft': {
                             rangeHightlightselected(draftCtx, refs.fxInput.current!);
                             break;
