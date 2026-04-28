@@ -193,7 +193,7 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
             if (columnMapValue) {
                 const columnMap = columnMapValue as Y.Map<unknown>;
                 const taskIdsArray = columnMap.get('taskIds') as Y.Array<string>;
-                if (taskIdsArray) taskIdsArray.push([taskId]);
+                if (taskIdsArray) taskIdsArray.insert(0, [taskId]);
             }
         });
         setIsAddCardDialogOpen(false);
