@@ -1,7 +1,11 @@
 import { forEach, isNil } from 'es-toolkit/compat';
 import { genarate } from './format';
-import type { CellMatrix, SingleRange } from './types';
+import type { CellMatrix, ConditionalFormatRule, SingleRange } from './types';
 import { isRealNull } from './validation';
+
+// CF rule shapes (`ConditionalFormatRule`, `DataBarRule`, etc.) are defined in
+// `@workspace/lib/sheets` since they live on `Sheet.luckysheet_conditionformat_save`
+// — see engine/types.ts for the re-export.
 
 export type DataBar =
     | { valueType: 'minus'; valueLen: number; format: string[]; minusLen: number }
@@ -26,60 +30,6 @@ export type ConditionalFormatFormulaEvaluator = (
 export type EvaluateConditionalFormatOptions = {
     evaluateFormula?: ConditionalFormatFormulaEvaluator;
 };
-
-// Discriminated union for `luckysheet_conditionformat_save` entries. Producer is
-// state/modules/conditionFormat.ts; consumers include the canvas painter (state)
-// and the apps/api HTML export. The `format` field's shape varies by `type`:
-// string[] for `dataBar` / `colorGradation`, `{textColor, cellColor}` for the
-// `default` family. `cellrange` is always a SingleRange[].
-export type ConditionalFormatConditionName =
-    | 'greaterThan'
-    | 'lessThan'
-    | 'equal'
-    | 'textContains'
-    | 'between'
-    | 'occurrenceDate'
-    | 'duplicateValue'
-    | 'top10'
-    | 'top10_percent'
-    | 'last10'
-    | 'last10_percent'
-    | 'aboveAverage'
-    | 'belowAverage'
-    | 'formula';
-
-export type DefaultRuleFormat = {
-    textColor?: string | null;
-    cellColor?: string | null;
-};
-
-type CFRuleBase = {
-    cellrange: SingleRange[];
-};
-
-export type DataBarRule = CFRuleBase & {
-    type: 'dataBar';
-    format: string[];
-};
-
-export type ColorGradationRule = CFRuleBase & {
-    type: 'colorGradation';
-    format: string[];
-};
-
-export type IconsRule = CFRuleBase & {
-    type: 'icons';
-};
-
-export type DefaultConditionalFormatRule = CFRuleBase & {
-    type: 'default';
-    format: DefaultRuleFormat;
-    conditionName: ConditionalFormatConditionName;
-    conditionRange?: SingleRange[];
-    conditionValue: (string | number)[];
-};
-
-export type ConditionalFormatRule = DataBarRule | ColorGradationRule | IconsRule | DefaultConditionalFormatRule;
 
 // Returns the cell's display value at (r, c). Mirrors the "v" attribute path of
 // state-side getCellValue, simplified for the conditional-format evaluator.
