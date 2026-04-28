@@ -27,6 +27,60 @@ export type EvaluateConditionalFormatOptions = {
     evaluateFormula?: ConditionalFormatFormulaEvaluator;
 };
 
+// Discriminated union for `luckysheet_conditionformat_save` entries. Producer is
+// state/modules/conditionFormat.ts; consumers include the canvas painter (state)
+// and the apps/api HTML export. The `format` field's shape varies by `type`:
+// string[] for `dataBar` / `colorGradation`, `{textColor, cellColor}` for the
+// `default` family. `cellrange` is always a SingleRange[].
+export type ConditionalFormatConditionName =
+    | 'greaterThan'
+    | 'lessThan'
+    | 'equal'
+    | 'textContains'
+    | 'between'
+    | 'occurrenceDate'
+    | 'duplicateValue'
+    | 'top10'
+    | 'top10_percent'
+    | 'last10'
+    | 'last10_percent'
+    | 'aboveAverage'
+    | 'belowAverage'
+    | 'formula';
+
+export type DefaultRuleFormat = {
+    textColor?: string | null;
+    cellColor?: string | null;
+};
+
+type CFRuleBase = {
+    cellrange: SingleRange[];
+};
+
+export type DataBarRule = CFRuleBase & {
+    type: 'dataBar';
+    format: string[];
+};
+
+export type ColorGradationRule = CFRuleBase & {
+    type: 'colorGradation';
+    format: string[];
+};
+
+export type IconsRule = CFRuleBase & {
+    type: 'icons';
+};
+
+export type DefaultConditionalFormatRule = CFRuleBase & {
+    type: 'default';
+    format: DefaultRuleFormat;
+    conditionName: ConditionalFormatConditionName;
+    conditionRange?: SingleRange[];
+    conditionValue: (string | number)[];
+};
+
+export type ConditionalFormatRule = DataBarRule | ColorGradationRule | IconsRule | DefaultConditionalFormatRule;
+
 // Returns the cell's display value at (r, c). Mirrors the "v" attribute path of
 // state-side getCellValue, simplified for the conditional-format evaluator.
 function cellValueAt(data: CellMatrix, r: number, c: number) {
@@ -73,24 +127,18 @@ export function getColorGradation(color1: string, color2: string, value1: number
 // computed text/cell colors and data bars per cell. The formula-rule branch is
 // gated on options.evaluateFormula — when not provided, formula-based rules are
 // skipped entirely (other rule types still evaluate).
-//
-// TODO: tighten the rule shape to a discriminated union over rule.type. Note that
-// `format` is heterogeneously typed: `string[]` for `dataBar` / `colorGradation`,
-// `{textColor, cellColor}` for the `default` family. Producer is
-// state/modules/conditionFormat.ts; consumers also include apps/api HTML export.
 export function evaluateConditionalFormat(
-    // biome-ignore lint/suspicious/noExplicitAny: rule shape carryover; tightening is a follow-up
-    rules: any[] | null | undefined,
+    rules: ConditionalFormatRule[] | null | undefined,
     data: CellMatrix,
     options?: EvaluateConditionalFormatOptions,
 ): ComputeMap {
     const ruleArr = rules ?? [];
     const computeMap: ComputeMap = {};
 
-    for (let i = 0; i < ruleArr.length; i += 1) {
-        const { type, cellrange, format } = ruleArr[i];
+    for (const rule of ruleArr) {
         // data bar
-        if (type === 'dataBar') {
+        if (rule.type === 'dataBar') {
+            const { cellrange, format } = rule;
             let max = null;
             let min = null;
             for (let s = 0; s < cellrange.length; s += 1) {
@@ -170,8 +218,9 @@ export function evaluateConditionalFormat(
                     }
                 }
             }
-        } else if (type === 'colorGradation') {
+        } else if (rule.type === 'colorGradation') {
             // color scale
+            const { cellrange, format } = rule;
             let max = null;
             let min = null;
             let sum = 0;
@@ -266,14 +315,13 @@ export function evaluateConditionalFormat(
                     }
                 }
             }
-        } else if (type === 'icons') {
-            // icon set
+        } else if (rule.type === 'icons') {
+            // icon set — not yet implemented
         } else {
-            // other
-            // get variable values
-            const { conditionName } = ruleArr[i];
-            const conditionValue0 = ruleArr[i].conditionValue[0];
-            const conditionValue1 = ruleArr[i].conditionValue[1];
+            // 'default' — comparison / aggregation / formula rules
+            const { cellrange, format, conditionName, conditionValue } = rule;
+            const conditionValue0 = conditionValue[0];
+            const conditionValue1 = conditionValue[1];
             const { textColor, cellColor } = format;
             for (let s = 0; s < cellrange.length; s += 1) {
                 // check condition type
@@ -302,7 +350,7 @@ export function evaluateConditionalFormat(
                             } else if (conditionName === 'equal') {
                                 matches = cell.v.toString() === conditionValue0;
                             } else if (conditionName === 'textContains') {
-                                matches = cell.v.toString().indexOf(conditionValue0) !== -1;
+                                matches = cell.v.toString().indexOf(String(conditionValue0)) !== -1;
                             }
                             if (matches) {
                                 applyCellStyle(computeMap, r, c, { textColor, cellColor });
@@ -310,16 +358,12 @@ export function evaluateConditionalFormat(
                         }
                     }
                 } else if (conditionName === 'between') {
-                    // compare the two values
-                    let vBig = 0;
-                    let vSmall = 0;
-                    if (conditionValue0 > conditionValue1) {
-                        vBig = conditionValue0;
-                        vSmall = conditionValue1;
-                    } else {
-                        vBig = conditionValue1;
-                        vSmall = conditionValue0;
-                    }
+                    // Coerce to number — `between` only compares against numeric cell values
+                    // (`typeof cell.v === 'number'` guard below) and form input arrives as string.
+                    const v0 = Number(conditionValue0);
+                    const v1 = Number(conditionValue1);
+                    const vBig = Math.max(v0, v1);
+                    const vSmall = Math.min(v0, v1);
                     // iterate over apply range and evaluate
                     for (let r = cellrange[s].row[0]; r <= cellrange[s].row[1]; r += 1) {
                         for (let c = cellrange[s].column[0]; c <= cellrange[s].column[1]; c += 1) {
@@ -422,18 +466,17 @@ export function evaluateConditionalFormat(
                         // sort from largest to smallest
                         dArr.sort((a, b) => b - a);
 
+                        // form input arrives as string; coerce once for arithmetic / slice
+                        const n = Number(conditionValue0);
                         let cArr: number[] | undefined;
                         if (conditionName === 'top10') {
-                            cArr = dArr.slice(0, conditionValue0); // top 10 items
+                            cArr = dArr.slice(0, n); // top n items
                         } else if (conditionName === 'top10_percent') {
-                            cArr = dArr.slice(0, Math.floor((conditionValue0 * dArr.length) / 100)); // top 10% items
+                            cArr = dArr.slice(0, Math.floor((n * dArr.length) / 100)); // top n% items
                         } else if (conditionName === 'last10') {
-                            cArr = dArr.slice(dArr.length - conditionValue0, dArr.length); // bottom 10 items
+                            cArr = dArr.slice(dArr.length - n, dArr.length); // bottom n items
                         } else if (conditionName === 'last10_percent') {
-                            cArr = dArr.slice(
-                                dArr.length - Math.floor((conditionValue0 * dArr.length) / 100),
-                                dArr.length,
-                            ); // bottom 10% items
+                            cArr = dArr.slice(dArr.length - Math.floor((n * dArr.length) / 100), dArr.length); // bottom n% items
                         }
                         // iterate over apply range and evaluate
                         for (let r = cellrange[s].row[0]; r <= cellrange[s].row[1]; r += 1) {
@@ -469,8 +512,8 @@ export function evaluateConditionalFormat(
                     const stc = cellrange[s].column[0];
                     const edc = cellrange[s].column[1];
 
-                    const formulaTxt =
-                        conditionValue0.toString().slice(0, 1) === '=' ? conditionValue0 : `=${conditionValue0}`;
+                    const formulaSrc = String(conditionValue0);
+                    const formulaTxt = formulaSrc.startsWith('=') ? formulaSrc : `=${formulaSrc}`;
                     for (let r = str; r <= edr; r += 1) {
                         for (let c = stc; c <= edc; c += 1) {
                             const raw = options.evaluateFormula(formulaTxt, str, stc, r, c);

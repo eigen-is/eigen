@@ -10,10 +10,17 @@ export {
 export { createArrayResolver } from './cell-resolver';
 export type {
     CellFormatStyle,
+    ColorGradationRule,
     ComputeMap,
+    ConditionalFormatConditionName,
     ConditionalFormatFormulaEvaluator,
+    ConditionalFormatRule,
     DataBar,
+    DataBarRule,
+    DefaultConditionalFormatRule,
+    DefaultRuleFormat,
     EvaluateConditionalFormatOptions,
+    IconsRule,
 } from './conditional-format';
 export { cfSplitRange, evaluateConditionalFormat, getColorGradation } from './conditional-format';
 export {
