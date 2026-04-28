@@ -1,6 +1,28 @@
 import type { CellCoordinate } from './parser/helper/cell.ts';
 
+// Sheet data shapes (Cell, CellMatrix, SingleRange, ConditionalFormatRule, …) live
+// in `@workspace/lib/sheets` to avoid a workspace cycle (fortune-sheet depends on
+// lib, not vice versa). Re-exported here so engine code keeps importing from `./types`
+// without churning every file.
+export type {
+    Cell,
+    CellMatrix,
+    CellStyle,
+    CellType,
+    CellWithRowAndCol,
+    ColorGradationRule,
+    ConditionalFormatConditionName,
+    ConditionalFormatRule,
+    DataBarRule,
+    DefaultConditionalFormatRule,
+    IconsRule,
+    InlineStringSegment,
+    Range,
+    SingleRange,
+} from '@workspace/lib/sheets';
 export type { CellCoordinate };
+
+import type { Cell, CellMatrix } from '@workspace/lib/sheets';
 
 // Single cell reference resolved from a label like `A1` or `Sheet1!$A$1`.
 export type CellInfo = {
@@ -18,53 +40,6 @@ export type RangeCell = {
     label: string;
     sheetName?: string | null;
 };
-
-export type CellStyle = {
-    bl?: number;
-    it?: number;
-    ff?: number | string;
-    fs?: number;
-    fc?: string;
-    ht?: number;
-    vt?: number;
-    tb?: string;
-    cl?: number;
-    un?: number;
-};
-
-export type InlineStringSegment = {
-    v?: string;
-    si?: number;
-    measureText?: unknown;
-} & CellStyle;
-
-export type CellType = {
-    fa?: string;
-    t?: string;
-    s?: InlineStringSegment[];
-};
-
-export type Cell = {
-    v?: string | number | boolean;
-    m?: string | number;
-    mc?: { r: number; c: number; rs?: number; cs?: number };
-    f?: string;
-    ct?: CellType;
-    qp?: number;
-    bg?: string;
-    lo?: number;
-    // Text rotation: signed degrees in [-90, 90] (positive = CCW / "up", negative = CW
-    // / "down"), or 'vertical' for stacked top-to-bottom characters. Matches Excel /
-    // OOXML's textRotation. Undefined or 0 means no rotation.
-    rt?: number | 'vertical';
-    hl?: { r: number; c: number; id: string };
-    commentChatNames?: string[];
-} & CellStyle;
-
-export type CellMatrix = (Cell | null)[][];
-
-export type SingleRange = { row: number[]; column: number[] };
-export type Range = SingleRange[];
 
 export type FormulaDependency = {
     row: [number, number];

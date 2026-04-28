@@ -10,19 +10,14 @@ export {
 export { createArrayResolver } from './cell-resolver';
 export type {
     CellFormatStyle,
-    ColorGradationRule,
     ComputeMap,
-    ConditionalFormatConditionName,
     ConditionalFormatFormulaEvaluator,
-    ConditionalFormatRule,
     DataBar,
-    DataBarRule,
-    DefaultConditionalFormatRule,
-    DefaultRuleFormat,
     EvaluateConditionalFormatOptions,
-    IconsRule,
 } from './conditional-format';
 export { cfSplitRange, evaluateConditionalFormat, getColorGradation } from './conditional-format';
+// CF rule shapes (`ConditionalFormatRule` etc.) live in `@workspace/lib/sheets` and
+// are surfaced through `./types` re-exports below.
 export {
     detectCycle,
     getCalculationOrder,
