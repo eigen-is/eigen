@@ -56,19 +56,7 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
 
 ### Misc cleanups
 
-6. `apps/sheets/src/components/sheets/SheetOverlay/InputBox.tsx`'s arrow-key
-   handler manipulates `.luckysheet-formula-search-item-active` on the formula
-   autocomplete popup (lines 113, 115, 122–125, 206–235), but
-   `SheetOverlay/FormulaSearch/index.tsx` never sets the
-   `luckysheet-formula-search-item` / `luckysheet-formula-search-func` /
-   `luckysheet-formula-search-item-active` classes — keyboard navigation +
-   Enter/Tab selection in the autocomplete have been silently broken since the
-   shadcn migration. Fix by lifting the active index into FormulaSearch state
-   and threading callbacks through `WorkbookContext`, or (less work) just
-   re-add the classes plus the `index === 0` initial active marker. Mouse
-   click selection still works.
-
-7. Move package to `apps/sheets/src/fortune-sheet/` — only `apps/sheets/`
+6. Move package to `apps/sheets/src/fortune-sheet/` — only `apps/sheets/`
    consumes it. Low priority, rename-only with no code impact.
 
 ---
@@ -205,6 +193,25 @@ priority — rename-only.
 ---
 
 ## Recently shipped
+
+### 2026-04-29
+
+- **Formula autocomplete popup adopted shared chat suggest pattern**
+  (`SheetOverlay/FormulaSearch`). Was silently broken since the
+  `2026-04-28` shadcn cleanup pass dropped the `luckysheet-formula-search-item*`
+  classes that `InputBox`'s arrow-key handler queried via
+  `document.querySelector` + `classList.add/remove`. Replaced the DOM-mutation
+  approach with `useSuggestions` from
+  `@workspace/ui/components/layout/chat/use-suggestions` (the same hook
+  powering chat slash/at/target suggests + contact autosuggest). Items render
+  as `eigen-list-item` `<li>`s with `onMouseDown`+`preventDefault` for click
+  selection. Active row's description is now shown (was hardcoded to row 0).
+  Extracted the `<span>` insertion logic from `InputBox` into a shared
+  `insertFunctionAtCursor(ctx, target, name)` state mutator in
+  `formula-editor.ts` so both `InputBox` and `FxEditor` use the same path —
+  this also fixes `FxEditor`'s popup, which had keyboard nav + click both
+  fully broken (it never had any wiring to begin with). `functionCandidates`
+  type tightened from `any[]` → `FunctionCandidate[]` in `state/context.ts`.
 
 ### 2026-04-28
 

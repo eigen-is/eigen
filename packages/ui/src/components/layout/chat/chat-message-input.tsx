@@ -3,6 +3,7 @@ import type { ChatAttachment, RoomMember } from '@workspace/lib/types/chat';
 import { isAttachmentReference } from '@workspace/lib/types/chat';
 import { Paperclip, Send } from 'lucide-react';
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { useSuggestions } from '../../../hooks/use-suggestions';
 import { cn } from '../../../lib/utils';
 import { Button } from '../../button';
 import { ReferenceAttachmentChip } from '../attachment/reference-attachment-chip';
@@ -10,7 +11,6 @@ import { SimpleAttachmentChip } from '../attachment/simple-attachment-chip';
 import { ChatPlayerSuggest } from './chat-player-suggest';
 import { ChatSlashSuggest } from './chat-slash-suggest';
 import { getAtSuggestQuery, getSlashTargetQuery } from './chat-utils';
-import { useSuggestions } from './use-suggestions';
 
 export type ChatMessageInputHandle = {
     addFiles: (files: File[]) => void;
