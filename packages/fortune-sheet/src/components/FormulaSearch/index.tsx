@@ -150,21 +150,14 @@ export function FormulaSearch({ onCancel: _onCancel }: { onCancel: () => void })
                     <button
                         type="button"
                         className={cn(
-                            'block w-full text-left px-3 py-2 cursor-pointer border-b border-border text-sm',
-                            index === selectedFuncIndex ? 'bg-primary text-primary-foreground' : 'hover:bg-muted/50',
+                            'block w-full text-left px-3 py-2 border-b border-border text-sm eigen-list-item',
+                            index === selectedFuncIndex && 'eigen-list-item-active',
                         )}
                         key={v.n}
                         onClick={() => setSelectedFuncIndex(index)}
                     >
                         <div className="font-medium">{v.n}</div>
-                        <div
-                            className={cn(
-                                'text-xs',
-                                index === selectedFuncIndex ? 'text-primary-foreground/70' : 'text-muted-foreground',
-                            )}
-                        >
-                            {v.a}
-                        </div>
+                        <div className="text-xs text-muted-foreground">{v.a}</div>
                     </button>
                 ))}
             </div>

@@ -56,7 +56,17 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
 
 ### Misc cleanups
 
-6. Move package to `apps/sheets/src/fortune-sheet/` — only `apps/sheets/`
+6. **`SheetTab` shadcn migration** — bottom tab bar
+   (`components/SheetTab/index.tsx` + `SheetItem.tsx`, ~580 LOC TSX) still
+   has its own ~272 LOC `index.css` (also part of TODO #2's CSS migration —
+   tackle them together). Add/delete/rename/hide/color all use bespoke
+   styling and dropdowns; should adopt shadcn `DropdownMenu` (rename, color,
+   hide, etc.) and `Tailwind` for layout. Drag-and-drop reorder + scroll
+   buttons can stay as plain buttons. `ContextMenu/SheetTab.tsx` (the
+   right-click on a tab) already uses shadcn — only the tab bar itself needs
+   the pass.
+
+7. Move package to `apps/sheets/src/fortune-sheet/` — only `apps/sheets/`
    consumes it. Low priority, rename-only with no code impact.
 
 ---
