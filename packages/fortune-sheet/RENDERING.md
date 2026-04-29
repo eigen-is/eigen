@@ -113,7 +113,15 @@ Positioned with `left_move` / `top_move` / `width_move` / `height_move` from the
 When you double-click or type into a cell, InputBox appears:
 - A ContentEditable div positioned at the cell's location
 - `z-index: 19` when editing, `-1` when hidden
-- Renders `FormulaSearch` dropdown and `FormulaHint` tooltip below when editing formulas
+- Renders `FormulaSearch` dropdown (typed candidate list) and `FormulaHint` card
+  (post-commit signature/argument help). Both wrap `SheetOverlay/FormulaPopup`,
+  which uses Radix `Popover` with a virtual anchor at the input's bounding rect
+  to portal out of InputBox's `z-19` stacking context — landing at `z-1010`
+  above the scrollbars (`z-1003`).
+- The autocomplete keyboard + insertion path (Enter/Tab commit, ArrowUp/Down
+  navigation, Escape dismiss, click-to-insert) lives in
+  `hooks/useFormulaAutocomplete`, shared with FxEditor. It composes
+  `@workspace/ui/hooks/use-suggestions` (the generic chat suggest hook).
 
 ### 5. Formula Bar — FxEditor (React)
 

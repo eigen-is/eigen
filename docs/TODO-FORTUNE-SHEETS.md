@@ -196,22 +196,44 @@ priority — rename-only.
 
 ### 2026-04-29
 
-- **Formula autocomplete popup adopted shared chat suggest pattern**
-  (`SheetOverlay/FormulaSearch`). Was silently broken since the
-  `2026-04-28` shadcn cleanup pass dropped the `luckysheet-formula-search-item*`
-  classes that `InputBox`'s arrow-key handler queried via
-  `document.querySelector` + `classList.add/remove`. Replaced the DOM-mutation
-  approach with `useSuggestions` from
-  `@workspace/ui/components/layout/chat/use-suggestions` (the same hook
-  powering chat slash/at/target suggests + contact autosuggest). Items render
-  as `eigen-list-item` `<li>`s with `onMouseDown`+`preventDefault` for click
-  selection. Active row's description is now shown (was hardcoded to row 0).
-  Extracted the `<span>` insertion logic from `InputBox` into a shared
-  `insertFunctionAtCursor(ctx, target, name)` state mutator in
-  `formula-editor.ts` so both `InputBox` and `FxEditor` use the same path —
-  this also fixes `FxEditor`'s popup, which had keyboard nav + click both
-  fully broken (it never had any wiring to begin with). `functionCandidates`
-  type tightened from `any[]` → `FunctionCandidate[]` in `state/context.ts`.
+- **TODO #6 — Formula autocomplete + hint popups rebuilt on Radix Popover**.
+  Both `SheetOverlay/FormulaSearch` (the typed-text candidate list) and
+  `SheetOverlay/FormulaHint` (the post-commit signature/argument card) were
+  silently broken: `FormulaSearch`'s keyboard nav, click, and Enter/Tab commit
+  were all unwired since the `2026-04-28` shadcn cleanup dropped the
+  `luckysheet-formula-search-item*` classes that `InputBox` queried via
+  `document.querySelector` + `classList.add/remove`; `FxEditor`'s popup had
+  never had any wiring at all; both popups were also pinned to the cell
+  width by their flex parent and hidden behind the `z-1003` scrollbar.
+  Rebuild:
+  - New `SheetOverlay/FormulaPopup` wraps both popups in a Radix `Popover` with
+    a fixed-position virtual anchor tracked off the input element's
+    `getBoundingClientRect` (rect re-read on resize/scroll). Portals out of
+    the editor's `z-19` stacking context, lands at `z-1010` above scrollbars,
+    width is `w-80` (320px) so the popup no longer follows cell width.
+  - New `hooks/useFormulaAutocomplete` owns the autocomplete keyboard +
+    insertion path for both `InputBox` and `FxEditor`. Wraps shared
+    `useSuggestions` (now at `@workspace/ui/hooks/use-suggestions`, moved
+    from the chat folder since it's generic; chat-message-input now imports
+    relatively) with a synchronous Enter/Tab commit that reads
+    `context.functionCandidates` directly — bypassing the effect-driven
+    countRef in `useSuggestions` to avoid the count-vs-visible race.
+  - `FormulaSearch` items render as `eigen-list-item` `<li>`s with
+    `onMouseDown`+`preventDefault` for click; active row's description shown
+    (was hardcoded to row 0).
+  - `FormulaHint` lost its broken `X` (close) and `ChevronUp` (collapse)
+    button stubs — both had `cursor-pointer`+`title` but no `onClick`.
+    Layout collapsed from triple-absolute-positioned divs to plain flow.
+  - DOM-side helper extracted to
+    `formula-editor.ts::insertFormulaFunctionDom(target, name): boolean` —
+    pure DOM, no `ctx`; callers do the state mutation in their own
+    `setContext` recipe (avoids mixing side effects with immer).
+  - `useSuggestions`: `selectedIndex` moved to a ref alongside its `useState`,
+    so `handleKeyDown` is no longer recreated on every arrow press. Benefits
+    chat too (consumer `useCallback` deps no longer cascade).
+  - `state/context.ts`: `functionCandidates: any[]` → `FunctionCandidate[]`.
+  - Removed the now-unused `id="luckysheet-formula-search-c"` (DOM selector
+    coupling for this popup is gone).
 
 ### 2026-04-28
 
