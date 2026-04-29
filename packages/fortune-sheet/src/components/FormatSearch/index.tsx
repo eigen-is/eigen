@@ -122,21 +122,15 @@ export function FormatSearch({
                 {toolbarFormat.map((v: ToolbarFormatType, index: number) => (
                     <div
                         className={cn(
-                            'flex items-center justify-between px-3 py-1.5 text-sm cursor-pointer border-b border-border',
-                            index === selectedFormatIndex ? 'bg-primary text-primary-foreground' : 'hover:bg-muted/50',
+                            'flex items-center justify-between px-3 py-1.5 text-sm border-b border-border eigen-list-item',
+                            index === selectedFormatIndex && 'eigen-list-item-active',
                         )}
                         key={v.name}
                         onClick={() => setSelectedFormatIndex(index)}
                         tabIndex={0}
                     >
                         <span>{v.name}</span>
-                        <span
-                            className={
-                                index === selectedFormatIndex ? 'text-primary-foreground/70' : 'text-muted-foreground'
-                            }
-                        >
-                            {v.value}
-                        </span>
+                        <span className="text-muted-foreground">{v.value}</span>
                     </div>
                 ))}
             </div>
