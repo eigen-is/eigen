@@ -1,27 +1,49 @@
+import { useScrollToIndex } from '@workspace/ui/hooks/use-scroll-to-index';
 import { cn } from '@workspace/ui/lib/utils';
-import type React from 'react';
-import { useContext } from 'react';
+import { useContext, useEffect, useMemo, useRef } from 'react';
 import { WorkbookContext } from '../../../context';
+import { FormulaPopup } from '../FormulaPopup';
 
-export const FormulaSearch: React.FC<React.HTMLAttributes<HTMLDivElement>> = (props) => {
+type FormulaSearchProps = {
+    anchorRef: { readonly current: HTMLElement | null };
+    open: boolean;
+    selectedIndex: number;
+    onSelect: (formulaName: string) => void;
+    onItemsChange: (count: number, names: string[]) => void;
+};
+
+export function FormulaSearch({ anchorRef, open, selectedIndex, onSelect, onItemsChange }: FormulaSearchProps) {
     const { context } = useContext(WorkbookContext);
-    if (context.functionCandidates.length === 0) return null;
+    const listRef = useRef<HTMLUListElement>(null);
+    useScrollToIndex(listRef, selectedIndex);
+
+    const items = context.functionCandidates;
+    const names = useMemo(() => items.map((i) => i.n), [items]);
+
+    useEffect(() => {
+        onItemsChange(names.length, names);
+    }, [names, onItemsChange]);
 
     return (
-        <div
-            {...props}
-            id="luckysheet-formula-search-c"
-            className="absolute z-[1003] w-[300px] border border-border bg-background shadow-md text-xs"
-        >
-            {context.functionCandidates.map((v, index) => (
-                <div
-                    key={v.n}
-                    className={cn('cursor-pointer px-2.5 py-1.5', index === 0 && 'border-y border-border bg-muted')}
-                >
-                    <div className="text-sm">{v.n}</div>
-                    {index === 0 && <div className="text-muted-foreground">{v.d}</div>}
-                </div>
-            ))}
-        </div>
+        <FormulaPopup anchorRef={anchorRef} open={open && items.length > 0}>
+            <ul ref={listRef} tabIndex={-1}>
+                {items.map((v, index) => {
+                    const isActive = index === selectedIndex;
+                    return (
+                        <li
+                            key={v.n}
+                            className={cn('px-2.5 py-1.5 eigen-list-item', isActive && 'eigen-list-item-active')}
+                            onMouseDown={(e) => {
+                                e.preventDefault();
+                                onSelect(v.n);
+                            }}
+                        >
+                            <div className="text-sm">{v.n}</div>
+                            {isActive && v.d && <div className="text-xs text-muted-foreground">{v.d}</div>}
+                        </li>
+                    );
+                })}
+            </ul>
+        </FormulaPopup>
     );
-};
+}

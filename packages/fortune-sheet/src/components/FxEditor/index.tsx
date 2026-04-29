@@ -1,6 +1,7 @@
 import { FunctionSquare } from 'lucide-react';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
+import { useFormulaAutocomplete } from '../../hooks/useFormulaAutocomplete';
 import { usePrevious } from '../../hooks/usePrevious';
 import {
     cancelNormalSelected,
@@ -28,7 +29,6 @@ export function FxEditor() {
     const { context, setContext, refs } = useContext(WorkbookContext);
     const [focused, setFocused] = useState(false);
     const lastKeyDownEventRef = useRef<KeyboardEvent>(null);
-    const inputContainerRef = useRef<HTMLDivElement>(null);
     const [isHidenRC, setIsHidenRC] = useState<boolean>(false);
     const firstSelection = context.luckysheet_select_save?.[0];
     const prevFirstSelection = usePrevious(firstSelection);
@@ -102,6 +102,8 @@ export function FxEditor() {
         setContext,
     ]);
 
+    const formulaAutocomplete = useFormulaAutocomplete({ targetRef: refs.fxInput, enabled: focused });
+
     const onKeyDown = useCallback(
         (e: React.KeyboardEvent<HTMLDivElement>) => {
             if (context.allowEdit === false) {
@@ -113,6 +115,9 @@ export function FxEditor() {
             if (key === 'ArrowLeft' || key === 'ArrowRight') {
                 e.stopPropagation();
             }
+
+            if (formulaAutocomplete.handleKeyDown(e)) return;
+
             setContext((draftCtx) => {
                 if (context.luckysheetCellUpdate.length > 0) {
                     switch (key) {
@@ -158,7 +163,13 @@ export function FxEditor() {
                 }
             });
         },
-        [context.allowEdit, context.luckysheetCellUpdate.length, refs.fxInput, setContext],
+        [
+            context.allowEdit,
+            context.luckysheetCellUpdate.length,
+            formulaAutocomplete.handleKeyDown,
+            refs.fxInput,
+            setContext,
+        ],
     );
 
     const onChange = useCallback(() => {
@@ -209,10 +220,7 @@ export function FxEditor() {
                 <div className="flex items-center  pl-2 pr-2">
                     <FunctionSquare width={18} height={18} aria-hidden="true" />
                 </div>
-                <div
-                    ref={inputContainerRef}
-                    className="overflow-visible p-0 flex-1 flex items-center relative border-l border-border"
-                >
+                <div className="overflow-visible p-0 flex-1 flex items-center relative border-l border-border">
                     <ContentEditable
                         innerRef={(e) => {
                             refs.fxInput.current = e;
@@ -228,20 +236,14 @@ export function FxEditor() {
                         tabIndex={0}
                         allowEdit={allowEdit}
                     />
-                    {focused && (
-                        <>
-                            <FormulaSearch
-                                style={{
-                                    top: inputContainerRef.current!.clientHeight,
-                                }}
-                            />
-                            <FormulaHint
-                                style={{
-                                    top: inputContainerRef.current!.clientHeight,
-                                }}
-                            />
-                        </>
-                    )}
+                    <FormulaSearch
+                        anchorRef={refs.fxInput}
+                        open={focused}
+                        selectedIndex={formulaAutocomplete.selectedIndex}
+                        onSelect={formulaAutocomplete.insertFormula}
+                        onItemsChange={formulaAutocomplete.onItemsChange}
+                    />
+                    <FormulaHint anchorRef={refs.fxInput} open={focused} />
                 </div>
             </div>
         </aside>

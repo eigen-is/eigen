@@ -33,8 +33,11 @@ export function useSuggestions({
     acceptShiftEnter = false,
 }: UseSuggestionsOptions): UseSuggestionsResult {
     const [selectedIndex, setSelectedIndex] = useState(0);
+    const selectedIndexRef = useRef(0);
     const countRef = useRef(0);
     const itemsRef = useRef<string[]>([]);
+
+    selectedIndexRef.current = selectedIndex;
 
     const onItemsChange = useCallback((count: number, items: string[]) => {
         countRef.current = count;
@@ -65,7 +68,7 @@ export function useSuggestions({
             const isCommit = e.key === 'Tab' || (e.key === 'Enter' && (acceptShiftEnter || !e.shiftKey));
             if (isCommit) {
                 e.preventDefault();
-                const item = itemsRef.current[selectedIndex];
+                const item = itemsRef.current[selectedIndexRef.current];
                 if (item !== undefined) {
                     onSelect(item);
                     setSelectedIndex(0);
@@ -82,7 +85,7 @@ export function useSuggestions({
             }
             return false;
         },
-        [visible, passthroughWhenEmpty, acceptShiftEnter, selectedIndex, onSelect, onEscape, onCommitEmpty],
+        [visible, passthroughWhenEmpty, acceptShiftEnter, onSelect, onEscape, onCommitEmpty],
     );
 
     return { selectedIndex, onItemsChange, handleKeyDown };

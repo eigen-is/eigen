@@ -314,6 +314,39 @@ function searchFunction(ctx: Context, searchtxt: string) {
     ctx.functionCandidates = list;
 }
 
+export function insertFormulaFunctionDom(target: HTMLElement, formulaName: string): boolean {
+    const searchTxt = getrangeseleciton()?.textContent || "";
+    const deleteCount = searchTxt.length;
+    target.focus();
+
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return false;
+
+    const range = selection.getRangeAt(0);
+    if (deleteCount !== 0) {
+        const startOffset = Math.max(range.startOffset - deleteCount, 0);
+        const endOffset = range.startOffset;
+        range.setStart(range.startContainer, startOffset);
+        range.setEnd(range.startContainer, endOffset);
+        range.deleteContents();
+    }
+
+    const functionStr = `<span dir="auto" class="luckysheet-formula-text-func">${formulaName}</span>`;
+    const lParStr = `<span dir="auto" class="luckysheet-formula-text-lpar">(</span>`;
+    const functionNode = new DOMParser().parseFromString(functionStr, "text/html").body.childNodes[0];
+    const lParNode = new DOMParser().parseFromString(lParStr, "text/html").body.childNodes[0];
+
+    if (range.startContainer.parentNode) {
+        range.setStart(range.startContainer.parentNode, 1);
+    }
+    range.insertNode(lParNode);
+    range.insertNode(functionNode);
+    range.collapse();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    return true;
+}
+
 export function getrangeseleciton() {
     const currSelection = window.getSelection();
     if (!currSelection) return null;

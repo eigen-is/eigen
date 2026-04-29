@@ -23,6 +23,11 @@ interface MutableRefObject<T> {
     current: T;
 }
 
+export type FunctionCandidate = {
+    n: string;
+    d?: string;
+};
+
 type RefValues = {
     globalCache: GlobalCache;
     cellInput: MutableRefObject<HTMLDivElement | null>;
@@ -116,7 +121,7 @@ export type Context = {
         backgroundColor: string;
     } & Rect)[];
     formulaRangeSelect: ({ rangeIndex: number } & Rect) | undefined;
-    functionCandidates: any[];
+    functionCandidates: FunctionCandidate[];
     functionHint: string | null | undefined;
 
     luckysheet_copy_save?: {
