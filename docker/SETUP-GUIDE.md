@@ -254,7 +254,7 @@ When `edge` is off and `static` is on, a small `eigen-static` container handles 
 SPA serving and API proxying internally on `127.0.0.1:8080`. Your webserver only needs to
 terminate HTTPS and forward everything there.
 
-The setup script writes two snippets you can drop in as-is:
+The setup script writes three drop-in snippets next to `.env.production`:
 
 - **`eigen.nginx.conf`** — symlink into `/etc/nginx/sites-enabled/`. About 25 lines:
   one `proxy_pass http://127.0.0.1:8080`, plus the WebSocket upgrade map and the SSE
@@ -262,14 +262,17 @@ The setup script writes two snippets you can drop in as-is:
 - **`eigen.Caddyfile`** — append to your existing `Caddyfile`. Six lines: a single
   `reverse_proxy 127.0.0.1:8080`. Caddy auto-detects WebSocket upgrades, so no map
   directive needed.
+- **`eigen.apache.conf`** — `a2ensite` it. About 30 lines covering SSL, the
+  `mod_proxy_wstunnel` rewrite for WebSocket upgrades, and `ProxyPass` for the rest. The
+  snippet header lists the modules to enable (`a2enmod proxy proxy_http proxy_wstunnel
+  rewrite ssl headers`) and a one-liner to switch from `mpm_prefork` to `mpm_event` —
+  prefork uses one process per long-lived SSE/WebSocket connection and runs out of slots
+  fast.
 
 The bundled `eigen-static` container is built from your local `dist/` directory at
 `docker compose build` time, so it always matches the freshly-built frontend. Update
 flow stays the same: `bun run build && docker compose --env-file .env.production up -d
 --build`.
-
-**On Apache**: skip the `prefork` MPM. It uses one process per long-lived SSE / WebSocket
-connection and exhausts process slots quickly. Use the [event MPM](https://httpd.apache.org/docs/2.4/mod/event.html) instead.
 
 #### TLS certs without bundled Caddy
 
