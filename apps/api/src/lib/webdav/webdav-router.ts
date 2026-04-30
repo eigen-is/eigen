@@ -37,6 +37,7 @@ export const webdavRouter = new Elysia({ name: 'webdav', prefix: '/webdav' })
             mountId: params.mountId,
             pathStr: '/',
             depth,
+            body: await request.text(),
         });
     })
     .route('PROPFIND', '/:ownerId/:mountId/*', async ({ request, params }) => {
@@ -50,6 +51,7 @@ export const webdavRouter = new Elysia({ name: 'webdav', prefix: '/webdav' })
             mountId: params.mountId,
             pathStr,
             depth,
+            body: await request.text(),
         });
     })
     .route('GET', '/:ownerId/:mountId/*', async ({ request, params }) => {

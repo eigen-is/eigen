@@ -1,4 +1,5 @@
 import { isContainerType } from '@workspace/lib/types';
+import { XMLParser, XMLValidator } from 'fast-xml-parser';
 import type { ProtocolUser } from '../auth/protocol-auth';
 import { ApiError } from '../core/errors';
 import type Drive from '../drive/drive';
@@ -10,6 +11,23 @@ import { buildXmlResponse, encodeHref, escapeXml, multistatus, propstatOk, resou
 
 const FINITE_DEPTH_BODY = `<?xml version="1.0" encoding="utf-8"?>
 <D:error xmlns:D="DAV:"><D:propfind-finite-depth/></D:error>`;
+
+const propfindParser = new XMLParser({ ignoreAttributes: false, removeNSPrefix: true });
+
+// RFC 4918 §9.1: empty body is allowed (= allprop). A non-empty body must be a
+// well-formed XML document rooted at <propfind>. Anything else → 400.
+function validatePropfindBody(body: string): void {
+    const trimmed = body.trim();
+    if (!trimmed) return;
+    const validation = XMLValidator.validate(trimmed);
+    if (validation !== true) {
+        throw new ApiError(400, 'Malformed XML');
+    }
+    const parsed = propfindParser.parse(trimmed) as Record<string, unknown>;
+    if (!('propfind' in parsed)) {
+        throw new ApiError(400, 'Expected <propfind> root element');
+    }
+}
 
 function withTrailingSlash(p: string): string {
     return p.endsWith('/') ? p : `${p}/`;
@@ -35,8 +53,11 @@ export async function handleResourcePropfind(args: {
     mountId: string;
     pathStr: string;
     depth: '0' | '1' | 'infinity';
+    body: string;
 }): Promise<Response> {
-    const { user, ownerId, mountId, pathStr, depth } = args;
+    const { user, ownerId, mountId, pathStr, depth, body } = args;
+
+    validatePropfindBody(body);
 
     if (depth === 'infinity') {
         return new Response(FINITE_DEPTH_BODY, {
