@@ -13,10 +13,10 @@ import { escapeHtml } from '@workspace/lib/html';
 import type { BorderInfo, Cell, CellWithRowAndCol, Sheet } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import DOMPurify from 'isomorphic-dompurify';
+import { readSheetsContent } from '../../document/sheets';
 import type { Mount } from '../../mount';
 import type { ExportResult } from '../export-document';
 import { getFontCSS } from '../fonts';
-import { loadSheetsContent } from './content';
 import { resolveFontFamily } from './fonts';
 
 const DEFAULT_COL_WIDTH = 73;
@@ -67,7 +67,7 @@ export async function exportSheetsToHtml(mount: Mount, drivePath: DrivePath): Pr
 
 export async function generateSheetsExportHtml(mount: Mount, drivePath: DrivePath): Promise<string> {
     const title = drivePath.name.replace(/\.eigensheets$/, '');
-    const sheets = await loadSheetsContent(mount, drivePath);
+    const sheets = await readSheetsContent(mount, drivePath);
     const bodyHtml = renderSheetsHtml(sheets);
     const sanitized = DOMPurify.sanitize(bodyHtml, { FORCE_BODY: true });
     return wrapInDocument(title, sanitized);
