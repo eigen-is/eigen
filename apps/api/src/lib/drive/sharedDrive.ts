@@ -145,11 +145,14 @@ export default class SharedDrive {
     }
 
     public async copyPath(mountId: string, srcPathId: string, destParentId: string, name: string): Promise<DrivePath> {
-        return this.withReadPermission(mountId, srcPathId, () =>
-            this.withWritePermission(mountId, destParentId, () =>
-                this.sharedDrive.copyPath(mountId, srcPathId, destParentId, name),
-            ),
-        );
+        const memberships = await this.getUserMemberships();
+        if (!(await this.canRead(mountId, srcPathId, this.user, memberships))) {
+            throw new ApiError(403, 'No read permission on source');
+        }
+        if (!(await this.canWrite(mountId, destParentId, this.user, memberships))) {
+            throw new ApiError(403, 'No write permission on target folder');
+        }
+        return this.sharedDrive.copyPath(mountId, srcPathId, destParentId, name);
     }
 
     public async copyPathCrossMount(
@@ -159,11 +162,14 @@ export default class SharedDrive {
         destParentId: string,
         name: string,
     ): Promise<DrivePath> {
-        return this.withReadPermission(srcMountId, srcPathId, () =>
-            this.withWritePermission(destMountId, destParentId, () =>
-                this.sharedDrive.copyPathCrossMount(srcMountId, srcPathId, destMountId, destParentId, name),
-            ),
-        );
+        const memberships = await this.getUserMemberships();
+        if (!(await this.canRead(srcMountId, srcPathId, this.user, memberships))) {
+            throw new ApiError(403, 'No read permission on source');
+        }
+        if (!(await this.canWrite(destMountId, destParentId, this.user, memberships))) {
+            throw new ApiError(403, 'No write permission on target folder');
+        }
+        return this.sharedDrive.copyPathCrossMount(srcMountId, srcPathId, destMountId, destParentId, name);
     }
 
     public async isInsideContainer(mountId: string, pathId: string): Promise<boolean> {
