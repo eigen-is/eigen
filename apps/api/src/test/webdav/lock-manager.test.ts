@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { LockManager, parseIfHeaderTokens } from '../../lib/webdav/locks';
+import { LockManager, parseIfHeaderTokens } from '../../lib/drive/lock-manager';
 
 describe('LockManager', () => {
     test('acquire returns a urn:uuid token', () => {
