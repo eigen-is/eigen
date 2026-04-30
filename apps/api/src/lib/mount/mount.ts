@@ -990,7 +990,7 @@ export class Mount {
             .from(paths)
             .where(isNull(paths.trashedAt))
             .get();
-        return Number(result?.total ?? 0);
+        return result?.total ?? 0;
     }
 
     async getBreadcrumb(pathId: string): Promise<DrivePath[]> {
