@@ -435,6 +435,12 @@ export default class Drive {
         return await mount.readFile(pathId);
     }
 
+    async readRange(mountId: string, pathId: string, start: number, end: number): Promise<StorageFile | null> {
+        const mount = this.getMount(mountId);
+        await mount.getActivePath(pathId);
+        return mount.readRange(pathId, start, end);
+    }
+
     async serveFile(mountId: string, pathId: string, disposition: 'attachment' | 'inline'): Promise<Response> {
         const mount = this.getMount(mountId);
         const path = await mount.getActivePath(pathId);
@@ -890,6 +896,7 @@ export default class Drive {
             ownerId: r.ownerId,
             mimeType: r.mimeType,
             size: r.size ?? 0,
+            hash: null,
             thumbnail: r.thumbnail,
             acl: r.acl as DriveACL[] | null,
             visibility: (r.visibility ?? 'private') as DriveVisibility,

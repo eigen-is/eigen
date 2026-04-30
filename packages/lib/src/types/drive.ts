@@ -201,6 +201,7 @@ export type DrivePath = {
     ownerId: string;
     mimeType: string;
     size: number;
+    hash: string | null;
     thumbnail: string | null;
     acl: DriveACL[] | null;
     visibility: DriveVisibility;
