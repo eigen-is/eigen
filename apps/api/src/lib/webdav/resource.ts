@@ -128,7 +128,7 @@ export async function handlePut(args: {
 
     const parent = await cache.resolve(drive, mountId, parentStr);
     if (!parent) throw new ApiError(409, 'Parent not found');
-    if (await drive.isInsideContainer(mountId, parent.id)) {
+    if (await drive.isContainerWriteBlocked(mountId, parent.id)) {
         throw new ApiError(423, 'Container internals are read-only');
     }
 
@@ -180,7 +180,7 @@ export async function handleMkcol(args: {
 
     const parent = await cache.resolve(drive, mountId, parentStr);
     if (!parent) throw new ApiError(409, 'Parent not found');
-    if (await drive.isInsideContainer(mountId, parent.id)) {
+    if (await drive.isContainerWriteBlocked(mountId, parent.id)) {
         throw new ApiError(423, 'Container internals are read-only');
     }
 

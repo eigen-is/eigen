@@ -176,6 +176,12 @@ export default class SharedDrive {
         return this.withReadPermission(mountId, pathId, () => this.sharedDrive.isInsideContainer(mountId, pathId));
     }
 
+    public async isContainerWriteBlocked(mountId: string, pathId: string): Promise<boolean> {
+        return this.withReadPermission(mountId, pathId, () =>
+            this.sharedDrive.isContainerWriteBlocked(mountId, pathId),
+        );
+    }
+
     public async readRange(mountId: string, pathId: string, start: number, end: number) {
         return this.withReadPermission(mountId, pathId, () => this.sharedDrive.readRange(mountId, pathId, start, end));
     }
