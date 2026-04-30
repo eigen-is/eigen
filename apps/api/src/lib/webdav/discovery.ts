@@ -2,7 +2,7 @@ import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
 import type { ProtocolUser } from '../auth/protocol-auth';
 import { ApiError } from '../core/errors';
 import { getHome } from '../home';
-import { getTeam } from '../team/team';
+import { getTeam } from '../team';
 import { getMemberships } from '../user';
 import { buildXmlResponse, encodeHref, escapeXml, multistatus, propstatOk, response } from './xml';
 
