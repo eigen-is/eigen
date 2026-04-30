@@ -96,20 +96,24 @@ export function extractPropOps(body: string): PropOp[] {
         if (k.startsWith('@_')) docAttrs[k] = String(v);
     }
 
+    // RFC 4918 §9.2: PROPPATCH operations MUST be processed in document order.
+    // Object.entries preserves XML document order, but we must NOT separate set/remove
+    // into two passes — that breaks `<remove/>` followed by `<set/>` on the same prop.
+    // fast-xml-parser collapses repeated <set>/<remove> children into arrays, which
+    // also preserves their original order.
     const ops: PropOp[] = [];
-    for (const verb of ['set', 'remove'] as const) {
-        for (const [k, raw] of Object.entries(root)) {
-            if (stripPrefix(k).local !== verb) continue;
-            const entries = Array.isArray(raw) ? raw : [raw];
-            for (const entry of entries) {
-                if (!entry || typeof entry !== 'object') continue;
-                const propKey = Object.keys(entry).find((pk) => stripPrefix(pk).local === 'prop');
-                if (!propKey) continue;
-                for (const child of iterPropChildren((entry as Record<string, unknown>)[propKey])) {
-                    const { prefix, local } = stripPrefix(child.tag);
-                    const namespace = resolveNamespace(prefix, { ...docAttrs, ...child.attrs }, 'DAV:');
-                    ops.push({ op: verb, namespace, name: local, value: child.value });
-                }
+    for (const [k, raw] of Object.entries(root)) {
+        const verb = stripPrefix(k).local;
+        if (verb !== 'set' && verb !== 'remove') continue;
+        const entries = Array.isArray(raw) ? raw : [raw];
+        for (const entry of entries) {
+            if (!entry || typeof entry !== 'object') continue;
+            const propKey = Object.keys(entry).find((pk) => stripPrefix(pk).local === 'prop');
+            if (!propKey) continue;
+            for (const child of iterPropChildren((entry as Record<string, unknown>)[propKey])) {
+                const { prefix, local } = stripPrefix(child.tag);
+                const namespace = resolveNamespace(prefix, { ...docAttrs, ...child.attrs }, 'DAV:');
+                ops.push({ op: verb, namespace, name: local, value: child.value });
             }
         }
     }
