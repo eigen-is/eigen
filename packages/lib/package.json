@@ -5,7 +5,8 @@
   "private": true,
   "sideEffects": false,
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
   },
   "dependencies": {
     "@apps/api": "workspace:*",
