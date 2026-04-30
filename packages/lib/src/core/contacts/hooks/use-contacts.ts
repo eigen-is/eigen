@@ -1,6 +1,6 @@
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { contactsApi } from '@workspace/lib/api';
-import { useAuth } from '@workspace/lib/auth';
+import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import type { Contact } from '@workspace/lib/types/contact';
 import { AppError, onMutationError } from '../../api-error';
 import { invalidateHomeSize } from '../../home';
@@ -19,6 +19,7 @@ export const contactKeys = {
 // Fetch all contacts
 export function useContacts() {
     const { user } = useAuth();
+    const isGuest = useIsGuest();
     const ownerId = user?.id || '';
 
     return useQuery({
@@ -28,7 +29,7 @@ export function useContacts() {
             return response.data || [];
         },
         staleTime: 5 * 60 * 1000, // 5 minutes
-        enabled: !!ownerId && user?.role !== 'guest',
+        enabled: !!ownerId && !isGuest,
     });
 }
 

@@ -1,4 +1,4 @@
-import { useAuth } from '@workspace/lib/auth';
+import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { useCheckPermissions, useIsEffectiveOwner, useUpdateACL } from '@workspace/lib/drive';
 import type { DriveACL, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
@@ -23,6 +23,7 @@ export function DriveAccessDialog({ open, onOpenChange, path, prefillEmail }: Dr
     }, [path]);
 
     const { user } = useAuth();
+    const isGuest = useIsGuest();
     const updateACL = useUpdateACL(path?.ownerId || '', path?.mountId, user?.id);
     const isEffectiveOwner = useIsEffectiveOwner(path?.ownerId || '');
     const { data: permissions } = useCheckPermissions(path?.ownerId || '', path?.mountId || '', path?.id);
@@ -32,7 +33,6 @@ export function DriveAccessDialog({ open, onOpenChange, path, prefillEmail }: Dr
     }
 
     // Guests and non-owner editors (when sharing is restricted) see read-only view
-    const isGuest = user?.role === 'guest';
     const readOnly = isGuest || (path.sharingRestricted && !isEffectiveOwner);
 
     const handleEmailClick = () => {

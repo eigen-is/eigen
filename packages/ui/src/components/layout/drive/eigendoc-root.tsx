@@ -1,5 +1,5 @@
 import { Outlet } from '@tanstack/react-router';
-import { useAuth } from '@workspace/lib/auth';
+import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, useRootFolder } from '@workspace/lib/drive';
 import { parseOwnerId } from '@workspace/lib/types';
 import type { DriveContextType } from '@workspace/lib/types/drive';
@@ -22,7 +22,7 @@ type EigenDocRootProps = {
 
 export function EigenDocRoot({ config, rootRoute, isFullScreen = false, teamOwnerId, teamMountId }: EigenDocRootProps) {
     const { user } = useAuth();
-    const isGuest = user?.role === 'guest';
+    const isGuest = useIsGuest();
     const isTeamView = !!teamOwnerId && !!teamMountId && parseOwnerId(teamOwnerId).type === 'team';
     const activeOwnerId = isTeamView ? teamOwnerId : isGuest ? '' : user?.id || '';
     const activeMountId = isTeamView ? teamMountId : DEFAULT_MOUNT_ID;

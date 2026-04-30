@@ -3,12 +3,12 @@ import type { OrgMember } from '@workspace/lib/types/admin';
 import { toast } from 'sonner';
 import { settingsApi } from '../../api';
 import { AppError, onMutationError } from '../../api-error';
-import { useAuth } from '../../auth/auth-context';
 import { authClient } from '../../auth/hooks/use-auth-client';
+import { useIsGuest } from '../../auth/hooks/use-is-guest';
 import { adminKeys } from './keys';
 
 export function useMembers(organizationId?: string) {
-    const { user } = useAuth();
+    const isGuest = useIsGuest();
     return useQuery({
         queryKey: adminKeys.members(organizationId ?? ''),
         queryFn: async (): Promise<OrgMember[]> => {
@@ -26,7 +26,7 @@ export function useMembers(organizationId?: string) {
                 createdAt: new Date(m.createdAt),
             }));
         },
-        enabled: !!organizationId && user?.role !== 'guest',
+        enabled: !!organizationId && !isGuest,
         staleTime: 1000 * 60 * 2,
     });
 }
