@@ -434,4 +434,29 @@ export default class SharedDrive {
         // paths where the querying user has ACL read access.
         return this.sharedDrive.getSharedWith(user);
     }
+
+    public async setDeadProp(
+        mountId: string,
+        pathId: string,
+        namespace: string,
+        name: string,
+        value: string,
+    ): Promise<void> {
+        return this.withWritePermission(mountId, pathId, () =>
+            this.sharedDrive.setDeadProp(mountId, pathId, namespace, name, value),
+        );
+    }
+
+    public async removeDeadProp(mountId: string, pathId: string, namespace: string, name: string): Promise<void> {
+        return this.withWritePermission(mountId, pathId, () =>
+            this.sharedDrive.removeDeadProp(mountId, pathId, namespace, name),
+        );
+    }
+
+    public async listDeadProps(
+        mountId: string,
+        pathId: string,
+    ): Promise<{ namespace: string; name: string; value: string }[]> {
+        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.listDeadProps(mountId, pathId));
+    }
 }

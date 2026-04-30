@@ -3,7 +3,7 @@ import * as schema from './schema';
 
 export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
     name: 'mount-metadata',
-    currentVersion: 1,
+    currentVersion: 2,
     schema,
     migrations: [
         {
@@ -41,6 +41,21 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     ON paths(trashedFrom, trashedAt) WHERE trashedFrom IS NOT NULL;
                 CREATE INDEX IF NOT EXISTS idx_paths_parent_trash
                     ON paths(parentId, trashedAt);
+            `),
+        },
+        {
+            version: 2,
+            up: (db) =>
+                db.exec(`
+                CREATE TABLE IF NOT EXISTS webdav_dead_props (
+                    pathId TEXT NOT NULL,
+                    namespace TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    value TEXT NOT NULL,
+                    PRIMARY KEY (pathId, namespace, name),
+                    FOREIGN KEY (pathId) REFERENCES paths(id) ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS idx_webdav_dead_props_pathId ON webdav_dead_props(pathId);
             `),
         },
     ],

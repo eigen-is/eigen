@@ -3,6 +3,7 @@ import { authenticateBasic } from './auth';
 import { handleDiscoveryOwner, handleDiscoveryRoot } from './discovery';
 import { handleCopy, handleMove } from './move-copy';
 import { handleResourcePropfind } from './propfind';
+import { handleProppatch } from './proppatch';
 import { handleDelete, handleGet, handleMkcol, handlePut } from './resource';
 
 // Default-to-`infinity` matches RFC 4918: when Depth is omitted, it defaults to infinity.
@@ -132,5 +133,15 @@ export const webdavRouter = new Elysia({ name: 'webdav', prefix: '/webdav' })
             requestUrl: request.url,
             destinationHeader: request.headers.get('Destination'),
             overwrite: (request.headers.get('Overwrite') ?? 'T').toUpperCase() !== 'F',
+        });
+    })
+    .route('PROPPATCH', '/:ownerId/:mountId/*', async ({ request, params }) => {
+        const user = await authenticateBasic(request);
+        return handleProppatch({
+            user,
+            ownerId: params.ownerId,
+            mountId: params.mountId,
+            pathStr: `/${params['*'] ?? ''}`,
+            body: await request.text(),
         });
     });
