@@ -847,6 +847,21 @@ export default class Drive {
         await mount.updatePath(pathId, {});
     }
 
+    async setDeadProp(mountId: string, pathId: string, namespace: string, name: string, value: string): Promise<void> {
+        return this.getMount(mountId).setDeadProp(pathId, namespace, name, value);
+    }
+
+    async removeDeadProp(mountId: string, pathId: string, namespace: string, name: string): Promise<void> {
+        return this.getMount(mountId).removeDeadProp(pathId, namespace, name);
+    }
+
+    async listDeadProps(
+        mountId: string,
+        pathId: string,
+    ): Promise<{ namespace: string; name: string; value: string }[]> {
+        return this.getMount(mountId).listDeadProps(pathId);
+    }
+
     async touchFile(mountId: string, parentId: string, name: string, mimeType: string): Promise<string> {
         const mount = this.getMount(mountId);
         return mount.touchFile(parentId, name, mimeType);

@@ -1,6 +1,6 @@
 import type { DriveACL, DrivePathDetails, DrivePathType, DriveVisibility } from '@workspace/lib/types/drive';
 import { sql } from 'drizzle-orm';
-import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 export const paths = sqliteTable('paths', {
     id: text('id').primaryKey(),
@@ -22,3 +22,19 @@ export const paths = sqliteTable('paths', {
     trashedAt: integer('trashedAt', { mode: 'timestamp' }),
     trashedFrom: text('trashedFrom'),
 });
+
+// WebDAV dead properties (RFC 4918 §3) — opaque key/value pairs stored verbatim
+// per resource. Live properties (displayname, getetag, etc.) are derived from the
+// path row and intentionally rejected by PROPPATCH; see PROTECTED_PROPS in proppatch.ts.
+export const webdavDeadProps = sqliteTable(
+    'webdav_dead_props',
+    {
+        pathId: text('pathId').notNull(),
+        namespace: text('namespace').notNull(),
+        name: text('name').notNull(),
+        value: text('value').notNull(),
+    },
+    (t) => ({
+        pk: primaryKey({ columns: [t.pathId, t.namespace, t.name] }),
+    }),
+);

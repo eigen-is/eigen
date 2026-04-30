@@ -1,15 +1,27 @@
 import { isContainerType } from '@workspace/lib/types';
 import type { ProtocolUser } from '../auth/protocol-auth';
 import { ApiError } from '../core/errors';
+import type Drive from '../drive/drive';
+import type SharedDrive from '../drive/sharedDrive';
 import { getWebdavDrive } from './get-drive';
 import { WebdavPathCache } from './path-resolve';
-import { buildXmlResponse, encodeHref, multistatus, propstatOk, resourceProps, response } from './xml';
+import { buildXmlResponse, encodeHref, escapeXml, multistatus, propstatOk, resourceProps, response } from './xml';
 
 const FINITE_DEPTH_BODY = `<?xml version="1.0" encoding="utf-8"?>
 <D:error xmlns:D="DAV:"><D:propfind-finite-depth/></D:error>`;
 
 function withTrailingSlash(p: string): string {
     return p.endsWith('/') ? p : `${p}/`;
+}
+
+async function deadPropsXml(drive: Drive | SharedDrive, mountId: string, pathId: string): Promise<string[]> {
+    const deadProps = await drive.listDeadProps(mountId, pathId);
+    return deadProps.map((dp) => {
+        const safeName = escapeXml(dp.name);
+        const safeValue = escapeXml(dp.value);
+        if (dp.namespace === 'DAV:') return `<D:${safeName}>${safeValue}</D:${safeName}>`;
+        return `<X:${safeName} xmlns:X="${escapeXml(dp.namespace)}">${safeValue}</X:${safeName}>`;
+    });
 }
 
 export async function handleResourcePropfind(args: {
@@ -38,22 +50,30 @@ export async function handleResourcePropfind(args: {
     const responses: string[] = [];
 
     if (isCollection) {
-        const [used, total] = await Promise.all([drive.usedBytes(mountId), drive.quotaBytes(mountId)]);
+        const [used, total, deadXml] = await Promise.all([
+            drive.usedBytes(mountId),
+            drive.quotaBytes(mountId),
+            deadPropsXml(drive, mountId, path.id),
+        ]);
         responses.push(
             response(`${baseHref}${withTrailingSlash(encodeHref(pathStr))}`, [
-                propstatOk(
-                    resourceProps({
+                propstatOk([
+                    ...resourceProps({
                         path,
                         isCollection: true,
                         quotaUsed: used,
                         quotaAvailable: Math.max(0, total - used),
                     }),
-                ),
+                    ...deadXml,
+                ]),
             ]),
         );
     } else {
+        const deadXml = await deadPropsXml(drive, mountId, path.id);
         responses.push(
-            response(`${baseHref}${encodeHref(pathStr)}`, [propstatOk(resourceProps({ path, isCollection: false }))]),
+            response(`${baseHref}${encodeHref(pathStr)}`, [
+                propstatOk([...resourceProps({ path, isCollection: false }), ...deadXml]),
+            ]),
         );
     }
 
@@ -63,9 +83,12 @@ export async function handleResourcePropfind(args: {
         for (const child of children) {
             const childIsCollection = isContainerType(child.type);
             const childPath = `${parentHref}${child.name}${childIsCollection ? '/' : ''}`;
+            // N+1 dead-prop fetch per child. Acceptable for v1; revisit if Finder
+            // listings of large folders show up in profiling.
+            const deadXml = await deadPropsXml(drive, mountId, child.id);
             responses.push(
                 response(`${baseHref}${encodeHref(childPath)}`, [
-                    propstatOk(resourceProps({ path: child, isCollection: childIsCollection })),
+                    propstatOk([...resourceProps({ path: child, isCollection: childIsCollection }), ...deadXml]),
                 ]),
             );
         }
