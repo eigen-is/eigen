@@ -6,6 +6,7 @@ import { rateLimit } from 'elysia-rate-limit';
 import { trustedOrigins } from './lib/auth/auth';
 import { caldavRouter } from './lib/caldav/caldav-router';
 import { ApiError } from './lib/core/errors';
+import { webdavRouter } from './lib/webdav/webdav-router';
 import { betterAuth } from './routes/auth';
 import { calendarRouter } from './routes/calendar';
 import { chatRouter } from './routes/chat';
@@ -30,15 +31,16 @@ const SLOW_REQUEST_MS = 200;
 
 const DAV_CAPABILITY_HEADERS = {
     DAV: '1, 2, 3, calendar-access',
-    Allow: 'OPTIONS, GET, PUT, DELETE, PROPFIND, PROPPATCH, REPORT, MKCALENDAR',
+    Allow: 'OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, PROPPATCH, MKCOL, MOVE, COPY, LOCK, UNLOCK, REPORT, MKCALENDAR',
 };
 
 export const app = new Elysia()
     .use(serverTiming())
     .use(swagger())
-    // Handle CalDAV OPTIONS before CORS intercepts them — CalDAV clients need DAV capability headers
+    // Handle CalDAV/WebDAV OPTIONS before CORS intercepts them — DAV clients need capability headers
     .onRequest(({ request }) => {
-        if (request.method === 'OPTIONS' && new URL(request.url).pathname.startsWith('/dav')) {
+        const pathname = new URL(request.url).pathname;
+        if (request.method === 'OPTIONS' && (pathname.startsWith('/dav') || pathname.startsWith('/webdav'))) {
             return new Response(null, { status: 204, headers: DAV_CAPABILITY_HEADERS });
         }
     })
@@ -95,14 +97,20 @@ export const app = new Elysia()
     .use(sseRouter)
     .use(internalRouter)
     .use(caldavRouter)
+    .use(webdavRouter)
 
     .onError(({ error, set, code, request }) => {
         if (code === 'VALIDATION') return;
         const err = error as Error;
         if (err instanceof ApiError) {
             set.status = err.status;
-            if (err.status === 401 && new URL(request.url).pathname.startsWith('/dav')) {
-                set.headers['WWW-Authenticate'] = 'Basic realm="Eigen CalDAV"';
+            if (err.status === 401) {
+                const pathname = new URL(request.url).pathname;
+                if (pathname.startsWith('/dav')) {
+                    set.headers['WWW-Authenticate'] = 'Basic realm="Eigen CalDAV"';
+                } else if (pathname.startsWith('/webdav')) {
+                    set.headers['WWW-Authenticate'] = 'Basic realm="Eigen Drive"';
+                }
             }
             return err.message;
         }
