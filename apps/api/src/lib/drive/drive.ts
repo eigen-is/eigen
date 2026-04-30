@@ -809,6 +809,10 @@ export default class Drive {
         return (await this.documents.get(key)!()) as CollabDocument;
     }
 
+    isCollabOpen(mountId: string, pathId: string): boolean {
+        return this.documents.has(`${this.owner.id}.${mountId}.${pathId}`);
+    }
+
     async closeCollabDocument(mountId: string, pathId: string): Promise<void> {
         const mount = this.getMount(mountId);
         const key = `${this.owner.id}.${mountId}.${pathId}`;

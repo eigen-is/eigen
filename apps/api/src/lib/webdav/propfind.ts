@@ -3,6 +3,7 @@ import type { ProtocolUser } from '../auth/protocol-auth';
 import { ApiError } from '../core/errors';
 import type Drive from '../drive/drive';
 import type SharedDrive from '../drive/sharedDrive';
+import { isHiddenName } from './container-overlay';
 import { getWebdavDrive } from './get-drive';
 import { lockManager } from './locks';
 import { WebdavPathCache } from './path-resolve';
@@ -90,6 +91,7 @@ export async function handleResourcePropfind(args: {
         const children = await drive.getFolderContents(mountId, path.id);
         const parentHref = withTrailingSlash(pathStr);
         for (const child of children) {
+            if (isHiddenName(child.name)) continue;
             const childIsCollection = isContainerType(child.type);
             const childPath = `${parentHref}${child.name}${childIsCollection ? '/' : ''}`;
             // N+1 dead-prop fetch per child. Acceptable for v1; revisit if Finder
