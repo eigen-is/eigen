@@ -272,7 +272,7 @@ export default class Drive {
         parentId: string,
         name: string,
         mimeType: string,
-        data: Buffer | StorageFile,
+        data: Buffer | StorageFile | ReadableStream<Uint8Array>,
     ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         const parent = await mount.getActivePath(parentId);
@@ -513,7 +513,11 @@ export default class Drive {
         });
     }
 
-    async writeFileContent(mountId: string, pathId: string, data: Buffer): Promise<DrivePath> {
+    async writeFileContent(
+        mountId: string,
+        pathId: string,
+        data: Buffer | StorageFile | ReadableStream<Uint8Array>,
+    ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         const path = await mount.getActivePath(pathId);
         if (path.type !== DRIVE_TYPE_FILE) {
@@ -522,47 +526,22 @@ export default class Drive {
         if (!(await this.canWrite(mountId, pathId, this.owner))) {
             throw new ApiError(403, 'No write permission');
         }
-        await mount.writeFile(pathId, data);
+        if (Buffer.isBuffer(data)) {
+            await mount.writeFile(pathId, data);
+        } else {
+            // Stream / S3File: detour through a temp file so we don't hold bytes in memory.
+            const tempId = randomUUID();
+            try {
+                await writeTempWithHash(mount.getTempPath(tempId), data);
+                await mount.writeFile(pathId, Bun.file(mount.getTempPath(tempId)));
+            } finally {
+                await mount.cleanupTemp(tempId);
+            }
+        }
         const updated = await mount.getPath(pathId);
         if (!updated) throw new ApiError(500, 'Failed to get updated file');
         this.emit(SSEventType.DRIVE_FILE_UPLOADED, updated);
         return updated;
-    }
-
-    async createFromTemp(
-        mountId: string,
-        parentId: string,
-        name: string,
-        mimeType: string,
-        size: number,
-        hash: string,
-        tempId: string,
-    ): Promise<DrivePath> {
-        const mount = this.getMount(mountId);
-        const newId = await mount.createFileFromTemp(parentId, name, mimeType, size, hash, tempId);
-        const created = await mount.getPath(newId);
-        if (!created) throw new ApiError(500, 'Failed to create file');
-        this.emit(SSEventType.DRIVE_FILE_UPLOADED, created);
-        return created;
-    }
-
-    async overwriteFromTemp(mountId: string, pathId: string, tempId: string): Promise<DrivePath> {
-        const mount = this.getMount(mountId);
-        const path = await mount.getActivePath(pathId);
-        if (path.type !== DRIVE_TYPE_FILE) throw new ApiError(404, 'File not found');
-        await mount.writeFile(pathId, Bun.file(mount.getTempPath(tempId)));
-        const updated = await mount.getPath(pathId);
-        if (!updated) throw new ApiError(500, 'Failed to overwrite file');
-        this.emit(SSEventType.DRIVE_FILE_UPLOADED, updated);
-        return updated;
-    }
-
-    getTempPath(mountId: string, tempId: string): string {
-        return this.getMount(mountId).getTempPath(tempId);
-    }
-
-    async cleanupTemp(mountId: string, tempId: string): Promise<void> {
-        return this.getMount(mountId).cleanupTemp(tempId);
     }
 
     async resolveFile(mountId: string, pathId: string): Promise<{ mount: Mount; path: DrivePath }> {
