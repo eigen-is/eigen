@@ -1,14 +1,10 @@
 import type { ProtocolUser } from '../auth/protocol-auth';
 import { ApiError } from '../core/errors';
+import { getSharedDrive } from '../drive/get-drive';
+import type { Lock } from '../drive/lock-manager';
 import { LOCK_DEFAULT_TTL_MS, parseIfHeaderTokens } from '../drive/lock-manager';
-import { getWebdavDrive } from './get-drive';
 import { WebdavPathCache } from './path-resolve';
 import { lockdiscoveryProp } from './xml';
-
-// Re-export for tests and PROPFIND/move-copy/resource handlers that consume Lock state
-// without needing the manager directly.
-export type { Lock } from '../drive/lock-manager';
-export { parseIfHeaderTokens } from '../drive/lock-manager';
 
 function parseTimeoutHeader(header: string | null): number {
     if (!header) return LOCK_DEFAULT_TTL_MS;
@@ -23,7 +19,7 @@ function extractLockOwner(body: string): string | undefined {
     return match?.[1].trim() || undefined;
 }
 
-function buildLockResponse(lock: import('../drive/lock-manager').Lock): Response {
+function buildLockResponse(lock: Lock): Response {
     const body = `<?xml version="1.0" encoding="utf-8"?>
 <D:prop xmlns:D="DAV:">${lockdiscoveryProp([lock])}</D:prop>`;
     return new Response(body, {
@@ -46,7 +42,7 @@ export async function handleLock(args: {
     depthHeader: string | null;
 }): Promise<Response> {
     const { user, ownerId, mountId, pathStr, body, timeoutHeader, ifHeader, depthHeader } = args;
-    const drive = await getWebdavDrive(ownerId, user);
+    const drive = await getSharedDrive(ownerId, user);
     const cache = new WebdavPathCache();
     const path = await cache.resolve(drive, mountId, pathStr);
     if (!path) throw new ApiError(404, 'Not found');
@@ -77,7 +73,7 @@ export async function handleUnlock(args: {
 }): Promise<Response> {
     const { user, ownerId, mountId, pathStr, lockTokenHeader } = args;
     if (!lockTokenHeader) throw new ApiError(400, 'Missing Lock-Token');
-    const drive = await getWebdavDrive(ownerId, user);
+    const drive = await getSharedDrive(ownerId, user);
     const path = await drive.resolvePath(mountId, pathStr);
     if (!path) throw new ApiError(404, 'Not found');
 

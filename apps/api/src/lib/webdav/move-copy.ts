@@ -2,8 +2,8 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import type { ProtocolUser } from '../auth/protocol-auth';
 import { ApiError } from '../core/errors';
 import type Drive from '../drive/drive';
+import { getSharedDrive } from '../drive/get-drive';
 import type SharedDrive from '../drive/sharedDrive';
-import { getWebdavDrive } from './get-drive';
 import { WebdavPathCache } from './path-resolve';
 
 type DestParts = { ownerId: string; mountId: string; pathStr: string };
@@ -47,7 +47,7 @@ async function resolveMoveCopy(args: {
     const dest = parseDestination(destinationHeader, requestUrl);
     if (dest.ownerId !== ownerId) throw new ApiError(502, `Cross-owner ${verb}s not supported`);
 
-    const drive = await getWebdavDrive(ownerId, user);
+    const drive = await getSharedDrive(ownerId, user);
     const cache = new WebdavPathCache();
 
     const src = await cache.resolve(drive, mountId, pathStr);
