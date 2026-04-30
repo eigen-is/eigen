@@ -2,6 +2,7 @@ import { isContainerType } from '@workspace/lib/types/drive';
 import type { ProtocolUser } from '../auth/protocol-auth';
 import { ApiError } from '../core/errors';
 import { getWebdavDrive } from './get-drive';
+import { lockManager } from './locks';
 import { WebdavPathCache } from './path-resolve';
 import { computeEtag } from './xml';
 
@@ -96,8 +97,9 @@ export async function handlePut(args: {
     contentLength: number | null;
     ifMatch: string | null;
     ifNoneMatch: string | null;
+    ifHeader: string | null;
 }): Promise<Response> {
-    const { user, ownerId, mountId, pathStr, body, contentLength, ifMatch, ifNoneMatch } = args;
+    const { user, ownerId, mountId, pathStr, body, contentLength, ifMatch, ifNoneMatch, ifHeader } = args;
     if (!body) throw new ApiError(400, 'No body');
 
     const drive = await getWebdavDrive(ownerId, user);
@@ -109,6 +111,10 @@ export async function handlePut(args: {
     }
     if (existing && (await drive.isInsideContainer(mountId, existing.id))) {
         throw new ApiError(423, 'Container internals are read-only');
+    }
+
+    if (existing && !lockManager.isWriteAllowed(existing.id, ifHeader, user.id)) {
+        throw new ApiError(423, 'Locked');
     }
 
     if (existing) {
@@ -130,6 +136,10 @@ export async function handlePut(args: {
     if (!parent) throw new ApiError(409, 'Parent not found');
     if (await drive.isContainerWriteBlocked(mountId, parent.id)) {
         throw new ApiError(423, 'Container internals are read-only');
+    }
+    // Depth-infinity lock on the parent must block PUT of new children too.
+    if (!existing && !lockManager.isWriteAllowed(parent.id, ifHeader, user.id)) {
+        throw new ApiError(423, 'Locked');
     }
 
     // Pre-check Content-Length against quota — cheap reject for honest clients.
@@ -193,8 +203,9 @@ export async function handleDelete(args: {
     ownerId: string;
     mountId: string;
     pathStr: string;
+    ifHeader: string | null;
 }): Promise<Response> {
-    const { user, ownerId, mountId } = args;
+    const { user, ownerId, mountId, ifHeader } = args;
     // Normalise trailing slash so /foo/ and /foo share a cache key.
     const pathStr = args.pathStr.replace(/\/+$/, '') || '/';
 
@@ -204,6 +215,9 @@ export async function handleDelete(args: {
     if (!path) throw new ApiError(404, 'Not found');
     if (await drive.isInsideContainer(mountId, path.id)) {
         throw new ApiError(423, 'Container internals are read-only');
+    }
+    if (!lockManager.isWriteAllowed(path.id, ifHeader, user.id)) {
+        throw new ApiError(423, 'Locked');
     }
     await drive.deletePath(mountId, path.id);
     return new Response(null, { status: 204 });
