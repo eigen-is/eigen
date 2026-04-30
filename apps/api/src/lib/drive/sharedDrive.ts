@@ -9,7 +9,7 @@ import { ApiError } from '../core';
 import type { Home } from '../home';
 import type { StorageFile } from '../storage';
 import { getMemberships, type Memberships } from '../user/';
-import { canReadFromAncestors } from './acl';
+import { type AuthSubject, canReadFromAncestors } from './acl';
 import type Drive from './drive';
 
 // Composition over inheritance: SharedDrive deliberately does NOT extend Drive. Pairing this
@@ -20,10 +20,10 @@ import type Drive from './drive';
 // hole.
 export default class SharedDrive {
     private sharedDrive: Drive;
-    private user: User;
+    private user: AuthSubject;
     private owner: User;
 
-    constructor(sharedHome: Home, user: User) {
+    constructor(sharedHome: Home, user: AuthSubject) {
         this.sharedDrive = sharedHome.drive;
         this.user = user;
         this.owner = sharedHome.user;
@@ -106,11 +106,11 @@ export default class SharedDrive {
         return [];
     }
 
-    public async canWrite(mountId: string, pathId: string, user: User, memberships?: Memberships) {
+    public async canWrite(mountId: string, pathId: string, user: AuthSubject, memberships?: Memberships) {
         return this.sharedDrive.canWrite(mountId, pathId, user, memberships);
     }
 
-    public async canRead(mountId: string, pathId: string, user: User, memberships?: Memberships) {
+    public async canRead(mountId: string, pathId: string, user: AuthSubject, memberships?: Memberships) {
         return this.sharedDrive.canRead(mountId, pathId, user, memberships);
     }
 
@@ -433,7 +433,7 @@ export default class SharedDrive {
         return memberships.teamIds.includes(parsed.id);
     }
 
-    public async getSharedWith(user: User): Promise<DrivePath[]> {
+    public async getSharedWith(user: AuthSubject): Promise<DrivePath[]> {
         // No owner/team check — getSharedWith is self-filtering: it only returns
         // paths where the querying user has ACL read access.
         return this.sharedDrive.getSharedWith(user);

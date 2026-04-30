@@ -41,6 +41,7 @@ import type { StorageFile } from '../storage';
 import { getTeamMembers } from '../team';
 import { getMemberships, type Memberships } from '../user/';
 import {
+    type AuthSubject,
     canReadFromAncestors,
     canWriteFromAncestors,
     filterRedundantACL,
@@ -774,7 +775,7 @@ export default class Drive {
         return { alreadyHasAccess: false, targetPathId: targetPath.id };
     }
 
-    async canRead(mountId: string, pathId: string, user: User, memberships?: Memberships): Promise<boolean> {
+    async canRead(mountId: string, pathId: string, user: AuthSubject, memberships?: Memberships): Promise<boolean> {
         const mount = this.getMount(mountId);
         const ancestors = await mount.getBreadcrumb(pathId);
         if (ancestors.length === 0) return false;
@@ -782,7 +783,7 @@ export default class Drive {
         return canReadFromAncestors(ancestors, user, resolved);
     }
 
-    async canWrite(mountId: string, pathId: string, user: User, memberships?: Memberships): Promise<boolean> {
+    async canWrite(mountId: string, pathId: string, user: AuthSubject, memberships?: Memberships): Promise<boolean> {
         const mount = this.getMount(mountId);
         const ancestors = await mount.getBreadcrumb(pathId);
         if (ancestors.length === 0) return false;
@@ -876,7 +877,7 @@ export default class Drive {
         return results.map((r) => this.sharedRowToDrivePath(r));
     }
 
-    async getSharedWith(user: User): Promise<DrivePath[]> {
+    async getSharedWith(user: AuthSubject): Promise<DrivePath[]> {
         const allShared = await this.getSharedPathsByMe();
         const memberships = await getMemberships(user.id);
         const results: DrivePath[] = [];
