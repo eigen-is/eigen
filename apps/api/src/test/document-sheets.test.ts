@@ -179,20 +179,56 @@ describe('document/sheets — patch op replay', () => {
         expect(result[0].celldata?.[0].v?.v).toBe(2);
     });
 
-    test('reads doc with snapshot + structural op (addSheet) → snapshot returned, console.warn emitted', async () => {
+    test('reads doc with snapshot + addSheet op → returns sheets with new sheet appended', async () => {
         const sheetsPath = await drivePost<DrivePath>(
             ctx.alice.user.sessionToken,
             ctx.alice.user.id,
             mountId,
             `folder/${rootId}/create/sheets`,
-            { fileName: 'replay-structural' },
+            { fileName: 'replay-add-sheet' },
         );
 
         const home = await getHome(ctx.alice.user.id);
         const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
 
         const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], config: {} }];
-        const batch: Op[] = [{ op: 'addSheet', path: [], value: { id: 'sheet-2', name: 'Sheet2' } }];
+        const newSheet: Sheet = { id: 'sheet-2', name: 'Sheet2', order: 1, celldata: [], config: {} };
+        const batch: Op[] = [{ op: 'addSheet', id: 'sheet-2', path: [], value: newSheet }];
+        collab.doc.transact(() => {
+            collab.doc.getMap('state').set('snapshot', JSON.stringify(sheets));
+            collab.doc.getArray<Op[]>('ops').push([batch]);
+        });
+
+        const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+        try {
+            const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
+            const result = await readSheetsContent(mount, path);
+
+            expect(result).toHaveLength(2);
+            expect(result[1]).toEqual(newSheet);
+            expect(warnSpy).not.toHaveBeenCalled();
+        } finally {
+            warnSpy.mockRestore();
+        }
+    });
+
+    test('reads doc with snapshot + deleteSheet op → returns sheets without the deleted sheet', async () => {
+        const sheetsPath = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/sheets`,
+            { fileName: 'replay-delete-sheet' },
+        );
+
+        const home = await getHome(ctx.alice.user.id);
+        const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
+
+        const sheets: Sheet[] = [
+            { id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], config: {} },
+            { id: 'sheet-2', name: 'Sheet2', order: 1, celldata: [], config: {} },
+        ];
+        const batch: Op[] = [{ op: 'deleteSheet', id: 'sheet-1', path: [], value: sheets[0] }];
         collab.doc.transact(() => {
             collab.doc.getMap('state').set('snapshot', JSON.stringify(sheets));
             collab.doc.getArray<Op[]>('ops').push([batch]);
@@ -204,7 +240,41 @@ describe('document/sheets — patch op replay', () => {
             const result = await readSheetsContent(mount, path);
 
             expect(result).toHaveLength(1);
-            expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/structural ops skipped/));
+            expect(result[0].id).toBe('sheet-2');
+            expect(warnSpy).not.toHaveBeenCalled();
+        } finally {
+            warnSpy.mockRestore();
+        }
+    });
+
+    test('reads doc with snapshot + insertRowCol op → snapshot returned, console.warn emitted', async () => {
+        const sheetsPath = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/sheets`,
+            { fileName: 'replay-row-col' },
+        );
+
+        const home = await getHome(ctx.alice.user.id);
+        const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
+
+        const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], config: {} }];
+        const batch: Op[] = [
+            { op: 'insertRowCol', id: 'sheet-1', path: [], value: { type: 'row', index: 0, count: 1 } },
+        ];
+        collab.doc.transact(() => {
+            collab.doc.getMap('state').set('snapshot', JSON.stringify(sheets));
+            collab.doc.getArray<Op[]>('ops').push([batch]);
+        });
+
+        const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+        try {
+            const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
+            const result = await readSheetsContent(mount, path);
+
+            expect(result).toEqual(sheets);
+            expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/insertRowCol replay deferred/));
         } finally {
             warnSpy.mockRestore();
         }

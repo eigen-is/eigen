@@ -13,14 +13,20 @@ function replaySheetsOps(sheets: Sheet[], opBatches: Op[][]): Sheet[] {
     let result = sheets;
     for (const batch of opBatches) {
         const [patches, specialOps] = opToPatchOnSheets(result, batch);
-        if (specialOps.length > 0) {
-            // Special-op replay (insertRowCol/deleteRowCol/addSheet/deleteSheet) is
-            // deferred — those helpers transitively import DOM-coupled code from
-            // fortune-sheet. The FE editor's beforeunload snapshot flush
-            // self-corrects this within the editing session.
-            console.warn(`[sheets] ${specialOps.length} structural ops skipped`);
-        }
         result = applyPatches(result, patches);
+        for (const op of specialOps) {
+            if (op.op === 'addSheet') {
+                result = [...result, op.value as Sheet];
+            } else if (op.op === 'deleteSheet' && op.id) {
+                result = result.filter((s) => s.id !== op.id);
+            } else {
+                // Row/col replay needs cell-matrix shifting coupled to fortune-sheet's
+                // formula recompute path, which is DOM-dependent at module evaluation.
+                // The FE editor's beforeunload snapshot flush self-corrects this within
+                // the editing session.
+                console.warn(`[sheets] ${op.op} replay deferred (row/col needs cell-matrix shift)`);
+            }
+        }
     }
     return result;
 }
