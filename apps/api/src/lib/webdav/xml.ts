@@ -1,3 +1,5 @@
+import type { DrivePath } from '@workspace/lib/types/drive';
+
 const XML_HEADER = '<?xml version="1.0" encoding="utf-8"?>';
 
 export function escapeXml(s: string): string {
@@ -46,4 +48,50 @@ export function encodeHref(path: string): string {
         .split('/')
         .map((seg) => encodeURIComponent(seg))
         .join('/');
+}
+
+export type LockProps = { token: string; ownerHref?: string; depth: 0 | 'infinity'; expiresAt: number };
+
+export function lockdiscoveryProp(locks: LockProps[]): string {
+    if (locks.length === 0) return '<D:lockdiscovery/>';
+    const inner = locks
+        .map((l) => {
+            const owner = l.ownerHref ? `<D:owner>${escapeXml(l.ownerHref)}</D:owner>` : '';
+            const timeoutSeconds = Math.max(1, Math.floor((l.expiresAt - Date.now()) / 1000));
+            const depth = `<D:depth>${l.depth === 0 ? '0' : 'infinity'}</D:depth>`;
+            return `<D:activelock><D:locktype><D:write/></D:locktype><D:lockscope><D:exclusive/></D:lockscope>${depth}${owner}<D:timeout>Second-${timeoutSeconds}</D:timeout><D:locktoken><D:href>${escapeXml(l.token)}</D:href></D:locktoken></D:activelock>`;
+        })
+        .join('');
+    return `<D:lockdiscovery>${inner}</D:lockdiscovery>`;
+}
+
+export function supportedlockProp(): string {
+    return '<D:supportedlock><D:lockentry><D:lockscope><D:exclusive/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockentry></D:supportedlock>';
+}
+
+export function resourceProps(args: {
+    path: DrivePath;
+    isCollection: boolean;
+    quotaUsed?: number;
+    quotaAvailable?: number;
+    locks?: LockProps[];
+}): string[] {
+    const { path, isCollection, quotaUsed, quotaAvailable, locks = [] } = args;
+    const props: string[] = [
+        `<D:displayname>${escapeXml(path.name)}</D:displayname>`,
+        `<D:resourcetype>${isCollection ? '<D:collection/>' : ''}</D:resourcetype>`,
+        `<D:creationdate>${path.createdAt.toISOString()}</D:creationdate>`,
+        `<D:getlastmodified>${path.updatedAt.toUTCString()}</D:getlastmodified>`,
+    ];
+    if (!isCollection) {
+        props.push(`<D:getcontentlength>${path.size}</D:getcontentlength>`);
+        props.push(`<D:getcontenttype>${escapeXml(path.mimeType)}</D:getcontenttype>`);
+        props.push(`<D:getetag>"${path.id}-${path.updatedAt.getTime()}-${path.size}"</D:getetag>`);
+    }
+    if (quotaUsed !== undefined) props.push(`<D:quota-used-bytes>${quotaUsed}</D:quota-used-bytes>`);
+    if (quotaAvailable !== undefined)
+        props.push(`<D:quota-available-bytes>${quotaAvailable}</D:quota-available-bytes>`);
+    props.push(supportedlockProp());
+    props.push(lockdiscoveryProp(locks));
+    return props;
 }

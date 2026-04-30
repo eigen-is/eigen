@@ -134,6 +134,12 @@ export default class SharedDrive {
         return this.withReadPermission(mountId, root.id, () => this.sharedDrive.usedBytes(mountId));
     }
 
+    public async quotaBytes(mountId: string): Promise<number> {
+        const root = await this.sharedDrive.resolvePath(mountId, '/');
+        if (!root) throw new ApiError(404, 'Mount not found');
+        return this.withReadPermission(mountId, root.id, async () => this.sharedDrive.quotaBytes(mountId));
+    }
+
     public async downloadFile(mountId: string, pathId: string) {
         return this.withReadPermission(mountId, pathId, () => this.sharedDrive.downloadFile(mountId, pathId));
     }
