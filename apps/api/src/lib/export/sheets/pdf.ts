@@ -1,9 +1,9 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import DOMPurify from 'isomorphic-dompurify';
+import { readSheetsContent } from '../../document/sheets';
 import type { Mount } from '../../mount';
 import type { ExportResult } from '../export-document';
 import { htmlToPdf } from '../weasyprint';
-import { loadSheetsContent } from './content';
 import { getSheetContentSize, renderSheetsHtml, wrapInDocument } from './html';
 
 const PAGE_MARGIN = 40;
@@ -11,7 +11,7 @@ const PAGE_SLACK = 20;
 
 export async function exportSheetsToPdf(mount: Mount, drivePath: DrivePath): Promise<ExportResult> {
     const title = drivePath.name.replace(/\.eigensheets$/, '');
-    const sheets = await loadSheetsContent(mount, drivePath);
+    const sheets = await readSheetsContent(mount, drivePath);
 
     let maxW = 0;
     let maxH = 0;

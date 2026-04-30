@@ -3,8 +3,9 @@ import type { Cell, ConditionalFormatRule, Sheet } from '@workspace/lib/sheets';
 import { renderSheetsHtml } from '../lib/export/sheets/html';
 
 // Build a Sheet with both `data` (matrix form, required by the CF engine) and `celldata`
-// (sparse form, what the renderer iterates). Snapshots in production carry both — see
-// dataToCelldata in apps/api/src/lib/export/sheets/content.ts.
+// (sparse form, what the renderer iterates). The fortune-sheet Workbook keeps both
+// projections in sync via its dataToCelldata/celldataToData transforms, so snapshots
+// flushed by the FE editor carry both.
 function makeSheet(cells: { r: number; c: number; v: Cell }[], rules?: ConditionalFormatRule[]): Sheet {
     const rows = cells.reduce((max, x) => Math.max(max, x.r), 0) + 1;
     const cols = cells.reduce((max, x) => Math.max(max, x.c), 0) + 1;
