@@ -31,6 +31,9 @@ function replaySheetsOps(sheets: Sheet[], opBatches: Op[][]): Sheet[] {
     return result;
 }
 
+// Returns Sheet[] directly (vs. {content, mediaByName} like the doc/slides readers)
+// because the sheets export and preview pipelines fetch media lazily from the mount
+// per-cell rather than bundling it upfront — see lib/export/sheets/{html,pdf,xlsx}.ts.
 export async function readSheetsContent(mount: Mount, drivePath: DrivePath): Promise<Sheet[]> {
     const dataDbPath = await mount.getChildByName(drivePath.id, 'data.db');
     if (!dataDbPath) throw new Error('eigensheets data.db missing');
