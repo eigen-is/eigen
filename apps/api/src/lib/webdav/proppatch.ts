@@ -123,11 +123,16 @@ export async function handleProppatch(args: {
     mountId: string;
     pathStr: string;
     body: string;
+    ifHeader: string | null;
 }): Promise<Response> {
-    const { user, ownerId, mountId, pathStr, body } = args;
+    const { user, ownerId, mountId, pathStr, body, ifHeader } = args;
     const drive = await getSharedDrive(ownerId, user);
     const path = await drive.resolvePath(mountId, pathStr);
     if (!path) throw new ApiError(404, 'Not found');
+
+    if (!drive.lockManager.isWriteAllowed(path.id, ifHeader, user.id)) {
+        throw new ApiError(423, 'Locked');
+    }
 
     const ops = extractPropOps(body);
     const propstats: string[] = [];
