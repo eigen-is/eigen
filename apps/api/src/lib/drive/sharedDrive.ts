@@ -208,6 +208,10 @@ export default class SharedDrive {
         return this.withReadPermission(mountId, pathId, () => this.sharedDrive.getCollabDocument(mountId, pathId));
     }
 
+    public async isCollabOpen(mountId: string, pathId: string): Promise<boolean> {
+        return this.withReadPermission(mountId, pathId, async () => this.sharedDrive.isCollabOpen(mountId, pathId));
+    }
+
     public async createFolder(mountId: string, parentId: string, folderName: string): Promise<DrivePath> {
         return this.withWritePermission(mountId, parentId, () =>
             this.sharedDrive.createFolder(mountId, parentId, folderName),

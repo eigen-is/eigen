@@ -134,3 +134,33 @@ describe('WebDAV PUT', () => {
         expect(getRes.headers.get('ETag')).toBe(putEtag);
     });
 });
+
+describe('WebDAV hidden names', () => {
+    let ctx: TestContext;
+    let baseHref: string;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        const dRes = await webdavRequest(ctx.alice.user.email, 'PROPFIND', `/webdav/${ctx.alice.user.id}/`);
+        const m = (await dRes.text()).match(new RegExp(`/webdav/${ctx.alice.user.id}/([^/<]+)/`));
+        if (!m) throw new Error('mount id not found');
+        baseHref = `/webdav/${ctx.alice.user.id}/${m[1]}`;
+    });
+
+    test('PUT a .DS_Store succeeds and PROPFIND hides it', async () => {
+        await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHref}/.DS_Store`, { body: 'x' });
+        const list = await webdavRequest(ctx.alice.user.email, 'PROPFIND', `${baseHref}/`, {
+            headers: { Depth: '1' },
+        });
+        expect(await list.text()).not.toContain('.DS_Store');
+    });
+
+    test('PUT an Office ~$ lock file succeeds and stays GET-able', async () => {
+        const url = `${baseHref}/~$Report.docx`;
+        const res = await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'lockfile' });
+        expect([201, 204]).toContain(res.status);
+        const get = await webdavRequest(ctx.alice.user.email, 'GET', url);
+        expect(get.status).toBe(200);
+        expect(await get.text()).toBe('lockfile');
+    });
+});
