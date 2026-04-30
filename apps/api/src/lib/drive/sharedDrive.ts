@@ -144,6 +144,32 @@ export default class SharedDrive {
         return this.withReadPermission(mountId, pathId, () => this.sharedDrive.downloadFile(mountId, pathId));
     }
 
+    public async copyPath(mountId: string, srcPathId: string, destParentId: string, name: string): Promise<DrivePath> {
+        return this.withReadPermission(mountId, srcPathId, () =>
+            this.withWritePermission(mountId, destParentId, () =>
+                this.sharedDrive.copyPath(mountId, srcPathId, destParentId, name),
+            ),
+        );
+    }
+
+    public async copyPathCrossMount(
+        srcMountId: string,
+        srcPathId: string,
+        destMountId: string,
+        destParentId: string,
+        name: string,
+    ): Promise<DrivePath> {
+        return this.withReadPermission(srcMountId, srcPathId, () =>
+            this.withWritePermission(destMountId, destParentId, () =>
+                this.sharedDrive.copyPathCrossMount(srcMountId, srcPathId, destMountId, destParentId, name),
+            ),
+        );
+    }
+
+    public async isInsideContainer(mountId: string, pathId: string): Promise<boolean> {
+        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.isInsideContainer(mountId, pathId));
+    }
+
     public async readRange(mountId: string, pathId: string, start: number, end: number) {
         return this.withReadPermission(mountId, pathId, () => this.sharedDrive.readRange(mountId, pathId, start, end));
     }
