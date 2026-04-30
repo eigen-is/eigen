@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { DRIVE_TYPE_FOLDER, type DrivePath, isContainerType } from '@workspace/lib/types';
 import { type DatabaseConfig, ManagedDatabase, type SchemaType } from '../lib/core';
 import { createDefaultMountConfig, Mount } from '../lib/mount/mount';
 
@@ -43,27 +44,23 @@ describe('Mount.getBreadcrumb (powers Drive.isInsideContainer)', () => {
         rootId = (await mount.getRootFolder())!.id;
     });
 
+    function hasNonFolderContainerAncestor(ancestors: DrivePath[], leafId: string): boolean {
+        return ancestors
+            .slice(0, -1)
+            .some((p) => p.id !== leafId && isContainerType(p.type) && p.type !== DRIVE_TYPE_FOLDER);
+    }
+
     test('container ancestor: child of an .eigendoc-style folder is marked inside', async () => {
         const docId = await mount.createFolder(rootId, 'My.eigendoc', 'doc');
         const childId = await mount.createFile(docId, 'data.db', 'application/octet-stream', 0, Buffer.alloc(0));
         const ancestors = await mount.getBreadcrumb(childId);
-        const hasContainer = ancestors.some((p) => p.id !== childId && p.type === 'doc');
-        expect(hasContainer).toBe(true);
+        expect(hasNonFolderContainerAncestor(ancestors, childId)).toBe(true);
     });
 
     test('regular folder is NOT a container', async () => {
         const folderId = await mount.createFolder(rootId, 'plain-folder');
         const childId = await mount.createFile(folderId, 'note.txt', 'text/plain', 4, Buffer.from('test'));
         const ancestors = await mount.getBreadcrumb(childId);
-        const hasContainer = ancestors.some(
-            (p) =>
-                p.id !== childId &&
-                (p.type === 'doc' ||
-                    p.type === 'sheets' ||
-                    p.type === 'slides' ||
-                    p.type === 'stickies' ||
-                    p.type === 'chat'),
-        );
-        expect(hasContainer).toBe(false);
+        expect(hasNonFolderContainerAncestor(ancestors, childId)).toBe(false);
     });
 });
