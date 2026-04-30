@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router';
 import { getDriveAppUrl, getSpaceAppUrl } from '@workspace/lib/api';
-import { useAuth } from '@workspace/lib/auth';
+import { useIsGuest } from '@workspace/lib/auth';
 import { cn } from '../../../lib/utils.ts';
 import { Bar } from '../braket/bar.tsx';
 import { Ket } from '../braket/ket.tsx';
@@ -12,10 +12,10 @@ type AppLogoProps = {
 };
 
 export function AppLogo({ appName = 'mail', className, logoHref }: AppLogoProps) {
-    const { user } = useAuth();
+    const isGuest = useIsGuest();
     const isSpace = appName.toLowerCase() === 'space';
     // Guests can't access the Space app — link them to Drive instead
-    const defaultHref = user?.role === 'guest' ? getDriveAppUrl() : isSpace ? undefined : getSpaceAppUrl();
+    const defaultHref = isGuest ? getDriveAppUrl() : isSpace ? undefined : getSpaceAppUrl();
     const href = logoHref ?? defaultHref;
 
     return (

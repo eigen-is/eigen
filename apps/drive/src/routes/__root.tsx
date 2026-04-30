@@ -1,5 +1,5 @@
 import { createRootRouteWithContext, Outlet } from '@tanstack/react-router';
-import { type AuthContextType, useAuth } from '@workspace/lib/auth';
+import { type AuthContextType, useAuth, useIsGuest } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, useRootFolder } from '@workspace/lib/drive';
 import type { DriveContextType } from '@workspace/lib/types/drive';
 import { ErrorState, LoadingState } from '@workspace/ui';
@@ -17,6 +17,7 @@ type MyRouterContext = {
 
 function DriveRoot() {
     const { user } = useAuth();
+    const isGuest = useIsGuest();
 
     if (!user) {
         return (
@@ -26,7 +27,7 @@ function DriveRoot() {
         );
     }
 
-    if (user.role === 'guest') return <GuestDriveRoot />;
+    if (isGuest) return <GuestDriveRoot />;
 
     return <AuthenticatedDriveRoot />;
 }

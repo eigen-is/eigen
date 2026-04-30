@@ -1,6 +1,6 @@
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { spaceApi } from '@workspace/lib/api';
-import { useAuth } from '@workspace/lib/auth';
+import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import type { UserSettings } from '@workspace/lib/types/settings';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
@@ -13,6 +13,7 @@ export const spaceKeys = {
 
 export function useSpaceSettings() {
     const { user } = useAuth();
+    const isGuest = useIsGuest();
     const ownerId = user?.id || '';
 
     return useQuery({
@@ -22,7 +23,7 @@ export function useSpaceSettings() {
             return res.data || {};
         },
         staleTime: 5 * 60 * 1000,
-        enabled: !!ownerId && user?.role !== 'guest',
+        enabled: !!ownerId && !isGuest,
     });
 }
 

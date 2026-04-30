@@ -3,6 +3,7 @@ import { useRouter } from '@tanstack/react-router';
 import { API_HOST } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth/auth-context.tsx';
 import { usePublicConfig } from '@workspace/lib/public';
+import { validateEmailAddress } from '@workspace/lib/validation';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
@@ -121,6 +122,7 @@ function GuestLoginForm({ initialEmail = '' }: { initialEmail?: string }) {
     const [step, setStep] = useState<'email' | 'otp'>('email');
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const isEmailValid = validateEmailAddress(email);
 
     const handleRequestOtp = async () => {
         setIsLoading(true);
@@ -180,10 +182,10 @@ function GuestLoginForm({ initialEmail = '' }: { initialEmail?: string }) {
                             autoFocus
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && handleRequestOtp()}
+                            onKeyDown={(e) => e.key === 'Enter' && isEmailValid && handleRequestOtp()}
                         />
                     </div>
-                    <Button className="w-full" disabled={isLoading || !email} onClick={handleRequestOtp}>
+                    <Button className="w-full" disabled={isLoading || !isEmailValid} onClick={handleRequestOtp}>
                         {isLoading ? 'Sending...' : 'Send code'}
                     </Button>
                 </>

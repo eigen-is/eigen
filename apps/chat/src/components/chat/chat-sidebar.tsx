@@ -1,5 +1,5 @@
 import { useNavigate } from '@tanstack/react-router';
-import { useAuth } from '@workspace/lib/auth';
+import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { useChats, useUnreadChatIds } from '@workspace/lib/chat';
 import { useDriveAccess } from '@workspace/lib/drive';
 import { useMyTeams } from '@workspace/lib/home';
@@ -90,6 +90,7 @@ export function ChatSidebar({
     rootPath,
 }: ChatSidebarProps) {
     const { user } = useAuth();
+    const isGuest = useIsGuest();
     const unreadChatIds = useUnreadChatIds(user?.id ?? '');
     const { data: chats, isLoading } = useChats(ownerId);
     const [createChatOpen, setCreateChatOpen] = useState(false);
@@ -111,17 +112,19 @@ export function ChatSidebar({
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
             {isMobile && <SidebarHeader appName="chat" onClose={onClose} />}
 
-            <div className="px-3 py-2">
-                <Button
-                    variant="default"
-                    size={condensed ? 'icon' : 'default'}
-                    className={`${condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}`}
-                    onClick={() => setCreateChatOpen(true)}
-                >
-                    <Plus className="h-4 w-4" />
-                    {!condensed && <span>New chat</span>}
-                </Button>
-            </div>
+            {!isGuest && (
+                <div className="px-3 py-2">
+                    <Button
+                        variant="default"
+                        size={condensed ? 'icon' : 'default'}
+                        className={`${condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}`}
+                        onClick={() => setCreateChatOpen(true)}
+                    >
+                        <Plus className="h-4 w-4" />
+                        {!condensed && <span>New chat</span>}
+                    </Button>
+                </div>
+            )}
 
             {isLoading || !chats ? (
                 <div className="flex justify-center py-4">
@@ -160,16 +163,18 @@ export function ChatSidebar({
                 </>
             )}
 
-            <DriveCreateEigenDoc
-                open={createChatOpen}
-                onOpenChange={setCreateChatOpen}
-                type="chat"
-                defaultOwnerId={ownerId}
-                defaultFolderId={rootPath?.id}
-                defaultMountId={rootPath?.mountId ?? mountId}
-                openInNewTab={false}
-                onAfterCreate={handleAfterCreate}
-            />
+            {!isGuest && (
+                <DriveCreateEigenDoc
+                    open={createChatOpen}
+                    onOpenChange={setCreateChatOpen}
+                    type="chat"
+                    defaultOwnerId={ownerId}
+                    defaultFolderId={rootPath?.id}
+                    defaultMountId={rootPath?.mountId ?? mountId}
+                    openInNewTab={false}
+                    onAfterCreate={handleAfterCreate}
+                />
+            )}
         </div>
     );
 }

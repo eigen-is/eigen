@@ -73,7 +73,7 @@ runs explicitly after OTP verification instead.
 
 When an authenticated user visits a shared resource they don't have access to:
 
-1. App renders `<RequestAccessView>` (replaces the old `<AccessDenied/>` component)
+1. App renders `<RequestAccessView>` instead of a generic access-denied page
 2. User clicks "Request access" → `POST /drive/:ownerId/:mountId/path/:pathId/request-access`
 3. Endpoint sends a notification to the resource owner via `sendToHome()`
 4. Notification tag: `access-request:{ownerId}:{mountId}:{pathId}:{email}` (idempotent via tag dedup)

@@ -2,7 +2,7 @@ import { useRouter } from '@tanstack/react-router';
 import { useIsAdmin } from '@workspace/lib/admin';
 import { getAdminAppUrl, getSpacePasswordUrl, getSpaceProfileUrl } from '@workspace/lib/api.ts';
 import { apps } from '@workspace/lib/apps.ts';
-import { useAuth } from '@workspace/lib/auth/auth-context.tsx';
+import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { useUnreadNotificationCount } from '@workspace/lib/notification';
 import { useSpaceSettings, useUpdateSpaceSettings } from '@workspace/lib/space';
 import { Grip, LogOut, Menu, Palette, Settings, Shield, TriangleAlert, UserRound } from 'lucide-react';
@@ -239,7 +239,7 @@ function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
 export function Topbar({ rootRoute }: TopbarProps) {
     const { appName, documentTitle, isMobile, sidebarMode, setSidebarOpen } = useLayout();
     const auth = useAuth();
-    const isGuest = auth.user?.role === 'guest';
+    const isGuest = useIsGuest();
     const { data: unreadCount = 0 } = useUnreadNotificationCount(auth.user?.id ?? '');
 
     useEffect(() => {
