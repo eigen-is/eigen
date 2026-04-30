@@ -1,7 +1,7 @@
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
 import type { ProtocolUser } from '../auth/protocol-auth';
 import { ApiError } from '../core/errors';
-import { getHome } from '../home';
+import { pullDriveMounts } from '../home/home-relay';
 import { getTeam } from '../team';
 import { getMemberships } from '../user';
 import { buildXmlResponse, encodeHref, escapeXml, multistatus, propstatOk, response } from './xml';
@@ -45,8 +45,7 @@ export async function handleDiscoveryOwner(user: ProtocolUser, ownerId: string):
         }
     }
 
-    const home = await getHome(ownerId);
-    const mounts = await home.drive.listMounts();
+    const mounts = await pullDriveMounts(ownerId);
 
     const responses = [
         collectionResponse(`/webdav/${encodeHref(ownerId)}/`, ownerId),
