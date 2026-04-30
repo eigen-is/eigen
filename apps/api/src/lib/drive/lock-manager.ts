@@ -105,8 +105,18 @@ export class LockManager {
         return out;
     }
 
-    isWriteAllowed(pathId: string, ifHeader: string | null, userId: string): boolean {
-        const active = this.listForPath(pathId);
+    // Locks that cover a path: the path's own locks plus any depth=infinity lock on
+    // an ancestor. Caller supplies the ancestor list (root-first) — usually from
+    // Drive.breadCrumb minus the path itself. RFC 4918 §6.2 says depth-infinity locks
+    // on a collection apply to every member.
+    coveringLocks(pathId: string, ancestorPathIds: string[] = []): Lock[] {
+        const own = this.listForPath(pathId);
+        const ancestor = ancestorPathIds.flatMap((id) => this.listForPath(id).filter((l) => l.depth === 'infinity'));
+        return [...own, ...ancestor];
+    }
+
+    isWriteAllowed(pathId: string, ifHeader: string | null, userId: string, ancestorPathIds: string[] = []): boolean {
+        const active = this.coveringLocks(pathId, ancestorPathIds);
         if (active.length === 0) return true;
         const tokens = parseIfHeaderTokens(ifHeader);
         return active.every((lock) => lock.userId === userId && tokens.includes(lock.token));
