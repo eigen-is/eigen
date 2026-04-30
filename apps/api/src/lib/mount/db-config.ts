@@ -3,9 +3,13 @@ import * as schema from './schema';
 
 export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
     name: 'mount-metadata',
-    currentVersion: 2,
+    currentVersion: 3,
     schema,
     migrations: [
+        // v2 was previously claimed by an `ALTER TABLE paths ADD COLUMN trashedAt/trashedFrom`
+        // migration that has since been folded into v1 and removed. Existing dev DBs from that
+        // period are stamped with version=2, so a *new* v2 migration here would silently skip
+        // on those DBs. Use v3 for any new schema work going forward.
         {
             version: 1,
             up: (db) =>
@@ -44,7 +48,7 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
             `),
         },
         {
-            version: 2,
+            version: 3,
             up: (db) =>
                 db.exec(`
                 CREATE TABLE IF NOT EXISTS webdav_dead_props (
