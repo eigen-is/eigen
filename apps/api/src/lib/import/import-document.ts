@@ -67,11 +67,11 @@ export async function convertToDocument(
         if (!sourcePath.name.toLowerCase().endsWith('.docx')) {
             throw new ApiError(400, 'Only .docx files can be converted to documents');
         }
-        const { pmJson, images, schema } = await parseDocxOrThrow(buffer);
+        const { json, images, schema } = await parseDocxOrThrow(buffer);
         const name = sourcePath.name.replace(/\.docx$/i, '');
         const newPath = await drive.create(sourcePath.mountId, sourcePath.parentId, name, 'doc');
         const collabDoc = await drive.getCollabDocument(sourcePath.mountId, newPath.id);
-        writeEigendocToYjs(collabDoc.doc, pmJson, schema);
+        writeEigendocToYjs(collabDoc.doc, json, schema);
         await saveDocImages(mount, newPath, images);
         return newPath;
     }
@@ -93,9 +93,9 @@ export async function importIntoDocument(
     }
 
     if (path.mimeType === DRIVE_MIME_DOC) {
-        const { pmJson, images, schema } = await parseDocxOrThrow(buffer);
+        const { json, images, schema } = await parseDocxOrThrow(buffer);
         const collabDoc = await drive.getCollabDocument(path.mountId, path.id);
-        writeEigendocToYjs(collabDoc.doc, pmJson, schema);
+        writeEigendocToYjs(collabDoc.doc, json, schema);
         await saveDocImages(mount, path, images);
         return;
     }

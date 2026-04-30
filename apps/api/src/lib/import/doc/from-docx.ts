@@ -17,7 +17,7 @@ const parser = PmDOMParser.fromSchema(schema);
 
 export { schema as docSchema };
 
-export async function docxToPmJson(buffer: Buffer): Promise<{ pmJson: JSONContent; images: DocxImage[] }> {
+export async function docxToPmJson(buffer: Buffer): Promise<{ json: JSONContent; images: DocxImage[] }> {
     const mammoth = (await import('mammoth')).default;
     const images: DocxImage[] = [];
     let imageIndex = 0;
@@ -45,7 +45,7 @@ export async function docxToPmJson(buffer: Buffer): Promise<{ pmJson: JSONConten
     const pmDoc = parser.parse(dom.window.document.body);
 
     // ProseMirror's toJSON() returns the correct JSONContent shape
-    return { pmJson: pmDoc.toJSON() as JSONContent, images };
+    return { json: pmDoc.toJSON() as JSONContent, images };
 }
 
 function extensionFromMime(contentType: string): string {
