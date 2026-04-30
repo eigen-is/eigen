@@ -1,5 +1,5 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
-import type { Sheet } from '@workspace/lib/sheets';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import type { Op, Sheet } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { readSheetsContent, writeSheetsToYjs } from '../lib/document/sheets';
 import { getHome } from '../lib/home/get-home';
@@ -107,5 +107,131 @@ describe('document/sheets', () => {
         writeSheetsToYjs(collab.doc, sheets);
 
         expect(collab.doc.getArray('ops').length).toBe(0);
+    });
+});
+
+describe('document/sheets — patch op replay', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+    let mountId: string;
+    let rootId: string;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        mountId = 'default';
+        const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root');
+        rootId = root.id;
+    });
+
+    test('reads doc with snapshot + cell-edit op → returns sheets with edit applied', async () => {
+        const sheetsPath = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/sheets`,
+            { fileName: 'replay-cell-edit' },
+        );
+
+        const home = await getHome(ctx.alice.user.id);
+        const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
+
+        const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], config: {} }];
+        const batch: Op[] = [
+            { op: 'replace', id: 'sheet-1', path: ['celldata'], value: [{ r: 0, c: 0, v: { v: 7 } }] },
+        ];
+        collab.doc.transact(() => {
+            collab.doc.getMap('state').set('snapshot', JSON.stringify(sheets));
+            collab.doc.getArray<Op[]>('ops').push([batch]);
+        });
+
+        const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
+        const result = await readSheetsContent(mount, path);
+
+        expect(result[0].celldata).toEqual([{ r: 0, c: 0, v: { v: 7 } }]);
+    });
+
+    test('reads doc with snapshot + multiple op batches → applies in order', async () => {
+        const sheetsPath = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/sheets`,
+            { fileName: 'replay-multi-batch' },
+        );
+
+        const home = await getHome(ctx.alice.user.id);
+        const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
+
+        const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], config: {} }];
+        const batch1: Op[] = [
+            { op: 'replace', id: 'sheet-1', path: ['celldata'], value: [{ r: 0, c: 0, v: { v: 1 } }] },
+        ];
+        const batch2: Op[] = [
+            { op: 'replace', id: 'sheet-1', path: ['celldata'], value: [{ r: 0, c: 0, v: { v: 2 } }] },
+        ];
+        collab.doc.transact(() => {
+            collab.doc.getMap('state').set('snapshot', JSON.stringify(sheets));
+            collab.doc.getArray<Op[]>('ops').push([batch1, batch2]);
+        });
+
+        const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
+        const result = await readSheetsContent(mount, path);
+
+        expect(result[0].celldata?.[0].v?.v).toBe(2);
+    });
+
+    test('reads doc with snapshot + structural op (addSheet) → snapshot returned, console.warn emitted', async () => {
+        const sheetsPath = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/sheets`,
+            { fileName: 'replay-structural' },
+        );
+
+        const home = await getHome(ctx.alice.user.id);
+        const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
+
+        const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], config: {} }];
+        const batch: Op[] = [{ op: 'addSheet', path: [], value: { id: 'sheet-2', name: 'Sheet2' } }];
+        collab.doc.transact(() => {
+            collab.doc.getMap('state').set('snapshot', JSON.stringify(sheets));
+            collab.doc.getArray<Op[]>('ops').push([batch]);
+        });
+
+        const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
+        try {
+            const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
+            const result = await readSheetsContent(mount, path);
+
+            expect(result).toHaveLength(1);
+            expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/structural ops skipped/));
+        } finally {
+            warnSpy.mockRestore();
+        }
+    });
+
+    test('reads doc with snapshot + orphan patch op (sheet id not in array) → op dropped', async () => {
+        const sheetsPath = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/sheets`,
+            { fileName: 'replay-orphan' },
+        );
+
+        const home = await getHome(ctx.alice.user.id);
+        const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
+
+        const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], config: {} }];
+        const batch: Op[] = [{ op: 'replace', id: 'sheet-missing', path: ['celldata'], value: [] }];
+        collab.doc.transact(() => {
+            collab.doc.getMap('state').set('snapshot', JSON.stringify(sheets));
+            collab.doc.getArray<Op[]>('ops').push([batch]);
+        });
+
+        const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
+        const result = await readSheetsContent(mount, path);
+
+        expect(result).toEqual(sheets);
     });
 });

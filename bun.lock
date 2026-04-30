@@ -94,6 +94,7 @@
         "html-to-text": "^9.0.5",
         "ical.js": "^2.2.1",
         "iconv-lite": "^0.7.2",
+        "immer": "^9.0.12",
         "isomorphic-dompurify": "^3.6.0",
         "lib0": "^0.2.117",
         "libbase64": "^1.3.0",
