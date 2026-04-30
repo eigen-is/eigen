@@ -178,3 +178,61 @@ export async function handlePut(args: {
         await drive.cleanupTemp(mountId, tempId).catch(() => {});
     }
 }
+
+export async function handleMkcol(args: {
+    user: ProtocolUser;
+    ownerId: string;
+    mountId: string;
+    pathStr: string;
+    contentLength: number;
+}): Promise<Response> {
+    const { user, ownerId, mountId, contentLength } = args;
+    if (contentLength > 0) {
+        throw new ApiError(415, 'MKCOL request body not supported');
+    }
+
+    // Strip trailing slash so /foo/ creates /foo. Root → '/' which resolves to existing → 405.
+    const pathStr = args.pathStr.replace(/\/+$/, '') || '/';
+
+    const drive = await getWebdavDrive(ownerId, user);
+    const cache = new WebdavPathCache();
+    if (await cache.resolve(drive, mountId, pathStr)) {
+        // RFC 4918 §9.3.1: target exists → 405 Method Not Allowed
+        return new Response(null, { status: 405 });
+    }
+
+    const lastSlash = pathStr.lastIndexOf('/');
+    const parentStr = pathStr.slice(0, lastSlash) || '/';
+    const name = pathStr.slice(lastSlash + 1).normalize('NFC');
+    if (!name) throw new ApiError(400, 'Missing folder name');
+
+    const parent = await cache.resolve(drive, mountId, parentStr);
+    if (!parent) throw new ApiError(409, 'Parent not found');
+    if (await drive.isInsideContainer(mountId, parent.id)) {
+        throw new ApiError(423, 'Container internals are read-only');
+    }
+
+    await drive.createFolder(mountId, parent.id, name);
+    return new Response(null, { status: 201 });
+}
+
+export async function handleDelete(args: {
+    user: ProtocolUser;
+    ownerId: string;
+    mountId: string;
+    pathStr: string;
+}): Promise<Response> {
+    const { user, ownerId, mountId } = args;
+    // Normalise trailing slash so /foo/ and /foo share a cache key.
+    const pathStr = args.pathStr.replace(/\/+$/, '') || '/';
+
+    const drive = await getWebdavDrive(ownerId, user);
+    const cache = new WebdavPathCache();
+    const path = await cache.resolve(drive, mountId, pathStr);
+    if (!path) throw new ApiError(404, 'Not found');
+    if (await drive.isInsideContainer(mountId, path.id)) {
+        throw new ApiError(423, 'Container internals are read-only');
+    }
+    await drive.deletePath(mountId, path.id);
+    return new Response(null, { status: 204 });
+}
