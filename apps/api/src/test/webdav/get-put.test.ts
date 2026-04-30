@@ -72,3 +72,65 @@ describe('WebDAV GET/HEAD', () => {
         expect(a.headers.get('ETag')).toBe(b.headers.get('ETag'));
     });
 });
+
+describe('WebDAV PUT', () => {
+    let ctx: TestContext;
+    let mountId: string;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        const dRes = await webdavRequest(ctx.alice.user.email, 'PROPFIND', `/webdav/${ctx.alice.user.id}/`);
+        const m = (await dRes.text()).match(new RegExp(`/webdav/${ctx.alice.user.id}/([^/<]+)/`));
+        if (!m) throw new Error('mount id not found');
+        mountId = m[1];
+    });
+
+    test('PUT creates a new file', async () => {
+        const url = `/webdav/${ctx.alice.user.id}/${mountId}/put-new.txt`;
+        const res = await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'created\n' });
+        expect(res.status).toBe(201);
+        const get = await webdavRequest(ctx.alice.user.email, 'GET', url);
+        expect(await get.text()).toBe('created\n');
+    });
+
+    test('PUT overwrites an existing file', async () => {
+        const url = `/webdav/${ctx.alice.user.id}/${mountId}/put-new.txt`;
+        const res = await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'overwritten\n' });
+        expect(res.status).toBe(204);
+        const get = await webdavRequest(ctx.alice.user.email, 'GET', url);
+        expect(await get.text()).toBe('overwritten\n');
+    });
+
+    test('PUT with mismatched If-Match → 412', async () => {
+        const url = `/webdav/${ctx.alice.user.id}/${mountId}/put-new.txt`;
+        const res = await webdavRequest(ctx.alice.user.email, 'PUT', url, {
+            body: 'no',
+            headers: { 'If-Match': '"wrong"' },
+        });
+        expect(res.status).toBe(412);
+    });
+
+    test('PUT with If-None-Match: * on existing → 412', async () => {
+        const url = `/webdav/${ctx.alice.user.id}/${mountId}/put-new.txt`;
+        const res = await webdavRequest(ctx.alice.user.email, 'PUT', url, {
+            body: 'no',
+            headers: { 'If-None-Match': '*' },
+        });
+        expect(res.status).toBe(412);
+    });
+
+    test('PUT with no parent → 409', async () => {
+        const url = `/webdav/${ctx.alice.user.id}/${mountId}/no/such/dir/x.txt`;
+        const res = await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'nope' });
+        expect(res.status).toBe(409);
+    });
+
+    test('PUT then GET round-trips ETag', async () => {
+        const url = `/webdav/${ctx.alice.user.id}/${mountId}/put-roundtrip.txt`;
+        const putRes = await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'roundtrip-data' });
+        const putEtag = putRes.headers.get('ETag');
+        expect(putEtag).toMatch(/^".+"$/);
+        const getRes = await webdavRequest(ctx.alice.user.email, 'HEAD', url);
+        expect(getRes.headers.get('ETag')).toBe(putEtag);
+    });
+});

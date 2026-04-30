@@ -190,6 +190,37 @@ export default class SharedDrive {
         );
     }
 
+    public async createFromTemp(
+        mountId: string,
+        parentId: string,
+        name: string,
+        mimeType: string,
+        size: number,
+        hash: string,
+        tempId: string,
+    ): Promise<DrivePath> {
+        return this.withWritePermission(mountId, parentId, () =>
+            this.sharedDrive.createFromTemp(mountId, parentId, name, mimeType, size, hash, tempId),
+        );
+    }
+
+    public async overwriteFromTemp(mountId: string, pathId: string, tempId: string): Promise<DrivePath> {
+        return this.withWritePermission(mountId, pathId, () =>
+            this.sharedDrive.overwriteFromTemp(mountId, pathId, tempId),
+        );
+    }
+
+    // Temp paths are mount-internal (private filesystem under tmpDir). The `mountId` here
+    // is just used to locate the tmp directory; no user data is exposed. ACL gating is
+    // enforced on the call sites that actually create/overwrite files via these temps.
+    public getTempPath(mountId: string, tempId: string): string {
+        return this.sharedDrive.getTempPath(mountId, tempId);
+    }
+
+    public async cleanupTemp(mountId: string, tempId: string): Promise<void> {
+        return this.sharedDrive.cleanupTemp(mountId, tempId);
+    }
+
     public async resolveFile(mountId: string, pathId: string) {
         return this.withReadPermission(mountId, pathId, () => this.sharedDrive.resolveFile(mountId, pathId));
     }

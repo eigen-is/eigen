@@ -96,3 +96,29 @@ export async function writeTempWithHash(
     }
     return { size, hash: hasher.digest('hex') };
 }
+
+// Stream a request body (ReadableStream<Uint8Array>) into a temp path while computing
+// the sha256 hash in a single pass. Sibling of writeTempWithHash for raw HTTP bodies.
+export async function writeStreamToTemp(
+    tempPath: string,
+    body: ReadableStream<Uint8Array>,
+): Promise<{ size: number; hash: string }> {
+    const hasher = new Bun.CryptoHasher('sha256');
+    const writer = Bun.file(tempPath).writer({ highWaterMark: 256 * 1024 });
+    const reader = body.getReader();
+    let size = 0;
+    try {
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            hasher.update(value);
+            writer.write(value);
+            size += value.byteLength;
+        }
+        await writer.end();
+    } catch (e) {
+        await writer.end();
+        throw e;
+    }
+    return { size, hash: hasher.digest('hex') };
+}

@@ -529,6 +529,42 @@ export default class Drive {
         return updated;
     }
 
+    async createFromTemp(
+        mountId: string,
+        parentId: string,
+        name: string,
+        mimeType: string,
+        size: number,
+        hash: string,
+        tempId: string,
+    ): Promise<DrivePath> {
+        const mount = this.getMount(mountId);
+        const newId = await mount.createFileFromTemp(parentId, name, mimeType, size, hash, tempId);
+        const created = await mount.getPath(newId);
+        if (!created) throw new ApiError(500, 'Failed to create file');
+        this.emit(SSEventType.DRIVE_FILE_UPLOADED, created);
+        return created;
+    }
+
+    async overwriteFromTemp(mountId: string, pathId: string, tempId: string): Promise<DrivePath> {
+        const mount = this.getMount(mountId);
+        const path = await mount.getActivePath(pathId);
+        if (path.type !== DRIVE_TYPE_FILE) throw new ApiError(404, 'File not found');
+        await mount.writeFile(pathId, Bun.file(mount.getTempPath(tempId)));
+        const updated = await mount.getPath(pathId);
+        if (!updated) throw new ApiError(500, 'Failed to overwrite file');
+        this.emit(SSEventType.DRIVE_FILE_UPLOADED, updated);
+        return updated;
+    }
+
+    getTempPath(mountId: string, tempId: string): string {
+        return this.getMount(mountId).getTempPath(tempId);
+    }
+
+    async cleanupTemp(mountId: string, tempId: string): Promise<void> {
+        return this.getMount(mountId).cleanupTemp(tempId);
+    }
+
     async resolveFile(mountId: string, pathId: string): Promise<{ mount: Mount; path: DrivePath }> {
         const mount = this.getMount(mountId);
         const path = await mount.getActivePath(pathId);
