@@ -50,7 +50,13 @@ export function encodeHref(path: string): string {
         .join('/');
 }
 
-export type LockProps = { token: string; ownerHref?: string; depth: 0 | 'infinity'; expiresAt: number };
+export type LockProps = {
+    token: string;
+    ownerHref?: string;
+    depth: 0 | 'infinity';
+    scope: 'exclusive' | 'shared';
+    expiresAt: number;
+};
 
 export function lockdiscoveryProp(locks: LockProps[]): string {
     if (locks.length === 0) return '<D:lockdiscovery/>';
@@ -59,14 +65,15 @@ export function lockdiscoveryProp(locks: LockProps[]): string {
             const owner = l.ownerHref ? `<D:owner>${escapeXml(l.ownerHref)}</D:owner>` : '';
             const timeoutSeconds = Math.max(1, Math.floor((l.expiresAt - Date.now()) / 1000));
             const depth = `<D:depth>${l.depth === 0 ? '0' : 'infinity'}</D:depth>`;
-            return `<D:activelock><D:locktype><D:write/></D:locktype><D:lockscope><D:exclusive/></D:lockscope>${depth}${owner}<D:timeout>Second-${timeoutSeconds}</D:timeout><D:locktoken><D:href>${escapeXml(l.token)}</D:href></D:locktoken></D:activelock>`;
+            const scope = l.scope === 'shared' ? '<D:shared/>' : '<D:exclusive/>';
+            return `<D:activelock><D:locktype><D:write/></D:locktype><D:lockscope>${scope}</D:lockscope>${depth}${owner}<D:timeout>Second-${timeoutSeconds}</D:timeout><D:locktoken><D:href>${escapeXml(l.token)}</D:href></D:locktoken></D:activelock>`;
         })
         .join('');
     return `<D:lockdiscovery>${inner}</D:lockdiscovery>`;
 }
 
 export function supportedlockProp(): string {
-    return '<D:supportedlock><D:lockentry><D:lockscope><D:exclusive/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockentry></D:supportedlock>';
+    return '<D:supportedlock><D:lockentry><D:lockscope><D:exclusive/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockentry><D:lockentry><D:lockscope><D:shared/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockentry></D:supportedlock>';
 }
 
 // Files written through the drive API carry a SHA-256 hash; legacy/edge rows may

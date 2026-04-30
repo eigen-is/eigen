@@ -1,7 +1,7 @@
 import type { ProtocolUser } from '../auth/protocol-auth';
 import { ApiError } from '../core/errors';
 import { getSharedDrive } from '../drive/get-drive';
-import type { Lock } from '../drive/lock-manager';
+import type { Lock, LockScope } from '../drive/lock-manager';
 import { LOCK_DEFAULT_TTL_MS, parseIfHeaderTokens } from '../drive/lock-manager';
 import { WebdavPathCache } from './path-resolve';
 import { lockdiscoveryProp } from './xml';
@@ -17,6 +17,11 @@ function parseTimeoutHeader(header: string | null): number {
 function extractLockOwner(body: string): string | undefined {
     const match = body.match(/<(?:[A-Za-z][\w]*:)?owner(?:\s[^>]*)?>([\s\S]*?)<\/(?:[A-Za-z][\w]*:)?owner>/i);
     return match?.[1].trim() || undefined;
+}
+
+// Default to exclusive when the body omits <lockscope> entirely (RFC 4918 §9.10).
+function extractLockScope(body: string): LockScope {
+    return /<(?:[A-Za-z][\w]*:)?shared\s*\/?>/i.test(body) ? 'shared' : 'exclusive';
 }
 
 function buildLockResponse(lock: Lock): Response {
@@ -60,9 +65,11 @@ export async function handleLock(args: {
     }
 
     const ownerHref = extractLockOwner(body);
+    const scope = extractLockScope(body);
     const lock = drive.lockManager.acquire({
         pathId: path.id,
         depth,
+        scope,
         userId: user.id,
         ownerHref,
         ttlMs,
