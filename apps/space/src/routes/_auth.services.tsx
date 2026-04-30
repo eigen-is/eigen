@@ -12,7 +12,7 @@ import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { Separator } from '@workspace/ui/components/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@workspace/ui/components/table';
-import { Calendar, Check, Copy, KeyRound, Mail, Plus, Trash2 } from 'lucide-react';
+import { Calendar, Check, Copy, FolderTree, KeyRound, Mail, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
 export const Route = createFileRoute('/_auth/services')({
@@ -151,14 +151,15 @@ function ServicesComponent() {
     const { user } = useAuth();
     const host = new URL(API_HOST).hostname;
     const davBase = `${API_HOST}/dav`;
+    const webdavBase = `${API_HOST}/webdav`;
 
     return (
         <div className="flex flex-col m-8">
             <div className="w-full max-w-3xl">
-                <h1 className="text-2xl font-semibold mb-6">Calendar & Mail</h1>
+                <h1 className="text-2xl font-semibold mb-6">Integrations</h1>
                 <p className="text-sm text-muted-foreground mb-6">
-                    Connect your calendars and email to external clients like Thunderbird, Apple Mail, or any app that
-                    supports CalDAV and IMAP.
+                    Connect your calendars, mail, and drive to external clients like Thunderbird, Apple Mail, Finder,
+                    rclone, or any app that supports CalDAV, IMAP, or WebDAV.
                 </p>
 
                 <div className="space-y-6">
@@ -199,6 +200,23 @@ function ServicesComponent() {
                             <CopyableField label="Username" value={user?.email ?? ''} />
                             <CopyableField label="SMTP server" value={host} />
                             <CopyableField label="SMTP port" value="465" />
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <FolderTree className="h-5 w-5" />
+                                WebDAV (Drive sync)
+                            </CardTitle>
+                            <CardDescription>
+                                Mount your Eigen drive in Finder, Explorer, rclone, or Mountain Duck. Authenticate with
+                                an app password generated below.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                            <CopyableField label="Server URL" value={`${webdavBase}/${user?.id ?? ''}/`} />
+                            <CopyableField label="Username" value={user?.email ?? ''} />
                         </CardContent>
                     </Card>
 
