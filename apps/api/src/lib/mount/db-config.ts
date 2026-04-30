@@ -32,29 +32,11 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     FOREIGN KEY (parentId) REFERENCES paths(id) ON DELETE CASCADE
                 );
 
-                CREATE TABLE IF NOT EXISTS labels (
-                    id TEXT PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    color TEXT NOT NULL,
-                    createdAt INTEGER DEFAULT (unixepoch()),
-                    updatedAt INTEGER DEFAULT (unixepoch())
-                );
-
-                CREATE TABLE IF NOT EXISTS paths_to_labels (
-                    pathId TEXT NOT NULL,
-                    labelId TEXT NOT NULL,
-                    PRIMARY KEY (pathId, labelId),
-                    FOREIGN KEY (pathId) REFERENCES paths(id) ON DELETE CASCADE,
-                    FOREIGN KEY (labelId) REFERENCES labels(id) ON DELETE CASCADE
-                );
-
                 CREATE INDEX IF NOT EXISTS idx_paths_ownerId ON paths(ownerId);
                 CREATE INDEX IF NOT EXISTS idx_paths_type ON paths(type);
                 CREATE INDEX IF NOT EXISTS idx_paths_mimeType ON paths(mimeType);
                 CREATE INDEX IF NOT EXISTS idx_paths_parentId_name ON paths(parentId, name);
                 CREATE INDEX IF NOT EXISTS idx_paths_type_parentId ON paths(type, parentId);
-                CREATE INDEX IF NOT EXISTS idx_paths_to_labels_pathId ON paths_to_labels(pathId);
-                CREATE INDEX IF NOT EXISTS idx_paths_to_labels_labelId ON paths_to_labels(labelId);
                 CREATE INDEX IF NOT EXISTS idx_paths_trashed_from
                     ON paths(trashedFrom, trashedAt) WHERE trashedFrom IS NOT NULL;
                 CREATE INDEX IF NOT EXISTS idx_paths_parent_trash

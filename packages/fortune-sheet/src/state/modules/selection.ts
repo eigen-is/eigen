@@ -1425,7 +1425,6 @@ export function moveHighlightRange(
             width
         );
         if (!isNil(changeparam)) {
-            // @ts-ignore
             [columnseleted, rowseleted, top, height, left, width] = changeparam;
         }
         ctx.formulaCache.func_selectedrange = {

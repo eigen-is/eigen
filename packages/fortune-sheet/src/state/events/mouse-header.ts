@@ -89,7 +89,6 @@ export function handleRowHeaderMouseDown(
                 col
             );
             if (changeparam != null) {
-                // @ts-ignore
                 [rowseleted, top, height] = [
                     changeparam[1],
                     changeparam[2],
@@ -146,7 +145,6 @@ export function handleRowHeaderMouseDown(
                     col
                 );
                 if (changeparam != null) {
-                    // @ts-ignore
                     [rowseleted, top, height] = [
                         changeparam[1],
                         changeparam[2],
@@ -465,7 +463,6 @@ export function handleColumnHeaderMouseDown(
                 width
             );
             if (changeparam != null) {
-                // @ts-ignore
                 [columnseleted, left, width] = [
                     changeparam[0],
                     changeparam[4],
@@ -522,7 +519,6 @@ export function handleColumnHeaderMouseDown(
                     width
                 );
                 if (changeparam != null) {
-                    // @ts-ignore
                     [columnseleted, left, width] = [
                         changeparam[0],
                         changeparam[4],

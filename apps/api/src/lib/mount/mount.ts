@@ -32,7 +32,7 @@ import { deleteThumbnail } from '../shared/thumbnails';
 import { LocalKeyStorage, LocalStorage, S3Storage, type StorageBackend, type StorageFile } from '../storage';
 import { MOUNT_DB_CONFIG } from './db-config';
 import type * as schema from './schema';
-import { labels, paths, pathsToLabels } from './schema';
+import { paths } from './schema';
 
 type LocalDatabaseGetter = <S extends SchemaType>(
     config: DatabaseConfig<S>,
@@ -988,51 +988,6 @@ export class Mount {
         }
 
         return ordered.map((r) => this.toDrivePath(r));
-    }
-
-    async getLabels() {
-        return await this.db.select().from(labels).all();
-    }
-
-    async createLabel(name: string, color: string): Promise<string> {
-        const labelId = randomUUID();
-        await this.db.insert(labels).values({
-            id: labelId,
-            name,
-            color,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-        });
-        return labelId;
-    }
-
-    async updateLabel(labelId: string, name: string, color: string): Promise<void> {
-        await this.db.update(labels).set({ name, color, updatedAt: new Date() }).where(eq(labels.id, labelId));
-    }
-
-    async deleteLabel(labelId: string): Promise<void> {
-        this.db.transaction((tx) => {
-            tx.delete(pathsToLabels).where(eq(pathsToLabels.labelId, labelId)).run();
-            tx.delete(labels).where(eq(labels.id, labelId)).run();
-        });
-    }
-
-    async setPathLabels(pathId: string, labelIds: string[]): Promise<void> {
-        this.db.transaction((tx) => {
-            tx.delete(pathsToLabels).where(eq(pathsToLabels.pathId, pathId)).run();
-            for (const labelId of labelIds) {
-                tx.insert(pathsToLabels).values({ pathId, labelId }).run();
-            }
-        });
-    }
-
-    async getPathLabels(pathId: string): Promise<string[]> {
-        const results = await this.db
-            .select({ labelId: pathsToLabels.labelId })
-            .from(pathsToLabels)
-            .where(eq(pathsToLabels.pathId, pathId))
-            .all();
-        return results.map((r) => r.labelId);
     }
 
     private toDrivePath(row: typeof paths.$inferSelect): DrivePath {

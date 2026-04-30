@@ -300,7 +300,6 @@ export function rangeDrag(
         width
     );
     if (changeparam != null) {
-        // @ts-ignore
         [columnseleted, rowseleted, top, height, left, width] = changeparam;
     }
 
@@ -383,7 +382,6 @@ export function rangeDragColumn(
         width
     );
     if (changeparam != null) {
-        // @ts-ignore
         [columnseleted, , , , left, width] = changeparam;
     }
 
@@ -462,7 +460,6 @@ export function rangeDragRow(
         col - col_pre - 1
     );
     if (changeparam != null) {
-        // @ts-ignore
         [, rowseleted, top, height] = changeparam;
     }
 

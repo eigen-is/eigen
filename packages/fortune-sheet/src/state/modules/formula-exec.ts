@@ -739,7 +739,7 @@ export function execFunctionGroup(
     origin_r: number | null,
     origin_c: number | null,
     value: unknown,
-    id?: string,
+    id?: string | null,
     data?: CellMatrix | null,
     isForce = false
 ): void {

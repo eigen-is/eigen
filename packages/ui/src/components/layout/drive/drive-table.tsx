@@ -127,7 +127,6 @@ export function DriveTable({
                 type: 'folder',
                 parentId: null,
                 ownerId: currentPath.ownerId || '',
-                labels: [],
                 mimeType: 'folder',
                 size: 0,
                 thumbnail: null,

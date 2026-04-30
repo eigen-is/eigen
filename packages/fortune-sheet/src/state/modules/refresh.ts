@@ -20,7 +20,6 @@ function runExecFunction(
         }
     }
     ctx.formulaCache.execFunctionExist.reverse();
-    // @ts-ignore
     execFunctionGroup(ctx, null, null, null, null, data);
     ctx.formulaCache.execFunctionGlobalData = null;
 }

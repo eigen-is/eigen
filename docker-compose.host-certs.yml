@@ -1,0 +1,32 @@
+# Reuse the host's Let's Encrypt certs for postfix and dovecot when COMPOSE_PROFILES omits
+# 'edge' (i.e. the bundled Caddy is off and your host webserver issues the certs). The
+# bundled cert exporter only runs inside the Caddy container, so without this overlay the
+# `./data/certs/` mount stays empty and IMAPS / SMTPS can't start.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.host-certs.yml \
+#       --env-file .env.production up -d
+#
+# Cert reload on renewal:
+#   The mounts use the live/ symlinks, so renewals are picked up at the next service
+#   reload. Hook this into certbot so postfix/dovecot reload promptly:
+#
+#     # /etc/letsencrypt/renewal-hooks/deploy/eigen.sh
+#     #!/usr/bin/env sh
+#     docker compose -f /opt/eigen/docker-compose.yml \
+#         -f /opt/eigen/docker-compose.host-certs.yml \
+#         --env-file /opt/eigen/.env.production kill -s HUP postfix dovecot
+#
+#   chmod +x /etc/letsencrypt/renewal-hooks/deploy/eigen.sh
+#
+# Compose 2.20+ required (uses !override to fully replace the volume list).
+services:
+  postfix:
+    volumes: !override
+      - /etc/letsencrypt/live/${MAIL_DOMAIN:-${DOMAIN}}:/certs:ro
+      - ./data/dkim:/data/dkim
+      - postfix-queue:/var/spool/postfix
+  dovecot:
+    volumes: !override
+      - /etc/letsencrypt/live/${MAIL_DOMAIN:-${DOMAIN}}:/certs:ro
+      - ./data:/data
