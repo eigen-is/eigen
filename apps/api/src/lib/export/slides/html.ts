@@ -2,11 +2,11 @@ import { escapeHtml } from '@workspace/lib/html';
 import type { DrivePath } from '@workspace/lib/types/drive';
 // CSS embedded as string at build time by Bun's bundler — no runtime file resolution needed
 import slideTextCSSRaw from '../../../../../../packages/ui/src/styles/slide-text.css' with { type: 'text' };
+import { readSlidesContent } from '../../document/slides';
 import type { Mount } from '../../mount';
 import type { ExportResult } from '../export-document';
 import { getFontCSS } from '../fonts';
 import { buildDataUriMap } from '../media';
-import { loadSlidesContent } from './content';
 import {
     fixedSizeUnit,
     type ImgSrcResolver,
@@ -35,10 +35,7 @@ export async function generateSlidesExportHtml(
     mode: 'html' | 'pdf',
 ): Promise<string> {
     const title = stripSlidesExtension(drivePath.name);
-    const content = await loadSlidesContent(mount, drivePath);
-    if (!content) return wrapInDocument(title, '', mode);
-
-    const { deck, mediaByName } = content;
+    const { deck, mediaByName } = await readSlidesContent(mount, drivePath);
     const dataUriMap = await buildDataUriMap(mount, mediaByName);
     const resolveImgSrc: ImgSrcResolver = (mediaName) => dataUriMap.get(mediaName) ?? null;
 
