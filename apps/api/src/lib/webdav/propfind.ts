@@ -21,7 +21,11 @@ async function deadPropsXml(drive: Drive | SharedDrive, mountId: string, pathId:
         const safeName = escapeXml(dp.name);
         const safeValue = escapeXml(dp.value);
         if (dp.namespace === 'DAV:') return `<D:${safeName}>${safeValue}</D:${safeName}>`;
-        return `<X:${safeName} xmlns:X="${escapeXml(dp.namespace)}">${safeValue}</X:${safeName}>`;
+        // Use a default-namespace declaration on the element rather than re-declaring a
+        // shared prefix on every sibling. expat (used by neon-litmus) flags repeated
+        // `xmlns:X="..."` declarations on adjacent siblings as "invalid namespace
+        // declaration", even though the values match. xmlns="..." sidesteps the issue.
+        return `<${safeName} xmlns="${escapeXml(dp.namespace)}">${safeValue}</${safeName}>`;
     });
 }
 
