@@ -24,13 +24,18 @@ const PROTECTED_PROPS = new Set([
 
 // Keep namespace prefixes in tag names so we can distinguish DAV: from custom
 // namespaces (Z:Win32CreationTime, etc.) — fast-xml-parser's removeNSPrefix
-// would collapse them all into bare local names.
+// would collapse them all into bare local names. `htmlEntities: true` gates
+// numeric character reference decoding for codepoints > U+FF — without it,
+// `&#65536;` is left as a literal string instead of becoming 𐀀 (RFC 4918
+// expects round-trip fidelity for XML character references in dead props).
 const parser = new XMLParser({
     ignoreAttributes: false,
     attributeNamePrefix: '@_',
     removeNSPrefix: false,
     parseTagValue: false,
     trimValues: false,
+    processEntities: true,
+    htmlEntities: true,
 });
 
 type PropOp = { op: 'set' | 'remove'; namespace: string; name: string; value: string };
