@@ -16,8 +16,8 @@
 > flag — gating the in-app Mail UI when host runs the mail server) remains **deferred**;
 > scenarios C/D today still expose a Mail tile that 5xx's because `mailRouter` and the
 > launcher entry haven't been gated. Phase 5 (per-app feature flags in `settings.json`),
-> Phase 6 (Flavor 2 — host-postfix LMTP forwarding into Eigen), and Phase 7 (Flavor 3 —
-> multi-domain mail) remain future work.
+> Phase 6 (Flavor 2 — host postfix forwarding into Eigen's `/mail/deliver/:to`), and Phase 7
+> (Flavor 3 — multi-domain mail) remain future work.
 
 > **TLDR**: Make the Docker stack composable so users with an existing webserver and/or mail server on the
 > host can opt out of Eigen's `caddy`, `postfix`, and `dovecot` containers, and decouple the mail domain
@@ -252,7 +252,10 @@ share-by-email continue to function.
 
 This split matters because outbound and inbound are orthogonal capabilities. In scenarios C and D the
 host already runs postfix; Eigen relays outbound through it (`SMTP_HOST=host.docker.internal`) but
-*receiving* would require LMTP forwarding from the host — that's "Flavor 2" and out of scope.
+*receiving* would require host postfix to forward into Eigen's existing `/mail/deliver/:to` endpoint —
+that's "Flavor 2" and out of scope. (Today's bundled flow is also HTTP, not LMTP — postfix `pipe`s
+into [`docker/postfix/eigen-deliver`](../docker/postfix/eigen-deliver) which POSTs the raw `.eml` to
+the API. Same mechanism, just from a host postfix.)
 
 ```bash
 # .env.example
@@ -264,12 +267,14 @@ MAIL_APP_ENABLED=true
 | Layer | Where | Behaviour when `false` |
 |---|---|---|
 | API mail router | [`apps/api/src/app.ts:81`](../apps/api/src/app.ts) (`.use(mailRouter)`) | Skip registration. `/api/mail/*` and `/mail/deliver/*` return 404. |
-| Maildir lifecycle | [`apps/api/src/lib/home/user-home.ts`](../apps/api/src/lib/home/user-home.ts) (`new Maildir(this)` + `_mail.init()`) | Skip instantiation. No filesystem watchers, no `welcomeMail()`, no MailDB. Existing Maildirs on disk are untouched, just not served. |
-| Caddy SPA route | [`Caddyfile:66`](../Caddyfile) (`import app mail`) | Omit when Caddy is on but Mail is off. |
+| Maildir construction | [`apps/api/src/lib/home/user-home.ts:24`](../apps/api/src/lib/home/user-home.ts) (`new Maildir(this)`) | Skip the constructor. With `_mail` undefined, no filesystem watchers, no `welcomeMail()`, no MailDB. Existing Maildirs on disk are untouched, just not served. |
+| Maildir init call | [`apps/api/src/lib/home/home.ts:100`](../apps/api/src/lib/home/home.ts) (`this._mail?.init()` inside `super.init(true)`) | Already optional-chained — short-circuits when `_mail` is undefined per the row above. Listed for orientation; no edit needed if the constructor is gated. |
+| Caddy SPA route | [`Caddyfile:66`](../Caddyfile) (`import app mail`) | Omit when Caddy is on but Mail is off. **Mechanism**: Caddy has no native conditional imports. Pick one: (a) ship a second Caddyfile-no-mail and switch via `caddy run --config`, (b) startup script rewrites the line based on `MAIL_APP_ENABLED` before `caddy run`, or (c) factor `import app mail` into a separate file referenced by `import {$MAIL_IMPORTS_FILE}` and point the env var at an empty file when off. |
 | IMAP autodiscovery | [`Caddyfile:46`](../Caddyfile) + [`docker/caddy/autoconfig.xml`](../docker/caddy/autoconfig.xml) | Skip the `/.well-known/autoconfig/mail/...` route. |
 | Features endpoint | new [`apps/api/src/routes/features.ts`](../apps/api/src/routes/features.ts) (or extend [`setup.ts`](../apps/api/src/routes/setup.ts)) | Returns `{ mail: false }`. |
 | Frontend features hook | new `packages/lib/src/core/features.ts` | `useFeatures()` React Query hook returns `{ mail: false }`. |
-| App registry filter | [`packages/lib/src/core/apps.ts`](../packages/lib/src/core/apps.ts) consumers (`topbar.tsx`, `apps/index/src/routes/index.tsx`, `apps/space/src/routes/_auth.index.tsx`, command palette) | Filter Mail entry out via `useFeatures()`. |
+| App registry filter | [`packages/lib/src/core/apps.ts`](../packages/lib/src/core/apps.ts) consumers ([`packages/ui/src/components/layout/app/topbar.tsx`](../packages/ui/src/components/layout/app/topbar.tsx), [`apps/space/src/routes/_auth.index.tsx`](../apps/space/src/routes/_auth.index.tsx)) | Filter Mail entry out via `useFeatures()`. |
+| Landing page carousel | [`apps/index/src/routes/index.tsx:26`](../apps/index/src/routes/index.tsx) (`apps[appIndex]` rotation in the public-facing animated logo) | Filter Mail out before passing into the carousel. Visible to logged-out visitors so it leaks the app's existence even when otherwise gated. |
 | Notification deep-links | [`packages/lib/src/core/notification/resolve-link.ts:124`](../packages/lib/src/core/notification/resolve-link.ts) | The `'mail'` case in `isClickableNotification()` and the `getMailAppUrl()` call return `null` / hide the notification. |
 | Mail SSE handler | [`packages/lib/src/core/sse/hooks/use-sse.ts`](../packages/lib/src/core/sse/hooks/use-sse.ts) (`handleMailSSEvent`) | Skip dispatch. Today the handler no-ops on non-`mail:*` events, so this is dead-branch cleanup. |
 | Tests | `apps/api/src/test/mail.test.ts`, `ical-imip.test.ts` (the inbound parts) | Skip via `describe.skipIf(...)` when flag is false. |
@@ -283,7 +288,7 @@ These keep working unchanged because they only depend on outbound SMTP, not on M
 | Welcome emails to new users (when sent to user's external address) | Pure outbound via `mailer.ts` | Today `welcomeMail()` is delivered to the user's own Eigen Maildir — gone in C/D. A separate "outbound welcome to external address" path would be a small follow-up; track as TODO. |
 | Password reset, email verification | Pure outbound | none |
 | Share-invite emails | Pure outbound | none |
-| Calendar iMIP **sending** (`apps/api/src/lib/calendar/invite-propagation.ts`, RSVP path in `calendar.ts`) | Generates iMIP-formatted .eml, sends via SMTP | iMIP **RSVPs from external attendees can't be received** in C/D — there's no Maildir for postfix to deliver into. External attendees stay "no response" until Flavor 2 (host-postfix LMTP forwarding) lands. Document this in SETUP-GUIDE. |
+| Calendar iMIP **sending** (`apps/api/src/lib/calendar/invite-propagation.ts`, RSVP path in `calendar.ts`) | Generates iMIP-formatted .eml, sends via SMTP | iMIP **RSVPs from external attendees can't be received** in C/D — there's no Maildir for postfix to deliver into. External attendees stay "no response" until Flavor 2 (host postfix forwarding to `/mail/deliver/:to`) lands. Document this in SETUP-GUIDE. |
 | Drive `emailCollaborators()` (`apps/api/src/lib/drive/drive.ts`) | Pure outbound | none |
 | Contacts "Send email" button (`apps/contacts/src/components/contacts/contact-detail.tsx` + `team-member-detail.tsx`) | Falls back to system `mailto:` (browser opens user's default mail client) instead of opening Eigen's composer | Need a small UX change: when `features.mail === false`, swap the click handler to `window.location.href = 'mailto:...'`. The button stays useful. |
 | `getMailAppUrl` callers ([`api.ts:68`](../packages/lib/src/core/api.ts) and helpers) | Branch on `features.mail` and fall back to `mailto:` | Sweep callsites once. |
@@ -513,7 +518,7 @@ on Maildir presence.
 | 3 | End-to-end docs for scenarios C/D. Host-cert overlay (`docker-compose.host-certs.yml`) with worked example and certbot deploy-hook pattern. Outbound-welcome path for new users when `MAIL_APP_ENABLED=false` (welcome to user's external email instead of internal Maildir). | S |
 | 4 (optional) | `certbot` sidecar example. Switch cert export from polling to renewal hook (or `acme.sh`). | S |
 | 5 (future) | Generalize the feature-flag pattern: every app exposes `enabled`. Move from env to `data/server/settings.json` with admin-UI toggles, following the Nextcloud `occ app:enable` shape. | M |
-| 6 (future, "Flavor 2") | Inbound to the apex via host-postfix LMTP forwarding, so scenario C/D can receive mail (incl. iMIP RSVPs). | M |
+| 6 (future, "Flavor 2") | Inbound to the apex via host postfix forwarding into Eigen's existing `/mail/deliver/:to` HTTP endpoint, so scenario C/D can receive mail (incl. iMIP RSVPs). Bundled postfix already uses HTTP-pipe delivery (`docker/postfix/eigen-deliver` → POST to API), not LMTP — Phase 6 is the same shape from a host postfix. Mostly docs work: a worked example of how to add a postfix transport on the host that pipes into Eigen, plus verifying `TRUSTED_NETWORKS` covers the host's source IP (open question #5). | M |
 | 7 (future, "Flavor 3") | **Multi-domain mail.** `MAIL_DOMAIN` becomes `MAIL_DOMAINS` (array). New `domain` table, per-org domain ownership, postfix `virtual_mailbox_domains` regenerated at startup, per-domain DKIM keys, per-user aliases. User table grows an `email_aliases` relation. Material data-model work; treat as a separate proposal. | L |
 
 ## Open questions
@@ -530,15 +535,36 @@ on Maildir presence.
 2. **Inbound to the apex via host postfix** — covered as "Flavor 2" / Phase 6.
 3. **Multi-domain mail** — covered as "Flavor 3" / Phase 7. Worth flagging that `MAIL_DOMAIN` is the
    designed entry point; `MAIL_DOMAINS=apex.com,other.com` is the natural extension when the data model
-   catches up. Today's single-domain assumption is in: postfix `virtual_mailbox_domains` (single value),
-   user `email` column (single value, no aliases table), DKIM (one key generated per `MAIL_DOMAIN`), and
-   the `mailbox_deliver` lookup which keys on the literal email string. All four need rework for
-   multi-domain.
+   catches up. Today's single-domain assumption surfaces in seven places:
+   - Postfix `virtual_mailbox_domains = $MAIL_DOMAIN` (single scalar) in `docker/postfix/main.cf.template:13`.
+   - User `email` column in `apps/api/auth-schema.ts:6` — `text NOT NULL UNIQUE`, no aliases table.
+   - DKIM key generation in `docker/postfix/entrypoint.sh:49` — one key per `$MAIL_DOMAIN`, hardcoded
+     selector `eigen`. Per-domain keys need opendkim `SigningTable`/`KeyTable` config.
+   - The deliver lookup `getUserByEmail()` in `apps/api/src/lib/mail/mail.ts:38` — exact-match SQL
+     against the single `email` column.
+   - `getMailDomain()` in `apps/api/src/lib/config/server-config.ts:78-80` — returns a scalar string;
+     becomes `getMailDomains(): string[]` and every caller (mailer `from`, autoconfig render, dovecot
+     auth path) needs per-user domain selection.
+   - `docker/caddy/autoconfig.xml` — `<domain>` uses `MAIL_DOMAIN` correctly but `<hostname>` for IMAP
+     and SMTP uses `DOMAIN` (the web host). The template structure assumes one IMAP/SMTP hostname
+     applies to all served domains.
+   - Setup wizard (`apps/api/src/routes/setup.ts:29-42`) has no `mailDomain` field — `MAIL_DOMAIN`
+     flows in via env only. Multi-domain admins would need a UI affordance plus, presumably, a
+     domain-add/remove flow rather than a single field.
+
+   All seven need rework for multi-domain.
 4. **Default for `EIGEN_API_BIND` in dev compose.** Local tests run via `bun run` outside Docker. The
    bind only matters for the production compose; dev keeps no host port.
-5. **`TRUSTED_PROXIES` allowlist for scenario B.** The API trusts `X-Forwarded-Proto`/`X-Real-IP` from
-   `TRUSTED_NETWORKS` today. When the host edge proxies in from a non-default subnet, document the env
-   extension. Same shape as Mailcow's `TRUSTED_PROXIES`.
+5. **`TRUSTED_NETWORKS` allowlist for scenarios B and Phase 6.** The API trusts
+   `X-Forwarded-Proto`/`X-Real-IP` from `TRUSTED_NETWORKS`, and the inbound deliver endpoint
+   `/mail/deliver/:to` guards on the same list via `requireLocalhost()`
+   (`apps/api/src/lib/core/access.ts:26`). The compose env sets it to
+   `127.0.0.0/8,::1,172.16.0.0/12`, which covers Docker's default bridge (`172.17.0.0/16`) and
+   Eigen's custom `eigen` network (`172.20.0.0/24`) — so most Phase 6 setups work as-is, since a
+   host postfix connecting to a published port appears to come from the bridge gateway. Document
+   the extension knob anyway: hosts on a non-default subnet, IPv6-only deploys, or scenario-B host
+   edges that NAT through unusual addresses need to widen the list. Code-level fallback (when
+   the env is unset) is just `127.0.0.0/8,::1`. Same shape as Mailcow's `TRUSTED_PROXIES`.
 6. **`welcomeMail()` re-fire on flag flip-back.** Today the welcome message is delivered to the user's
    own Eigen Maildir on first `Maildir.init()`. If the flag goes false then true again, does it re-fire?
    Check whether the new-user signal is per-user-state or Maildir-presence; gate it on the former so
