@@ -19,7 +19,7 @@ import {
     type MountConfig,
     type MountSettings,
 } from '@workspace/lib/types';
-import type { DriveVisibility } from '@workspace/lib/types/drive';
+import { type DriveVisibility, isContainerType } from '@workspace/lib/types/drive';
 import type { BunFile } from 'bun';
 import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
@@ -28,6 +28,7 @@ import { getS3Config } from '../config/server-config';
 import { getServerSettings } from '../config/server-settings';
 import { ApiError, type DatabaseConfig, ManagedDatabase, type SchemaType } from '../core';
 import { getUniqueFileName } from '../drive/naming';
+import { writeTempWithHash } from '../drive/streaming';
 import { deleteThumbnail } from '../shared/thumbnails';
 import { LocalKeyStorage, LocalStorage, S3Storage, type StorageBackend, type StorageFile } from '../storage';
 import { MOUNT_DB_CONFIG } from './db-config';
@@ -386,6 +387,37 @@ export class Mount {
         });
 
         return fileId;
+    }
+
+    async copyPath(srcPathId: string, destParentId: string, name: string): Promise<DrivePath> {
+        const src = await this.getPath(srcPathId);
+        if (!src || src.trashedAt) throw new ApiError(404, 'Source not found');
+
+        if (isContainerType(src.type)) {
+            const containerType: DriveContainerType | undefined = src.type === DRIVE_TYPE_FOLDER ? undefined : src.type;
+            const newId = await this.createFolder(destParentId, name, containerType);
+            const children = await this.listFolder(srcPathId);
+            for (const child of children) {
+                await this.copyPath(child.id, newId, child.name);
+            }
+            const created = await this.getPath(newId);
+            if (!created) throw new ApiError(500, 'Failed to copy folder');
+            return created;
+        }
+
+        const srcKey = await this.getStorageKey(srcPathId);
+        const srcFile = this.storage.read(srcKey);
+        if (!(await srcFile.exists())) throw new ApiError(404, 'Source file missing on storage');
+        const tempId = randomUUID();
+        const { size, hash } = await writeTempWithHash(this.getTempPath(tempId), srcFile);
+        try {
+            const newId = await this.createFileFromTemp(destParentId, name, src.mimeType, size, hash, tempId);
+            const created = await this.getPath(newId);
+            if (!created) throw new ApiError(500, 'Failed to copy file');
+            return created;
+        } finally {
+            await this.cleanupTemp(tempId);
+        }
     }
 
     async touchFile(parentId: string, name: string, mimeType: string) {

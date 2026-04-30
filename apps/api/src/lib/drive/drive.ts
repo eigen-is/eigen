@@ -11,6 +11,7 @@ import {
 import {
     DRIVE_EXTENSIONS,
     type DriveACL,
+    type DriveContainerType,
     type DrivePath,
     type DriveVisibility,
     type EigenDocType,
@@ -433,6 +434,59 @@ export default class Drive {
         const mount = this.getMount(mountId);
         await mount.getActivePath(pathId);
         return await mount.readFile(pathId);
+    }
+
+    async copyPath(mountId: string, srcPathId: string, destParentId: string, name: string): Promise<DrivePath> {
+        return this.getMount(mountId).copyPath(srcPathId, destParentId, name);
+    }
+
+    async copyPathCrossMount(
+        srcMountId: string,
+        srcPathId: string,
+        destMountId: string,
+        destParentId: string,
+        name: string,
+    ): Promise<DrivePath> {
+        if (srcMountId === destMountId) {
+            return this.copyPath(srcMountId, srcPathId, destParentId, name);
+        }
+
+        const srcMount = this.getMount(srcMountId);
+        const destMount = this.getMount(destMountId);
+        const src = await srcMount.getPath(srcPathId);
+        if (!src || src.trashedAt) throw new ApiError(404, 'Source not found');
+
+        if (isContainerType(src.type)) {
+            const containerType: DriveContainerType | undefined = src.type === DRIVE_TYPE_FOLDER ? undefined : src.type;
+            const newFolderId = await destMount.createFolder(destParentId, name, containerType);
+            const children = await srcMount.listFolder(srcPathId);
+            for (const child of children) {
+                await this.copyPathCrossMount(srcMountId, child.id, destMountId, newFolderId, child.name);
+            }
+            const created = await destMount.getPath(newFolderId);
+            if (!created) throw new ApiError(500, 'Failed to copy folder cross-mount');
+            return created;
+        }
+
+        const srcFile = await srcMount.readFile(srcPathId);
+        if (!srcFile) throw new ApiError(404, 'Source file missing on storage');
+        const tempId = randomUUID();
+        const { size, hash } = await writeTempWithHash(destMount.getTempPath(tempId), srcFile);
+        try {
+            const newId = await destMount.createFileFromTemp(destParentId, name, src.mimeType, size, hash, tempId);
+            const created = await destMount.getPath(newId);
+            if (!created) throw new ApiError(500, 'Failed to copy file cross-mount');
+            return created;
+        } finally {
+            await destMount.cleanupTemp(tempId);
+        }
+    }
+
+    async isInsideContainer(mountId: string, pathId: string): Promise<boolean> {
+        const ancestors = await this.getMount(mountId).getBreadcrumb(pathId);
+        // Breadcrumb is root-to-self; drop the path itself and reject plain folders so
+        // only true Eigen container ancestors (.eigendoc / .eigenchat / etc.) count.
+        return ancestors.slice(0, -1).some((p) => isContainerType(p.type) && p.type !== DRIVE_TYPE_FOLDER);
     }
 
     async readRange(mountId: string, pathId: string, start: number, end: number): Promise<StorageFile | null> {
