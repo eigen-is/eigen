@@ -3,7 +3,7 @@ import { getDocExtensions } from '@workspace/lib/docs/eigendoc';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import DOMPurify from 'isomorphic-dompurify';
 import { common, createLowlight } from 'lowlight';
-import { loadEigendocContent } from '../export/doc/content';
+import { readEigendocContent } from '../document/doc';
 import { renderCodeBlockNode, renderFigureNode, renderTaskItemNode } from '../export/doc/render';
 import { buildPreviewUrl } from '../export/media';
 import type { Mount } from '../mount';
@@ -12,13 +12,10 @@ const lowlight = createLowlight(common);
 const extensions = getDocExtensions({ lowlight });
 
 export async function generateEigendocPreview(mount: Mount, drivePath: DrivePath): Promise<string> {
-    const content = await loadEigendocContent(mount, drivePath);
-    if (!content) return '';
-
-    const { pmJson, mediaByName } = content;
+    const { json, mediaByName } = await readEigendocContent(mount, drivePath);
 
     const html = renderToHTMLString({
-        content: pmJson,
+        content: json,
         extensions,
         options: {
             nodeMapping: {
