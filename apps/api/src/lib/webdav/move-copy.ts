@@ -69,7 +69,7 @@ async function resolveMoveCopy(args: {
 
     const destParent = await cache.resolve(drive, dest.mountId, destParentStr);
     if (!destParent) throw new ApiError(409, 'Destination parent not found');
-    if (await drive.isInsideContainer(dest.mountId, destParent.id)) {
+    if (await drive.isContainerWriteBlocked(dest.mountId, destParent.id)) {
         throw new ApiError(423, 'Container internals are read-only');
     }
 
