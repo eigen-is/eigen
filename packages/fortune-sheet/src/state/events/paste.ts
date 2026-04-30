@@ -154,7 +154,6 @@ function postPasteCut(
         target.curDataVerification;
 
     ctx.formulaCache.execFunctionExist.reverse();
-    // @ts-ignore
     execFunctionGroup(ctx, null, null, null, null, target.curData);
     ctx.formulaCache.execFunctionGlobalData = null;
 

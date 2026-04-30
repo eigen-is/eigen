@@ -212,7 +212,6 @@ export function handleCellAreaMouseDown(
                     width
                 );
                 if (changeparam != null) {
-                    // @ts-ignore
                     [columnseleted, rowseleted, top, height, left, width] = changeparam;
                 }
 
@@ -436,7 +435,6 @@ export function handleCellAreaMouseDown(
                     width
                 );
                 if (changeparam != null) {
-                    // @ts-ignore
                     [columnseleted, rowseleted, top, height, left, width] = changeparam;
                 }
                 last.row = rowseleted;
@@ -653,22 +651,21 @@ export function handleContextMenu(
                     col
                 );
                 if (changeparam != null) {
-                    // @ts-ignore
                     const [columnseleted, rowseleted, top, height, left, width] =
                         changeparam;
                     ctx.luckysheet_select_save?.push({
-                        left: left as number,
-                        width: (width as number) - 1,
-                        top: top as number,
-                        height: (height as number) - 1,
-                        left_move: left as number,
-                        width_move: width as number,
-                        top_move: top as number,
-                        height_move: height as number,
-                        row: rowseleted as number[],
-                        column: columnseleted as number[],
-                        row_focus: (rowseleted as number[])[0],
-                        column_focus: (columnseleted as number[])[0],
+                        left,
+                        width: width - 1,
+                        top,
+                        height: height - 1,
+                        left_move: left,
+                        width_move: width,
+                        top_move: top,
+                        height_move: height,
+                        row: rowseleted,
+                        column: columnseleted,
+                        row_focus: rowseleted[0],
+                        column_focus: columnseleted[0],
                     });
                     return;
                 }
@@ -705,23 +702,22 @@ export function handleContextMenu(
                 col
             );
             if (changeparam != null) {
-                // @ts-ignore
                 const [columnseleted, rowseleted, top, height, left, width] =
                     changeparam;
                 ctx.luckysheet_select_save = [
                     {
-                        left: left as number,
-                        width: (width as number) - 1,
-                        top: top as number,
-                        height: (height as number) - 1,
-                        left_move: left as number,
-                        width_move: width as number,
-                        top_move: top as number,
-                        height_move: height as number,
-                        row: rowseleted as number[],
-                        column: columnseleted as number[],
-                        row_focus: (rowseleted as number[])[0],
-                        column_focus: (columnseleted as number[])[0],
+                        left,
+                        width: width - 1,
+                        top,
+                        height: height - 1,
+                        left_move: left,
+                        width_move: width,
+                        top_move: top,
+                        height_move: height,
+                        row: rowseleted,
+                        column: columnseleted,
+                        row_focus: rowseleted[0],
+                        column_focus: columnseleted[0],
                     },
                 ];
                 return;

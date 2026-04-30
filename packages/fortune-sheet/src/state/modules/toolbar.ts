@@ -268,9 +268,8 @@ function setAttr(
     updateFormat(ctx, cellInput, flowdata, attr, value, canvas);
 }
 
-// @ts-ignore
-function checkNoNullValue(cell) {
-    let v = cell;
+function checkNoNullValue(cell: Cell | null) {
+    let v: any = cell;
     if (isPlainObject(v)) {
         v = v.v;
     }
@@ -278,7 +277,7 @@ function checkNoNullValue(cell) {
     if (
         !isRealNull(v) &&
         isdatatypemulti(v).num &&
-        (cell.ct == null ||
+        (cell?.ct == null ||
             cell.ct.t == null ||
             cell.ct.t === "n" ||
             cell.ct.t === "g")
@@ -289,9 +288,8 @@ function checkNoNullValue(cell) {
     return false;
 }
 
-// @ts-ignore
-function checkNoNullValueAll(cell) {
-    let v = cell;
+function checkNoNullValueAll(cell: Cell | null) {
+    let v: any = cell;
     if (isPlainObject(v)) {
         v = v.v;
     }
@@ -864,7 +862,6 @@ export function autoSelectionFormula(
             );
         });
 
-        // @ts-ignore
         execFunctionGroup(ctx, null, null, null, null, flowdata);
         ctx.formulaCache.execFunctionGlobalData = null;
     }

@@ -153,7 +153,6 @@ function renderCellSelection(
         width
     );
     if (changeparam != null) {
-        // @ts-ignore
         [columnseleted, rowseleted, top, height, left, width] = changeparam;
     }
 

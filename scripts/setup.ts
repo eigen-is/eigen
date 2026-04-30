@@ -14,6 +14,22 @@ const ENV_PATH = '.env.production';
 const NGINX_OUT = 'eigen.nginx.conf';
 const CADDY_OUT = 'eigen.Caddyfile';
 
+// Frontend apps that ship as separate dist subdirs under /<appname>/. Keep in sync with
+// the bundled Caddyfile and vite.shared.config.ts. Order doesn't matter.
+const APPS = [
+    'mail',
+    'drive',
+    'docs',
+    'contacts',
+    'calendar',
+    'chat',
+    'stickies',
+    'slides',
+    'sheets',
+    'space',
+    'admin',
+] as const;
+
 // Event-based readline that buffers lines arriving before a consumer asks. This handles both
 // the TTY case (lines come one at a time after each prompt) and the piped case (all lines
 // arrive before the first prompt is awaited). Bun's readline/promises hangs in the latter.
@@ -172,8 +188,20 @@ console.log(`\n✓ Wrote ${ENV_PATH}`);
 
 if (useHostProxy) {
     const distRoot = resolve('dist');
+    const appRegex = APPS.join('|');
     const nginxConf = `# Eigen reverse-proxy snippet for nginx.
 # Symlink: ln -s ${resolve(NGINX_OUT)} /etc/nginx/sites-enabled/eigen.conf
+#
+# Make sure your nginx http {} block has the WebSocket upgrade map below — it's
+# required for collaborative editing (sheets, slides, stickies, docs). On Debian/
+# Ubuntu, /etc/nginx/sites-enabled/* is included from http {}, so dropping this
+# whole file in just works.
+
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
 server {
     listen 443 ssl;
     listen [::]:443 ssl;
@@ -183,18 +211,19 @@ server {
     ssl_certificate     /etc/letsencrypt/live/${domain}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${domain}/privkey.pem;
 
-    # API
+    # API + WebSocket (collab editing uses /eigen/ws/collab/...)
     location /eigen/ {
         proxy_pass http://127.0.0.1:8000/;
         proxy_http_version 1.1;
-        proxy_set_header Connection "";
+        proxy_set_header Upgrade $http_upgrade;            # WebSocket upgrade
+        proxy_set_header Connection $connection_upgrade;   # WebSocket upgrade
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_buffering off;       # SSE: stream chunks immediately
         proxy_cache off;
-        proxy_read_timeout 24h;    # SSE: long-lived connection
+        proxy_read_timeout 24h;    # SSE / WebSocket: long-lived connections
         gzip off;                  # SSE: gzip would buffer
     }
 
@@ -205,11 +234,17 @@ server {
         proxy_read_timeout 5m;
         proxy_set_header X-Real-IP $remote_addr;
     }
-
-    # CalDAV discovery
     location = /.well-known/caldav { return 301 /dav/; }
 
-    # SPA bundles
+    # SPA bundles — each app is built into its own /<appname>/ subdir with assets
+    # referenced as /<appname>/assets/... Match the path; fall back to that app's
+    # index.html so deep links (/mail/inbox, /drive/folder/abc) hit the SPA router.
+    location ~ ^/(${appRegex})(/.*)?$ {
+        root ${distRoot};
+        try_files $uri $uri/ /$1/index.html;
+    }
+
+    # Landing page
     location / {
         root ${distRoot}/index;
         try_files $uri $uri/ /index.html;
@@ -219,21 +254,38 @@ server {
     writeFileSync(NGINX_OUT, nginxConf);
 
     const caddyConf = `# Eigen reverse-proxy snippet for Caddy. Append to your host Caddyfile.
+
+(app) {
+    redir /{args[0]} /{args[0]}/ 308
+    handle_path /{args[0]}/* {
+        root * ${distRoot}/{args[0]}
+        try_files {path} /index.html
+        file_server
+    }
+}
+
 ${domain} {
     encode gzip zstd
 
-    handle /eigen/* {
+    # API + WebSocket (Caddy auto-detects upgrade requests)
+    handle_path /eigen/* {
         reverse_proxy 127.0.0.1:8000 {
             flush_interval -1
             header_up X-Forwarded-Proto {scheme}
             header_up X-Real-IP {remote_host}
         }
     }
+
+    # CalDAV
     handle /dav/* {
         reverse_proxy 127.0.0.1:8000
     }
     redir /.well-known/caldav /dav/ 301
 
+    # Frontend apps
+${APPS.map((app) => `    import app ${app}`).join('\n')}
+
+    # Landing page
     handle {
         root * ${distRoot}/index
         try_files {path} {path}/index.html /index.html

@@ -491,7 +491,7 @@ function mergeMove(
     height: number,
     left: number,
     width: number
-) {
+): [number[], number[], number, number, number, number] | null {
     const row_st = mc.r;
     const row_ed = mc.r + mc.rs - 1;
     const col_st = mc.c;
@@ -577,7 +577,7 @@ export function mergeMoveMain(
     height: number,
     left: number,
     width: number
-) {
+): [number[], number[], number, number, number, number] | null {
     const mergesetting = ctx.config.merge;
 
     if (!mergesetting) {
@@ -618,7 +618,6 @@ export function mergeMoveMain(
             if (changeparam != null) {
                 mergeMoveData[key] = mc;
 
-                // @ts-ignore
                 [columnseleted, rowseleted, top, height, left, width] = changeparam;
 
                 offloop = true;

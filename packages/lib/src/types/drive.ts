@@ -199,7 +199,6 @@ export type DrivePath = {
     type: DrivePathType;
     parentId: string | null;
     ownerId: string;
-    labels?: string[];
     mimeType: string;
     size: number;
     thumbnail: string | null;

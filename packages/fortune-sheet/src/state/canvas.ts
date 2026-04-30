@@ -14,7 +14,7 @@ export const defaultStyle = {
     strokeStyle: "rgba(0, 0, 0, 0.1)",
     rowFillStyle: "#5e5e5e",
     textAlign: "center",
-};
+} as const;
 
 // Check if value is a pure number
 function isRealNum(val: any) {
@@ -139,7 +139,6 @@ export class Canvas {
         );
 
         renderCtx.font = defaultFont(this.sheetCtx.defaultFontSize);
-        // @ts-ignore
         renderCtx.textBaseline = defaultStyle.textBaseline;
         renderCtx.fillStyle = defaultStyle.fillStyle;
 
@@ -325,7 +324,6 @@ export class Canvas {
         );
 
         renderCtx.font = defaultFont(this.sheetCtx.defaultFontSize);
-        // @ts-ignore
         renderCtx.textBaseline = defaultStyle.textBaseline;
         renderCtx.fillStyle = defaultStyle.fillStyle;
 
