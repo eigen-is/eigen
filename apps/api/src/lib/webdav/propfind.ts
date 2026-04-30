@@ -1,0 +1,75 @@
+import { isContainerType } from '@workspace/lib/types';
+import type { ProtocolUser } from '../auth/protocol-auth';
+import { ApiError } from '../core/errors';
+import { getWebdavDrive } from './get-drive';
+import { WebdavPathCache } from './path-resolve';
+import { buildXmlResponse, encodeHref, multistatus, propstatOk, resourceProps, response } from './xml';
+
+const FINITE_DEPTH_BODY = `<?xml version="1.0" encoding="utf-8"?>
+<D:error xmlns:D="DAV:"><D:propfind-finite-depth/></D:error>`;
+
+function withTrailingSlash(p: string): string {
+    return p.endsWith('/') ? p : `${p}/`;
+}
+
+export async function handleResourcePropfind(args: {
+    user: ProtocolUser;
+    ownerId: string;
+    mountId: string;
+    pathStr: string;
+    depth: '0' | '1' | 'infinity';
+}): Promise<Response> {
+    const { user, ownerId, mountId, pathStr, depth } = args;
+
+    if (depth === 'infinity') {
+        return new Response(FINITE_DEPTH_BODY, {
+            status: 403,
+            headers: { 'Content-Type': 'application/xml; charset=utf-8' },
+        });
+    }
+
+    const drive = await getWebdavDrive(ownerId, user);
+    const cache = new WebdavPathCache();
+    const path = await cache.resolve(drive, mountId, pathStr);
+    if (!path) throw new ApiError(404, 'Not found');
+
+    const baseHref = `/webdav/${encodeHref(ownerId)}/${encodeHref(mountId)}`;
+    const isCollection = isContainerType(path.type);
+    const responses: string[] = [];
+
+    if (isCollection) {
+        const [used, total] = await Promise.all([drive.usedBytes(mountId), drive.quotaBytes(mountId)]);
+        responses.push(
+            response(`${baseHref}${withTrailingSlash(encodeHref(pathStr))}`, [
+                propstatOk(
+                    resourceProps({
+                        path,
+                        isCollection: true,
+                        quotaUsed: used,
+                        quotaAvailable: Math.max(0, total - used),
+                    }),
+                ),
+            ]),
+        );
+    } else {
+        responses.push(
+            response(`${baseHref}${encodeHref(pathStr)}`, [propstatOk(resourceProps({ path, isCollection: false }))]),
+        );
+    }
+
+    if (isCollection && depth === '1') {
+        const children = await drive.getFolderContents(mountId, path.id);
+        const parentHref = withTrailingSlash(pathStr);
+        for (const child of children) {
+            const childIsCollection = isContainerType(child.type);
+            const childPath = `${parentHref}${child.name}${childIsCollection ? '/' : ''}`;
+            responses.push(
+                response(`${baseHref}${encodeHref(childPath)}`, [
+                    propstatOk(resourceProps({ path: child, isCollection: childIsCollection })),
+                ]),
+            );
+        }
+    }
+
+    return buildXmlResponse(multistatus(responses));
+}
