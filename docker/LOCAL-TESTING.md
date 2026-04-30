@@ -239,6 +239,84 @@ Mailpit:   Catches outbound email from web UI (dev only)
 
 All containers share `./data/` — user files, databases, and emails live there.
 
+## Testing different deployment shapes
+
+The defaults above test scenario A (bundled Caddy + bundled mail, all-in-one). The other
+shapes documented in [SETUP-GUIDE.md](SETUP-GUIDE.md#other-deployment-shapes) are testable
+locally too — the dev compose hardcodes `localhost`, so you don't need real DNS or certs.
+
+### Smoke-test all four scenarios at once
+
+```bash
+./docker/test-deployments.sh
+```
+
+Boots each `COMPOSE_PROFILES` combination (`edge,mail`, `static,mail`, `edge`, `static`),
+curls landing / per-app SPA / `/eigen/health` / WebSocket-upgrade probes through the right
+port for each shape, and tears down. ~2 min wall clock; prints `✓ ALL OK` or the list of
+failures. Run before merging anything that touches `setup.ts`, `docker-compose*`,
+`scripts/generate-env.sh`, or any Caddyfile.
+
+### Test scenario B by hand (bundled static container, no bundled Caddy)
+
+```bash
+bun run setup    # answer "yes" to the host-webserver question
+COMPOSE_PROFILES=static,mail docker compose -f docker-compose.yml -f docker-compose.dev.yml \
+    --env-file .env.production up -d --build
+```
+
+The bundled Caddy is skipped; `eigen-static` (built from your local `dist/`) is exposed on
+`127.0.0.1:8080`. Probe directly:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:8080/eigen/health   # → 200
+curl -s http://localhost:8080/mail/ | head -3                                 # mail SPA HTML
+```
+
+The mail HTML's `<script src="…">` tag should reference `/mail/assets/…`, not `/assets/…`
+(the latter would mean the landing page got served instead of the mail SPA — bug).
+
+To also test a real host webserver in front of `eigen-static`, run a throwaway nginx with
+the generated `eigen.nginx.conf` and curl through it on a different port:
+
+```bash
+docker run --rm -d --name test-host-nginx -p 8081:443 \
+    --add-host=host.docker.internal:host-gateway \
+    -v "$(pwd)/eigen.nginx.conf:/etc/nginx/conf.d/default.conf:ro" \
+    nginx:alpine
+```
+
+For postfix / dovecot when Caddy is off, use the host-cert overlay so they pick up TLS
+certs from somewhere other than the (now-missing) Caddy export:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml \
+    -f docker-compose.host-certs.yml --env-file .env.production up -d
+```
+
+Locally that mounts `/etc/letsencrypt/live/localhost/` which doesn't exist; for a real
+end-to-end test, generate a self-signed cert at that path or skip IMAPS testing.
+
+### Test scenario C (host mail, no bundled mail)
+
+Use `COMPOSE_PROFILES=edge` and point `SMTP_HOST` somewhere reachable. Mailpit on the host
+is the easy local choice — it catches outbound mail without sending it:
+
+```bash
+docker run --rm -d --name host-mailpit -p 1025:1025 -p 8025:8025 axllent/mailpit
+COMPOSE_PROFILES=edge SMTP_HOST=host.docker.internal SMTP_PORT=1025 \
+    docker compose -f docker-compose.yml -f docker-compose.dev.yml \
+    --env-file .env.production up -d
+```
+
+Outbound emails appear at `http://localhost:8025`. Inbound delivery and IMAP won't work
+(no postfix / dovecot in containers) — that's the scenario.
+
+### Test scenario D (host both)
+
+`COMPOSE_PROFILES=static`. Combine the two recipes above — `eigen-static` on `:8080` for
+the frontend + API, host mailpit (or postfix) for SMTP.
+
 ## Differences from `bun run serve`
 
 | Feature | `bun run serve` | Docker dev |
