@@ -1,6 +1,7 @@
 import Elysia from 'elysia';
 import { authenticateBasic } from './auth';
 import { handleDiscoveryOwner, handleDiscoveryRoot } from './discovery';
+import { handleLock, handleUnlock } from './locks';
 import { handleCopy, handleMove } from './move-copy';
 import { handleResourcePropfind } from './propfind';
 import { handleProppatch } from './proppatch';
@@ -89,6 +90,7 @@ export const webdavRouter = new Elysia({ name: 'webdav', prefix: '/webdav' })
             contentLength: len ? Number(len) : null,
             ifMatch: request.headers.get('If-Match'),
             ifNoneMatch: request.headers.get('If-None-Match'),
+            ifHeader: request.headers.get('If'),
         });
     })
     .route('MKCOL', '/:ownerId/:mountId/*', async ({ request, params }) => {
@@ -109,6 +111,7 @@ export const webdavRouter = new Elysia({ name: 'webdav', prefix: '/webdav' })
             ownerId: params.ownerId,
             mountId: params.mountId,
             pathStr: `/${params['*'] ?? ''}`,
+            ifHeader: request.headers.get('If'),
         });
     })
     .route('MOVE', '/:ownerId/:mountId/*', async ({ request, params }) => {
@@ -121,6 +124,7 @@ export const webdavRouter = new Elysia({ name: 'webdav', prefix: '/webdav' })
             requestUrl: request.url,
             destinationHeader: request.headers.get('Destination'),
             overwrite: (request.headers.get('Overwrite') ?? 'T').toUpperCase() !== 'F',
+            ifHeader: request.headers.get('If'),
         });
     })
     .route('COPY', '/:ownerId/:mountId/*', async ({ request, params }) => {
@@ -133,6 +137,7 @@ export const webdavRouter = new Elysia({ name: 'webdav', prefix: '/webdav' })
             requestUrl: request.url,
             destinationHeader: request.headers.get('Destination'),
             overwrite: (request.headers.get('Overwrite') ?? 'T').toUpperCase() !== 'F',
+            ifHeader: request.headers.get('If'),
         });
     })
     .route('PROPPATCH', '/:ownerId/:mountId/*', async ({ request, params }) => {
@@ -143,5 +148,28 @@ export const webdavRouter = new Elysia({ name: 'webdav', prefix: '/webdav' })
             mountId: params.mountId,
             pathStr: `/${params['*'] ?? ''}`,
             body: await request.text(),
+        });
+    })
+    .route('LOCK', '/:ownerId/:mountId/*', async ({ request, params }) => {
+        const user = await authenticateBasic(request);
+        return handleLock({
+            user,
+            ownerId: params.ownerId,
+            mountId: params.mountId,
+            pathStr: `/${params['*'] ?? ''}`,
+            body: await request.text(),
+            timeoutHeader: request.headers.get('Timeout'),
+            ifHeader: request.headers.get('If'),
+            depthHeader: request.headers.get('Depth'),
+        });
+    })
+    .route('UNLOCK', '/:ownerId/:mountId/*', async ({ request, params }) => {
+        const user = await authenticateBasic(request);
+        return handleUnlock({
+            user,
+            ownerId: params.ownerId,
+            mountId: params.mountId,
+            pathStr: `/${params['*'] ?? ''}`,
+            lockTokenHeader: request.headers.get('Lock-Token'),
         });
     });

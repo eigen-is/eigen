@@ -4,6 +4,7 @@ import { ApiError } from '../core/errors';
 import type Drive from '../drive/drive';
 import type SharedDrive from '../drive/sharedDrive';
 import { getWebdavDrive } from './get-drive';
+import { lockManager } from './locks';
 import { WebdavPathCache } from './path-resolve';
 import { buildXmlResponse, encodeHref, escapeXml, multistatus, propstatOk, resourceProps, response } from './xml';
 
@@ -63,6 +64,7 @@ export async function handleResourcePropfind(args: {
                         isCollection: true,
                         quotaUsed: used,
                         quotaAvailable: Math.max(0, total - used),
+                        locks: lockManager.listForPath(path.id),
                     }),
                     ...deadXml,
                 ]),
@@ -72,7 +74,14 @@ export async function handleResourcePropfind(args: {
         const deadXml = await deadPropsXml(drive, mountId, path.id);
         responses.push(
             response(`${baseHref}${encodeHref(pathStr)}`, [
-                propstatOk([...resourceProps({ path, isCollection: false }), ...deadXml]),
+                propstatOk([
+                    ...resourceProps({
+                        path,
+                        isCollection: false,
+                        locks: lockManager.listForPath(path.id),
+                    }),
+                    ...deadXml,
+                ]),
             ]),
         );
     }
@@ -88,7 +97,14 @@ export async function handleResourcePropfind(args: {
             const deadXml = await deadPropsXml(drive, mountId, child.id);
             responses.push(
                 response(`${baseHref}${encodeHref(childPath)}`, [
-                    propstatOk([...resourceProps({ path: child, isCollection: childIsCollection }), ...deadXml]),
+                    propstatOk([
+                        ...resourceProps({
+                            path: child,
+                            isCollection: childIsCollection,
+                            locks: lockManager.listForPath(child.id),
+                        }),
+                        ...deadXml,
+                    ]),
                 ]),
             );
         }

@@ -4,6 +4,7 @@ import { ApiError } from '../core/errors';
 import type Drive from '../drive/drive';
 import type SharedDrive from '../drive/sharedDrive';
 import { getWebdavDrive } from './get-drive';
+import { lockManager } from './locks';
 import { WebdavPathCache } from './path-resolve';
 
 type DestParts = { ownerId: string; mountId: string; pathStr: string };
@@ -39,9 +40,10 @@ async function resolveMoveCopy(args: {
     requestUrl: string;
     destinationHeader: string | null;
     overwrite: boolean;
+    ifHeader: string | null;
     verb: 'MOVE' | 'COPY';
 }): Promise<Resolved | Response> {
-    const { user, ownerId, mountId, pathStr, requestUrl, destinationHeader, overwrite, verb } = args;
+    const { user, ownerId, mountId, pathStr, requestUrl, destinationHeader, overwrite, ifHeader, verb } = args;
     if (!destinationHeader) throw new ApiError(400, 'Missing Destination');
     const dest = parseDestination(destinationHeader, requestUrl);
     if (dest.ownerId !== ownerId) throw new ApiError(502, `Cross-owner ${verb}s not supported`);
@@ -54,12 +56,19 @@ async function resolveMoveCopy(args: {
     if (verb === 'MOVE' && (await drive.isInsideContainer(mountId, src.id))) {
         throw new ApiError(423, 'Container internals are read-only');
     }
+    // MOVE removes from src so a lock on src must be honoured. COPY leaves src untouched.
+    if (verb === 'MOVE' && !lockManager.isWriteAllowed(src.id, ifHeader, user.id)) {
+        throw new ApiError(423, 'Locked');
+    }
 
     const destPathStr = dest.pathStr || '/';
     const destExisting = await cache.resolve(drive, dest.mountId, destPathStr);
     if (destExisting && !overwrite) return new Response(null, { status: 412 });
     if (destExisting && (await drive.isInsideContainer(dest.mountId, destExisting.id))) {
         throw new ApiError(423, 'Container internals are read-only');
+    }
+    if (destExisting && !lockManager.isWriteAllowed(destExisting.id, ifHeader, user.id)) {
+        throw new ApiError(423, 'Locked');
     }
 
     const lastSlash = destPathStr.lastIndexOf('/');
@@ -71,6 +80,9 @@ async function resolveMoveCopy(args: {
     if (!destParent) throw new ApiError(409, 'Destination parent not found');
     if (await drive.isContainerWriteBlocked(dest.mountId, destParent.id)) {
         throw new ApiError(423, 'Container internals are read-only');
+    }
+    if (!lockManager.isWriteAllowed(destParent.id, ifHeader, user.id)) {
+        throw new ApiError(423, 'Locked');
     }
 
     return { drive, src, destMountId: dest.mountId, destParent, destExisting, newName };
@@ -84,6 +96,7 @@ export async function handleMove(args: {
     requestUrl: string;
     destinationHeader: string | null;
     overwrite: boolean;
+    ifHeader: string | null;
 }): Promise<Response> {
     const resolved = await resolveMoveCopy({ ...args, verb: 'MOVE' });
     if (resolved instanceof Response) return resolved;
@@ -113,6 +126,7 @@ export async function handleCopy(args: {
     requestUrl: string;
     destinationHeader: string | null;
     overwrite: boolean;
+    ifHeader: string | null;
 }): Promise<Response> {
     const resolved = await resolveMoveCopy({ ...args, verb: 'COPY' });
     if (resolved instanceof Response) return resolved;
