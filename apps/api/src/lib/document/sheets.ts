@@ -1,9 +1,29 @@
-import type { Sheet } from '@workspace/lib/sheets';
+import type { Op, Sheet } from '@workspace/lib/sheets';
+import { opToPatchOnSheets } from '@workspace/lib/sheets/yjs-ops';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { applyPatches, enablePatches } from 'immer';
 import type * as Y from 'yjs';
 import { COLLAB_DB_CONFIG } from '../collab/db-config';
 import { loadYjsState } from '../collab/yjs-loader';
 import type { Mount } from '../mount';
+
+enablePatches();
+
+function replaySheetsOps(sheets: Sheet[], opBatches: Op[][]): Sheet[] {
+    let result = sheets;
+    for (const batch of opBatches) {
+        const [patches, specialOps] = opToPatchOnSheets(result, batch);
+        if (specialOps.length > 0) {
+            // Special-op replay (insertRowCol/deleteRowCol/addSheet/deleteSheet) is
+            // deferred — those helpers transitively import DOM-coupled code from
+            // fortune-sheet. The FE editor's beforeunload snapshot flush
+            // self-corrects this within the editing session.
+            console.warn(`[sheets] ${specialOps.length} structural ops skipped`);
+        }
+        result = applyPatches(result, patches);
+    }
+    return result;
+}
 
 export async function readSheetsContent(mount: Mount, drivePath: DrivePath): Promise<Sheet[]> {
     const dataDbPath = await mount.getChildByName(drivePath.id, 'data.db');
@@ -14,9 +34,13 @@ export async function readSheetsContent(mount: Mount, drivePath: DrivePath): Pro
     const managedDb = await mount.openDatabase(COLLAB_DB_CONFIG, dataDbPath.id);
     const { doc } = loadYjsState(managedDb);
     const snapshot = doc.getMap('state').get('snapshot') as string | undefined;
-    if (!snapshot) throw new Error('eigensheets data.db missing');
+    const opBatches = doc.getArray<Op[]>('ops').toArray();
+    if (!snapshot && opBatches.length === 0) {
+        throw new Error('eigensheets data.db missing');
+    }
 
-    return JSON.parse(snapshot) as Sheet[];
+    const sheets = (snapshot ? JSON.parse(snapshot) : []) as Sheet[];
+    return replaySheetsOps(sheets, opBatches);
 }
 
 export function writeSheetsToYjs(doc: Y.Doc, sheets: Sheet[]): void {
