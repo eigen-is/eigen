@@ -845,6 +845,14 @@ export class Mount {
         return written;
     }
 
+    // Overwrite using a temp file with size+hash already known (from writeTempWithHash).
+    // Mirrors createFileFromTemp on the create side and avoids re-hashing.
+    async writeFileFromTemp(pathId: string, tempId: string, size: number, hash: string): Promise<void> {
+        const storageKey = await this.getStorageKey(pathId);
+        await this.uploadFromTemp(storageKey, tempId);
+        await this.db.update(paths).set({ size, hash, updatedAt: new Date() }).where(eq(paths.id, pathId));
+    }
+
     getTempPath(pathId: string): string {
         return path.join(this.tmpDir, pathId.replace(/\//g, '_'));
     }
