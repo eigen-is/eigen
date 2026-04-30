@@ -5,22 +5,11 @@ import type {PatchOptions} from "./utils";
 // Shared sheet data shapes (Cell, CellMatrix, CellWithRowAndCol, SingleRange,
 // Range, …) live in @workspace/lib/sheets and are re-exported through
 // ../engine/types — surfaced here so state-side consumers don't have to know
-// the canonical home.
+// the canonical home. `Op` lives in lib too (the BE document reader replays
+// ops without the engine), but it isn't engine-conceptual — re-exported
+// directly from lib here.
 export type {Cell, CellMatrix, CellWithRowAndCol, Range, SingleRange};
-
-export type Op = {
-    op:
-        | "replace"
-        | "remove"
-        | "add"
-        | "insertRowCol"
-        | "deleteRowCol"
-        | "addSheet"
-        | "deleteSheet";
-    id?: string;
-    path: (string | number)[];
-    value?: any;
-};
+export type {Op} from "@workspace/lib/sheets";
 
 export type Rect = {
     top: number;
