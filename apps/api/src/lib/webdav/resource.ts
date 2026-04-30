@@ -1,8 +1,6 @@
-import { randomUUID } from 'node:crypto';
 import { isContainerType } from '@workspace/lib/types/drive';
 import type { ProtocolUser } from '../auth/protocol-auth';
 import { ApiError } from '../core/errors';
-import { writeStreamToTemp } from '../drive/streaming';
 import { getWebdavDrive } from './get-drive';
 import { WebdavPathCache } from './path-resolve';
 import { computeEtag } from './xml';
@@ -134,49 +132,23 @@ export async function handlePut(args: {
         throw new ApiError(423, 'Container internals are read-only');
     }
 
-    // Two-stage quota enforcement. Stage 1: if the client advertised a Content-Length,
-    // reject obviously oversized PUTs before we burn disk on the temp write. The client
-    // might lie, so this is only a fast path; the real check happens after streaming.
+    // Pre-check Content-Length against quota — cheap reject for honest clients.
+    // A client that lies (or omits Content-Length) can exceed quota by one PUT;
+    // they're authenticated, so noisy-user not attack-vector.
     if (contentLength !== null) {
         const [used, total] = await Promise.all([drive.usedBytes(mountId), drive.quotaBytes(mountId)]);
         const projected = used + contentLength - (existing?.size ?? 0);
         if (projected > total) throw new ApiError(507, 'Insufficient Storage');
     }
 
-    const tempId = randomUUID();
-    const tempPath = drive.getTempPath(mountId, tempId);
-    try {
-        const tempInfo = await writeStreamToTemp(tempPath, body);
+    const path = existing
+        ? await drive.writeFileContent(mountId, existing.id, body)
+        : await drive.createFileFromData(mountId, parent.id, name, mimeTypeFromName(name), body);
 
-        // Stage 2: recheck against actual streamed size. Catches clients that lied about
-        // Content-Length, or chunked uploads where Content-Length was absent.
-        if (contentLength === null || tempInfo.size !== contentLength) {
-            const [used, total] = await Promise.all([drive.usedBytes(mountId), drive.quotaBytes(mountId)]);
-            const projected = used + tempInfo.size - (existing?.size ?? 0);
-            if (projected > total) throw new ApiError(507, 'Insufficient Storage');
-        }
-
-        const path = existing
-            ? await drive.overwriteFromTemp(mountId, existing.id, tempId)
-            : await drive.createFromTemp(
-                  mountId,
-                  parent.id,
-                  name,
-                  mimeTypeFromName(name),
-                  tempInfo.size,
-                  tempInfo.hash,
-                  tempId,
-              );
-
-        return new Response(null, {
-            status: existing ? 204 : 201,
-            headers: { ETag: computeEtag(path), 'Last-Modified': path.updatedAt.toUTCString() },
-        });
-    } finally {
-        // createFileFromTemp/writeFile copy from temp without deleting it, so we always
-        // run cleanup. cleanupTemp tolerates missing files (Task 6 — see Mount.cleanupTemp).
-        await drive.cleanupTemp(mountId, tempId).catch(() => {});
-    }
+    return new Response(null, {
+        status: existing ? 204 : 201,
+        headers: { ETag: computeEtag(path), 'Last-Modified': path.updatedAt.toUTCString() },
+    });
 }
 
 export async function handleMkcol(args: {

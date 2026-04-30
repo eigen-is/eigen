@@ -184,41 +184,14 @@ export default class SharedDrive {
         return this.withReadPermission(mountId, pathId, () => this.sharedDrive.serveFile(mountId, pathId, disposition));
     }
 
-    public async writeFileContent(mountId: string, pathId: string, data: Buffer) {
+    public async writeFileContent(
+        mountId: string,
+        pathId: string,
+        data: Buffer | StorageFile | ReadableStream<Uint8Array>,
+    ) {
         return this.withWritePermission(mountId, pathId, () =>
             this.sharedDrive.writeFileContent(mountId, pathId, data),
         );
-    }
-
-    public async createFromTemp(
-        mountId: string,
-        parentId: string,
-        name: string,
-        mimeType: string,
-        size: number,
-        hash: string,
-        tempId: string,
-    ): Promise<DrivePath> {
-        return this.withWritePermission(mountId, parentId, () =>
-            this.sharedDrive.createFromTemp(mountId, parentId, name, mimeType, size, hash, tempId),
-        );
-    }
-
-    public async overwriteFromTemp(mountId: string, pathId: string, tempId: string): Promise<DrivePath> {
-        return this.withWritePermission(mountId, pathId, () =>
-            this.sharedDrive.overwriteFromTemp(mountId, pathId, tempId),
-        );
-    }
-
-    // Temp helpers (getTempPath, cleanupTemp): paths are mount-internal under tmpDir, no
-    // user data exposed. ACL is enforced at the call sites that consume the temp via
-    // createFromTemp/overwriteFromTemp.
-    public getTempPath(mountId: string, tempId: string): string {
-        return this.sharedDrive.getTempPath(mountId, tempId);
-    }
-
-    public async cleanupTemp(mountId: string, tempId: string): Promise<void> {
-        return this.sharedDrive.cleanupTemp(mountId, tempId);
     }
 
     public async resolveFile(mountId: string, pathId: string) {
@@ -251,7 +224,7 @@ export default class SharedDrive {
         parentId: string,
         name: string,
         mimeType: string,
-        data: Buffer | StorageFile,
+        data: Buffer | StorageFile | ReadableStream<Uint8Array>,
     ): Promise<DrivePath> {
         return this.withWritePermission(mountId, parentId, () =>
             this.sharedDrive.createFileFromData(mountId, parentId, name, mimeType, data),
