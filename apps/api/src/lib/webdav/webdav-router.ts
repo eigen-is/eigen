@@ -1,6 +1,7 @@
 import Elysia from 'elysia';
 import { authenticateBasic } from './auth';
 import { handleDiscoveryOwner, handleDiscoveryRoot } from './discovery';
+import { handleCopy, handleMove } from './move-copy';
 import { handleResourcePropfind } from './propfind';
 import { handleDelete, handleGet, handleMkcol, handlePut } from './resource';
 
@@ -107,5 +108,29 @@ export const webdavRouter = new Elysia({ name: 'webdav', prefix: '/webdav' })
             ownerId: params.ownerId,
             mountId: params.mountId,
             pathStr: `/${params['*'] ?? ''}`,
+        });
+    })
+    .route('MOVE', '/:ownerId/:mountId/*', async ({ request, params }) => {
+        const user = await authenticateBasic(request);
+        return handleMove({
+            user,
+            ownerId: params.ownerId,
+            mountId: params.mountId,
+            pathStr: `/${params['*'] ?? ''}`,
+            requestUrl: request.url,
+            destinationHeader: request.headers.get('Destination'),
+            overwrite: (request.headers.get('Overwrite') ?? 'T').toUpperCase() !== 'F',
+        });
+    })
+    .route('COPY', '/:ownerId/:mountId/*', async ({ request, params }) => {
+        const user = await authenticateBasic(request);
+        return handleCopy({
+            user,
+            ownerId: params.ownerId,
+            mountId: params.mountId,
+            pathStr: `/${params['*'] ?? ''}`,
+            requestUrl: request.url,
+            destinationHeader: request.headers.get('Destination'),
+            overwrite: (request.headers.get('Overwrite') ?? 'T').toUpperCase() !== 'F',
         });
     });
