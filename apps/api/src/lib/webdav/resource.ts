@@ -100,7 +100,10 @@ export async function handlePut(args: {
     ifHeader: string | null;
 }): Promise<Response> {
     const { user, ownerId, mountId, pathStr, body, contentLength, ifMatch, ifNoneMatch, ifHeader } = args;
-    if (!body) throw new ApiError(400, 'No body');
+    // macOS Finder (WebDAVFS/3.0.0) opens a copy by sending a 0-byte PUT to
+    // reserve the resource, then follows up with the actual content. A null
+    // body or Content-Length: 0 must succeed and create an empty file.
+    const data: Buffer | ReadableStream<Uint8Array> = body ?? Buffer.alloc(0);
 
     const drive = await getSharedDrive(ownerId, user);
     const cache = new WebdavPathCache();
@@ -153,8 +156,8 @@ export async function handlePut(args: {
     }
 
     const path = existing
-        ? await drive.writeFileContent(mountId, existing.id, body)
-        : await drive.createFileFromData(mountId, parent.id, name, mimeTypeFromName(name), body);
+        ? await drive.writeFileContent(mountId, existing.id, data)
+        : await drive.createFileFromData(mountId, parent.id, name, mimeTypeFromName(name), data);
 
     return new Response(null, {
         status: existing ? 204 : 201,
