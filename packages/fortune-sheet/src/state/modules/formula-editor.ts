@@ -602,27 +602,15 @@ function functionRange(
     v: string,
     vp: string
 ) {
-    if (window.getSelection) {
-        // ie11 10 9 ff safari
-        const currSelection = window.getSelection();
-        if (!currSelection) return;
-        const fri = findrangeindex(ctx, v, vp);
+    const currSelection = window.getSelection();
+    if (!currSelection) return;
+    const fri = findrangeindex(ctx, v, vp);
 
-        if (isNil(fri)) {
-            currSelection.selectAllChildren(obj);
-            currSelection.collapseToEnd();
-        } else {
-            setCaretPosition(ctx, obj.querySelectorAll("span")[fri[0]], 0, fri[1]);
-        }
-        // @ts-ignore
-    } else if (document.selection) {
-        // ie10 9 8 7 6 5
-        // @ts-ignore
-        ctx.formulaCache.functionRangeIndex.moveToElementText(obj); // move range to obj
-        // @ts-ignore
-        ctx.formulaCache.functionRangeIndex.collapse(false); // move cursor to end
-        // @ts-ignore
-        ctx.formulaCache.functionRangeIndex.select();
+    if (isNil(fri)) {
+        currSelection.selectAllChildren(obj);
+        currSelection.collapseToEnd();
+    } else {
+        setCaretPosition(ctx, obj.querySelectorAll("span")[fri[0]], 0, fri[1]);
     }
 }
 
@@ -863,33 +851,25 @@ export function handleFormulaInput(
 
         resetRangeIndexes();
 
-        if (window.getSelection) {
-            // all browsers, except IE before version 9
-            const currSelection = window.getSelection();
-            if (!currSelection) return;
-            if (currSelection.anchorNode?.nodeName.toLowerCase() === "div") {
-                const editorlen = $editor.querySelectorAll("span").length;
-                if (editorlen > 0)
-                    ctx.formulaCache.functionRangeIndex = [
-                        editorlen - 1,
-                        $editor.querySelectorAll("span").item(editorlen - 1).textContent
-                            ?.length!,
-                    ];
-            } else {
+        const currSelection = window.getSelection();
+        if (!currSelection) return;
+        if (currSelection.anchorNode?.nodeName.toLowerCase() === "div") {
+            const editorlen = $editor.querySelectorAll("span").length;
+            if (editorlen > 0)
                 ctx.formulaCache.functionRangeIndex = [
-                    indexOf(
-                        currSelection.anchorNode?.parentNode?.parentNode?.childNodes,
-                        // @ts-ignore
-                        currSelection.anchorNode?.parentNode
-                    ),
-                    currSelection.anchorOffset,
+                    editorlen - 1,
+                    $editor.querySelectorAll("span").item(editorlen - 1).textContent
+                        ?.length!,
                 ];
-            }
         } else {
-            // Internet Explorer before version 9
-            // @ts-ignore
-            const textRange = document.selection.createRange();
-            ctx.formulaCache.functionRangeIndex = textRange;
+            ctx.formulaCache.functionRangeIndex = [
+                indexOf(
+                    currSelection.anchorNode?.parentNode?.parentNode?.childNodes,
+                    // @ts-ignore
+                    currSelection.anchorNode?.parentNode
+                ),
+                currSelection.anchorOffset,
+            ];
         }
 
         $editor.innerHTML = value;

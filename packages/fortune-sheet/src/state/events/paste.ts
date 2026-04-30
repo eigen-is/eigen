@@ -1472,13 +1472,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
         // $("#luckysheet-rich-text-editor").blur();
         selectionCache.isPasteAction = false;
 
-        let {clipboardData} = e;
-        if (!clipboardData) {
-            // @ts-ignore
-            // for IE
-            clipboardData = window.clipboardData;
-        }
-
+        const {clipboardData} = e;
         if (!clipboardData) return;
 
         let txtdata =
@@ -1950,12 +1944,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
         // prevent default paste behaviour
         e.preventDefault();
 
-        let {clipboardData} = e;
-        if (!clipboardData) {
-            // for IE
-            // @ts-ignore
-            clipboardData = window.clipboardData;
-        }
+        const {clipboardData} = e;
         const text = clipboardData?.getData("text/plain");
         if (text) {
             document.execCommand("insertText", false, text);

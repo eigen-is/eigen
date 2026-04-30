@@ -244,24 +244,16 @@ export function handleCellAreaMouseDown(
                 if (vText.length > 0 && vText.substring(0, 1) === "=") {
                     vText = functionHTMLGenerate(vText);
 
-                    if (window.getSelection) {
-                        // all browsers, except IE before version 9
-                        const currSelection = window.getSelection();
-                        if (currSelection == null) return;
-                        ctx.formulaCache.functionRangeIndex = [
-                            indexOf(
-                                currSelection.anchorNode?.parentNode?.parentNode?.childNodes,
-                                // @ts-ignore
-                                currSelection.anchorNode?.parentNode
-                            ),
-                            currSelection.anchorOffset,
-                        ];
-                    } else {
-                        // Internet Explorer before version 9
-                        // @ts-ignore
-                        const textRange = document.selection.createRange();
-                        ctx.formulaCache.functionRangeIndex = textRange;
-                    }
+                    const currSelection = window.getSelection();
+                    if (currSelection == null) return;
+                    ctx.formulaCache.functionRangeIndex = [
+                        indexOf(
+                            currSelection.anchorNode?.parentNode?.parentNode?.childNodes,
+                            // @ts-ignore
+                            currSelection.anchorNode?.parentNode
+                        ),
+                        currSelection.anchorOffset,
+                    ];
 
                     /* Re-add closing parenthesis before display */
                     cellInput.innerHTML = vText;
