@@ -1,7 +1,7 @@
 import { isContainerType } from '@workspace/lib/types/drive';
 import type { ProtocolUser } from '../auth/protocol-auth';
 import { ApiError } from '../core/errors';
-import { getWebdavDrive } from './get-drive';
+import { getSharedDrive } from '../drive/get-drive';
 import { WebdavPathCache } from './path-resolve';
 import { computeEtag } from './xml';
 
@@ -28,7 +28,7 @@ export async function handleGet(args: {
     ifNoneMatch: string | null;
 }): Promise<Response> {
     const { user, ownerId, mountId, pathStr, headOnly, rangeHeader, ifMatch, ifNoneMatch } = args;
-    const drive = await getWebdavDrive(ownerId, user);
+    const drive = await getSharedDrive(ownerId, user);
     const cache = new WebdavPathCache();
     const path = await cache.resolve(drive, mountId, pathStr);
     if (!path) throw new ApiError(404, 'Not found');
@@ -101,7 +101,7 @@ export async function handlePut(args: {
     const { user, ownerId, mountId, pathStr, body, contentLength, ifMatch, ifNoneMatch, ifHeader } = args;
     if (!body) throw new ApiError(400, 'No body');
 
-    const drive = await getWebdavDrive(ownerId, user);
+    const drive = await getSharedDrive(ownerId, user);
     const cache = new WebdavPathCache();
     const existing = await cache.resolve(drive, mountId, pathStr);
 
@@ -175,7 +175,7 @@ export async function handleMkcol(args: {
     // Strip trailing slash so /foo/ creates /foo. Root → '/' which resolves to existing → 405.
     const pathStr = args.pathStr.replace(/\/+$/, '') || '/';
 
-    const drive = await getWebdavDrive(ownerId, user);
+    const drive = await getSharedDrive(ownerId, user);
     const cache = new WebdavPathCache();
     if (await cache.resolve(drive, mountId, pathStr)) {
         // RFC 4918 §9.3.1: target exists → 405 Method Not Allowed
@@ -208,7 +208,7 @@ export async function handleDelete(args: {
     // Normalise trailing slash so /foo/ and /foo share a cache key.
     const pathStr = args.pathStr.replace(/\/+$/, '') || '/';
 
-    const drive = await getWebdavDrive(ownerId, user);
+    const drive = await getSharedDrive(ownerId, user);
     const cache = new WebdavPathCache();
     const path = await cache.resolve(drive, mountId, pathStr);
     if (!path) throw new ApiError(404, 'Not found');

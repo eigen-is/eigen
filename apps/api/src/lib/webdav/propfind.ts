@@ -2,9 +2,9 @@ import { isContainerType } from '@workspace/lib/types';
 import type { ProtocolUser } from '../auth/protocol-auth';
 import { ApiError } from '../core/errors';
 import type Drive from '../drive/drive';
+import { getSharedDrive } from '../drive/get-drive';
 import type SharedDrive from '../drive/sharedDrive';
 import { isHiddenName } from './container-overlay';
-import { getWebdavDrive } from './get-drive';
 import { WebdavPathCache } from './path-resolve';
 import { buildXmlResponse, encodeHref, escapeXml, multistatus, propstatOk, resourceProps, response } from './xml';
 
@@ -41,7 +41,7 @@ export async function handleResourcePropfind(args: {
         });
     }
 
-    const drive = await getWebdavDrive(ownerId, user);
+    const drive = await getSharedDrive(ownerId, user);
     const cache = new WebdavPathCache();
     const path = await cache.resolve(drive, mountId, pathStr);
     if (!path) throw new ApiError(404, 'Not found');
