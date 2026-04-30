@@ -2,6 +2,7 @@ import { XMLParser } from 'fast-xml-parser';
 import type { ProtocolUser } from '../auth/protocol-auth';
 import { ApiError } from '../core/errors';
 import { getSharedDrive } from '../drive/get-drive';
+import { assertWritable } from './locks';
 import { buildXmlResponse, encodeHref, escapeXml, multistatus, propstatOk, propstatStatus, response } from './xml';
 
 // RFC 4918 §15 classifies these as live properties: their values are derived from
@@ -139,9 +140,7 @@ export async function handleProppatch(args: {
     const path = await drive.resolvePath(mountId, pathStr);
     if (!path) throw new ApiError(404, 'Not found');
 
-    if (!drive.lockManager.isWriteAllowed(path.id, ifHeader, user.id)) {
-        throw new ApiError(423, 'Locked');
-    }
+    await assertWritable(drive, mountId, path.id, ifHeader, user.id);
 
     const ops = extractPropOps(body);
     const propstats: string[] = [];

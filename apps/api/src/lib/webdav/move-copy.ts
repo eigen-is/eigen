@@ -4,6 +4,7 @@ import { ApiError } from '../core/errors';
 import type Drive from '../drive/drive';
 import { getSharedDrive } from '../drive/get-drive';
 import type SharedDrive from '../drive/sharedDrive';
+import { assertWritable } from './locks';
 import { WebdavPathCache } from './path-resolve';
 
 type DestParts = { ownerId: string; mountId: string; pathStr: string };
@@ -56,8 +57,8 @@ async function resolveMoveCopy(args: {
         throw new ApiError(423, 'Container internals are read-only');
     }
     // MOVE removes from src so a lock on src must be honoured. COPY leaves src untouched.
-    if (verb === 'MOVE' && !drive.lockManager.isWriteAllowed(src.id, ifHeader, user.id)) {
-        throw new ApiError(423, 'Locked');
+    if (verb === 'MOVE') {
+        await assertWritable(drive, mountId, src.id, ifHeader, user.id);
     }
 
     const destPathStr = dest.pathStr || '/';
@@ -66,8 +67,8 @@ async function resolveMoveCopy(args: {
     if (destExisting && (await drive.isInsideContainer(dest.mountId, destExisting.id))) {
         throw new ApiError(423, 'Container internals are read-only');
     }
-    if (destExisting && !drive.lockManager.isWriteAllowed(destExisting.id, ifHeader, user.id)) {
-        throw new ApiError(423, 'Locked');
+    if (destExisting) {
+        await assertWritable(drive, dest.mountId, destExisting.id, ifHeader, user.id);
     }
 
     const lastSlash = destPathStr.lastIndexOf('/');
@@ -80,9 +81,7 @@ async function resolveMoveCopy(args: {
     if (await drive.isContainerWriteBlocked(dest.mountId, destParent.id)) {
         throw new ApiError(423, 'Container internals are read-only');
     }
-    if (!drive.lockManager.isWriteAllowed(destParent.id, ifHeader, user.id)) {
-        throw new ApiError(423, 'Locked');
-    }
+    await assertWritable(drive, dest.mountId, destParent.id, ifHeader, user.id);
 
     return { drive, src, destMountId: dest.mountId, destParent, destExisting, newName };
 }

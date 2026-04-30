@@ -12,6 +12,23 @@ function parseTimeoutHeader(header: string | null): number {
     return match ? Number(match[1]) * 1000 : LOCK_DEFAULT_TTL_MS;
 }
 
+// RFC 4918 §6.2: depth-infinity locks on a collection cover every member, so a
+// write on a descendant must satisfy the ancestor lock. Walk the breadcrumb to
+// collect ancestor IDs and ask the LockManager to consider both layers.
+export async function assertWritable(
+    drive: Awaited<ReturnType<typeof getSharedDrive>>,
+    mountId: string,
+    pathId: string,
+    ifHeader: string | null,
+    userId: string,
+): Promise<void> {
+    const breadcrumb = await drive.breadCrumb(mountId, pathId);
+    const ancestorIds = breadcrumb.slice(0, -1).map((p) => p.id);
+    if (!drive.lockManager.isWriteAllowed(pathId, ifHeader, userId, ancestorIds)) {
+        throw new ApiError(423, 'Locked');
+    }
+}
+
 // RFC 4918 §14.17 owner element. Accept both prefixed (<D:owner>) and default-namespace
 // (<owner xmlns="DAV:">) shapes — curl's example bodies use the latter.
 function extractLockOwner(body: string): string | undefined {

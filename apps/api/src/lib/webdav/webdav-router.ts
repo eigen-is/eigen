@@ -104,6 +104,7 @@ export const webdavRouter = new Elysia({ name: 'webdav', prefix: '/webdav' })
             mountId: params.mountId,
             pathStr: `/${params['*'] ?? ''}`,
             contentLength: len,
+            ifHeader: request.headers.get('If'),
         });
     })
     .route('DELETE', '/:ownerId/:mountId/*', async ({ request, params }) => {

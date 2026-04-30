@@ -2,6 +2,7 @@ import { isContainerType } from '@workspace/lib/types/drive';
 import type { ProtocolUser } from '../auth/protocol-auth';
 import { ApiError } from '../core/errors';
 import { getSharedDrive } from '../drive/get-drive';
+import { assertWritable } from './locks';
 import { WebdavPathCache } from './path-resolve';
 import { computeEtag } from './xml';
 
@@ -112,8 +113,8 @@ export async function handlePut(args: {
         throw new ApiError(423, 'Container internals are read-only');
     }
 
-    if (existing && !drive.lockManager.isWriteAllowed(existing.id, ifHeader, user.id)) {
-        throw new ApiError(423, 'Locked');
+    if (existing) {
+        await assertWritable(drive, mountId, existing.id, ifHeader, user.id);
     }
 
     if (existing) {
@@ -136,9 +137,10 @@ export async function handlePut(args: {
     if (await drive.isContainerWriteBlocked(mountId, parent.id)) {
         throw new ApiError(423, 'Container internals are read-only');
     }
-    // Depth-infinity lock on the parent must block PUT of new children too.
-    if (!existing && !drive.lockManager.isWriteAllowed(parent.id, ifHeader, user.id)) {
-        throw new ApiError(423, 'Locked');
+    // Depth-infinity lock on the parent (or any of its ancestors) must block PUT
+    // of new children. assertWritable walks the breadcrumb to honor that.
+    if (!existing) {
+        await assertWritable(drive, mountId, parent.id, ifHeader, user.id);
     }
 
     // Pre-check Content-Length against quota — cheap reject for honest clients.
@@ -166,8 +168,9 @@ export async function handleMkcol(args: {
     mountId: string;
     pathStr: string;
     contentLength: number;
+    ifHeader: string | null;
 }): Promise<Response> {
-    const { user, ownerId, mountId, contentLength } = args;
+    const { user, ownerId, mountId, contentLength, ifHeader } = args;
     if (contentLength > 0) {
         throw new ApiError(415, 'MKCOL request body not supported');
     }
@@ -192,6 +195,7 @@ export async function handleMkcol(args: {
     if (await drive.isContainerWriteBlocked(mountId, parent.id)) {
         throw new ApiError(423, 'Container internals are read-only');
     }
+    await assertWritable(drive, mountId, parent.id, ifHeader, user.id);
 
     await drive.createFolder(mountId, parent.id, name);
     return new Response(null, { status: 201 });
@@ -215,9 +219,7 @@ export async function handleDelete(args: {
     if (await drive.isInsideContainer(mountId, path.id)) {
         throw new ApiError(423, 'Container internals are read-only');
     }
-    if (!drive.lockManager.isWriteAllowed(path.id, ifHeader, user.id)) {
-        throw new ApiError(423, 'Locked');
-    }
+    await assertWritable(drive, mountId, path.id, ifHeader, user.id);
     await drive.deletePath(mountId, path.id);
     return new Response(null, { status: 204 });
 }
