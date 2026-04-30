@@ -5,7 +5,6 @@ import type Drive from '../drive/drive';
 import type SharedDrive from '../drive/sharedDrive';
 import { isHiddenName } from './container-overlay';
 import { getWebdavDrive } from './get-drive';
-import { lockManager } from './locks';
 import { WebdavPathCache } from './path-resolve';
 import { buildXmlResponse, encodeHref, escapeXml, multistatus, propstatOk, resourceProps, response } from './xml';
 
@@ -65,7 +64,7 @@ export async function handleResourcePropfind(args: {
                         isCollection: true,
                         quotaUsed: used,
                         quotaAvailable: Math.max(0, total - used),
-                        locks: lockManager.listForPath(path.id),
+                        locks: drive.lockManager.listForPath(path.id),
                     }),
                     ...deadXml,
                 ]),
@@ -79,7 +78,7 @@ export async function handleResourcePropfind(args: {
                     ...resourceProps({
                         path,
                         isCollection: false,
-                        locks: lockManager.listForPath(path.id),
+                        locks: drive.lockManager.listForPath(path.id),
                     }),
                     ...deadXml,
                 ]),
@@ -103,7 +102,7 @@ export async function handleResourcePropfind(args: {
                         ...resourceProps({
                             path: child,
                             isCollection: childIsCollection,
-                            locks: lockManager.listForPath(child.id),
+                            locks: drive.lockManager.listForPath(child.id),
                         }),
                         ...deadXml,
                     ]),

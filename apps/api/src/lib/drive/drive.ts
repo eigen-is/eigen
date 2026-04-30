@@ -50,6 +50,7 @@ import {
     normalizeACL,
 } from './acl';
 import { type EffectiveMember, propagateACLChange, resolveACLToEmails } from './acl-propagation';
+import { LockManager } from './lock-manager';
 import { getUniqueFileName } from './naming';
 import { getSharedDatabase } from './shared';
 import * as sharedSchema from './sharedschema';
@@ -63,6 +64,8 @@ export default class Drive {
     private defaultMountId: string = 'default';
     private sharedDb!: BunSQLiteDatabase<typeof sharedSchema>;
     private documents: Map<string, () => Promise<CollabDocument>> = new Map();
+    // Per-Drive WebDAV LockManager. Locks evict when this Drive's Home unloads via destruct().
+    public readonly lockManager = new LockManager();
 
     constructor(home: Home) {
         this.home = home;
@@ -982,6 +985,8 @@ export default class Drive {
                 console.error(`Failed to close mount databases:`, error);
             }
         }
+
+        this.lockManager.clear();
     }
 
     private sharedRowToDrivePath(r: typeof sharedSchema.sharedPaths.$inferSelect): DrivePath {

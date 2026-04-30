@@ -29,6 +29,13 @@ export default class SharedDrive {
         this.owner = sharedHome.user;
     }
 
+    // WebDAV LockManager lives on the underlying Drive (and shares the Home's lifecycle).
+    // Lock state is per-user (acquire/release check userId), so no extra ACL gate needed
+    // beyond the path-resolution that already happened in the route handler.
+    public get lockManager() {
+        return this.sharedDrive.lockManager;
+    }
+
     private async getUserMemberships(): Promise<Memberships> {
         return getMemberships(this.user.id);
     }

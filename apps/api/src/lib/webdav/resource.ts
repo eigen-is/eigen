@@ -2,7 +2,6 @@ import { isContainerType } from '@workspace/lib/types/drive';
 import type { ProtocolUser } from '../auth/protocol-auth';
 import { ApiError } from '../core/errors';
 import { getWebdavDrive } from './get-drive';
-import { lockManager } from './locks';
 import { WebdavPathCache } from './path-resolve';
 import { computeEtag } from './xml';
 
@@ -113,7 +112,7 @@ export async function handlePut(args: {
         throw new ApiError(423, 'Container internals are read-only');
     }
 
-    if (existing && !lockManager.isWriteAllowed(existing.id, ifHeader, user.id)) {
+    if (existing && !drive.lockManager.isWriteAllowed(existing.id, ifHeader, user.id)) {
         throw new ApiError(423, 'Locked');
     }
 
@@ -138,7 +137,7 @@ export async function handlePut(args: {
         throw new ApiError(423, 'Container internals are read-only');
     }
     // Depth-infinity lock on the parent must block PUT of new children too.
-    if (!existing && !lockManager.isWriteAllowed(parent.id, ifHeader, user.id)) {
+    if (!existing && !drive.lockManager.isWriteAllowed(parent.id, ifHeader, user.id)) {
         throw new ApiError(423, 'Locked');
     }
 
@@ -216,7 +215,7 @@ export async function handleDelete(args: {
     if (await drive.isInsideContainer(mountId, path.id)) {
         throw new ApiError(423, 'Container internals are read-only');
     }
-    if (!lockManager.isWriteAllowed(path.id, ifHeader, user.id)) {
+    if (!drive.lockManager.isWriteAllowed(path.id, ifHeader, user.id)) {
         throw new ApiError(423, 'Locked');
     }
     await drive.deletePath(mountId, path.id);
