@@ -41,10 +41,6 @@ export async function readSheetsContent(mount: Mount, drivePath: DrivePath): Pro
     const { doc } = loadYjsState(managedDb);
     const snapshot = doc.getMap('state').get('snapshot') as string | undefined;
     const opBatches = doc.getArray<Op[]>('ops').toArray();
-    if (!snapshot && opBatches.length === 0) {
-        throw new Error('eigensheets data.db missing');
-    }
-
     const sheets = (snapshot ? JSON.parse(snapshot) : []) as Sheet[];
     return replaySheetsOps(sheets, opBatches);
 }

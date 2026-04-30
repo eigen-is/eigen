@@ -32,6 +32,25 @@ describe('document/sheets', () => {
         await expect(readSheetsContent(mount, path)).rejects.toThrow('eigensheets data.db missing');
     });
 
+    test('reads doc with neither snapshot nor ops → returns empty Sheet[]', async () => {
+        const sheetsPath = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/sheets`,
+            { fileName: 'empty-doc' },
+        );
+
+        const home = await getHome(ctx.alice.user.id);
+        // Materialise the data.db without writing any snapshot or ops
+        await home.drive.getCollabDocument(mountId, sheetsPath.id);
+
+        const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
+        const result = await readSheetsContent(mount, path);
+
+        expect(result).toEqual([]);
+    });
+
     test('reads snapshot-only doc → returns parsed Sheet[]', async () => {
         const sheetsPath = await drivePost<DrivePath>(
             ctx.alice.user.sessionToken,
