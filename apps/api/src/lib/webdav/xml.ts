@@ -69,6 +69,13 @@ export function supportedlockProp(): string {
     return '<D:supportedlock><D:lockentry><D:lockscope><D:exclusive/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockentry></D:supportedlock>';
 }
 
+// Files written through the drive API carry a SHA-256 hash; legacy/edge rows may
+// not, so we fall back to a synthetic id+mtime+size triple. Quotes per RFC 7232.
+export function computeEtag(path: Pick<DrivePath, 'hash' | 'id' | 'updatedAt' | 'size'>): string {
+    const value = path.hash ?? `${path.id}-${path.updatedAt.getTime()}-${path.size}`;
+    return `"${value}"`;
+}
+
 export function resourceProps(args: {
     path: DrivePath;
     isCollection: boolean;
@@ -86,7 +93,7 @@ export function resourceProps(args: {
     if (!isCollection) {
         props.push(`<D:getcontentlength>${path.size}</D:getcontentlength>`);
         props.push(`<D:getcontenttype>${escapeXml(path.mimeType)}</D:getcontenttype>`);
-        props.push(`<D:getetag>"${path.id}-${path.updatedAt.getTime()}-${path.size}"</D:getetag>`);
+        props.push(`<D:getetag>${computeEtag(path)}</D:getetag>`);
     }
     if (quotaUsed !== undefined) props.push(`<D:quota-used-bytes>${quotaUsed}</D:quota-used-bytes>`);
     if (quotaAvailable !== undefined)

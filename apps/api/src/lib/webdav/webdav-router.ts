@@ -2,6 +2,7 @@ import Elysia from 'elysia';
 import { authenticateBasic } from './auth';
 import { handleDiscoveryOwner, handleDiscoveryRoot } from './discovery';
 import { handleResourcePropfind } from './propfind';
+import { handleGet } from './resource';
 
 // Default-to-`infinity` matches RFC 4918: when Depth is omitted, it defaults to infinity.
 // handleResourcePropfind then returns 403 with propfind-finite-depth, which is correct.
@@ -46,5 +47,31 @@ export const webdavRouter = new Elysia({ name: 'webdav', prefix: '/webdav' })
             mountId: params.mountId,
             pathStr,
             depth,
+        });
+    })
+    .route('GET', '/:ownerId/:mountId/*', async ({ request, params }) => {
+        const user = await authenticateBasic(request);
+        return handleGet({
+            user,
+            ownerId: params.ownerId,
+            mountId: params.mountId,
+            pathStr: `/${params['*'] ?? ''}`,
+            headOnly: false,
+            rangeHeader: request.headers.get('Range'),
+            ifMatch: request.headers.get('If-Match'),
+            ifNoneMatch: request.headers.get('If-None-Match'),
+        });
+    })
+    .route('HEAD', '/:ownerId/:mountId/*', async ({ request, params }) => {
+        const user = await authenticateBasic(request);
+        return handleGet({
+            user,
+            ownerId: params.ownerId,
+            mountId: params.mountId,
+            pathStr: `/${params['*'] ?? ''}`,
+            headOnly: true,
+            rangeHeader: null,
+            ifMatch: request.headers.get('If-Match'),
+            ifNoneMatch: request.headers.get('If-None-Match'),
         });
     });

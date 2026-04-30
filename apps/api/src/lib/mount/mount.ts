@@ -787,6 +787,14 @@ export class Mount {
         return null;
     }
 
+    async readRange(pathId: string, start: number, end: number): Promise<StorageFile | null> {
+        const storageKey = await this.getStorageKey(pathId);
+        const probe = this.storage.read(storageKey);
+        if (!(await probe.exists())) return null;
+        if (this.storage.readRange) return this.storage.readRange(storageKey, start, end);
+        return probe.slice(start, end);
+    }
+
     async writeFile(pathId: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
         const storageKey = await this.getStorageKey(pathId);
         const written = await this.storage.write(storageKey, data);
@@ -1030,6 +1038,7 @@ export class Mount {
             ownerId: row.ownerId,
             mimeType: row.mimeType,
             size: row.size ?? 0,
+            hash: row.hash,
             thumbnail: row.thumbnail,
             acl: row.acl,
             visibility: (row.visibility ?? 'private') as DriveVisibility,
