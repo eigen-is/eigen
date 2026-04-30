@@ -210,9 +210,9 @@ export default class SharedDrive {
         );
     }
 
-    // Temp paths are mount-internal (private filesystem under tmpDir). The `mountId` here
-    // is just used to locate the tmp directory; no user data is exposed. ACL gating is
-    // enforced on the call sites that actually create/overwrite files via these temps.
+    // Temp helpers (getTempPath, cleanupTemp): paths are mount-internal under tmpDir, no
+    // user data exposed. ACL is enforced at the call sites that consume the temp via
+    // createFromTemp/overwriteFromTemp.
     public getTempPath(mountId: string, tempId: string): string {
         return this.sharedDrive.getTempPath(mountId, tempId);
     }
