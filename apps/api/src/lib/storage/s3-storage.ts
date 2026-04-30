@@ -49,6 +49,10 @@ export class S3Storage implements StorageBackend {
         return this.client.file(this.getKey(key));
     }
 
+    readRange(key: string, start: number, end: number): S3File {
+        return this.client.file(this.getKey(key)).slice(start, end);
+    }
+
     async write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
         const file = this.read(key);
         const written = await file.write(data);
