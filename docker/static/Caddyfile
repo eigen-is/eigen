@@ -1,0 +1,81 @@
+# Static-only Eigen frontend. Serves the SPA bundles + proxies the API on plain HTTP :8080.
+# A host webserver (nginx, Caddy, Apache, Cloudflare Tunnel, Tailscale Funnel, ...) terminates
+# HTTPS and forwards everything here. See docker/SETUP-GUIDE.md for wiring.
+
+{
+    auto_https off
+    admin off
+}
+
+(app) {
+    redir /{args[0]} /{args[0]}/ 308
+    handle_path /{args[0]}/* {
+        root * /www/{args[0]}
+        try_files {path} /index.html
+        file_server
+    }
+}
+
+:8080 {
+    encode gzip zstd
+
+    @static path *.js *.css *.png *.jpg *.svg *.woff2 *.ttf *.woff *.eot
+    header @static Cache-Control "public, max-age=31536000, immutable"
+
+    # API + WebSocket (Caddy auto-detects upgrade requests and forwards them transparently)
+    handle_path /eigen/* {
+        reverse_proxy eigen-api:8000 {
+            flush_interval -1
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # CalDAV
+    handle /dav/* {
+        reverse_proxy eigen-api:8000
+    }
+    handle /.well-known/caldav {
+        redir /dav/ 301
+    }
+
+    # Email autodiscovery — same template as the bundled Caddyfile, served at the apex
+    handle /.well-known/autoconfig/mail/config-v1.1.xml {
+        root * /etc/caddy
+        rewrite * /autoconfig.xml
+        templates
+        header Content-Type "application/xml"
+        file_server
+    }
+
+    # CalDAV root discovery — Apple Calendar PROPFIND/OPTIONS hits /
+    @caldav_root {
+        method PROPFIND OPTIONS
+        path /
+    }
+    handle @caldav_root {
+        rewrite * /dav/
+        reverse_proxy eigen-api:8000
+    }
+
+    # Frontend apps
+    import app mail
+    import app drive
+    import app docs
+    import app contacts
+    import app calendar
+    import app chat
+    import app stickies
+    import app slides
+    import app sheets
+    import app space
+    import app admin
+
+    # Landing page
+    handle {
+        root * /www/index
+        try_files {path} {path}/index.html /index.html
+        file_server
+    }
+}

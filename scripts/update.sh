@@ -25,6 +25,7 @@ if [ -f .env.production ]; then
     echo "Checking .env.production for new variables..."
     add_var_if_missing COMPOSE_PROFILES "edge,mail"
     add_var_if_missing EIGEN_API_BIND "127.0.0.1:8000"
+    add_var_if_missing EIGEN_STATIC_BIND "127.0.0.1:8080"
     add_var_if_missing MAIL_DOMAIN "$(grep '^DOMAIN=' .env.production | cut -d= -f2-)"
 fi
 

@@ -1,12 +1,23 @@
 # Proposal: Optional Caddy + Mail Stack for Existing-Server Deployments
 
-> **STATUS (2026-04-28)**: Phases 1 + 3 shipped (Compose profiles, `EIGEN_API_BIND`, `MAIL_DOMAIN`,
-> `bun run setup`, SSE `X-Accel-Buffering`, host-proxy + split-domain docs in
-> [SETUP-GUIDE.md](../docker/SETUP-GUIDE.md)). Phase 2 (`MAIL_APP_ENABLED` flag — gating the in-app
-> Mail UI when host runs the mail server) is **deferred**; scenarios C/D today still expose a Mail
-> tile that 5xx's because `mailRouter` and the launcher entry haven't been gated. Phase 4 (host-cert
-> overlay), Phase 5 (per-app feature flags in `settings.json`), Phase 6 (Flavor 2 — host-postfix
-> LMTP forwarding into Eigen), and Phase 7 (Flavor 3 — multi-domain mail) remain future work.
+> **STATUS (2026-04-30)**: Phases 1 + 3 fully shipped, plus the architectural cleanup of the
+> host-webserver path. Compose profiles, `EIGEN_API_BIND`, `MAIL_DOMAIN` end-to-end
+> (postfix/dovecot/autoconfig/mailer), `bun run setup` (with mail-domain + host-webserver
+> questions), SSE `X-Accel-Buffering`, the host-cert overlay (`docker-compose.host-certs.yml`
+> with certbot-deploy-hook docs), and the "Other deployment shapes" section in
+> [SETUP-GUIDE.md](../docker/SETUP-GUIDE.md) (host webserver, host mail, Cloudflare Tunnel,
+> Tailscale Funnel, split-domain) are all live. The host-webserver path now uses a small
+> bundled `eigen-static` container (`profiles: ["static"]`, port 8080) that serves the SPA
+> bundles and proxies the API internally — collapsing the generated nginx/Caddy snippet from
+> ~50 lines of per-app routing to a single `proxy_pass`/`reverse_proxy` line. A smoke-test
+> script (`docker/test-deployments.sh`) covers all four shapes (`edge,mail` /
+> `static,mail` / `edge` / `static`) end-to-end with 20 assertions including SPA asset hashes
+> and WebSocket upgrade pass-through; ran green on 2026-04-30. Phase 2 (`MAIL_APP_ENABLED`
+> flag — gating the in-app Mail UI when host runs the mail server) remains **deferred**;
+> scenarios C/D today still expose a Mail tile that 5xx's because `mailRouter` and the
+> launcher entry haven't been gated. Phase 5 (per-app feature flags in `settings.json`),
+> Phase 6 (Flavor 2 — host-postfix LMTP forwarding into Eigen), and Phase 7 (Flavor 3 —
+> multi-domain mail) remain future work.
 
 > **TLDR**: Make the Docker stack composable so users with an existing webserver and/or mail server on the
 > host can opt out of Eigen's `caddy`, `postfix`, and `dovecot` containers, and decouple the mail domain
@@ -127,9 +138,12 @@ COMPOSE_PROFILES=edge,mail
 | Scenario | `COMPOSE_PROFILES` |
 |---|---|
 | A. Default | `edge,mail` |
-| B. Host webserver | `mail` |
+| B. Host webserver | `static,mail` |
 | C. Host mail server | `edge` |
-| D. Host both | *(empty)* |
+| D. Host both | `static` |
+
+(Original design used `mail` / *(empty)* for B/D with the user wiring their own webserver
+to host `dist/`; superseded by the bundled `eigen-static` container — see status banner.)
 
 Compose semantics relevant to this design (per the
 [official spec](https://docs.docker.com/reference/compose-file/profiles/)):

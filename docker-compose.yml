@@ -57,6 +57,25 @@ services:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
 
+  eigen-static:
+    profiles: ["static"]
+    build:
+      context: .
+      dockerfile: docker/static/Dockerfile
+    ports:
+      - "${EIGEN_STATIC_BIND:-127.0.0.1:8080}:8080"
+    environment:
+      DOMAIN: ${DOMAIN}
+      MAIL_DOMAIN: ${MAIL_DOMAIN:-${DOMAIN}}
+    depends_on:
+      eigen-api:
+        condition: service_healthy
+    restart: unless-stopped
+    networks: [eigen]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
   unbound:
     profiles: ["mail"]
     image: mvance/unbound:latest
