@@ -148,6 +148,7 @@ export const webdavRouter = new Elysia({ name: 'webdav', prefix: '/webdav' })
             mountId: params.mountId,
             pathStr: `/${params['*'] ?? ''}`,
             body: await request.text(),
+            ifHeader: request.headers.get('If'),
         });
     })
     .route('LOCK', '/:ownerId/:mountId/*', async ({ request, params }) => {
