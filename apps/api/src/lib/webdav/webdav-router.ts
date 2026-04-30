@@ -140,6 +140,7 @@ export const webdavRouter = new Elysia({ name: 'webdav', prefix: '/webdav' })
             destinationHeader: request.headers.get('Destination'),
             overwrite: (request.headers.get('Overwrite') ?? 'T').toUpperCase() !== 'F',
             ifHeader: request.headers.get('If'),
+            depth: parseDepth(request.headers.get('Depth')),
         });
     })
     .route('PROPPATCH', '/:ownerId/:mountId/*', async ({ request, params }) => {

@@ -126,6 +126,7 @@ export async function handleCopy(args: {
     destinationHeader: string | null;
     overwrite: boolean;
     ifHeader: string | null;
+    depth: '0' | '1' | 'infinity';
 }): Promise<Response> {
     const resolved = await resolveMoveCopy({ ...args, verb: 'COPY' });
     if (resolved instanceof Response) return resolved;
@@ -133,7 +134,11 @@ export async function handleCopy(args: {
 
     if (destExisting) await drive.deletePath(destMountId, destExisting.id);
 
-    if (args.mountId === destMountId) {
+    // RFC 4918 §9.8.3: Depth: 0 on a collection COPY means copy the collection
+    // itself but NOT its members. Files are unaffected (they have no children).
+    if (args.depth === '0' && src.type !== 'file') {
+        await drive.createFolder(destMountId, destParent.id, newName);
+    } else if (args.mountId === destMountId) {
         await drive.copyPath(args.mountId, src.id, destParent.id, newName);
     } else {
         await drive.copyPathCrossMount(args.mountId, src.id, destMountId, destParent.id, newName);
