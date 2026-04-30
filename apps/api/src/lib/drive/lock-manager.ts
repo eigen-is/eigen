@@ -31,15 +31,24 @@ export class LockManager {
         }
     }
 
-    acquire(args: { pathId: string; depth: 0 | 'infinity'; userId: string; ownerHref?: string; ttlMs?: number }): Lock {
+    acquire(args: {
+        pathId: string;
+        depth: 0 | 'infinity';
+        userId: string;
+        ownerHref?: string;
+        ttlMs?: number;
+        ifHeader?: string | null;
+    }): Lock {
         this.gc();
+        // RFC 4918 §7.5: a LOCK on a resource with an existing exclusive lock must
+        // include the holder's token in the If header (regardless of principal).
+        // Same-credential second sessions therefore can't take a phantom second lock.
         const existing = this.byPath.get(args.pathId);
-        if (existing) {
-            for (const token of existing) {
-                const held = this.locks.get(token);
-                if (held && held.userId !== args.userId) {
-                    throw new ApiError(423, 'Locked');
-                }
+        if (existing && existing.size > 0) {
+            const ifTokens = parseIfHeaderTokens(args.ifHeader ?? null);
+            const hasAuthorizingToken = [...existing].some((token) => ifTokens.includes(token));
+            if (!hasAuthorizingToken) {
+                throw new ApiError(423, 'Locked');
             }
         }
         const token = `urn:uuid:${randomUUID()}`;
