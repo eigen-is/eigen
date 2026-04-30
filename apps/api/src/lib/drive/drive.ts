@@ -143,6 +143,14 @@ export default class Drive {
         return await mount.getPath(pathId);
     }
 
+    async resolvePath(mountId: string, pathStr: string): Promise<DrivePath | null> {
+        return this.getMount(mountId).resolvePath(pathStr);
+    }
+
+    async usedBytes(mountId: string): Promise<number> {
+        return this.getMount(mountId).usedBytes();
+    }
+
     async getFolderContents(mountId: string, pathId: string): Promise<DrivePath[]> {
         const mount = this.getMount(mountId);
         const folder = await mount.getActivePath(pathId);

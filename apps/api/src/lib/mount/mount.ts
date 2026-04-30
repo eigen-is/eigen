@@ -213,6 +213,7 @@ export class Mount {
     }
 
     async getChildByName(parentId: string, name: string): Promise<DrivePath | null> {
+        name = name.normalize('NFC');
         const result = await this.db
             .select()
             .from(paths)
@@ -222,6 +223,26 @@ export class Mount {
             .get();
 
         return result ? this.toDrivePath(result) : null;
+    }
+
+    async resolvePath(pathStr: string): Promise<DrivePath | null> {
+        const segments = pathStr
+            .split('/')
+            .filter((s) => s.length > 0)
+            .map((s) => s.normalize('NFC'));
+        for (const seg of segments) {
+            if (seg === '..' || seg === '.') throw new ApiError(400, 'Invalid path');
+            // biome-ignore lint/suspicious/noControlCharactersInRegex: WebDAV paths must reject control bytes per RFC 4918
+            if (/[\x00-\x1f]/.test(seg)) throw new ApiError(400, 'Invalid path');
+        }
+        let current: DrivePath | null = await this.getRootFolder();
+        for (const seg of segments) {
+            if (!current) return null;
+            const child = await this.getChildByName(current.id, seg);
+            if (!child || child.trashedAt) return null;
+            current = child;
+        }
+        return current;
     }
 
     private async assertUniqueName(parentId: string, name: string, excludeId?: string): Promise<void> {
@@ -961,6 +982,15 @@ export class Mount {
             .where(and(sql`${paths.acl} IS NOT NULL AND json_array_length(${paths.acl}) > 0`, isNull(paths.trashedAt)))
             .all();
         return results.map((r) => this.toDrivePath(r));
+    }
+
+    async usedBytes(): Promise<number> {
+        const result = await this.db
+            .select({ total: sql<number>`COALESCE(SUM(${paths.size}), 0)` })
+            .from(paths)
+            .where(isNull(paths.trashedAt))
+            .get();
+        return Number(result?.total ?? 0);
     }
 
     async getBreadcrumb(pathId: string): Promise<DrivePath[]> {
