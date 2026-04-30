@@ -13,6 +13,7 @@ import { createInterface } from 'node:readline';
 const ENV_PATH = '.env.production';
 const NGINX_OUT = 'eigen.nginx.conf';
 const CADDY_OUT = 'eigen.Caddyfile';
+const APACHE_OUT = 'eigen.apache.conf';
 
 // Event-based readline that buffers lines arriving before a consumer asks. This handles both
 // the TTY case (lines come one at a time after each prompt) and the piped case (all lines
@@ -233,7 +234,43 @@ ${domain} {
 }
 `;
     writeFileSync(CADDY_OUT, caddyConf);
-    console.log(`✓ Wrote ${NGINX_OUT} and ${CADDY_OUT}`);
+
+    const apacheConf = `# Eigen reverse-proxy snippet for Apache 2.4.
+# Drop into /etc/apache2/sites-available/eigen.conf, then: sudo a2ensite eigen
+#
+# Required modules — run once:
+#   sudo a2enmod proxy proxy_http proxy_wstunnel rewrite ssl headers
+#
+# Use the event MPM (the default on modern Apache). The prefork MPM spawns one process
+# per connection and exhausts slots under long-lived SSE / WebSocket clients:
+#   sudo a2dismod mpm_prefork && sudo a2enmod mpm_event && sudo systemctl restart apache2
+
+<IfModule mod_ssl.c>
+<VirtualHost *:443>
+    ServerName ${domain}
+
+    SSLEngine on
+    SSLCertificateFile    /etc/letsencrypt/live/${domain}/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/${domain}/privkey.pem
+
+    ProxyPreserveHost On
+    ProxyTimeout 86400              # SSE / WebSocket: long-lived connections
+    RequestHeader set X-Forwarded-Proto "https"
+
+    # WebSocket upgrade (collab editing on sheets, slides, stickies, docs)
+    RewriteEngine On
+    RewriteCond %{HTTP:Upgrade} websocket [NC]
+    RewriteCond %{HTTP:Connection} upgrade [NC]
+    RewriteRule ^/?(.*) "ws://127.0.0.1:8080/$1" [P,L]
+
+    # Everything else
+    ProxyPass        / http://127.0.0.1:8080/
+    ProxyPassReverse / http://127.0.0.1:8080/
+</VirtualHost>
+</IfModule>
+`;
+    writeFileSync(APACHE_OUT, apacheConf);
+    console.log(`✓ Wrote ${NGINX_OUT}, ${CADDY_OUT}, and ${APACHE_OUT}`);
 }
 
 // --- DNS records ---
