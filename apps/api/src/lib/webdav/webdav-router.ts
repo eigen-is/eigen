@@ -1,5 +1,5 @@
 import Elysia from 'elysia';
-import { authenticateBasic } from './auth';
+import { authenticateBasic } from '../auth/protocol-auth';
 import { handleDiscoveryOwner, handleDiscoveryRoot } from './discovery';
 import { handleLock, handleUnlock } from './locks';
 import { handleCopy, handleMove } from './move-copy';
