@@ -97,7 +97,7 @@ FUSE-T / WinFsp / `webdavfs` layer.
 
 | Client | License | Native-FS layer | Use case |
 |---|---|---|---|
-| **Mountain Duck** ([mountainduck.io](https://mountainduck.io)) | $39 one-time per platform | Bundles WinFsp on Windows; uses FUSE-T on Mac automatically | Polished GUI; recommended commercial pick |
+| **Mountain Duck** ([mountainduck.io](https://mountainduck.io)) | $49 one-time, single license covers Win + Mac | Mountain Duck 5+ uses native APIs (macOS File Provider, Windows CfAPI); pre-5 versions used WinFsp / FUSE-T | Polished GUI; recommended commercial pick |
 | **rclone-mount** ([rclone.org](https://rclone.org)) | Free / open source | User installs FUSE-T (`.pkg`) on Mac or WinFsp (`.msi`) on Win | Recommended free / scriptable pick |
 | **Built-in Finder / Explorer** | Built into the OS | Apple's `webdavfs` / Microsoft's WebClient | Supported with caveats (Finder is slow; Win 11 needs registry edits for >50 MB and HTTPS-Basic) |
 
@@ -234,7 +234,7 @@ CalDAV already does this in `apps/api/src/lib/caldav/propfind.ts`; lift the patt
 | `getcontenttype` | `path.mimeType` |
 | `getlastmodified` | `path.updatedAt` formatted as RFC 1123, **always UTC** (Apple's webdavfs assumes UTC). Set the HTTP `Last-Modified` header on every GET/HEAD too. |
 | `creationdate` | `path.createdAt` (ISO 8601) |
-| `getetag` | `"${path.hash}"` — Drive already stores SHA-256. Strong validator MUST be DQUOTE-wrapped, content-derived; do *not* include `updatedAt` or Finder enters re-download loops. |
+| `getetag` | `"${path.hash}"` — Drive already stores SHA-256. Strong validator MUST be DQUOTE-wrapped (RFC 7232 §2.3) and MUST change whenever the content changes (RFC 7232 §2.1). A content hash satisfies that; an `updatedAt` timestamp does not (a background rewrite that misses the bump would silently break the validator) and Finder enters re-download loops on unstable validators. |
 | `resourcetype` | `<collection/>` for folders, empty for files |
 | `quota-available-bytes` | `mount.maxSizeMB * 1MB - usedBytes` |
 | `quota-used-bytes` | sum of `paths.size` for this mount where `trashedAt IS NULL` |
@@ -261,13 +261,15 @@ The Drive / Mount API surface is close, but a handful of helpers are missing:
 5. **`Mount.usedBytes(): Promise<number>`** — for quota properties. Sum `paths.size` filtered by
    `trashedAt IS NULL`.
 6. **`Drive.isCollabOpen(mountId, pathId): boolean`** — Drive tracks open collab docs in a `documents`
-   Map (drive.ts ~line 62). The only related public method today is `closeCollabDocument()` (line 715);
+   Map (drive.ts:62). The only related public method today is `closeCollabDocument()` (drive.ts:716);
    add an `isCollabOpen()` reader that consults the same Map. Used by `export` mode to return 423
    Locked when a Yjs session is live.
 7. **Container-internal read-only guard** — there is no existing mechanism to mark a path as
    container-internal. Add a derived predicate `isInsideContainer(path): Promise<boolean>` (walks
-   ancestors, short-circuits when an ancestor's `mimeType` is in the eigen-container set defined
-   alongside `DRIVE_EXTENSIONS` at drive.ts:43–49). Cache hits per request. Used by Phase 2 to gate
+   ancestors, short-circuits when an ancestor's `type` is one of the eigen container types — `doc`,
+   `stickies`, `slides`, `sheets`, `chat` — which are listed in `DRIVE_EXTENSIONS` at
+   `packages/lib/src/types/drive.ts:43–49` and matched by `isCollabType()` / `isChatType()` in the
+   same file). Cache hits per request. Used by Phase 2 to gate
    PUT / MKCOL / DELETE / MOVE / COPY inside `*.eigendoc`, `*.eigensheets`, etc. → 423 Locked.
 8. **Lock table** (in-memory at first):
    ```typescript
@@ -291,6 +293,14 @@ The Drive / Mount API surface is close, but a handful of helpers are missing:
        exportFormat?: 'docx' | 'html' | 'pdf'; // only when containerDisplay = 'export'
    };
    ```
+10. **`SharedDrive` wrappers for every new route-callable method** — per AGENTS.md, `getSharedDrive()`
+    returns `Drive | SharedDrive`, so any `Drive` method without a matching `SharedDrive` wrapper is
+    unreachable from a route (TS error at the callsite). Add wrappers in
+    `apps/api/src/lib/drive/sharedDrive.ts` for `resolvePath`, `listFolderRecursive`, `copyPath`,
+    `usedBytes`, and `isCollabOpen`, each with the appropriate permission check
+    (`withReadPermission`, `withWritePermission`, or owner-only). Routes never hold a `Mount`
+    directly — `Drive.getMount()` is private and stays that way; the new `Mount.*` methods are
+    invoked indirectly through the Drive/SharedDrive wrappers.
 
 These are additive — no breaking changes to existing Drive callers.
 
@@ -418,8 +428,8 @@ recent Microsoft / Apple docs):
 
 | Quirk | Behavior | Workaround |
 |---|---|---|
-| Finder LOCKs files on open-with-write | One LOCK at file-open time (10-min timeout, ~5-min refresh), one UNLOCK at close — *not* per-PUT. The lock spans many PUTs during one editing session. | Implement Class 2 LOCK with synthetic tokens. |
-| Office save dance: LOCK + temp filename + MOVE | Word/Excel/PowerPoint on Windows use `~$Report.docx` as the temp prefix; **Word for Mac (Sequoia 15.1+) uses `.~WRDxxxx`** — both must be accepted. The lock spans the dance; MOVE within the same collection must work. | Implement LOCK + MOVE; recognise both temp-filename families. |
+| Finder LOCKs files on open-with-write | The clean pattern is one LOCK at file-open (10-min timeout, ~5-min refresh) and one UNLOCK at close — *not* per-PUT — but in practice Finder also issues spurious LOCK/UNLOCK pairs around metadata calls (sabre.io/dav/clients/finder/). Lock-state churn in logs is normal. | Implement Class 2 LOCK with synthetic tokens; tolerate frequent acquire/release. |
+| Office save dance: LOCK + temp filename + MOVE | On Windows `~$<filename>.docx` is the *owner/lock file* (sits next to the doc whenever it's open); the actual save-temp uses a `~WRD####.tmp` style. **Word for Mac on Sequoia 15.1+ surfaces `.~WRDxxxx` save-temps as visible/persistent files on network volumes** (Microsoft Q&A, Sept 2024). All three families (`~$`, `~WRD####.tmp`, `.~WRDxxxx`) must be accepted. The lock spans the dance; MOVE within the same collection must work. | Implement LOCK + MOVE; allow-list all three temp-filename families. |
 | Office sends `If-Match: "etag"` on saves | Modern Office (per webdavsystem.com) does compare ETags and surfaces a merge UI on mismatch. | Honor `If-Match`; return 412 on hash mismatch. |
 | Office AutoSave is disabled on WebDAV mounts | Confirmed by Microsoft on the M365 Apps community (v2306+). | Document for `export` mode users — saves are manual; co-authoring won't work via WebDAV. |
 | Finder writes `.DS_Store`, `._foo` (AppleDouble) | One per directory edit. | Silently accept on PUT; filter from PROPFIND listings. (Standard Nextcloud / sabre/dav pattern.) |
@@ -428,9 +438,9 @@ recent Microsoft / Apple docs):
 | Windows requires HTTPS for Basic auth | `BasicAuthLevel = 1` default since Vista; current on Win 11 2025. | HTTPS-only. The registry tweak to lower it to 2 is for self-signed-cert testing only — never recommend in production. |
 | Windows 50 MB upload cap | `FileSizeLimitInBytes` default is 50 MB; max via registry is 4 GB. | Onboarding doc must mention the cap and the registry path. |
 | Windows 30-min upload timeout | `FsCtlRequestTimeoutInSec` default for WebClient is 30 min. | Document for users uploading large files. |
-| Windows WebClient service is off by default on some SKUs | Service `WebClient` (`net start webclient`) must be running. | Document. |
+| Windows WebClient service is off by default on some SKUs **and deprecated in Win 11 23H2** | Service `WebClient` (`net start webclient`) must be running. Microsoft has announced WebClient deprecation; raw Explorer / `net use` mounts on Windows are on a glide path to removal. | Document; nudge Windows users toward Mountain Duck or rclone-mount rather than the built-in client. |
 | Finder PROPFIND stalls on big folders | Documented across Nextcloud / Seafile communities; pain starts in the low thousands of entries. | Empirically tune a soft cap (e.g. 10 000) and 502 above it; recommend rclone-mount for power-users. |
-| `webdavfs` aggressive caching at `/var/db/webdavcache` | Cached metadata can stick around for minutes; ETag changes don't always invalidate. | `Cache-Control: no-cache, must-revalidate` on PROPFIND responses. |
+| `webdavfs` aggressive metadata caching | Apple's `webdavfs` keeps cached metadata around for minutes (modern macOS stores it under `/private/var/folders/...`; older docs cite `/var/db/webdavcache` but that path is no longer authoritative). ETag changes don't always invalidate. | `Cache-Control: no-cache, must-revalidate` on PROPFIND responses. |
 | iOS Files.app native WebDAV is intermittent | Use a third-party shim (FileBrowser, Documents, Owlfiles). | Don't market iOS Files.app as a supported direct client — recommend a shim. |
 | Connection reuse: 4–8 parallel HTTP/1.1 keep-alive requests | Bun handles this transparently, but lock state must be checked atomically per request. | The in-memory `Map` index by `pathId` must use a single transaction or compare-and-swap. |
 | `411 Length Required` corner cases | Finder sends Content-Length always; some PUTs use chunked Transfer-Encoding. | Accept both; do not require Content-Length unconditionally. |
@@ -447,7 +457,8 @@ class LockManager {
 
     // Default TTL 600s — modern Office (v2509+) refreshes locks ~every 10 minutes and ignores
     // the server's Timeout header, so a short server-side TTL would expire mid-edit. Sabre/dav
-    // uses 180s minimum; we choose 600s for Office friendliness.
+    // hardcodes 1800s as its default; 600s is a balance between Office's refresh cadence and
+    // not retaining stale locks too long.
     acquire(pathId: string, depth: 0 | 'infinity', userId: string, ttlMs = 600_000): Lock {
         const token = `urn:uuid:${crypto.randomUUID()}`;
         const lock: Lock = { token, pathId, depth, userId, expiresAt: Date.now() + ttlMs };
@@ -501,24 +512,23 @@ Mounted in `apps/api/src/app.ts` next to `caldavRouter`:
 .route('PROPFIND', '/webdav/:ownerId/:mountId/*', async ({ request, params }) => {
     const user = await authenticateBasic(request);
     if (user instanceof Response) return user;
-    requireSelf(params.ownerId, user.id);
 
-    const home = await getHome(params.ownerId);
-    const drive = home.drive;
-    const mount = drive.getMount(params.mountId);
-    if (!mount) return new Response('Not Found', { status: 404 });
+    // Routes go through SharedDrive so cross-owner access is checked and ACL is enforced
+    // automatically. SharedDrive wraps Drive; both expose the WebDAV-level methods we need
+    // (see Required Drive additions § SharedDrive wrappers).
+    const drive = await getSharedDrive(params.ownerId, user);
+    const mountSettings = drive.getMountConfig(params.mountId).settings;
 
     const depth = (request.headers.get('Depth') ?? 'infinity') as '0' | '1' | 'infinity';
     const pathStr = `/${params['*'] ?? ''}`;
-    const path = await mount.resolvePath(pathStr); // throws ApiError(404) if missing
-    await drive.assertReadable(path, user.id);
+    const path = await drive.resolvePath(params.mountId, pathStr); // throws ApiError(404); ACL via wrapper
 
-    const responses: ResourceResponse[] = [resourceToProps(mount, path, lockManager)];
+    const responses: ResourceResponse[] = [resourceToProps(drive, params.mountId, path, lockManager)];
     if (path.type === 'folder' && depth !== '0') {
-        const children = await mount.listFolder(path.id);
+        const children = await drive.getFolderContents(params.mountId, path.id);
         for (const child of children) {
-            const overlay = applyContainerOverlay(child, mount.settings.webdav); // hides/renames eigen*
-            if (overlay) responses.push(resourceToProps(mount, overlay, lockManager));
+            const overlay = applyContainerOverlay(child, mountSettings.webdav); // hides/renames eigen*
+            if (overlay) responses.push(resourceToProps(drive, params.mountId, overlay, lockManager));
         }
         if (depth === 'infinity') {
             // RFC 4918 §9.1: optionally refuse with 403 + <propfind-finite-depth>.
@@ -533,7 +543,7 @@ Mounted in `apps/api/src/app.ts` next to `caldavRouter`:
 
 - **Per-mount quota**: `MountConfig.maxSizeMB` (mount.ts:19). Check `mount.usedBytes() + Content-Length`
   before starting a PUT. Return 507 Insufficient Storage on failure.
-- **Per-user upload size**: `getUploadMaxSize(home, user.id)` from
+- **Per-user upload size**: `getUploadMaxSize(ownerId, userId, mountId)` from
   `apps/api/src/lib/config/enforcement.ts:20` — same value the regular Drive route enforces.
 - **Concurrency**: WebDAV clients (esp. Finder) issue 4–8 parallel requests. Existing Bun / Elysia
   handling is fine; no special pooling. Locks serialise mutating ops on a single resource.
