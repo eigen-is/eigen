@@ -60,7 +60,14 @@ export async function handleLock(args: {
     }
 
     const ownerHref = extractLockOwner(body);
-    const lock = drive.lockManager.acquire({ pathId: path.id, depth, userId: user.id, ownerHref, ttlMs });
+    const lock = drive.lockManager.acquire({
+        pathId: path.id,
+        depth,
+        userId: user.id,
+        ownerHref,
+        ttlMs,
+        ifHeader,
+    });
     return buildLockResponse(lock);
 }
 
