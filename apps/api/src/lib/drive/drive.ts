@@ -538,10 +538,12 @@ export default class Drive {
             await mount.writeFile(pathId, data);
         } else {
             // Stream / S3File: detour through a temp file so we don't hold bytes in memory.
+            // Pass the size+hash that writeTempWithHash already computed so the mount
+            // doesn't re-buffer the temp file to recompute SHA-256.
             const tempId = randomUUID();
             try {
-                await writeTempWithHash(mount.getTempPath(tempId), data);
-                await mount.writeFile(pathId, Bun.file(mount.getTempPath(tempId)));
+                const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), data);
+                await mount.writeFileFromTemp(pathId, tempId, size, hash);
             } finally {
                 await mount.cleanupTemp(tempId);
             }
