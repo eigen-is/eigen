@@ -6,11 +6,14 @@ import { ApiError } from '../core/errors';
 // Single-node only: a sharded deployment would need to back this with the per-mount DB
 // or a central store keyed by (mountId, pathId).
 
+export type LockScope = 'exclusive' | 'shared';
+
 export type Lock = {
     token: string;
     pathId: string;
     ownerHref?: string;
     depth: 0 | 'infinity';
+    scope: LockScope;
     expiresAt: number;
     userId: string;
 };
@@ -34,20 +37,24 @@ export class LockManager {
     acquire(args: {
         pathId: string;
         depth: 0 | 'infinity';
+        scope: LockScope;
         userId: string;
         ownerHref?: string;
         ttlMs?: number;
         ifHeader?: string | null;
     }): Lock {
         this.gc();
-        // RFC 4918 §7.5: a LOCK on a resource with an existing exclusive lock must
-        // include the holder's token in the If header (regardless of principal).
-        // Same-credential second sessions therefore can't take a phantom second lock.
+        // RFC 4918 §6.2 / §7.5: shared locks may coexist; an exclusive lock excludes
+        // every other lock; any lock excludes a subsequent exclusive lock. New
+        // requests that don't supply a current token in the If header must be
+        // rejected if the existing locks would conflict.
         const existing = this.byPath.get(args.pathId);
         if (existing && existing.size > 0) {
+            const heldLocks = [...existing].map((t) => this.locks.get(t)).filter((l): l is Lock => !!l);
             const ifTokens = parseIfHeaderTokens(args.ifHeader ?? null);
-            const hasAuthorizingToken = [...existing].some((token) => ifTokens.includes(token));
-            if (!hasAuthorizingToken) {
+            const hasAuthorizingToken = heldLocks.some((l) => ifTokens.includes(l.token));
+            const conflicts = args.scope === 'exclusive' || heldLocks.some((l) => l.scope === 'exclusive');
+            if (conflicts && !hasAuthorizingToken) {
                 throw new ApiError(423, 'Locked');
             }
         }
@@ -57,6 +64,7 @@ export class LockManager {
             pathId: args.pathId,
             ownerHref: args.ownerHref,
             depth: args.depth,
+            scope: args.scope,
             userId: args.userId,
             expiresAt: Date.now() + (args.ttlMs ?? DEFAULT_TTL_MS),
         };
