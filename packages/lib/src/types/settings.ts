@@ -6,11 +6,6 @@ export type MountSettings = {
     enabled: boolean;
     name?: string;
     s3Config?: S3Config;
-    // Reserved for Phase 6-7 (export mode). Router currently treats containerDisplay as 'raw'.
-    webdav?: {
-        containerDisplay: 'raw' | 'export';
-        exportFormat?: 'docx' | 'html' | 'pdf';
-    };
 };
 
 export type EmailSignature = {
