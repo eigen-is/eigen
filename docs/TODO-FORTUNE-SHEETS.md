@@ -18,13 +18,41 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
 ### Core technical debt
 
 1. **Enable biome on `state/`** — biggest lift. Currently excluded in `biome.jsonc`
-   line 14. Will surface ~232 `any` annotations (31 in `rowcol.ts` alone) and ~60
-   `@ts-ignore` directives. ~90 files / 48k LOC. Open this incrementally — each
-   file's typing gaps are independent. Once typing tightens, collapse state's
-   `Sheet` / `SheetConfig` (`state/types.ts`) into `Omit<lib.Sheet, …> & {editor
-   extras}` — the shared shapes already live in `@workspace/lib/sheets`; only
-   `borderInfo: any[]` and `luckysheet_conditionformat_save: any[]` keep state
-   from extending lib directly today.
+   line 14. ~90 files / 48k LOC. Three pre-pass blockers before flipping the switch:
+   - **~25 `@ts-ignore` directives remaining** (Group F — real type/data gaps,
+     per-site judgment, not a mechanical sweep). Mechanical pre-passes shipped
+     2026-04-30 cleared 35/60 (Groups A/C/D/E in `921904a6`, Group B in
+     `4d1f2cfe`). Sites listed below.
+   - **~232 `any` annotations** (31 in `api/rowcol.ts` alone) → biome's
+     `noExplicitAny` rule.
+   - **Formatter sweep** across all state files.
+
+   Once typing tightens, collapse state's `Sheet` / `SheetConfig`
+   (`state/types.ts`) into `Omit<lib.Sheet, …> & {editor extras}` — the shared
+   shapes already live in `@workspace/lib/sheets`; only `borderInfo: any[]` and
+   `luckysheet_conditionformat_save: any[]` keep state from extending lib
+   directly today.
+
+   **Group F ts-ignore sites (deferred per-site work, line numbers as of 2026-04-30):**
+   - `modules/cell.ts:1222,1224` — runtime-stamped `cell._color` /
+     `cell._fontSize` not on the shared `Cell` type. Add as optional fields,
+     or narrow.
+   - `events/paste.ts:324,766,1333` — `cfg.merge[key] = …` — `Sheet.config.merge`
+     not typed as `Record<string, MergeCell>`.
+   - `events/paste.ts:1682` — `genarate()` returns untyped tuple →
+     `[cell.m, cell.ct, cell.v] = mask`. Type the return.
+   - `events/paste.ts:1732` — `locale_fontjson[fa]` index sig.
+   - `events/paste.ts:1790,1792` — `parseInt(td.getAttribute(...), 10)` —
+     `getAttribute` returns `string | null`.
+   - `events/mouse-cell.ts:252`, `events/mouse-header.ts:175,541`,
+     `modules/formula-editor.ts:868` — `currSelection.anchorNode?.parentNode`
+     indexed into `childNodes` (es-toolkit `indexOf` typing).
+   - `modules/inline-string.ts:231`, `modules/cell.ts:170,1130,1134,1152,1180` —
+     dynamic-key writes / `delete` on non-optional / `forEach` key annotation.
+   - `api/cell.ts:126,204`, `api/rowcol.ts:24` — `cell[attr] = v`,
+     `attr === "bd"` narrowing, `frozen.type` literal union.
+   - `modules/toolbar.ts:157,186,188` — `value[attr] = focusStatus`,
+     `d[r][c] = {v: value}` then index write.
 
 2. **CSS migrations** — 3 files remain (size verified 2026-04-28); then delete
    `src/css.d.ts`:
@@ -203,6 +231,46 @@ priority — rename-only.
 ---
 
 ## Recently shipped
+
+### 2026-04-30
+
+- **TODO #1 — `state/` ts-ignore pre-pass: 35/60 cleared** across two commits.
+  - **`921904a6`** (Groups A/C/D/E, 21 ts-ignores, bundled with unrelated work
+    by a concurrent commit — provenance loss, work itself is correct):
+    - **Group A (14):** added explicit return type
+      `[number[], number[], number, number, number, number] | null` to
+      `mergeMove` / `mergeMoveMain` in `modules/cell.ts`. Killed all destructure-
+      site ignores in `cell.ts`, `events/mouse-drag.ts`, `events/mouse-cell.ts`,
+      `events/mouse-header.ts`, `modules/formula-range.ts`, `modules/selection.ts`.
+      Bonus broken-window cleanup at `events/mouse-cell.ts:651-722` removed
+      16 dead `as number` / `as number[]` casts that the destructure no longer
+      needs.
+    - **Group C (3):** changed `execFunctionGroup`'s `id?: string` → `id?: string |
+      null` in `modules/formula-exec.ts:742`. Function body already handled `null`
+      via `if (id == null)`. Cleared callsites in `modules/refresh.ts`,
+      `events/paste.ts`, `modules/toolbar.ts`.
+    - **Group D (2):** added `as const` to `defaultStyle` in `canvas.ts:11` so
+      `textBaseline: "middle"` / `textAlign: "center"` become CanvasTextBaseline /
+      CanvasTextAlign assignable.
+    - **Group E (2):** typed previously untyped `cell` param of
+      `checkNoNullValue` / `checkNoNullValueAll` in `modules/toolbar.ts` as
+      `Cell | null`. Internal `let v: any` retained for the local-reassign-to-
+      primitive pattern (a controlled compromise; clean separate-vars refactor
+      deferred).
+  - **`4d1f2cfe`** (Group B, 14 ts-ignores, clean standalone commit): deleted
+    dead IE 6-9 fallback branches across `modules/cursor.ts` (4),
+    `events/mouse-cell.ts` (1), `events/mouse-header.ts` (2),
+    `modules/formula-editor.ts` (5), `events/paste.ts` (2). Dropped
+    `document.selection`, `document.body.createTextRange()`, IE TextRange
+    `moveToElementText/collapse/select`, and `window.clipboardData` fallbacks.
+    Outer `if (window.getSelection)` / `if (document.createRange)` wrappers
+    unwrapped — both APIs are non-optional in modern lib.dom. Inner null guards
+    (`if (!currSelection) return`) preserved. paste.ts: `let` → `const` since
+    `clipboardData` no longer reassigned. Inner Group F `@ts-ignore` lines on
+    `parentNode` chains preserved per scope (still listed under Group F above).
+  - Net: 25 Group F ignores remain. No mechanical sweeps will help them — each
+    is a real type/data gap requiring per-site judgment. `bun run typecheck`
+    green after each pass.
 
 ### 2026-04-29
 
