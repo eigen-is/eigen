@@ -3,6 +3,8 @@ import { opToPatchOnSheets } from '@workspace/lib/sheets/yjs-ops';
 import { applyPatches, enablePatches } from 'immer';
 import { applySheetsRowColOp } from './rowcol';
 
+// immer's patch plugin is a global, idempotent enable. Calling here means any
+// consumer of replaySheetsOps gets it transitively without a separate bootstrap.
 enablePatches();
 
 export function replaySheetsOps(sheets: Sheet[], opBatches: Op[][]): Sheet[] {
