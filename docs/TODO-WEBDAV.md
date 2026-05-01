@@ -103,12 +103,13 @@ RFC 4918 gap. props#2 is a strictness call. locks#37 is dead.
 
 ---
 
-## From 2026-04-30 deep code review
+## From 2026-04-30 deep code review (all addressed 2026-05-01)
 
 Five-agent parallel review. Container-internals-readable was confirmed
 by Reinder ("fine if someone reads content of an eigendoc, it should be
 read-only"), so the guard is correct as written: writes blocked, reads
-permitted. The items below are the surviving real findings.
+permitted. Items 5–14 below are kept for the audit trail; all are now
+fixed — see "Done in this branch" at the bottom for commit links.
 
 ### 5. LOCK `acquire` ignores ancestor depth-infinity locks
 
@@ -296,7 +297,28 @@ is local and safe.
 
 ## Done in this branch (for reference)
 
-All review issues closed: R1–R5 (architectural cleanups), L1–L5 (lock
-state correctness), P1 (PROPFIND XML validation), C1 (COPY Depth: 0).
-End-to-end verified with macOS Finder. Branch shipped with
+**Initial review pass (through 2026-04-30).** R1–R5 (architectural
+cleanups), L1–L5 (lock state correctness), P1 (PROPFIND XML validation),
+C1 (COPY Depth: 0). End-to-end verified with macOS Finder. Capped by
 `accept 0-byte PUT (Finder placeholder pattern)` (`cb590182`).
+
+**Follow-up pass (2026-05-01).** Items 5–14 above plus one Cyberduck-
+discovered fix:
+
+| # | Commit | Summary |
+|---|---|---|
+| 5 | `33945d54` | LOCK acquire honors ancestor depth-infinity locks |
+| 6 | `6c8f12db` | Cap LOCK Timeout at 24h |
+| 7 | `aac632c5` | Release source locks on DELETE / cross-mount MOVE |
+| 8 | `9de3ee19` | If-Match before If-None-Match (RFC 7232 §6) |
+| 9 | `38a354b9` | Cap PROPFIND/PROPPATCH/LOCK XML bodies at 64KB |
+| 10–13 | `f798ee64` | Post-review cleanups: drop `Resolved \| Response` union, drop `WebdavPathCache`, use `Drive \| SharedDrive` directly, drop undocumented Cache-Control |
+| — | `203143b3` | URL-decode wildcard params and Destination header (Cyberduck's `My%20Folder` was 404) |
+| dead-props | `d6c9f470` | Store dead-props in `DrivePath.details` (table dropped, 9 methods → 1) |
+| 14 | `680ae3e5` | Single breadcrumb walk per write handler, `EIGEN_DOCUMENT_TYPES` constant, `Drive.isInsideContainer/isContainerWriteBlocked` removed |
+
+End state of WebDAV-flavored Drive surface: `lockManager` field +
+`updatePathDetails` (generic). Container-detection logic lives in
+`lib/webdav/container-guard.ts` as a pure function over a pre-fetched
+breadcrumb. Type-set has one source of truth (`isDocumentType` /
+`EIGEN_DOCUMENT_TYPES`).
