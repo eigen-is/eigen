@@ -176,21 +176,19 @@ function applyInsert(sheets: Sheet[], targetIndex: number, op: Extract<RowColOp,
     if (op.type === 'row' && data.length + op.count >= 10000) throw new Error('maxExceeded');
     if (op.type === 'column' && data[0] && data[0].length + op.count >= 1000) throw new Error('maxExceeded');
 
-    const count = Math.floor(op.count);
+    const { count } = op;
     const newTarget = cloneDeep(target);
     const newCfg = (newTarget.config ?? {}) as ExtendedSheetConfig;
     const newData = newTarget.data!;
     const insertAt = op.direction === 'lefttop' ? op.index : op.index + 1;
 
-    // Merge config
     newCfg.merge = shiftMergeForInsert(cfg, op.type, op.index, count, op.direction);
 
     if (op.type === 'row') {
-        // rowhidden key shift
         if (cfg.rowhidden != null) {
             const rowhidden_new: Record<string, number> = {};
             for (const [rstr, v] of Object.entries(cfg.rowhidden)) {
-                const r = Number.parseFloat(rstr);
+                const r = Number.parseInt(rstr, 10);
                 if (r < op.index) {
                     rowhidden_new[r] = v;
                 } else if (r === op.index) {
@@ -206,11 +204,10 @@ function applyInsert(sheets: Sheet[], targetIndex: number, op: Extract<RowColOp,
             newCfg.rowhidden = rowhidden_new;
         }
 
-        // rowlen key shift
         if (cfg.rowlen != null) {
             const rowlen_new: Record<string, number> = {};
             for (const [rstr, v] of Object.entries(cfg.rowlen)) {
-                const r = Number.parseFloat(rstr);
+                const r = Number.parseInt(rstr, 10);
                 if (r < op.index) {
                     rowlen_new[r] = v;
                 } else if (r === op.index) {
@@ -226,11 +223,10 @@ function applyInsert(sheets: Sheet[], targetIndex: number, op: Extract<RowColOp,
             newCfg.rowlen = rowlen_new;
         }
 
-        // customHeight key shift
         if (cfg.customHeight != null) {
             const customHeight_new: Record<string, number> = {};
             for (const [rstr, v] of Object.entries(cfg.customHeight)) {
-                const r = Number.parseFloat(rstr);
+                const r = Number.parseInt(rstr, 10);
                 if (r < op.index) {
                     customHeight_new[r] = v;
                 } else if (r === op.index) {
@@ -246,16 +242,14 @@ function applyInsert(sheets: Sheet[], targetIndex: number, op: Extract<RowColOp,
             newCfg.customHeight = customHeight_new;
         }
 
-        // Cell matrix insert
         const cols = newData[0]?.length ?? 0;
         const blank = () => new Array<null>(cols).fill(null);
         for (let i = 0; i < count; i += 1) newData.splice(insertAt, 0, blank());
     } else {
-        // colhidden key shift
         if (cfg.colhidden != null) {
             const colhidden_new: Record<string, number> = {};
             for (const [cstr, v] of Object.entries(cfg.colhidden)) {
-                const c = Number.parseFloat(cstr);
+                const c = Number.parseInt(cstr, 10);
                 if (c < op.index) {
                     colhidden_new[c] = v;
                 } else if (c === op.index) {
@@ -271,11 +265,10 @@ function applyInsert(sheets: Sheet[], targetIndex: number, op: Extract<RowColOp,
             newCfg.colhidden = colhidden_new;
         }
 
-        // columnlen key shift
         if (cfg.columnlen != null) {
             const columnlen_new: Record<string, number> = {};
             for (const [cstr, v] of Object.entries(cfg.columnlen)) {
-                const c = Number.parseFloat(cstr);
+                const c = Number.parseInt(cstr, 10);
                 if (c < op.index) {
                     columnlen_new[c] = v;
                 } else if (c === op.index) {
@@ -291,11 +284,10 @@ function applyInsert(sheets: Sheet[], targetIndex: number, op: Extract<RowColOp,
             newCfg.columnlen = columnlen_new;
         }
 
-        // customWidth key shift
         if (cfg.customWidth != null) {
             const customWidth_new: Record<string, number> = {};
             for (const [cstr, v] of Object.entries(cfg.customWidth)) {
-                const c = Number.parseFloat(cstr);
+                const c = Number.parseInt(cstr, 10);
                 if (c < op.index) {
                     customWidth_new[c] = v;
                 } else if (c === op.index) {
@@ -311,7 +303,6 @@ function applyInsert(sheets: Sheet[], targetIndex: number, op: Extract<RowColOp,
             newCfg.customWidth = customWidth_new;
         }
 
-        // Cell matrix insert
         for (const row of newData) {
             for (let i = 0; i < count; i += 1) row.splice(insertAt, 0, null);
         }
@@ -319,7 +310,6 @@ function applyInsert(sheets: Sheet[], targetIndex: number, op: Extract<RowColOp,
 
     newTarget.config = newCfg;
 
-    // Conditional format range shift
     if (target.luckysheet_conditionformat_save != null) {
         newTarget.luckysheet_conditionformat_save = target.luckysheet_conditionformat_save.map((cf) => {
             const newRanges = cf.cellrange.map((range) => {
@@ -386,15 +376,13 @@ function applyDelete(sheets: Sheet[], targetIndex: number, op: Extract<RowColOp,
     const newData = newTarget.data!;
     const removeCount = op.end - op.start + 1;
 
-    // Merge config
     newCfg.merge = shiftMergeForDelete(cfg, op.type, op.start, removeCount);
 
     if (op.type === 'row') {
-        // rowhidden key shift
         if (cfg.rowhidden != null) {
             const rowhidden_new: Record<string, number> = {};
             for (const [rstr, v] of Object.entries(cfg.rowhidden)) {
-                const r = Number.parseFloat(rstr);
+                const r = Number.parseInt(rstr, 10);
                 if (r < op.start) {
                     rowhidden_new[r] = v;
                 } else if (r > op.end) {
@@ -404,11 +392,10 @@ function applyDelete(sheets: Sheet[], targetIndex: number, op: Extract<RowColOp,
             newCfg.rowhidden = rowhidden_new;
         }
 
-        // rowlen key shift
         if (cfg.rowlen != null) {
             const rowlen_new: Record<string, number> = {};
             for (const [rstr, v] of Object.entries(cfg.rowlen)) {
-                const r = Number.parseFloat(rstr);
+                const r = Number.parseInt(rstr, 10);
                 if (r < op.start) {
                     rowlen_new[r] = v;
                 } else if (r > op.end) {
@@ -418,11 +405,10 @@ function applyDelete(sheets: Sheet[], targetIndex: number, op: Extract<RowColOp,
             newCfg.rowlen = rowlen_new;
         }
 
-        // customHeight key shift
         if (cfg.customHeight != null) {
             const customHeight_new: Record<string, number> = {};
             for (const [rstr, v] of Object.entries(cfg.customHeight)) {
-                const r = Number.parseFloat(rstr);
+                const r = Number.parseInt(rstr, 10);
                 if (r < op.start) {
                     customHeight_new[r] = v;
                 } else if (r > op.end) {
@@ -432,14 +418,12 @@ function applyDelete(sheets: Sheet[], targetIndex: number, op: Extract<RowColOp,
             newCfg.customHeight = customHeight_new;
         }
 
-        // Cell matrix delete
         newData.splice(op.start, removeCount);
     } else {
-        // colhidden key shift
         if (cfg.colhidden != null) {
             const colhidden_new: Record<string, number> = {};
             for (const [cstr, v] of Object.entries(cfg.colhidden)) {
-                const c = Number.parseFloat(cstr);
+                const c = Number.parseInt(cstr, 10);
                 if (c < op.start) {
                     colhidden_new[c] = v;
                 } else if (c > op.end) {
@@ -449,11 +433,10 @@ function applyDelete(sheets: Sheet[], targetIndex: number, op: Extract<RowColOp,
             newCfg.colhidden = colhidden_new;
         }
 
-        // columnlen key shift
         if (cfg.columnlen != null) {
             const columnlen_new: Record<string, number> = {};
             for (const [cstr, v] of Object.entries(cfg.columnlen)) {
-                const c = Number.parseFloat(cstr);
+                const c = Number.parseInt(cstr, 10);
                 if (c < op.start) {
                     columnlen_new[c] = v;
                 } else if (c > op.end) {
@@ -463,11 +446,10 @@ function applyDelete(sheets: Sheet[], targetIndex: number, op: Extract<RowColOp,
             newCfg.columnlen = columnlen_new;
         }
 
-        // customWidth key shift
         if (cfg.customWidth != null) {
             const customWidth_new: Record<string, number> = {};
             for (const [cstr, v] of Object.entries(cfg.customWidth)) {
-                const c = Number.parseFloat(cstr);
+                const c = Number.parseInt(cstr, 10);
                 if (c < op.start) {
                     customWidth_new[c] = v;
                 } else if (c > op.end) {
@@ -477,13 +459,11 @@ function applyDelete(sheets: Sheet[], targetIndex: number, op: Extract<RowColOp,
             newCfg.customWidth = customWidth_new;
         }
 
-        // Cell matrix delete
         for (const row of newData) row.splice(op.start, removeCount);
     }
 
     newTarget.config = newCfg;
 
-    // Conditional format range shift
     if (target.luckysheet_conditionformat_save != null) {
         const newCFarr = [];
         for (const cf of target.luckysheet_conditionformat_save) {
