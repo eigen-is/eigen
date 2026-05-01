@@ -6,10 +6,16 @@ import { LOCK_DEFAULT_TTL_MS, parseIfHeaderTokens } from '../drive/lock-manager'
 import { WebdavPathCache } from './path-resolve';
 import { lockdiscoveryProp } from './xml';
 
+// Cap at 24h. RFC 4918 §10.7 lets the server ignore the requested timeout, and
+// without a cap an authenticated client could pin in-memory lock state for years
+// (Second-2147483647 ≈ 68y) — the LockManager only GCs expired entries.
+const LOCK_MAX_TTL_MS = 24 * 60 * 60 * 1000;
+
 function parseTimeoutHeader(header: string | null): number {
     if (!header) return LOCK_DEFAULT_TTL_MS;
     const match = header.match(/Second-(\d+)/i);
-    return match ? Number(match[1]) * 1000 : LOCK_DEFAULT_TTL_MS;
+    if (!match) return LOCK_DEFAULT_TTL_MS;
+    return Math.min(Number(match[1]) * 1000, LOCK_MAX_TTL_MS);
 }
 
 // RFC 4918 §6.2: depth-infinity locks on a collection cover every member, so a

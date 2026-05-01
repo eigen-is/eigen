@@ -89,4 +89,24 @@ describe('WebDAV LOCK/UNLOCK', () => {
         });
         expect(res.status).toBe(204);
     });
+
+    test('LOCK with absurd Timeout is capped to 24h', async () => {
+        const url = `${baseHref}/lock-timeout-cap.txt`;
+        await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'x' });
+        const lockBody = `<?xml version="1.0" encoding="utf-8" ?>
+<D:lockinfo xmlns:D="DAV:">
+  <D:lockscope><D:exclusive/></D:lockscope>
+  <D:locktype><D:write/></D:locktype>
+  <D:owner><D:href>mailto:alice@example.com</D:href></D:owner>
+</D:lockinfo>`;
+        const res = await webdavRequest(ctx.alice.user.email, 'LOCK', url, {
+            body: lockBody,
+            headers: { 'Content-Type': 'application/xml; charset=utf-8', Timeout: 'Second-2147483647' },
+        });
+        expect(res.status).toBe(200);
+        const body = await res.text();
+        const match = body.match(/<D:timeout>Second-(\d+)<\/D:timeout>/);
+        expect(match).not.toBeNull();
+        expect(Number(match![1])).toBeLessThanOrEqual(86_400);
+    });
 });
