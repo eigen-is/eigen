@@ -90,6 +90,24 @@ describe('WebDAV LOCK/UNLOCK', () => {
         expect(res.status).toBe(204);
     });
 
+    test('DELETE releases the source lock from LockManager', async () => {
+        // Dynamic import: get-home transitively loads server-config, whose top-level
+        // ensureLoaded() captures EIGEN_DATA_ROOT at import time. Importing it before
+        // ../setup runs would freeze the wrong data dir and break setup-complete.
+        const { getHome } = await import('../../lib/home/get-home');
+        const { token, url } = await lockFile('lock-delete-release.txt');
+        const home = await getHome(ctx.alice.user.id);
+        const path = await home.drive.resolvePath(mountId, '/lock-delete-release.txt');
+        expect(path).not.toBeNull();
+        const pathId = path!.id;
+        expect(home.drive.lockManager.listForPath(pathId)).toHaveLength(1);
+        const del = await webdavRequest(ctx.alice.user.email, 'DELETE', url, {
+            headers: { If: `(<${token}>)` },
+        });
+        expect(del.status).toBe(204);
+        expect(home.drive.lockManager.listForPath(pathId)).toHaveLength(0);
+    });
+
     test('LOCK with absurd Timeout is capped to 24h', async () => {
         const url = `${baseHref}/lock-timeout-cap.txt`;
         await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'x' });
