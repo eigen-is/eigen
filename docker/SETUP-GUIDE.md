@@ -1,112 +1,77 @@
 # Setting Up Eigen on Your Server
 
-A step-by-step guide to deploying your own Eigen instance. No Docker experience needed.
+A step-by-step guide to deploying your own Eigen instance.
 
 ## What You'll Get
 
-Eigen is a self-hosted Google Workspace alternative: email, calendar, drive, docs, chat — all on your own server. This guide sets up:
+- Web apps at `https://yourdomain.com` — mail, drive, docs, calendar, chat, and more
+- Email send/receive with automatic DKIM signing
+- IMAP (port 993) and SMTP submission (port 587) for desktop/mobile clients
+- CalDAV for calendar apps
+- Automatic HTTPS via Let's Encrypt
 
-- **Web apps** at `https://yourdomain.com` (mail, drive, docs, calendar, etc.)
-- **Email receiving** on port 25 (incoming mail from the internet)
-- **Email sending** via an SMTP relay (so your emails reach inboxes, not spam folders)
-- **IMAP** on port 993 (connect Thunderbird, Apple Mail, etc.)
-- **Automatic HTTPS** via Let's Encrypt (zero certificate management)
-
-Everything runs in Docker containers — isolated, reproducible, and easy to update.
+Everything runs in Docker — isolated, reproducible, easy to update.
 
 ## Prerequisites
 
-You need:
-- A **Linux VPS** (Debian 12 or Ubuntu 22.04+, 2GB+ RAM recommended)
-- A **domain name** you control (e.g., `eigen.example.com`)
+- A **Linux VPS** (Debian 12 or Ubuntu 22.04+, 2 GB+ RAM)
+- A **domain** you control (e.g., `eigen.example.com`)
 - **SSH access** to your server
-- An **SMTP relay account** for sending email (recommended: [Brevo](https://brevo.com) free tier — 300 emails/day)
+- An **SMTP relay account** for outbound email — recommended: [Brevo](https://brevo.com) free tier (300 emails/day)
 
 ### Why an SMTP relay?
 
-Most VPS providers (Hetzner, DigitalOcean) block outbound port 25 to prevent spam. An SMTP relay service sends your emails through their trusted servers, ensuring they reach inboxes. Brevo's free tier works for personal/small team use.
+Most VPS providers (Hetzner, DigitalOcean) block outbound port 25 to prevent spam. A relay sends through trusted servers so your emails reach inboxes. You can skip this initially and add it later.
 
-## Step 1: Install Docker
+---
 
-SSH into your server and install Docker:
+## Quick Start
+
+This path assumes a single domain, all-in-one Docker deploy. If you already run a webserver, your own mail server, or want addresses on a different domain than the web URL, see [Alternative deployments](#alternative-deployments) below.
+
+### 1. Install Docker and Bun
 
 ```bash
 curl -fsSL https://get.docker.com | sh
-```
-
-This installs Docker Engine and Docker Compose. Verify it works:
-
-```bash
-docker --version
-docker compose version
-```
-
-Eigen needs Docker Compose **2.20 or newer** (the default since August 2023) — the optional-service profiles below rely on features added in that release. The default install gives you a recent version; the check above is a sanity check, not a chore.
-
-## Step 2: Set Up DNS
-
-Before your server can receive email and get HTTPS certificates, your domain needs to point to it.
-
-Go to your DNS provider and add these records (replace `eigen.example.com` with your domain and `1.2.3.4` with your server's IP):
-
-| Type | Name | Value | Why |
-|------|------|-------|-----|
-| A | `eigen.example.com` | `1.2.3.4` | Points your domain to your server |
-| MX | `eigen.example.com` | `10 eigen.example.com` | Tells the internet where to deliver email |
-| SRV | `_imaps._tcp.eigen.example.com` | `0 1 993 eigen.example.com` | Apple Mail / Thunderbird find IMAP automatically |
-| SRV | `_submission._tcp.eigen.example.com` | `0 1 587 eigen.example.com` | Apple Mail / Thunderbird find SMTP automatically |
-
-The SRV records enable auto-discovery: when you add an account in Apple Mail, Thunderbird, or other clients with just your email and password, they find IMAP and SMTP automatically. CalDAV (calendar sync) is discovered via `/.well-known/caldav` — no SRV record needed.
-
-Wait for DNS propagation (usually 5-30 minutes). Verify:
-
-```bash
-dig eigen.example.com A     # Should show your server IP
-dig eigen.example.com MX    # Should show your domain
-dig _imaps._tcp.eigen.example.com SRV  # Should show 993
-```
-
-You'll add DKIM, SPF, and DMARC records in Step 6 (after the server generates your DKIM key).
-
-## Step 3: Clone and Configure
-
-```bash
-git clone <eigen-repo-url> /opt/eigen
-cd /opt/eigen
-```
-
-Install Bun (needed for both setup and the frontend build):
-
-```bash
 curl -fsSL https://bun.sh/install | bash
 source ~/.bashrc
 ln -sf ~/.bun/bin/bun  /usr/local/bin/bun
 ln -sf ~/.bun/bin/bunx /usr/local/bin/bunx
 ```
 
-Run the interactive setup. It asks four questions, writes `.env.production`, prints the
-DNS records to add, and (if you say you have a host webserver) generates ready-to-use
-nginx and Caddy snippets:
+Verify:
 
 ```bash
+docker compose version   # need 2.20+
+bun --version
+```
+
+### 2. Point your domain at the server
+
+Add one DNS record (replace `eigen.example.com` with your domain and `1.2.3.4` with your server's IP):
+
+| Type | Name | Value |
+|------|------|-------|
+| A | `eigen.example.com` | `1.2.3.4` |
+
+Wait for propagation (5–30 minutes), then verify:
+
+```bash
+dig eigen.example.com A
+```
+
+Mail-related DNS records (MX, SPF, DKIM, DMARC, SRV) come in step 6, after the mail server has booted and generated its DKIM key.
+
+### 3. Clone and configure
+
+```bash
+git clone <eigen-repo-url> /opt/eigen
+cd /opt/eigen
 bun install
 bun run setup
 ```
 
-**Want mail at a different domain than the web URL?** When the script asks "Mail domain",
-enter the domain you want addresses on (e.g. `example.com`) while keeping the web URL on
-its subdomain (e.g. `eigen.example.com`). MX, SPF, DMARC, DKIM all get printed against the
-mail domain.
-
-**Already running nginx/Caddy on the host?** Answer "yes" to the reverse-proxy question.
-The script writes `eigen.nginx.conf` and `eigen.Caddyfile` you can drop into your existing
-config and sets `COMPOSE_PROFILES=mail` so the bundled Caddy is skipped. The snippets
-include the SSE / WebSocket plumbing collaborative editing needs — see
-[Other deployment shapes](#other-deployment-shapes) below for details and the host-cert
-overlay you'll want for postfix / dovecot to use your existing Let's Encrypt certs.
-
-Open the generated `.env.production` to add SMTP relay credentials if your VPS blocks
-outbound port 25:
+The setup script asks four questions and writes `.env.production`. If you have an SMTP relay, add the credentials:
 
 ```
 SMTP_RELAY_HOST=smtp-relay.brevo.com
@@ -114,15 +79,11 @@ SMTP_RELAY_USER=your-api-key@brevo.com
 SMTP_RELAY_PASSWORD=your-smtp-key
 ```
 
-If you don't have a relay yet, leave them empty — you can add them later.
+If you don't, leave them empty for now.
 
-> Non-interactive alternative: `./scripts/generate-env.sh eigen.example.com > .env.production`
-> still works for CI / scripted installs. It doesn't ask about mail domain or host
-> webserver — those settings stay at defaults.
+> **CI / scripted installs:** `./scripts/generate-env.sh eigen.example.com > .env.production` skips the prompts and uses defaults.
 
-## Step 4: Build the Frontend
-
-The frontend apps (mail, drive, docs, etc.) need to be compiled with your domain baked in:
+### 4. Build the frontend
 
 ```bash
 set -a && source .env.production && set +a
@@ -130,29 +91,24 @@ bun run --sequential --filter './apps/*' build
 bun --filter '@apps/api' buildfordocker
 ```
 
-This compiles 13 frontend apps into the `dist/` directory. The `--sequential` flag builds one app
-at a time to avoid running out of memory on small servers (2-4GB RAM).
+`--sequential` builds one app at a time so 2–4 GB servers don't run out of memory.
 
-## Step 5: Start Eigen
+### 5. Start Eigen
 
 ```bash
-# Ensure data directory is writable by the API container (runs as UID 1000)
 mkdir -p data && chown -R 1000:1000 data
-
 docker compose --env-file .env.production up -d
 ```
 
-This starts the bundled stack — five containers in the all-in-one default:
-- **caddy** — Reverse proxy with automatic HTTPS certificates
-- **eigen-api** — The Eigen backend (handles all your data)
-- **unbound** — Recursive DNS resolver (Postfix needs a real resolver, not Docker's DNS proxy)
-- **postfix** — Email server (receives incoming mail, sends via relay)
-- **dovecot** — IMAP server (lets mail clients read your inbox)
+Five containers start:
 
-If you opted out of `edge` or `mail` during setup, fewer containers run — see
-[Other deployment shapes](#other-deployment-shapes) below.
+- **caddy** — reverse proxy with automatic HTTPS
+- **eigen-api** — backend
+- **unbound** — DNS resolver (Postfix needs a real one, not Docker's proxy)
+- **postfix** — incoming mail + outbound via your relay
+- **dovecot** — IMAP
 
-Check that everything is running:
+Check status:
 
 ```bash
 docker compose --env-file .env.production ps
@@ -160,133 +116,167 @@ docker compose --env-file .env.production ps
 
 All containers should show `Up` and `healthy`.
 
-### First-time setup
+Open `https://eigen.example.com/admin` in your browser. The setup wizard creates your organization and admin account, then redirects you to the login page.
 
-Open `https://eigen.example.com/admin` in your browser. The setup wizard will ask you to:
-1. Choose a name for your organization
-2. Create your admin account (email + password)
-3. Configure storage settings
+### 6. Add the mail DNS records
 
-After setup, you're redirected to the login page. Sign in and you're ready to go!
-
-## Step 6: Configure Email DNS Records
-
-After Postfix starts for the first time, it generates a DKIM key. Check the logs:
+After Postfix starts for the first time, it generates a DKIM key. Print it:
 
 ```bash
 docker compose --env-file .env.production logs postfix | grep -A1 "DKIM"
 ```
 
-Now add these DNS records. **Records sit on `MAIL_DOMAIN`, not `DOMAIN`** — for a typical
-single-domain deploy they're the same; for split deployments (web on `eigen.example.com`,
-mail at `@example.com`) the records go on `example.com`. The setup script printed the exact
-host names for your config; this table shows the shape:
+Add these DNS records:
 
 | Type | Name | Value |
 |------|------|-------|
-| TXT | `<MAIL_DOMAIN>` | `"v=spf1 mx include:your-relay.com ~all"` |
-| TXT | `eigen._domainkey.<MAIL_DOMAIN>` | *(the DKIM key from the logs)* |
-| TXT | `_dmarc.<MAIL_DOMAIN>` | `"v=DMARC1; p=quarantine; rua=mailto:postmaster@<MAIL_DOMAIN>"` |
+| MX | `eigen.example.com` | `10 eigen.example.com` |
+| TXT | `eigen.example.com` | `"v=spf1 mx include:your-relay.com ~all"` |
+| TXT | `eigen._domainkey.eigen.example.com` | *(DKIM key from logs)* |
+| TXT | `_dmarc.eigen.example.com` | `"v=DMARC1; p=quarantine; rua=mailto:postmaster@eigen.example.com"` |
+| SRV | `_imaps._tcp.eigen.example.com` | `0 1 993 eigen.example.com` |
+| SRV | `_submission._tcp.eigen.example.com` | `0 1 587 eigen.example.com` |
 
-Also set the **rDNS (PTR) record** in your VPS provider's control panel — it should resolve
-to your web domain (the host the mail server actually runs on).
+Set the **rDNS (PTR) record** in your VPS provider's panel — it should resolve to your domain.
 
-### What these do:
-- **SPF** — tells receiving servers which IPs are allowed to send email for your domain
-- **DKIM** — digitally signs your outgoing emails to prove they're from you
-- **DMARC** — tells receiving servers what to do with unsigned/suspicious emails
-- **rDNS** — maps your IP back to your domain (many email servers check this)
+What these do:
 
-## Step 7: Connect Your Email Client (Optional)
+- **MX** — tells the internet which server delivers your mail
+- **SPF** — which IPs may send email for your domain
+- **DKIM** — signs outgoing email to prove it's from you
+- **DMARC** — tells receivers what to do with unsigned mail
+- **rDNS** — maps your IP back to your domain (many servers check this)
+- **SRV records** — let mail clients auto-discover IMAP/SMTP from just an email address
 
-To use Thunderbird, Apple Mail, or any IMAP client alongside the web interface:
+### 7. Connect a mail or calendar client (optional)
+
+**IMAP / SMTP:**
 
 | Setting | Value |
 |---------|-------|
-| Server | your web URL (`DOMAIN`) — e.g. `eigen.example.com` |
-| Port | `993` |
-| Security | SSL/TLS |
-| Username | your email (`you@<MAIL_DOMAIN>`) |
+| Server | `eigen.example.com` |
+| IMAP port | `993` (SSL/TLS) |
+| SMTP port | `587` (STARTTLS) |
+| Username | `you@eigen.example.com` |
 | Password | your Eigen password |
 
-Note the split: addresses live on `MAIL_DOMAIN` but the IMAP server hostname is the web
-`DOMAIN` (that's where Dovecot runs). Same shape for SMTP submission on port 587.
-
-Your IMAP client and the Eigen web interface share the same mailbox — changes sync both ways.
-
-## Step 8: Connect Your Calendar App (Optional)
-
-Eigen includes a CalDAV server. Connect Apple Calendar, Thunderbird, DAVx5 (Android), or any CalDAV client:
+**CalDAV** (Apple Calendar, DAVx5, Thunderbird):
 
 | Setting | Value |
 |---------|-------|
 | Server | `https://eigen.example.com/dav/` |
-| Username | Your email (e.g., `you@eigen.example.com`) |
-| Password | Your Eigen password |
+| Username | `you@eigen.example.com` |
+| Password | your Eigen password |
 
-Apple Calendar and DAVx5 auto-discover your calendars from just the server URL. Thunderbird requires
-the full calendar URL (`https://eigen.example.com/dav/calendars/{userId}/`).
+Apple Calendar and DAVx5 auto-discover calendars from the server URL. Thunderbird needs the full URL: `https://eigen.example.com/dav/calendars/{userId}/`.
 
-Events sync both ways — create, edit, and delete in your calendar app or the Eigen web interface.
+The web interface and IMAP/CalDAV clients share the same data — changes sync both ways.
 
-## Other deployment shapes
+You're done.
 
-Steps 1–8 give you the all-in-one path: Eigen runs its own webserver and mail server. If
-that's what you want, skip ahead to "Updating Eigen".
+---
 
-If you already run nginx, Caddy, or Apache on this server, or run your own postfix, or use
-Cloudflare Tunnel / Tailscale Funnel, you can opt out of bundled pieces. Mix and match
-with `COMPOSE_PROFILES`:
+## Operations
 
-| Your setup | `COMPOSE_PROFILES=` |
-|---|---|
-| Default (bundled webserver + bundled mail) | `edge,mail` |
-| Bundled mail, **your** webserver | `static,mail` |
-| Bundled webserver, **your** mail server | `edge` |
-| Neither — host runs both | `static` |
+> **Tip:** every `docker compose` command needs `--env-file .env.production`. To save typing:
+> ```bash
+> alias dc='docker compose --env-file .env.production'
+> ```
+> Examples below use the full form for clarity.
 
-`bun run setup` asks "Run Eigen behind an existing webserver?" — answering yes sets
-`static,mail` and writes a tiny ready-to-use webserver snippet next to `.env.production`.
+### Updating
 
-### Running alongside an existing webserver
+```bash
+cd /opt/eigen
+./scripts/update.sh
+```
 
-When `edge` is off and `static` is on, a small `eigen-static` container handles all the
-SPA serving and API proxying internally on `127.0.0.1:8080`. Your webserver only needs to
-terminate HTTPS and forward everything there.
+Pulls latest code, rebuilds the frontend, restarts containers. Active SSE/WebSocket connections briefly reconnect.
 
-The setup script writes three drop-in snippets next to `.env.production`:
+### Backups
 
-- **`eigen.nginx.conf`** — symlink into `/etc/nginx/sites-enabled/`. About 25 lines:
-  one `proxy_pass http://127.0.0.1:8080`, plus the WebSocket upgrade map and the SSE
-  buffering settings collaborative editing needs.
-- **`eigen.Caddyfile`** — append to your existing `Caddyfile`. Six lines: a single
-  `reverse_proxy 127.0.0.1:8080`. Caddy auto-detects WebSocket upgrades, so no map
-  directive needed.
-- **`eigen.apache.conf`** — `a2ensite` it. About 30 lines covering SSL, the
-  `mod_proxy_wstunnel` rewrite for WebSocket upgrades, and `ProxyPass` for the rest. The
-  snippet header lists the modules to enable (`a2enmod proxy proxy_http proxy_wstunnel
-  rewrite ssl headers`) and a one-liner to switch from `mpm_prefork` to `mpm_event` —
-  prefork uses one process per long-lived SSE/WebSocket connection and runs out of slots
-  fast.
+```bash
+./scripts/backup.sh
+```
 
-The bundled `eigen-static` container is built from your local `dist/` directory at
-`docker compose build` time, so it always matches the freshly-built frontend. Update
-flow stays the same: `bun run build && docker compose --env-file .env.production up -d
---build`.
+Saves all data (mail, files, contacts, calendars, settings) to `./backups/`. Schedule daily:
+
+```bash
+crontab -e
+# 0 3 * * * /opt/eigen/scripts/backup.sh
+```
+
+### Firewall
+
+```bash
+ufw allow 22/tcp     # SSH
+ufw allow 80/tcp     # HTTP (redirects to HTTPS)
+ufw allow 443/tcp    # HTTPS
+ufw allow 443/udp    # HTTP/3 (optional)
+ufw allow 25/tcp     # SMTP (incoming)
+ufw allow 465/tcp    # SMTPS
+ufw allow 587/tcp    # SMTP submission
+ufw allow 993/tcp    # IMAP
+```
+
+### Troubleshooting
+
+**Container status:**
+```bash
+docker compose --env-file .env.production ps
+```
+
+**Logs:**
+```bash
+docker compose --env-file .env.production logs              # all
+docker compose --env-file .env.production logs eigen-api    # one container
+```
+
+**Restart everything:**
+```bash
+docker compose --env-file .env.production restart
+```
+
+**HTTPS not working** — Caddy handles certs automatically. Common causes:
+- DNS not propagated yet
+- Port 80 or 443 blocked by firewall
+- Another service occupying 80/443
+
+**Email not arriving:**
+- `docker compose --env-file .env.production logs postfix`
+- `dig eigen.example.com MX`
+- `telnet eigen.example.com 25` from another machine
+
+---
+
+## Alternative deployments
+
+Pick one of these instead of (or in addition to) the Quick Start when your setup differs.
+
+### Behind your existing webserver
+
+**Pick this when** your server already runs nginx, Caddy, or Apache for other sites.
+
+In step 3, when `bun run setup` asks "Run Eigen behind an existing webserver?", answer **yes**. The script sets `COMPOSE_PROFILES=static,mail` and writes a drop-in snippet next to `.env.production`:
+
+- `eigen.nginx.conf` — symlink into `/etc/nginx/sites-enabled/`
+- `eigen.Caddyfile` — append to your existing `Caddyfile`
+- `eigen.apache.conf` — `a2ensite` it
+
+Each snippet covers SSL termination, the WebSocket upgrade map, and the SSE buffering settings collaborative editing needs. They proxy to the bundled `eigen-static` container on `127.0.0.1:8080`.
+
+**Apache notes:** the config header lists modules to enable (`a2enmod proxy proxy_http proxy_wstunnel rewrite ssl headers`) and a one-liner to switch from `mpm_prefork` to `mpm_event` — prefork uses one process per long-lived SSE/WebSocket connection and runs out of slots fast.
 
 #### TLS certs without bundled Caddy
 
-The bundled certificate manager lives inside the Caddy container. When Caddy is off, postfix
-and dovecot still need certs for IMAPS / SMTPS. Reuse your host's Let's Encrypt certs with
-the host-cert overlay:
+The bundled cert manager lives in the Caddy container. When Caddy is off, postfix and dovecot still need certs for IMAPS/SMTPS. Reuse your host's Let's Encrypt certs with the host-cert overlay:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.host-certs.yml \
     --env-file .env.production up -d
 ```
 
-That mounts `/etc/letsencrypt/live/${MAIL_DOMAIN}/` into postfix and dovecot read-only. Wire
-a certbot deploy-hook so they reload after each renewal:
+That mounts `/etc/letsencrypt/live/${MAIL_DOMAIN}/` into postfix and dovecot read-only. Wire a certbot deploy-hook so they reload after each renewal:
 
 ```bash
 sudo tee /etc/letsencrypt/renewal-hooks/deploy/eigen.sh > /dev/null <<'EOF'
@@ -298,36 +288,13 @@ EOF
 sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/eigen.sh
 ```
 
-### Running alongside an existing mail server
+### Behind Cloudflare Tunnel or Tailscale Funnel
 
-When `mail` is off, the postfix / dovecot / unbound containers don't start. Outbound
-notifications (welcome, password reset, calendar invites, share-by-email) keep working —
-Eigen relays through whatever `SMTP_HOST` points at. Add to `.env.production`:
+**Pick this when** you don't want public ports on your host.
 
-```
-SMTP_HOST=host.docker.internal
-SMTP_PORT=25
-```
+Set `COMPOSE_PROFILES=static,mail` in `.env.production`. Eigen runs the bundled static container on `127.0.0.1:8080`; the tunnel is your edge. WebSocket and SSE pass through transparently.
 
-`host.docker.internal` is Docker's name for "the machine the container is running on". For
-this to work, your host postfix needs to:
-- Bind to `0.0.0.0` (or the docker bridge gateway, default `172.20.0.1`), not just
-  `127.0.0.1`-only
-- Permit relay from the docker bridge subnet (`172.20.0.0/24`)
-
-A third-party relay (Brevo, SendGrid, Postmark) works the same way: set `SMTP_HOST` to the
-relay host and use the standard `SMTP_RELAY_*` credentials in `.env.production`.
-
-> **Heads-up**: the in-app **Mail** tab still appears when bundled mail is off, and clicking
-> it returns errors (the gating flag is on the roadmap, not shipped). Tell users to point
-> their IMAP client at your existing mail server instead. Outbound from Eigen (welcome,
-> password reset, share invites) is unaffected.
-
-### Cloudflare Tunnel
-
-Same shape as the host-webserver path — Cloudflare's `cloudflared` daemon is your edge. Use
-`COMPOSE_PROFILES=static,mail`, keep `EIGEN_STATIC_BIND=127.0.0.1:8080`, and point the
-tunnel at the bundled static container:
+**Cloudflare Tunnel:**
 
 ```yaml
 # cloudflared config.yml
@@ -337,118 +304,65 @@ ingress:
   - service: http_status:404
 ```
 
-WebSocket and SSE pass through the tunnel transparently. No public ports needed on the host.
-
-### Tailscale Funnel / Serve
-
-Identical shape — Tailscale terminates HTTPS, forwards to the static container:
+**Tailscale Funnel:**
 
 ```bash
 tailscale serve --bg --https=443 http://127.0.0.1:8080
 tailscale funnel --bg 443
 ```
 
+### Using your existing mail server
+
+**Pick this when** you already run postfix/dovecot on the host, or want a third-party mail provider to handle inbox/IMAP.
+
+Set `COMPOSE_PROFILES=edge` in `.env.production` — postfix, dovecot, and unbound containers won't start. Outbound notifications (welcome, password reset, calendar invites) keep working through your existing SMTP. Add to `.env.production`:
+
+```
+SMTP_HOST=host.docker.internal
+SMTP_PORT=25
+```
+
+`host.docker.internal` is Docker's name for "the machine the container is running on". For this to work, your host postfix needs to:
+
+- Bind to `0.0.0.0` (or the docker bridge gateway, default `172.20.0.1`), not just `127.0.0.1`
+- Permit relay from the docker bridge subnet (`172.20.0.0/24`)
+
+Third-party relays (Brevo, SendGrid, Postmark) work the same way — set `SMTP_HOST` to the relay host and use the standard `SMTP_RELAY_*` credentials.
+
+> **Heads-up:** the in-app **Mail** tab still appears when bundled mail is off, and clicking it returns errors (the gating flag is on the roadmap). Tell users to point their IMAP client at your existing mail server.
+
 ### Mail at a different domain than the web URL
 
-When you want addresses at `you@example.com` but Eigen at `eigen.example.com`, set them
-separately during setup:
+**Pick this when** Eigen runs at `eigen.example.com` but addresses are `you@example.com`.
+
+In `.env.production`:
 
 ```
 DOMAIN=eigen.example.com
 MAIL_DOMAIN=example.com
 ```
 
-DNS records for mail (MX, SPF, DKIM, DMARC) live on `MAIL_DOMAIN`. The MX *target* is your
-web host:
+Mail DNS records (MX, SPF, DKIM, DMARC) live on `MAIL_DOMAIN`. The MX *target* is your web host:
 
 ```
-example.com.            MX   10 eigen.example.com.
-example.com.            TXT  "v=spf1 mx -all"
-_dmarc.example.com.     TXT  "v=DMARC1; p=quarantine; rua=mailto:postmaster@example.com"
-eigen._domainkey.example.com.  TXT  "<key from postfix logs after first boot>"
+example.com.                     MX   10 eigen.example.com.
+example.com.                     TXT  "v=spf1 mx -all"
+_dmarc.example.com.              TXT  "v=DMARC1; p=quarantine; rua=mailto:postmaster@example.com"
+eigen._domainkey.example.com.    TXT  "<key from postfix logs after first boot>"
 ```
 
-**Autoconfig caveat**: mail clients (Apple Mail, Thunderbird) look for auto-discovery at
-`https://autoconfig.example.com/.well-known/autoconfig/mail/config-v1.1.xml` — that's the
-apex, not the subdomain Caddy serves. Two options:
+**Autoconfig caveat:** mail clients look for auto-discovery at `https://autoconfig.example.com/...` — the apex, not Eigen's subdomain. Two options:
 
-1. **Manual config**: tell users to enter `eigen.example.com` as the IMAP / SMTP server
-   hostname when adding their account. Inelegant but works everywhere.
-2. **Add an `autoconfig` DNS record**: point `autoconfig.example.com` at the same IP, then
-   add a Caddy block that serves the same `autoconfig.xml` on that hostname. The setup
-   script prints the right A record automatically when `DOMAIN ≠ MAIL_DOMAIN`.
+1. **Manual config** — tell users to enter `eigen.example.com` as the IMAP/SMTP server hostname when adding their account.
+2. **Autoconfig record** — point `autoconfig.example.com` at the same IP. The setup script prints the right A record automatically when `DOMAIN ≠ MAIL_DOMAIN`.
 
-## Updating Eigen
+### Compose profile reference
 
-When there's a new version:
+`COMPOSE_PROFILES` controls which bundled services start. `bun run setup` picks the right value based on your answers; you can also edit `.env.production` directly:
 
-```bash
-cd /opt/eigen
-./scripts/update.sh
-```
-
-This pulls the latest code, installs dependencies, builds the frontend sequentially, sets data
-directory permissions, and restarts the containers. Active connections (SSE, WebSocket) will
-briefly reconnect.
-
-## Backups
-
-Create a backup:
-
-```bash
-./scripts/backup.sh
-```
-
-This saves all your data (emails, files, contacts, calendars, settings) to `./backups/`. Set up a daily cron job:
-
-```bash
-crontab -e
-# Add: 0 3 * * * /opt/eigen/scripts/backup.sh
-```
-
-## Firewall
-
-If you use a firewall, open these ports:
-
-```bash
-ufw allow 80/tcp     # HTTP (redirects to HTTPS)
-ufw allow 443/tcp    # HTTPS (web interface)
-ufw allow 443/udp    # HTTP/3 (optional, faster connections)
-ufw allow 25/tcp     # SMTP (receive email)
-ufw allow 465/tcp    # SMTPS (send email from external clients)
-ufw allow 587/tcp    # SMTP submission (send email from external clients)
-ufw allow 993/tcp    # IMAP (email clients)
-ufw allow 22/tcp     # SSH (your access)
-```
-
-## Troubleshooting
-
-### Check container status
-```bash
-docker compose --env-file .env.production ps
-```
-
-### View logs
-```bash
-docker compose --env-file .env.production logs            # All containers
-docker compose --env-file .env.production logs caddy       # Just Caddy
-docker compose --env-file .env.production logs eigen-api   # Just the API
-docker compose --env-file .env.production logs postfix     # Just Postfix
-docker compose --env-file .env.production logs dovecot     # Just Dovecot
-```
-
-### Restart everything
-```bash
-docker compose --env-file .env.production restart
-```
-
-### HTTPS certificate issues
-Caddy handles certificates automatically. If something goes wrong, check Caddy's logs. Common issues:
-- DNS not pointing to your server yet (wait for propagation)
-- Port 80 or 443 blocked by firewall
-- Another service using port 80/443
-
-### Email not arriving
-- Check Postfix logs: `docker compose --env-file .env.production logs postfix`
-- Verify MX record: `dig yourdomain.com MX`
-- Verify port 25 is open: `telnet yourdomain.com 25` from another machine
+| Setup | Profile |
+|---|---|
+| All-in-one (default) | `edge,mail` |
+| Bundled mail, your webserver | `static,mail` |
+| Bundled webserver, your mail server | `edge` |
+| Neither — host runs both | `static` |
