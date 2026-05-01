@@ -1,7 +1,7 @@
 import type { Op, Sheet } from '@workspace/lib/sheets';
 import { opToPatchOnSheets } from '@workspace/lib/sheets/yjs-ops';
 import { applyPatches, enablePatches } from 'immer';
-import { applySheetsRowColOp } from './rowcol';
+import { applySheetsDeleteRowCol, applySheetsInsertRowCol } from './rowcol';
 
 // immer's patch plugin is a global, idempotent enable. Calling here means any
 // consumer of replaySheetsOps gets it transitively without a separate bootstrap.
@@ -47,14 +47,14 @@ export function replaySheetsOps(sheets: Sheet[], opBatches: Op[][]): Sheet[] {
                     console.warn('[sheets] insertRowCol op has malformed value', op.value);
                     continue;
                 }
-                result = applySheetsRowColOp(result, { ...v, id: op.id, mode: 'insert' });
+                result = applySheetsInsertRowCol(result, { ...v, id: op.id });
             } else if (op.op === 'deleteRowCol' && op.id) {
                 const v = asDeleteValue(op.value);
                 if (!v) {
                     console.warn('[sheets] deleteRowCol op has malformed value', op.value);
                     continue;
                 }
-                result = applySheetsRowColOp(result, { ...v, id: op.id, mode: 'delete' });
+                result = applySheetsDeleteRowCol(result, { ...v, id: op.id });
             } else {
                 console.warn(`[sheets] unhandled special op: ${op.op}`);
             }
