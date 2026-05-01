@@ -524,8 +524,13 @@ export default class Drive {
         if (!(await this.canWrite(mountId, pathId, this.owner))) {
             throw new ApiError(403, 'No write permission');
         }
+
+        let thumbnailSource: Buffer | string | null = null;
+        let thumbnailCleanup: (() => Promise<void>) | undefined;
+
         if (Buffer.isBuffer(data)) {
             await mount.writeFile(pathId, data);
+            if (data.length > 0) thumbnailSource = data;
         } else {
             // Stream / S3File: detour through a temp file so we don't hold bytes in memory.
             // Pass the size+hash that writeTempWithHash already computed so the mount
@@ -534,13 +539,32 @@ export default class Drive {
             try {
                 const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), data);
                 await mount.writeFileFromTemp(pathId, tempId, size, hash);
-            } finally {
+                if (size > 0) {
+                    thumbnailSource = mount.getTempPath(tempId);
+                    thumbnailCleanup = () => mount.cleanupTemp(tempId);
+                } else {
+                    await mount.cleanupTemp(tempId);
+                }
+            } catch (e) {
                 await mount.cleanupTemp(tempId);
+                throw e;
             }
         }
+
         const updated = await mount.getPath(pathId);
         if (!updated) throw new ApiError(500, 'Failed to get updated file');
         this.emit(SSEventType.DRIVE_FILE_UPLOADED, updated);
+
+        if (thumbnailSource !== null) {
+            this.regenerateThumbnailAsync(
+                mount,
+                pathId,
+                thumbnailSource,
+                updated.mimeType,
+                updated.name,
+                thumbnailCleanup,
+            );
+        }
         return updated;
     }
 
@@ -1056,27 +1080,46 @@ export default class Drive {
         if (!uploadedFile) throw new ApiError(500, 'Failed to get uploaded file');
         this.emit(SSEventType.DRIVE_FILE_UPLOADED, uploadedFile);
 
-        const tempPath = mount.getTempPath(tempId);
-        (async () => {
-            try {
-                const thumbnail = await saveThumbnail(mount.thumbsDir, pathId, tempPath, mimeType, safeName);
-                if (thumbnail) {
-                    await mount.updatePath(pathId, {
-                        thumbnail: thumbnail.fileName,
-                        details: {
-                            ...(uploadedFile.details ?? {}),
-                            width: thumbnail.width,
-                            height: thumbnail.height,
-                        },
-                    });
-                    this.emit(SSEventType.DRIVE_FILE_UPLOADED, (await mount.getPath(pathId))!);
-                }
-            } finally {
-                await mount.cleanupTemp(tempId);
-            }
-        })().catch((e) => console.error(`Thumbnail generation failed for ${pathId}:`, e));
+        if (uploadedFile.size === 0) {
+            // 0-byte placeholders (Finder's two-step copy) can't yield a thumbnail.
+            // Skip the worker spawn; the real bytes will arrive via writeFileContent.
+            await mount.cleanupTemp(tempId);
+        } else {
+            this.regenerateThumbnailAsync(mount, pathId, mount.getTempPath(tempId), mimeType, safeName, () =>
+                mount.cleanupTemp(tempId),
+            );
+        }
 
         return uploadedFile;
+    }
+
+    private regenerateThumbnailAsync(
+        mount: Mount,
+        pathId: string,
+        source: Buffer | string,
+        mimeType: string,
+        fileName: string,
+        onCleanup?: () => Promise<void>,
+    ): void {
+        (async () => {
+            try {
+                const thumbnail = await saveThumbnail(mount.thumbsDir, pathId, source, mimeType, fileName);
+                if (!thumbnail) return;
+                const current = await mount.getPath(pathId);
+                if (!current) return;
+                await mount.updatePath(pathId, {
+                    thumbnail: thumbnail.fileName,
+                    details: {
+                        ...(current.details ?? {}),
+                        width: thumbnail.width,
+                        height: thumbnail.height,
+                    },
+                });
+                this.emit(SSEventType.DRIVE_FILE_UPLOADED, (await mount.getPath(pathId))!);
+            } finally {
+                await onCleanup?.();
+            }
+        })().catch((e) => console.error(`Thumbnail generation failed for ${pathId}:`, e));
     }
 
     private emit(type: Parameters<typeof buildDriveEvent>[0], path: DrivePath, oldParentId?: string): void {
