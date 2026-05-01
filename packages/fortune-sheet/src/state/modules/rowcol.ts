@@ -1,4 +1,4 @@
-import {assign, clone, cloneDeep, forEach, isEmpty, isNil, size} from "es-toolkit/compat";
+import {assign, clone, cloneDeep, forEach, isEmpty, size} from "es-toolkit/compat";
 import {applySheetsRowColOp} from "../../engine/rowcol";
 import {Context} from "../context";
 import {Sheet} from "../types";
@@ -46,50 +46,17 @@ function shiftStateOnlyFieldsForInsert(
     const file = ctx.luckysheetfile[curOrder];
     if (!file) return;
 
-    // Formula config update
-    const newCalcChain = [];
-    for (
-        let SheetIndex = 0;
-        SheetIndex < ctx.luckysheetfile.length;
-        SheetIndex += 1
-    ) {
-        if (
-            isNil(ctx.luckysheetfile[SheetIndex].calcChain) ||
-            ctx.luckysheetfile.length === 0
-        ) {
-            continue;
-        }
-        const {calcChain} = ctx.luckysheetfile[SheetIndex];
-        for (let i = 0; i < calcChain!.length; i += 1) {
-            const calc: any = cloneDeep(calcChain![i]);
-            const calc_r = calc.r;
-            const calc_c = calc.c;
-
-            if (type === "row" && SheetIndex === curOrder) {
-                if (direction === "lefttop") {
-                    if (calc_r >= index) {
-                        calc.r += count;
-                    }
-                } else if (direction === "rightbottom") {
-                    if (calc_r > index) {
-                        calc.r += count;
-                    }
-                }
-
-                newCalcChain.push(calc);
-            } else if (type === "column" && SheetIndex === curOrder) {
-                if (direction === "lefttop") {
-                    if (calc_c >= index) {
-                        calc.c += count;
-                    }
-                } else if (direction === "rightbottom") {
-                    if (calc_c > index) {
-                        calc.c += count;
-                    }
-                }
-
-                newCalcChain.push(calc);
-            }
+    // calcChain entries are sheet-local; cross-sheet formula text is rewritten by the engine.
+    const newCalcChain: any[] = [];
+    if (file.calcChain != null) {
+        for (const entry of file.calcChain) {
+            const calc: any = cloneDeep(entry);
+            if (type === "row") {
+                if (direction === "lefttop" && calc.r >= index) calc.r += count;
+                else if (direction === "rightbottom" && calc.r > index) calc.r += count;
+            } else if (direction === "lefttop" && calc.c >= index) calc.c += count;
+            else if (direction === "rightbottom" && calc.c > index) calc.c += count;
+            newCalcChain.push(calc);
         }
     }
     file.calcChain = newCalcChain;
@@ -341,41 +308,21 @@ function shiftStateOnlyFieldsForDelete(
 
     const slen = end - start + 1;
 
-    // Formula config update
-    const newCalcChain = [];
-    for (
-        let SheetIndex = 0;
-        SheetIndex < ctx.luckysheetfile.length;
-        SheetIndex += 1
-    ) {
-        if (
-            isNil(ctx.luckysheetfile[SheetIndex].calcChain) ||
-            ctx.luckysheetfile.length === 0
-        ) {
-            continue;
-        }
-        const {calcChain} = ctx.luckysheetfile[SheetIndex];
-        for (let i = 0; i < calcChain!.length; i += 1) {
-            const calc: any = cloneDeep(calcChain![i]);
-            const calc_r = calc.r;
-            const calc_c = calc.c;
-
-            if (type === "row" && SheetIndex === curOrder) {
-                if (calc_r < start || calc_r > end) {
-                    if (calc_r > end) {
-                        calc.r = calc_r - slen;
-                    }
-
+    // calcChain entries are sheet-local; entries inside the deleted range drop out.
+    const newCalcChain: any[] = [];
+    if (file.calcChain != null) {
+        for (const entry of file.calcChain) {
+            const calc: any = cloneDeep(entry);
+            if (type === "row") {
+                if (calc.r < start) newCalcChain.push(calc);
+                else if (calc.r > end) {
+                    calc.r -= slen;
                     newCalcChain.push(calc);
                 }
-            } else if (type === "column" && SheetIndex === curOrder) {
-                if (calc_c < start || calc_c > end) {
-                    if (calc_c > end) {
-                        calc.c = calc_c - slen;
-                    }
-
-                    newCalcChain.push(calc);
-                }
+            } else if (calc.c < start) newCalcChain.push(calc);
+            else if (calc.c > end) {
+                calc.c -= slen;
+                newCalcChain.push(calc);
             }
         }
     }
