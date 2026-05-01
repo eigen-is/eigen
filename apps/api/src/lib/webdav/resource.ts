@@ -37,11 +37,12 @@ export async function handleGet(args: {
 
     const etag = computeEtag(path);
 
-    if (ifNoneMatch && ifMatchesEtag(ifNoneMatch, etag)) {
-        return new Response(null, { status: 304, headers: { ETag: etag } });
-    }
+    // RFC 7232 §6 precondition order: If-Match before If-None-Match.
     if (ifMatch && !ifMatchesEtag(ifMatch, etag)) {
         return new Response(null, { status: 412 });
+    }
+    if (ifNoneMatch && ifMatchesEtag(ifNoneMatch, etag)) {
+        return new Response(null, { status: 304, headers: { ETag: etag } });
     }
 
     const headers: Record<string, string> = {

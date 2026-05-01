@@ -66,6 +66,15 @@ describe('WebDAV GET/HEAD', () => {
         expect(res.status).toBe(412);
     });
 
+    test('GET with conflicting If-Match (fails) and If-None-Match (matches) → 412', async () => {
+        // RFC 7232 §6: If-Match is evaluated before If-None-Match.
+        // If-Match fails → 412, regardless of what If-None-Match would do.
+        const res = await webdavRequest(ctx.alice.user.email, 'GET', testFilePath, {
+            headers: { 'If-Match': '"deadbeef"', 'If-None-Match': testFileEtag },
+        });
+        expect(res.status).toBe(412);
+    });
+
     test('ETag is byte-stable across requests', async () => {
         const a = await webdavRequest(ctx.alice.user.email, 'HEAD', testFilePath);
         const b = await webdavRequest(ctx.alice.user.email, 'HEAD', testFilePath);
