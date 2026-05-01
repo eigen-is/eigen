@@ -1,9 +1,18 @@
 # WebDAV TODO
 
 Follow-ups deferred from the WebDAV server branch (`feat/webdav-server`).
-Litmus baseline at branch end: **96/101** (97%). Real macOS Finder copy
-verified working with a 160 MB MP4. None of the items below are blockers
-to shipping; they're known gaps worth addressing in a follow-up session.
+Litmus baseline at 2026-05-01 (litmus 0.17): **101/105** (96.2%) — basic
+16/16, copymove 13/13, props 32/33, locks 36/39, http 4/4. Real macOS
+Finder copy verified working with a 160 MB MP4. None of the items below
+are blockers to shipping; they're known gaps worth addressing in a
+follow-up session.
+
+> **Running litmus locally:** the dev server's per-IP rate limit
+> (`apps/api/src/app.ts`, 300 req/min) trips before the locks/http
+> suites finish in a single back-to-back run, producing false 429
+> failures. Either bump the limit during litmus runs or sleep ~70 s
+> between suites (`TESTS='locks http' ./litmus …` after a wait clears
+> the window).
 
 For protocol architecture see `docs/PROPOSAL_DRIVE_MOUNT.md`.
 For client recipes see `docs/WEBDAV-RCLONE.md`, `docs/WEBDAV-MOUNTAIN-DUCK.md`.
@@ -55,17 +64,18 @@ the WebDAV branch; flag it before it bites someone.
 ### 3. Litmus failures left intentionally
 
 `litmus http://localhost:8000/webdav/<owner>/<mount>/ <user> <pass>`
-final score: 96/101.
+(litmus 0.17) final score: 101/105.
 
 | # | Group | Test | Verdict |
 |---|-------|------|---------|
-| locks#19 | locks | cond_put_corrupt_token | **Defer.** Needs full RFC 4918 §10.4 tagged-list `If` parser (URI tag + multi-condition). Real work, not a one-line fix. |
-| locks#21 | locks | complex_conditionals | **Defer.** Same parser as #19. |
-| locks#37 | locks | indirect_refresh on lock-null | **Won't fix.** Lock-null resources are a deprecated WebDAV concept — RFC 4918 explicitly drops them in favour of LOCK on a created resource. |
 | props#2 | props | propfind_invalid2 | **Defer.** We accept some malformed-namespace XML that an expat-strict parser would reject. Stricter validation would also need to keep our own well-formed bodies passing. |
+| locks#19 | locks | fail_complex_cond_put | **Defer.** Needs full RFC 4918 §10.4 tagged-list `If` parser (URI tag + multi-condition). Real work, not a one-line fix. |
+| locks#21 | locks | fail_cond_put_unlocked | **Defer.** Same parser as #19. |
+| locks#37 | locks | unmapped_lock | **Defer.** RFC 4918 §9.10.4 says LOCK on an unmapped URL must create a "locked empty resource" and return 201; today we return 404. Small but real gap. (Note: in litmus 0.13 test 37 was `indirect_refresh on lock-null`, a dead RFC 2518 concept — different test, despite the shared number.) |
 
-Pursuing locks#19/#21 is the only one that meaningfully closes a real
-RFC 4918 gap. props#2 is a strictness call. locks#37 is dead.
+Pursuing locks#19/#21 closes the only deferred gap that fixes a
+multi-test RFC area. locks#37 is one isolated case. props#2 is a
+strictness call.
 
 ---
 
