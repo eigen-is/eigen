@@ -1,4 +1,4 @@
-import { app } from '../setup';
+import { app, authedRequest } from '../setup';
 
 export const WEBDAV_PASSWORD = 'testpassword123';
 
@@ -22,4 +22,13 @@ export function webdavRequest(
             body: options.body,
         }),
     );
+}
+
+// /webdav/<ownerId>/ no longer lists mounts (the discovery endpoint was
+// removed); fetch via the regular drive API instead.
+export async function getDefaultMountId(sessionToken: string, ownerId: string): Promise<string> {
+    const res = await authedRequest(sessionToken, `/drive/${ownerId}/mounts`);
+    const mounts = (await res.json()) as { id: string }[];
+    if (!mounts.length) throw new Error(`No mounts for owner ${ownerId}`);
+    return mounts[0].id;
 }

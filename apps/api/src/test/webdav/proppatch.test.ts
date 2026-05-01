@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { getTestContext, type TestContext } from '../setup';
-import { webdavRequest } from './setup';
+import { getDefaultMountId, webdavRequest } from './setup';
 
 describe('WebDAV PROPPATCH', () => {
     let ctx: TestContext;
@@ -9,10 +9,7 @@ describe('WebDAV PROPPATCH', () => {
 
     beforeAll(async () => {
         ctx = await getTestContext();
-        const dRes = await webdavRequest(ctx.alice.user.email, 'PROPFIND', `/webdav/${ctx.alice.user.id}/`);
-        const m = (await dRes.text()).match(new RegExp(`/webdav/${ctx.alice.user.id}/([^/<]+)/`));
-        if (!m) throw new Error('mount id not found');
-        mountId = m[1];
+        mountId = await getDefaultMountId(ctx.alice.user.sessionToken, ctx.alice.user.id);
         baseHref = `/webdav/${ctx.alice.user.id}/${mountId}`;
     });
 

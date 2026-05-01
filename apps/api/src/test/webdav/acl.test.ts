@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { getTestContext, type TestContext } from '../setup';
-import { webdavRequest } from './setup';
+import { getDefaultMountId, webdavRequest } from './setup';
 
 describe('WebDAV ACL', () => {
     let ctx: TestContext;
@@ -9,16 +9,8 @@ describe('WebDAV ACL', () => {
 
     beforeAll(async () => {
         ctx = await getTestContext();
-        const dRes = await webdavRequest(ctx.alice.user.email, 'PROPFIND', `/webdav/${ctx.alice.user.id}/`);
-        const m = (await dRes.text()).match(new RegExp(`/webdav/${ctx.alice.user.id}/([^/<]+)/`));
-        if (!m) throw new Error('mount id not found');
-        aliceMount = m[1];
+        aliceMount = await getDefaultMountId(ctx.alice.user.sessionToken, ctx.alice.user.id);
         baseHrefAlice = `/webdav/${ctx.alice.user.id}/${aliceMount}`;
-    });
-
-    test("Bob cannot PROPFIND alice's owner discovery", async () => {
-        const res = await webdavRequest(ctx.bob.user.email, 'PROPFIND', `/webdav/${ctx.alice.user.id}/`);
-        expect(res.status).toBe(403);
     });
 
     test("Bob cannot PROPFIND alice's mount root", async () => {
