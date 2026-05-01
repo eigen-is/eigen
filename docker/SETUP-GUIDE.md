@@ -8,6 +8,7 @@ A step-by-step guide to deploying your own Eigen instance.
 - Email send/receive with automatic DKIM signing
 - IMAP (port 993) and SMTP submission (port 587) for desktop/mobile clients
 - CalDAV for calendar apps
+- WebDAV for mounting your Drive in Finder, Files, or any WebDAV client
 - Automatic HTTPS via Let's Encrypt
 
 Everything runs in Docker — isolated, reproducible, easy to update.
@@ -17,7 +18,7 @@ Everything runs in Docker — isolated, reproducible, easy to update.
 - A **Linux VPS** (Debian 12 or Ubuntu 22.04+, 2 GB+ RAM)
 - A **domain** you control (e.g., `eigen.example.com`)
 - **SSH access** to your server
-- An **SMTP relay account** for outbound email — recommended: [Brevo](https://brevo.com) free tier (300 emails/day)
+- An **SMTP relay account** for outbound email (e.g. [Brevo](https://brevo.com)'s free tier — 300 emails/day)
 
 ### Why an SMTP relay?
 
