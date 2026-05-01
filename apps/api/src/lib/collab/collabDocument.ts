@@ -1,5 +1,4 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
-import type { User } from 'better-auth/types';
 import type { ServerWebSocket } from 'bun';
 import { desc, eq, lt, lte } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
@@ -12,6 +11,7 @@ import { COMMENT_INDEX_DB_CONFIG } from '../chat/comment-db-config';
 import type { ManagedDatabase } from '../core';
 import { ApiError } from '../core/errors';
 import type { Drive } from '../drive';
+import type { User } from '../user';
 import { COLLAB_DB_CONFIG } from './db-config';
 import * as schema from './schema.ts';
 import { loadYjsState } from './yjs-loader';

@@ -27,6 +27,10 @@ export class LocalStorage implements StorageBackend {
         return Bun.file(this.resolve(key));
     }
 
+    readRange(key: string, start: number, end: number): BunFile {
+        return Bun.file(this.resolve(key)).slice(start, end);
+    }
+
     async write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
         return await Bun.write(this.resolve(key), data, { createPath: true });
     }

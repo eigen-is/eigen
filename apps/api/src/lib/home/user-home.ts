@@ -1,5 +1,4 @@
 import type { UserSettings } from '@workspace/lib/types/settings';
-import type { User } from 'better-auth/types';
 import { Calendar } from '../calendar/calendar';
 import { getUserHomePath } from '../config/paths.ts';
 import { getServerSettings, mapStorageType } from '../config/server-settings';
@@ -8,6 +7,7 @@ import { JsonStore, LocalFilesystem } from '../core';
 import { Drive } from '../drive';
 import Maildir from '../mail/maildir.ts';
 import { NotificationCenter } from '../notification-center/notification-center';
+import type { User } from '../user';
 import { Home } from './home.ts';
 
 export class UserHome extends Home {

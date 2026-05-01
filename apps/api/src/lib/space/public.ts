@@ -2,11 +2,11 @@ import * as path from 'node:path';
 import { parseOwnerId } from '@workspace/lib/types';
 import type { PublicUser } from '@workspace/lib/types/public';
 import { validateEmailAddress } from '@workspace/lib/validation';
-import type { User } from 'better-auth/types';
 import type { BunFile } from 'bun';
 import { getAvatarsDir } from '../config/paths';
 import { ApiError } from '../core';
 import { getTeam } from '../team';
+import type { User } from '../user';
 import { getUserByEmail, getUserById } from '../user/';
 
 export async function getUserByEmailOrId(emailOrId: string): Promise<User | null> {

@@ -1,7 +1,6 @@
 import type { Contact } from '@workspace/lib/types/contact';
 import type { Label } from '@workspace/lib/types/label';
 import { SSEventType } from '@workspace/lib/types/sse';
-import type { User } from 'better-auth/types';
 import { eq, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { v4 as uuidv4 } from 'uuid';
@@ -13,6 +12,7 @@ import type { Home } from '../home';
 import { getHome } from '../home';
 import { pushUserProfile } from '../home/home-relay';
 import { generateImagePreview } from '../shared/thumbnails';
+import type { User } from '../user';
 import { getOrgOwner } from '../user/';
 import { CONTACTS_DB_CONFIG } from './db-config';
 import * as schema from './schema';

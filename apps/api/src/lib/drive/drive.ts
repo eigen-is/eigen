@@ -12,6 +12,7 @@ import {
     DRIVE_EXTENSIONS,
     type DriveACL,
     type DrivePath,
+    type DrivePathDetails,
     type DriveVisibility,
     type EigenDocType,
     isChatType,
@@ -21,7 +22,6 @@ import {
 } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { validateACLEntries, validateEmailAddress } from '@workspace/lib/validation';
-import type { User } from 'better-auth/types';
 import { eq } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { createAsyncSingleton } from '../../utils/singleton';
@@ -37,6 +37,7 @@ import { createDefaultMountConfig, createMountConfig, Mount } from '../mount';
 import { saveThumbnail } from '../shared/thumbnails';
 import type { StorageFile } from '../storage';
 import { getTeamMembers } from '../team';
+import type { User } from '../user';
 import { getMemberships, type Memberships } from '../user/';
 import {
     canReadFromAncestors,
@@ -47,6 +48,7 @@ import {
     normalizeACL,
 } from './acl';
 import { type EffectiveMember, propagateACLChange, resolveACLToEmails } from './acl-propagation';
+import { LockManager } from './lock-manager';
 import { getUniqueFileName } from './naming';
 import { getSharedDatabase } from './shared';
 import * as sharedSchema from './sharedschema';
@@ -60,6 +62,8 @@ export default class Drive {
     private defaultMountId: string = 'default';
     private sharedDb!: BunSQLiteDatabase<typeof sharedSchema>;
     private documents: Map<string, () => Promise<CollabDocument>> = new Map();
+    // Per-Drive WebDAV LockManager. Locks evict when this Drive's Home unloads via destruct().
+    public readonly lockManager = new LockManager();
 
     constructor(home: Home) {
         this.home = home;
@@ -141,6 +145,10 @@ export default class Drive {
     async getPath(mountId: string, pathId: string): Promise<DrivePath | null> {
         const mount = this.getMount(mountId);
         return await mount.getPath(pathId);
+    }
+
+    async resolvePath(mountId: string, pathStr: string): Promise<DrivePath | null> {
+        return this.getMount(mountId).resolvePath(pathStr);
     }
 
     async getFolderContents(mountId: string, pathId: string): Promise<DrivePath[]> {
@@ -257,7 +265,7 @@ export default class Drive {
         parentId: string,
         name: string,
         mimeType: string,
-        data: Buffer | StorageFile,
+        data: Buffer | StorageFile | ReadableStream<Uint8Array>,
     ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         const parent = await mount.getActivePath(parentId);
@@ -421,6 +429,16 @@ export default class Drive {
         return await mount.readFile(pathId);
     }
 
+    async copyPath(mountId: string, srcPathId: string, destParentId: string, name: string): Promise<DrivePath> {
+        return this.getMount(mountId).copyPath(srcPathId, destParentId, name);
+    }
+
+    async readRange(mountId: string, pathId: string, start: number, end: number): Promise<StorageFile | null> {
+        const mount = this.getMount(mountId);
+        await mount.getActivePath(pathId);
+        return mount.readRange(pathId, start, end);
+    }
+
     async serveFile(mountId: string, pathId: string, disposition: 'attachment' | 'inline'): Promise<Response> {
         const mount = this.getMount(mountId);
         const path = await mount.getActivePath(pathId);
@@ -439,7 +457,11 @@ export default class Drive {
         });
     }
 
-    async writeFileContent(mountId: string, pathId: string, data: Buffer): Promise<DrivePath> {
+    async writeFileContent(
+        mountId: string,
+        pathId: string,
+        data: Buffer | StorageFile | ReadableStream<Uint8Array>,
+    ): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         const path = await mount.getActivePath(pathId);
         if (path.type !== DRIVE_TYPE_FILE) {
@@ -448,10 +470,47 @@ export default class Drive {
         if (!(await this.canWrite(mountId, pathId, this.owner))) {
             throw new ApiError(403, 'No write permission');
         }
-        await mount.writeFile(pathId, data);
+
+        let thumbnailSource: Buffer | string | null = null;
+        let thumbnailCleanup: (() => Promise<void>) | undefined;
+
+        if (Buffer.isBuffer(data)) {
+            await mount.writeFile(pathId, data);
+            if (data.length > 0) thumbnailSource = data;
+        } else {
+            // Stream / S3File: detour through a temp file so we don't hold bytes in memory.
+            // Pass the size+hash that writeTempWithHash already computed so the mount
+            // doesn't re-buffer the temp file to recompute SHA-256.
+            const tempId = randomUUID();
+            try {
+                const { size, hash } = await writeTempWithHash(mount.getTempPath(tempId), data);
+                await mount.writeFileFromTemp(pathId, tempId, size, hash);
+                if (size > 0) {
+                    thumbnailSource = mount.getTempPath(tempId);
+                    thumbnailCleanup = () => mount.cleanupTemp(tempId);
+                } else {
+                    await mount.cleanupTemp(tempId);
+                }
+            } catch (e) {
+                await mount.cleanupTemp(tempId);
+                throw e;
+            }
+        }
+
         const updated = await mount.getPath(pathId);
         if (!updated) throw new ApiError(500, 'Failed to get updated file');
         this.emit(SSEventType.DRIVE_FILE_UPLOADED, updated);
+
+        if (thumbnailSource !== null) {
+            this.regenerateThumbnailAsync(
+                mount,
+                pathId,
+                thumbnailSource,
+                updated.mimeType,
+                updated.name,
+                thumbnailCleanup,
+            );
+        }
         return updated;
     }
 
@@ -751,6 +810,10 @@ export default class Drive {
         await mount.updatePath(pathId, {});
     }
 
+    async updatePathDetails(mountId: string, pathId: string, details: DrivePathDetails): Promise<void> {
+        await this.getMount(mountId).updatePath(pathId, { details });
+    }
+
     async touchFile(mountId: string, parentId: string, name: string, mimeType: string): Promise<string> {
         const mount = this.getMount(mountId);
         return mount.touchFile(parentId, name, mimeType);
@@ -864,6 +927,8 @@ export default class Drive {
                 console.error(`Failed to close mount databases:`, error);
             }
         }
+
+        this.lockManager.clear();
     }
 
     private sharedRowToDrivePath(r: typeof sharedSchema.sharedPaths.$inferSelect): DrivePath {
@@ -876,6 +941,7 @@ export default class Drive {
             ownerId: r.ownerId,
             mimeType: r.mimeType,
             size: r.size ?? 0,
+            hash: null,
             thumbnail: r.thumbnail,
             acl: r.acl as DriveACL[] | null,
             visibility: (r.visibility ?? 'private') as DriveVisibility,
@@ -956,27 +1022,46 @@ export default class Drive {
         if (!uploadedFile) throw new ApiError(500, 'Failed to get uploaded file');
         this.emit(SSEventType.DRIVE_FILE_UPLOADED, uploadedFile);
 
-        const tempPath = mount.getTempPath(tempId);
-        (async () => {
-            try {
-                const thumbnail = await saveThumbnail(mount.thumbsDir, pathId, tempPath, mimeType, safeName);
-                if (thumbnail) {
-                    await mount.updatePath(pathId, {
-                        thumbnail: thumbnail.fileName,
-                        details: {
-                            ...(uploadedFile.details ?? {}),
-                            width: thumbnail.width,
-                            height: thumbnail.height,
-                        },
-                    });
-                    this.emit(SSEventType.DRIVE_FILE_UPLOADED, (await mount.getPath(pathId))!);
-                }
-            } finally {
-                await mount.cleanupTemp(tempId);
-            }
-        })().catch((e) => console.error(`Thumbnail generation failed for ${pathId}:`, e));
+        if (uploadedFile.size === 0) {
+            // 0-byte placeholders (Finder's two-step copy) can't yield a thumbnail.
+            // Skip the worker spawn; the real bytes will arrive via writeFileContent.
+            await mount.cleanupTemp(tempId);
+        } else {
+            this.regenerateThumbnailAsync(mount, pathId, mount.getTempPath(tempId), mimeType, safeName, () =>
+                mount.cleanupTemp(tempId),
+            );
+        }
 
         return uploadedFile;
+    }
+
+    private regenerateThumbnailAsync(
+        mount: Mount,
+        pathId: string,
+        source: Buffer | string,
+        mimeType: string,
+        fileName: string,
+        onCleanup?: () => Promise<void>,
+    ): void {
+        (async () => {
+            try {
+                const thumbnail = await saveThumbnail(mount.thumbsDir, pathId, source, mimeType, fileName);
+                if (!thumbnail) return;
+                const current = await mount.getPath(pathId);
+                if (!current) return;
+                await mount.updatePath(pathId, {
+                    thumbnail: thumbnail.fileName,
+                    details: {
+                        ...(current.details ?? {}),
+                        width: thumbnail.width,
+                        height: thumbnail.height,
+                    },
+                });
+                this.emit(SSEventType.DRIVE_FILE_UPLOADED, (await mount.getPath(pathId))!);
+            } finally {
+                await onCleanup?.();
+            }
+        })().catch((e) => console.error(`Thumbnail generation failed for ${pathId}:`, e));
     }
 
     private emit(type: Parameters<typeof buildDriveEvent>[0], path: DrivePath, oldParentId?: string): void {

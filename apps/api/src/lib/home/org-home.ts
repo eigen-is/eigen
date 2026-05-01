@@ -1,7 +1,7 @@
 import { parseOwnerId } from '@workspace/lib/types';
-import type { User } from 'better-auth/types';
 import { getOrgDataPath } from '../config/paths';
 import { ApiError, LocalFilesystem } from '../core';
+import { makeSyntheticUser, type User } from '../user';
 import { Home } from './home';
 
 export function getSyntheticOrgUser(ownerId: string): User {
@@ -9,15 +9,7 @@ export function getSyntheticOrgUser(ownerId: string): User {
     if (!parsed || parsed.type !== 'org') {
         throw new ApiError(400, 'Invalid orgId format');
     }
-
-    return {
-        id: ownerId,
-        name: ownerId,
-        email: '',
-        emailVerified: false,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-    };
+    return makeSyntheticUser(ownerId, ownerId, '');
 }
 
 export class OrgHome extends Home {

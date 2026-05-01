@@ -1,7 +1,7 @@
 import Elysia from 'elysia';
+import { authenticateBasic } from '../auth/protocol-auth';
 import { requireSelf } from '../core/access';
 import { getHome } from '../home';
-import { authenticateBasic } from './auth';
 import { handleCalendarHomePropfind, handlePrincipalPropfind, handleRootPropfind } from './discovery';
 import { handleCalendarPropfind } from './propfind';
 import { handleMkcalendar, handleProppatch } from './proppatch';

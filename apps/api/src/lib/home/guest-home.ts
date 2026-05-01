@@ -1,8 +1,8 @@
-import type { User } from 'better-auth/types';
 import { getGuestHomePath } from '../config/paths.ts';
 import { JsonStore, LocalFilesystem } from '../core';
 import { Drive } from '../drive';
 import { NotificationCenter } from '../notification-center/notification-center';
+import type { User } from '../user';
 import { Home, type HomeSettings } from './home.ts';
 
 export class GuestHome extends Home {

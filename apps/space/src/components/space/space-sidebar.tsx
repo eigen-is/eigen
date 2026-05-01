@@ -43,7 +43,7 @@ export function SpaceSidebar({ condensed = false, onClose, isMobile = false }: S
                 />
                 <SidebarItem
                     icon={<MonitorSmartphone className="h-4 w-4" />}
-                    label="Calendar & Mail"
+                    label="Integrations"
                     condensed={condensed}
                     to="/services"
                     params={{}}

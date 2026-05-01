@@ -19,14 +19,13 @@ import { ApiError, PATHS } from '../core';
 import type { ManagedDatabase } from '../core/';
 import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
+import type { User } from '../user';
 import { CALENDAR_DB_CONFIG } from './db-config';
 import { composeRsvpReply } from './imip';
 import { propagateCancellation, propagateDecline, propagateInvitation, propagateRsvp } from './invite-propagation';
 import * as schema from './schema';
 import { notifySharedCalendarUsers, propagateCalendarShare } from './share-propagation';
 import { buildCalendarEvent } from './sse-events';
-
-type UserIdentity = { id: string; email: string; name?: string | null };
 
 // Internal type extending the shared CalendarEvent with CalDAV-only storage fields
 export type CalendarEventRow = CalendarEvent & { eventCtag: number | null };
@@ -351,7 +350,7 @@ export class Calendar {
             uid?: string | null;
             uri?: string | null;
         },
-        user?: UserIdentity,
+        user?: User,
     ): CalendarEvent {
         const cal = this.getCalendarById(calendarId);
         if (!cal) throw new ApiError(404, 'Calendar not found');
@@ -600,7 +599,7 @@ export class Calendar {
             sequence?: number;
             data?: EventData | null;
         },
-        user?: UserIdentity,
+        user?: User,
     ): CalendarEvent {
         const existing = this.getEventById(id);
         if (!existing) throw new ApiError(404, 'Event not found');
@@ -699,7 +698,7 @@ export class Calendar {
         return updatedEvent;
     }
 
-    public deleteEvent(id: string, user?: UserIdentity): void {
+    public deleteEvent(id: string, user?: User): void {
         const existing = this.getEventById(id);
         if (!existing) throw new ApiError(404, 'Event not found');
 
@@ -1338,7 +1337,7 @@ export class Calendar {
 
     public rsvp(
         eventId: string,
-        user: UserIdentity,
+        user: User,
         input: {
             status: Attendee['status'];
             scope?: 'this' | 'this-and-following' | 'all';

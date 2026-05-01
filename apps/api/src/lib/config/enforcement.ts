@@ -17,15 +17,39 @@ async function resolveQuotas(
     return { home, quotas };
 }
 
-export async function getUploadMaxSize(ownerId: string, userId: string, mountId: string): Promise<number> {
-    const maxUpload = getMaxUploadSize();
+export async function getMountQuotaState(
+    ownerId: string,
+    userId: string,
+    mountId: string,
+): Promise<{ used: number; max: number }> {
     const { home, quotas } = await resolveQuotas(ownerId, userId, mountId);
-    const currentSize = await home.drive.size(mountId);
-    const remainingQuota = quotas.mountMax - currentSize;
-    if (remainingQuota <= 0) {
-        throw new ApiError(413, 'Storage quota exceeded');
+    const used = await home.drive.size(mountId);
+    return { used, max: quotas.mountMax };
+}
+
+// addBytes is the bytes about to be written; creditExisting is the size of the
+// file being overwritten (subtracted from the projected total). Throws 507 if
+// the projection would exceed the mount's quota.
+export async function enforceMountQuota(
+    ownerId: string,
+    userId: string,
+    mountId: string,
+    addBytes: number,
+    creditExisting = 0,
+): Promise<void> {
+    const { used, max } = await getMountQuotaState(ownerId, userId, mountId);
+    if (used + addBytes - creditExisting > max) {
+        throw new ApiError(507, 'Insufficient Storage');
     }
-    return Math.min(maxUpload, remainingQuota);
+}
+
+export async function getUploadMaxSize(ownerId: string, userId: string, mountId: string): Promise<number> {
+    const { used, max } = await getMountQuotaState(ownerId, userId, mountId);
+    const remainingQuota = max - used;
+    if (remainingQuota <= 0) {
+        throw new ApiError(507, 'Insufficient Storage');
+    }
+    return Math.min(getMaxUploadSize(), remainingQuota);
 }
 
 const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
@@ -36,7 +60,7 @@ export async function getMailUploadMaxSize(userId: string): Promise<number> {
     const mailContactsSize = ((await home.mail?.size()) || 0) + ((await home.contacts?.size()) || 0);
     const remainingQuota = quotas.mailAndContactsMax - mailContactsSize;
     if (remainingQuota <= 0) {
-        throw new ApiError(413, 'Mail storage quota exceeded');
+        throw new ApiError(507, 'Insufficient Storage');
     }
     return Math.min(maxUpload, remainingQuota);
 }
@@ -48,6 +72,6 @@ export async function enforceAvatarUpload(userId: string, fileSize: number): Pro
     const { home, quotas } = await resolveQuotas(userId, userId, 'default');
     const mailContactsSize = ((await home.mail?.size()) || 0) + ((await home.contacts?.size()) || 0);
     if (mailContactsSize + fileSize > quotas.mailAndContactsMax) {
-        throw new ApiError(413, 'Mail & contacts storage quota exceeded');
+        throw new ApiError(507, 'Insufficient Storage');
     }
 }
