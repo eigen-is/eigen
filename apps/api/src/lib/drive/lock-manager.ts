@@ -42,15 +42,17 @@ export class LockManager {
         ownerHref?: string;
         ttlMs?: number;
         ifHeader?: string | null;
+        ancestorPathIds?: string[];
     }): Lock {
         this.gc();
         // RFC 4918 §6.2 / §7.5: shared locks may coexist; an exclusive lock excludes
         // every other lock; any lock excludes a subsequent exclusive lock. New
         // requests that don't supply a current token in the If header must be
-        // rejected if the existing locks would conflict.
-        const existing = this.byPath.get(args.pathId);
-        if (existing && existing.size > 0) {
-            const heldLocks = [...existing].map((t) => this.locks.get(t)).filter((l): l is Lock => !!l);
+        // rejected if the existing locks would conflict. coveringLocks also surfaces
+        // ancestor depth-infinity locks, so a child of a locked collection can't be
+        // acquired without the ancestor's token.
+        const heldLocks = this.coveringLocks(args.pathId, args.ancestorPathIds ?? []);
+        if (heldLocks.length > 0) {
             const ifTokens = parseIfHeaderTokens(args.ifHeader ?? null);
             const hasAuthorizingToken = heldLocks.some((l) => ifTokens.includes(l.token));
             const conflicts = args.scope === 'exclusive' || heldLocks.some((l) => l.scope === 'exclusive');

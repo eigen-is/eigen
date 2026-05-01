@@ -83,6 +83,8 @@ export async function handleLock(args: {
 
     const ownerHref = extractLockOwner(body);
     const scope = extractLockScope(body);
+    const breadcrumb = await drive.breadCrumb(mountId, path.id);
+    const ancestorPathIds = breadcrumb.slice(0, -1).map((p) => p.id);
     const lock = drive.lockManager.acquire({
         pathId: path.id,
         depth,
@@ -91,6 +93,7 @@ export async function handleLock(args: {
         ownerHref,
         ttlMs,
         ifHeader,
+        ancestorPathIds,
     });
     return buildLockResponse(lock);
 }
