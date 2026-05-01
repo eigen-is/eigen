@@ -100,6 +100,26 @@ describe('replaySheetsOps', () => {
         expect(result[0].data![1][0]?.v).toBe('new');
     });
 
+    test('insertRowCol with malformed value warns and skips', () => {
+        const sheet = baseSheet('s1', 'Sheet1');
+        const ops: Op[][] = [[{ op: 'insertRowCol', id: 's1', path: [], value: { type: 'row', index: 0 } }]];
+        const result = replaySheetsOps([sheet], ops);
+        expect(result[0].data!.length).toBe(1);
+    });
+
+    test('deleteRowCol with malformed value warns and skips', () => {
+        const sheet: Sheet = {
+            id: 's1',
+            name: 'Sheet1',
+            order: 0,
+            data: [[{ v: 'a', m: 'a', ct: { fa: 'General', t: 'g' } }]],
+            config: {},
+        };
+        const ops: Op[][] = [[{ op: 'deleteRowCol', id: 's1', path: [], value: { type: 'row' } }]];
+        const result = replaySheetsOps([sheet], ops);
+        expect(result[0].data!.length).toBe(1);
+    });
+
     test('multiple batches apply sequentially', () => {
         const sheet: Sheet = { id: 's1', name: 'Sheet1', order: 0, data: [[null]], config: {} };
         const ops: Op[][] = [
