@@ -216,8 +216,8 @@ function ServicesComponent() {
                                 WebDAV (Drive sync)
                             </CardTitle>
                             <CardDescription>
-                                Mount each drive separately in Finder, Explorer, rclone, or Mountain Duck. Authenticate
-                                with an app password generated below.
+                                Mount each drive separately in Finder, Explorer, rclone, DAVx5, or Mountain Duck.
+                                Authenticate with an app password generated below.
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-3">
