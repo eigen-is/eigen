@@ -283,6 +283,7 @@ describe('document/sheets — patch op replay', () => {
                 id: 'sheet-1',
                 name: 'Sheet1',
                 order: 0,
+                celldata: [],
                 data: [
                     [{ v: 'first', m: 'first', ct: { fa: 'General', t: 'g' } }],
                     [{ v: 'second', m: 'second', ct: { fa: 'General', t: 'g' } }],
