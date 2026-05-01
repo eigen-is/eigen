@@ -615,7 +615,15 @@ export function insertRowCol(
 
     const {type, index, count, direction} = op;
 
-    ctx.luckysheetfile = applySheetsInsertRowCol(ctx.luckysheetfile, {...op, id});
+    // Per-sheet write-back (vs. wholesale array reassignment) so immer emits
+    // granular replace patches per changed sheet instead of one synthetic
+    // ['luckysheetfile'] replace carrying the entire post-mutation Sheet[].
+    // The engine helper preserves identity for unchanged sheets, so unaffected
+    // sheets produce no patch at all — saves bandwidth on collab updates.
+    const insertedSheets = applySheetsInsertRowCol(ctx.luckysheetfile, {...op, id});
+    for (let i = 0; i < insertedSheets.length; i += 1) {
+        ctx.luckysheetfile[i] = insertedSheets[i];
+    }
 
     const curOrder = getSheetIndex(ctx, id);
     if (curOrder == null) return;
@@ -930,7 +938,11 @@ export function deleteRowCol(
     const {type, start, end} = op;
     const slen = end - start + 1;
 
-    ctx.luckysheetfile = applySheetsDeleteRowCol(ctx.luckysheetfile, {...op, id});
+    // See insertRowCol above for why this isn't a wholesale reassignment.
+    const deletedSheets = applySheetsDeleteRowCol(ctx.luckysheetfile, {...op, id});
+    for (let i = 0; i < deletedSheets.length; i += 1) {
+        ctx.luckysheetfile[i] = deletedSheets[i];
+    }
 
     const curOrder = getSheetIndex(ctx, id);
     if (curOrder == null) return;
