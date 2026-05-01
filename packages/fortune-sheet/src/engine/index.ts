@@ -33,6 +33,7 @@ export {
     operatorjson,
     operatorPriority,
 } from './formula-utils';
+export { replaySheetsOps } from './replay-ops';
 export { applySheetsRowColOp, type RowColOp } from './rowcol';
 export type {
     CalculationChainEntry,
