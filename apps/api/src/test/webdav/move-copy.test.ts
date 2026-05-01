@@ -2,8 +2,6 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import { getTestContext } from '../setup';
 import { getDefaultMountId, webdavRequest } from './setup';
 
-// TODO: cross-mount test once harness supports a second mount
-
 describe('WebDAV MOVE/COPY', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
     let mountId: string;

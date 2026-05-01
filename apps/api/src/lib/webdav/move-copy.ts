@@ -31,7 +31,6 @@ function parseDestination(destHeader: string, requestUrl: string): DestParts {
 type Resolved = {
     drive: Drive | SharedDrive;
     src: DrivePath;
-    destMountId: string;
     destParent: DrivePath;
     destExisting: DrivePath | null;
     newName: string;
@@ -52,6 +51,7 @@ async function resolveMoveCopy(args: {
     if (!destinationHeader) throw new ApiError(400, 'Missing Destination');
     const dest = parseDestination(destinationHeader, requestUrl);
     if (dest.ownerId !== ownerId) throw new ApiError(502, `Cross-owner ${verb}s not supported`);
+    if (dest.mountId !== mountId) throw new ApiError(502, `Cross-mount ${verb}s not supported`);
 
     const drive = await getSharedDrive(ownerId, user);
 
@@ -70,7 +70,7 @@ async function resolveMoveCopy(args: {
     }
 
     const destPathStr = dest.pathStr || '/';
-    const destExisting = await drive.resolvePath(dest.mountId, destPathStr);
+    const destExisting = await drive.resolvePath(mountId, destPathStr);
     if (destExisting && !overwrite) throw new ApiError(412, 'Destination exists, no overwrite');
 
     const lastSlash = destPathStr.lastIndexOf('/');
@@ -78,7 +78,7 @@ async function resolveMoveCopy(args: {
     const newName = destPathStr.slice(lastSlash + 1).normalize('NFC');
     if (!newName) throw new ApiError(400, 'Destination name missing');
 
-    const destParent = await drive.resolvePath(dest.mountId, destParentStr);
+    const destParent = await drive.resolvePath(mountId, destParentStr);
     if (!destParent) throw new ApiError(409, 'Destination parent not found');
 
     // One destination-side breadcrumb fetch. destExisting's full chain (if
@@ -87,8 +87,8 @@ async function resolveMoveCopy(args: {
     // the lock check runs on destExisting *and* destParent (overwrite
     // touches destExisting; either case adds/replaces a child of destParent).
     const destBreadcrumb = destExisting
-        ? await drive.breadCrumb(dest.mountId, destExisting.id)
-        : await drive.breadCrumb(dest.mountId, destParent.id);
+        ? await drive.breadCrumb(mountId, destExisting.id)
+        : await drive.breadCrumb(mountId, destParent.id);
     if (enclosingDocumentContainer(destBreadcrumb, { includeSelf: !destExisting })) {
         throw new ApiError(423, 'Container internals are read-only');
     }
@@ -99,7 +99,7 @@ async function resolveMoveCopy(args: {
         assertWritable(drive.lockManager, destBreadcrumb, ifHeader, user.id);
     }
 
-    return { drive, src, destMountId: dest.mountId, destParent, destExisting, newName };
+    return { drive, src, destParent, destExisting, newName };
 }
 
 export async function handleMove(args: {
@@ -112,29 +112,18 @@ export async function handleMove(args: {
     overwrite: boolean;
     ifHeader: string | null;
 }): Promise<Response> {
-    const { drive, src, destMountId, destParent, destExisting, newName } = await resolveMoveCopy({
+    const { drive, src, destParent, destExisting, newName } = await resolveMoveCopy({
         ...args,
         verb: 'MOVE',
     });
 
-    if (destExisting) await drive.deletePath(destMountId, destExisting.id);
+    if (destExisting) await drive.deletePath(args.mountId, destExisting.id);
 
-    if (args.mountId === destMountId) {
-        if (src.parentId !== destParent.id) {
-            await drive.movePath(args.mountId, src.id, destParent.id);
-        }
-        if (src.name !== newName) {
-            await drive.renamePath(args.mountId, src.id, newName);
-        }
-    } else {
-        await drive.copyPathCrossMount(args.mountId, src.id, destMountId, destParent.id, newName);
-        await drive.deletePath(args.mountId, src.id);
-        // Cross-mount MOVE creates a new pathId at the destination; the source
-        // pathId is gone, so its locks are unreachable. Release them explicitly
-        // (in-mount MOVE keeps the same pathId, so no release is needed there).
-        for (const lock of drive.lockManager.listForPath(src.id)) {
-            drive.lockManager.release(lock.token);
-        }
+    if (src.parentId !== destParent.id) {
+        await drive.movePath(args.mountId, src.id, destParent.id);
+    }
+    if (src.name !== newName) {
+        await drive.renamePath(args.mountId, src.id, newName);
     }
     return new Response(null, { status: destExisting ? 204 : 201 });
 }
@@ -150,21 +139,19 @@ export async function handleCopy(args: {
     ifHeader: string | null;
     depth: '0' | '1' | 'infinity';
 }): Promise<Response> {
-    const { drive, src, destMountId, destParent, destExisting, newName } = await resolveMoveCopy({
+    const { drive, src, destParent, destExisting, newName } = await resolveMoveCopy({
         ...args,
         verb: 'COPY',
     });
 
-    if (destExisting) await drive.deletePath(destMountId, destExisting.id);
+    if (destExisting) await drive.deletePath(args.mountId, destExisting.id);
 
     // RFC 4918 §9.8.3: Depth: 0 on a collection COPY means copy the collection
     // itself but NOT its members. Files are unaffected (they have no children).
     if (args.depth === '0' && src.type !== 'file') {
-        await drive.createFolder(destMountId, destParent.id, newName);
-    } else if (args.mountId === destMountId) {
-        await drive.copyPath(args.mountId, src.id, destParent.id, newName);
+        await drive.createFolder(args.mountId, destParent.id, newName);
     } else {
-        await drive.copyPathCrossMount(args.mountId, src.id, destMountId, destParent.id, newName);
+        await drive.copyPath(args.mountId, src.id, destParent.id, newName);
     }
     return new Response(null, { status: destExisting ? 204 : 201 });
 }

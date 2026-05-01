@@ -146,23 +146,6 @@ export default class SharedDrive {
         return this.sharedDrive.copyPath(mountId, srcPathId, destParentId, name);
     }
 
-    public async copyPathCrossMount(
-        srcMountId: string,
-        srcPathId: string,
-        destMountId: string,
-        destParentId: string,
-        name: string,
-    ): Promise<DrivePath> {
-        const memberships = await this.getUserMemberships();
-        if (!(await this.canRead(srcMountId, srcPathId, this.user, memberships))) {
-            throw new ApiError(403, 'No read permission on source');
-        }
-        if (!(await this.canWrite(destMountId, destParentId, this.user, memberships))) {
-            throw new ApiError(403, 'No write permission on target folder');
-        }
-        return this.sharedDrive.copyPathCrossMount(srcMountId, srcPathId, destMountId, destParentId, name);
-    }
-
     public async readRange(mountId: string, pathId: string, start: number, end: number) {
         return this.withReadPermission(mountId, pathId, () => this.sharedDrive.readRange(mountId, pathId, start, end));
     }
