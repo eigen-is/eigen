@@ -93,12 +93,16 @@ bun install
 bun run setup
 ```
 
-**Want mail at a different domain than the web URL?** When the script asks "Mail domain",
+**Want mail at a different domain than the web URL?** 
+
+When the script asks "Mail domain",
 enter the domain you want addresses on (e.g. `example.com`) while keeping the web URL on
 its subdomain (e.g. `eigen.example.com`). MX, SPF, DMARC, DKIM all get printed against the
 mail domain.
 
-**Already running nginx/Caddy on the host?** Answer "yes" to the reverse-proxy question.
+**Already running nginx/Caddy on the host?** 
+
+Answer "yes" to the reverse-proxy question.
 The script writes `eigen.nginx.conf` and `eigen.Caddyfile` you can drop into your existing
 config and sets `COMPOSE_PROFILES=mail` so the bundled Caddy is skipped. The snippets
 include the SSE / WebSocket plumbing collaborative editing needs — see
