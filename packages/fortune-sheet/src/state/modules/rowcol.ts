@@ -28,6 +28,728 @@ const refreshLocalMergeData = (merge_new: Record<string, any>, file: Sheet) => {
     });
 };
 
+function shiftStateOnlyFieldsForInsert(
+    ctx: Context,
+    op: {type: "row" | "column"; index: number; count: number; direction: "lefttop" | "rightbottom"; id: string},
+) {
+    const {type, index, count, direction} = op;
+    const id = op.id || ctx.currentSheetId;
+    const curOrder = getSheetIndex(ctx, id);
+    if (curOrder == null) return;
+    const file = ctx.luckysheetfile[curOrder];
+    if (!file) return;
+    const d = file.data;
+
+    // Formula config update (calcChain entries + cell.f rewrites)
+    const newCalcChain = [];
+    for (
+        let SheetIndex = 0;
+        SheetIndex < ctx.luckysheetfile.length;
+        SheetIndex += 1
+    ) {
+        if (
+            isNil(ctx.luckysheetfile[SheetIndex].calcChain) ||
+            ctx.luckysheetfile.length === 0
+        ) {
+            continue;
+        }
+        const {calcChain} = ctx.luckysheetfile[SheetIndex];
+        const {data} = ctx.luckysheetfile[SheetIndex];
+        for (let i = 0; i < calcChain!.length; i += 1) {
+            const calc: any = cloneDeep(calcChain![i]);
+            const calc_r = calc.r;
+            const calc_c = calc.c;
+            const calc_i = calc.id;
+            const calc_funcStr = getcellFormula(ctx, calc_r, calc_c, calc_i);
+
+            if (type === "row" && SheetIndex === curOrder) {
+                const functionStr = `=${functionStrChange(
+                    calc_funcStr,
+                    "add",
+                    "row",
+                    direction,
+                    index,
+                    count
+                )}`;
+
+                if (d![calc_r]?.[calc_c]?.f === calc_funcStr) {
+                    d![calc_r]![calc_c]!.f = functionStr;
+                }
+
+                if (direction === "lefttop") {
+                    if (calc_r >= index) {
+                        calc.r += count;
+                    }
+                } else if (direction === "rightbottom") {
+                    if (calc_r > index) {
+                        calc.r += count;
+                    }
+                }
+
+                newCalcChain.push(calc);
+            } else if (type === "row") {
+                const functionStr = `=${functionStrChange(
+                    calc_funcStr,
+                    "add",
+                    "row",
+                    direction,
+                    index,
+                    count
+                )}`;
+
+                if (data![calc_r]?.[calc_c]?.f === calc_funcStr) {
+                    data![calc_r]![calc_c]!.f = functionStr;
+                }
+            } else if (type === "column" && SheetIndex === curOrder) {
+                const functionStr = `=${functionStrChange(
+                    calc_funcStr,
+                    "add",
+                    "col",
+                    direction,
+                    index,
+                    count
+                )}`;
+
+                if (d![calc_r]?.[calc_c]?.f === calc_funcStr) {
+                    d![calc_r]![calc_c]!.f = functionStr;
+                }
+
+                if (direction === "lefttop") {
+                    if (calc_c >= index) {
+                        calc.c += count;
+                    }
+                } else if (direction === "rightbottom") {
+                    if (calc_c > index) {
+                        calc.c += count;
+                    }
+                }
+
+                newCalcChain.push(calc);
+            } else if (type === "column") {
+                const functionStr = `=${functionStrChange(
+                    calc_funcStr,
+                    "add",
+                    "col",
+                    direction,
+                    index,
+                    count
+                )}`;
+
+                if (data![calc_r]?.[calc_c]?.f === calc_funcStr) {
+                    data![calc_r]![calc_c]!.f = functionStr;
+                }
+            }
+        }
+    }
+    file.calcChain = newCalcChain;
+
+    // Filter config update
+    const cfg = file.config || {};
+    const {filter_select} = file;
+    const {filter} = file;
+    let newFilterObj: any = null;
+    if (!isEmpty(filter_select) && filter_select != null) {
+        newFilterObj = {filter_select: null, filter: null};
+
+        let f_r1 = filter_select.row[0];
+        let f_r2 = filter_select.row[1];
+        let f_c1 = filter_select.column[0];
+        let f_c2 = filter_select.column[1];
+
+        if (type === "row") {
+            if (f_r1 < index) {
+                if (f_r2 === index && direction === "lefttop") {
+                    f_r2 += count;
+                } else if (f_r2 > index) {
+                    f_r2 += count;
+                }
+            } else if (f_r1 === index) {
+                if (direction === "lefttop") {
+                    f_r1 += count;
+                    f_r2 += count;
+                } else if (direction === "rightbottom" && f_r2 > index) {
+                    f_r2 += count;
+                }
+            } else {
+                f_r1 += count;
+                f_r2 += count;
+            }
+
+            if (filter != null) {
+                newFilterObj.filter = {};
+
+                forEach(filter, (v, k) => {
+                    const f_rowhidden = filter[k].rowhidden;
+                    const f_rowhidden_new: any = {};
+                    forEach(f_rowhidden, (v1, nstr) => {
+                        const n = parseFloat(nstr);
+
+                        if (n < index) {
+                            f_rowhidden_new[n] = 0;
+                        } else if (n === index) {
+                            if (direction === "lefttop") {
+                                f_rowhidden_new[n + count] = 0;
+                            } else if (direction === "rightbottom") {
+                                f_rowhidden_new[n] = 0;
+                            }
+                        } else {
+                            f_rowhidden_new[n + count] = 0;
+                        }
+                    });
+                    newFilterObj.filter[k] = cloneDeep(filter[k]);
+                    newFilterObj.filter[k].rowhidden = f_rowhidden_new;
+                    newFilterObj.filter[k].str = f_r1;
+                    newFilterObj.filter[k].edr = f_r2;
+                });
+            }
+        } else if (type === "column") {
+            if (f_c1 < index) {
+                if (f_c2 === index && direction === "lefttop") {
+                    f_c2 += count;
+                } else if (f_c2 > index) {
+                    f_c2 += count;
+                }
+            } else if (f_c1 === index) {
+                if (direction === "lefttop") {
+                    f_c1 += count;
+                    f_c2 += count;
+                } else if (direction === "rightbottom" && f_c2 > index) {
+                    f_c2 += count;
+                }
+            } else {
+                f_c1 += count;
+                f_c2 += count;
+            }
+
+            if (filter != null) {
+                newFilterObj.filter = {};
+
+                forEach(filter, (v, k) => {
+                    let f_cindex = filter[k].cindex;
+
+                    if (f_cindex === index && direction === "lefttop") {
+                        f_cindex += count;
+                    } else if (f_cindex > index) {
+                        f_cindex += count;
+                    }
+
+                    newFilterObj.filter[f_cindex - f_c1] = cloneDeep(filter[k]);
+                    newFilterObj.filter[f_cindex - f_c1].cindex = f_cindex;
+                    newFilterObj.filter[f_cindex - f_c1].stc = f_c1;
+                    newFilterObj.filter[f_cindex - f_c1].edc = f_c2;
+                });
+            }
+        }
+
+        newFilterObj.filter_select = {row: [f_r1, f_r2], column: [f_c1, f_c2]};
+    }
+
+    if (newFilterObj != null && newFilterObj.filter != null) {
+        if (cfg.rowhidden == null) {
+            cfg.rowhidden = {};
+        }
+
+        forEach(newFilterObj.filter, (v, k) => {
+            const f_rowhidden = newFilterObj.filter[k].rowhidden;
+            forEach(f_rowhidden, (v1, n) => {
+                cfg.rowhidden![n] = 0;
+            });
+        });
+    }
+
+    if (newFilterObj != null) {
+        file.filter = newFilterObj.filter;
+        file.filter_select = newFilterObj.filter_select;
+    }
+
+    // Freeze config update
+    const {frozen} = file;
+    if (frozen) {
+        const normalizedIndex = direction === "lefttop" ? index - 1 : index;
+        if (
+            type === "row" &&
+            (frozen.type === "rangeRow" || frozen.type === "rangeBoth")
+        ) {
+            if ((frozen.range?.row_focus ?? -1) > normalizedIndex) {
+                frozen.range!.row_focus += count;
+            }
+        }
+        if (
+            type === "column" &&
+            (frozen.type === "rangeColumn" || frozen.type === "rangeBoth")
+        ) {
+            if ((frozen.range?.column_focus ?? -1) > normalizedIndex) {
+                frozen.range!.column_focus += count;
+            }
+        }
+    }
+
+    // Data validation config update
+    const {dataVerification} = file;
+    const newDataVerification: any = {};
+    if (dataVerification != null) {
+        forEach(dataVerification, (v, key) => {
+            const r = Number(key.split("_")[0]);
+            const c = Number(key.split("_")[1]);
+            const item = dataVerification[key];
+
+            if (type === "row") {
+                if (index < r) {
+                    newDataVerification[`${r + count}_${c}`] = item;
+                } else if (index === r) {
+                    if (direction === "lefttop") {
+                        newDataVerification[`${r + count}_${c}`] = item;
+
+                        for (let i = 0; i < count; i += 1) {
+                            newDataVerification[`${r + i}_${c}`] = item;
+                        }
+                    } else {
+                        newDataVerification[`${r}_${c}`] = item;
+
+                        for (let i = 0; i < count; i += 1) {
+                            newDataVerification[`${r + i + 1}_${c}`] = item;
+                        }
+                    }
+                } else {
+                    newDataVerification[`${r}_${c}`] = item;
+                }
+            } else if (type === "column") {
+                if (index < c) {
+                    newDataVerification[`${r}_${c + count}`] = item;
+                } else if (index === c) {
+                    if (direction === "lefttop") {
+                        newDataVerification[`${r}_${c + count}`] = item;
+
+                        for (let i = 0; i < count; i += 1) {
+                            newDataVerification[`${r}_${c + i}`] = item;
+                        }
+                    } else {
+                        newDataVerification[`${r}_${c}`] = item;
+
+                        for (let i = 0; i < count; i += 1) {
+                            newDataVerification[`${r}_${c + i + 1}`] = item;
+                        }
+                    }
+                } else {
+                    newDataVerification[`${r}_${c}`] = item;
+                }
+            }
+        });
+    }
+    file.dataVerification = newDataVerification;
+
+    // Hyperlink config update
+    const {hyperlink} = file;
+    const newHyperlink: any = {};
+    if (hyperlink != null) {
+        forEach(hyperlink, (v, key) => {
+            const r = Number(key.split("_")[0]);
+            const c = Number(key.split("_")[1]);
+            const item = hyperlink[key];
+
+            if (type === "row") {
+                if (index < r) {
+                    newHyperlink[`${r + count}_${c}`] = item;
+                } else if (index === r) {
+                    if (direction === "lefttop") {
+                        newHyperlink[`${r + count}_${c}`] = item;
+                    } else {
+                        newHyperlink[`${r}_${c}`] = item;
+                    }
+                } else {
+                    newHyperlink[`${r}_${c}`] = item;
+                }
+            } else if (type === "column") {
+                if (index < c) {
+                    newHyperlink[`${r}_${c + count}`] = item;
+                } else if (index === c) {
+                    if (direction === "lefttop") {
+                        newHyperlink[`${r}_${c + count}`] = item;
+                    } else {
+                        newHyperlink[`${r}_${c}`] = item;
+                    }
+                } else {
+                    newHyperlink[`${r}_${c}`] = item;
+                }
+            }
+        });
+    }
+    file.hyperlink = newHyperlink;
+}
+
+function shiftStateOnlyFieldsForDelete(
+    ctx: Context,
+    op: {type: "row" | "column"; start: number; end: number; id: string},
+) {
+    const {type, start, end} = op;
+    const id = op.id || ctx.currentSheetId;
+    const curOrder = getSheetIndex(ctx, id);
+    if (curOrder == null) return;
+    const file = ctx.luckysheetfile[curOrder];
+    if (!file) return;
+
+    const slen = end - start + 1;
+
+    // Formula config update (calcChain entries + cell.f rewrites)
+    const newCalcChain = [];
+    for (
+        let SheetIndex = 0;
+        SheetIndex < ctx.luckysheetfile.length;
+        SheetIndex += 1
+    ) {
+        if (
+            isNil(ctx.luckysheetfile[SheetIndex].calcChain) ||
+            ctx.luckysheetfile.length === 0
+        ) {
+            continue;
+        }
+        const {calcChain} = ctx.luckysheetfile[SheetIndex];
+        const {data} = ctx.luckysheetfile[SheetIndex];
+        for (let i = 0; i < calcChain!.length; i += 1) {
+            const calc: any = cloneDeep(calcChain![i]);
+            const calc_r = calc.r;
+            const calc_c = calc.c;
+            const calc_i = calc.id;
+            const calc_funcStr = getcellFormula(ctx, calc_r, calc_c, calc_i);
+
+            if (type === "row" && SheetIndex === curOrder) {
+                if (calc_r < start || calc_r > end) {
+                    const functionStr = `=${functionStrChange(
+                        calc_funcStr,
+                        "del",
+                        "row",
+                        null,
+                        start,
+                        slen
+                    )}`;
+
+                    if (data![calc_r]?.[calc_c]?.f === calc_funcStr) {
+                        data![calc_r]![calc_c]!.f = functionStr;
+                    }
+
+                    if (calc_r > end) {
+                        calc.r = calc_r - slen;
+                    }
+
+                    newCalcChain.push(calc);
+                }
+            } else if (type === "row") {
+                const functionStr = `=${functionStrChange(
+                    calc_funcStr,
+                    "del",
+                    "row",
+                    null,
+                    start,
+                    slen
+                )}`;
+
+                if (data![calc_r]?.[calc_c]?.f === calc_funcStr) {
+                    data![calc_r]![calc_c]!.f = functionStr;
+                }
+            } else if (type === "column" && SheetIndex === curOrder) {
+                if (calc_c < start || calc_c > end) {
+                    const functionStr = `=${functionStrChange(
+                        calc_funcStr,
+                        "del",
+                        "col",
+                        null,
+                        start,
+                        slen
+                    )}`;
+
+                    if (data![calc_r]?.[calc_c]?.f === calc_funcStr) {
+                        data![calc_r]![calc_c]!.f = functionStr;
+                    }
+
+                    if (calc_c > end) {
+                        calc.c = calc_c - slen;
+                    }
+
+                    newCalcChain.push(calc);
+                }
+            } else if (type === "column") {
+                const functionStr = `=${functionStrChange(
+                    calc_funcStr,
+                    "del",
+                    "col",
+                    null,
+                    start,
+                    slen
+                )}`;
+
+                if (data![calc_r]?.[calc_c]?.f === calc_funcStr) {
+                    data![calc_r]![calc_c]!.f = functionStr;
+                }
+            }
+        }
+    }
+    file.calcChain = newCalcChain;
+
+    // Filter config update
+    const cfg = file.config || {};
+    const {filter_select} = file;
+    const {filter} = file;
+    let newFilterObj: any = null;
+    if (!isEmpty(filter_select) && filter_select != null) {
+        newFilterObj = {filter_select: null, filter: null};
+
+        let f_r1 = filter_select.row[0];
+        let f_r2 = filter_select.row[1];
+        let f_c1 = filter_select.column[0];
+        let f_c2 = filter_select.column[1];
+
+        if (type === "row") {
+            if (f_r1 > end) {
+                f_r1 -= slen;
+                f_r2 -= slen;
+
+                newFilterObj.filter_select = {
+                    row: [f_r1, f_r2],
+                    column: [f_c1, f_c2],
+                };
+            } else if (f_r1 < start) {
+                if (f_r2 < start) {
+                } else if (f_r2 <= end) {
+                    f_r2 = start - 1;
+                } else {
+                    f_r2 -= slen;
+                }
+
+                newFilterObj.filter_select = {
+                    row: [f_r1, f_r2],
+                    column: [f_c1, f_c2],
+                };
+            }
+
+            if (newFilterObj.filter_select != null && filter != null) {
+                forEach(filter, (v, k) => {
+                    const f_rowhidden = filter[k].rowhidden;
+                    const f_rowhidden_new: any = {};
+                    forEach(f_rowhidden, (v1, nstr) => {
+                        const n = parseFloat(nstr);
+
+                        if (n < start) {
+                            f_rowhidden_new[n] = 0;
+                        } else if (n > end) {
+                            f_rowhidden_new[n - slen] = 0;
+                        }
+                    });
+
+                    if (!isEmpty(f_rowhidden_new)) {
+                        if (newFilterObj.filter == null) {
+                            newFilterObj.filter = {};
+                        }
+
+                        newFilterObj.filter[k] = cloneDeep(filter[k]);
+                        newFilterObj.filter[k].rowhidden = f_rowhidden_new;
+                        newFilterObj.filter[k].str = f_r1;
+                        newFilterObj.filter[k].edr = f_r2;
+                    }
+                });
+            }
+        } else if (type === "column") {
+            if (f_c1 > end) {
+                f_c1 -= slen;
+                f_c2 -= slen;
+
+                newFilterObj.filter_select = {
+                    row: [f_r1, f_r2],
+                    column: [f_c1, f_c2],
+                };
+            } else if (f_c1 < start) {
+                if (f_c2 < start) {
+                } else if (f_c2 <= end) {
+                    f_c2 = start - 1;
+                } else {
+                    f_c2 -= slen;
+                }
+
+                newFilterObj.filter_select = {
+                    row: [f_r1, f_r2],
+                    column: [f_c1, f_c2],
+                };
+            } else {
+                if (f_c2 > end) {
+                    f_c1 = start;
+                    f_c2 -= slen;
+
+                    newFilterObj.filter_select = {
+                        row: [f_r1, f_r2],
+                        column: [f_c1, f_c2],
+                    };
+                }
+            }
+
+            if (newFilterObj.filter_select != null && filter != null) {
+                forEach(filter, (v, k) => {
+                    let f_cindex = filter[k].cindex;
+
+                    if (f_cindex < start) {
+                        if (newFilterObj.filter == null) {
+                            newFilterObj.filter = {};
+                        }
+
+                        newFilterObj.filter[f_cindex - f_c1] = cloneDeep(filter[k]);
+                        newFilterObj.filter[f_cindex - f_c1].edc = f_c2;
+                    } else if (f_cindex > end) {
+                        f_cindex -= slen;
+
+                        if (newFilterObj.filter == null) {
+                            newFilterObj.filter = {};
+                        }
+
+                        newFilterObj.filter[f_cindex - f_c1] = cloneDeep(filter[k]);
+                        newFilterObj.filter[f_cindex - f_c1].cindex = f_cindex;
+                        newFilterObj.filter[f_cindex - f_c1].stc = f_c1;
+                        newFilterObj.filter[f_cindex - f_c1].edc = f_c2;
+                    }
+                });
+            }
+        }
+    }
+
+    if (newFilterObj != null && newFilterObj.filter != null) {
+        if (cfg.rowhidden == null) {
+            cfg.rowhidden = {};
+        }
+
+        forEach(newFilterObj.filter, (v, k) => {
+            const f_rowhidden = newFilterObj.filter[k].rowhidden;
+            forEach(f_rowhidden, (v1, n) => {
+                cfg.rowhidden![n] = 0;
+            });
+        });
+    }
+
+    if (newFilterObj != null) {
+        file.filter = newFilterObj.filter;
+        file.filter_select = newFilterObj.filter_select;
+    }
+
+    // Freeze config update
+    const {frozen} = file;
+    if (frozen) {
+        if (
+            type === "row" &&
+            (frozen.type === "rangeRow" || frozen.type === "rangeBoth")
+        ) {
+            if ((frozen.range?.row_focus ?? -1) >= start) {
+                frozen.range!.row_focus -=
+                    Math.min(end, frozen.range!.row_focus) - start + 1;
+            }
+        }
+        if (
+            type === "column" &&
+            (frozen.type === "rangeColumn" || frozen.type === "rangeBoth")
+        ) {
+            if ((frozen.range?.column_focus ?? -1) >= start) {
+                frozen.range!.column_focus -=
+                    Math.min(end, frozen.range!.column_focus) - start + 1;
+            }
+        }
+    }
+
+    // Data validation config update
+    const {dataVerification} = file;
+    const newDataVerification: any = {};
+    if (dataVerification != null) {
+        forEach(dataVerification, (v, key) => {
+            const r = Number(key.split("_")[0]);
+            const c = Number(key.split("_")[1]);
+            const item = dataVerification[key];
+
+            if (type === "row") {
+                if (r < start) {
+                    newDataVerification[`${r}_${c}`] = item;
+                } else if (r > end) {
+                    newDataVerification[`${r - slen}_${c}`] = item;
+                }
+            } else if (type === "column") {
+                if (c < start) {
+                    newDataVerification[`${r}_${c}`] = item;
+                } else if (c > end) {
+                    newDataVerification[`${r}_${c - slen}`] = item;
+                }
+            }
+        });
+    }
+    file.dataVerification = newDataVerification;
+
+    // Hyperlink config update
+    const {hyperlink} = file;
+    const newHyperlink: any = {};
+    if (hyperlink != null) {
+        forEach(hyperlink, (v, key) => {
+            const r = Number(key.split("_")[0]);
+            const c = Number(key.split("_")[1]);
+            const item = hyperlink[key];
+
+            if (type === "row") {
+                if (r < start) {
+                    newHyperlink[`${r}_${c}`] = item;
+                } else if (r > end) {
+                    newHyperlink[`${r - slen}_${c}`] = item;
+                }
+            } else if (type === "column") {
+                if (c < start) {
+                    newHyperlink[`${r}_${c}`] = item;
+                } else if (c > end) {
+                    newHyperlink[`${r}_${c - slen}`] = item;
+                }
+            }
+        });
+    }
+    file.hyperlink = newHyperlink;
+}
+
+function adjustSelectionForInsert(
+    ctx: Context,
+    op: {type: "row" | "column"; index: number; count: number; direction: "lefttop" | "rightbottom"; id: string},
+) {
+    const {type, index, count, direction} = op;
+    const id = op.id || ctx.currentSheetId;
+    const curOrder = getSheetIndex(ctx, id);
+    if (curOrder == null) return;
+    const file = ctx.luckysheetfile[curOrder];
+    if (!file) return;
+    const d = file.data;
+    if (!d) return;
+
+    let range = null;
+    if (type === "row") {
+        if (direction === "lefttop") {
+            range = [
+                {row: [index, index + count - 1], column: [0, d[0].length - 1]},
+            ];
+        } else {
+            range = [
+                {row: [index + 1, index + count], column: [0, d[0].length - 1]},
+            ];
+        }
+        file.row = d.length;
+    } else {
+        if (direction === "lefttop") {
+            range = [{row: [0, d.length - 1], column: [index, index + count - 1]}];
+        } else {
+            range = [{row: [0, d.length - 1], column: [index + 1, index + count]}];
+        }
+        file.column = d[0]?.length;
+    }
+
+    file.luckysheet_select_save = range;
+    if (file.id === ctx.currentSheetId) {
+        ctx.luckysheet_select_save = range;
+    }
+}
+
+function adjustSelectionForDelete(
+    ctx: Context,
+    op: {type: "row" | "column"; start: number; end: number; id: string},
+) {
+    // Clear selection when selected elements are deleted
+    ctx.luckysheet_select_save = undefined;
+}
+
 /**
  * Insert rows or columns
  * @param {string} type 'row' or 'column'
@@ -165,220 +887,7 @@ export function insertRowCol(
     });
     cfg.merge = merge_new;
 
-    // Formula config update
-    const newCalcChain = [];
-    for (
-        let SheetIndex = 0;
-        SheetIndex < ctx.luckysheetfile.length;
-        SheetIndex += 1
-    ) {
-        if (
-            isNil(ctx.luckysheetfile[SheetIndex].calcChain) ||
-            ctx.luckysheetfile.length === 0
-        ) {
-            continue;
-        }
-        const {calcChain} = ctx.luckysheetfile[SheetIndex];
-        const {data} = ctx.luckysheetfile[SheetIndex];
-        for (let i = 0; i < calcChain!.length; i += 1) {
-            const calc: any = cloneDeep(calcChain![i]);
-            const calc_r = calc.r;
-            const calc_c = calc.c;
-            const calc_i = calc.id;
-            const calc_funcStr = getcellFormula(ctx, calc_r, calc_c, calc_i);
-
-            if (type === "row" && SheetIndex === curOrder) {
-                const functionStr = `=${functionStrChange(
-                    calc_funcStr,
-                    "add",
-                    "row",
-                    direction,
-                    index,
-                    count
-                )}`;
-
-                if (d[calc_r]?.[calc_c]?.f === calc_funcStr) {
-                    d[calc_r]![calc_c]!.f = functionStr;
-                }
-
-                if (direction === "lefttop") {
-                    if (calc_r >= index) {
-                        calc.r += count;
-                    }
-                } else if (direction === "rightbottom") {
-                    if (calc_r > index) {
-                        calc.r += count;
-                    }
-                }
-
-                newCalcChain.push(calc);
-            } else if (type === "row") {
-                const functionStr = `=${functionStrChange(
-                    calc_funcStr,
-                    "add",
-                    "row",
-                    direction,
-                    index,
-                    count
-                )}`;
-
-                if (data![calc_r]?.[calc_c]?.f === calc_funcStr) {
-                    data![calc_r]![calc_c]!.f = functionStr;
-                }
-            } else if (type === "column" && SheetIndex === curOrder) {
-                const functionStr = `=${functionStrChange(
-                    calc_funcStr,
-                    "add",
-                    "col",
-                    direction,
-                    index,
-                    count
-                )}`;
-
-                if (d[calc_r]?.[calc_c]?.f === calc_funcStr) {
-                    d[calc_r]![calc_c]!.f = functionStr;
-                }
-
-                if (direction === "lefttop") {
-                    if (calc_c >= index) {
-                        calc.c += count;
-                    }
-                } else if (direction === "rightbottom") {
-                    if (calc_c > index) {
-                        calc.c += count;
-                    }
-                }
-
-                newCalcChain.push(calc);
-            } else if (type === "column") {
-                const functionStr = `=${functionStrChange(
-                    calc_funcStr,
-                    "add",
-                    "col",
-                    direction,
-                    index,
-                    count
-                )}`;
-
-                if (data![calc_r]?.[calc_c]?.f === calc_funcStr) {
-                    data![calc_r]![calc_c]!.f = functionStr;
-                }
-            }
-        }
-    }
-
-    // Filter config update
-    const {filter_select} = file;
-    const {filter} = file;
-    let newFilterObj: any = null;
-    if (!isEmpty(filter_select) && filter_select != null) {
-        newFilterObj = {filter_select: null, filter: null};
-
-        let f_r1 = filter_select.row[0];
-        let f_r2 = filter_select.row[1];
-        let f_c1 = filter_select.column[0];
-        let f_c2 = filter_select.column[1];
-
-        if (type === "row") {
-            if (f_r1 < index) {
-                if (f_r2 === index && direction === "lefttop") {
-                    f_r2 += count;
-                } else if (f_r2 > index) {
-                    f_r2 += count;
-                }
-            } else if (f_r1 === index) {
-                if (direction === "lefttop") {
-                    f_r1 += count;
-                    f_r2 += count;
-                } else if (direction === "rightbottom" && f_r2 > index) {
-                    f_r2 += count;
-                }
-            } else {
-                f_r1 += count;
-                f_r2 += count;
-            }
-
-            if (filter != null) {
-                newFilterObj.filter = {};
-
-                forEach(filter, (v, k) => {
-                    const f_rowhidden = filter[k].rowhidden;
-                    const f_rowhidden_new: any = {};
-                    forEach(f_rowhidden, (v1, nstr) => {
-                        const n = parseFloat(nstr);
-
-                        if (n < index) {
-                            f_rowhidden_new[n] = 0;
-                        } else if (n === index) {
-                            if (direction === "lefttop") {
-                                f_rowhidden_new[n + count] = 0;
-                            } else if (direction === "rightbottom") {
-                                f_rowhidden_new[n] = 0;
-                            }
-                        } else {
-                            f_rowhidden_new[n + count] = 0;
-                        }
-                    });
-                    newFilterObj.filter[k] = cloneDeep(filter[k]);
-                    newFilterObj.filter[k].rowhidden = f_rowhidden_new;
-                    newFilterObj.filter[k].str = f_r1;
-                    newFilterObj.filter[k].edr = f_r2;
-                });
-            }
-        } else if (type === "column") {
-            if (f_c1 < index) {
-                if (f_c2 === index && direction === "lefttop") {
-                    f_c2 += count;
-                } else if (f_c2 > index) {
-                    f_c2 += count;
-                }
-            } else if (f_c1 === index) {
-                if (direction === "lefttop") {
-                    f_c1 += count;
-                    f_c2 += count;
-                } else if (direction === "rightbottom" && f_c2 > index) {
-                    f_c2 += count;
-                }
-            } else {
-                f_c1 += count;
-                f_c2 += count;
-            }
-
-            if (filter != null) {
-                newFilterObj.filter = {};
-
-                forEach(filter, (v, k) => {
-                    let f_cindex = filter[k].cindex;
-
-                    if (f_cindex === index && direction === "lefttop") {
-                        f_cindex += count;
-                    } else if (f_cindex > index) {
-                        f_cindex += count;
-                    }
-
-                    newFilterObj.filter[f_cindex - f_c1] = cloneDeep(filter[k]);
-                    newFilterObj.filter[f_cindex - f_c1].cindex = f_cindex;
-                    newFilterObj.filter[f_cindex - f_c1].stc = f_c1;
-                    newFilterObj.filter[f_cindex - f_c1].edc = f_c2;
-                });
-            }
-        }
-
-        newFilterObj.filter_select = {row: [f_r1, f_r2], column: [f_c1, f_c2]};
-    }
-
-    if (newFilterObj != null && newFilterObj.filter != null) {
-        if (cfg.rowhidden == null) {
-            cfg.rowhidden = {};
-        }
-
-        forEach(newFilterObj.filter, (v, k) => {
-            const f_rowhidden = newFilterObj.filter[k].rowhidden;
-            forEach(f_rowhidden, (v1, n) => {
-                cfg.rowhidden![n] = 0;
-            });
-        });
-    }
+    shiftStateOnlyFieldsForInsert(ctx, {...op, id});
 
     // Conditional formatting config update
     const CFarr = file.luckysheet_conditionformat_save;
@@ -496,118 +1005,6 @@ export function insertRowCol(
 
             newAFarr.push(af);
         }
-    }
-
-    // Freeze config update
-    const {frozen} = file;
-    if (frozen) {
-        const normalizedIndex = direction === "lefttop" ? index - 1 : index;
-        if (
-            type === "row" &&
-            (frozen.type === "rangeRow" || frozen.type === "rangeBoth")
-        ) {
-            if ((frozen.range?.row_focus ?? -1) > normalizedIndex) {
-                frozen.range!.row_focus += count;
-            }
-        }
-        if (
-            type === "column" &&
-            (frozen.type === "rangeColumn" || frozen.type === "rangeBoth")
-        ) {
-            if ((frozen.range?.column_focus ?? -1) > normalizedIndex) {
-                frozen.range!.column_focus += count;
-            }
-        }
-    }
-
-    // Data validation config update
-    const {dataVerification} = file;
-    const newDataVerification: any = {};
-    if (dataVerification != null) {
-        forEach(dataVerification, (v, key) => {
-            const r = Number(key.split("_")[0]);
-            const c = Number(key.split("_")[1]);
-            const item = dataVerification[key];
-
-            if (type === "row") {
-                if (index < r) {
-                    newDataVerification[`${r + count}_${c}`] = item;
-                } else if (index === r) {
-                    if (direction === "lefttop") {
-                        newDataVerification[`${r + count}_${c}`] = item;
-
-                        for (let i = 0; i < count; i += 1) {
-                            newDataVerification[`${r + i}_${c}`] = item;
-                        }
-                    } else {
-                        newDataVerification[`${r}_${c}`] = item;
-
-                        for (let i = 0; i < count; i += 1) {
-                            newDataVerification[`${r + i + 1}_${c}`] = item;
-                        }
-                    }
-                } else {
-                    newDataVerification[`${r}_${c}`] = item;
-                }
-            } else if (type === "column") {
-                if (index < c) {
-                    newDataVerification[`${r}_${c + count}`] = item;
-                } else if (index === c) {
-                    if (direction === "lefttop") {
-                        newDataVerification[`${r}_${c + count}`] = item;
-
-                        for (let i = 0; i < count; i += 1) {
-                            newDataVerification[`${r}_${c + i}`] = item;
-                        }
-                    } else {
-                        newDataVerification[`${r}_${c}`] = item;
-
-                        for (let i = 0; i < count; i += 1) {
-                            newDataVerification[`${r}_${c + i + 1}`] = item;
-                        }
-                    }
-                } else {
-                    newDataVerification[`${r}_${c}`] = item;
-                }
-            }
-        });
-    }
-
-    // Hyperlink config update
-    const {hyperlink} = file;
-    const newHyperlink: any = {};
-    if (hyperlink != null) {
-        forEach(hyperlink, (v, key) => {
-            const r = Number(key.split("_")[0]);
-            const c = Number(key.split("_")[1]);
-            const item = hyperlink[key];
-
-            if (type === "row") {
-                if (index < r) {
-                    newHyperlink[`${r + count}_${c}`] = item;
-                } else if (index === r) {
-                    if (direction === "lefttop") {
-                        newHyperlink[`${r + count}_${c}`] = item;
-                    } else {
-                        newHyperlink[`${r}_${c}`] = item;
-                    }
-                } else {
-                    newHyperlink[`${r}_${c}`] = item;
-                }
-            } else if (type === "column") {
-                if (index < c) {
-                    newHyperlink[`${r}_${c + count}`] = item;
-                } else if (index === c) {
-                    if (direction === "lefttop") {
-                        newHyperlink[`${r}_${c + count}`] = item;
-                    } else {
-                        newHyperlink[`${r}_${c}`] = item;
-                    }
-                } else {
-                    newHyperlink[`${r}_${c}`] = item;
-                }
-            }
-        });
     }
 
     if (type === "row") {
@@ -1082,65 +1479,14 @@ export function insertRowCol(
     // Refresh when modifying the current sheet
     file.data = d;
     file.config = cfg;
-    file.calcChain = newCalcChain;
-    if (newFilterObj != null) {
-        file.filter = newFilterObj.filter;
-        file.filter_select = newFilterObj.filter_select;
-    }
     file.luckysheet_conditionformat_save = newCFarr;
     file.luckysheet_alternateformat_save = newAFarr;
-    file.dataVerification = newDataVerification;
-    file.hyperlink = newHyperlink;
     if (file.id === ctx.currentSheetId) {
         ctx.config = cfg;
-        // jfrefreshgrid_adRC(
-        //   d,
-        //   cfg,
-        //   "addRC",
-        //   {
-        //     index,
-        //     len: value,
-        //     direction,
-        //     rc: type1,
-        //     restore: false,
-        //   },
-        //   newCalcChain,
-        //   newFilterObj,
-        //   newCFarr,
-        //   newAFarr,
-        //   newFreezen,
-        //   newDataVerification,
-        //   newHyperlink
-        // );
-    }
-
-    let range = null;
-    if (type === "row") {
-        if (direction === "lefttop") {
-            range = [
-                {row: [index, index + count - 1], column: [0, d[0].length - 1]},
-            ];
-        } else {
-            range = [
-                {row: [index + 1, index + count], column: [0, d[0].length - 1]},
-            ];
-        }
-        file.row = file.data.length;
-    } else {
-        if (direction === "lefttop") {
-            range = [{row: [0, d.length - 1], column: [index, index + count - 1]}];
-        } else {
-            range = [{row: [0, d.length - 1], column: [index + 1, index + count]}];
-        }
-        file.column = file.data[0]?.length;
     }
 
     if (changeSelection) {
-        file.luckysheet_select_save = range;
-        if (file.id === ctx.currentSheetId) {
-            ctx.luckysheet_select_save = range;
-            // selectHightlightShow();
-        }
+        adjustSelectionForInsert(ctx, {...op, id});
     }
 
     refreshLocalMergeData(merge_new, file);
@@ -1307,234 +1653,7 @@ export function deleteRowCol(
     });
     cfg.merge = merge_new;
 
-    // Formula config update
-    const newCalcChain = [];
-    for (
-        let SheetIndex = 0;
-        SheetIndex < ctx.luckysheetfile.length;
-        SheetIndex += 1
-    ) {
-        if (
-            isNil(ctx.luckysheetfile[SheetIndex].calcChain) ||
-            ctx.luckysheetfile.length === 0
-        ) {
-            continue;
-        }
-        const {calcChain} = ctx.luckysheetfile[SheetIndex];
-        const {data} = ctx.luckysheetfile[SheetIndex];
-        for (let i = 0; i < calcChain!.length; i += 1) {
-            const calc: any = cloneDeep(calcChain![i]);
-            const calc_r = calc.r;
-            const calc_c = calc.c;
-            const calc_i = calc.id;
-            const calc_funcStr = getcellFormula(ctx, calc_r, calc_c, calc_i);
-
-            if (type === "row" && SheetIndex === curOrder) {
-                if (calc_r < start || calc_r > end) {
-                    const functionStr = `=${functionStrChange(
-                        calc_funcStr,
-                        "del",
-                        "row",
-                        null,
-                        start,
-                        slen
-                    )}`;
-
-                    if (data![calc_r]?.[calc_c]?.f === calc_funcStr) {
-                        data![calc_r]![calc_c]!.f = functionStr;
-                    }
-
-                    if (calc_r > end) {
-                        calc.r = calc_r - slen;
-                    }
-
-                    newCalcChain.push(calc);
-                }
-            } else if (type === "row") {
-                const functionStr = `=${functionStrChange(
-                    calc_funcStr,
-                    "del",
-                    "row",
-                    null,
-                    start,
-                    slen
-                )}`;
-
-                if (data![calc_r]?.[calc_c]?.f === calc_funcStr) {
-                    data![calc_r]![calc_c]!.f = functionStr;
-                }
-            } else if (type === "column" && SheetIndex === curOrder) {
-                if (calc_c < start || calc_c > end) {
-                    const functionStr = `=${functionStrChange(
-                        calc_funcStr,
-                        "del",
-                        "col",
-                        null,
-                        start,
-                        slen
-                    )}`;
-
-                    if (data![calc_r]?.[calc_c]?.f === calc_funcStr) {
-                        data![calc_r]![calc_c]!.f = functionStr;
-                    }
-
-                    if (calc_c > end) {
-                        calc.c = calc_c - slen;
-                    }
-
-                    newCalcChain.push(calc);
-                }
-            } else if (type === "column") {
-                const functionStr = `=${functionStrChange(
-                    calc_funcStr,
-                    "del",
-                    "col",
-                    null,
-                    start,
-                    slen
-                )}`;
-
-                if (data![calc_r]?.[calc_c]?.f === calc_funcStr) {
-                    data![calc_r]![calc_c]!.f = functionStr;
-                }
-            }
-        }
-    }
-
-    // Filter config update
-    const {filter_select} = file;
-    const {filter} = file;
-    let newFilterObj: any = null;
-    if (!isEmpty(filter_select) && filter_select != null) {
-        newFilterObj = {filter_select: null, filter: null};
-
-        let f_r1 = filter_select.row[0];
-        let f_r2 = filter_select.row[1];
-        let f_c1 = filter_select.column[0];
-        let f_c2 = filter_select.column[1];
-
-        if (type === "row") {
-            if (f_r1 > end) {
-                f_r1 -= slen;
-                f_r2 -= slen;
-
-                newFilterObj.filter_select = {
-                    row: [f_r1, f_r2],
-                    column: [f_c1, f_c2],
-                };
-            } else if (f_r1 < start) {
-                if (f_r2 < start) {
-                } else if (f_r2 <= end) {
-                    f_r2 = start - 1;
-                } else {
-                    f_r2 -= slen;
-                }
-
-                newFilterObj.filter_select = {
-                    row: [f_r1, f_r2],
-                    column: [f_c1, f_c2],
-                };
-            }
-
-            if (newFilterObj.filter_select != null && filter != null) {
-                forEach(filter, (v, k) => {
-                    const f_rowhidden = filter[k].rowhidden;
-                    const f_rowhidden_new: any = {};
-                    forEach(f_rowhidden, (v1, nstr) => {
-                        const n = parseFloat(nstr);
-
-                        if (n < start) {
-                            f_rowhidden_new[n] = 0;
-                        } else if (n > end) {
-                            f_rowhidden_new[n - slen] = 0;
-                        }
-                    });
-
-                    if (!isEmpty(f_rowhidden_new)) {
-                        if (newFilterObj.filter == null) {
-                            newFilterObj.filter = {};
-                        }
-
-                        newFilterObj.filter[k] = cloneDeep(filter[k]);
-                        newFilterObj.filter[k].rowhidden = f_rowhidden_new;
-                        newFilterObj.filter[k].str = f_r1;
-                        newFilterObj.filter[k].edr = f_r2;
-                    }
-                });
-            }
-        } else if (type === "column") {
-            if (f_c1 > end) {
-                f_c1 -= slen;
-                f_c2 -= slen;
-
-                newFilterObj.filter_select = {
-                    row: [f_r1, f_r2],
-                    column: [f_c1, f_c2],
-                };
-            } else if (f_c1 < start) {
-                if (f_c2 < start) {
-                } else if (f_c2 <= end) {
-                    f_c2 = start - 1;
-                } else {
-                    f_c2 -= slen;
-                }
-
-                newFilterObj.filter_select = {
-                    row: [f_r1, f_r2],
-                    column: [f_c1, f_c2],
-                };
-            } else {
-                if (f_c2 > end) {
-                    f_c1 = start;
-                    f_c2 -= slen;
-
-                    newFilterObj.filter_select = {
-                        row: [f_r1, f_r2],
-                        column: [f_c1, f_c2],
-                    };
-                }
-            }
-
-            if (newFilterObj.filter_select != null && filter != null) {
-                forEach(filter, (v, k) => {
-                    let f_cindex = filter[k].cindex;
-
-                    if (f_cindex < start) {
-                        if (newFilterObj.filter == null) {
-                            newFilterObj.filter = {};
-                        }
-
-                        newFilterObj.filter[f_cindex - f_c1] = cloneDeep(filter[k]);
-                        newFilterObj.filter[f_cindex - f_c1].edc = f_c2;
-                    } else if (f_cindex > end) {
-                        f_cindex -= slen;
-
-                        if (newFilterObj.filter == null) {
-                            newFilterObj.filter = {};
-                        }
-
-                        newFilterObj.filter[f_cindex - f_c1] = cloneDeep(filter[k]);
-                        newFilterObj.filter[f_cindex - f_c1].cindex = f_cindex;
-                        newFilterObj.filter[f_cindex - f_c1].stc = f_c1;
-                        newFilterObj.filter[f_cindex - f_c1].edc = f_c2;
-                    }
-                });
-            }
-        }
-    }
-
-    if (newFilterObj != null && newFilterObj.filter != null) {
-        if (cfg.rowhidden == null) {
-            cfg.rowhidden = {};
-        }
-
-        forEach(newFilterObj.filter, (v, k) => {
-            const f_rowhidden = newFilterObj.filter[k].rowhidden;
-            forEach(f_rowhidden, (v1, n) => {
-                cfg.rowhidden![n] = 0;
-            });
-        });
-    }
+    shiftStateOnlyFieldsForDelete(ctx, {type, start, end, id});
 
     // Conditional formatting config update
     const CFarr = file.luckysheet_conditionformat_save;
@@ -1666,79 +1785,6 @@ export function deleteRowCol(
                 }
             }
         }
-    }
-
-    // Freeze config update
-    const {frozen} = file;
-    if (frozen) {
-        if (
-            type === "row" &&
-            (frozen.type === "rangeRow" || frozen.type === "rangeBoth")
-        ) {
-            if ((frozen.range?.row_focus ?? -1) >= start) {
-                frozen.range!.row_focus -=
-                    Math.min(end, frozen.range!.row_focus) - start + 1;
-            }
-        }
-        if (
-            type === "column" &&
-            (frozen.type === "rangeColumn" || frozen.type === "rangeBoth")
-        ) {
-            if ((frozen.range?.column_focus ?? -1) >= start) {
-                frozen.range!.column_focus -=
-                    Math.min(end, frozen.range!.column_focus) - start + 1;
-            }
-        }
-    }
-
-    // Data validation config update
-    const {dataVerification} = file;
-    const newDataVerification: any = {};
-    if (dataVerification != null) {
-        forEach(dataVerification, (v, key) => {
-            const r = Number(key.split("_")[0]);
-            const c = Number(key.split("_")[1]);
-            const item = dataVerification[key];
-
-            if (type === "row") {
-                if (r < start) {
-                    newDataVerification[`${r}_${c}`] = item;
-                } else if (r > end) {
-                    newDataVerification[`${r - slen}_${c}`] = item;
-                }
-            } else if (type === "column") {
-                if (c < start) {
-                    newDataVerification[`${r}_${c}`] = item;
-                } else if (c > end) {
-                    newDataVerification[`${r}_${c - slen}`] = item;
-                }
-            }
-        });
-    }
-
-    // Hyperlink config update
-    const {hyperlink} = file;
-    const newHyperlink: any = {};
-    if (hyperlink != null) {
-        forEach(hyperlink, (v, key) => {
-            const r = Number(key.split("_")[0]);
-            const c = Number(key.split("_")[1]);
-            const item = hyperlink[key];
-
-            if (type === "row") {
-                if (r < start) {
-                    newHyperlink[`${r}_${c}`] = item;
-                } else if (r > end) {
-                    newHyperlink[`${r - slen}_${c}`] = item;
-                }
-            } else if (type === "column") {
-                if (c < start) {
-                    newHyperlink[`${r}_${c}`] = item;
-                } else if (c > end) {
-                    newHyperlink[`${r}_${c - slen}`] = item;
-                }
-            }
-        });
     }
 
     // Main logic
@@ -2033,41 +2079,19 @@ export function deleteRowCol(
         file.column = d[0]?.length;
     }
 
-    // Clear selection when selected elements are deleted
-    ctx.luckysheet_select_save = undefined;
+    adjustSelectionForDelete(ctx, {type, start, end, id});
 
     // Refresh when modifying the current sheet
     file.data = d;
     file.config = cfg;
-    file.calcChain = newCalcChain;
-    if (newFilterObj != null) {
-        file.filter = newFilterObj.filter;
-        file.filter_select = newFilterObj.filter_select;
-    }
     file.luckysheet_conditionformat_save = newCFarr;
     file.luckysheet_alternateformat_save = newAFarr;
-    file.dataVerification = newDataVerification;
-    file.hyperlink = newHyperlink;
 
     refreshLocalMergeData(merge_new, file);
     ctx.formulaCache.formulaCellInfoMap = null;
 
     if (file.id === ctx.currentSheetId) {
         ctx.config = cfg;
-        // jfrefreshgrid_adRC(
-        //   d,
-        //   cfg,
-        //   "delRC",
-        //   { index: st, len: ed - st + 1, rc: type1 },
-        //   newCalcChain,
-        //   newFilterObj,
-        //   newCFarr,
-        //   newAFarr,
-        //   newFreezen,
-        //   newDataVerification,
-        //   newHyperlink
-        // );
-    } else {
     }
 }
 
