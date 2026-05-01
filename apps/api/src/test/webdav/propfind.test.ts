@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { driveGet, drivePost, getTestContext } from '../setup';
-import { webdavRequest } from './setup';
+import { getDefaultMountId, webdavRequest } from './setup';
 
 describe('WebDAV resource PROPFIND', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -8,11 +8,7 @@ describe('WebDAV resource PROPFIND', () => {
 
     beforeAll(async () => {
         ctx = await getTestContext();
-        const res = await webdavRequest(ctx.alice.user.email, 'PROPFIND', `/webdav/${ctx.alice.user.id}/`);
-        const body = await res.text();
-        const m = body.match(new RegExp(`/webdav/${ctx.alice.user.id}/([^/<]+)/`));
-        if (!m) throw new Error('could not find mount id');
-        mountId = m[1];
+        mountId = await getDefaultMountId(ctx.alice.user.sessionToken, ctx.alice.user.id);
     });
 
     test('Depth 0 on the root collection returns the collection only', async () => {

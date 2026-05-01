@@ -1,7 +1,6 @@
 import Elysia from 'elysia';
 import { authenticateBasic } from '../auth/protocol-auth';
 import { ApiError } from '../core/errors';
-import { handleDiscoveryOwner, handleDiscoveryRoot } from './discovery';
 import { handleLock, handleUnlock } from './locks';
 import { handleCopy, handleMove } from './move-copy';
 import { handleResourcePropfind } from './propfind';
@@ -60,19 +59,11 @@ async function readXmlBody(request: Request): Promise<string> {
     return new TextDecoder().decode(merged);
 }
 
+// The mount URL is /webdav/<ownerId>/<mountId>/. Levels above (/webdav/, /webdav/<ownerId>/)
+// are intentionally not exposed: there is no auto-discovery API, and any client that
+// navigates "up" from a mounted URL gets 404. Each accessible mount's URL is listed in
+// the Space services page (apps/space/src/routes/_auth.services.tsx) for users to copy.
 export const webdavRouter = new Elysia({ name: 'webdav', prefix: '/webdav' })
-    .route('PROPFIND', '/', async ({ request }) => {
-        const user = await authenticateBasic(request);
-        return handleDiscoveryRoot(user);
-    })
-    .route('PROPFIND', '/:ownerId', async ({ request, params }) => {
-        const user = await authenticateBasic(request);
-        return handleDiscoveryOwner(user, params.ownerId);
-    })
-    .route('PROPFIND', '/:ownerId/', async ({ request, params }) => {
-        const user = await authenticateBasic(request);
-        return handleDiscoveryOwner(user, params.ownerId);
-    })
     .route('PROPFIND', '/:ownerId/:mountId', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         const depth = parseDepth(request.headers.get('Depth'));

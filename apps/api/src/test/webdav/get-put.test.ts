@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { driveGet, driveUpload, getTestContext, type TestContext } from '../setup';
-import { webdavRequest } from './setup';
+import { getDefaultMountId, webdavRequest } from './setup';
 
 describe('WebDAV GET/HEAD', () => {
     let ctx: TestContext;
@@ -11,10 +11,7 @@ describe('WebDAV GET/HEAD', () => {
 
     beforeAll(async () => {
         ctx = await getTestContext();
-        const dRes = await webdavRequest(ctx.alice.user.email, 'PROPFIND', `/webdav/${ctx.alice.user.id}/`);
-        const m = (await dRes.text()).match(new RegExp(`/webdav/${ctx.alice.user.id}/([^/<]+)/`));
-        if (!m) throw new Error('mount id not found');
-        mountId = m[1];
+        mountId = await getDefaultMountId(ctx.alice.user.sessionToken, ctx.alice.user.id);
 
         const root = await driveGet(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root');
         const file = new File([testFileContent], 'webdav-test.txt', { type: 'text/plain' });
@@ -88,10 +85,7 @@ describe('WebDAV PUT', () => {
 
     beforeAll(async () => {
         ctx = await getTestContext();
-        const dRes = await webdavRequest(ctx.alice.user.email, 'PROPFIND', `/webdav/${ctx.alice.user.id}/`);
-        const m = (await dRes.text()).match(new RegExp(`/webdav/${ctx.alice.user.id}/([^/<]+)/`));
-        if (!m) throw new Error('mount id not found');
-        mountId = m[1];
+        mountId = await getDefaultMountId(ctx.alice.user.sessionToken, ctx.alice.user.id);
     });
 
     test('PUT creates a new file', async () => {
@@ -150,10 +144,8 @@ describe('WebDAV hidden names', () => {
 
     beforeAll(async () => {
         ctx = await getTestContext();
-        const dRes = await webdavRequest(ctx.alice.user.email, 'PROPFIND', `/webdav/${ctx.alice.user.id}/`);
-        const m = (await dRes.text()).match(new RegExp(`/webdav/${ctx.alice.user.id}/([^/<]+)/`));
-        if (!m) throw new Error('mount id not found');
-        baseHref = `/webdav/${ctx.alice.user.id}/${m[1]}`;
+        const mountId = await getDefaultMountId(ctx.alice.user.sessionToken, ctx.alice.user.id);
+        baseHref = `/webdav/${ctx.alice.user.id}/${mountId}`;
     });
 
     test('PUT a .DS_Store succeeds and PROPFIND hides it', async () => {

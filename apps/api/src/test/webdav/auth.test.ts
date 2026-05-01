@@ -1,24 +1,25 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { app, getTestContext } from '../setup';
-import { basicAuth } from './setup';
+import { basicAuth, getDefaultMountId } from './setup';
 
 describe('WebDAV auth', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
+    let mountUrl: string;
     beforeAll(async () => {
         ctx = await getTestContext();
+        const mountId = await getDefaultMountId(ctx.alice.user.sessionToken, ctx.alice.user.id);
+        mountUrl = `http://localhost/webdav/${ctx.alice.user.id}/${mountId}/`;
     });
 
     test('missing Authorization → 401 with WWW-Authenticate Basic', async () => {
-        const res = await app.handle(
-            new Request(`http://localhost/webdav/${ctx.alice.user.id}/`, { method: 'PROPFIND' }),
-        );
+        const res = await app.handle(new Request(mountUrl, { method: 'PROPFIND' }));
         expect(res.status).toBe(401);
         expect(res.headers.get('WWW-Authenticate')?.toLowerCase()).toContain('basic');
     });
 
     test('wrong password → 401', async () => {
         const res = await app.handle(
-            new Request(`http://localhost/webdav/${ctx.alice.user.id}/`, {
+            new Request(mountUrl, {
                 method: 'PROPFIND',
                 headers: { Authorization: basicAuth(ctx.alice.user.email, 'wrong') },
             }),
@@ -26,15 +27,13 @@ describe('WebDAV auth', () => {
         expect(res.status).toBe(401);
     });
 
-    test('valid primary password → 207 (handler exists)', async () => {
+    test('valid primary password → 207', async () => {
         const res = await app.handle(
-            new Request(`http://localhost/webdav/${ctx.alice.user.id}/`, {
+            new Request(mountUrl, {
                 method: 'PROPFIND',
                 headers: { Authorization: basicAuth(ctx.alice.user.email), Depth: '0' },
             }),
         );
-        // After Task 5 lands, this returns 207. For now the router doesn't exist; the test
-        // is added here so the next task can light it up.
-        expect([207, 404]).toContain(res.status);
+        expect(res.status).toBe(207);
     });
 });

@@ -1,39 +1,30 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { getTestContext } from '../setup';
 import { webdavRequest } from './setup';
 
-describe('WebDAV discovery', () => {
-    let ctx: Awaited<ReturnType<typeof getTestContext>>;
-    beforeAll(async () => {
-        ctx = await getTestContext();
-    });
+// /webdav/ and /webdav/<ownerId>/ used to return a discovery listing of every
+// drive the user could reach. That conflated "what can I access?" with "where
+// do my files live?" — Mountain Duck mounted /webdav/<userId>/ and showed the
+// real mount as a fake `default/` subfolder, and Cyberduck navigating up
+// surfaced unrelated team drives. Both layers are now removed; the canonical
+// mount URL is /webdav/<ownerId>/<mountId>/, listed in the Space services UI.
 
-    test('PROPFIND /webdav/ lists self', async () => {
+describe('WebDAV discovery is locked down', () => {
+    test('PROPFIND /webdav/ → 404', async () => {
+        const ctx = await getTestContext();
         const res = await webdavRequest(ctx.alice.user.email, 'PROPFIND', '/webdav/');
-        expect(res.status).toBe(207);
-        const body = await res.text();
-        expect(body).toContain(ctx.alice.user.id);
-        expect(body).toContain('<D:multistatus');
+        expect(res.status).toBe(404);
     });
 
-    test('PROPFIND /webdav/:uid/ lists at least the default mount', async () => {
+    test('PROPFIND /webdav/<userId>/ → 404 (no per-owner discovery)', async () => {
+        const ctx = await getTestContext();
         const res = await webdavRequest(ctx.alice.user.email, 'PROPFIND', `/webdav/${ctx.alice.user.id}/`);
-        expect(res.status).toBe(207);
-        const body = await res.text();
-        expect(body).toMatch(/<D:href>\/webdav\/[^<]+\/[^<]+\/<\/D:href>/);
+        expect(res.status).toBe(404);
     });
 
-    test("PROPFIND on bob's owner from alice → 403", async () => {
-        const res = await webdavRequest(ctx.alice.user.email, 'PROPFIND', `/webdav/${ctx.bob.user.id}/`);
-        expect(res.status).toBe(403);
-    });
-
-    test('PROPFIND on a team the user does not belong to → 403', async () => {
-        const res = await webdavRequest(
-            ctx.alice.user.email,
-            'PROPFIND',
-            '/webdav/team_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/',
-        );
-        expect(res.status).toBe(403);
+    test('PROPFIND /webdav/<teamOwnerId>/ → 404 even when the user is a member', async () => {
+        const ctx = await getTestContext();
+        const res = await webdavRequest(ctx.alice.user.email, 'PROPFIND', '/webdav/team_anything/');
+        expect(res.status).toBe(404);
     });
 });
