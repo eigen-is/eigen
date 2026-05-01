@@ -33,6 +33,7 @@ export {
     operatorjson,
     operatorPriority,
 } from './formula-utils';
+export { applySheetsRowColOp, type RowColOp } from './rowcol';
 export type {
     CalculationChainEntry,
     CellResolver,
