@@ -103,6 +103,197 @@ RFC 4918 gap. props#2 is a strictness call. locks#37 is dead.
 
 ---
 
+## From 2026-04-30 deep code review
+
+Five-agent parallel review. Container-internals-readable was confirmed
+by Reinder ("fine if someone reads content of an eigendoc, it should be
+read-only"), so the guard is correct as written: writes blocked, reads
+permitted. The items below are the surviving real findings.
+
+### 5. LOCK `acquire` ignores ancestor depth-infinity locks
+
+**Symptom:** A client `LOCK`s a child of a depth-infinity-locked
+collection. The acquire succeeds and returns a token. The first write
+with that token returns 423.
+
+**Why it happens:** `LockManager.acquire`
+(`apps/api/src/lib/drive/lock-manager.ts:51`) only consults
+`byPath.get(args.pathId)` for conflicts. `isWriteAllowed` correctly
+walks ancestors via `coveringLocks`, so writes are gated — but the
+acquire path skips the same walk. Acquire and write-check use
+inconsistent conflict logic.
+
+**Fix sketch:** Mirror `coveringLocks(pathId, ancestorIds)` at acquire
+time. The handler already has the breadcrumb (or can compute it). May
+require threading `ancestorIds` into `acquire` args. Pairs naturally
+with the depth-infinity write check shipped in `206a19a8`.
+
+---
+
+### 6. Lock `Timeout` header has no upper bound
+
+**Symptom:** Authenticated user sends `Timeout: Second-2147483647`,
+pinning an in-memory lock for ~68 years. With no per-user lock count
+limit either, this is a memory exhaustion vector for any auth user.
+
+**Why it happens:** `parseTimeoutHeader` in
+`apps/api/src/lib/webdav/locks.ts:9-13` does `Number(match[1]) * 1000`
+with no clamp. GC only runs on `acquire`/`listForPath` and only evicts
+expired locks — multi-year TTL never expires.
+
+**Fix sketch:** Cap at a reasonable ceiling at parse time
+(`Math.min(parsed, MAX_LOCK_TTL_MS)`). 24h or 7d is plenty for any real
+client. Optional: per-user lock count cap in `acquire`.
+
+---
+
+### 7. DELETE and cross-mount MOVE leak source locks
+
+**Symptom:** After `drive.deletePath(...)` (or the cross-mount MOVE
+source-delete), the in-memory `LockManager` still holds entries keyed
+by the now-deleted `pathId`. Memory leaks until TTL expiry. Combined
+with #6, the leak is unbounded.
+
+**Why it happens:** `handleDelete` in
+`apps/api/src/lib/webdav/resource.ts:226` and the cross-mount MOVE arm
+in `move-copy.ts:113-114` don't release locks for the deleted source.
+LockManager only GC's on TTL.
+
+**Fix sketch:** After `deletePath`, iterate
+`drive.lockManager.listForPath(path.id)` and `release()` each token.
+Same in the cross-mount MOVE arm before the source delete. Cheap.
+
+---
+
+### 8. `If-None-Match` evaluated before `If-Match` (RFC 7232 §6 order)
+
+**Symptom:** A request with conflicting `If-Match` and `If-None-Match`
+headers returns 304 when it should return 412. Rare in practice (most
+clients send only one), but technically incorrect.
+
+**Why it happens:**
+`apps/api/src/lib/webdav/resource.ts:40-45` checks `If-None-Match`
+first. RFC 7232 §6 specifies `If-Match` → `If-Unmodified-Since` →
+`If-None-Match` → `If-Modified-Since` → `If-Range`.
+
+**Fix sketch:** Swap the two `if` blocks. One-line diff.
+
+---
+
+### 9. No body-size cap on PROPPATCH/LOCK XML
+
+**Symptom:** Authenticated user sends a 100MB+ PROPPATCH or LOCK body;
+`await request.text()` reads it whole, `fast-xml-parser` parses
+synchronously, event loop blocks. DoS vector for auth users.
+
+**Why it happens:** Handlers don't gate on `Content-Length` before
+reading body. Bun has implicit limits, but they're per-process not
+per-handler.
+
+**Fix sketch:** Cheap byte-length cap (e.g. 64KB) at handler entry.
+PROPFIND, PROPPATCH, LOCK bodies are all small in normal use; anything
+bigger is suspicious.
+
+---
+
+### 10. `Resolved | Response` discriminated union return (cleanup)
+
+**Symptom:**
+`apps/api/src/lib/webdav/move-copy.ts:35-87`'s `resolveMoveCopy`
+returns either a `Resolved` bag or a precondition-failed `Response`.
+Both callers do `if (resolved instanceof Response) return resolved`.
+CODE-STANDARDS.md flags this exact shape as BAD ("Unnecessary
+discriminated union for two cases").
+
+**Fix sketch:** Replace the `return new Response(null, { status: 412 })`
+at line 66 with `throw new ApiError(412, 'Destination exists, no
+overwrite')`. Function returns plain `Resolved`. Both callers drop the
+`instanceof` check.
+
+---
+
+### 11. `WebdavPathCache` is over-engineered (cleanup)
+
+**Symptom:** A single-method class wrapping a `Map.get/set` with one
+indirection (`apps/api/src/lib/webdav/path-resolve.ts`). Instantiated
+fresh in every handler. CalDAV has no equivalent.
+
+**Fix sketch:** Inline `const cache = new Map<string, DrivePath |
+null>()` per handler with a small `resolveCached(cache, drive, mountId,
+pathStr)` helper if the dedup is worth it. Or just dedupe at callsites
+— most handlers resolve only 2–3 paths.
+
+---
+
+### 12. `assertWritable` parameter type alias (cleanup)
+
+**Symptom:**
+`apps/api/src/lib/webdav/locks.ts:19` types `drive` as
+`Awaited<ReturnType<typeof getSharedDrive>>`. The aliased type is
+exactly `Drive | SharedDrive`, and a `DriveLike` alias already exists
+in `path-resolve.ts:5`.
+
+**Fix sketch:** Import and use `DriveLike` (or `Drive | SharedDrive`
+directly).
+
+---
+
+### 13. `buildXmlResponse` adds undocumented Cache-Control (cleanup)
+
+**Symptom:** Every WebDAV XML response includes `Cache-Control:
+no-cache, must-revalidate` (`apps/api/src/lib/webdav/xml.ts`
+`buildXmlResponse`). CalDAV's equivalent doesn't. No comment explains
+why.
+
+**Fix sketch:** Either add a one-line WHY comment (RFC ref or specific
+client incompat that motivated it) or drop the header.
+
+---
+
+### 14. Container-detection logic spelled three different ways
+
+**Symptom:** "Is this path inside / under an `.eigen*` container?" is
+now answered by three independent code paths with three slightly
+different filters.
+
+| Where | Filter | Walks |
+|---|---|---|
+| `Drive.findContainerPath` → `findContainerFromAncestors` (`acl.ts:87`) | `isCollabType(p.type)` — **excludes chat** | up |
+| `Drive.isInsideContainer` / `isContainerWriteBlocked` (`drive.ts:489-501`) — new in this branch | `isContainerType(p.type) && !== DRIVE_TYPE_FOLDER` — **includes chat** | up |
+| `Mount.getPathsByMimeType` `excludeDocumentChildren` CTE (`mount.ts:1007`) | inline `IN (DRIVE_TYPE_DOC, _STICKIES, _SLIDES, _SHEETS, _CHAT)` — **includes chat** | down |
+
+The chat-included variants and chat-excluded variant disagree on
+purpose (ACL inheritance is collab-only; WebDAV write-protect must
+include chats; mime-type filtering also includes chats), but the
+type-set is hard-coded in three places. Adding a new container type
+(or removing one) requires touching all three.
+
+Additionally, `webdav/resource.ts handlePut` walks the breadcrumb
+**three** times per request:
+1. `drive.isInsideContainer(existing)` (resource.ts:115)
+2. `drive.isContainerWriteBlocked(parent)` (resource.ts:140)
+3. `assertWritable` → `drive.breadCrumb` (locks.ts:25)
+
+Three SQLite recursive-CTE walks for the same ancestor chain.
+
+**Fix sketch:**
+- Centralise the "non-folder container types" set as a single exported
+  constant (e.g. `EIGEN_CONTAINER_TYPES` in `types/drive.ts`) and use
+  it from all three call sites. `isCollabType` stays as the
+  chat-excluded variant for ACL inheritance.
+- Consider replacing `isInsideContainer`/`isContainerWriteBlocked`
+  with a parameterised `findContainerPath(mountId, pathId, {
+  includeChat: true })` so there's one ancestor-walking helper, not
+  three.
+- In `handlePut`, fetch the breadcrumb once at the top and pass it to
+  the three checks instead of re-querying. Same for `handleMove` /
+  `handleCopy` / `handleDelete`.
+
+The new functions are only called from WebDAV today, so this refactor
+is local and safe.
+
+---
+
 ## Done in this branch (for reference)
 
 All review issues closed: R1–R5 (architectural cleanups), L1–L5 (lock
