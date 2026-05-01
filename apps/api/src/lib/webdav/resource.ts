@@ -224,5 +224,11 @@ export async function handleDelete(args: {
     }
     await assertWritable(drive, mountId, path.id, ifHeader, user.id);
     await drive.deletePath(mountId, path.id);
+    // LockManager only GCs expired entries; without explicit release, locks on
+    // a deleted pathId stay in memory until TTL. With the 24h cap that's bounded
+    // but still wasteful — and unbounded across many deletions in a session.
+    for (const lock of drive.lockManager.listForPath(path.id)) {
+        drive.lockManager.release(lock.token);
+    }
     return new Response(null, { status: 204 });
 }

@@ -112,6 +112,12 @@ export async function handleMove(args: {
     } else {
         await drive.copyPathCrossMount(args.mountId, src.id, destMountId, destParent.id, newName);
         await drive.deletePath(args.mountId, src.id);
+        // Cross-mount MOVE creates a new pathId at the destination; the source
+        // pathId is gone, so its locks are unreachable. Release them explicitly
+        // (in-mount MOVE keeps the same pathId, so no release is needed there).
+        for (const lock of drive.lockManager.listForPath(src.id)) {
+            drive.lockManager.release(lock.token);
+        }
     }
     return new Response(null, { status: destExisting ? 204 : 201 });
 }
