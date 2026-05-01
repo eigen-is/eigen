@@ -27,7 +27,7 @@ In Mountain Duck, click **+** to add a new bookmark and fill in:
 | Username   | your email address                                             |
 | Password   | the app password you just generated                            |
 
-You can find `<your-user-id>` and `<your-mount-id>` on the **Integrations** page (the WebDAV "Server URL" field).
+The **Integrations** page shows one URL per mount you can access (your personal drives plus any team drives). Pick the one you want to mount; for team drives, `<your-user-id>` is `team_<id>`. Each mount needs its own bookmark.
 
 Save the bookmark.
 

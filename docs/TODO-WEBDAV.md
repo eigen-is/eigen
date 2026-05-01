@@ -5,7 +5,7 @@ Litmus baseline at branch end: **96/101** (97%). Real macOS Finder copy
 verified working with a 160 MB MP4. None of the items below are blockers
 to shipping; they're known gaps worth addressing in a follow-up session.
 
-For protocol architecture see `docs/PROPOSAL-WEBDAV-CALDAV.md`.
+For protocol architecture see `docs/PROPOSAL_DRIVE_MOUNT.md`.
 For client recipes see `docs/WEBDAV-RCLONE.md`, `docs/WEBDAV-MOUNTAIN-DUCK.md`.
 
 ---
@@ -88,7 +88,7 @@ the WebDAV branch; flag it before it bites someone.
 
 ### 4. Litmus failures left intentionally
 
-`litmus http://localhost:3000/webdav/<owner>/<mount>/ <user> <pass>`
+`litmus http://localhost:8000/webdav/<owner>/<mount>/ <user> <pass>`
 final score: 96/101.
 
 | # | Group | Test | Verdict |
@@ -316,6 +316,7 @@ discovered fix:
 | — | `203143b3` | URL-decode wildcard params and Destination header (Cyberduck's `My%20Folder` was 404) |
 | dead-props | `d6c9f470` | Store dead-props in `DrivePath.details` (table dropped, 9 methods → 1) |
 | 14 | `680ae3e5` | Single breadcrumb walk per write handler, `EIGEN_DOCUMENT_TYPES` constant, `Drive.isInsideContainer/isContainerWriteBlocked` removed |
+| discovery | (this branch) | `/webdav/` and `/webdav/<ownerId>/` no longer discoverable; canonical URL is `/webdav/<ownerId>/<mountId>/`. Space Integrations page lists one URL per mount (personal + team). `discovery.ts` deleted. |
 
 End state of WebDAV-flavored Drive surface: `lockManager` field +
 `updatePathDetails` (generic). Container-detection logic lives in

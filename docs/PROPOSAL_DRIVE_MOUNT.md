@@ -134,17 +134,21 @@ The WebDAV router is a sibling to `caldavRouter`. It calls `getHome(ownerId)`, w
 
 ### URL scheme
 
-Mirrors CalDAV's three-level discovery. Each mount becomes a top-level WebDAV "share" (Mac users will
-see one network volume per mount).
+Each mount is its own top-level WebDAV "share" (Mac users will see one network volume per mount).
+The mount URL is the canonical entry point — there is no above-mount discovery.
 
 ```
-/webdav/                              → 401 if unauthenticated; PROPFIND lists owners
-/webdav/:ownerId/                     → PROPFIND lists mounts
+/webdav/                              → 404 (intentional; not a discovery endpoint)
+/webdav/:ownerId/                     → 404 (intentional; not a discovery endpoint)
 /webdav/:ownerId/:mountId/            → root collection of a mount
 /webdav/:ownerId/:mountId/<path>      → file or folder by hierarchical name
 ```
 
-`:ownerId` is raw UUID for users, `team_{id}` for teams (same convention as everywhere else). Routes
+`:ownerId` is raw UUID for users, `team_{id}` for teams (same convention as everywhere else).
+The Space **Integrations** page lists one URL per accessible mount (personal + team) so clients
+can copy them directly — discovery via PROPFIND was locked down because Mountain Duck mounting
+`/webdav/<userId>/` exposed the real mount as a fake `default/` subfolder, and Cyberduck's
+"navigate up" surfaced unrelated team drives. Routes
 verify the caller via the standard `requireSelf(ownerId, userId)` (`apps/api/src/lib/core/access.ts:44`)
 and `requireTeamAccess(userId, teamId)` (line 56) helpers. For team mounts, parse the prefix with
 `parseOwnerId()` from `packages/lib/src/types/owner.ts` first.
@@ -484,7 +488,6 @@ apps/api/src/lib/webdav/
   webdav-router.ts          # Elysia router — verb dispatch
   auth.ts                   # authenticateBasic — wraps verifyProtocolAuth
   multistatus.ts            # XML helpers (shared shape with CalDAV)
-  discovery.ts              # PROPFIND on /webdav, /webdav/:ownerId
   propfind.ts               # PROPFIND on resources (single + listing)
   resource.ts               # GET / HEAD / PUT / DELETE / MKCOL
   move-copy.ts              # MOVE / COPY (cross-collection edge cases)
@@ -602,7 +605,6 @@ Mounted in `apps/api/src/app.ts` next to `caldavRouter`:
 | Router | `apps/api/src/lib/webdav/webdav-router.ts` | new |
 | Auth | `apps/api/src/lib/webdav/auth.ts` | new |
 | Multistatus / XML | `apps/api/src/lib/webdav/multistatus.ts` | new |
-| Discovery PROPFIND | `apps/api/src/lib/webdav/discovery.ts` | new |
 | Resource PROPFIND | `apps/api/src/lib/webdav/propfind.ts` | new |
 | GET / PUT / DELETE / MKCOL | `apps/api/src/lib/webdav/resource.ts` | new |
 | MOVE / COPY | `apps/api/src/lib/webdav/move-copy.ts` | new |

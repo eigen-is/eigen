@@ -47,14 +47,14 @@ user> <your-email>
 pass> <your-app-password>
 ```
 
-You can find `<your-user-id>` and `<your-mount-id>` on the **Integrations** page (the WebDAV "Server URL" field) or by fetching `/webdav/<your-user-id>/` from a browser.
+The **Integrations** page shows one URL per mount you can access (your personal drives plus any team drives). Pick the one you want to mount and copy it verbatim — `<your-user-id>` is `team_<id>` for team drives.
 
 Or write `~/.config/rclone/rclone.conf` directly:
 
 ```ini
 [eigen]
 type = webdav
-url = https://eigen.example.com/webdav/abc123.../default/
+url = https://eigen.example.com/webdav/abc123.../mnt_xyz789/
 vendor = other
 user = you@example.com
 pass = <obscured-app-password>
@@ -108,6 +108,7 @@ fusermount -u ~/eigen-drive
 ## Troubleshooting
 
 - **`401 Unauthorized` on every request** — your app password expired or was revoked. Generate a new one and update `rclone.conf`.
+- **`404 Not Found` on PROPFIND of `/webdav/` or `/webdav/<user-id>/`** — those discovery levels are intentionally not exposed. The canonical URL is `/webdav/<owner-id>/<mount-id>/`; copy it from the **Integrations** page.
 - **`403 Forbidden` on PROPFIND** — the user-id or mount-id in your URL is wrong, or you don't have access to that mount. Reload the **Integrations** page for the correct URL.
 - **Office complains "another user has locked the file"** — a `.docx` LOCK is still active. Wait 10 minutes (the lock TTL) or call `rclone purge eigen:.locks/` if you've left zombies behind.
 - **macOS**: if Finder freezes the first time you open the mount, restart Finder (`killall Finder`) — rclone needs a moment to populate the root cache.
