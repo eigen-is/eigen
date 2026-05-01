@@ -7,6 +7,7 @@ import { handleCopy, handleMove } from './move-copy';
 import { handleResourcePropfind } from './propfind';
 import { handleProppatch } from './proppatch';
 import { handleDelete, handleGet, handleMkcol, handlePut } from './resource';
+import { decodeHref } from './xml';
 
 // Default-to-`infinity` matches RFC 4918: when Depth is omitted, it defaults to infinity.
 // handleResourcePropfind then returns 403 with propfind-finite-depth, which is correct.
@@ -14,6 +15,12 @@ function parseDepth(header: string | null): '0' | '1' | 'infinity' {
     if (header === '0') return '0';
     if (header === '1') return '1';
     return 'infinity';
+}
+
+// Elysia leaves wildcard params percent-encoded ("My%20Folder/file.txt"); decode
+// per-segment so a real space in a name matches the row stored as "My Folder".
+function pathStrFromParams(star: string | undefined): string {
+    return `/${decodeHref(star ?? '')}`;
 }
 
 // PROPFIND/PROPPATCH/LOCK bodies are short XML in any real client. Reject anything
@@ -82,7 +89,7 @@ export const webdavRouter = new Elysia({ name: 'webdav', prefix: '/webdav' })
         const user = await authenticateBasic(request);
         const depth = parseDepth(request.headers.get('Depth'));
         const rest = (params['*'] ?? '').replace(/\/+$/, '');
-        const pathStr = rest.length === 0 ? '/' : `/${rest}`;
+        const pathStr = rest.length === 0 ? '/' : `/${decodeHref(rest)}`;
         return handleResourcePropfind({
             user,
             ownerId: params.ownerId,
@@ -98,7 +105,7 @@ export const webdavRouter = new Elysia({ name: 'webdav', prefix: '/webdav' })
             user,
             ownerId: params.ownerId,
             mountId: params.mountId,
-            pathStr: `/${params['*'] ?? ''}`,
+            pathStr: pathStrFromParams(params['*']),
             headOnly: false,
             rangeHeader: request.headers.get('Range'),
             ifMatch: request.headers.get('If-Match'),
@@ -111,7 +118,7 @@ export const webdavRouter = new Elysia({ name: 'webdav', prefix: '/webdav' })
             user,
             ownerId: params.ownerId,
             mountId: params.mountId,
-            pathStr: `/${params['*'] ?? ''}`,
+            pathStr: pathStrFromParams(params['*']),
             headOnly: true,
             rangeHeader: null,
             ifMatch: request.headers.get('If-Match'),
@@ -125,7 +132,7 @@ export const webdavRouter = new Elysia({ name: 'webdav', prefix: '/webdav' })
             user,
             ownerId: params.ownerId,
             mountId: params.mountId,
-            pathStr: `/${params['*'] ?? ''}`,
+            pathStr: pathStrFromParams(params['*']),
             body: request.body,
             contentLength: len ? Number(len) : null,
             ifMatch: request.headers.get('If-Match'),
@@ -140,7 +147,7 @@ export const webdavRouter = new Elysia({ name: 'webdav', prefix: '/webdav' })
             user,
             ownerId: params.ownerId,
             mountId: params.mountId,
-            pathStr: `/${params['*'] ?? ''}`,
+            pathStr: pathStrFromParams(params['*']),
             contentLength: len,
             ifHeader: request.headers.get('If'),
         });
@@ -151,7 +158,7 @@ export const webdavRouter = new Elysia({ name: 'webdav', prefix: '/webdav' })
             user,
             ownerId: params.ownerId,
             mountId: params.mountId,
-            pathStr: `/${params['*'] ?? ''}`,
+            pathStr: pathStrFromParams(params['*']),
             ifHeader: request.headers.get('If'),
         });
     })
@@ -161,7 +168,7 @@ export const webdavRouter = new Elysia({ name: 'webdav', prefix: '/webdav' })
             user,
             ownerId: params.ownerId,
             mountId: params.mountId,
-            pathStr: `/${params['*'] ?? ''}`,
+            pathStr: pathStrFromParams(params['*']),
             requestUrl: request.url,
             destinationHeader: request.headers.get('Destination'),
             overwrite: (request.headers.get('Overwrite') ?? 'T').toUpperCase() !== 'F',
@@ -174,7 +181,7 @@ export const webdavRouter = new Elysia({ name: 'webdav', prefix: '/webdav' })
             user,
             ownerId: params.ownerId,
             mountId: params.mountId,
-            pathStr: `/${params['*'] ?? ''}`,
+            pathStr: pathStrFromParams(params['*']),
             requestUrl: request.url,
             destinationHeader: request.headers.get('Destination'),
             overwrite: (request.headers.get('Overwrite') ?? 'T').toUpperCase() !== 'F',
@@ -188,7 +195,7 @@ export const webdavRouter = new Elysia({ name: 'webdav', prefix: '/webdav' })
             user,
             ownerId: params.ownerId,
             mountId: params.mountId,
-            pathStr: `/${params['*'] ?? ''}`,
+            pathStr: pathStrFromParams(params['*']),
             body: await readXmlBody(request),
             ifHeader: request.headers.get('If'),
         });
@@ -199,7 +206,7 @@ export const webdavRouter = new Elysia({ name: 'webdav', prefix: '/webdav' })
             user,
             ownerId: params.ownerId,
             mountId: params.mountId,
-            pathStr: `/${params['*'] ?? ''}`,
+            pathStr: pathStrFromParams(params['*']),
             body: await readXmlBody(request),
             timeoutHeader: request.headers.get('Timeout'),
             ifHeader: request.headers.get('If'),
@@ -212,7 +219,7 @@ export const webdavRouter = new Elysia({ name: 'webdav', prefix: '/webdav' })
             user,
             ownerId: params.ownerId,
             mountId: params.mountId,
-            pathStr: `/${params['*'] ?? ''}`,
+            pathStr: pathStrFromParams(params['*']),
             lockTokenHeader: request.headers.get('Lock-Token'),
         });
     });
