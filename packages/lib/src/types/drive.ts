@@ -183,11 +183,17 @@ export type ImageDimensions = {
     height: number;
 };
 
+export type WebdavDeadProp = { ns: string; name: string; value: string };
+
 export type DrivePathDetails =
     | ({
           originalName?: string;
           duration?: number;
           pageCount?: number;
+          // RFC 4918 §3 dead properties — opaque key/value XML attached by clients
+          // (Finder color tags, Office Win32* timestamps). Live properties (etag,
+          // displayname, etc.) are derived; PROPPATCH on those returns 403.
+          webdavProps?: WebdavDeadProp[];
           [key: string]: unknown;
       } & Partial<ImageDimensions>)
     | null;

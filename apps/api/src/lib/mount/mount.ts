@@ -33,7 +33,7 @@ import { deleteThumbnail } from '../shared/thumbnails';
 import { LocalKeyStorage, LocalStorage, S3Storage, type StorageBackend, type StorageFile } from '../storage';
 import { MOUNT_DB_CONFIG } from './db-config';
 import type * as schema from './schema';
-import { paths, webdavDeadProps } from './schema';
+import { paths } from './schema';
 
 type LocalDatabaseGetter = <S extends SchemaType>(
     config: DatabaseConfig<S>,
@@ -1039,40 +1039,6 @@ export class Mount {
             .where(isNull(paths.trashedAt))
             .get();
         return result?.total ?? 0;
-    }
-
-    async setDeadProp(pathId: string, namespace: string, name: string, value: string): Promise<void> {
-        await this.db
-            .insert(webdavDeadProps)
-            .values({ pathId, namespace, name, value })
-            .onConflictDoUpdate({
-                target: [webdavDeadProps.pathId, webdavDeadProps.namespace, webdavDeadProps.name],
-                set: { value },
-            });
-    }
-
-    async removeDeadProp(pathId: string, namespace: string, name: string): Promise<void> {
-        await this.db
-            .delete(webdavDeadProps)
-            .where(
-                and(
-                    eq(webdavDeadProps.pathId, pathId),
-                    eq(webdavDeadProps.namespace, namespace),
-                    eq(webdavDeadProps.name, name),
-                ),
-            );
-    }
-
-    async listDeadProps(pathId: string): Promise<{ namespace: string; name: string; value: string }[]> {
-        return this.db
-            .select({
-                namespace: webdavDeadProps.namespace,
-                name: webdavDeadProps.name,
-                value: webdavDeadProps.value,
-            })
-            .from(webdavDeadProps)
-            .where(eq(webdavDeadProps.pathId, pathId))
-            .all();
     }
 
     async getBreadcrumb(pathId: string): Promise<DrivePath[]> {

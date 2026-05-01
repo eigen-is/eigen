@@ -1,6 +1,6 @@
 import type { MountInfo } from '@workspace/lib/types';
 import { parseOwnerId } from '@workspace/lib/types';
-import type { DriveACL, DrivePath, DriveVisibility, EigenDocType } from '@workspace/lib/types/drive';
+import type { DriveACL, DrivePath, DrivePathDetails, DriveVisibility, EigenDocType } from '@workspace/lib/types/drive';
 import type { User } from 'better-auth';
 import type { ChatRoom } from '../chat';
 import type CollabDocument from '../collab/collabDocument.ts';
@@ -446,28 +446,9 @@ export default class SharedDrive {
         return this.sharedDrive.getSharedWith(user);
     }
 
-    public async setDeadProp(
-        mountId: string,
-        pathId: string,
-        namespace: string,
-        name: string,
-        value: string,
-    ): Promise<void> {
+    public async updatePathDetails(mountId: string, pathId: string, details: DrivePathDetails): Promise<void> {
         return this.withWritePermission(mountId, pathId, () =>
-            this.sharedDrive.setDeadProp(mountId, pathId, namespace, name, value),
+            this.sharedDrive.updatePathDetails(mountId, pathId, details),
         );
-    }
-
-    public async removeDeadProp(mountId: string, pathId: string, namespace: string, name: string): Promise<void> {
-        return this.withWritePermission(mountId, pathId, () =>
-            this.sharedDrive.removeDeadProp(mountId, pathId, namespace, name),
-        );
-    }
-
-    public async listDeadProps(
-        mountId: string,
-        pathId: string,
-    ): Promise<{ namespace: string; name: string; value: string }[]> {
-        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.listDeadProps(mountId, pathId));
     }
 }
