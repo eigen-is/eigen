@@ -48,6 +48,7 @@
     "./validation": "./src/validation/index.ts",
     "./docs/eigendoc": "./src/docs/eigendoc/index.ts",
     "./sheets": "./src/sheets/index.ts",
+    "./sheets/*": "./src/sheets/*",
     "./slides": "./src/slides/index.ts"
   },
   "peerDependencies": {
