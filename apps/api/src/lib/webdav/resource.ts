@@ -3,7 +3,6 @@ import type { ProtocolUser } from '../auth/protocol-auth';
 import { ApiError } from '../core/errors';
 import { getSharedDrive } from '../drive/get-drive';
 import { assertWritable } from './locks';
-import { WebdavPathCache } from './path-resolve';
 import { computeEtag } from './xml';
 
 function mimeTypeFromName(name: string): string {
@@ -30,8 +29,7 @@ export async function handleGet(args: {
 }): Promise<Response> {
     const { user, ownerId, mountId, pathStr, headOnly, rangeHeader, ifMatch, ifNoneMatch } = args;
     const drive = await getSharedDrive(ownerId, user);
-    const cache = new WebdavPathCache();
-    const path = await cache.resolve(drive, mountId, pathStr);
+    const path = await drive.resolvePath(mountId, pathStr);
     if (!path) throw new ApiError(404, 'Not found');
     if (path.type !== 'file') throw new ApiError(405, 'Not a file');
 
@@ -107,8 +105,7 @@ export async function handlePut(args: {
     const data: Buffer | ReadableStream<Uint8Array> = body ?? Buffer.alloc(0);
 
     const drive = await getSharedDrive(ownerId, user);
-    const cache = new WebdavPathCache();
-    const existing = await cache.resolve(drive, mountId, pathStr);
+    const existing = await drive.resolvePath(mountId, pathStr);
 
     if (existing && isContainerType(existing.type)) {
         throw new ApiError(409, 'Cannot PUT over a collection');
@@ -136,7 +133,7 @@ export async function handlePut(args: {
     const name = pathStr.slice(lastSlash + 1).normalize('NFC');
     if (!name) throw new ApiError(400, 'Missing file name');
 
-    const parent = await cache.resolve(drive, mountId, parentStr);
+    const parent = await drive.resolvePath(mountId, parentStr);
     if (!parent) throw new ApiError(409, 'Parent not found');
     if (await drive.isContainerWriteBlocked(mountId, parent.id)) {
         throw new ApiError(423, 'Container internals are read-only');
@@ -183,8 +180,7 @@ export async function handleMkcol(args: {
     const pathStr = args.pathStr.replace(/\/+$/, '') || '/';
 
     const drive = await getSharedDrive(ownerId, user);
-    const cache = new WebdavPathCache();
-    if (await cache.resolve(drive, mountId, pathStr)) {
+    if (await drive.resolvePath(mountId, pathStr)) {
         // RFC 4918 §9.3.1: target exists → 405 Method Not Allowed
         return new Response(null, { status: 405 });
     }
@@ -194,7 +190,7 @@ export async function handleMkcol(args: {
     const name = pathStr.slice(lastSlash + 1).normalize('NFC');
     if (!name) throw new ApiError(400, 'Missing folder name');
 
-    const parent = await cache.resolve(drive, mountId, parentStr);
+    const parent = await drive.resolvePath(mountId, parentStr);
     if (!parent) throw new ApiError(409, 'Parent not found');
     if (await drive.isContainerWriteBlocked(mountId, parent.id)) {
         throw new ApiError(423, 'Container internals are read-only');
@@ -217,8 +213,7 @@ export async function handleDelete(args: {
     const pathStr = args.pathStr.replace(/\/+$/, '') || '/';
 
     const drive = await getSharedDrive(ownerId, user);
-    const cache = new WebdavPathCache();
-    const path = await cache.resolve(drive, mountId, pathStr);
+    const path = await drive.resolvePath(mountId, pathStr);
     if (!path) throw new ApiError(404, 'Not found');
     if (await drive.isInsideContainer(mountId, path.id)) {
         throw new ApiError(423, 'Container internals are read-only');

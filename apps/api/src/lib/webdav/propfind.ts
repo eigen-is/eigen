@@ -6,7 +6,6 @@ import type Drive from '../drive/drive';
 import { getSharedDrive } from '../drive/get-drive';
 import type SharedDrive from '../drive/sharedDrive';
 import { isHiddenName } from './container-overlay';
-import { WebdavPathCache } from './path-resolve';
 import { buildXmlResponse, encodeHref, escapeXml, multistatus, propstatOk, resourceProps, response } from './xml';
 
 const FINITE_DEPTH_BODY = `<?xml version="1.0" encoding="utf-8"?>
@@ -67,8 +66,7 @@ export async function handleResourcePropfind(args: {
     }
 
     const drive = await getSharedDrive(ownerId, user);
-    const cache = new WebdavPathCache();
-    const path = await cache.resolve(drive, mountId, pathStr);
+    const path = await drive.resolvePath(mountId, pathStr);
     if (!path) throw new ApiError(404, 'Not found');
 
     const baseHref = `/webdav/${encodeHref(ownerId)}/${encodeHref(mountId)}`;
