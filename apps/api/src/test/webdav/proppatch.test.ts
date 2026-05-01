@@ -64,4 +64,17 @@ describe('WebDAV PROPPATCH', () => {
         expect(res.status).toBe(207);
         expect(await res.text()).toContain('HTTP/1.1 403 Forbidden');
     });
+
+    test('PROPPATCH body over 64KB → 413', async () => {
+        await webdavRequest(ctx.alice.user.email, 'PUT', `${baseHref}/proppatch-big.txt`, { body: 'x' });
+        const body = `<?xml version="1.0"?>
+<D:propertyupdate xmlns:D="DAV:" xmlns:Z="urn:eigen-test">
+  <D:set><D:prop><Z:Big>${'a'.repeat(70_000)}</Z:Big></D:prop></D:set>
+</D:propertyupdate>`;
+        const res = await webdavRequest(ctx.alice.user.email, 'PROPPATCH', `${baseHref}/proppatch-big.txt`, {
+            body,
+            headers: { 'Content-Type': 'application/xml; charset=utf-8' },
+        });
+        expect(res.status).toBe(413);
+    });
 });

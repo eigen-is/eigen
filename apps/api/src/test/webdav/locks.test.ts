@@ -108,6 +108,22 @@ describe('WebDAV LOCK/UNLOCK', () => {
         expect(home.drive.lockManager.listForPath(pathId)).toHaveLength(0);
     });
 
+    test('LOCK body over 64KB → 413', async () => {
+        const url = `${baseHref}/lock-big-body.txt`;
+        await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'x' });
+        const lockBody = `<?xml version="1.0" encoding="utf-8" ?>
+<D:lockinfo xmlns:D="DAV:">
+  <D:lockscope><D:exclusive/></D:lockscope>
+  <D:locktype><D:write/></D:locktype>
+  <D:owner><D:href>mailto:${'a'.repeat(70_000)}@example.com</D:href></D:owner>
+</D:lockinfo>`;
+        const res = await webdavRequest(ctx.alice.user.email, 'LOCK', url, {
+            body: lockBody,
+            headers: { 'Content-Type': 'application/xml; charset=utf-8' },
+        });
+        expect(res.status).toBe(413);
+    });
+
     test('LOCK with absurd Timeout is capped to 24h', async () => {
         const url = `${baseHref}/lock-timeout-cap.txt`;
         await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: 'x' });
