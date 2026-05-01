@@ -8,18 +8,13 @@ import {
     DRIVE_MIME_SHEETS,
     DRIVE_MIME_SLIDES,
     DRIVE_MIME_STICKIES,
-    DRIVE_TYPE_CHAT,
-    DRIVE_TYPE_DOC,
     DRIVE_TYPE_FOLDER,
-    DRIVE_TYPE_SHEETS,
-    DRIVE_TYPE_SLIDES,
-    DRIVE_TYPE_STICKIES,
     type DriveContainerType,
     type DrivePath,
     type MountConfig,
     type MountSettings,
 } from '@workspace/lib/types';
-import { type DriveVisibility, isContainerType } from '@workspace/lib/types/drive';
+import { type DriveVisibility, EIGEN_DOCUMENT_TYPES, isContainerType } from '@workspace/lib/types/drive';
 import type { BunFile } from 'bun';
 import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
@@ -1001,10 +996,14 @@ export class Mount {
         }
         conditions.push(isNull(paths.trashedAt));
         if (options?.excludeDocumentChildren) {
+            const typeList = sql.join(
+                EIGEN_DOCUMENT_TYPES.map((t) => sql`${t}`),
+                sql`, `,
+            );
             conditions.push(sql`${paths.parentId} NOT IN (
                 WITH RECURSIVE doc_tree AS (
                     SELECT ${paths.id} FROM ${paths}
-                    WHERE ${paths.type} IN (${DRIVE_TYPE_DOC}, ${DRIVE_TYPE_STICKIES}, ${DRIVE_TYPE_SLIDES}, ${DRIVE_TYPE_SHEETS}, ${DRIVE_TYPE_CHAT})
+                    WHERE ${paths.type} IN (${typeList})
                     AND ${paths.trashedAt} IS NULL
                     UNION ALL
                     SELECT p.id FROM ${paths} p

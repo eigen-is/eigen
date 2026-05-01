@@ -2,6 +2,7 @@ import { isContainerType } from '@workspace/lib/types/drive';
 import type { ProtocolUser } from '../auth/protocol-auth';
 import { ApiError } from '../core/errors';
 import { getSharedDrive } from '../drive/get-drive';
+import { enclosingDocumentContainer } from './container-guard';
 import { assertWritable } from './locks';
 import { computeEtag } from './xml';
 
@@ -110,13 +111,27 @@ export async function handlePut(args: {
     if (existing && isContainerType(existing.type)) {
         throw new ApiError(409, 'Cannot PUT over a collection');
     }
-    if (existing && (await drive.isInsideContainer(mountId, existing.id))) {
+
+    const lastSlash = pathStr.lastIndexOf('/');
+    const parentStr = pathStr.slice(0, lastSlash) || '/';
+    const name = pathStr.slice(lastSlash + 1).normalize('NFC');
+    if (!name) throw new ApiError(400, 'Missing file name');
+
+    const parent = await drive.resolvePath(mountId, parentStr);
+    if (!parent) throw new ApiError(409, 'Parent not found');
+
+    // One breadcrumb fetch covers both checks. For an existing PUT, "is the
+    // file inside a container?" — the file itself isn't, only its ancestors
+    // matter (includeSelf=false). For a new PUT, "are writes INTO parent
+    // blocked?" — parent itself counts (includeSelf=true). The lock check
+    // (RFC 4918 §6.2 depth-infinity) uses the same breadcrumb either way.
+    const breadcrumb = existing
+        ? await drive.breadCrumb(mountId, existing.id)
+        : await drive.breadCrumb(mountId, parent.id);
+    if (enclosingDocumentContainer(breadcrumb, { includeSelf: !existing })) {
         throw new ApiError(423, 'Container internals are read-only');
     }
-
-    if (existing) {
-        await assertWritable(drive, mountId, existing.id, ifHeader, user.id);
-    }
+    assertWritable(drive.lockManager, breadcrumb, ifHeader, user.id);
 
     if (existing) {
         const etag = computeEtag(existing);
@@ -126,22 +141,6 @@ export async function handlePut(args: {
         if (ifNoneMatch === '*') return new Response(null, { status: 412 });
     } else if (ifMatch === '*') {
         return new Response(null, { status: 412 });
-    }
-
-    const lastSlash = pathStr.lastIndexOf('/');
-    const parentStr = pathStr.slice(0, lastSlash) || '/';
-    const name = pathStr.slice(lastSlash + 1).normalize('NFC');
-    if (!name) throw new ApiError(400, 'Missing file name');
-
-    const parent = await drive.resolvePath(mountId, parentStr);
-    if (!parent) throw new ApiError(409, 'Parent not found');
-    if (await drive.isContainerWriteBlocked(mountId, parent.id)) {
-        throw new ApiError(423, 'Container internals are read-only');
-    }
-    // Depth-infinity lock on the parent (or any of its ancestors) must block PUT
-    // of new children. assertWritable walks the breadcrumb to honor that.
-    if (!existing) {
-        await assertWritable(drive, mountId, parent.id, ifHeader, user.id);
     }
 
     // Pre-check Content-Length against quota — cheap reject for honest clients.
@@ -192,10 +191,12 @@ export async function handleMkcol(args: {
 
     const parent = await drive.resolvePath(mountId, parentStr);
     if (!parent) throw new ApiError(409, 'Parent not found');
-    if (await drive.isContainerWriteBlocked(mountId, parent.id)) {
+
+    const breadcrumb = await drive.breadCrumb(mountId, parent.id);
+    if (enclosingDocumentContainer(breadcrumb, { includeSelf: true })) {
         throw new ApiError(423, 'Container internals are read-only');
     }
-    await assertWritable(drive, mountId, parent.id, ifHeader, user.id);
+    assertWritable(drive.lockManager, breadcrumb, ifHeader, user.id);
 
     await drive.createFolder(mountId, parent.id, name);
     return new Response(null, { status: 201 });
@@ -215,10 +216,12 @@ export async function handleDelete(args: {
     const drive = await getSharedDrive(ownerId, user);
     const path = await drive.resolvePath(mountId, pathStr);
     if (!path) throw new ApiError(404, 'Not found');
-    if (await drive.isInsideContainer(mountId, path.id)) {
+
+    const breadcrumb = await drive.breadCrumb(mountId, path.id);
+    if (enclosingDocumentContainer(breadcrumb, { includeSelf: false })) {
         throw new ApiError(423, 'Container internals are read-only');
     }
-    await assertWritable(drive, mountId, path.id, ifHeader, user.id);
+    assertWritable(drive.lockManager, breadcrumb, ifHeader, user.id);
     await drive.deletePath(mountId, path.id);
     // LockManager only GCs expired entries; without explicit release, locks on
     // a deleted pathId stay in memory until TTL. With the 24h cap that's bounded

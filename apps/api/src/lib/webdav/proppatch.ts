@@ -140,7 +140,8 @@ export async function handleProppatch(args: {
     const path = await drive.resolvePath(mountId, pathStr);
     if (!path) throw new ApiError(404, 'Not found');
 
-    await assertWritable(drive, mountId, path.id, ifHeader, user.id);
+    const breadcrumb = await drive.breadCrumb(mountId, path.id);
+    assertWritable(drive.lockManager, breadcrumb, ifHeader, user.id);
 
     // Apply all ops in memory first, then write once. RFC 4918 §9.2 requires
     // ops to be processed in document order; replaceMatching preserves the

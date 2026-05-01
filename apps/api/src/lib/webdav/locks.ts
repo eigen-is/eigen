@@ -1,10 +1,9 @@
+import type { DrivePath } from '@workspace/lib/types/drive';
 import type { ProtocolUser } from '../auth/protocol-auth';
 import { ApiError } from '../core/errors';
-import type Drive from '../drive/drive';
 import { getSharedDrive } from '../drive/get-drive';
-import type { Lock, LockScope } from '../drive/lock-manager';
+import type { Lock, LockManager, LockScope } from '../drive/lock-manager';
 import { LOCK_DEFAULT_TTL_MS, parseIfHeaderTokens } from '../drive/lock-manager';
-import type SharedDrive from '../drive/sharedDrive';
 import { lockdiscoveryProp } from './xml';
 
 // Cap at 24h. RFC 4918 §10.7 lets the server ignore the requested timeout, and
@@ -20,18 +19,17 @@ function parseTimeoutHeader(header: string | null): number {
 }
 
 // RFC 4918 §6.2: depth-infinity locks on a collection cover every member, so a
-// write on a descendant must satisfy the ancestor lock. Walk the breadcrumb to
-// collect ancestor IDs and ask the LockManager to consider both layers.
-export async function assertWritable(
-    drive: Drive | SharedDrive,
-    mountId: string,
-    pathId: string,
+// write on a descendant must satisfy the ancestor lock. The breadcrumb is
+// root-to-self; we split it into the path itself (last) and ancestors (rest).
+export function assertWritable(
+    lockManager: LockManager,
+    breadcrumb: DrivePath[],
     ifHeader: string | null,
     userId: string,
-): Promise<void> {
-    const breadcrumb = await drive.breadCrumb(mountId, pathId);
+): void {
+    const pathId = breadcrumb[breadcrumb.length - 1].id;
     const ancestorIds = breadcrumb.slice(0, -1).map((p) => p.id);
-    if (!drive.lockManager.isWriteAllowed(pathId, ifHeader, userId, ancestorIds)) {
+    if (!lockManager.isWriteAllowed(pathId, ifHeader, userId, ancestorIds)) {
         throw new ApiError(423, 'Locked');
     }
 }

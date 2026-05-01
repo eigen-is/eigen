@@ -84,6 +84,18 @@ export function isDocumentType(type: DrivePathType) {
     return isCollabType(type) || isChatType(type);
 }
 
+// Every Eigen container type except plain folders. Single source of truth for
+// "is this an Eigen-managed document/chat" — used by WebDAV write-protect
+// (mount internals are read-only) and by the excludeDocumentChildren CTE
+// in mount.ts. Same set as isDocumentType, exposed as an array for SQL IN.
+export const EIGEN_DOCUMENT_TYPES = [
+    DRIVE_TYPE_DOC,
+    DRIVE_TYPE_STICKIES,
+    DRIVE_TYPE_SLIDES,
+    DRIVE_TYPE_SHEETS,
+    DRIVE_TYPE_CHAT,
+] as const;
+
 const INLINE_EDITABLE_MIMES = new Set([
     'text/markdown',
     'text/plain',

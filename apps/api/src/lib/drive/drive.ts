@@ -487,20 +487,6 @@ export default class Drive {
         }
     }
 
-    async isInsideContainer(mountId: string, pathId: string): Promise<boolean> {
-        const ancestors = await this.getMount(mountId).getBreadcrumb(pathId);
-        // Breadcrumb is root-to-self; drop the path itself and reject plain folders so
-        // only true Eigen container ancestors (.eigendoc / .eigenchat / etc.) count.
-        return ancestors.slice(0, -1).some((p) => isContainerType(p.type) && p.type !== DRIVE_TYPE_FOLDER);
-    }
-
-    async isContainerWriteBlocked(mountId: string, pathId: string): Promise<boolean> {
-        const ancestors = await this.getMount(mountId).getBreadcrumb(pathId);
-        // Writes INTO this path are blocked if the path itself or any ancestor is a
-        // non-folder Eigen container (.eigendoc / .eigenchat / etc.).
-        return ancestors.some((p) => isContainerType(p.type) && p.type !== DRIVE_TYPE_FOLDER);
-    }
-
     async readRange(mountId: string, pathId: string, start: number, end: number): Promise<StorageFile | null> {
         const mount = this.getMount(mountId);
         await mount.getActivePath(pathId);
