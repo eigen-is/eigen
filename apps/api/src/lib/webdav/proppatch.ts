@@ -142,7 +142,12 @@ export async function handleProppatch(args: {
 
     await assertWritable(drive, mountId, path.id, ifHeader, user.id);
 
+    // Apply all ops in memory first, then write once. RFC 4918 §9.2 requires
+    // ops to be processed in document order; replaceMatching preserves the
+    // existing element's slot when we hit a set on an existing prop.
     const ops = extractPropOps(body);
+    let webdavProps = path.details?.webdavProps ? [...path.details.webdavProps] : [];
+    let mutated = false;
     const propstats: string[] = [];
     for (const op of ops) {
         const propEl = renderPropElement(op);
@@ -150,12 +155,23 @@ export async function handleProppatch(args: {
             propstats.push(propstatStatus(403, 'Forbidden', [propEl]));
             continue;
         }
+        const idx = webdavProps.findIndex((p) => p.ns === op.namespace && p.name === op.name);
         if (op.op === 'set') {
-            await drive.setDeadProp(mountId, path.id, op.namespace, op.name, op.value);
-        } else {
-            await drive.removeDeadProp(mountId, path.id, op.namespace, op.name);
+            const next = { ns: op.namespace, name: op.name, value: op.value };
+            if (idx === -1) webdavProps.push(next);
+            else webdavProps = webdavProps.map((p, i) => (i === idx ? next : p));
+            mutated = true;
+        } else if (idx !== -1) {
+            webdavProps = webdavProps.filter((_, i) => i !== idx);
+            mutated = true;
         }
         propstats.push(propstatOk([propEl]));
+    }
+    if (mutated) {
+        await drive.updatePathDetails(mountId, path.id, {
+            ...(path.details ?? {}),
+            webdavProps: webdavProps.length === 0 ? undefined : webdavProps,
+        });
     }
 
     const href = `/webdav/${encodeHref(ownerId)}/${encodeHref(mountId)}${encodeHref(pathStr)}`;

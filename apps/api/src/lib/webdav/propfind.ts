@@ -1,10 +1,9 @@
 import { isContainerType } from '@workspace/lib/types';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
 import type { ProtocolUser } from '../auth/protocol-auth';
 import { ApiError } from '../core/errors';
-import type Drive from '../drive/drive';
 import { getSharedDrive } from '../drive/get-drive';
-import type SharedDrive from '../drive/sharedDrive';
 import { isHiddenName } from './container-overlay';
 import { buildXmlResponse, encodeHref, escapeXml, multistatus, propstatOk, resourceProps, response } from './xml';
 
@@ -32,17 +31,17 @@ function withTrailingSlash(p: string): string {
     return p.endsWith('/') ? p : `${p}/`;
 }
 
-async function deadPropsXml(drive: Drive | SharedDrive, mountId: string, pathId: string): Promise<string[]> {
-    const deadProps = await drive.listDeadProps(mountId, pathId);
+function deadPropsXml(path: DrivePath): string[] {
+    const deadProps = path.details?.webdavProps ?? [];
     return deadProps.map((dp) => {
         const safeName = escapeXml(dp.name);
         const safeValue = escapeXml(dp.value);
-        if (dp.namespace === 'DAV:') return `<D:${safeName}>${safeValue}</D:${safeName}>`;
+        if (dp.ns === 'DAV:') return `<D:${safeName}>${safeValue}</D:${safeName}>`;
         // Use a default-namespace declaration on the element rather than re-declaring a
         // shared prefix on every sibling. expat (used by neon-litmus) flags repeated
         // `xmlns:X="..."` declarations on adjacent siblings as "invalid namespace
         // declaration", even though the values match. xmlns="..." sidesteps the issue.
-        return `<${safeName} xmlns="${escapeXml(dp.namespace)}">${safeValue}</${safeName}>`;
+        return `<${safeName} xmlns="${escapeXml(dp.ns)}">${safeValue}</${safeName}>`;
     });
 }
 
@@ -74,11 +73,7 @@ export async function handleResourcePropfind(args: {
     const responses: string[] = [];
 
     if (isCollection) {
-        const [used, total, deadXml] = await Promise.all([
-            drive.usedBytes(mountId),
-            drive.quotaBytes(mountId),
-            deadPropsXml(drive, mountId, path.id),
-        ]);
+        const [used, total] = await Promise.all([drive.usedBytes(mountId), drive.quotaBytes(mountId)]);
         responses.push(
             response(`${baseHref}${withTrailingSlash(encodeHref(pathStr))}`, [
                 propstatOk([
@@ -89,12 +84,11 @@ export async function handleResourcePropfind(args: {
                         quotaAvailable: Math.max(0, total - used),
                         locks: drive.lockManager.listForPath(path.id),
                     }),
-                    ...deadXml,
+                    ...deadPropsXml(path),
                 ]),
             ]),
         );
     } else {
-        const deadXml = await deadPropsXml(drive, mountId, path.id);
         responses.push(
             response(`${baseHref}${encodeHref(pathStr)}`, [
                 propstatOk([
@@ -103,7 +97,7 @@ export async function handleResourcePropfind(args: {
                         isCollection: false,
                         locks: drive.lockManager.listForPath(path.id),
                     }),
-                    ...deadXml,
+                    ...deadPropsXml(path),
                 ]),
             ]),
         );
@@ -116,9 +110,6 @@ export async function handleResourcePropfind(args: {
             if (isHiddenName(child.name)) continue;
             const childIsCollection = isContainerType(child.type);
             const childPath = `${parentHref}${child.name}${childIsCollection ? '/' : ''}`;
-            // N+1 dead-prop fetch per child. Acceptable for v1; revisit if Finder
-            // listings of large folders show up in profiling.
-            const deadXml = await deadPropsXml(drive, mountId, child.id);
             responses.push(
                 response(`${baseHref}${encodeHref(childPath)}`, [
                     propstatOk([
@@ -127,7 +118,7 @@ export async function handleResourcePropfind(args: {
                             isCollection: childIsCollection,
                             locks: drive.lockManager.listForPath(child.id),
                         }),
-                        ...deadXml,
+                        ...deadPropsXml(child),
                     ]),
                 ]),
             );
