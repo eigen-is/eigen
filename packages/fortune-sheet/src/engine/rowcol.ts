@@ -26,13 +26,16 @@ type ExtendedSheetConfig = SheetConfig & {
     customWidth?: Record<string, number>;
 };
 
-export function applySheetsInsertRowCol(sheets: Sheet[], op: InsertRowColOp): Sheet[] {
+// Generic over S so the state-side state.Sheet[] passes through with its extras
+// (filter / frozen / dataVerification / ...) typed end-to-end. The engine only
+// reads lib.Sheet-typed fields; cloneDeep preserves the wider input shape.
+export function applySheetsInsertRowCol<S extends Sheet>(sheets: S[], op: InsertRowColOp): S[] {
     const targetIndex = sheets.findIndex((s) => s.id === op.id);
     if (targetIndex === -1) return sheets;
     return applyInsert(sheets, targetIndex, op);
 }
 
-export function applySheetsDeleteRowCol(sheets: Sheet[], op: DeleteRowColOp): Sheet[] {
+export function applySheetsDeleteRowCol<S extends Sheet>(sheets: S[], op: DeleteRowColOp): S[] {
     const targetIndex = sheets.findIndex((s) => s.id === op.id);
     if (targetIndex === -1) return sheets;
     return applyDelete(sheets, targetIndex, op);
@@ -140,17 +143,17 @@ function shiftMergeForDelete(
     return merge_new;
 }
 
-function shiftFormulasAcrossSheets(
-    sheets: Sheet[],
+function shiftFormulasAcrossSheets<S extends Sheet>(
+    sheets: S[],
     type: 'row' | 'column',
     direction: 'lefttop' | 'rightbottom' | null,
     index: number,
     count: number,
     op: 'add' | 'del',
-): Sheet[] {
+): S[] {
     return sheets.map((sheet) => {
         if (!sheet.data) return sheet;
-        let cloned: Sheet | null = null;
+        let cloned: S | null = null;
         for (let r = 0; r < sheet.data.length; r += 1) {
             const row = sheet.data[r];
             if (!row) continue;
@@ -169,7 +172,7 @@ function shiftFormulasAcrossSheets(
     });
 }
 
-function applyInsert(sheets: Sheet[], targetIndex: number, op: InsertRowColOp): Sheet[] {
+function applyInsert<S extends Sheet>(sheets: S[], targetIndex: number, op: InsertRowColOp): S[] {
     const target = sheets[targetIndex];
     const cfg = (target.config ?? {}) as ExtendedSheetConfig;
     const data = target.data;
@@ -364,12 +367,12 @@ function applyInsert(sheets: Sheet[], targetIndex: number, op: InsertRowColOp): 
         });
     }
 
-    let result: Sheet[] = [...sheets.slice(0, targetIndex), newTarget, ...sheets.slice(targetIndex + 1)];
+    let result: S[] = [...sheets.slice(0, targetIndex), newTarget, ...sheets.slice(targetIndex + 1)];
     result = shiftFormulasAcrossSheets(result, op.type, op.direction, op.index, count, 'add');
     return result;
 }
 
-function applyDelete(sheets: Sheet[], targetIndex: number, op: DeleteRowColOp): Sheet[] {
+function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: DeleteRowColOp): S[] {
     const target = sheets[targetIndex];
     const data = target.data;
     if (!data) return sheets;
@@ -536,7 +539,7 @@ function applyDelete(sheets: Sheet[], targetIndex: number, op: DeleteRowColOp): 
         newTarget.luckysheet_conditionformat_save = newCFarr;
     }
 
-    let result: Sheet[] = [...sheets.slice(0, targetIndex), newTarget, ...sheets.slice(targetIndex + 1)];
+    let result: S[] = [...sheets.slice(0, targetIndex), newTarget, ...sheets.slice(targetIndex + 1)];
     result = shiftFormulasAcrossSheets(result, op.type, null, op.start, removeCount, 'del');
     return result;
 }

@@ -611,7 +611,7 @@ export function insertRowCol(
 
     const {type, index, count, direction} = op;
 
-    ctx.luckysheetfile = applySheetsInsertRowCol(ctx.luckysheetfile as any, {...op, id}) as typeof ctx.luckysheetfile;
+    ctx.luckysheetfile = applySheetsInsertRowCol(ctx.luckysheetfile, {...op, id});
 
     const curOrder = getSheetIndex(ctx, id);
     if (curOrder == null) return;
@@ -926,7 +926,7 @@ export function deleteRowCol(
     const {type, start, end} = op;
     const slen = end - start + 1;
 
-    ctx.luckysheetfile = applySheetsDeleteRowCol(ctx.luckysheetfile as any, {...op, id}) as typeof ctx.luckysheetfile;
+    ctx.luckysheetfile = applySheetsDeleteRowCol(ctx.luckysheetfile, {...op, id});
 
     const curOrder = getSheetIndex(ctx, id);
     if (curOrder == null) return;
