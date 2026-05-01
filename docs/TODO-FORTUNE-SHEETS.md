@@ -139,9 +139,12 @@ off. Walk through if you touch the related surface.
   per-cell after relative-ref shifting; absolute `$A$1` rules anchor; cross-
   sheet refs resolve. Engine + html-export tests cover this; manual export
   smoke is the gap.
-- **Row/col op engine wrap (state task 5)** — right-click insert/delete row & column on
-  a sheet with merges, frozen rows, active filter, data-verification rule, conditional
-  format. Verify shifts correctly + selection follows + formulas update.
+- **Row/col op engine wrap + BE/FE replay (2026-05-01)** — right-click insert/delete row &
+  column on a sheet with merges, frozen rows, active filter, data-verification rule,
+  conditional format. Verify shifts correctly + selection follows + formulas update. Also:
+  cold-join with pending row/col ops (browser A inserts a row, closes tab without flushing;
+  browser B opens fresh and sees the inserted row); active-session remote op; snapshot-only
+  load path. Exercises the new shared `replaySheetsOps` on both BE and FE initial-load.
 
 ---
 
@@ -234,6 +237,33 @@ priority — rename-only.
 ---
 
 ## Recently shipped
+
+### 2026-05-01
+
+- **Context-free row/col op replay** (spec: `docs/superpowers/specs/2026-05-01-context-free-row-col-ops-design.md`).
+  Pure data-shift logic for `insertRowCol` / `deleteRowCol` extracted from `state/modules/rowcol.ts`
+  into the headless engine. New exports from `@workspace/fortune-sheet/engine`:
+  - `applySheetsInsertRowCol<S extends Sheet>(sheets, op): S[]` and
+    `applySheetsDeleteRowCol<S extends Sheet>(sheets, op): S[]` — generic over sheet shape so
+    state.Sheet[] flows through with editor-runtime extras typed end-to-end (no `as any` casts).
+  - `replaySheetsOps(sheets, opBatches): Sheet[]` — single source of truth for "snapshot + ops →
+    `Sheet[]`". Used by both BE document reader (`apps/api/src/lib/document/sheets.ts`) and FE
+    initial-load (`apps/sheets/src/components/sheets/hooks/use-sheet.ts`); typed shape adapters
+    (`asInsertValue` / `asDeleteValue`) pin `op.value` so future field drift fails fast.
+  - `functionStrChange` relocated from `state/modules/formula-range.ts` to `engine/formula-shift.ts`.
+  - State's `insertRowCol` / `deleteRowCol` now wrap the engine and only handle state-only
+    fields (filter / frozen / dataVerification / hyperlink / calcChain / luckysheet_select_save).
+  - FE collapsed two-phase mount (snapshot then `applyOp(pendingOps)`) into single replay-then-mount;
+    `pendingOpsRef` and post-mount replay `useEffect` removed. Ongoing ops over WebSocket still
+    flow through `workbook.applyOp` as before.
+  - Reviewer-flagged followups also shipped: `RowColOp` discriminated union split into
+    `InsertRowColOp` + `DeleteRowColOp` (CODE-STANDARDS "no unnecessary discriminated union for two
+    cases"); dead all-sheet calcChain loop in state collapsed to single target-sheet pass (the
+    cross-sheet formula-text rewrite moved to engine, leaving the loop with only the target branch
+    active).
+  - Smoke test still owed: cold-join with pending ops; active-session remote op; snapshot-only
+    path. Already in "Smoke tests still owed" as the row/col op smoke item — extends to cover
+    the new BE/FE replay path.
 
 ### 2026-04-30
 
