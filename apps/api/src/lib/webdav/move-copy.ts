@@ -4,6 +4,7 @@ import { ApiError } from '../core/errors';
 import type Drive from '../drive/drive';
 import { getSharedDrive } from '../drive/get-drive';
 import type SharedDrive from '../drive/sharedDrive';
+import { enclosingDocumentContainer } from './container-guard';
 import { assertWritable } from './locks';
 
 type DestParts = { ownerId: string; mountId: string; pathStr: string };
@@ -56,23 +57,21 @@ async function resolveMoveCopy(args: {
 
     const src = await drive.resolvePath(mountId, pathStr);
     if (!src) throw new ApiError(404, 'Source not found');
-    if (verb === 'MOVE' && (await drive.isInsideContainer(mountId, src.id))) {
-        throw new ApiError(423, 'Container internals are read-only');
-    }
-    // MOVE removes from src so a lock on src must be honoured. COPY leaves src untouched.
+
+    // Source side. MOVE removes from src so the container guard and lock
+    // check both apply; COPY leaves src untouched and only needs the
+    // (already done) resolve.
     if (verb === 'MOVE') {
-        await assertWritable(drive, mountId, src.id, ifHeader, user.id);
+        const srcBreadcrumb = await drive.breadCrumb(mountId, src.id);
+        if (enclosingDocumentContainer(srcBreadcrumb, { includeSelf: false })) {
+            throw new ApiError(423, 'Container internals are read-only');
+        }
+        assertWritable(drive.lockManager, srcBreadcrumb, ifHeader, user.id);
     }
 
     const destPathStr = dest.pathStr || '/';
     const destExisting = await drive.resolvePath(dest.mountId, destPathStr);
     if (destExisting && !overwrite) throw new ApiError(412, 'Destination exists, no overwrite');
-    if (destExisting && (await drive.isInsideContainer(dest.mountId, destExisting.id))) {
-        throw new ApiError(423, 'Container internals are read-only');
-    }
-    if (destExisting) {
-        await assertWritable(drive, dest.mountId, destExisting.id, ifHeader, user.id);
-    }
 
     const lastSlash = destPathStr.lastIndexOf('/');
     const destParentStr = destPathStr.slice(0, lastSlash) || '/';
@@ -81,10 +80,24 @@ async function resolveMoveCopy(args: {
 
     const destParent = await drive.resolvePath(dest.mountId, destParentStr);
     if (!destParent) throw new ApiError(409, 'Destination parent not found');
-    if (await drive.isContainerWriteBlocked(dest.mountId, destParent.id)) {
+
+    // One destination-side breadcrumb fetch. destExisting's full chain (if
+    // it exists) supplies destParent's chain via slice(0,-1); otherwise we
+    // fetch destParent directly. The container guard runs on this chain;
+    // the lock check runs on destExisting *and* destParent (overwrite
+    // touches destExisting; either case adds/replaces a child of destParent).
+    const destBreadcrumb = destExisting
+        ? await drive.breadCrumb(dest.mountId, destExisting.id)
+        : await drive.breadCrumb(dest.mountId, destParent.id);
+    if (enclosingDocumentContainer(destBreadcrumb, { includeSelf: !destExisting })) {
         throw new ApiError(423, 'Container internals are read-only');
     }
-    await assertWritable(drive, dest.mountId, destParent.id, ifHeader, user.id);
+    if (destExisting) {
+        assertWritable(drive.lockManager, destBreadcrumb, ifHeader, user.id);
+        assertWritable(drive.lockManager, destBreadcrumb.slice(0, -1), ifHeader, user.id);
+    } else {
+        assertWritable(drive.lockManager, destBreadcrumb, ifHeader, user.id);
+    }
 
     return { drive, src, destMountId: dest.mountId, destParent, destExisting, newName };
 }
