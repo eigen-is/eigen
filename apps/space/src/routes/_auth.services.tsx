@@ -6,6 +6,9 @@ import {
     useCreateAppPassword,
     useDeleteAppPassword,
 } from '@workspace/lib/core/auth/hooks/use-app-passwords';
+import { useMounts } from '@workspace/lib/drive';
+import { useMyTeams } from '@workspace/lib/home';
+import { teamOwnerId } from '@workspace/lib/types';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@workspace/ui/components/card';
 import { Input } from '@workspace/ui/components/input';
@@ -152,6 +155,8 @@ function ServicesComponent() {
     const host = new URL(API_HOST).hostname;
     const davBase = `${API_HOST}/dav`;
     const webdavBase = `${API_HOST}/webdav`;
+    const { data: personalMounts } = useMounts(user?.id ?? '');
+    const { data: teams } = useMyTeams();
 
     return (
         <div className="flex flex-col m-8">
@@ -210,13 +215,28 @@ function ServicesComponent() {
                                 WebDAV (Drive sync)
                             </CardTitle>
                             <CardDescription>
-                                Mount your Eigen drive in Finder, Explorer, rclone, or Mountain Duck. Authenticate with
-                                an app password generated below.
+                                Mount each drive separately in Finder, Explorer, rclone, or Mountain Duck. Authenticate
+                                with an app password generated below.
                             </CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-3">
-                            <CopyableField label="Server URL" value={`${webdavBase}/${user?.id ?? ''}/`} />
                             <CopyableField label="Username" value={user?.email ?? ''} />
+                            {personalMounts?.map((m) => (
+                                <CopyableField
+                                    key={m.id}
+                                    label={`Personal — ${m.name}`}
+                                    value={`${webdavBase}/${user?.id ?? ''}/${m.id}/`}
+                                />
+                            ))}
+                            {teams?.flatMap((team) =>
+                                team.mounts.map((m) => (
+                                    <CopyableField
+                                        key={`${team.id}-${m.id}`}
+                                        label={`${team.name} — ${m.name}`}
+                                        value={`${webdavBase}/${teamOwnerId(team.id)}/${m.id}/`}
+                                    />
+                                )),
+                            )}
                         </CardContent>
                     </Card>
 
