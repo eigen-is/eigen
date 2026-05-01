@@ -266,7 +266,7 @@ describe('document/sheets — patch op replay', () => {
         }
     });
 
-    test('reads doc with snapshot + insertRowCol op → snapshot returned, console.warn emitted', async () => {
+    test('reads doc with snapshot + insertRowCol op → row shifted in result', async () => {
         const sheetsPath = await drivePost<DrivePath>(
             ctx.alice.user.sessionToken,
             ctx.alice.user.id,
@@ -278,25 +278,39 @@ describe('document/sheets — patch op replay', () => {
         const home = await getHome(ctx.alice.user.id);
         const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
 
-        const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], config: {} }];
+        const sheets: Sheet[] = [
+            {
+                id: 'sheet-1',
+                name: 'Sheet1',
+                order: 0,
+                data: [
+                    [{ v: 'first', m: 'first', ct: { fa: 'General', t: 'g' } }],
+                    [{ v: 'second', m: 'second', ct: { fa: 'General', t: 'g' } }],
+                ],
+                config: {},
+            },
+        ];
         const batch: Op[] = [
-            { op: 'insertRowCol', id: 'sheet-1', path: [], value: { type: 'row', index: 0, count: 1 } },
+            {
+                op: 'insertRowCol',
+                id: 'sheet-1',
+                path: [],
+                value: { type: 'row', index: 0, count: 1, direction: 'lefttop' },
+            },
         ];
         collab.doc.transact(() => {
             collab.doc.getMap('state').set('snapshot', JSON.stringify(sheets));
             collab.doc.getArray<Op[]>('ops').push([batch]);
         });
 
-        const warnSpy = spyOn(console, 'warn').mockImplementation(() => {});
-        try {
-            const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
-            const result = await readSheetsContent(mount, path);
+        const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
+        const result = await readSheetsContent(mount, path);
 
-            expect(result).toEqual(sheets);
-            expect(warnSpy).toHaveBeenCalledWith(expect.stringMatching(/insertRowCol replay deferred/));
-        } finally {
-            warnSpy.mockRestore();
-        }
+        expect(result).toHaveLength(1);
+        expect(result[0].data!.length).toBe(3);
+        expect(result[0].data![0]).toEqual([null]);
+        expect(result[0].data![1][0]?.v).toBe('first');
+        expect(result[0].data![2][0]?.v).toBe('second');
     });
 
     test('reads doc with snapshot + orphan patch op (sheet id not in array) → op dropped', async () => {
