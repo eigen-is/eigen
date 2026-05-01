@@ -1,6 +1,7 @@
 import type { Op, Sheet } from '@workspace/lib/sheets';
 import { opToPatchOnSheets } from '@workspace/lib/sheets/yjs-ops';
 import { applyPatches, enablePatches } from 'immer';
+import { celldataToData, dataToCelldata } from './celldata';
 import { applySheetsDeleteRowCol, applySheetsInsertRowCol } from './rowcol';
 
 // immer's patch plugin is a global, idempotent enable. Calling here means any
@@ -30,13 +31,43 @@ function asDeleteValue(v: unknown): DeleteValue | null {
     return { type, start, end };
 }
 
+// Snapshots persisted by writeSheetsToYjs / xlsxToSheets carry only `celldata`,
+// while ops emitted by fortune-sheet's reducer reference `data[r][c]`. Without
+// materializing data first, applyPatches throws "path doesn't resolve" on the
+// very first data-targeting op. We materialize on the way in and refresh
+// celldata on the way out so consumers (xlsx export, FE state) see a
+// consistent shape — but only when ops actually touched `data`. Ops that
+// target `celldata` directly are authoritative and we leave them alone.
+function withMaterializedData(s: Sheet): Sheet {
+    if (s.data) return s;
+    const sized = s as { row?: number; column?: number };
+    return { ...s, data: celldataToData(s.celldata ?? [], sized.row, sized.column) ?? [] };
+}
+
+function withSyncedCelldata(s: Sheet): Sheet {
+    return { ...s, celldata: dataToCelldata(s.data) };
+}
+
+function batchTouchesData(batch: Op[]): boolean {
+    return batch.some((op) => op.path[0] === 'data');
+}
+
 export function replaySheetsOps(sheets: Sheet[], opBatches: Op[][]): Sheet[] {
     if (opBatches.length === 0) return sheets;
-    let result = sheets;
+    // Only materialize/sync when ops actually reference `data[r][c]`. Batches
+    // that only target `celldata` paths leave both the input and output shape
+    // untouched, so a doc that never opened in the FE round-trips byte-for-byte.
+    const sawDataOps = opBatches.some(batchTouchesData);
+    let result = sawDataOps ? sheets.map(withMaterializedData) : sheets;
     for (const batch of opBatches) {
-        const [patches, specialOps] = opToPatchOnSheets(result, batch);
-        result = applyPatches(result, patches);
-        for (const op of specialOps) {
+        // Special ops first, then convert+apply normal ops against the
+        // post-special state. opToPatchOnSheets resolves a sheet id to an
+        // index, so it has to run AFTER addSheet/deleteSheet have settled
+        // the array — otherwise indices land on wrong (or no longer
+        // existing) sheets and applyPatches throws "path doesn't resolve".
+        // Mirrors fortune-sheet's applyOp in Workbook/api.ts where special
+        // ops drive state changes and patches are best-effort companions.
+        for (const op of batch) {
             if (op.op === 'addSheet') {
                 result = [...result, op.value as Sheet];
             } else if (op.op === 'deleteSheet' && op.id) {
@@ -55,10 +86,12 @@ export function replaySheetsOps(sheets: Sheet[], opBatches: Op[][]): Sheet[] {
                     continue;
                 }
                 result = applySheetsDeleteRowCol(result, { ...v, id: op.id });
-            } else {
-                console.warn(`[sheets] unhandled special op: ${op.op}`);
             }
+            // normal ops are handled below in one applyPatches pass
         }
+        const normalOps = batch.filter((op) => op.op === 'add' || op.op === 'remove' || op.op === 'replace');
+        const [patches] = opToPatchOnSheets(result, normalOps);
+        result = applyPatches(result, patches);
     }
-    return result;
+    return sawDataOps ? result.map(withSyncedCelldata) : result;
 }

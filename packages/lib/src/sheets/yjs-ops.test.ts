@@ -22,10 +22,17 @@ describe('opToPatchOnSheets', () => {
         expect(special).toEqual([]);
     });
 
-    test('op with no id → patch retains original path', () => {
-        const ops: Op[] = [{ op: 'add', path: ['something'], value: 1 }];
+    test('op with no id → dropped (no Sheet[]-rooted mapping)', () => {
+        // The wholesale ['luckysheetfile'] replace patch that immer emits when
+        // fortune-sheet's reducer reassigns ctx.luckysheetfile (row/col ops)
+        // would otherwise produce a Sheet[]-rooted patch with a non-numeric
+        // key, throwing immer error 14 in applyPatches.
+        const ops: Op[] = [
+            { op: 'replace', path: ['luckysheetfile'], value: SHEETS },
+            { op: 'add', path: ['something'], value: 1 },
+        ];
         const [patches] = opToPatchOnSheets(SHEETS, ops);
-        expect(patches).toEqual([{ op: 'add', value: 1, path: ['something'] }]);
+        expect(patches).toEqual([]);
     });
 
     test('special ops are partitioned out', () => {

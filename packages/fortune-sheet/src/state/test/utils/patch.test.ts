@@ -34,6 +34,19 @@ describe("opToPatch parity with opToPatchOnSheets", () => {
         expect(wrapped).toEqual([]);
     });
 
+    test("no-id wholesale ['luckysheetfile'] replace: both drop it", () => {
+        // The synthetic patch immer emits when fortune-sheet's reducer
+        // reassigns ctx.luckysheetfile (e.g. row/col mutations). Has no id and
+        // a Context-rooted path; the paired insertRowCol / deleteRowCol special
+        // op already carries the semantics, so dropping here is correct.
+        const ctx = getContext();
+        const ops: Op[] = [{op: "replace", path: ["luckysheetfile"], value: SHEETS}];
+        const [pure] = opToPatchOnSheets(ctx.luckysheetfile, ops);
+        const [wrapped] = opToPatch(ctx, ops);
+        expect(pure).toEqual([]);
+        expect(wrapped).toEqual([]);
+    });
+
     test("images op on currentSheetId: wrapper adds insertedImgs side patch", () => {
         const ctx = getContext();
         const ops: Op[] = [{op: "add", id: "sheet-1", path: ["images", 0], value: {id: "img-1"}}];

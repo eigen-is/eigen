@@ -8,6 +8,7 @@ export {
     toA1,
 } from './a1-notation';
 export { createArrayResolver } from './cell-resolver';
+export { celldataToData, dataToCelldata } from './celldata';
 export type {
     CellFormatStyle,
     ComputeMap,

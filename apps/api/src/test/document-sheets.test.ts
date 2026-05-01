@@ -314,6 +314,93 @@ describe('document/sheets — patch op replay', () => {
         expect(result[0].data![2][0]?.v).toBe('second');
     });
 
+    test('celldata-only snapshot + cell-edit op → data materialized, celldata refreshed', async () => {
+        // Reproduces the user-reported export crash: xlsxToSheets / pre-flush
+        // FE snapshots store celldata only, but ops emitted by the reducer
+        // reference data[r][c]. replaySheetsOps must materialize data before
+        // applying patches, then sync celldata back so xlsx export sees the
+        // edit.
+        const sheetsPath = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/sheets`,
+            { fileName: 'replay-celldata-only' },
+        );
+
+        const home = await getHome(ctx.alice.user.id);
+        const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
+
+        const sheets: Sheet[] = [
+            {
+                id: 'sheet-1',
+                name: 'Sheet1',
+                order: 0,
+                celldata: [{ r: 0, c: 0, v: { v: 'before', m: 'before', ct: { fa: 'General', t: 'g' } } }],
+                config: {},
+            },
+        ];
+        const batch: Op[] = [{ op: 'replace', id: 'sheet-1', path: ['data', 0, 0, 'v'], value: 'after' }];
+        collab.doc.transact(() => {
+            collab.doc.getMap('state').set('snapshot', JSON.stringify(sheets));
+            collab.doc.getArray<Op[]>('ops').push([batch]);
+        });
+
+        const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
+        const result = await readSheetsContent(mount, path);
+
+        expect(result[0].data![0][0]?.v).toBe('after');
+        expect(result[0].celldata?.[0]?.v?.v).toBe('after');
+    });
+
+    test('reads doc with snapshot + wholesale luckysheetfile replace + insertRowCol → no crash, row inserted', async () => {
+        // Real op shape from the Annual Calendar regression: when
+        // fortune-sheet's reducer reassigns ctx.luckysheetfile during a row/col
+        // mutation, immer emits a synthetic replace patch with no sheet id and
+        // path ['luckysheetfile']. Applying that patch on Sheet[] root throws
+        // immer error 14. opToPatchOnSheets drops it; the paired insertRowCol
+        // special op carries the semantics.
+        const sheetsPath = await drivePost<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}/create/sheets`,
+            { fileName: 'replay-wholesale-replace' },
+        );
+
+        const home = await getHome(ctx.alice.user.id);
+        const collab = await home.drive.getCollabDocument(mountId, sheetsPath.id);
+
+        const sheets: Sheet[] = [
+            {
+                id: 'sheet-1',
+                name: 'Sheet1',
+                order: 0,
+                data: [[{ v: 'a', m: 'a', ct: { fa: 'General', t: 'g' } }]],
+                config: {},
+            },
+        ];
+        const batch: Op[] = [
+            { op: 'replace', path: ['luckysheetfile'], value: sheets },
+            {
+                op: 'insertRowCol',
+                id: 'sheet-1',
+                path: [],
+                value: { type: 'row', index: 0, count: 1, direction: 'lefttop' },
+            },
+        ];
+        collab.doc.transact(() => {
+            collab.doc.getMap('state').set('snapshot', JSON.stringify(sheets));
+            collab.doc.getArray<Op[]>('ops').push([batch]);
+        });
+
+        const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
+        const result = await readSheetsContent(mount, path);
+
+        expect(result[0].data!.length).toBe(2);
+        expect(result[0].data![1][0]?.v).toBe('a');
+    });
+
     test('reads doc with snapshot + orphan patch op (sheet id not in array) → op dropped', async () => {
         const sheetsPath = await drivePost<DrivePath>(
             ctx.alice.user.sessionToken,
