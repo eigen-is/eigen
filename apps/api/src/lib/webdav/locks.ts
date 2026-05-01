@@ -1,9 +1,10 @@
 import type { ProtocolUser } from '../auth/protocol-auth';
 import { ApiError } from '../core/errors';
+import type Drive from '../drive/drive';
 import { getSharedDrive } from '../drive/get-drive';
 import type { Lock, LockScope } from '../drive/lock-manager';
 import { LOCK_DEFAULT_TTL_MS, parseIfHeaderTokens } from '../drive/lock-manager';
-import { WebdavPathCache } from './path-resolve';
+import type SharedDrive from '../drive/sharedDrive';
 import { lockdiscoveryProp } from './xml';
 
 // Cap at 24h. RFC 4918 §10.7 lets the server ignore the requested timeout, and
@@ -22,7 +23,7 @@ function parseTimeoutHeader(header: string | null): number {
 // write on a descendant must satisfy the ancestor lock. Walk the breadcrumb to
 // collect ancestor IDs and ask the LockManager to consider both layers.
 export async function assertWritable(
-    drive: Awaited<ReturnType<typeof getSharedDrive>>,
+    drive: Drive | SharedDrive,
     mountId: string,
     pathId: string,
     ifHeader: string | null,
@@ -71,8 +72,7 @@ export async function handleLock(args: {
 }): Promise<Response> {
     const { user, ownerId, mountId, pathStr, body, timeoutHeader, ifHeader, depthHeader } = args;
     const drive = await getSharedDrive(ownerId, user);
-    const cache = new WebdavPathCache();
-    const path = await cache.resolve(drive, mountId, pathStr);
+    const path = await drive.resolvePath(mountId, pathStr);
     if (!path) throw new ApiError(404, 'Not found');
 
     const ttlMs = parseTimeoutHeader(timeoutHeader);

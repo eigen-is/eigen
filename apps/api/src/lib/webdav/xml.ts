@@ -34,10 +34,7 @@ export function propstatStatus(status: number, statusText: string, props: string
 export function buildXmlResponse(body: string, status = 207): Response {
     return new Response(body, {
         status,
-        headers: {
-            'Content-Type': 'application/xml; charset=utf-8',
-            'Cache-Control': 'no-cache, must-revalidate',
-        },
+        headers: { 'Content-Type': 'application/xml; charset=utf-8' },
     });
 }
 
