@@ -1031,15 +1031,6 @@ export class Mount {
         return results.map((r) => this.toDrivePath(r));
     }
 
-    async usedBytes(): Promise<number> {
-        const result = await this.db
-            .select({ total: sql<number>`COALESCE(SUM(${paths.size}), 0)` })
-            .from(paths)
-            .where(isNull(paths.trashedAt))
-            .get();
-        return result?.total ?? 0;
-    }
-
     async getBreadcrumb(pathId: string): Promise<DrivePath[]> {
         const rows = await this.db
             .select()

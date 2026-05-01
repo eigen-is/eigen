@@ -1,4 +1,5 @@
 import { isContainerType } from '@workspace/lib/types/drive';
+import { enforceMountQuota } from '../config/enforcement';
 import { ApiError } from '../core/errors';
 import { getSharedDrive } from '../drive/get-drive';
 import type { User } from '../user';
@@ -147,9 +148,7 @@ export async function handlePut(args: {
     // A client that lies (or omits Content-Length) can exceed quota by one PUT;
     // they're authenticated, so noisy-user not attack-vector.
     if (contentLength !== null) {
-        const [used, total] = await Promise.all([drive.usedBytes(mountId), drive.quotaBytes(mountId)]);
-        const projected = used + contentLength - (existing?.size ?? 0);
-        if (projected > total) throw new ApiError(507, 'Insufficient Storage');
+        await enforceMountQuota(ownerId, user.id, mountId, contentLength, existing?.size ?? 0);
     }
 
     const path = existing

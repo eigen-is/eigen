@@ -76,10 +76,6 @@ export default class SharedDrive {
         return (await this.canRead(mountId, root.id, this.user, memberships)) ? root : null;
     }
 
-    public async size(_mountId: string) {
-        return 0;
-    }
-
     public async getMimeTypeContents(
         mimeType: string,
         options?: {
@@ -133,18 +129,6 @@ export default class SharedDrive {
         const path = await this.sharedDrive.resolvePath(mountId, pathStr);
         if (!path) return null;
         return this.withReadPermission(mountId, path.id, async () => path);
-    }
-
-    public async usedBytes(mountId: string): Promise<number> {
-        const root = await this.sharedDrive.resolvePath(mountId, '/');
-        if (!root) throw new ApiError(404, 'Mount not found');
-        return this.withReadPermission(mountId, root.id, () => this.sharedDrive.usedBytes(mountId));
-    }
-
-    public async quotaBytes(mountId: string): Promise<number> {
-        const root = await this.sharedDrive.resolvePath(mountId, '/');
-        if (!root) throw new ApiError(404, 'Mount not found');
-        return this.withReadPermission(mountId, root.id, async () => this.sharedDrive.quotaBytes(mountId));
     }
 
     public async downloadFile(mountId: string, pathId: string) {
