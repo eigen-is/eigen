@@ -139,6 +139,9 @@ off. Walk through if you touch the related surface.
   per-cell after relative-ref shifting; absolute `$A$1` rules anchor; cross-
   sheet refs resolve. Engine + html-export tests cover this; manual export
   smoke is the gap.
+- **Row/col op engine wrap (state task 5)** — right-click insert/delete row & column on
+  a sheet with merges, frozen rows, active filter, data-verification rule, conditional
+  format. Verify shifts correctly + selection follows + formulas update.
 
 ---
 
