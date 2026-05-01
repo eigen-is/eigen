@@ -12,41 +12,7 @@ For client recipes see `docs/WEBDAV-RCLONE.md`, `docs/WEBDAV-MOUNTAIN-DUCK.md`.
 
 ## Outstanding
 
-### 1. Overwrite-PUT path skips thumbnail regeneration
-
-**Symptom:** An image dropped onto a Finder-mounted drive does not get a
-thumbnail.
-
-**Why it happens:** Finder's two-step copy goes:
-1. `PUT Content-Length: 0` — placeholder, lands via `createFileFromData`
-   → `finalizeUpload` (`drive.ts:1067`) runs `saveThumbnail` on **0 bytes**
-   and produces nothing.
-2. `LOCK` → `PUT` chunked with the real content → routed through
-   `writeFileContent` (`drive.ts:527`), which **does not call
-   `saveThumbnail`** — it only writes bytes and emits
-   `DRIVE_FILE_UPLOADED`.
-
-Net effect: file lands at correct size, but the row's `thumbnail` column
-stays null and `details.width`/`height` are unset.
-
-**Scope:** This is not just a WebDAV bug — `writeFileContent` is the
-generic overwrite path. Any flow that overwrites an existing file's
-content (chat re-upload, future API endpoints) has the same hole. WebDAV
-just makes it visible because Finder *always* overwrites.
-
-**Fix sketch:** Have `writeFileContent` regenerate the thumbnail after
-the write, mirroring `finalizeUpload`'s async block. Keep it
-non-blocking so a slow ImageMagick run doesn't stall the response.
-Consider extracting the "regenerate thumbnail for pathId" block into a
-helper both call sites can share.
-
-**Bonus:** The 0-byte placeholder PUT also runs `saveThumbnail` once for
-nothing. Cheap to skip when `size === 0`, saves an ImageMagick spawn per
-Finder copy.
-
----
-
-### 2. `X-Expected-Entity-Length` not honored for quota pre-check
+### 1. `X-Expected-Entity-Length` not honored for quota pre-check
 
 **Symptom:** A Finder user with a chunked PUT can overshoot mount quota
 by one upload. Authenticated-user-noisy, not adversarial — but a real gap.
@@ -65,7 +31,7 @@ mid-stream failure).
 
 ---
 
-### 3. Mount migration framework is content-blind
+### 2. Mount migration framework is content-blind
 
 **Symptom (during this branch):** Adding a `webdav_dead_props` migration
 at version 2 silently failed on existing dev DBs because they were
@@ -86,7 +52,7 @@ the WebDAV branch; flag it before it bites someone.
 
 ---
 
-### 4. Litmus failures left intentionally
+### 3. Litmus failures left intentionally
 
 `litmus http://localhost:8000/webdav/<owner>/<mount>/ <user> <pass>`
 final score: 96/101.
@@ -317,6 +283,7 @@ discovered fix:
 | dead-props | `d6c9f470` | Store dead-props in `DrivePath.details` (table dropped, 9 methods → 1) |
 | 14 | `680ae3e5` | Single breadcrumb walk per write handler, `EIGEN_DOCUMENT_TYPES` constant, `Drive.isInsideContainer/isContainerWriteBlocked` removed |
 | discovery | (this branch) | `/webdav/` and `/webdav/<ownerId>/` no longer discoverable; canonical URL is `/webdav/<ownerId>/<mountId>/`. Space Integrations page lists one URL per mount (personal + team). `discovery.ts` deleted. |
+| 1 | (this branch) | `writeFileContent` regenerates thumbnail/dimensions on overwrite (Finder two-step copy now thumbnails). `finalizeUpload` skips the worker for 0-byte placeholders. Shared `regenerateThumbnailAsync` helper. |
 
 End state of WebDAV-flavored Drive surface: `lockManager` field +
 `updatePathDetails` (generic). Container-detection logic lives in

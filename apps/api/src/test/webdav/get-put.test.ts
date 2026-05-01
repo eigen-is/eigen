@@ -1,6 +1,15 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { driveGet, driveUpload, getTestContext, type TestContext } from '../setup';
 import { getDefaultMountId, webdavRequest } from './setup';
+
+// Smallest valid 4×4 PNG — same payload preview.test.ts uses.
+const PNG_BYTES = new Uint8Array([
+    137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 4, 0, 0, 0, 4, 8, 2, 0, 0, 0, 38, 147, 9, 41,
+    0, 0, 0, 9, 112, 72, 89, 115, 0, 0, 3, 232, 0, 0, 3, 232, 1, 181, 123, 82, 107, 0, 0, 0, 17, 73, 68, 65, 84, 120,
+    156, 99, 248, 207, 192, 0, 71, 8, 22, 94, 14, 0, 174, 147, 15, 241, 166, 148, 72, 35, 0, 0, 0, 0, 73, 69, 78, 68,
+    174, 66, 96, 130,
+]);
 
 describe('WebDAV GET/HEAD', () => {
     let ctx: TestContext;
@@ -163,5 +172,82 @@ describe('WebDAV hidden names', () => {
         const get = await webdavRequest(ctx.alice.user.email, 'GET', url);
         expect(get.status).toBe(200);
         expect(await get.text()).toBe('lockfile');
+    });
+});
+
+describe('WebDAV PUT thumbnails', () => {
+    let ctx: TestContext;
+    let mountId: string;
+    let rootId: string;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        mountId = await getDefaultMountId(ctx.alice.user.sessionToken, ctx.alice.user.id);
+        const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root');
+        rootId = root.id;
+    });
+
+    async function findChild(name: string): Promise<DrivePath> {
+        const children = await driveGet<DrivePath[]>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `folder/${rootId}`,
+        );
+        const child = children.find((c) => c.name === name);
+        if (!child) throw new Error(`No child '${name}' in root`);
+        return child;
+    }
+
+    async function pollThumbnail(pathId: string): Promise<DrivePath> {
+        let path = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${pathId}`);
+        for (let i = 0; i < 40 && !path.thumbnail; i++) {
+            await Bun.sleep(50);
+            path = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${pathId}`);
+        }
+        return path;
+    }
+
+    test('Finder two-step copy (empty PUT, then real bytes) generates a thumbnail', async () => {
+        // Mirrors macOS Finder's WebDAVFS sequence: a 0-byte placeholder PUT
+        // creates the resource, then a follow-up PUT writes the real content.
+        const url = `/webdav/${ctx.alice.user.id}/${mountId}/finder-two-step.png`;
+
+        const placeholder = await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: '' });
+        expect(placeholder.status).toBe(201);
+
+        const real = await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: PNG_BYTES });
+        expect(real.status).toBe(204);
+
+        const child = await findChild('finder-two-step.png');
+        const path = await pollThumbnail(child.id);
+        expect(path.thumbnail).toBeTruthy();
+        expect(path.details?.width).toBe(4);
+        expect(path.details?.height).toBe(4);
+    });
+
+    test('overwriting an existing image regenerates the thumbnail', async () => {
+        // The generic overwrite path (writeFileContent) — not just WebDAV —
+        // must regenerate the thumbnail when bytes change.
+        const file = new File(['placeholder'], 'overwrite-image.png', { type: 'image/png' });
+        const uploaded = await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, rootId, file);
+        // Placeholder is non-image bytes labelled image/png — sharp won't
+        // produce a thumbnail, so it stays null.
+        const before = await driveGet<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            `path/${uploaded.id}`,
+        );
+        expect(before.thumbnail).toBeNull();
+
+        const url = `/webdav/${ctx.alice.user.id}/${mountId}/overwrite-image.png`;
+        const res = await webdavRequest(ctx.alice.user.email, 'PUT', url, { body: PNG_BYTES });
+        expect(res.status).toBe(204);
+
+        const path = await pollThumbnail(uploaded.id);
+        expect(path.thumbnail).toBeTruthy();
+        expect(path.details?.width).toBe(4);
+        expect(path.details?.height).toBe(4);
     });
 });
