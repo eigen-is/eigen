@@ -1,9 +1,9 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
-import type { ProtocolUser } from '../auth/protocol-auth';
 import { ApiError } from '../core/errors';
 import type Drive from '../drive/drive';
 import { getSharedDrive } from '../drive/get-drive';
 import type SharedDrive from '../drive/sharedDrive';
+import type { User } from '../user';
 import { enclosingDocumentContainer } from './container-guard';
 import { assertWritable } from './locks';
 
@@ -38,7 +38,7 @@ type Resolved = {
 };
 
 async function resolveMoveCopy(args: {
-    user: ProtocolUser;
+    user: User;
     ownerId: string;
     mountId: string;
     pathStr: string;
@@ -103,7 +103,7 @@ async function resolveMoveCopy(args: {
 }
 
 export async function handleMove(args: {
-    user: ProtocolUser;
+    user: User;
     ownerId: string;
     mountId: string;
     pathStr: string;
@@ -140,7 +140,7 @@ export async function handleMove(args: {
 }
 
 export async function handleCopy(args: {
-    user: ProtocolUser;
+    user: User;
     ownerId: string;
     mountId: string;
     pathStr: string;

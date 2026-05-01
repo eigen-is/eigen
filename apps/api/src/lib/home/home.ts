@@ -1,6 +1,5 @@
 import * as path from 'node:path';
 import type { SSEvent } from '@workspace/lib/types/sse';
-import type { User } from 'better-auth/types';
 import { createAsyncSingleton } from '../../utils/singleton';
 import { time } from '../../utils/timing';
 import type { Calendar } from '../calendar/calendar';
@@ -17,6 +16,7 @@ import {
 import type { Drive } from '../drive';
 import type Maildir from '../mail/maildir';
 import type { NotificationCenter } from '../notification-center/notification-center';
+import type { User } from '../user';
 
 export type HomeSettings = Record<string, unknown>;
 

@@ -1,13 +1,9 @@
 import { parseOwnerId } from '@workspace/lib/types';
 import { type DriveACL, type DrivePath, isCollabType } from '@workspace/lib/types/drive';
+import type { User } from '../user';
 import type { Memberships } from '../user/';
 
-// Minimal shape of the authenticated subject the ACL layer needs. better-auth's `User`
-// and `ProtocolUser` (basic-auth result) are both structural supertypes of this, so
-// callers can pass either without casting.
-export type AuthSubject = { id: string; email: string };
-
-export function canReadFromAncestors(ancestors: DrivePath[], user: AuthSubject, memberships: Memberships): boolean {
+export function canReadFromAncestors(ancestors: DrivePath[], user: User, memberships: Memberships): boolean {
     for (const path of ancestors) {
         if (path.ownerId === user.id) return true;
 
@@ -26,7 +22,7 @@ export function canReadFromAncestors(ancestors: DrivePath[], user: AuthSubject, 
     return false;
 }
 
-export function canWriteFromAncestors(ancestors: DrivePath[], user: AuthSubject, memberships: Memberships): boolean {
+export function canWriteFromAncestors(ancestors: DrivePath[], user: User, memberships: Memberships): boolean {
     for (const path of ancestors) {
         if (path.ownerId === user.id) return true;
 
@@ -47,7 +43,7 @@ export function canWriteFromAncestors(ancestors: DrivePath[], user: AuthSubject,
 
 export function matchesACL(
     acl: DriveACL[],
-    user: AuthSubject,
+    user: User,
     memberships: Memberships,
     permission: 'read' | 'write',
 ): boolean {

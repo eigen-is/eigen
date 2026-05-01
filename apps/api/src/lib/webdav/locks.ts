@@ -1,9 +1,9 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
-import type { ProtocolUser } from '../auth/protocol-auth';
 import { ApiError } from '../core/errors';
 import { getSharedDrive } from '../drive/get-drive';
 import type { Lock, LockManager, LockScope } from '../drive/lock-manager';
 import { LOCK_DEFAULT_TTL_MS, parseIfHeaderTokens } from '../drive/lock-manager';
+import type { User } from '../user';
 import { lockdiscoveryProp } from './xml';
 
 // Cap at 24h. RFC 4918 §10.7 lets the server ignore the requested timeout, and
@@ -59,7 +59,7 @@ function buildLockResponse(lock: Lock): Response {
 }
 
 export async function handleLock(args: {
-    user: ProtocolUser;
+    user: User;
     ownerId: string;
     mountId: string;
     pathStr: string;
@@ -103,7 +103,7 @@ export async function handleLock(args: {
 }
 
 export async function handleUnlock(args: {
-    user: ProtocolUser;
+    user: User;
     ownerId: string;
     mountId: string;
     pathStr: string;

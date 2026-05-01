@@ -1,9 +1,9 @@
 import { isContainerType } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
-import type { ProtocolUser } from '../auth/protocol-auth';
 import { ApiError } from '../core/errors';
 import { getSharedDrive } from '../drive/get-drive';
+import type { User } from '../user';
 import { isHiddenName } from './container-overlay';
 import { buildXmlResponse, encodeHref, escapeXml, multistatus, propstatOk, resourceProps, response } from './xml';
 
@@ -46,7 +46,7 @@ function deadPropsXml(path: DrivePath): string[] {
 }
 
 export async function handleResourcePropfind(args: {
-    user: ProtocolUser;
+    user: User;
     ownerId: string;
     mountId: string;
     pathStr: string;
