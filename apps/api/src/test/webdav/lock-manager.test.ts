@@ -103,4 +103,48 @@ describe('LockManager', () => {
         expect(parseIfHeaderTokens(null)).toEqual([]);
         expect(parseIfHeaderTokens('')).toEqual([]);
     });
+
+    test('acquire blocks descendant lock when ancestor holds depth-infinity exclusive', () => {
+        // RFC 4918 §6.2: a depth-infinity lock on a collection covers every member.
+        // Acquiring a new lock on a descendant must be rejected without an authorizing token.
+        const m = new LockManager();
+        m.acquire(exclusive({ pathId: 'parent', depth: 'infinity' }));
+        expect(() => m.acquire(exclusive({ pathId: 'child', userId: 'u2', ancestorPathIds: ['parent'] }))).toThrow(
+            /Locked/,
+        );
+    });
+
+    test('acquire allows descendant lock when ancestor token is presented', () => {
+        const m = new LockManager();
+        const parent = m.acquire(exclusive({ pathId: 'parent', depth: 'infinity' }));
+        const child = m.acquire(
+            exclusive({ pathId: 'child', ancestorPathIds: ['parent'], ifHeader: `<${parent.token}>` }),
+        );
+        expect(child.token).toMatch(/^urn:uuid:/);
+    });
+
+    test('acquire ignores depth=0 ancestor lock', () => {
+        // A depth-0 lock covers only its own resource, not descendants.
+        const m = new LockManager();
+        m.acquire(exclusive({ pathId: 'parent', depth: 0 }));
+        const child = m.acquire(exclusive({ pathId: 'child', userId: 'u2', ancestorPathIds: ['parent'] }));
+        expect(child.token).toMatch(/^urn:uuid:/);
+    });
+
+    test('acquire allows shared descendant under shared depth-infinity ancestor', () => {
+        const m = new LockManager();
+        m.acquire(exclusive({ pathId: 'parent', depth: 'infinity', scope: 'shared' }));
+        const child = m.acquire(
+            exclusive({ pathId: 'child', userId: 'u2', scope: 'shared', ancestorPathIds: ['parent'] }),
+        );
+        expect(child.token).toMatch(/^urn:uuid:/);
+    });
+
+    test('acquire blocks exclusive descendant under shared depth-infinity ancestor', () => {
+        const m = new LockManager();
+        m.acquire(exclusive({ pathId: 'parent', depth: 'infinity', scope: 'shared' }));
+        expect(() => m.acquire(exclusive({ pathId: 'child', userId: 'u2', ancestorPathIds: ['parent'] }))).toThrow(
+            /Locked/,
+        );
+    });
 });
