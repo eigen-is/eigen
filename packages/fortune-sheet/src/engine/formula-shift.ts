@@ -5,7 +5,6 @@ import { error } from './validation';
 export type FormulaShiftMode = 'up' | 'down' | 'left' | 'right';
 
 // Returns [rowAbsolute, colAbsolute] for a single ref like "$A$1" → [true, true].
-// Exported so state-side `functionStrChange_range` can share the same detection.
 export function detectAbsolute(txt: string): [boolean, boolean] {
     const row = txt.replace(/[^0-9]/g, '');
     const col = txt.replace(/[^A-Za-z]/g, '');
