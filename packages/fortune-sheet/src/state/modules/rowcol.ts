@@ -1,5 +1,5 @@
 import {assign, clone, cloneDeep, forEach, isEmpty, size} from "es-toolkit/compat";
-import {applySheetsRowColOp} from "../../engine/rowcol";
+import {applySheetsDeleteRowCol, applySheetsInsertRowCol} from "../../engine/rowcol";
 import {Context} from "../context";
 import {Sheet} from "../types";
 import {getSheetIndex} from "../utils";
@@ -611,7 +611,7 @@ export function insertRowCol(
 
     const {type, index, count, direction} = op;
 
-    ctx.luckysheetfile = applySheetsRowColOp(ctx.luckysheetfile as any, {...op, id, mode: "insert"}) as typeof ctx.luckysheetfile;
+    ctx.luckysheetfile = applySheetsInsertRowCol(ctx.luckysheetfile as any, {...op, id}) as typeof ctx.luckysheetfile;
 
     const curOrder = getSheetIndex(ctx, id);
     if (curOrder == null) return;
@@ -926,7 +926,7 @@ export function deleteRowCol(
     const {type, start, end} = op;
     const slen = end - start + 1;
 
-    ctx.luckysheetfile = applySheetsRowColOp(ctx.luckysheetfile as any, {...op, id, mode: "delete"}) as typeof ctx.luckysheetfile;
+    ctx.luckysheetfile = applySheetsDeleteRowCol(ctx.luckysheetfile as any, {...op, id}) as typeof ctx.luckysheetfile;
 
     const curOrder = getSheetIndex(ctx, id);
     if (curOrder == null) return;

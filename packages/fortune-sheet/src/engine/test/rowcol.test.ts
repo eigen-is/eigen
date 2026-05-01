@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { Sheet } from '@workspace/lib/sheets';
-import { applySheetsRowColOp } from '../rowcol';
+import { applySheetsDeleteRowCol, applySheetsInsertRowCol } from '../rowcol';
 
 const cell = (v: string | number) => ({ v, m: String(v), ct: { fa: 'General', t: 'g' } });
 
@@ -18,7 +18,7 @@ const makeSheet = (
     ...extras,
 });
 
-describe('applySheetsRowColOp — row insert', () => {
+describe('applySheetsInsertRowCol — row', () => {
     test('insert row at top (lefttop) shifts cells down and clears row 0', () => {
         const sheets: Sheet[] = [
             makeSheet('s1', 'Sheet1', [
@@ -26,8 +26,7 @@ describe('applySheetsRowColOp — row insert', () => {
                 [cell('c'), cell('d')],
             ]),
         ];
-        const result = applySheetsRowColOp(sheets, {
-            mode: 'insert',
+        const result = applySheetsInsertRowCol(sheets, {
             type: 'row',
             index: 0,
             count: 1,
@@ -42,8 +41,7 @@ describe('applySheetsRowColOp — row insert', () => {
 
     test('insert row in middle (rightbottom) shifts cells below', () => {
         const sheets: Sheet[] = [makeSheet('s1', 'Sheet1', [[cell('a')], [cell('b')], [cell('c')]])];
-        const result = applySheetsRowColOp(sheets, {
-            mode: 'insert',
+        const result = applySheetsInsertRowCol(sheets, {
             type: 'row',
             index: 1,
             count: 1,
@@ -72,8 +70,7 @@ describe('applySheetsRowColOp — row insert', () => {
                 },
             ),
         ];
-        const result = applySheetsRowColOp(sheets, {
-            mode: 'insert',
+        const result = applySheetsInsertRowCol(sheets, {
             type: 'row',
             index: 1,
             count: 1,
@@ -92,8 +89,7 @@ describe('applySheetsRowColOp — row insert', () => {
                 config: { rowhidden: { '1': 0, '2': 0 } },
             }),
         ];
-        const result = applySheetsRowColOp(sheets, {
-            mode: 'insert',
+        const result = applySheetsInsertRowCol(sheets, {
             type: 'row',
             index: 0,
             count: 1,
@@ -117,8 +113,7 @@ describe('applySheetsRowColOp — row insert', () => {
                 ],
             }),
         ];
-        const result = applySheetsRowColOp(sheets, {
-            mode: 'insert',
+        const result = applySheetsInsertRowCol(sheets, {
             type: 'row',
             index: 0,
             count: 1,
@@ -130,11 +125,10 @@ describe('applySheetsRowColOp — row insert', () => {
     });
 });
 
-describe('applySheetsRowColOp — column insert', () => {
+describe('applySheetsInsertRowCol — column', () => {
     test('insert column at left shifts cells right', () => {
         const sheets: Sheet[] = [makeSheet('s1', 'Sheet1', [[cell('a'), cell('b')]])];
-        const result = applySheetsRowColOp(sheets, {
-            mode: 'insert',
+        const result = applySheetsInsertRowCol(sheets, {
             type: 'column',
             index: 0,
             count: 1,
@@ -152,8 +146,7 @@ describe('applySheetsRowColOp — column insert', () => {
                 config: { colhidden: { '1': 0 } },
             }),
         ];
-        const result = applySheetsRowColOp(sheets, {
-            mode: 'insert',
+        const result = applySheetsInsertRowCol(sheets, {
             type: 'column',
             index: 0,
             count: 1,
@@ -164,10 +157,10 @@ describe('applySheetsRowColOp — column insert', () => {
     });
 });
 
-describe('applySheetsRowColOp — row delete', () => {
+describe('applySheetsDeleteRowCol — row', () => {
     test('delete single row removes it; cells below shift up', () => {
         const sheets: Sheet[] = [makeSheet('s1', 'Sheet1', [[cell('a')], [cell('b')], [cell('c')]])];
-        const result = applySheetsRowColOp(sheets, { mode: 'delete', type: 'row', start: 1, end: 1, id: 's1' });
+        const result = applySheetsDeleteRowCol(sheets, { type: 'row', start: 1, end: 1, id: 's1' });
         expect(result[0].data!.length).toBe(2);
         expect(result[0].data![0][0]?.v).toBe('a');
         expect(result[0].data![1][0]?.v).toBe('c');
@@ -177,24 +170,24 @@ describe('applySheetsRowColOp — row delete', () => {
         const sheets: Sheet[] = [
             makeSheet('s1', 'Sheet1', [[cell('a')], [cell('b')], [cell('c')], [cell('d')], [cell('e')]]),
         ];
-        const result = applySheetsRowColOp(sheets, { mode: 'delete', type: 'row', start: 1, end: 3, id: 's1' });
+        const result = applySheetsDeleteRowCol(sheets, { type: 'row', start: 1, end: 3, id: 's1' });
         expect(result[0].data!.length).toBe(2);
         expect(result[0].data![0][0]?.v).toBe('a');
         expect(result[0].data![1][0]?.v).toBe('e');
     });
 });
 
-describe('applySheetsRowColOp — column delete', () => {
+describe('applySheetsDeleteRowCol — column', () => {
     test('delete column range', () => {
         const sheets: Sheet[] = [makeSheet('s1', 'Sheet1', [[cell('a'), cell('b'), cell('c'), cell('d')]])];
-        const result = applySheetsRowColOp(sheets, { mode: 'delete', type: 'column', start: 1, end: 2, id: 's1' });
+        const result = applySheetsDeleteRowCol(sheets, { type: 'column', start: 1, end: 2, id: 's1' });
         expect(result[0].data![0]).toHaveLength(2);
         expect(result[0].data![0][0]?.v).toBe('a');
         expect(result[0].data![0][1]?.v).toBe('d');
     });
 });
 
-describe('applySheetsRowColOp — cross-sheet formula refs', () => {
+describe('applySheetsInsertRowCol/Delete — cross-sheet formula refs', () => {
     test('row insert in Sheet1 shifts =Sheet1!A1 in Sheet2 to =Sheet1!A2', () => {
         const s1: Sheet = { id: 's1', name: 'Sheet1', order: 0, data: [[cell('x')]], config: {} };
         const s2: Sheet = {
@@ -204,8 +197,7 @@ describe('applySheetsRowColOp — cross-sheet formula refs', () => {
             data: [[{ v: '', m: '', ct: { fa: 'General', t: 'g' }, f: '=Sheet1!A1' } as any]],
             config: {},
         };
-        const result = applySheetsRowColOp([s1, s2], {
-            mode: 'insert',
+        const result = applySheetsInsertRowCol([s1, s2], {
             type: 'row',
             index: 0,
             count: 1,
@@ -223,8 +215,7 @@ describe('applySheetsRowColOp — cross-sheet formula refs', () => {
             data: [[cell(1)], [cell(2)], [{ v: 0, m: '0', ct: { fa: 'General', t: 'n' }, f: '=A1+A2' } as any]],
             config: {},
         };
-        const result = applySheetsRowColOp([s1], {
-            mode: 'insert',
+        const result = applySheetsInsertRowCol([s1], {
             type: 'row',
             index: 0,
             count: 1,
@@ -247,13 +238,13 @@ describe('applySheetsRowColOp — cross-sheet formula refs', () => {
             ],
             config: {},
         };
-        const result = applySheetsRowColOp([s1], { mode: 'delete', type: 'row', start: 0, end: 2, id: 's1' });
+        const result = applySheetsDeleteRowCol([s1], { type: 'row', start: 0, end: 2, id: 's1' });
         // Row 3 (the formula) is now row 0 after deleting rows 0-2; formula references rows that no longer exist.
         expect(result[0].data![0][0]?.f).toBe('=#REF!');
     });
 });
 
-describe('applySheetsRowColOp — guards', () => {
+describe('applySheetsInsertRowCol/Delete — guards', () => {
     test('throws readOnly when target row is read-only', () => {
         const sheets: Sheet[] = [
             makeSheet('s1', 'Sheet1', [[cell('a')]], {
@@ -261,8 +252,7 @@ describe('applySheetsRowColOp — guards', () => {
             }),
         ];
         expect(() =>
-            applySheetsRowColOp(sheets, {
-                mode: 'insert',
+            applySheetsInsertRowCol(sheets, {
                 type: 'row',
                 index: 0,
                 count: 1,
@@ -281,8 +271,7 @@ describe('applySheetsRowColOp — guards', () => {
             ),
         ];
         expect(() =>
-            applySheetsRowColOp(sheets, {
-                mode: 'insert',
+            applySheetsInsertRowCol(sheets, {
                 type: 'row',
                 index: 0,
                 count: 1,
@@ -298,9 +287,7 @@ describe('applySheetsRowColOp — guards', () => {
                 config: { rowReadOnly: { '1': 1 } } as any,
             }),
         ];
-        expect(() => applySheetsRowColOp(sheets, { mode: 'delete', type: 'row', start: 0, end: 2, id: 's1' })).toThrow(
-            'readOnly',
-        );
+        expect(() => applySheetsDeleteRowCol(sheets, { type: 'row', start: 0, end: 2, id: 's1' })).toThrow('readOnly');
     });
 
     test('delete throws readOnly for column range', () => {
@@ -309,13 +296,13 @@ describe('applySheetsRowColOp — guards', () => {
                 config: { colReadOnly: { '2': 1 } } as any,
             }),
         ];
-        expect(() =>
-            applySheetsRowColOp(sheets, { mode: 'delete', type: 'column', start: 1, end: 2, id: 's1' }),
-        ).toThrow('readOnly');
+        expect(() => applySheetsDeleteRowCol(sheets, { type: 'column', start: 1, end: 2, id: 's1' })).toThrow(
+            'readOnly',
+        );
     });
 });
 
-describe('applySheetsRowColOp — passthrough', () => {
+describe('applySheetsInsertRowCol — passthrough', () => {
     test('state-only fields on input pass through engine unchanged', () => {
         const sheets: any[] = [
             {
@@ -329,8 +316,7 @@ describe('applySheetsRowColOp — passthrough', () => {
                 dataVerification: { '0_0': { type: 'list', value1: 'a,b' } },
             },
         ];
-        const result = applySheetsRowColOp(sheets as Sheet[], {
-            mode: 'insert',
+        const result = applySheetsInsertRowCol(sheets as Sheet[], {
             type: 'row',
             index: 0,
             count: 1,

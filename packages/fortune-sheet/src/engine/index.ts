@@ -34,7 +34,12 @@ export {
     operatorPriority,
 } from './formula-utils';
 export { replaySheetsOps } from './replay-ops';
-export { applySheetsRowColOp, type RowColOp } from './rowcol';
+export {
+    applySheetsDeleteRowCol,
+    applySheetsInsertRowCol,
+    type DeleteRowColOp,
+    type InsertRowColOp,
+} from './rowcol';
 export type {
     CalculationChainEntry,
     CellResolver,

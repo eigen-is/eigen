@@ -2,23 +2,23 @@ import type { Sheet, SheetConfig } from '@workspace/lib/sheets';
 import { cloneDeep } from 'es-toolkit/compat';
 import { functionStrChange } from './formula-shift';
 
-export type RowColOp =
-    | {
-          mode: 'insert';
-          type: 'row' | 'column';
-          index: number;
-          count: number;
-          direction: 'lefttop' | 'rightbottom';
-          id: string;
-      }
-    | {
-          mode: 'delete';
-          type: 'row' | 'column';
-          start: number;
-          end: number;
-          id: string;
-      };
+export type InsertRowColOp = {
+    type: 'row' | 'column';
+    index: number;
+    count: number;
+    direction: 'lefttop' | 'rightbottom';
+    id: string;
+};
 
+export type DeleteRowColOp = {
+    type: 'row' | 'column';
+    start: number;
+    end: number;
+    id: string;
+};
+
+// SheetConfig in lib types only the fields the BE needs to read. The engine also
+// shifts editor-runtime fields that live alongside but aren't lib-typed.
 type ExtendedSheetConfig = SheetConfig & {
     rowReadOnly?: Record<string, number>;
     colReadOnly?: Record<string, number>;
@@ -26,11 +26,15 @@ type ExtendedSheetConfig = SheetConfig & {
     customWidth?: Record<string, number>;
 };
 
-export function applySheetsRowColOp(sheets: Sheet[], op: RowColOp): Sheet[] {
+export function applySheetsInsertRowCol(sheets: Sheet[], op: InsertRowColOp): Sheet[] {
     const targetIndex = sheets.findIndex((s) => s.id === op.id);
     if (targetIndex === -1) return sheets;
+    return applyInsert(sheets, targetIndex, op);
+}
 
-    if (op.mode === 'insert') return applyInsert(sheets, targetIndex, op);
+export function applySheetsDeleteRowCol(sheets: Sheet[], op: DeleteRowColOp): Sheet[] {
+    const targetIndex = sheets.findIndex((s) => s.id === op.id);
+    if (targetIndex === -1) return sheets;
     return applyDelete(sheets, targetIndex, op);
 }
 
@@ -165,7 +169,7 @@ function shiftFormulasAcrossSheets(
     });
 }
 
-function applyInsert(sheets: Sheet[], targetIndex: number, op: Extract<RowColOp, { mode: 'insert' }>): Sheet[] {
+function applyInsert(sheets: Sheet[], targetIndex: number, op: InsertRowColOp): Sheet[] {
     const target = sheets[targetIndex];
     const cfg = (target.config ?? {}) as ExtendedSheetConfig;
     const data = target.data;
@@ -365,7 +369,7 @@ function applyInsert(sheets: Sheet[], targetIndex: number, op: Extract<RowColOp,
     return result;
 }
 
-function applyDelete(sheets: Sheet[], targetIndex: number, op: Extract<RowColOp, { mode: 'delete' }>): Sheet[] {
+function applyDelete(sheets: Sheet[], targetIndex: number, op: DeleteRowColOp): Sheet[] {
     const target = sheets[targetIndex];
     const data = target.data;
     if (!data) return sheets;
