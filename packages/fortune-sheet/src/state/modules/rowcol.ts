@@ -40,7 +40,7 @@ function shiftStateOnlyFieldsForInsert(
     if (!file) return;
     const d = file.data;
 
-    // Formula config update (calcChain entries + cell.f rewrites)
+    // Formula config update
     const newCalcChain = [];
     for (
         let SheetIndex = 0;
@@ -390,7 +390,7 @@ function shiftStateOnlyFieldsForDelete(
 
     const slen = end - start + 1;
 
-    // Formula config update (calcChain entries + cell.f rewrites)
+    // Formula config update
     const newCalcChain = [];
     for (
         let SheetIndex = 0;
@@ -742,13 +742,6 @@ function adjustSelectionForInsert(
     }
 }
 
-function adjustSelectionForDelete(
-    ctx: Context,
-    op: {type: "row" | "column"; start: number; end: number; id: string},
-) {
-    // Clear selection when selected elements are deleted
-    ctx.luckysheet_select_save = undefined;
-}
 
 /**
  * Insert rows or columns
@@ -2079,7 +2072,7 @@ export function deleteRowCol(
         file.column = d[0]?.length;
     }
 
-    adjustSelectionForDelete(ctx, {type, start, end, id});
+    ctx.luckysheet_select_save = undefined;
 
     // Refresh when modifying the current sheet
     file.data = d;
