@@ -1,9 +1,9 @@
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
 import type { CalendarShare, SharedCalendar } from '@workspace/lib/types/calendar';
-import type { User } from 'better-auth/types';
 import { ApiError } from '../core';
 import { getHome } from '../home';
 import { pullCalendarPermission, pullCalendars } from '../home/home-relay';
+import type { User } from '../user';
 import { getMemberships } from '../user';
 import type { Calendar } from './calendar';
 

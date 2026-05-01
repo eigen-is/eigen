@@ -8,18 +8,13 @@ import {
     DRIVE_MIME_SHEETS,
     DRIVE_MIME_SLIDES,
     DRIVE_MIME_STICKIES,
-    DRIVE_TYPE_CHAT,
-    DRIVE_TYPE_DOC,
     DRIVE_TYPE_FOLDER,
-    DRIVE_TYPE_SHEETS,
-    DRIVE_TYPE_SLIDES,
-    DRIVE_TYPE_STICKIES,
     type DriveContainerType,
     type DrivePath,
     type MountConfig,
     type MountSettings,
 } from '@workspace/lib/types';
-import type { DriveVisibility } from '@workspace/lib/types/drive';
+import { type DriveVisibility, EIGEN_DOCUMENT_TYPES, isContainerType } from '@workspace/lib/types/drive';
 import type { BunFile } from 'bun';
 import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
@@ -28,6 +23,7 @@ import { getS3Config } from '../config/server-config';
 import { getServerSettings } from '../config/server-settings';
 import { ApiError, type DatabaseConfig, ManagedDatabase, type SchemaType } from '../core';
 import { getUniqueFileName } from '../drive/naming';
+import { writeTempWithHash } from '../drive/streaming';
 import { deleteThumbnail } from '../shared/thumbnails';
 import { LocalKeyStorage, LocalStorage, S3Storage, type StorageBackend, type StorageFile } from '../storage';
 import { MOUNT_DB_CONFIG } from './db-config';
@@ -213,6 +209,7 @@ export class Mount {
     }
 
     async getChildByName(parentId: string, name: string): Promise<DrivePath | null> {
+        name = name.normalize('NFC');
         const result = await this.db
             .select()
             .from(paths)
@@ -222,6 +219,26 @@ export class Mount {
             .get();
 
         return result ? this.toDrivePath(result) : null;
+    }
+
+    async resolvePath(pathStr: string): Promise<DrivePath | null> {
+        const segments = pathStr
+            .split('/')
+            .filter((s) => s.length > 0)
+            .map((s) => s.normalize('NFC'));
+        for (const seg of segments) {
+            if (seg === '..' || seg === '.') throw new ApiError(400, 'Invalid path');
+            // biome-ignore lint/suspicious/noControlCharactersInRegex: WebDAV paths must reject control bytes per RFC 4918
+            if (/[\x00-\x1f]/.test(seg)) throw new ApiError(400, 'Invalid path');
+        }
+        let current: DrivePath | null = await this.getRootFolder();
+        for (const seg of segments) {
+            if (!current) return null;
+            const child = await this.getChildByName(current.id, seg);
+            if (!child || child.trashedAt) return null;
+            current = child;
+        }
+        return current;
     }
 
     private async assertUniqueName(parentId: string, name: string, excludeId?: string): Promise<void> {
@@ -365,6 +382,37 @@ export class Mount {
         });
 
         return fileId;
+    }
+
+    async copyPath(srcPathId: string, destParentId: string, name: string): Promise<DrivePath> {
+        const src = await this.getPath(srcPathId);
+        if (!src || src.trashedAt) throw new ApiError(404, 'Source not found');
+
+        if (isContainerType(src.type)) {
+            const containerType: DriveContainerType | undefined = src.type === DRIVE_TYPE_FOLDER ? undefined : src.type;
+            const newId = await this.createFolder(destParentId, name, containerType);
+            const children = await this.listFolder(srcPathId);
+            for (const child of children) {
+                await this.copyPath(child.id, newId, child.name);
+            }
+            const created = await this.getPath(newId);
+            if (!created) throw new ApiError(500, 'Failed to copy folder');
+            return created;
+        }
+
+        const srcKey = await this.getStorageKey(srcPathId);
+        const srcFile = this.storage.read(srcKey);
+        if (!(await srcFile.exists())) throw new ApiError(404, 'Source file missing on storage');
+        const tempId = randomUUID();
+        const { size, hash } = await writeTempWithHash(this.getTempPath(tempId), srcFile);
+        try {
+            const newId = await this.createFileFromTemp(destParentId, name, src.mimeType, size, hash, tempId);
+            const created = await this.getPath(newId);
+            if (!created) throw new ApiError(500, 'Failed to copy file');
+            return created;
+        } finally {
+            await this.cleanupTemp(tempId);
+        }
     }
 
     async touchFile(parentId: string, name: string, mimeType: string) {
@@ -766,6 +814,14 @@ export class Mount {
         return null;
     }
 
+    async readRange(pathId: string, start: number, end: number): Promise<StorageFile | null> {
+        const storageKey = await this.getStorageKey(pathId);
+        const probe = this.storage.read(storageKey);
+        if (!(await probe.exists())) return null;
+        if (this.storage.readRange) return this.storage.readRange(storageKey, start, end);
+        return probe.slice(start, end);
+    }
+
     async writeFile(pathId: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
         const storageKey = await this.getStorageKey(pathId);
         const written = await this.storage.write(storageKey, data);
@@ -782,6 +838,14 @@ export class Mount {
         const hash = await this.computeHash(data);
         await this.db.update(paths).set({ size, hash, updatedAt: new Date() }).where(eq(paths.id, pathId));
         return written;
+    }
+
+    // Overwrite using a temp file with size+hash already known (from writeTempWithHash).
+    // Mirrors createFileFromTemp on the create side and avoids re-hashing.
+    async writeFileFromTemp(pathId: string, tempId: string, size: number, hash: string): Promise<void> {
+        const storageKey = await this.getStorageKey(pathId);
+        await this.uploadFromTemp(storageKey, tempId);
+        await this.db.update(paths).set({ size, hash, updatedAt: new Date() }).where(eq(paths.id, pathId));
     }
 
     getTempPath(pathId: string): string {
@@ -932,10 +996,14 @@ export class Mount {
         }
         conditions.push(isNull(paths.trashedAt));
         if (options?.excludeDocumentChildren) {
+            const typeList = sql.join(
+                EIGEN_DOCUMENT_TYPES.map((t) => sql`${t}`),
+                sql`, `,
+            );
             conditions.push(sql`${paths.parentId} NOT IN (
                 WITH RECURSIVE doc_tree AS (
                     SELECT ${paths.id} FROM ${paths}
-                    WHERE ${paths.type} IN (${DRIVE_TYPE_DOC}, ${DRIVE_TYPE_STICKIES}, ${DRIVE_TYPE_SLIDES}, ${DRIVE_TYPE_SHEETS}, ${DRIVE_TYPE_CHAT})
+                    WHERE ${paths.type} IN (${typeList})
                     AND ${paths.trashedAt} IS NULL
                     UNION ALL
                     SELECT p.id FROM ${paths} p
@@ -1000,6 +1068,7 @@ export class Mount {
             ownerId: row.ownerId,
             mimeType: row.mimeType,
             size: row.size ?? 0,
+            hash: row.hash,
             thumbnail: row.thumbnail,
             acl: row.acl,
             visibility: (row.visibility ?? 'private') as DriveVisibility,

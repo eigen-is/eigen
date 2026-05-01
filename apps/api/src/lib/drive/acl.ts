@@ -1,6 +1,6 @@
 import { parseOwnerId } from '@workspace/lib/types';
 import { type DriveACL, type DrivePath, isCollabType } from '@workspace/lib/types/drive';
-import type { User } from 'better-auth/types';
+import type { User } from '../user';
 import type { Memberships } from '../user/';
 
 export function canReadFromAncestors(ancestors: DrivePath[], user: User, memberships: Memberships): boolean {

@@ -14,10 +14,10 @@ import type { Attendee, CalendarEvent, CalendarItem, CalendarShare } from '@work
 import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
 import type { TeamSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
-import type { User } from 'better-auth/types';
 import type { InvitationUpdatePayload, ReceiveInvitationPayload } from '../calendar/calendar';
 import { getAvatarsDir } from '../config/paths';
 import type { PersistInput } from '../notification-center/notification-center';
+import type { User } from '../user';
 import { updateUser } from '../user/';
 import { atHome, getHome } from './get-home';
 

@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import type { S3Config } from '@workspace/lib/types';
 import { parseOwnerId } from '@workspace/lib/types';
 import type { MountSettings, TeamSettings } from '@workspace/lib/types/settings';
-import type { User } from 'better-auth/types';
 import { Calendar } from '../calendar/calendar';
 import { getTeamDataPath } from '../config/paths';
 import { getServerSettings, mapStorageType } from '../config/server-settings';
@@ -10,6 +9,7 @@ import { ApiError, JsonStore, LocalFilesystem } from '../core';
 import { Drive } from '../drive';
 import { createMountConfig } from '../mount';
 import { checkS3Connection } from '../storage/s3-storage';
+import { makeSyntheticUser, type User } from '../user';
 import { Home } from './home';
 
 export function getSyntheticTeamUser(ownerId: string, teamName?: string): User {
@@ -17,15 +17,7 @@ export function getSyntheticTeamUser(ownerId: string, teamName?: string): User {
     if (!parsed || parsed.type !== 'team') {
         throw new ApiError(400, 'Invalid teamId format');
     }
-
-    return {
-        id: ownerId,
-        name: teamName || ownerId,
-        email: '',
-        emailVerified: false,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-    };
+    return makeSyntheticUser(ownerId, teamName || ownerId, '');
 }
 
 export class TeamHome extends Home {

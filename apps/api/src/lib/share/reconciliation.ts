@@ -1,6 +1,6 @@
-import type { User } from 'better-auth/types';
 import { getHome } from '../home';
 import { pullCalendarShares, pullPendingInvitations, pullSharedPaths, sendToHome } from '../home/home-relay';
+import type { User } from '../user';
 import { getMemberships, getUserById } from '../user';
 import { getEntriesForTarget, removeEntriesForTarget } from './registry';
 

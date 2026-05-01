@@ -2,7 +2,6 @@ import { apiKey } from '@better-auth/api-key';
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { admin, organization, twoFactor } from 'better-auth/plugins';
-import type { User } from 'better-auth/types';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import {
     account as accountScheme,
@@ -22,6 +21,7 @@ import { getServerConfig } from '../config/server-config';
 import { ApiError } from '../core';
 import { sendMail } from '../core/mailer';
 import { reconcileSharesForNewTeamMember, reconcileSharesForNewUser } from '../share';
+import type { User } from '../user';
 
 export const trustedOrigins = [
     'http://localhost',
@@ -63,9 +63,13 @@ export const auth = betterAuth({
     databaseHooks: {
         user: {
             create: {
-                after: async (user) => {
-                    // better-auth's hook type doesn't include admin plugin fields
-                    if (user['role'] === 'guest') return;
+                after: async (hookUser) => {
+                    // better-auth's hook type omits admin/twoFactor plugin fields,
+                    // but the runtime row has them. Cast to our User type at the
+                    // boundary so the rest of the app doesn't need to thread the
+                    // looser shape through.
+                    const user = hookUser as User;
+                    if (user.role === 'guest') return;
                     await authAddUserToDefaultOrg(user);
                     await reconcileSharesForNewUser(user);
                 },

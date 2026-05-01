@@ -1,13 +1,13 @@
 import type { MountInfo } from '@workspace/lib/types';
 import { parseOwnerId } from '@workspace/lib/types';
-import type { DriveACL, DrivePath, DriveVisibility, EigenDocType } from '@workspace/lib/types/drive';
-import type { User } from 'better-auth';
+import type { DriveACL, DrivePath, DrivePathDetails, DriveVisibility, EigenDocType } from '@workspace/lib/types/drive';
 import type { ChatRoom } from '../chat';
 import type CollabDocument from '../collab/collabDocument.ts';
 import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
 import { ApiError } from '../core';
 import type { Home } from '../home';
 import type { StorageFile } from '../storage';
+import type { User } from '../user';
 import { getMemberships, type Memberships } from '../user/';
 import { canReadFromAncestors } from './acl';
 import type Drive from './drive';
@@ -27,6 +27,13 @@ export default class SharedDrive {
         this.sharedDrive = sharedHome.drive;
         this.user = user;
         this.owner = sharedHome.user;
+    }
+
+    // WebDAV LockManager lives on the underlying Drive (and shares the Home's lifecycle).
+    // Lock state is per-user (acquire/release check userId), so no extra ACL gate needed
+    // beyond the path-resolution that already happened in the route handler.
+    public get lockManager() {
+        return this.sharedDrive.lockManager;
     }
 
     private async getUserMemberships(): Promise<Memberships> {
@@ -67,10 +74,6 @@ export default class SharedDrive {
         if (!root) return null;
         const memberships = await this.getUserMemberships();
         return (await this.canRead(mountId, root.id, this.user, memberships)) ? root : null;
-    }
-
-    public async size(_mountId: string) {
-        return 0;
     }
 
     public async getMimeTypeContents(
@@ -122,15 +125,40 @@ export default class SharedDrive {
         return this.withReadPermission(mountId, pathId, () => this.sharedDrive.getPath(mountId, pathId));
     }
 
+    public async resolvePath(mountId: string, pathStr: string): Promise<DrivePath | null> {
+        const path = await this.sharedDrive.resolvePath(mountId, pathStr);
+        if (!path) return null;
+        return this.withReadPermission(mountId, path.id, async () => path);
+    }
+
     public async downloadFile(mountId: string, pathId: string) {
         return this.withReadPermission(mountId, pathId, () => this.sharedDrive.downloadFile(mountId, pathId));
+    }
+
+    public async copyPath(mountId: string, srcPathId: string, destParentId: string, name: string): Promise<DrivePath> {
+        const memberships = await this.getUserMemberships();
+        if (!(await this.canRead(mountId, srcPathId, this.user, memberships))) {
+            throw new ApiError(403, 'No read permission on source');
+        }
+        if (!(await this.canWrite(mountId, destParentId, this.user, memberships))) {
+            throw new ApiError(403, 'No write permission on target folder');
+        }
+        return this.sharedDrive.copyPath(mountId, srcPathId, destParentId, name);
+    }
+
+    public async readRange(mountId: string, pathId: string, start: number, end: number) {
+        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.readRange(mountId, pathId, start, end));
     }
 
     public async serveFile(mountId: string, pathId: string, disposition: 'attachment' | 'inline') {
         return this.withReadPermission(mountId, pathId, () => this.sharedDrive.serveFile(mountId, pathId, disposition));
     }
 
-    public async writeFileContent(mountId: string, pathId: string, data: Buffer) {
+    public async writeFileContent(
+        mountId: string,
+        pathId: string,
+        data: Buffer | StorageFile | ReadableStream<Uint8Array>,
+    ) {
         return this.withWritePermission(mountId, pathId, () =>
             this.sharedDrive.writeFileContent(mountId, pathId, data),
         );
@@ -166,7 +194,7 @@ export default class SharedDrive {
         parentId: string,
         name: string,
         mimeType: string,
-        data: Buffer | StorageFile,
+        data: Buffer | StorageFile | ReadableStream<Uint8Array>,
     ): Promise<DrivePath> {
         return this.withWritePermission(mountId, parentId, () =>
             this.sharedDrive.createFileFromData(mountId, parentId, name, mimeType, data),
@@ -369,5 +397,11 @@ export default class SharedDrive {
         // No owner/team check — getSharedWith is self-filtering: it only returns
         // paths where the querying user has ACL read access.
         return this.sharedDrive.getSharedWith(user);
+    }
+
+    public async updatePathDetails(mountId: string, pathId: string, details: DrivePathDetails): Promise<void> {
+        return this.withWritePermission(mountId, pathId, () =>
+            this.sharedDrive.updatePathDetails(mountId, pathId, details),
+        );
     }
 }

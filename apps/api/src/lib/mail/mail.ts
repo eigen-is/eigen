@@ -1,11 +1,11 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DraftAttachmentUpload, Email, EmailDraft, EmailSummary, NewDraft } from '@workspace/lib/types/mail';
-import type { User } from 'better-auth/types';
 import { processInboundImip } from '../calendar/imip';
 import { getMailUploadMaxSize, getUploadMaxSize } from '../config/enforcement';
 import { ApiError } from '../core/errors';
 import { getSharedDrive } from '../drive';
 import { getHome } from '../home';
+import type { User } from '../user';
 import { getUserByEmail } from '../user/';
 import { simpleParser } from './mail-parser';
 

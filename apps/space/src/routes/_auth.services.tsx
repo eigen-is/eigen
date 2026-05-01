@@ -6,13 +6,17 @@ import {
     useCreateAppPassword,
     useDeleteAppPassword,
 } from '@workspace/lib/core/auth/hooks/use-app-passwords';
+import { formatDate } from '@workspace/lib/date';
+import { useMounts } from '@workspace/lib/drive';
+import { useMyTeams } from '@workspace/lib/home';
+import { teamOwnerId } from '@workspace/lib/types';
 import { Button } from '@workspace/ui/components/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@workspace/ui/components/card';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { Separator } from '@workspace/ui/components/separator';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@workspace/ui/components/table';
-import { Calendar, Check, Copy, KeyRound, Mail, Plus, Trash2 } from 'lucide-react';
+import { Calendar, Check, Copy, FolderTree, KeyRound, Mail, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
 export const Route = createFileRoute('/_auth/services')({
@@ -121,10 +125,10 @@ function AppPasswords() {
                                     <TableRow key={pw.id}>
                                         <TableCell className="font-medium">{pw.name ?? 'Unnamed'}</TableCell>
                                         <TableCell className="text-muted-foreground">
-                                            {new Date(pw.createdAt).toLocaleDateString()}
+                                            {formatDate(pw.createdAt)}
                                         </TableCell>
                                         <TableCell className="text-muted-foreground">
-                                            {pw.lastRequest ? new Date(pw.lastRequest).toLocaleDateString() : 'Never'}
+                                            {pw.lastRequest ? formatDate(pw.lastRequest) : 'Never'}
                                         </TableCell>
                                         <TableCell>
                                             <Button
@@ -151,14 +155,17 @@ function ServicesComponent() {
     const { user } = useAuth();
     const host = new URL(API_HOST).hostname;
     const davBase = `${API_HOST}/dav`;
+    const webdavBase = `${API_HOST}/webdav`;
+    const { data: personalMounts } = useMounts(user?.id ?? '');
+    const { data: teams } = useMyTeams();
 
     return (
         <div className="flex flex-col m-8">
             <div className="w-full max-w-3xl">
-                <h1 className="text-2xl font-semibold mb-6">Calendar & Mail</h1>
+                <h1 className="text-2xl font-semibold mb-6">Integrations</h1>
                 <p className="text-sm text-muted-foreground mb-6">
-                    Connect your calendars and email to external clients like Thunderbird, Apple Mail, or any app that
-                    supports CalDAV and IMAP.
+                    Connect your calendars, mail, and drive to external clients like Thunderbird, Apple Mail, Finder,
+                    rclone, or any app that supports CalDAV, IMAP, or WebDAV.
                 </p>
 
                 <div className="space-y-6">
@@ -199,6 +206,38 @@ function ServicesComponent() {
                             <CopyableField label="Username" value={user?.email ?? ''} />
                             <CopyableField label="SMTP server" value={host} />
                             <CopyableField label="SMTP port" value="465" />
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2">
+                                <FolderTree className="h-5 w-5" />
+                                WebDAV (Drive sync)
+                            </CardTitle>
+                            <CardDescription>
+                                Mount each drive separately in Finder, Explorer, rclone, or Mountain Duck. Authenticate
+                                with an app password generated below.
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                            <CopyableField label="Username" value={user?.email ?? ''} />
+                            {personalMounts?.map((m) => (
+                                <CopyableField
+                                    key={m.id}
+                                    label={`Personal — ${m.name}`}
+                                    value={`${webdavBase}/${user?.id ?? ''}/${m.id}/`}
+                                />
+                            ))}
+                            {teams?.flatMap((team) =>
+                                team.mounts.map((m) => (
+                                    <CopyableField
+                                        key={`${team.id}-${m.id}`}
+                                        label={`${team.name} — ${m.name}`}
+                                        value={`${webdavBase}/${teamOwnerId(team.id)}/${m.id}/`}
+                                    />
+                                )),
+                            )}
                         </CardContent>
                     </Card>
 
