@@ -25,7 +25,7 @@ export {
 } from './dependency-graph';
 export { datenum_local, genarate, is_date, update, valueShowEs } from './format';
 export { FormulaEngine, isCellReference, isFormula } from './formula-engine';
-export { detectAbsolute, type FormulaShiftMode, functionCopy } from './formula-shift';
+export { detectAbsolute, type FormulaShiftMode, functionCopy, functionStrChange } from './formula-shift';
 export {
     calPostfixExpression,
     checkBracketNum,
