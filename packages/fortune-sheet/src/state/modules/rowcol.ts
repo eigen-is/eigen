@@ -54,8 +54,10 @@ function shiftStateOnlyFieldsForInsert(
             if (type === "row") {
                 if (direction === "lefttop" && calc.r >= index) calc.r += count;
                 else if (direction === "rightbottom" && calc.r > index) calc.r += count;
-            } else if (direction === "lefttop" && calc.c >= index) calc.c += count;
-            else if (direction === "rightbottom" && calc.c > index) calc.c += count;
+            } else {
+                if (direction === "lefttop" && calc.c >= index) calc.c += count;
+                else if (direction === "rightbottom" && calc.c > index) calc.c += count;
+            }
             newCalcChain.push(calc);
         }
     }
@@ -319,10 +321,12 @@ function shiftStateOnlyFieldsForDelete(
                     calc.r -= slen;
                     newCalcChain.push(calc);
                 }
-            } else if (calc.c < start) newCalcChain.push(calc);
-            else if (calc.c > end) {
-                calc.c -= slen;
-                newCalcChain.push(calc);
+            } else {
+                if (calc.c < start) newCalcChain.push(calc);
+                else if (calc.c > end) {
+                    calc.c -= slen;
+                    newCalcChain.push(calc);
+                }
             }
         }
     }
