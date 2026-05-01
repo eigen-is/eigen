@@ -1,6 +1,7 @@
 import { isContainerType } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { XMLParser, XMLValidator } from 'fast-xml-parser';
+import { getMountQuotaState } from '../config/enforcement';
 import { ApiError } from '../core/errors';
 import { getSharedDrive } from '../drive/get-drive';
 import type { User } from '../user';
@@ -73,7 +74,7 @@ export async function handleResourcePropfind(args: {
     const responses: string[] = [];
 
     if (isCollection) {
-        const [used, total] = await Promise.all([drive.usedBytes(mountId), drive.quotaBytes(mountId)]);
+        const { used, max } = await getMountQuotaState(ownerId, user.id, mountId);
         responses.push(
             response(`${baseHref}${withTrailingSlash(encodeHref(pathStr))}`, [
                 propstatOk([
@@ -81,7 +82,7 @@ export async function handleResourcePropfind(args: {
                         path,
                         isCollection: true,
                         quotaUsed: used,
-                        quotaAvailable: Math.max(0, total - used),
+                        quotaAvailable: Math.max(0, max - used),
                         locks: drive.lockManager.listForPath(path.id),
                     }),
                     ...deadPropsXml(path),

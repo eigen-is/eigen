@@ -30,7 +30,6 @@ import { ChatRoom } from '../chat';
 import CollabDocument from '../collab/collabDocument';
 import { isProduction } from '../config/env';
 import { getDomain, getMailDomain } from '../config/server-config';
-import { getServerSettings } from '../config/server-settings';
 import { ApiError, type DatabaseConfig, type ManagedDatabase, type SchemaType } from '../core';
 import { contentDisposition } from '../core/http';
 import { sendMail } from '../core/mailer';
@@ -151,15 +150,6 @@ export default class Drive {
 
     async resolvePath(mountId: string, pathStr: string): Promise<DrivePath | null> {
         return this.getMount(mountId).resolvePath(pathStr);
-    }
-
-    async usedBytes(mountId: string): Promise<number> {
-        return this.getMount(mountId).usedBytes();
-    }
-
-    quotaBytes(mountId: string): number {
-        const mb = this.getMountConfig(mountId).maxSizeMB ?? getServerSettings().quotas.defaultMountMaxSizeMB;
-        return mb * 1024 * 1024;
     }
 
     async getFolderContents(mountId: string, pathId: string): Promise<DrivePath[]> {
