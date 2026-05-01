@@ -85,6 +85,12 @@ export async function handleLock(args: {
         throw new ApiError(412, 'No matching lock to refresh');
     }
 
+    // resolvePath only checks read on SharedDrive; a fresh lock implies pending
+    // writes, so reject read-only collaborators before allocating a token.
+    if (!(await drive.canWrite(mountId, path.id, user))) {
+        throw new ApiError(403, 'No write permission');
+    }
+
     const ownerHref = extractLockOwner(body);
     const scope = extractLockScope(body);
     const breadcrumb = await drive.breadCrumb(mountId, path.id);

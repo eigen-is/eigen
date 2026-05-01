@@ -169,13 +169,10 @@ export async function handleMkcol(args: {
     contentLength: number;
     ifHeader: string | null;
 }): Promise<Response> {
-    const { user, ownerId, mountId, contentLength, ifHeader } = args;
+    const { user, ownerId, mountId, pathStr, contentLength, ifHeader } = args;
     if (contentLength > 0) {
         throw new ApiError(415, 'MKCOL request body not supported');
     }
-
-    // Strip trailing slash so /foo/ creates /foo. Root → '/' which resolves to existing → 405.
-    const pathStr = args.pathStr.replace(/\/+$/, '') || '/';
 
     const drive = await getSharedDrive(ownerId, user);
     if (await drive.resolvePath(mountId, pathStr)) {
@@ -208,10 +205,7 @@ export async function handleDelete(args: {
     pathStr: string;
     ifHeader: string | null;
 }): Promise<Response> {
-    const { user, ownerId, mountId, ifHeader } = args;
-    // Normalise trailing slash so /foo/ and /foo share a cache key.
-    const pathStr = args.pathStr.replace(/\/+$/, '') || '/';
-
+    const { user, ownerId, mountId, pathStr, ifHeader } = args;
     const drive = await getSharedDrive(ownerId, user);
     const path = await drive.resolvePath(mountId, pathStr);
     if (!path) throw new ApiError(404, 'Not found');
@@ -222,11 +216,6 @@ export async function handleDelete(args: {
     }
     assertWritable(drive.lockManager, breadcrumb, ifHeader, user.id);
     await drive.deletePath(mountId, path.id);
-    // LockManager only GCs expired entries; without explicit release, locks on
-    // a deleted pathId stay in memory until TTL. With the 24h cap that's bounded
-    // but still wasteful — and unbounded across many deletions in a session.
-    for (const lock of drive.lockManager.listForPath(path.id)) {
-        drive.lockManager.release(lock.token);
-    }
+    drive.lockManager.releaseAllForPath(path.id);
     return new Response(null, { status: 204 });
 }

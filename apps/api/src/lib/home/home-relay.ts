@@ -12,7 +12,6 @@
 import * as path from 'node:path';
 import type { Attendee, CalendarEvent, CalendarItem, CalendarShare } from '@workspace/lib/types/calendar';
 import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
-import type { MountInfo } from '@workspace/lib/types/mount';
 import type { TeamSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import type { InvitationUpdatePayload, ReceiveInvitationPayload } from '../calendar/calendar';
@@ -109,11 +108,6 @@ export async function sendToHome(targetUserId: string, message: HomeMessage): Pr
 export async function pullSharedPaths(ownerUserId: string, user: User): Promise<DrivePath[]> {
     const home = await getHome(ownerUserId);
     return home.drive.getSharedWith(user);
-}
-
-export async function pullDriveMounts(ownerUserId: string): Promise<MountInfo[]> {
-    const home = await getHome(ownerUserId);
-    return home.drive.listMounts();
 }
 
 export async function pullCalendarShares(

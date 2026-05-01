@@ -2,6 +2,7 @@ import { XMLParser } from 'fast-xml-parser';
 import { ApiError } from '../core/errors';
 import { getSharedDrive } from '../drive/get-drive';
 import type { User } from '../user';
+import { enclosingDocumentContainer } from './container-guard';
 import { assertWritable } from './locks';
 import { buildXmlResponse, encodeHref, escapeXml, multistatus, propstatOk, propstatStatus, response } from './xml';
 
@@ -85,7 +86,7 @@ function* iterPropChildren(
     }
 }
 
-export function extractPropOps(body: string): PropOp[] {
+function extractPropOps(body: string): PropOp[] {
     if (!body?.trim()) return [];
     const parsed = parser.parse(body) as Record<string, unknown>;
     const rootKey = Object.keys(parsed).find((k) => stripPrefix(k).local === 'propertyupdate');
@@ -141,6 +142,9 @@ export async function handleProppatch(args: {
     if (!path) throw new ApiError(404, 'Not found');
 
     const breadcrumb = await drive.breadCrumb(mountId, path.id);
+    if (enclosingDocumentContainer(breadcrumb, { includeSelf: false })) {
+        throw new ApiError(423, 'Container internals are read-only');
+    }
     assertWritable(drive.lockManager, breadcrumb, ifHeader, user.id);
 
     // Apply all ops in memory first, then write once. RFC 4918 §9.2 requires

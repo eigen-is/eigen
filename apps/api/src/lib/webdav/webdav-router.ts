@@ -18,8 +18,11 @@ function parseDepth(header: string | null): '0' | '1' | 'infinity' {
 
 // Elysia leaves wildcard params percent-encoded ("My%20Folder/file.txt"); decode
 // per-segment so a real space in a name matches the row stored as "My Folder".
+// Trailing slashes are stripped so /foo/ and /foo resolve to the same row — most
+// clients append `/` to collection URLs, but the underlying path has no slash.
 function pathStrFromParams(star: string | undefined): string {
-    return `/${decodeHref(star ?? '')}`;
+    const rest = (star ?? '').replace(/\/+$/, '');
+    return rest.length === 0 ? '/' : `/${decodeHref(rest)}`;
 }
 
 // PROPFIND/PROPPATCH/LOCK bodies are short XML in any real client. Reject anything
@@ -79,13 +82,11 @@ export const webdavRouter = new Elysia({ name: 'webdav', prefix: '/webdav' })
     .route('PROPFIND', '/:ownerId/:mountId/*', async ({ request, params }) => {
         const user = await authenticateBasic(request);
         const depth = parseDepth(request.headers.get('Depth'));
-        const rest = (params['*'] ?? '').replace(/\/+$/, '');
-        const pathStr = rest.length === 0 ? '/' : `/${decodeHref(rest)}`;
         return handleResourcePropfind({
             user,
             ownerId: params.ownerId,
             mountId: params.mountId,
-            pathStr,
+            pathStr: pathStrFromParams(params['*']),
             depth,
             body: await readXmlBody(request),
         });
