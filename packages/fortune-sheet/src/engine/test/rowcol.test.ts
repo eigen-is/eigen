@@ -291,6 +291,28 @@ describe('applySheetsRowColOp — guards', () => {
             }),
         ).toThrow('maxExceeded');
     });
+
+    test('delete throws readOnly when any row in [start, end] is read-only', () => {
+        const sheets: Sheet[] = [
+            makeSheet('s1', 'Sheet1', [[cell('a')], [cell('b')], [cell('c')]], {
+                config: { rowReadOnly: { '1': 1 } } as any,
+            }),
+        ];
+        expect(() => applySheetsRowColOp(sheets, { mode: 'delete', type: 'row', start: 0, end: 2, id: 's1' })).toThrow(
+            'readOnly',
+        );
+    });
+
+    test('delete throws readOnly for column range', () => {
+        const sheets: Sheet[] = [
+            makeSheet('s1', 'Sheet1', [[cell('a'), cell('b'), cell('c')]], {
+                config: { colReadOnly: { '2': 1 } } as any,
+            }),
+        ];
+        expect(() =>
+            applySheetsRowColOp(sheets, { mode: 'delete', type: 'column', start: 1, end: 2, id: 's1' }),
+        ).toThrow('readOnly');
+    });
 });
 
 describe('applySheetsRowColOp — passthrough', () => {

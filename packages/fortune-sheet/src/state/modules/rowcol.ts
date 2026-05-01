@@ -13,16 +13,24 @@ const refreshLocalMergeData = (merge_new: Record<string, any>, file: Sheet) => {
             cs: number;
         };
 
+        // Engine inserts null for new cells inside an expanded merge range; the
+        // canvas renderer needs `mc` on every cell of the range to hide them
+        // behind the top-left, so stamp through nulls too.
         for (let i = r; i < r + rs; i += 1) {
             for (let j = c; j < c + cs; j += 1) {
-                if (file?.data?.[i]?.[j]) {
-                    file.data[i][j] = assign(cloneDeep(file.data[i][j]), {mc: {r, c}});
-                }
+                if (!file?.data?.[i]) continue;
+                const existing = file.data[i][j];
+                file.data[i][j] = existing
+                    ? assign(cloneDeep(existing), {mc: {r, c}})
+                    : {mc: {r, c}};
             }
         }
 
-        if (file?.data?.[r]?.[c]) {
-            file.data[r][c] = assign(cloneDeep(file.data[r][c]), {mc: {r, c, rs, cs}});
+        if (file?.data?.[r]) {
+            const existing = file.data[r][c];
+            file.data[r][c] = existing
+                ? assign(cloneDeep(existing), {mc: {r, c, rs, cs}})
+                : {mc: {r, c, rs, cs}};
         }
     });
 };

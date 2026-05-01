@@ -371,6 +371,18 @@ function applyDelete(sheets: Sheet[], targetIndex: number, op: Extract<RowColOp,
     if (!data) return sheets;
 
     const cfg = (target.config ?? {}) as ExtendedSheetConfig;
+
+    if (op.type === 'row' && cfg.rowReadOnly) {
+        for (let i = op.start; i <= op.end; i += 1) {
+            if (cfg.rowReadOnly[i]) throw new Error('readOnly');
+        }
+    }
+    if (op.type === 'column' && cfg.colReadOnly) {
+        for (let i = op.start; i <= op.end; i += 1) {
+            if (cfg.colReadOnly[i]) throw new Error('readOnly');
+        }
+    }
+
     const newTarget = cloneDeep(target);
     const newCfg = (newTarget.config ?? {}) as ExtendedSheetConfig;
     const newData = newTarget.data!;
