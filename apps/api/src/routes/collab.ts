@@ -1,5 +1,4 @@
 import type { CollabDocumentInfo } from '@workspace/lib/types/collab';
-import type { User } from 'better-auth/types';
 import type { ServerWebSocket } from 'bun';
 import { Elysia, t } from 'elysia';
 import { getCommentIndex } from '../lib/chat/comment-index';
@@ -8,6 +7,7 @@ import { ApiError } from '../lib/core/errors';
 import { getSharedDrive } from '../lib/drive';
 import type Drive from '../lib/drive/drive';
 import type SharedDrive from '../lib/drive/sharedDrive';
+import type { User } from '../lib/user';
 import { keepWebSocketAlive } from '../utils/websockets';
 import { betterAuth } from './auth';
 

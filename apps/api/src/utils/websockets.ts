@@ -1,5 +1,5 @@
-import type { User } from 'better-auth/types';
 import type { ServerWebSocket } from 'bun';
+import type { User } from '../lib/user';
 
 export function keepWebSocketAlive(
     user: User,

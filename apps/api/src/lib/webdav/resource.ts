@@ -1,7 +1,7 @@
 import { isContainerType } from '@workspace/lib/types/drive';
-import type { ProtocolUser } from '../auth/protocol-auth';
 import { ApiError } from '../core/errors';
 import { getSharedDrive } from '../drive/get-drive';
+import type { User } from '../user';
 import { enclosingDocumentContainer } from './container-guard';
 import { assertWritable } from './locks';
 import { computeEtag } from './xml';
@@ -19,7 +19,7 @@ function ifMatchesEtag(header: string, etag: string): boolean {
 }
 
 export async function handleGet(args: {
-    user: ProtocolUser;
+    user: User;
     ownerId: string;
     mountId: string;
     pathStr: string;
@@ -89,7 +89,7 @@ export async function handleGet(args: {
 }
 
 export async function handlePut(args: {
-    user: ProtocolUser;
+    user: User;
     ownerId: string;
     mountId: string;
     pathStr: string;
@@ -163,7 +163,7 @@ export async function handlePut(args: {
 }
 
 export async function handleMkcol(args: {
-    user: ProtocolUser;
+    user: User;
     ownerId: string;
     mountId: string;
     pathStr: string;
@@ -203,7 +203,7 @@ export async function handleMkcol(args: {
 }
 
 export async function handleDelete(args: {
-    user: ProtocolUser;
+    user: User;
     ownerId: string;
     mountId: string;
     pathStr: string;

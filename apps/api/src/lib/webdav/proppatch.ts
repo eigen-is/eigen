@@ -1,7 +1,7 @@
 import { XMLParser } from 'fast-xml-parser';
-import type { ProtocolUser } from '../auth/protocol-auth';
 import { ApiError } from '../core/errors';
 import { getSharedDrive } from '../drive/get-drive';
+import type { User } from '../user';
 import { assertWritable } from './locks';
 import { buildXmlResponse, encodeHref, escapeXml, multistatus, propstatOk, propstatStatus, response } from './xml';
 
@@ -128,7 +128,7 @@ function renderPropElement(op: PropOp): string {
 }
 
 export async function handleProppatch(args: {
-    user: ProtocolUser;
+    user: User;
     ownerId: string;
     mountId: string;
     pathStr: string;
