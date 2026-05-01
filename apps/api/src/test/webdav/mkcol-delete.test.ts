@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { getTestContext } from '../setup';
+import { driveGet, drivePost, getTestContext } from '../setup';
 import { webdavRequest } from './setup';
 
 describe('WebDAV MKCOL/DELETE', () => {
@@ -23,6 +23,23 @@ describe('WebDAV MKCOL/DELETE', () => {
         });
         expect(propfind.status).toBe(207);
         expect(await propfind.text()).toContain('<D:collection/>');
+    });
+
+    test('PROPFIND on a name with a space (URL-encoded as %20) finds it', async () => {
+        // Reproduce the Cyberduck symptom: drive contains a folder with a real space
+        // in its name (created via the web UI's createFolder), and the client
+        // sends %20 in the WebDAV URL. Lookup must URL-decode before matching.
+        const ctx = await getTestContext();
+        const root = await driveGet(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root');
+        await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `folder/${root.id}`, {
+            folderName: 'My Documents',
+        });
+        const url = `/webdav/${ctx.alice.user.id}/${mountId}/My%20Documents/`;
+        const res = await webdavRequest(ctx.alice.user.email, 'PROPFIND', url, {
+            headers: { Depth: '0' },
+        });
+        expect(res.status).toBe(207);
+        expect(await res.text()).toContain('<D:collection/>');
     });
 
     test('MKCOL with body → 415', async () => {

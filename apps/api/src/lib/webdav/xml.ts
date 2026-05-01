@@ -47,6 +47,17 @@ export function encodeHref(path: string): string {
         .join('/');
 }
 
+// Inverse of encodeHref. Decodes per-segment so a literal %2F in a segment
+// (rare, but legal under RFC 3986) doesn't accidentally split into two
+// segments. Elysia's wildcard params and URL.pathname both preserve percent-
+// encoding, so every entry point that converts a URL path to a name needs this.
+export function decodeHref(path: string): string {
+    return path
+        .split('/')
+        .map((seg) => decodeURIComponent(seg))
+        .join('/');
+}
+
 export type LockProps = {
     token: string;
     ownerHref?: string;

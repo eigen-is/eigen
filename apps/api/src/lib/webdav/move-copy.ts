@@ -15,7 +15,12 @@ function parseDestination(destHeader: string, requestUrl: string): DestParts {
     } catch {
         throw new ApiError(400, 'Invalid Destination header');
     }
-    const segments = url.pathname.replace(/^\/+webdav\/+/, '').split('/');
+    // url.pathname keeps percent-encoding ("/webdav/U/M/My%20Folder"); decode each
+    // segment so the result matches in-database names.
+    const segments = url.pathname
+        .replace(/^\/+webdav\/+/, '')
+        .split('/')
+        .map(decodeURIComponent);
     const [ownerId, mountId, ...rest] = segments;
     if (!ownerId || !mountId) throw new ApiError(400, 'Destination not under /webdav');
     const pathStr = `/${rest.join('/').replace(/\/+$/, '')}`;
