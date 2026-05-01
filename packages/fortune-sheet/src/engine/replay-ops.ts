@@ -11,9 +11,8 @@ enablePatches();
 type InsertValue = { type: 'row' | 'column'; index: number; count: number; direction: 'lefttop' | 'rightbottom' };
 type DeleteValue = { type: 'row' | 'column'; start: number; end: number };
 
-// op.value is intentionally `any` in lib.Op (legacy patch.ts contract). These
-// adapters pin the row/col shape so a future RowColOp field addition fails fast
-// here rather than silently dropping out of the spread.
+// op.value is `any` in lib.Op; these adapters pin the runtime shape so a
+// malformed payload produces a warn+skip rather than corrupt state.
 function asInsertValue(v: unknown): InsertValue | null {
     if (!v || typeof v !== 'object') return null;
     const { type, index, count, direction } = v as Partial<InsertValue>;
@@ -31,45 +30,54 @@ function asDeleteValue(v: unknown): DeleteValue | null {
     return { type, start, end };
 }
 
-// Snapshots persisted by writeSheetsToYjs / xlsxToSheets carry only `celldata`,
-// while ops emitted by fortune-sheet's reducer reference `data[r][c]`. Without
-// materializing data first, applyPatches throws "path doesn't resolve" on the
-// very first data-targeting op. We materialize on the way in and refresh
-// celldata on the way out so consumers (xlsx export, FE state) see a
-// consistent shape — but only when ops actually touched `data`. Ops that
-// target `celldata` directly are authoritative and we leave them alone.
+function asSheet(v: unknown): Sheet | null {
+    if (!v || typeof v !== 'object') return null;
+    const sheet = v as Sheet;
+    if (typeof sheet.name !== 'string') return null;
+    return sheet;
+}
+
+// Persisted snapshots carry `celldata` only; ops reference `data[r][c]`. When a
+// batch targets `data`, materialize that sheet on the way in and resync its
+// `celldata` on the way out. Sheets touched only via `celldata` paths pass
+// through unchanged.
 function withMaterializedData(s: Sheet): Sheet {
     if (s.data) return s;
-    const sized = s as { row?: number; column?: number };
-    return { ...s, data: celldataToData(s.celldata ?? [], sized.row, sized.column) ?? [] };
+    return { ...s, data: celldataToData(s.celldata ?? [], s.row, s.column) };
 }
 
 function withSyncedCelldata(s: Sheet): Sheet {
     return { ...s, celldata: dataToCelldata(s.data) };
 }
 
-function batchTouchesData(batch: Op[]): boolean {
-    return batch.some((op) => op.path[0] === 'data');
+function collectDataOpSheetIds(opBatches: Op[][]): Set<string> | null {
+    let touched: Set<string> | null = null;
+    for (const batch of opBatches) {
+        for (const op of batch) {
+            if (op.path[0] === 'data' && op.id) {
+                if (!touched) touched = new Set();
+                touched.add(op.id);
+            }
+        }
+    }
+    return touched;
 }
 
 export function replaySheetsOps(sheets: Sheet[], opBatches: Op[][]): Sheet[] {
     if (opBatches.length === 0) return sheets;
-    // Only materialize/sync when ops actually reference `data[r][c]`. Batches
-    // that only target `celldata` paths leave both the input and output shape
-    // untouched, so a doc that never opened in the FE round-trips byte-for-byte.
-    const sawDataOps = opBatches.some(batchTouchesData);
-    let result = sawDataOps ? sheets.map(withMaterializedData) : sheets;
+    const dataOpIds = collectDataOpSheetIds(opBatches);
+    let result = dataOpIds ? sheets.map((s) => (s.id && dataOpIds.has(s.id) ? withMaterializedData(s) : s)) : sheets;
     for (const batch of opBatches) {
-        // Special ops first, then convert+apply normal ops against the
-        // post-special state. opToPatchOnSheets resolves a sheet id to an
-        // index, so it has to run AFTER addSheet/deleteSheet have settled
-        // the array — otherwise indices land on wrong (or no longer
-        // existing) sheets and applyPatches throws "path doesn't resolve".
-        // Mirrors fortune-sheet's applyOp in Workbook/api.ts where special
-        // ops drive state changes and patches are best-effort companions.
+        // Special ops first: opToPatchOnSheets maps sheet id → array index, so
+        // addSheet/deleteSheet must settle the array before patches resolve.
         for (const op of batch) {
             if (op.op === 'addSheet') {
-                result = [...result, op.value as Sheet];
+                const newSheet = asSheet(op.value);
+                if (!newSheet) {
+                    console.warn('[sheets] addSheet op has malformed value', op.value);
+                    continue;
+                }
+                result = [...result, newSheet];
             } else if (op.op === 'deleteSheet' && op.id) {
                 result = result.filter((s) => s.id !== op.id);
             } else if (op.op === 'insertRowCol' && op.id) {
@@ -87,11 +95,10 @@ export function replaySheetsOps(sheets: Sheet[], opBatches: Op[][]): Sheet[] {
                 }
                 result = applySheetsDeleteRowCol(result, { ...v, id: op.id });
             }
-            // normal ops are handled below in one applyPatches pass
         }
         const normalOps = batch.filter((op) => op.op === 'add' || op.op === 'remove' || op.op === 'replace');
         const [patches] = opToPatchOnSheets(result, normalOps);
         result = applyPatches(result, patches);
     }
-    return sawDataOps ? result.map(withSyncedCelldata) : result;
+    return dataOpIds ? result.map((s) => (s.id && dataOpIds.has(s.id) ? withSyncedCelldata(s) : s)) : result;
 }

@@ -144,6 +144,8 @@ export type Sheet = {
     config?: SheetConfig;
     celldata?: CellWithRowAndCol[];
     data?: CellMatrix;
+    row?: number;
+    column?: number;
     showGridLines?: boolean | number;
     luckysheet_conditionformat_save?: ConditionalFormatRule[];
 };

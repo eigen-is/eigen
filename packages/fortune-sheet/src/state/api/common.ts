@@ -1,12 +1,12 @@
 import {cloneDeep} from "es-toolkit/compat";
+import {celldataToData, dataToCelldata} from "../../engine/celldata";
 import {Context} from "../context";
-import {Sheet} from "../types";
 import {getSheetIndex} from "../utils";
 import {sheetNotFound} from "./errors";
 
 // Re-exported from the engine so a single canonical implementation serves
 // both fortune-sheet's runtime and replaySheetsOps' BE materialization step.
-export {celldataToData, dataToCelldata} from "../../engine/celldata";
+export {celldataToData, dataToCelldata};
 
 export type CommonOptions = { index?: number; id?: string };
 

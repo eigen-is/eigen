@@ -615,11 +615,10 @@ export function insertRowCol(
 
     const {type, index, count, direction} = op;
 
-    // Per-sheet write-back (vs. wholesale array reassignment) so immer emits
-    // granular replace patches per changed sheet instead of one synthetic
-    // ['luckysheetfile'] replace carrying the entire post-mutation Sheet[].
-    // The engine helper preserves identity for unchanged sheets, so unaffected
-    // sheets produce no patch at all — saves bandwidth on collab updates.
+    // Per-sheet write-back, not `ctx.luckysheetfile = ...`: a wholesale
+    // reassignment makes immer emit one synthetic root-level replace patch
+    // carrying the whole workbook, which is then shipped over collab on every
+    // edit. See packages/fortune-sheet/src/state/test/modules/rowcol-patches.test.ts.
     const insertedSheets = applySheetsInsertRowCol(ctx.luckysheetfile, {...op, id});
     for (let i = 0; i < insertedSheets.length; i += 1) {
         ctx.luckysheetfile[i] = insertedSheets[i];
