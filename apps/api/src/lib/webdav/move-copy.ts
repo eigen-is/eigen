@@ -117,7 +117,10 @@ export async function handleMove(args: {
         verb: 'MOVE',
     });
 
-    if (destExisting) await drive.deletePath(args.mountId, destExisting.id);
+    if (destExisting) {
+        await drive.deletePath(args.mountId, destExisting.id);
+        drive.lockManager.releaseAllForPath(destExisting.id);
+    }
 
     if (src.parentId !== destParent.id) {
         await drive.movePath(args.mountId, src.id, destParent.id);
@@ -144,7 +147,10 @@ export async function handleCopy(args: {
         verb: 'COPY',
     });
 
-    if (destExisting) await drive.deletePath(args.mountId, destExisting.id);
+    if (destExisting) {
+        await drive.deletePath(args.mountId, destExisting.id);
+        drive.lockManager.releaseAllForPath(destExisting.id);
+    }
 
     // RFC 4918 §9.8.3: Depth: 0 on a collection COPY means copy the collection
     // itself but NOT its members. Files are unaffected (they have no children).

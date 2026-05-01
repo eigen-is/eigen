@@ -95,6 +95,15 @@ export class LockManager {
         return true;
     }
 
+    // Drop every lock on a path (used when DELETE/MOVE/COPY remove or replace the
+    // resource). Without this, lock state lingers until TTL — bounded but wasteful.
+    releaseAllForPath(pathId: string): void {
+        const tokens = this.byPath.get(pathId);
+        if (!tokens) return;
+        for (const token of tokens) this.locks.delete(token);
+        this.byPath.delete(pathId);
+    }
+
     listForPath(pathId: string): Lock[] {
         this.gc();
         const tokens = this.byPath.get(pathId);

@@ -29,9 +29,15 @@ import { waitlistRouter } from './routes/waitlist';
 
 const SLOW_REQUEST_MS = 200;
 
-const DAV_CAPABILITY_HEADERS = {
+// CalDAV adds class-3, calendar-access, REPORT, MKCALENDAR on top of WebDAV.
+// Advertising REPORT/MKCALENDAR on /webdav would lie about supported verbs.
+const CALDAV_CAPABILITY_HEADERS = {
     DAV: '1, 2, 3, calendar-access',
     Allow: 'OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, PROPPATCH, MKCOL, MOVE, COPY, LOCK, UNLOCK, REPORT, MKCALENDAR',
+};
+const WEBDAV_CAPABILITY_HEADERS = {
+    DAV: '1, 2',
+    Allow: 'OPTIONS, GET, HEAD, PUT, DELETE, PROPFIND, PROPPATCH, MKCOL, MOVE, COPY, LOCK, UNLOCK',
 };
 
 export const app = new Elysia()
@@ -39,9 +45,13 @@ export const app = new Elysia()
     .use(swagger())
     // Handle CalDAV/WebDAV OPTIONS before CORS intercepts them — DAV clients need capability headers
     .onRequest(({ request }) => {
+        if (request.method !== 'OPTIONS') return;
         const pathname = new URL(request.url).pathname;
-        if (request.method === 'OPTIONS' && (pathname.startsWith('/dav') || pathname.startsWith('/webdav'))) {
-            return new Response(null, { status: 204, headers: DAV_CAPABILITY_HEADERS });
+        if (pathname.startsWith('/webdav')) {
+            return new Response(null, { status: 204, headers: WEBDAV_CAPABILITY_HEADERS });
+        }
+        if (pathname.startsWith('/dav')) {
+            return new Response(null, { status: 204, headers: CALDAV_CAPABILITY_HEADERS });
         }
     })
     .use(

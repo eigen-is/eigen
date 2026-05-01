@@ -6,6 +6,7 @@ import {
     useCreateAppPassword,
     useDeleteAppPassword,
 } from '@workspace/lib/core/auth/hooks/use-app-passwords';
+import { formatDate } from '@workspace/lib/date';
 import { useMounts } from '@workspace/lib/drive';
 import { useMyTeams } from '@workspace/lib/home';
 import { teamOwnerId } from '@workspace/lib/types';
@@ -124,10 +125,10 @@ function AppPasswords() {
                                     <TableRow key={pw.id}>
                                         <TableCell className="font-medium">{pw.name ?? 'Unnamed'}</TableCell>
                                         <TableCell className="text-muted-foreground">
-                                            {new Date(pw.createdAt).toLocaleDateString()}
+                                            {formatDate(pw.createdAt)}
                                         </TableCell>
                                         <TableCell className="text-muted-foreground">
-                                            {pw.lastRequest ? new Date(pw.lastRequest).toLocaleDateString() : 'Never'}
+                                            {pw.lastRequest ? formatDate(pw.lastRequest) : 'Never'}
                                         </TableCell>
                                         <TableCell>
                                             <Button
