@@ -1,3 +1,10 @@
+// Public surface of the fortune-sheet engine — pure, DOM-free, framework-free.
+// BE consumers (document/sheets reader, exporters, previews) import from
+// `@workspace/fortune-sheet/engine` rather than the package root so they don't
+// pull React or any state-layer modules. Keep this barrel restricted to symbols
+// safe for Node/server use; anything that reaches into `state/` belongs in the
+// package-root export instead.
+
 export {
     columnIndexToLabel,
     columnLabelToIndex,

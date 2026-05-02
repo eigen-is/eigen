@@ -7,14 +7,8 @@ import type { Mount } from '../../mount';
 import type { ExportResult } from '../export-document';
 import { getFontCSS } from '../fonts';
 import { buildDataUriMap } from '../media';
-import {
-    fixedSizeUnit,
-    type ImgSrcResolver,
-    renderDeckHtml,
-    responsiveSizeUnit,
-    type SizeUnit,
-    stripSlidesExtension,
-} from './render';
+import type { SizeUnit, SlideImgSrcResolver } from '../render-types';
+import { fixedSizeUnit, renderDeckHtml, responsiveSizeUnit, stripSlidesExtension } from './render';
 
 // 16:9 landscape page: 254mm x 142.875mm ~ 960 x 540 px at 96dpi
 const PAGE_WIDTH_PX = 960;
@@ -37,7 +31,7 @@ export async function generateSlidesExportHtml(
     const title = stripSlidesExtension(drivePath.name);
     const { deck, mediaByName } = await readSlidesContent(mount, drivePath);
     const dataUriMap = await buildDataUriMap(mount, mediaByName);
-    const resolveImgSrc: ImgSrcResolver = (mediaName) => dataUriMap.get(mediaName) ?? null;
+    const resolveImgSrc: SlideImgSrcResolver = (mediaName) => dataUriMap.get(mediaName) ?? null;
 
     const isPdf = mode === 'pdf';
     const sizeUnit: SizeUnit = isPdf ? fixedSizeUnit(PAGE_WIDTH_PX, PAGE_HEIGHT_PX) : responsiveSizeUnit;
