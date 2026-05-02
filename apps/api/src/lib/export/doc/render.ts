@@ -1,4 +1,5 @@
 import { escapeHtml } from '@workspace/lib/html';
+import type { FigureImgSrcResolver } from '../render-types';
 
 export function stripEigendocExtension(name: string): string {
     return name.replace(/\.eigendoc$/, '');
@@ -67,8 +68,6 @@ export function renderTaskItemNode(
     return `<li data-type="taskItem" data-checked="${dataChecked}"><label><input type="checkbox"${checkedAttr} disabled /></label><div>${content}</div></li>`;
 }
 
-type ImgSrcResolver = (mediaName: string | null, src: string | null) => string | null;
-
 /**
  * Renders a figure node to HTML. The `resolveImgSrc` callback controls how
  * media references are turned into `src` values (data-URIs for export,
@@ -76,7 +75,7 @@ type ImgSrcResolver = (mediaName: string | null, src: string | null) => string |
  */
 export function renderFigureNode(
     attrs: Record<string, unknown>,
-    resolveImgSrc: ImgSrcResolver,
+    resolveImgSrc: FigureImgSrcResolver,
     options?: { lazy?: boolean },
 ): string {
     const mediaName = attrs['mediaName'] as string | null;
