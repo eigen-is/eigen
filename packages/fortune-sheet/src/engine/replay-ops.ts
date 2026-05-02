@@ -50,11 +50,17 @@ function withSyncedCelldata(s: Sheet): Sheet {
     return { ...s, celldata: dataToCelldata(s.data) };
 }
 
+// A sheet snapshot persisted as celldata-only must materialize `data` before
+// any op that reads/writes through `data[r][c]`. Cell patches reach via
+// `path[0] === 'data'`; insertRowCol / deleteRowCol bypass paths and operate
+// on `target.data` directly inside the engine — both must trigger materialization.
 function collectDataOpSheetIds(opBatches: Op[][]): Set<string> | null {
     let touched: Set<string> | null = null;
     for (const batch of opBatches) {
         for (const op of batch) {
-            if (op.path[0] === 'data' && op.id) {
+            const needsData =
+                (op.path[0] === 'data' && op.id) || ((op.op === 'insertRowCol' || op.op === 'deleteRowCol') && op.id);
+            if (needsData && op.id) {
                 if (!touched) touched = new Set();
                 touched.add(op.id);
             }
@@ -86,14 +92,27 @@ export function replaySheetsOps(sheets: Sheet[], opBatches: Op[][]): Sheet[] {
                     console.warn('[sheets] insertRowCol op has malformed value', op.value);
                     continue;
                 }
-                result = applySheetsInsertRowCol(result, { ...v, id: op.id });
+                // The engine throws bare 'readOnly' / 'maxExceeded' Errors that
+                // are sentinel signals for the UI layer; on the BE replay path
+                // (export, preview, server-side read) there is no user to alert
+                // and the offending op should be skipped, not propagate up and
+                // crash the whole render.
+                try {
+                    result = applySheetsInsertRowCol(result, { ...v, id: op.id });
+                } catch (e) {
+                    console.warn('[sheets] insertRowCol op skipped:', (e as Error).message);
+                }
             } else if (op.op === 'deleteRowCol' && op.id) {
                 const v = asDeleteValue(op.value);
                 if (!v) {
                     console.warn('[sheets] deleteRowCol op has malformed value', op.value);
                     continue;
                 }
-                result = applySheetsDeleteRowCol(result, { ...v, id: op.id });
+                try {
+                    result = applySheetsDeleteRowCol(result, { ...v, id: op.id });
+                } catch (e) {
+                    console.warn('[sheets] deleteRowCol op skipped:', (e as Error).message);
+                }
             }
         }
         const normalOps = batch.filter((op) => op.op === 'add' || op.op === 'remove' || op.op === 'replace');
