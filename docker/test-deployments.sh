@@ -60,6 +60,46 @@ probe_ws() {
     fi
 }
 
+# Postfix should send a 220 SMTP banner as soon as the TCP connection is open. Doubles as
+# proof that postfix could resolve unbound's IP and start cleanly — the part that breaks
+# when EIGEN_SUBNET / EIGEN_UNBOUND_IP get out of sync. Retries because postfix has no
+# healthcheck, so `compose up --wait` returns before the listener is fully accepting.
+probe_smtp() {
+    local desc="$1" port="$2"
+    local banner=""
+    for _ in 1 2 3 4 5; do
+        banner=$(printf 'QUIT\r\n' | nc -w 5 localhost "$port" 2>/dev/null | head -1 || true)
+        echo "$banner" | grep -q '^220 ' && break
+        sleep 1
+    done
+    if echo "$banner" | grep -q '^220 '; then
+        log "✓ $desc → 220 banner"
+        PASS=$((PASS+1))
+    else
+        log "✗ $desc → '$banner' (expected SMTP 220 banner)"
+        FAIL=$((FAIL+1)); FAIL_LINES+=("SMTP banner on port $port: '$banner'")
+    fi
+}
+
+# Dovecot IMAPS speaks IMAP over TLS. Sending `a logout` keeps the connection open long
+# enough for openssl to emit the `* OK ...` greeting before exiting.
+probe_imaps() {
+    local desc="$1" port="$2"
+    local banner=""
+    for _ in 1 2 3 4 5; do
+        banner=$(echo 'a logout' | openssl s_client -connect "localhost:$port" -quiet 2>/dev/null | head -1 || true)
+        echo "$banner" | grep -q '^\* OK ' && break
+        sleep 1
+    done
+    if echo "$banner" | grep -q '^\* OK '; then
+        log "✓ $desc → '* OK' greeting"
+        PASS=$((PASS+1))
+    else
+        log "✗ $desc → '$banner' (expected '* OK ...')"
+        FAIL=$((FAIL+1)); FAIL_LINES+=("IMAPS banner on port $port: '$banner'")
+    fi
+}
+
 dc() {
     docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.production "$@"
 }
@@ -75,7 +115,10 @@ bring_up() {
 }
 
 tear_down() {
-    dc down --remove-orphans >/dev/null 2>&1 || true
+    # Override COMPOSE_PROFILES so down kills containers from every profile, not just the
+    # profile the active scenario brought up. Without this, switching scenarios leaves a
+    # stranded container that blocks the network from being recreated with a new subnet.
+    COMPOSE_PROFILES=edge,static,mail dc down --remove-orphans >/dev/null 2>&1 || true
 }
 
 ensure_env() {
@@ -120,6 +163,8 @@ probe "/mail/"               "$BASE_HTTPS/mail/"               200 '"/mail/asset
 probe "/sheets/"             "$BASE_HTTPS/sheets/"             200 '"/sheets/assets/'
 probe "/admin/"              "$BASE_HTTPS/admin/"              200 '"/admin/assets/'
 probe_ws "WS /eigen/ws/collab/..." "$BASE_HTTPS/eigen/ws/collab/x/y/z"
+probe_smtp  "SMTP banner :25"   25
+probe_imaps "IMAPS banner :993" 993
 tear_down
 
 ##############################################################################
@@ -133,6 +178,8 @@ probe "/mail/"               "$BASE_HTTP/mail/"                200 '"/mail/asset
 probe "/sheets/"             "$BASE_HTTP/sheets/"              200 '"/sheets/assets/'
 probe "/admin/"              "$BASE_HTTP/admin/"               200 '"/admin/assets/'
 probe_ws "WS /eigen/ws/collab/..." "$BASE_HTTP/eigen/ws/collab/x/y/z"
+probe_smtp  "SMTP banner :25"   25
+probe_imaps "IMAPS banner :993" 993
 tear_down
 
 ##############################################################################
@@ -153,6 +200,18 @@ probe "/eigen/health"        "$BASE_HTTP/eigen/health"         200 "OK"
 probe "/ (landing)"          "$BASE_HTTP/"                     200
 probe "/mail/"               "$BASE_HTTP/mail/"                200 '"/mail/assets/'
 probe_ws "WS /eigen/ws/collab/..." "$BASE_HTTP/eigen/ws/collab/x/y/z"
+tear_down
+
+##############################################################################
+header "Scenario H — edge,mail with custom subnet (172.30.0.0/24)"
+##############################################################################
+# Verifies EIGEN_SUBNET / EIGEN_UNBOUND_IP can be overridden in lockstep — the failure mode
+# we care about is postfix being unable to reach unbound for DNS, which would manifest as
+# either compose-up timing out or the SMTP banner probe failing.
+EIGEN_SUBNET=172.30.0.0/24 EIGEN_UNBOUND_IP=172.30.0.254 bring_up edge,mail
+probe "/eigen/health"        "$BASE_HTTPS/eigen/health"        200 "OK"
+probe_smtp  "SMTP banner :25"   25
+probe_imaps "IMAPS banner :993" 993
 tear_down
 
 ##############################################################################

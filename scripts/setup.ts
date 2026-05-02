@@ -142,9 +142,8 @@ ACME_EMAIL=${adminEmail}
 # edge        = bundled Caddy only (host runs its own mail server)
 # static      = bundled frontend only (host runs both webserver and mail)
 COMPOSE_PROFILES=${composeProfiles}
-# Host bind for the API; only reached when COMPOSE_PROFILES uses 'static' (or no edge/static).
-EIGEN_API_BIND=127.0.0.1:8000
 # Host bind for the static container; reached by your host webserver. Only used with 'static'.
+# Use 0.0.0.0:8080 to expose on the LAN, 127.0.0.1:8080 for localhost-only.
 EIGEN_STATIC_BIND=127.0.0.1:8080
 
 # === SMTP RELAY (optional — required if your VPS blocks outbound port 25) ===

@@ -242,20 +242,32 @@ All containers share `./data/` — user files, databases, and emails live there.
 ## Testing different deployment shapes
 
 The defaults above test scenario A (bundled Caddy + bundled mail, all-in-one). The other
-shapes documented in [SETUP-GUIDE.md](SETUP-GUIDE.md#other-deployment-shapes) are testable
+shapes documented in [SETUP-GUIDE.md](SETUP-GUIDE.md#alternative-deployments) are testable
 locally too — the dev compose hardcodes `localhost`, so you don't need real DNS or certs.
 
-### Smoke-test all four scenarios at once
+### Smoke-test the deployment shapes
 
 ```bash
 ./docker/test-deployments.sh
 ```
 
 Boots each `COMPOSE_PROFILES` combination (`edge,mail`, `static,mail`, `edge`, `static`),
-curls landing / per-app SPA / `/eigen/health` / WebSocket-upgrade probes through the right
-port for each shape, and tears down. ~2 min wall clock; prints `✓ ALL OK` or the list of
-failures. Run before merging anything that touches `setup.ts`, `docker-compose*`,
-`scripts/generate-env.sh`, or any Caddyfile.
+plus a custom-subnet variant (`EIGEN_SUBNET=172.30.0.0/24`) to exercise the network
+override path. Probes per scenario: landing page, per-app SPA bundles, `/eigen/health`,
+WebSocket upgrade pass-through, and — when `mail` is in the profile — the SMTP and IMAPS
+banners. ~3 min wall clock; prints `✓ ALL OK` or the list of failures. Run before merging
+anything that touches `setup.ts`, `docker-compose*`, `scripts/generate-env.sh`, or any
+Caddyfile.
+
+```bash
+./docker/test-host-proxies.sh
+```
+
+Brings up `static,mail` once and runs nginx, Caddy, and Apache (each in a container,
+attached to the eigen network) in front of `eigen-static` with adapted versions of the
+snippets `setup.ts` generates. Probes the same SPA / API / WebSocket set through each
+proxy. Verifies the host-webserver path — the part `test-deployments.sh` can't cover
+without a real host webserver.
 
 ### Test scenario B by hand (bundled static container, no bundled Caddy)
 
@@ -276,15 +288,11 @@ curl -s http://localhost:8080/mail/ | head -3                                 # 
 The mail HTML's `<script src="…">` tag should reference `/mail/assets/…`, not `/assets/…`
 (the latter would mean the landing page got served instead of the mail SPA — bug).
 
-To also test a real host webserver in front of `eigen-static`, run a throwaway nginx with
-the generated `eigen.nginx.conf` and curl through it on a different port:
-
-```bash
-docker run --rm -d --name test-host-nginx -p 8081:443 \
-    --add-host=host.docker.internal:host-gateway \
-    -v "$(pwd)/eigen.nginx.conf:/etc/nginx/conf.d/default.conf:ro" \
-    nginx:alpine
-```
+To also test a real host webserver in front of `eigen-static`, use `./docker/test-host-proxies.sh`
+— it spins up nginx, Caddy, and Apache (each in a container, attached to the eigen network) with
+adapted versions of the snippets `setup.ts` generates and probes the SPA / API / WebSocket set
+through each. That replaces the older throwaway-nginx recipe, which couldn't actually run the
+generated `eigen.nginx.conf` because it expects host-resident Let's Encrypt certs.
 
 For postfix / dovecot when Caddy is off, use the host-cert overlay so they pick up TLS
 certs from somewhere other than the (now-missing) Caddy export:
@@ -346,4 +354,12 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.p
 This means the auth endpoint isn't returning the right user ID. Check the API is healthy and the user exists.
 
 ### Port already in use
-Something else is using port 80, 443, 993, or 8025. Stop the conflicting service or change the port mapping in `docker-compose.dev.yml`.
+Something else is using port 80, 443, 25, 465, 587, 993, or 8025. Stop the conflicting service or change the port mapping in `docker-compose.dev.yml`. (Port 8000 is no longer bound on the host — eigen-api lives on the docker network only.)
+
+### Docker network subnet conflict
+If `docker compose up` fails with `pool overlaps with other one on this address space`, another network on your host already uses `172.20.0.0/24`. Override both values in `.env.production`:
+```
+EIGEN_SUBNET=172.30.0.0/24
+EIGEN_UNBOUND_IP=172.30.0.254
+```
+The two must stay consistent — unbound's IP must lie inside the subnet.
