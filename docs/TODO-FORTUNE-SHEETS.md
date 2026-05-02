@@ -82,9 +82,25 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
    fresh values; today the consumer reads the last-saved `cell.v` from the
    snapshot, which is fine. See [SHEETS.md § Headless Formula Engine](SHEETS.md#headless-formula-engine).
 
+6. **`from-xlsx.ts::parseA1` duplicates engine's `parseA1`** —
+   `apps/api/src/lib/import/sheets/from-xlsx.ts:208-216` defines a private
+   `parseA1` that returns `{r, c}` and only handles plain `A1` addresses.
+   The engine's exported `parseA1` (`@workspace/fortune-sheet/engine`) returns
+   `{col, row}` and handles `$`-absolute references and sheet-name prefixes.
+   Replace and adapt the two `parseRange` callsites to swap the field names.
+
+7. **PDF export computes `buildBorderMap` + `getGridBounds` twice per sheet** —
+   `apps/api/src/lib/export/sheets/pdf.ts` calls `getSheetContentSize(sheet)`
+   for every sheet (which builds the border map + grid bounds), then calls
+   `renderSheetsHtml(sheets)` which calls `renderSheet` → `buildBorderMap` +
+   `getGridBounds` again per sheet. Border-info iteration is O(borderInfo
+   entries × cells); on dense workbooks this doubles the export work for no
+   benefit. Either pre-compute bounds once and pass through, or expose a
+   combined `{html, sizes}` from `html.ts`.
+
 ### Misc cleanups
 
-6. **`SheetTab` shadcn migration** — bottom tab bar
+8. **`SheetTab` shadcn migration** — bottom tab bar
    (`components/SheetTab/index.tsx` + `SheetItem.tsx`, ~580 LOC TSX) still
    has its own ~272 LOC `index.css` (also part of TODO #2's CSS migration —
    tackle them together). Add/delete/rename/hide/color all use bespoke
@@ -94,8 +110,22 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
    right-click on a tab) already uses shadcn — only the tab bar itself needs
    the pass.
 
-7. Move package to `apps/sheets/src/fortune-sheet/` — only `apps/sheets/`
-   consumes it. Low priority, rename-only with no code impact.
+9. **`initSheetData` inlines `celldataToData`** —
+   `state/api/sheet.ts:16-54` builds the dense `data` matrix manually
+   (`maxBy` / `times` / fill loop) when adding/initialising a sheet. Engine
+   has the canonical `celldataToData(celldata, rowCount?, colCount?)`
+   re-exported from `state/api/common.ts` since 2026-05-01. Replace the inline
+   loop, passing `row ?? defaultrowNum`, `column ?? defaultcolumnNum` to
+   preserve the editor's empty-grid fallback.
+
+10. **JSDoc sweep across `state/`** — CODE-STANDARDS.md "No JSDoc". Many
+    state-module functions still carry `/** @param {string} type ... */` blocks
+    that contradict the actual TS types. Pre-existing legacy; not worth a
+    targeted PR but delete on touch (e.g. `state/modules/rowcol.ts:593-601`
+    on `insertRowCol`).
+
+11. Move package to `apps/sheets/src/fortune-sheet/` — only `apps/sheets/`
+    consumes it. Low priority, rename-only with no code impact.
 
 ---
 
