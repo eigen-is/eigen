@@ -248,6 +248,16 @@ docker compose --env-file .env.production restart
 - `dig eigen.example.com MX`
 - `telnet eigen.example.com 25` from another machine
 
+**Docker network subnet conflict** — if `docker compose up` fails with
+`pool overlaps with other one on this address space`, another network on your host already uses `172.20.0.0/24`. Override both values in `.env.production`:
+
+```
+EIGEN_SUBNET=172.30.0.0/24
+EIGEN_UNBOUND_IP=172.30.0.254
+```
+
+The two must stay consistent — unbound's IP must lie inside the subnet (postfix uses it as its DNS resolver, so the value can't be auto-derived).
+
 ---
 
 ## Alternative deployments
@@ -267,6 +277,27 @@ In step 3, when `bun run setup` asks "Run Eigen behind an existing webserver?", 
 Each snippet covers SSL termination, the WebSocket upgrade map, and the SSE buffering settings collaborative editing needs. They proxy to the bundled `eigen-static` container on `127.0.0.1:8080`.
 
 **Apache notes:** the config header lists modules to enable (`a2enmod proxy proxy_http proxy_wstunnel rewrite ssl headers`) and a one-liner to switch from `mpm_prefork` to `mpm_event` — prefork uses one process per long-lived SSE/WebSocket connection and runs out of slots fast.
+
+#### Behind a dockerised webserver (nginx proxy manager, etc.)
+
+When the webserver itself runs in docker, `127.0.0.1` inside that container is its own loopback — not the host — so the generated snippets' `proxy_pass http://127.0.0.1:8080` won't reach `eigen-static`. Two ways to fix it:
+
+- **Bind eigen-static on the LAN.** In `.env.production`:
+  ```
+  EIGEN_STATIC_BIND=0.0.0.0:8080
+  ```
+  Then point your dockerised webserver upstream at `<host-LAN-IP>:8080`. Simple, but exposes plain HTTP on the LAN.
+- **Share the eigen docker network.** Attach the webserver container to the `eigen_eigen` network and proxy to `eigen-static:8080` directly. In the webserver's compose file:
+  ```yaml
+  services:
+    nginx-proxy-manager:
+      networks: [default, eigen]
+  networks:
+    eigen:
+      external: true
+      name: eigen_eigen
+  ```
+  Cleaner — nothing extra exposed, traffic stays on the docker bridge.
 
 #### TLS certs without bundled Caddy
 
@@ -326,7 +357,7 @@ SMTP_PORT=25
 `host.docker.internal` is Docker's name for "the machine the container is running on". For this to work, your host postfix needs to:
 
 - Bind to `0.0.0.0` (or the docker bridge gateway, default `172.20.0.1`), not just `127.0.0.1`
-- Permit relay from the docker bridge subnet (`172.20.0.0/24`)
+- Permit relay from the docker bridge subnet (`172.20.0.0/24`, or whatever you set `EIGEN_SUBNET` to)
 
 Third-party relays (Brevo, SendGrid, Postmark) work the same way — set `SMTP_HOST` to the relay host and use the standard `SMTP_RELAY_*` credentials.
 

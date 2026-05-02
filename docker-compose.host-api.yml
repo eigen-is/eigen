@@ -1,0 +1,15 @@
+# Optional: bind eigen-api to a host port so you can curl it directly. Useful for debugging
+# (`curl http://127.0.0.1:8000/health`) or for a non-dockerised reverse proxy that doesn't
+# share the eigen network. The default deployment doesn't expose the API on the host —
+# caddy / eigen-static / postfix / dovecot all reach it via the docker network.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.host-api.yml \
+#       --env-file .env.production up -d
+#
+# Override the port via EIGEN_API_BIND in .env.production (e.g. 127.0.0.1:8083) when 8000
+# is already in use on your host.
+services:
+  eigen-api:
+    ports:
+      - "${EIGEN_API_BIND:-127.0.0.1:8000}:8000"

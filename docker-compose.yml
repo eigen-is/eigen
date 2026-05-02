@@ -29,8 +29,9 @@ services:
       context: .
       dockerfile: docker/api/Dockerfile
     user: "1000:1000"
-    ports:
-      - "${EIGEN_API_BIND:-127.0.0.1:8000}:8000"
+    # No host port binding — caddy / eigen-static / postfix / dovecot all reach the API via
+    # the docker network as `eigen-api:8000`. For host-side debug access, layer the
+    # docker-compose.host-api.yml overlay (binds 127.0.0.1:${EIGEN_API_BIND_PORT:-8000}).
     volumes:
       - ./data:/app/data
     # Lets the API reach a host-side mail server via SMTP_HOST=host.docker.internal in
@@ -82,7 +83,7 @@ services:
     restart: unless-stopped
     networks:
       eigen:
-        ipv4_address: 172.20.0.254
+        ipv4_address: ${EIGEN_UNBOUND_IP:-172.20.0.254}
     healthcheck:
       test: ["CMD", "drill", "@127.0.0.1", "cloudflare.com"]
       interval: 30s
@@ -101,7 +102,7 @@ services:
       - "25:25"
       - "465:465"
       - "587:587"
-    dns: [172.20.0.254]
+    dns: ["${EIGEN_UNBOUND_IP:-172.20.0.254}"]
     volumes:
       - ./data/dkim:/data/dkim
       - ./data/certs:/certs:ro
@@ -155,4 +156,6 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.20.0.0/24
+        # Override via EIGEN_SUBNET / EIGEN_UNBOUND_IP if 172.20.0.0/24 conflicts with your
+        # host. The two must stay consistent (unbound's IP must lie inside the subnet).
+        - subnet: ${EIGEN_SUBNET:-172.20.0.0/24}
