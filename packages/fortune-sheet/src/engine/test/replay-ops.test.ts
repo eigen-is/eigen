@@ -223,6 +223,66 @@ describe('replaySheetsOps', () => {
         expect(result[0].id).toBe('s1');
     });
 
+    test('celldata-only sheet + insertRowCol materializes data and applies', () => {
+        // Persisted snapshots typically carry celldata only. A queued insertRowCol
+        // bypasses path-based materialization (its path is []), so without
+        // including row/col ops in collectDataOpSheetIds the engine would see
+        // target.data === undefined and silently no-op. This regression test
+        // pins the materialization behavior.
+        const sheet: Sheet = {
+            id: 's1',
+            name: 'Sheet1',
+            order: 0,
+            celldata: [{ r: 0, c: 0, v: { v: 'a', m: 'a', ct: { fa: 'General', t: 'g' } } }],
+            config: {},
+        };
+        const ops: Op[][] = [
+            [
+                {
+                    op: 'insertRowCol',
+                    id: 's1',
+                    path: [],
+                    value: { type: 'row', index: 0, count: 1, direction: 'lefttop' },
+                },
+            ],
+        ];
+        const result = replaySheetsOps([sheet], ops);
+        expect(result[0].data!.length).toBe(2);
+        expect(result[0].data![1][0]?.v).toBe('a');
+        // celldata is resynced from the materialized data so downstream consumers see the shifted row.
+        expect(result[0].celldata).toEqual([{ r: 1, c: 0, v: { v: 'a', m: 'a', ct: { fa: 'General', t: 'g' } } }]);
+    });
+
+    test('engine readOnly throw is caught and op skipped on the replay path', () => {
+        // The engine throws bare Error('readOnly') / Error('maxExceeded') as
+        // signals for the UI layer. On the BE replay path they must not
+        // propagate, or every export/preview crashes when an op queue happens
+        // to target a readOnly row.
+        const sheet: Sheet = {
+            id: 's1',
+            name: 'Sheet1',
+            order: 0,
+            data: [[{ v: 'a', m: 'a', ct: { fa: 'General', t: 'g' } }]],
+            // biome-ignore lint/suspicious/noExplicitAny: rowReadOnly lives on state's ExtendedSheetConfig
+            config: { rowReadOnly: { 0: 1 } } as any,
+        };
+        const ops: Op[][] = [
+            [
+                {
+                    op: 'insertRowCol',
+                    id: 's1',
+                    path: [],
+                    value: { type: 'row', index: 0, count: 1, direction: 'lefttop' },
+                },
+                { op: 'replace', id: 's1', path: ['data', 0, 0, 'v'], value: 'b' },
+            ],
+        ];
+        const result = replaySheetsOps([sheet], ops);
+        // Row insert was skipped (no shift), but the companion patch still applied.
+        expect(result[0].data!.length).toBe(1);
+        expect(result[0].data![0][0]?.v).toBe('b');
+    });
+
     test('multiple batches apply sequentially', () => {
         const sheet: Sheet = { id: 's1', name: 'Sheet1', order: 0, data: [[null]], config: {} };
         const ops: Op[][] = [

@@ -110,7 +110,14 @@ export function useSheet(
         wsProvider.on('sync', (isSynced: boolean) => {
             if (!isSynced) return;
             const snapshot = stateMap.get('snapshot') as string | undefined;
-            const initial: Sheet[] = snapshot ? JSON.parse(snapshot) : DEFAULT_SHEETS;
+            let initial: Sheet[] = DEFAULT_SHEETS;
+            if (snapshot) {
+                try {
+                    initial = JSON.parse(snapshot) as Sheet[];
+                } catch (e) {
+                    console.warn('[sheet] Failed to parse initial snapshot, falling back to defaults:', e);
+                }
+            }
             const pending = opsArray.toArray() as Op[][];
             const data = pending.length > 0 ? replaySheetsOps(initial, pending) : initial;
             latestDataRef.current = data;
