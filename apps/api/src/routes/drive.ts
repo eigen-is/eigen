@@ -1,9 +1,12 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Elysia, t } from 'elysia';
 import { getUploadMaxSize } from '../lib/config/enforcement';
+import { getServerSettings } from '../lib/config/server-settings';
 import { ApiError } from '../lib/core';
 import { requireNonGuest } from '../lib/core/access';
 import { contentDisposition, setCacheHeaders } from '../lib/core/http';
+import { composeAccessRequestEmail } from '../lib/core/mail-composers';
+import { sendMail } from '../lib/core/mailer';
 import { getDrive, getSharedDrive } from '../lib/drive';
 import { exportDocument } from '../lib/export/export-document';
 import { getHome } from '../lib/home';
@@ -11,6 +14,7 @@ import { sendToHome } from '../lib/home/home-relay';
 import { convertToDocument, importIntoDocument } from '../lib/import/import-document';
 import { getScreenPreview, getTextPreview } from '../lib/preview/preview-cache';
 import { getThumbnail } from '../lib/shared/thumbnails';
+import { getUserById } from '../lib/user';
 import { betterAuth } from './auth';
 
 // Drive routes allow cross-owner access (shared drives, team drives).
@@ -481,6 +485,23 @@ export const driveRouter = new Elysia({ name: 'drive' })
                         actorEmail: user.email,
                     },
                 });
+            }
+
+            if (path && !path.trashedAt && !params.ownerId.startsWith('team_')) {
+                const settings = getServerSettings();
+                if (settings.notifications.email.userOnAccessRequest) {
+                    const owner = await getUserById(params.ownerId);
+                    if (owner) {
+                        const requesterName = user.name || user.email;
+                        const mail = composeAccessRequestEmail(
+                            path,
+                            { name: owner.name, email: owner.email },
+                            { name: requesterName, email: user.email },
+                            body.message ?? null,
+                        );
+                        sendMail(mail).catch((err) => console.error('Failed to send access-request email:', err));
+                    }
+                }
             }
 
             return { success: true };
