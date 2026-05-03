@@ -205,7 +205,7 @@ Before building custom UI, check these exist in `packages/ui/src/components/layo
 |-----------------|-----------------------------|--------------------------------------|
 | `TooltipButton` | `toolbar/tooltip-button.tsx` | Icon button with tooltip             |
 | `DeleteDialog`  | `delete/delete-dialog.tsx`   | Destructive action confirmation      |
-| `ConfirmDialog` | `delete/confirm-dialog.tsx`  | Generic confirmation dialog          |
+| `ConfirmDialog` | `confirm-dialog.tsx`         | Generic confirmation dialog          |
 | `EmptyState`    | `app/empty-state.tsx`        | "Nothing here" message with icon     |
 | `LoadingState`  | `app/loading-state.tsx`      | Centered spinner                     |
 | `ErrorState`    | `app/error-state.tsx`        | Error message display                |

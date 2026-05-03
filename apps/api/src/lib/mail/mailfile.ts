@@ -1,8 +1,6 @@
-import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
 import type { AddressObject } from '@workspace/lib/types/mail';
 import MailComposer from 'nodemailer/lib/mail-composer';
 import { getMailDomain } from '../config/server-config';
-import { renderAttachmentPills } from '../core/mail-template';
 
 export type EmlAttachment = {
     filename: string;
@@ -59,8 +57,4 @@ export async function createEmlContent(input: EmlInput): Promise<string> {
     });
 
     return buffer.toString('utf-8');
-}
-
-export function renderReferenceLinksHtml(references: AttachmentReference[]): string {
-    return renderAttachmentPills(references);
 }

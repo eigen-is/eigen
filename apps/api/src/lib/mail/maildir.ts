@@ -11,13 +11,14 @@ import type {
 } from '@workspace/lib/types/mail';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { ApiError, STANDARD_MAILBOXES } from '../core';
+import { renderAttachmentPills } from '../core/mail-template';
 import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
 import type { StorageFile } from '../storage';
 import { parseEml } from './mail-parse';
 import MailDB from './maildb';
 import { MaildirStore } from './maildir-store';
-import { createEmlContent, type EmlAttachment, renderReferenceLinksHtml } from './mailfile';
+import { createEmlContent, type EmlAttachment } from './mailfile';
 import {
     applyFlagsFromFilename,
     createUniqueMessageId,
@@ -53,7 +54,7 @@ function canonicalMailbox(name: string): string {
 }
 
 function appendReferenceLinks(html: string, refs: AttachmentReference[]): string {
-    const refHtml = renderReferenceLinksHtml(refs);
+    const refHtml = renderAttachmentPills(refs);
     if (!refHtml) return html;
     if (!html) return refHtml;
     const replaced = html.replace(/<\/body>/i, `${refHtml}</body>`);

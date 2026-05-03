@@ -45,12 +45,12 @@ function buildEventBodyHtml(event: CalendarEvent): string {
     return sections.join('\n');
 }
 
-function buildEventHtml(event: CalendarEvent, organizer: Organizer, banner?: string): string {
+function buildEventHtml(event: CalendarEvent, footerLine: string, banner?: string): string {
     return renderEigenEmail({
         title: event.title,
         bodyHtml: buildEventBodyHtml(event),
         banner,
-        footerLine: `Invitation from ${organizer.name || organizer.email}`,
+        footerLine,
     });
 }
 
@@ -63,34 +63,37 @@ function icalEvent(event: CalendarEvent, method: 'REQUEST' | 'REPLY' | 'CANCEL')
 }
 
 export function composeInviteEmail(event: CalendarEvent, organizer: Organizer, attendees: Attendee[]): OutboundMail {
+    const footer = `Invitation from ${organizer.name || organizer.email}`;
     return {
         from: { name: organizer.name ?? '', address: organizer.email },
         to: attendees.map((a) => ({ name: a.name ?? '', address: a.email })),
         subject: `Invitation: ${event.title}`,
         text: buildEventSummary(event),
-        html: buildEventHtml(event, organizer),
+        html: buildEventHtml(event, footer),
         icalEvent: icalEvent(withOrganizer(event, organizer), 'REQUEST'),
     };
 }
 
 export function composeUpdateEmail(event: CalendarEvent, organizer: Organizer, attendees: Attendee[]): OutboundMail {
+    const footer = `Invitation from ${organizer.name || organizer.email}`;
     return {
         from: { name: organizer.name ?? '', address: organizer.email },
         to: attendees.map((a) => ({ name: a.name ?? '', address: a.email })),
         subject: `Updated invitation: ${event.title}`,
         text: buildEventSummary(event),
-        html: buildEventHtml(event, organizer, 'This event has been updated'),
+        html: buildEventHtml(event, footer, 'This event has been updated'),
         icalEvent: icalEvent(withOrganizer(event, organizer), 'REQUEST'),
     };
 }
 
 export function composeCancelEmail(event: CalendarEvent, organizer: Organizer, attendees: Attendee[]): OutboundMail {
+    const footer = `Invitation from ${organizer.name || organizer.email}`;
     return {
         from: { name: organizer.name ?? '', address: organizer.email },
         to: attendees.map((a) => ({ name: a.name ?? '', address: a.email })),
         subject: `Cancelled: ${event.title}`,
         text: `This event has been cancelled:\n\n${buildEventSummary(event)}`,
-        html: buildEventHtml(event, organizer, 'This event has been cancelled'),
+        html: buildEventHtml(event, footer, 'This event has been cancelled'),
         icalEvent: icalEvent(withOrganizer(event, organizer), 'CANCEL'),
     };
 }
@@ -125,12 +128,11 @@ export function composeRsvpReply(
         to: [{ name: organizer.name ?? '', address: organizer.email }],
         subject: `${STATUS_LABELS[status]}: ${event.title}`,
         text: `${attendeeName} has ${statusLabel} the invitation: ${event.title}`,
-        html: renderEigenEmail({
-            title: event.title,
-            bodyHtml: buildEventBodyHtml(event),
-            banner: `${escapeHtml(attendeeName)} has ${statusLabel} the invitation`,
-            footerLine: `Reply from ${attendeeName}`,
-        }),
+        html: buildEventHtml(
+            event,
+            `Reply from ${attendeeName}`,
+            `${escapeHtml(attendeeName)} has ${statusLabel} the invitation`,
+        ),
         icalEvent: icalEvent(replyEvent, 'REPLY'),
     };
 }
