@@ -86,6 +86,18 @@ export const settingsRouter = new Elysia({ name: 'settings' })
                         inactivityDays: t.Optional(t.Number({ minimum: 1, maximum: 365 })),
                     }),
                 ),
+                notifications: t.Optional(
+                    t.Object({
+                        email: t.Optional(
+                            t.Object({
+                                guestOnAclAdd: t.Optional(t.Boolean()),
+                                userOnAclAdd: t.Optional(t.Boolean()),
+                                userOnCalendarInvite: t.Optional(t.Boolean()),
+                                userOnAccessRequest: t.Optional(t.Boolean()),
+                            }),
+                        ),
+                    }),
+                ),
             }),
             auth: true,
         },

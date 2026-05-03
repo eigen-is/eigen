@@ -38,6 +38,14 @@ const settingsStore = new JsonStore<ServerSettings>(serverFs, 'settings.json', {
         openSignup: true,
         inactivityDays: 7,
     },
+    notifications: {
+        email: {
+            guestOnAclAdd: true,
+            userOnAclAdd: false,
+            userOnCalendarInvite: true,
+            userOnAccessRequest: true,
+        },
+    },
 });
 
 let loaded = false;
