@@ -97,6 +97,115 @@ async function promptEmail(question: string, fallback: string): Promise<string> 
     }
 }
 
+// --- docker subnet detection ---
+//
+// docker-compose.yml defaults to 172.20.0.0/24 for the eigen network. That collides with
+// existing docker installs that already use it (default bridge sometimes runs there, or
+// another compose stack got it first). On fresh installs we can detect the conflict and
+// pick a free /24; on a re-run against a live eigen we MUST reuse the existing subnet so
+// we don't shift it under a running deployment.
+
+const DEFAULT_SUBNET = '172.20.0.0/24';
+const SUBNET_CANDIDATES = [DEFAULT_SUBNET, '172.30.0.0/24', '172.31.0.0/24', '10.20.0.0/24'];
+
+function cidrRange(cidr: string): [number, number] {
+    const [ip, prefixStr] = cidr.split('/');
+    const prefix = parseInt(prefixStr ?? '32', 10);
+    const parts = ip.split('.').map((p) => parseInt(p, 10));
+    const start = (parts[0] * 2 ** 24 + parts[1] * 2 ** 16 + parts[2] * 2 ** 8 + parts[3]) >>> 0;
+    const size = 2 ** (32 - prefix);
+    return [start, start + size - 1];
+}
+
+function cidrsOverlap(a: string, b: string): boolean {
+    const [aStart, aEnd] = cidrRange(a);
+    const [bStart, bEnd] = cidrRange(b);
+    return aStart <= bEnd && bStart <= aEnd;
+}
+
+// `.0` → `.254` for the /24's last-usable host (matches docker-compose.yml's unbound IP).
+function unboundIpFor(subnet: string): string {
+    return subnet.split('/')[0].replace(/\.0$/, '.254');
+}
+
+async function runDocker(args: string[]): Promise<{ stdout: string; ok: boolean }> {
+    try {
+        const proc = Bun.spawn(['docker', ...args], { stdout: 'pipe', stderr: 'ignore' });
+        const stdout = await new Response(proc.stdout).text();
+        await proc.exited;
+        return { stdout, ok: proc.exitCode === 0 };
+    } catch {
+        return { stdout: '', ok: false };
+    }
+}
+
+// Returns null when the compose-baked default (172.20.0.0/24) is fine — no env vars
+// needed. Returns { subnet, unboundIp, reason } when the env should pin a specific value.
+async function detectSubnet(
+    existing: Record<string, string>,
+): Promise<{ subnet: string; unboundIp: string; reason: string } | null> {
+    // 1. User-set wins. Don't second-guess hand-edited .env.production.
+    if (existing.EIGEN_SUBNET && existing.EIGEN_UNBOUND_IP) {
+        if (existing.EIGEN_SUBNET === DEFAULT_SUBNET) return null;
+        return {
+            subnet: existing.EIGEN_SUBNET,
+            unboundIp: existing.EIGEN_UNBOUND_IP,
+            reason: `preserved from existing .env.production (${existing.EIGEN_SUBNET})`,
+        };
+    }
+
+    // 2. Docker not installed / not running → defer. Keep the default; if it conflicts at
+    // compose-up time the user will see the troubleshooting doc.
+    if (!(await runDocker(['info'])).ok) return null;
+
+    // 3. Live eigen deployment? Reuse its actual subnet — the network already exists, and
+    // re-creating it on a different subnet would orphan running containers.
+    const eigenNet = await runDocker([
+        'network',
+        'inspect',
+        'eigen_eigen',
+        '--format',
+        '{{(index .IPAM.Config 0).Subnet}}',
+    ]);
+    if (eigenNet.ok && eigenNet.stdout.trim()) {
+        const existingSubnet = eigenNet.stdout.trim();
+        if (existingSubnet === DEFAULT_SUBNET) return null;
+        return {
+            subnet: existingSubnet,
+            unboundIp: unboundIpFor(existingSubnet),
+            reason: `reused existing eigen_eigen network (${existingSubnet})`,
+        };
+    }
+
+    // 4. Fresh install. Find a candidate /24 that doesn't overlap with any docker network.
+    const ids = (await runDocker(['network', 'ls', '-q'])).stdout.trim().split('\n').filter(Boolean);
+    if (ids.length === 0) return null;
+    const inspect = await runDocker([
+        'network',
+        'inspect',
+        ...ids,
+        '--format',
+        '{{range .IPAM.Config}}{{.Subnet}}{{"\\n"}}{{end}}',
+    ]);
+    const occupied = inspect.stdout
+        .split('\n')
+        .map((s) => s.trim())
+        .filter((s) => s.includes('/'));
+
+    for (const candidate of SUBNET_CANDIDATES) {
+        if (!occupied.some((o) => cidrsOverlap(candidate, o))) {
+            if (candidate === DEFAULT_SUBNET) return null;
+            return {
+                subnet: candidate,
+                unboundIp: unboundIpFor(candidate),
+                reason: `${DEFAULT_SUBNET} already in use by another docker network; picked ${candidate}`,
+            };
+        }
+    }
+    // All candidates taken — let compose fail loudly so the user reaches the troubleshooting doc.
+    return null;
+}
+
 // --- main ---
 
 console.log('\n--- Eigen setup ---\n');
@@ -122,12 +231,24 @@ const adminEmail = await promptEmail(
 
 rl.close();
 
+// --- detect docker network state ---
+
+const subnet = await detectSubnet(existing);
+if (subnet) console.log(`\nDocker network: ${subnet.reason}`);
+
 // --- write .env.production ---
 
 // edge   = bundled Caddy with HTTPS termination
 // static = bundled static-only frontend (no HTTPS), for use behind a host webserver
 // mail   = bundled mail trio (postfix + dovecot + unbound)
 const composeProfiles = useHostProxy ? 'static,mail' : 'edge,mail';
+
+const subnetBlock = subnet
+    ? `\n# === DOCKER NETWORK (auto-detected; default 172.20.0.0/24 conflicted with another network) ===
+EIGEN_SUBNET=${subnet.subnet}
+EIGEN_UNBOUND_IP=${subnet.unboundIp}
+`
+    : '';
 
 const env = `# Eigen production config — generated by 'bun run setup'.
 
@@ -145,6 +266,7 @@ COMPOSE_PROFILES=${composeProfiles}
 # Host bind for the static container; reached by your host webserver. Only used with 'static'.
 # Use 0.0.0.0:8080 to expose on the LAN, 127.0.0.1:8080 for localhost-only.
 EIGEN_STATIC_BIND=127.0.0.1:8080
+${subnetBlock}
 
 # === SMTP RELAY (optional — required if your VPS blocks outbound port 25) ===
 # Brevo free tier: 300 emails/day. Sign up at https://brevo.com

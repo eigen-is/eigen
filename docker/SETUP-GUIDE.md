@@ -299,6 +299,8 @@ When the webserver itself runs in docker, `127.0.0.1` inside that container is i
   ```
   Cleaner — nothing extra exposed, traffic stays on the docker bridge.
 
+**Nginx Proxy Manager specific:** in the proxy host's edit dialog, switch on **Websockets Support** (off by default). Without it, collab editing on docs / sheets / slides / stickies will silently fail to connect.
+
 #### TLS certs without bundled Caddy
 
 The bundled cert manager lives in the Caddy container. When Caddy is off, postfix and dovecot still need certs for IMAPS/SMTPS. Reuse your host's Let's Encrypt certs with the host-cert overlay:
