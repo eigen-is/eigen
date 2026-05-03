@@ -63,6 +63,7 @@ export function DriveEmailCollaborators({ path, open, onOpenChange }: DriveEmail
                                 onChange={setMessage}
                                 onChangeText={setMessageText}
                                 placeholder="Write a message..."
+                                className="px-3 py-2"
                                 containerClassName="min-h-[180px] flex flex-col"
                             />
                         </div>

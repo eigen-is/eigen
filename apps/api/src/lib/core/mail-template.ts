@@ -38,7 +38,7 @@ function appUrl(name: string, fallback: string): string {
     return process.env[name] || fallback;
 }
 
-function buildReferenceUrl(ref: AttachmentReference): string | undefined {
+function buildReferenceUrl(ref: AttachmentReference): string {
     const path = `${ref.ownerId}/${ref.mountId}/${ref.id}`;
     switch (ref.driveType) {
         case DRIVE_TYPE_DOC:
@@ -52,21 +52,21 @@ function buildReferenceUrl(ref: AttachmentReference): string | undefined {
         case DRIVE_TYPE_CHAT:
             return `${appUrl('VITE_APP_CHAT_URL', 'http://localhost:3008/chat')}/${path}`;
     }
+    const driveBase = appUrl('VITE_APP_DRIVE_URL', 'http://localhost:3002/drive');
     if (isFolderType(ref.driveType)) {
-        return `${appUrl('VITE_APP_DRIVE_URL', 'http://localhost:3002/drive')}/fs/${path}`;
+        return `${driveBase}/fs/${path}`;
     }
-    return undefined;
+    return `${driveBase}/shared/with-me?pid=${encodeURIComponent(ref.id)}&uid=${encodeURIComponent(ref.ownerId)}&mid=${encodeURIComponent(ref.mountId)}`;
 }
 
 export function renderAttachmentPills(references: AttachmentReference[]): string {
     const cards: string[] = [];
     for (const ref of references) {
         const href = buildReferenceUrl(ref);
-        if (!href) continue;
         const name = escapeHtml(stripEigenExtension(ref.name));
         cards.push(
             `<div style="display:inline-block;border:1px solid ${EMAIL_BORDER};border-radius:6px;padding:6px 10px;margin:4px 4px 4px 0;font-size:13px;font-family:${EMAIL_FONT};color:#333;text-decoration:none;">` +
-                `<a href="${escapeHtml(href)}" style="color:#333;text-decoration:none;">${PAPERCLIP_SVG}${name}</a>` +
+                `<a href="${escapeHtml(href)}" style="color:#333;text-decoration:none;">${PAPERCLIP_SVG}Open ${name} →</a>` +
                 '</div>',
         );
     }

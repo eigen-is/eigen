@@ -39,7 +39,7 @@ export function DriveShareSummary({
             }
         >
             {isShared ? (
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 -my-0.5">
                     {isPublic && (
                         <Tooltip delayDuration={300}>
                             <TooltipTrigger asChild>
