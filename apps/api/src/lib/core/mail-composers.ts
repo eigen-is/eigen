@@ -25,10 +25,11 @@ export function composeShareEmail(
     const displayName = stripEigenExtension(path.name);
     const actorDisplay = actor.name || actor.email;
     const subject = `${actorDisplay} shared "${displayName}" with you`;
+    const reference = pathAsAttachmentLink(path);
     const html = renderEigenEmail({
         title: subject,
         bodyHtml: `<p style="font-size:14px;line-height:1.5">${escapeHtml(actorDisplay)} shared a document with you. Open it from the link below.</p>`,
-        attachmentLinks: [pathAsAttachmentLink(path)],
+        attachmentLinks: [reference],
         footerLine: `Shared by ${actorDisplay}`,
         recipientEmail,
     });
@@ -36,7 +37,7 @@ export function composeShareEmail(
         from: { name: actor.name, address: actor.email },
         to: [{ name: '', address: recipientEmail }],
         subject,
-        text: `${actorDisplay} shared "${displayName}" with you.\n\n${buildAttachmentUrl(pathAsAttachmentLink(path), recipientEmail)}`,
+        text: `${actorDisplay} shared "${displayName}" with you.\n\n${buildAttachmentUrl(reference, recipientEmail)}`,
         html,
     };
 }
@@ -53,15 +54,16 @@ export function composeAccessRequestEmail(
     const messageBlock = message
         ? `<div style="margin-top:12px;padding:12px;border-left:3px solid #e0e0e0;color:#1a1a1a;font-size:14px;line-height:1.5">${escapeHtml(message).replace(/\n/g, '<br>')}</div>`
         : '';
+    const reference = pathAsAttachmentLink(path);
     const html = renderEigenEmail({
         title: subject,
         bodyHtml: `<p style="font-size:14px;line-height:1.5">${escapeHtml(requesterDisplay)} (<a href="mailto:${escapeHtml(requester.email)}" style="color:#1a73e8">${escapeHtml(requester.email)}</a>) is requesting access. Open the document and grant them access from the share dialog.</p>${messageBlock}`,
-        attachmentLinks: [pathAsAttachmentLink(path)],
+        attachmentLinks: [reference],
         footerLine: `Access request from ${requesterDisplay}`,
     });
     const textParts = [`${requesterDisplay} requested access to "${displayName}".`];
     if (message) textParts.push(`Message: ${message}`);
-    textParts.push(buildAttachmentUrl(pathAsAttachmentLink(path)));
+    textParts.push(buildAttachmentUrl(reference));
     return {
         from: { name: requester.name, address: requester.email },
         to: [{ name: owner.name, address: owner.email }],
@@ -75,17 +77,17 @@ export function composeCollaboratorsEmail(
     path: DrivePath,
     subject: string | null,
     htmlMessage: string,
-    documentLink: string,
     sender: { name: string; email: string },
     recipientEmail: string,
 ): OutboundMail {
     const displayName = stripEigenExtension(path.name);
     const resolvedSubject = subject?.trim() || displayName;
     const senderDisplay = sender.name || sender.email;
+    const reference = pathAsAttachmentLink(path);
     const html = renderEigenEmail({
         title: resolvedSubject,
         bodyHtml: htmlMessage,
-        attachmentLinks: [pathAsAttachmentLink(path)],
+        attachmentLinks: [reference],
         footerLine: `Sent from ${senderDisplay}`,
         recipientEmail,
     });
@@ -94,7 +96,7 @@ export function composeCollaboratorsEmail(
         from: { name: sender.name, address: sender.email },
         to: [{ name: '', address: recipientEmail }],
         subject: resolvedSubject,
-        text: `${textBody}\n\n${documentLink}`,
+        text: `${textBody}\n\n${buildAttachmentUrl(reference, recipientEmail)}`,
         html,
     };
 }

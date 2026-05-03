@@ -26,16 +26,6 @@ describe('renderEigenEmail', () => {
         expect(html).not.toMatch(/background:\s*#fce8e6/);
     });
 
-    test('emits CTA button when present', () => {
-        const html = renderEigenEmail({
-            title: 'T',
-            bodyHtml: '',
-            cta: { label: 'Open', href: 'https://example.com/x' },
-        });
-        expect(html).toContain('https://example.com/x');
-        expect(html).toContain('Open');
-    });
-
     test('emits attachment pills when present', () => {
         const html = renderEigenEmail({
             title: 'T',

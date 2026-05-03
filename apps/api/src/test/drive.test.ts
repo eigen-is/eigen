@@ -3290,7 +3290,6 @@ describe('Drive', () => {
                     body: JSON.stringify({
                         subject: 'Custom subject',
                         message: '<p>Take a look</p>',
-                        documentUrl: 'https://test.eigen.is/docs/doc/x/y/z',
                         sendCopyToSelf: false,
                     }),
                 },
@@ -3302,11 +3301,10 @@ describe('Drive', () => {
             const mail = calls[0][0];
             expect(mail.subject).toBe('Custom subject');
             expect(mail.html).toContain('Take a look');
-            // HTML attaches a paperclip pill built from the path, not the documentUrl.
             expect(mail.html).toContain('Open collab-mail-test');
-            // Plain-text fallback carries the user-supplied documentUrl.
             expect(mail.text).toContain('Take a look');
-            expect(mail.text).toContain('https://test.eigen.is/docs/doc/x/y/z');
+            // Plain-text fallback carries the path-derived URL.
+            expect(mail.text).toMatch(/\/doc\//);
             spy.mockRestore();
         });
     });

@@ -439,19 +439,16 @@ export function useEmailCollaborators(ownerId: string, mountId: string) {
             pathId,
             subject,
             message,
-            documentUrl,
             sendCopyToSelf,
         }: {
             pathId: string;
             subject: string;
             message: string;
-            documentUrl: string;
             sendCopyToSelf: boolean;
         }) => {
             const response = await driveApi({ ownerId })({ mountId }).path({ pathId })['email-collaborators'].post({
                 subject,
                 message,
-                documentUrl,
                 sendCopyToSelf,
             });
             if (response.error) throw new AppError(response);
