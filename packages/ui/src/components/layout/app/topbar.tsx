@@ -5,7 +5,7 @@ import { apps } from '@workspace/lib/apps.ts';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { useUnreadNotificationCount } from '@workspace/lib/notification';
 import { useSpaceSettings, useUpdateSpaceSettings } from '@workspace/lib/space';
-import { Grip, LogOut, Menu, Palette, Settings, Shield, TriangleAlert, UserRound } from 'lucide-react';
+import { Grip, LogOut, Menu, Palette, Settings, Shield, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '../../button.tsx';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../dialog.tsx';
@@ -22,8 +22,10 @@ import {
     DropdownMenuSubTrigger,
     DropdownMenuTrigger,
 } from '../../dropdown-menu.tsx';
+import { EigenLogo } from '../braket/eigen-logo.tsx';
 import { UserAvatar } from '../user-avatar.tsx';
 import { UserItem } from '../user-item.tsx';
+import { AboutDialog } from './about-dialog.tsx';
 import { AppLogo } from './app-logo.tsx';
 import { useLayout } from './layout-context.tsx';
 import { NotificationBell } from './notification-bell.tsx';
@@ -136,12 +138,14 @@ function AppSwitcher({ isGuest }: { isGuest: boolean }) {
 function GuestUserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
     const auth = useAuth();
     const { logoutDialogOpen, setLogoutDialogOpen, handleLogout } = useLogout(rootRoute);
+    const [aboutOpen, setAboutOpen] = useState(false);
 
     if (!auth.isAuthenticated) return null;
 
     return (
         <>
             <LogoutDialog open={logoutDialogOpen} onOpenChange={setLogoutDialogOpen} onLogout={handleLogout} />
+            <AboutDialog open={aboutOpen} onOpenChange={setAboutOpen} />
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="relative h-8 w-8 rounded-full overflow-hidden p-0">
@@ -158,6 +162,11 @@ function GuestUserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] 
                         <UserItem name={auth.user?.name} email={auth.user?.email} className="p-0" />
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => setAboutOpen(true)}>
+                        <EigenLogo />
+                        About Eigen
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => setLogoutDialogOpen(true)}>
                         <LogOut />
                         Log out
@@ -173,12 +182,14 @@ function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
     const { logoutDialogOpen, setLogoutDialogOpen, handleLogout } = useLogout(rootRoute);
     const { data: settings } = useSpaceSettings();
     const updateSettings = useUpdateSpaceSettings();
+    const [aboutOpen, setAboutOpen] = useState(false);
 
     if (!auth.isAuthenticated) return null;
 
     return (
         <>
             <LogoutDialog open={logoutDialogOpen} onOpenChange={setLogoutDialogOpen} onLogout={handleLogout} />
+            <AboutDialog open={aboutOpen} onOpenChange={setAboutOpen} />
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                     <Button variant="ghost" className="relative h-8 w-8 rounded-full overflow-hidden p-0">
@@ -226,6 +237,11 @@ function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
                         </DropdownMenuSubContent>
                     </DropdownMenuSub>
                     <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => setAboutOpen(true)}>
+                        <EigenLogo />
+                        About Eigen
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => setLogoutDialogOpen(true)}>
                         <LogOut />
                         Log out
@@ -247,7 +263,6 @@ export function Topbar({ rootRoute }: TopbarProps) {
         document.title = unreadCount > 0 ? `(${unreadCount}) ${base}` : base;
     }, [appName, documentTitle, unreadCount]);
 
-    const [testingDialogOpen, setTestingDialogOpen] = useState(false);
     const showBurger = isMobile && sidebarMode !== 'none';
 
     return (
@@ -276,35 +291,6 @@ export function Topbar({ rootRoute }: TopbarProps) {
                 </div>
 
                 <div className="flex items-center gap-1 px-4 shrink-0">
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-white hover:bg-primary/20 hover:text-white"
-                        onClick={() => setTestingDialogOpen(true)}
-                    >
-                        <TriangleAlert className="h-4 w-4" />
-                    </Button>
-                    <Dialog open={testingDialogOpen} onOpenChange={setTestingDialogOpen}>
-                        <DialogContent>
-                            <DialogHeader>
-                                <DialogTitle>Testing Phase</DialogTitle>
-                                <DialogDescription>
-                                    Not a launch, not a beta. Eigen is in a testing phase: a few weeks of real use by
-                                    real people to find bugs, fix what's broken and figure out what to build next.{' '}
-                                    <a
-                                        href="https://eigen.is/blog/eigen-six-months-later"
-                                        className="underline text-foreground"
-                                    >
-                                        Read more
-                                    </a>
-                                    .
-                                </DialogDescription>
-                            </DialogHeader>
-                            <DialogFooter>
-                                <Button onClick={() => setTestingDialogOpen(false)}>OK</Button>
-                            </DialogFooter>
-                        </DialogContent>
-                    </Dialog>
                     <NotificationBell />
                     {isMobile && <AppSwitcher isGuest={isGuest} />}
                     {isGuest ? <GuestUserDropdown rootRoute={rootRoute} /> : <UserDropdown rootRoute={rootRoute} />}

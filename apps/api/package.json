@@ -1,6 +1,5 @@
 {
   "name": "@apps/api",
-  "version": "1.0.50",
   "scripts": {
     "test": "bun test --preload ./src/test/preload.ts --concurrency 1 ./src/test/",
     "dev": "bun run --env-file=../../.env --watch src/index.ts",

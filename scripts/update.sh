@@ -31,6 +31,10 @@ fi
 echo "Loading environment..."
 set -a && source .env.production && set +a
 
+# Capture build metadata so the API can surface it in the About dialog
+export EIGEN_COMMIT=$(git rev-parse --short HEAD)
+export EIGEN_BUILT_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
 echo "Installing dependencies..."
 bun install
 

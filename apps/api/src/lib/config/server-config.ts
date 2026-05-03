@@ -1,9 +1,14 @@
 import type { S3Config } from '@workspace/lib/types';
 import type { ServerStorageType } from '@workspace/lib/types/settings';
+import pkg from '../../../../../package.json' with { type: 'json' };
 import type { DeepPartial } from '../core';
 import { JsonStore } from '../core/json-store';
 import { LocalFilesystem } from '../core/local-filesystem';
 import { getServerDataPath } from './paths';
+
+const VERSION: string = pkg.version;
+const COMMIT: string | undefined = process.env['EIGEN_COMMIT'] || undefined;
+const BUILT_AT: string | undefined = process.env['EIGEN_BUILT_AT'] || undefined;
 
 export type ServerConfig = {
     domain: string;
@@ -86,6 +91,9 @@ export function getPublicConfig() {
         mailDomain: getMailDomain(),
         orgName: config.orgName,
         orgId: config.orgId,
+        version: VERSION,
+        commit: COMMIT,
+        builtAt: BUILT_AT,
     };
 }
 

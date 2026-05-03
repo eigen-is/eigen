@@ -1,3 +1,4 @@
+export { AboutDialog } from './about-dialog.tsx';
 export { AccessDenied } from './access-denied.tsx';
 export { AppLogo } from './app-logo.tsx';
 export { AppShell } from './app-shell.tsx';
