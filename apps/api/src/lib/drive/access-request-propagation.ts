@@ -3,6 +3,7 @@ import { getServerSettings } from '../config/server-settings';
 import { composeAccessRequestEmail } from '../core/mail-composers';
 import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
+import { sendToHome } from '../home/home-relay';
 
 export async function propagateAccessRequest(
     home: Home,
@@ -15,12 +16,15 @@ export async function propagateAccessRequest(
     if (!path || path.trashedAt) return;
 
     const requesterName = requester.name || requester.email;
-    home.notifications?.persist({
-        type: 'access-request',
-        tag: `access-request:${home.user.id}:${mountId}:${pathId}:${requester.email}`,
-        title: `${requesterName} requested access to "${path.name}"`,
-        body: message,
-        actorEmail: requester.email,
+    await sendToHome(home.user.id, {
+        type: 'notification',
+        notification: {
+            type: 'access-request',
+            tag: `access-request:${home.user.id}:${mountId}:${pathId}:${requester.email}`,
+            title: `${requesterName} requested access to "${path.name}"`,
+            body: message,
+            actorEmail: requester.email,
+        },
     });
 
     if (parseOwnerId(home.user.id).type === 'user' && getServerSettings().notifications.email.ownerOnAccessRequest) {

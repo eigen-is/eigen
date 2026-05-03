@@ -27,8 +27,6 @@ import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { createAsyncSingleton } from '../../utils/singleton';
 import { ChatRoom } from '../chat';
 import CollabDocument from '../collab/collabDocument';
-import { isProduction } from '../config/env';
-import { getDomain, getMailDomain } from '../config/server-config';
 import { ApiError, type DatabaseConfig, type ManagedDatabase, type SchemaType } from '../core';
 import { contentDisposition } from '../core/http';
 import { composeCollaboratorsEmail } from '../core/mail-composers';
@@ -659,50 +657,20 @@ export default class Drive {
         pathId: string,
         subject: string | null,
         message: string,
-        documentUrl: string,
         sendCopyToSelf: boolean,
-        senderEmail: string,
-        senderName: string,
+        sender: { name: string; email: string },
     ): Promise<{ sent: number }> {
-        // Validate URL belongs to this server's web domain to prevent phishing.
-        const domain = getDomain();
-        const mailDomain = getMailDomain();
-        try {
-            const parsed = new URL(documentUrl);
-            const host = parsed.hostname;
-            if (host !== domain && !host.endsWith(`.${domain}`) && !(host === 'localhost' && !isProduction())) {
-                throw new ApiError(400, 'Invalid document URL');
-            }
-        } catch (e) {
-            if (e instanceof ApiError) throw e;
-            throw new ApiError(400, 'Invalid document URL');
-        }
-
         const path = await this.getPath(mountId, pathId);
         if (!path) throw new ApiError(404, 'Path not found');
 
         const members = await this.getEffectiveMembers(mountId, pathId);
-        const self = senderEmail.toLowerCase();
+        const self = sender.email.toLowerCase();
         const recipients = members.filter((m) => sendCopyToSelf || m.email !== self);
 
         const results = await Promise.allSettled(
-            recipients.map((member) => {
-                const isExternal = !member.email.endsWith(`@${mailDomain}`);
-                const link = isExternal
-                    ? `${documentUrl}${documentUrl.includes('?') ? '&' : '?'}email=${encodeURIComponent(member.email)}`
-                    : documentUrl;
-
-                return sendMail(
-                    composeCollaboratorsEmail(
-                        path,
-                        subject,
-                        message,
-                        link,
-                        { name: senderName, email: senderEmail },
-                        member.email,
-                    ),
-                );
-            }),
+            recipients.map((member) =>
+                sendMail(composeCollaboratorsEmail(path, subject, message, sender, member.email)),
+            ),
         );
 
         const sent = results.filter((r) => r.status === 'fulfilled' && r.value).length;

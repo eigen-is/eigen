@@ -323,7 +323,13 @@ export const driveRouter = new Elysia({ name: 'drive' })
         async ({ params, body, user }) => {
             requireNonGuest(user);
             const drive = await getSharedDrive(params.ownerId, user);
-            await drive.updateACL(params.mountId, params.pathId, body.acl, body.visibility, body.sharingRestricted);
+            // getSharedDrive returns raw Drive for own-owner — pass actor explicitly so
+            // propagateACLChange can fire user/guest share emails. SharedDrive ignores
+            // this param and uses this.user instead.
+            await drive.updateACL(params.mountId, params.pathId, body.acl, body.visibility, body.sharingRestricted, {
+                name: user.name,
+                email: user.email,
+            });
             return { success: true };
         },
         {
@@ -368,17 +374,14 @@ export const driveRouter = new Elysia({ name: 'drive' })
                 params.pathId,
                 body.subject ?? null,
                 body.message,
-                body.documentUrl,
                 body.sendCopyToSelf,
-                user.email,
-                user.name,
+                { name: user.name, email: user.email },
             );
         },
         {
             body: t.Object({
                 subject: t.Optional(t.String({ maxLength: 200 })),
                 message: t.String({ maxLength: 12000 }),
-                documentUrl: t.String({ maxLength: 500 }),
                 sendCopyToSelf: t.Boolean(),
             }),
             auth: true,

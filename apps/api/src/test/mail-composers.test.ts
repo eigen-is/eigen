@@ -7,7 +7,7 @@ const PATH: DrivePath = {
     mountId: 'm1',
     ownerId: 'u-owner',
     name: 'Quarterly Plan.eigendoc',
-    type: 'file',
+    type: 'doc',
     parentId: null,
     mimeType: 'application/eigendoc',
     size: 0,
@@ -68,7 +68,6 @@ describe('composeCollaboratorsEmail', () => {
             PATH,
             null,
             '<p>Hi team</p>',
-            'https://test.eigen.is/docs/doc/u-owner/m1/p1',
             { name: 'Alice', email: 'alice@test.eigen.is' },
             'bob@test.eigen.is',
         );
@@ -77,7 +76,8 @@ describe('composeCollaboratorsEmail', () => {
         expect(mail.html).toContain('<p>Hi team</p>');
         expect(mail.html).toContain('Quarterly Plan');
         expect(mail.text).toContain('Hi team');
-        expect(mail.text).toContain('https://test.eigen.is/docs/doc/u-owner/m1/p1');
+        // Plain-text falls back to the path-derived URL — same as the HTML pill.
+        expect(mail.text).toMatch(/\/doc\/u-owner\/m1\/p1/);
         expect(mail.from?.address).toBe('alice@test.eigen.is');
     });
 
@@ -86,7 +86,6 @@ describe('composeCollaboratorsEmail', () => {
             PATH,
             'Quick review needed',
             '<p>Hi team</p>',
-            'https://test.eigen.is/docs/doc/u-owner/m1/p1',
             { name: 'Alice', email: 'alice@test.eigen.is' },
             'bob@test.eigen.is',
         );
@@ -99,7 +98,6 @@ describe('composeCollaboratorsEmail', () => {
             PATH,
             '   ',
             '<p>Hi team</p>',
-            'https://test.eigen.is/docs/doc/u-owner/m1/p1',
             { name: 'Alice', email: 'alice@test.eigen.is' },
             'bob@test.eigen.is',
         );

@@ -226,26 +226,22 @@ export default class SharedDrive {
         pathId: string,
         subject: string | null,
         message: string,
-        documentUrl: string,
         sendCopyToSelf: boolean,
-        senderEmail: string,
-        senderName: string,
+        sender: { name: string; email: string },
     ) {
         return this.withWritePermission(mountId, pathId, () =>
-            this.sharedDrive.emailCollaborators(
-                mountId,
-                pathId,
-                subject,
-                message,
-                documentUrl,
-                sendCopyToSelf,
-                senderEmail,
-                senderName,
-            ),
+            this.sharedDrive.emailCollaborators(mountId, pathId, subject, message, sendCopyToSelf, sender),
         );
     }
 
-    public async inviteToChat(mountId: string, chatId: string, email: string) {
+    public async inviteToChat(
+        mountId: string,
+        chatId: string,
+        email: string,
+        // Param exists to match Drive.inviteToChat's union signature; SharedDrive
+        // derives the actor from this.user, so the route's value is intentionally ignored.
+        _actor?: { name: string; email: string } | null,
+    ) {
         const memberships = await this.getUserMemberships();
 
         if (!(await this.canWrite(mountId, chatId, this.user, memberships))) {
@@ -279,6 +275,9 @@ export default class SharedDrive {
         acl: DriveACL[],
         visibility?: DriveVisibility,
         sharingRestricted?: boolean,
+        // Param exists to match Drive.updateACL's union signature; SharedDrive
+        // derives the actor from this.user, so the route's value is intentionally ignored.
+        _actor?: { name: string; email: string } | null,
     ) {
         const memberships = await this.getUserMemberships();
         if (!(await this.canWrite(mountId, pathId, this.user, memberships))) {

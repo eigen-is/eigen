@@ -30,7 +30,6 @@ export type EmailShellInput = {
     bodyHtml: string;
     banner?: string;
     attachmentLinks?: AttachmentReference[];
-    cta?: { label: string; href: string };
     footerLine?: string;
     // Pill URLs for external recipients gain a `?email=` suffix so the guest-OTP
     // login page can pre-fill the address. No-op for users on this server's mail domain.
@@ -86,10 +85,6 @@ export function renderAttachmentPills(references: AttachmentReference[], recipie
     return `<div style="margin-top:16px;padding-top:12px;border-top:1px solid ${EMAIL_BORDER};">${cards.join('')}</div>`;
 }
 
-function renderCta(cta: { label: string; href: string }): string {
-    return `<div style="margin-top:20px"><a href="${escapeHtml(cta.href)}" style="display:inline-block;background:${EMAIL_LINK};color:#fff;text-decoration:none;padding:10px 18px;border-radius:6px;font-size:14px;font-weight:500;font-family:${EMAIL_FONT}">${escapeHtml(cta.label)}</a></div>`;
-}
-
 function renderBanner(banner: string): string {
     return `<div style="background:${EMAIL_BANNER_BG};color:${EMAIL_BANNER_FG};font-weight:600;font-size:13px;padding:8px 12px;border-radius:4px;margin-bottom:16px">${escapeHtml(banner)}</div>`;
 }
@@ -105,7 +100,6 @@ function renderFooter(footerLine: string): string {
 
 export function renderEigenEmail(input: EmailShellInput): string {
     const banner = input.banner ? renderBanner(input.banner) : '';
-    const cta = input.cta ? renderCta(input.cta) : '';
     const pills = input.attachmentLinks?.length
         ? renderAttachmentPills(input.attachmentLinks, input.recipientEmail)
         : '';
@@ -115,7 +109,6 @@ export function renderEigenEmail(input: EmailShellInput): string {
   <div style="border:1px solid ${EMAIL_BORDER};border-radius:${EMAIL_RADIUS};padding:24px;margin:16px 0;color:${EMAIL_TEXT}">
     ${banner}${title}
     ${input.bodyHtml}
-    ${cta}
     ${pills}
   </div>
   ${footer}

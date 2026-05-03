@@ -1,4 +1,3 @@
-import { getDriveShareUrl } from '@workspace/lib/api';
 import { useEmailCollaborators } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
@@ -37,14 +36,11 @@ export function DriveEmailCollaborators({ path, open, onOpenChange }: DriveEmail
     }, [open, defaultSubject]);
 
     const handleSend = () => {
-        const documentUrl = getDriveShareUrl(path);
-
         emailMutation.mutate(
             {
                 pathId: path.id,
                 subject: subject.trim() || defaultSubject,
                 message,
-                documentUrl,
                 sendCopyToSelf,
             },
             {
