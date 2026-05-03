@@ -63,6 +63,10 @@ export type ServerSettings = {
             body: string;
         };
     };
+    guests: {
+        openSignup: boolean;
+        inactivityDays: number;
+    };
 };
 
 export type MountResponse = {
