@@ -97,6 +97,51 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
 7. Move package to `apps/sheets/src/fortune-sheet/` — only `apps/sheets/`
    consumes it. Low priority, rename-only with no code impact.
 
+### Review-pass deferrals (BE replay code review, 2026-05-02)
+
+8. **Tagged engine errors instead of bare-string sentinels** — `engine/rowcol.ts`
+   throws `new Error('readOnly')` / `new Error('maxExceeded')` (lines 181-184,
+   384-389). `engine/replay-ops.ts` now catches by `(e as Error).message` so the
+   string is load-bearing. Replace with a `RowColError` class (or symbol-tagged
+   sentinel) so the contract is enforced at the type level and the catch site
+   doesn't depend on message punctuation.
+
+9. **`engine/replay-ops.ts::asSheet` should require `id: string`** — every
+   producer of `addSheet` ops stamps an id (`patchToOp` does this
+   unconditionally), but the validator currently accepts an `addSheet` op whose
+   `value` only has `name: string`. A sheet without an id silently breaks
+   subsequent ops referencing that sheet.
+
+10. **`applyInsert` / `applyDelete` deep-clone the full target sheet** —
+    `cloneDeep(target)` at `engine/rowcol.ts:187,393` clones every field
+    (state-only fields included) when the engine writes only `data`, `config`,
+    and `luckysheet_conditionformat_save`. State wrapper then mutates the
+    state-only fields, throwing away the wasteful clone. Profile first; only
+    optimize if row/col ops show up hot.
+
+11. **Stale JSDoc on `state/modules/rowcol.ts::insertRowCol`** (lines 593-601) —
+    the heavy refactor on this branch left the doc block intact even though
+    the function is now a thin wrapper around the engine. Delete on next touch
+    per project's "delete on touch" policy.
+
+12. **`(delta.insert as Op[][])` cast in `apps/sheets/.../use-sheet.ts`** —
+    Yjs's delta type is `unknown` so a cast is unavoidable, but adding an
+    `Array.isArray(delta.insert)` runtime check before the cast would be more
+    honest.
+
+### Pre-existing FE op-application caveats
+
+13. **`Workbook/api.ts:applyOp` only processes `specialOps[0]`** — when a remote
+    op batch contains 2+ special ops (e.g. two delete-rows), the receiver
+    silently drops everything after the first. `replaySheetsOps` does NOT have
+    this bug; only the live `applyOp` path. Today nothing emits multi-special
+    batches, but the guard is missing.
+
+14. **`stateMap.observe` doesn't replay pending ops on remote snapshot flush**
+    — when browser A flushes a snapshot while ops from B are in flight, B's
+    local-but-unflushed edits can be lost. Pre-existing; not introduced or
+    fixed by this branch.
+
 ---
 
 ## Smoke tests still owed
@@ -139,6 +184,17 @@ off. Walk through if you touch the related surface.
   per-cell after relative-ref shifting; absolute `$A$1` rules anchor; cross-
   sheet refs resolve. Engine + html-export tests cover this; manual export
   smoke is the gap.
+- **BE replay-on-read end-to-end** (`document-cleanup` branch, 2026-05-02):
+  - Edit a cell → reload before auto-flush → BE replay resurrects the
+    unflushed edit and the page rehydrates with it.
+  - Cold-join with pending ops: edit in browser A, close before flush; open
+    same doc in browser B → edit appears.
+  - Export to xlsx with pre-flush edits → opened workbook shows the edits
+    (validates the celldata-resync-without-ops path that fixed the
+    "exported sheet looks empty" bug, commit `e0124f02`).
+  - Hostile op queue (queue an insertRowCol against a `rowReadOnly` row, or
+    push past 10000 rows): export still succeeds with a console warn,
+    skipping the offending op rather than crashing the render.
 
 ---
 
