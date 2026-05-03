@@ -5,6 +5,7 @@ import { eq } from 'drizzle-orm';
 import { user as userSchema } from '../../auth-schema.ts';
 import { auth, getAuthDrizzleDb } from '../lib/auth/auth';
 import { updateServerConfig } from '../lib/config/server-config';
+import { updateServerSettings } from '../lib/config/server-settings';
 import { assertJson, authedRequest, getTestContext } from './setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
@@ -28,17 +29,35 @@ describe('Guest Auth', () => {
         await updateServerConfig({ domain: 'test.eigen.is' });
     });
 
-    test('request-otp rejects email with no shares', async () => {
-        const res = await ctx.app.handle(
-            new Request('http://localhost/guest-auth/request-otp', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: 'nobody@example.com' }),
-            }),
-        );
-        expect(res.status).toBe(400);
-        const body = await res.text();
-        expect(body).toContain('No shared resources found');
+    describe('open signup setting', () => {
+        afterAll(async () => {
+            await updateServerSettings({ guests: { openSignup: true } });
+        });
+
+        test('open signup accepts unknown email', async () => {
+            await updateServerSettings({ guests: { openSignup: true } });
+            const res = await ctx.app.handle(
+                new Request('http://localhost/guest-auth/request-otp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: `open-${randomUUID()}@example.com` }),
+                }),
+            );
+            expect(res.status).toBe(200);
+        });
+
+        test('closed signup rejects unknown email', async () => {
+            await updateServerSettings({ guests: { openSignup: false } });
+            const res = await ctx.app.handle(
+                new Request('http://localhost/guest-auth/request-otp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: `closed-${randomUUID()}@example.com` }),
+                }),
+            );
+            expect(res.status).toBe(400);
+            expect(await res.text()).toContain('No shared resources found');
+        });
     });
 
     test('request-otp rejects existing non-guest user', async () => {
