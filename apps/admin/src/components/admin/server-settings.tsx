@@ -11,12 +11,16 @@ import { Button } from '@workspace/ui/components/button';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { Separator } from '@workspace/ui/components/separator';
+import { Switch } from '@workspace/ui/components/switch';
 import { useState } from 'react';
 import { StorageTypePicker } from './storage-type-picker';
+
+type EmailFlag = 'guestOnAclAdd' | 'userOnAclAdd' | 'userOnCalendarInvite' | 'userOnAccessRequest';
 
 type SettingsDraft = {
     quotas?: Partial<ServerSettings['quotas']>;
     defaults?: { mount?: Partial<ServerSettings['defaults']['mount']> };
+    notifications?: { email?: Partial<ServerSettings['notifications']['email']> };
 };
 
 export function ServerSettingsPage() {
@@ -39,12 +43,23 @@ export function ServerSettingsPage() {
         defaults: {
             mount: { ...settings.defaults.mount, ...draft.defaults?.mount },
         },
+        notifications: {
+            email: { ...settings.notifications.email, ...draft.notifications?.email },
+        },
     };
 
     const updateQuota = (key: keyof ServerSettings['quotas'], value: number) => {
         if (Number.isNaN(value) || value < 0) return;
         setDirty(true);
         setDraft((prev) => ({ ...prev, quotas: { ...prev.quotas, [key]: value } }));
+    };
+
+    const updateEmailFlag = (key: EmailFlag, value: boolean) => {
+        setDirty(true);
+        setDraft((prev) => ({
+            ...prev,
+            notifications: { email: { ...prev.notifications?.email, [key]: value } },
+        }));
     };
 
     const currentS3 = s3Draft ?? s3Config ?? EMPTY_S3;
@@ -139,6 +154,44 @@ export function ServerSettingsPage() {
                 />
             </div>
 
+            <Separator />
+
+            <div className="space-y-4">
+                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+                    Email notifications
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                    Send email when a notification fires. In-app notifications always fire regardless.
+                </p>
+
+                <div className="space-y-3">
+                    <SwitchRow
+                        label="Email guests when added to share"
+                        description="Guests have no in-app channel — without email they have no way to know."
+                        checked={current.notifications.email.guestOnAclAdd}
+                        onChange={(v) => updateEmailFlag('guestOnAclAdd', v)}
+                    />
+                    <SwitchRow
+                        label="Email users when added to share"
+                        description="In-app notification + bell already fires. Off by default."
+                        checked={current.notifications.email.userOnAclAdd}
+                        onChange={(v) => updateEmailFlag('userOnAclAdd', v)}
+                    />
+                    <SwitchRow
+                        label="Email users for calendar invites"
+                        description="Time-sensitive — matches Google/Outlook behaviour."
+                        checked={current.notifications.email.userOnCalendarInvite}
+                        onChange={(v) => updateEmailFlag('userOnCalendarInvite', v)}
+                    />
+                    <SwitchRow
+                        label="Email users for access requests"
+                        description="Reaches owners not actively in Eigen."
+                        checked={current.notifications.email.userOnAccessRequest}
+                        onChange={(v) => updateEmailFlag('userOnAccessRequest', v)}
+                    />
+                </div>
+            </div>
+
             {anyDirty && (
                 <>
                     <Separator />
@@ -162,6 +215,28 @@ export function ServerSettingsPage() {
                     </div>
                 </>
             )}
+        </div>
+    );
+}
+
+function SwitchRow({
+    label,
+    description,
+    checked,
+    onChange,
+}: {
+    label: string;
+    description: string;
+    checked: boolean;
+    onChange: (value: boolean) => void;
+}) {
+    return (
+        <div className="flex items-start justify-between gap-4">
+            <div className="space-y-0.5">
+                <div className="text-sm font-medium">{label}</div>
+                <div className="text-xs text-muted-foreground">{description}</div>
+            </div>
+            <Switch checked={checked} onCheckedChange={onChange} />
         </div>
     );
 }
