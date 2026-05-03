@@ -1,5 +1,6 @@
 import type { Attendee, CalendarEvent } from '@workspace/lib/types/calendar';
 import { SSEventType } from '@workspace/lib/types/sse';
+import { getServerSettings } from '../config/server-settings';
 import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
 import { sendToHome } from '../home/home-relay';
@@ -61,6 +62,11 @@ export async function propagateInvitation(
                     organizerUserId: organizerHome.user.id,
                 },
             });
+            if (getServerSettings().notifications.email.userOnCalendarInvite) {
+                const organizer = { userId: user.id, email: user.email, name: user.name };
+                const mail = composeInviteEmail(event, organizer, [attendee]);
+                sendMail(mail).catch((err) => console.error('Failed to send Eigen invite email:', err));
+            }
         } catch (error) {
             console.error('Failed to send invitation:', error);
         }

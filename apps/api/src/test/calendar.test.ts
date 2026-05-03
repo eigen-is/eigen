@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type {
     CalendarEvent,
     CalendarEventOccurrence,
@@ -1538,5 +1538,86 @@ describe('Calendar', () => {
             const event = await assertJson<CalendarEvent>(res);
             expect(event.rrule).toBe('FREQ=DAILY;COUNT=5');
         });
+    });
+});
+
+describe('Calendar invite email to Eigen user', () => {
+    let testCtx: Awaited<ReturnType<typeof getTestContext>>;
+    let calendarId: string;
+
+    beforeAll(async () => {
+        testCtx = await getTestContext();
+        const calRes = await authedRequest(
+            testCtx.alice.user.sessionToken,
+            `/calendar/${testCtx.alice.user.id}/calendars`,
+        );
+        const cals = await assertJson<Array<{ id: string }>>(calRes);
+        calendarId = cals[0].id;
+    });
+
+    async function setToggle(value: boolean) {
+        await authedRequest(testCtx.alice.user.sessionToken, '/settings/server', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ notifications: { email: { userOnCalendarInvite: value } } }),
+        });
+    }
+
+    async function createEventWithBob(title: string): Promise<void> {
+        await authedRequest(
+            testCtx.alice.user.sessionToken,
+            `/calendar/${testCtx.alice.user.id}/calendars/${calendarId}/events`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title,
+                    startTime: 1745000000,
+                    endTime: 1745003600,
+                    allDay: false,
+                    data: {
+                        attendees: [
+                            {
+                                email: testCtx.bob.user.email,
+                                name: testCtx.bob.user.name,
+                                status: 'pending',
+                                role: 'required',
+                            },
+                        ],
+                    },
+                }),
+            },
+        );
+    }
+
+    afterEach(async () => {
+        await setToggle(true);
+    });
+
+    test('emails Eigen attendee when toggle on', async () => {
+        await setToggle(true);
+        const mailer = await import('../lib/core/mailer');
+        const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+
+        await createEventWithBob('Invite-toggle-on');
+        await new Promise((r) => setTimeout(r, 100));
+
+        const calls = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === testCtx.bob.user.email));
+        expect(calls.length).toBe(1);
+        expect(calls[0][0].subject).toContain('Invitation:');
+        spy.mockRestore();
+    });
+
+    test('does not email Eigen attendee when toggle off', async () => {
+        await setToggle(false);
+        const mailer = await import('../lib/core/mailer');
+        const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+
+        await createEventWithBob('Invite-toggle-off');
+        await new Promise((r) => setTimeout(r, 100));
+
+        const calls = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === testCtx.bob.user.email));
+        expect(calls.length).toBe(0);
+        spy.mockRestore();
     });
 });
