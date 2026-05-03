@@ -373,7 +373,6 @@ export const driveRouter = new Elysia({ name: 'drive' })
             return await drive.emailCollaborators(
                 params.mountId,
                 params.pathId,
-                body.subject,
                 body.message,
                 body.documentUrl,
                 body.sendCopyToSelf,
@@ -383,7 +382,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
         {
             body: t.Object({
-                subject: t.String({ maxLength: 200 }),
+                subject: t.Optional(t.String({ maxLength: 200 })),
                 message: t.String({ maxLength: 5000 }),
                 documentUrl: t.String({ maxLength: 500 }),
                 sendCopyToSelf: t.Boolean(),

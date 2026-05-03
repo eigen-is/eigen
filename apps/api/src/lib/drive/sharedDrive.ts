@@ -224,7 +224,6 @@ export default class SharedDrive {
     public async emailCollaborators(
         mountId: string,
         pathId: string,
-        subject: string,
         message: string,
         documentUrl: string,
         sendCopyToSelf: boolean,
@@ -235,7 +234,6 @@ export default class SharedDrive {
             this.sharedDrive.emailCollaborators(
                 mountId,
                 pathId,
-                subject,
                 message,
                 documentUrl,
                 sendCopyToSelf,
