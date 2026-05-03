@@ -51,7 +51,7 @@ export function ReferenceAttachmentChip({ reference, onRemove, className }: Refe
                 {getFileIcon(reference.mimeType, reference.driveType, {
                     className: 'h-3 w-3 text-muted-foreground shrink-0',
                 })}
-                <span className="truncate max-w-[200px]">{displayName}</span>
+                <span className="truncate max-w-[200px]">{onRemove ? displayName : `Open ${displayName}`}</span>
                 {!onRemove && <ExternalLink className="h-3 w-3 text-muted-foreground shrink-0" />}
             </div>
             {onRemove && (

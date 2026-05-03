@@ -81,7 +81,6 @@ export function composeCollaboratorsEmail(
     const html = renderEigenEmail({
         title: displayName,
         bodyHtml: htmlMessage,
-        cta: { label: 'Open document', href: documentLink },
         attachmentLinks: [pathAsAttachmentLink(path)],
         footerLine: `Sent from ${senderDisplay}`,
     });
