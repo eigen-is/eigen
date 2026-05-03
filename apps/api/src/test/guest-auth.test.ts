@@ -1,9 +1,10 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { DrivePath } from '@workspace/lib/types';
 import { eq } from 'drizzle-orm';
 import { user as userSchema } from '../../auth-schema.ts';
 import { auth, getAuthDrizzleDb } from '../lib/auth/auth';
+import { _resetOtpRateLimitForTests } from '../lib/auth/otp-rate-limit';
 import { updateServerConfig } from '../lib/config/server-config';
 import { updateServerSettings } from '../lib/config/server-settings';
 import { assertJson, authedRequest, getTestContext } from './setup';
@@ -27,6 +28,10 @@ describe('Guest Auth', () => {
 
     afterAll(async () => {
         await updateServerConfig({ domain: 'test.eigen.is' });
+    });
+
+    beforeEach(() => {
+        _resetOtpRateLimitForTests();
     });
 
     describe('open signup setting', () => {
@@ -71,6 +76,29 @@ describe('Guest Auth', () => {
         expect(res.status).toBe(400);
         const body = await res.text();
         expect(body).toContain('Use password login');
+    });
+
+    test('request-otp returns 429 after exceeding the per-email rate limit', async () => {
+        const email = `rl-${randomUUID()}@example.com`;
+        for (let i = 0; i < 3; i++) {
+            const ok = await ctx.app.handle(
+                new Request('http://localhost/guest-auth/request-otp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email }),
+                }),
+            );
+            expect(ok.status).toBe(200);
+        }
+        const res = await ctx.app.handle(
+            new Request('http://localhost/guest-auth/request-otp', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email }),
+            }),
+        );
+        expect(res.status).toBe(429);
+        expect(await res.text()).toContain('Too many');
     });
 
     describe('request-otp and verify-otp flow', () => {
