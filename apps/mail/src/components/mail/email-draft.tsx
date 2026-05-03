@@ -317,7 +317,7 @@ export function EmailDraft({
                         content={state.body}
                         onChange={(html) => setField('body', html)}
                         onChangeText={(text) => setField('bodyText', text)}
-                        onReady={(editor) => markEditorReady(editor.getHTML(), editor.getText())}
+                        onReady={({ html, text }) => markEditorReady(html, text)}
                         placeholder="Write your message here..."
                         toolbar="floating"
                         className="w-full h-full"
