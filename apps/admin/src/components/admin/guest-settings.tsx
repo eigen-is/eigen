@@ -77,7 +77,11 @@ export function GuestSettingsPage() {
                         min={1}
                         max={365}
                         value={current.inactivityDays}
-                        onChange={(e) => update({ inactivityDays: Number(e.target.value) })}
+                        onChange={(e) => {
+                            const value = e.target.valueAsNumber;
+                            if (Number.isNaN(value) || value < 1) return;
+                            update({ inactivityDays: value });
+                        }}
                     />
                 </div>
             </div>

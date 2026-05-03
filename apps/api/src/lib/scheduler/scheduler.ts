@@ -9,7 +9,10 @@
 
 const timers: Timer[] = [];
 
-export function scheduleInterval(name: string, intervalMs: number, fn: () => Promise<void> | void): void {
+// Runs fn immediately, then every intervalMs. fn can return anything (sync or
+// Promise) — the return value is discarded and rejections are caught + logged so
+// one bad sweep never breaks the schedule.
+export function scheduleInterval(name: string, intervalMs: number, fn: () => unknown): void {
     const run = () => {
         Promise.resolve(fn()).catch((error) => console.error(`[scheduler] ${name} failed:`, error));
     };
