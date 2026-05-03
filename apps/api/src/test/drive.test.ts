@@ -3288,7 +3288,6 @@ describe('Drive', () => {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        subject: 'Hello',
                         message: '<p>Take a look</p>',
                         documentUrl: 'https://test.eigen.is/docs/doc/x/y/z',
                         sendCopyToSelf: false,

@@ -717,6 +717,7 @@ export default class Drive {
         mountId: string,
         chatId: string,
         email: string,
+        actor: { name: string; email: string } | null = null,
     ): Promise<{
         alreadyHasAccess: boolean;
         targetPathId: string;
@@ -739,7 +740,7 @@ export default class Drive {
         }
 
         const newAcl = [...currentAcl, { id: email.toLowerCase(), read: true, write: true }];
-        await this.updateACL(mountId, targetPath.id, newAcl);
+        await this.updateACL(mountId, targetPath.id, newAcl, undefined, undefined, actor);
 
         return { alreadyHasAccess: false, targetPathId: targetPath.id };
     }

@@ -265,7 +265,10 @@ export default class SharedDrive {
         }
 
         // Delegate directly — Drive.inviteToChat would resolve the container again
-        return this.sharedDrive.inviteToChat(mountId, chatId, email);
+        return this.sharedDrive.inviteToChat(mountId, chatId, email, {
+            name: this.user.name,
+            email: this.user.email,
+        });
     }
 
     public async updateACL(
@@ -274,7 +277,6 @@ export default class SharedDrive {
         acl: DriveACL[],
         visibility?: DriveVisibility,
         sharingRestricted?: boolean,
-        _actor?: { name: string; email: string } | null,
     ) {
         const memberships = await this.getUserMemberships();
         if (!(await this.canWrite(mountId, pathId, this.user, memberships))) {
