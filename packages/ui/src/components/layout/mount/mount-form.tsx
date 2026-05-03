@@ -19,6 +19,7 @@ type S3CheckResult = { ok: boolean; message: string } | null;
 type MountFormProps = {
     defaultStorageType?: MountFormValues['storageType'];
     defaultMaxSizeMB?: number;
+    defaultS3Config?: S3Config;
     initialValues?: Partial<MountFormValues>;
     onSubmit: (values: MountFormValues) => void | Promise<void>;
     onCancel?: () => void;
@@ -30,6 +31,7 @@ type MountFormProps = {
 export function MountForm({
     defaultStorageType = 'local',
     defaultMaxSizeMB = 500,
+    defaultS3Config,
     initialValues,
     onSubmit,
     onCancel,
@@ -42,7 +44,9 @@ export function MountForm({
         initialValues?.storageType ?? defaultStorageType,
     );
     const [maxSizeMB, setMaxSizeMB] = useState(initialValues?.maxSizeMB ?? defaultMaxSizeMB);
-    const [s3Config, setS3Config] = useState<S3Config>(initialValues?.s3Config ?? { ...EMPTY_S3 });
+    const [s3Config, setS3Config] = useState<S3Config>(
+        initialValues?.s3Config ?? (defaultS3Config ? { ...defaultS3Config } : { ...EMPTY_S3 }),
+    );
     const [s3Check, setS3Check] = useState<S3CheckResult>(null);
     const [s3Checking, setS3Checking] = useState(false);
     const [submitting, setSubmitting] = useState(false);

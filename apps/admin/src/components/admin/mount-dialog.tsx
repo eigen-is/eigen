@@ -1,3 +1,4 @@
+import type { S3Config } from '@workspace/lib/types';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { MountForm, type MountFormValues } from '@workspace/ui/components/layout/mount/mount-form';
 
@@ -14,6 +15,7 @@ type MountDialogProps = {
     isEdit?: boolean;
     defaultStorageType?: MountFormValues['storageType'];
     defaultMaxSizeMB?: number;
+    defaultS3Config?: S3Config;
 };
 
 export function MountDialog({
@@ -27,6 +29,7 @@ export function MountDialog({
     isEdit,
     defaultStorageType,
     defaultMaxSizeMB,
+    defaultS3Config,
 }: MountDialogProps) {
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -38,6 +41,7 @@ export function MountDialog({
                     initialValues={initialValues}
                     defaultStorageType={defaultStorageType}
                     defaultMaxSizeMB={defaultMaxSizeMB}
+                    defaultS3Config={defaultS3Config}
                     onSubmit={async (values) => {
                         await onSubmit(values);
                         onOpenChange(false);
