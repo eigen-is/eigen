@@ -54,6 +54,10 @@ describe('Guest cleanup', () => {
 
     afterAll(async () => {
         await updateServerSettings({ guests: { inactivityDays: 7 } });
+        // The "does not touch non-guest users" test ages Alice's updatedAt to keep
+        // the assertion meaningful — restore so any later test seeing Alice gets a
+        // fresh timestamp.
+        setUserUpdatedAt(ctx.alice.user.id, new Date());
     });
 
     test('deletes guest with no sessions and old user.updatedAt', async () => {

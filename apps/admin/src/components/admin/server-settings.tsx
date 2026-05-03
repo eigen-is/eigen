@@ -54,7 +54,7 @@ export function ServerSettingsPage() {
     const handleSave = async () => {
         if (s3Dirty && s3Draft && current.defaults.mount.storageType === 's3')
             await updateS3Config.mutateAsync(s3Draft);
-        if (dirty) await updateSettings.mutateAsync(draft as Record<string, unknown>);
+        if (dirty) await updateSettings.mutateAsync(draft);
         setDraft({});
         setDirty(false);
         setS3Draft(null);
