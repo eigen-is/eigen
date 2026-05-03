@@ -1,5 +1,5 @@
 import type { ServerSettings } from '@workspace/lib/types/settings';
-import type { DeepPartial } from '../core';
+import type { DeepPartial } from '@workspace/lib/types/util';
 import { JsonStore } from '../core/json-store';
 import { LocalFilesystem } from '../core/local-filesystem';
 import { getServerDataPath } from './paths';

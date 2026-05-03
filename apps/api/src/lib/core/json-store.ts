@@ -1,8 +1,5 @@
+import type { DeepPartial } from '@workspace/lib/types/util';
 import type { LocalFilesystem } from './local-filesystem';
-
-export type DeepPartial<T> = {
-    [K in keyof T]?: T[K] extends Record<string, unknown> ? DeepPartial<T[K]> : T[K];
-};
 
 function deepMerge<T extends Record<string, unknown>>(target: T, source: DeepPartial<T>): T {
     const result = { ...target };
