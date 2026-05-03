@@ -65,6 +65,9 @@ export async function propagateInvitation(
             if (getServerSettings().notifications.email.userOnCalendarInvite) {
                 const organizer = { userId: user.id, email: user.email, name: user.name };
                 const mail = composeInviteEmail(event, organizer, [attendee]);
+                // Local Eigen recipient already has the event in-app via sendToHome above.
+                // Drop the iMIP attachment so processInboundImip doesn't fire a second update.
+                mail.icalEvent = undefined;
                 sendMail(mail).catch((err) => console.error('Failed to send Eigen invite email:', err));
             }
         } catch (error) {

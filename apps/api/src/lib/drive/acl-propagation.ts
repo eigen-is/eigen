@@ -69,19 +69,15 @@ async function emailNewlyAddedAclEntries(
 ): Promise<void> {
     const settings = getServerSettings();
     for (const email of addedUserEmails) {
-        try {
-            const target = await getUserByEmail(email);
-            const isGuest = !target || target.role === 'guest';
-            const enabled = isGuest
-                ? settings.notifications.email.guestOnAclAdd
-                : settings.notifications.email.userOnAclAdd;
-            if (!enabled) continue;
-            sendMail(composeShareEmail(path, email, actor)).catch((err) =>
-                console.error('Failed to send share email:', err),
-            );
-        } catch (err) {
-            console.error('Failed to resolve share-email recipient:', err);
-        }
+        const target = await getUserByEmail(email);
+        const isGuest = !target || target.role === 'guest';
+        const enabled = isGuest
+            ? settings.notifications.email.guestOnAclAdd
+            : settings.notifications.email.userOnAclAdd;
+        if (!enabled) continue;
+        sendMail(composeShareEmail(path, email, actor)).catch((err) =>
+            console.error('Failed to send share email:', err),
+        );
     }
 }
 

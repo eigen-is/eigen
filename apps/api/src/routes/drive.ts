@@ -1,4 +1,5 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { parseOwnerId } from '@workspace/lib/types/owner';
 import { Elysia, t } from 'elysia';
 import { getUploadMaxSize } from '../lib/config/enforcement';
 import { getServerSettings } from '../lib/config/server-settings';
@@ -14,7 +15,6 @@ import { sendToHome } from '../lib/home/home-relay';
 import { convertToDocument, importIntoDocument } from '../lib/import/import-document';
 import { getScreenPreview, getTextPreview } from '../lib/preview/preview-cache';
 import { getThumbnail } from '../lib/shared/thumbnails';
-import { getUserById } from '../lib/user';
 import { betterAuth } from './auth';
 
 // Drive routes allow cross-owner access (shared drives, team drives).
@@ -327,10 +327,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
         async ({ params, body, user }) => {
             requireNonGuest(user);
             const drive = await getSharedDrive(params.ownerId, user);
-            await drive.updateACL(params.mountId, params.pathId, body.acl, body.visibility, body.sharingRestricted, {
-                name: user.name,
-                email: user.email,
-            });
+            await drive.updateACL(params.mountId, params.pathId, body.acl, body.visibility, body.sharingRestricted);
             return { success: true };
         },
         {
@@ -382,8 +379,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
         {
             body: t.Object({
-                subject: t.Optional(t.String({ maxLength: 200 })),
-                message: t.String({ maxLength: 5000 }),
+                message: t.String({ maxLength: 12000 }),
                 documentUrl: t.String({ maxLength: 500 }),
                 sendCopyToSelf: t.Boolean(),
             }),
@@ -486,21 +482,20 @@ export const driveRouter = new Elysia({ name: 'drive' })
                 });
             }
 
-            if (path && !path.trashedAt && !params.ownerId.startsWith('team_')) {
-                const settings = getServerSettings();
-                if (settings.notifications.email.userOnAccessRequest) {
-                    const owner = await getUserById(params.ownerId);
-                    if (owner) {
-                        const requesterName = user.name || user.email;
-                        const mail = composeAccessRequestEmail(
-                            path,
-                            { name: owner.name, email: owner.email },
-                            { name: requesterName, email: user.email },
-                            body.message ?? null,
-                        );
-                        sendMail(mail).catch((err) => console.error('Failed to send access-request email:', err));
-                    }
-                }
+            if (
+                path &&
+                !path.trashedAt &&
+                parseOwnerId(params.ownerId).type === 'user' &&
+                getServerSettings().notifications.email.userOnAccessRequest
+            ) {
+                const requesterName = user.name || user.email;
+                const mail = composeAccessRequestEmail(
+                    path,
+                    { name: home.user.name, email: home.user.email },
+                    { name: requesterName, email: user.email },
+                    body.message ?? null,
+                );
+                sendMail(mail).catch((err) => console.error('Failed to send access-request email:', err));
             }
 
             return { success: true };

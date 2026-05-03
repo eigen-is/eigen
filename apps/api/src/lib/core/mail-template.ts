@@ -9,7 +9,7 @@ import {
     stripEigenExtension,
 } from '@workspace/lib/types/drive';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
-import { getDomain } from '../config/server-config';
+import { getDomain, getMailDomain } from '../config/server-config';
 
 const EMAIL_BORDER = '#e0e0e0';
 const EMAIL_TEXT = '#1a1a1a';
@@ -32,13 +32,16 @@ export type EmailShellInput = {
     attachmentLinks?: AttachmentReference[];
     cta?: { label: string; href: string };
     footerLine?: string;
+    // Pill URLs for external recipients gain a `?email=` suffix so the guest-OTP
+    // login page can pre-fill the address. No-op for users on this server's mail domain.
+    recipientEmail?: string;
 };
 
 function appUrl(name: string, fallback: string): string {
     return process.env[name] || fallback;
 }
 
-export function buildReferenceUrl(ref: AttachmentReference): string {
+function buildReferenceUrl(ref: AttachmentReference): string {
     const path = `${ref.ownerId}/${ref.mountId}/${ref.id}`;
     switch (ref.driveType) {
         case DRIVE_TYPE_DOC:
@@ -59,10 +62,19 @@ export function buildReferenceUrl(ref: AttachmentReference): string {
     return `${driveBase}/shared/with-me?pid=${encodeURIComponent(ref.id)}&uid=${encodeURIComponent(ref.ownerId)}&mid=${encodeURIComponent(ref.mountId)}`;
 }
 
-export function renderAttachmentPills(references: AttachmentReference[]): string {
+// External recipients get a `?email=` suffix on the link so the guest-OTP login
+// page can pre-fill their address. Same-domain recipients (already Eigen users)
+// see the bare URL.
+export function buildAttachmentUrl(ref: AttachmentReference, recipientEmail?: string): string {
+    const url = buildReferenceUrl(ref);
+    if (!recipientEmail || recipientEmail.endsWith(`@${getMailDomain()}`)) return url;
+    return `${url}${url.includes('?') ? '&' : '?'}email=${encodeURIComponent(recipientEmail)}`;
+}
+
+export function renderAttachmentPills(references: AttachmentReference[], recipientEmail?: string): string {
     const cards: string[] = [];
     for (const ref of references) {
-        const href = buildReferenceUrl(ref);
+        const href = buildAttachmentUrl(ref, recipientEmail);
         const name = escapeHtml(stripEigenExtension(ref.name));
         cards.push(
             `<div style="display:inline-block;border:1px solid ${EMAIL_BORDER};border-radius:6px;padding:6px 10px;margin:4px 4px 4px 0;font-size:13px;font-family:${EMAIL_FONT};color:#333;text-decoration:none;">` +
@@ -71,7 +83,7 @@ export function renderAttachmentPills(references: AttachmentReference[]): string
         );
     }
     if (cards.length === 0) return '';
-    return `<div style="margin-top:16px;padding-top:12px;border-top:1px solid #eee;">${cards.join('')}</div>`;
+    return `<div style="margin-top:16px;padding-top:12px;border-top:1px solid ${EMAIL_BORDER};">${cards.join('')}</div>`;
 }
 
 function renderCta(cta: { label: string; href: string }): string {
@@ -94,7 +106,9 @@ function renderFooter(footerLine: string): string {
 export function renderEigenEmail(input: EmailShellInput): string {
     const banner = input.banner ? renderBanner(input.banner) : '';
     const cta = input.cta ? renderCta(input.cta) : '';
-    const pills = input.attachmentLinks?.length ? renderAttachmentPills(input.attachmentLinks) : '';
+    const pills = input.attachmentLinks?.length
+        ? renderAttachmentPills(input.attachmentLinks, input.recipientEmail)
+        : '';
     const footer = input.footerLine ? renderFooter(input.footerLine) : '';
     const title = `<h2 style="margin:0 0 20px;font-size:18px;font-weight:600;color:${EMAIL_TEXT};font-family:${EMAIL_FONT}">${escapeHtml(input.title)}</h2>`;
     return `<div style="font-family:${EMAIL_FONT};padding:0 16px">

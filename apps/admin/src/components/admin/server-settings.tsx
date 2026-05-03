@@ -6,6 +6,7 @@ import {
 } from '@workspace/lib/settings';
 import { EMPTY_S3, type S3Config } from '@workspace/lib/types';
 import type { ServerSettings, ServerStorageType } from '@workspace/lib/types/settings';
+import type { DeepPartial } from '@workspace/lib/types/util';
 import { LoadingState } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Input } from '@workspace/ui/components/input';
@@ -15,13 +16,7 @@ import { Switch } from '@workspace/ui/components/switch';
 import { useState } from 'react';
 import { StorageTypePicker } from './storage-type-picker';
 
-type EmailFlag = 'guestOnAclAdd' | 'userOnAclAdd' | 'userOnCalendarInvite' | 'userOnAccessRequest';
-
-type SettingsDraft = {
-    quotas?: Partial<ServerSettings['quotas']>;
-    defaults?: { mount?: Partial<ServerSettings['defaults']['mount']> };
-    notifications?: { email?: Partial<ServerSettings['notifications']['email']> };
-};
+type EmailFlag = keyof ServerSettings['notifications']['email'];
 
 export function ServerSettingsPage() {
     const { data: settings, isLoading } = useServerSettings();
@@ -29,7 +24,7 @@ export function ServerSettingsPage() {
     const { data: s3Config } = useServerS3Config();
     const updateS3Config = useUpdateServerS3Config();
 
-    const [draft, setDraft] = useState<SettingsDraft>({});
+    const [draft, setDraft] = useState<DeepPartial<ServerSettings>>({});
     const [dirty, setDirty] = useState(false);
     const [s3Draft, setS3Draft] = useState<S3Config | null>(null);
     const [s3Dirty, setS3Dirty] = useState(false);
