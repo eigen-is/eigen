@@ -38,7 +38,7 @@ function appUrl(name: string, fallback: string): string {
     return process.env[name] || fallback;
 }
 
-function buildReferenceUrl(ref: AttachmentReference): string {
+export function buildReferenceUrl(ref: AttachmentReference): string {
     const path = `${ref.ownerId}/${ref.mountId}/${ref.id}`;
     switch (ref.driveType) {
         case DRIVE_TYPE_DOC:
