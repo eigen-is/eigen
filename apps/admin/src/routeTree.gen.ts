@@ -19,6 +19,7 @@ import { Route as AuthOrphansRouteImport } from './routes/_auth.orphans'
 import { Route as AuthOnboardingRouteImport } from './routes/_auth.onboarding'
 import { Route as AuthMembersRouteImport } from './routes/_auth.members'
 import { Route as AuthGuestsRouteImport } from './routes/_auth.guests'
+import { Route as AuthGuestSettingsRouteImport } from './routes/_auth.guest-settings'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -69,10 +70,16 @@ const AuthGuestsRoute = AuthGuestsRouteImport.update({
   path: '/guests',
   getParentRoute: () => AuthRoute,
 } as any)
+const AuthGuestSettingsRoute = AuthGuestSettingsRouteImport.update({
+  id: '/guest-settings',
+  path: '/guest-settings',
+  getParentRoute: () => AuthRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/guest-settings': typeof AuthGuestSettingsRoute
   '/guests': typeof AuthGuestsRoute
   '/members': typeof AuthMembersRoute
   '/onboarding': typeof AuthOnboardingRoute
@@ -84,6 +91,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/guest-settings': typeof AuthGuestSettingsRoute
   '/guests': typeof AuthGuestsRoute
   '/members': typeof AuthMembersRoute
   '/onboarding': typeof AuthOnboardingRoute
@@ -97,6 +105,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_auth': typeof AuthRouteWithChildren
   '/login': typeof LoginRoute
+  '/_auth/guest-settings': typeof AuthGuestSettingsRoute
   '/_auth/guests': typeof AuthGuestsRoute
   '/_auth/members': typeof AuthMembersRoute
   '/_auth/onboarding': typeof AuthOnboardingRoute
@@ -110,6 +119,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/login'
+    | '/guest-settings'
     | '/guests'
     | '/members'
     | '/onboarding'
@@ -121,6 +131,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/login'
+    | '/guest-settings'
     | '/guests'
     | '/members'
     | '/onboarding'
@@ -133,6 +144,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_auth'
     | '/login'
+    | '/_auth/guest-settings'
     | '/_auth/guests'
     | '/_auth/members'
     | '/_auth/onboarding'
@@ -220,10 +232,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthGuestsRouteImport
       parentRoute: typeof AuthRoute
     }
+    '/_auth/guest-settings': {
+      id: '/_auth/guest-settings'
+      path: '/guest-settings'
+      fullPath: '/guest-settings'
+      preLoaderRoute: typeof AuthGuestSettingsRouteImport
+      parentRoute: typeof AuthRoute
+    }
   }
 }
 
 interface AuthRouteChildren {
+  AuthGuestSettingsRoute: typeof AuthGuestSettingsRoute
   AuthGuestsRoute: typeof AuthGuestsRoute
   AuthMembersRoute: typeof AuthMembersRoute
   AuthOnboardingRoute: typeof AuthOnboardingRoute
@@ -234,6 +254,7 @@ interface AuthRouteChildren {
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
+  AuthGuestSettingsRoute: AuthGuestSettingsRoute,
   AuthGuestsRoute: AuthGuestsRoute,
   AuthMembersRoute: AuthMembersRoute,
   AuthOnboardingRoute: AuthOnboardingRoute,
