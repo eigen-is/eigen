@@ -2,7 +2,7 @@ import { getHome } from '../home';
 import { pullCalendarShares, pullPendingInvitations, pullSharedPaths, sendToHome } from '../home/home-relay';
 import type { User } from '../user';
 import { getMemberships, getUserById } from '../user';
-import { getEntriesForTarget, removeEntriesForTarget } from './registry';
+import { getEntriesForTarget } from './registry';
 
 export async function reconcileSharesForNewUser(user: User): Promise<void> {
     const fromUserIds = await getEntriesForTarget(user.email);
@@ -63,8 +63,6 @@ export async function reconcileSharesForNewUser(user: User): Promise<void> {
             console.error(`Failed to reconcile shares from ${fromUserId} for new user ${user.id}:`, error);
         }
     }
-
-    await removeEntriesForTarget(user.email);
 }
 
 export async function reconcileSharesForNewTeamMember(userId: string, teamId: string): Promise<void> {
