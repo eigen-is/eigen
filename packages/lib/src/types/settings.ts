@@ -68,6 +68,14 @@ export type ServerSettings = {
         openSignup: boolean;
         inactivityDays: number;
     };
+    notifications: {
+        email: {
+            guestOnAclAdd: boolean;
+            userOnAclAdd: boolean;
+            userOnCalendarInvite: boolean;
+            userOnAccessRequest: boolean;
+        };
+    };
 };
 
 export type MountResponse = {
