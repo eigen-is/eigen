@@ -1,8 +1,10 @@
 {
   "name": "eigen",
+  "version": "0.0.1",
   "private": true,
   "scripts": {
     "prepare": "git config core.hooksPath .githooks",
+    "release": "bun scripts/release.ts",
     "serve": "bun --filter '*' dev",
     "serve:index": "bun --filter '@apps/api' --filter './apps/index' dev",
     "serve:mail": "bun --filter '@apps/api' --filter './apps/mail' dev",
