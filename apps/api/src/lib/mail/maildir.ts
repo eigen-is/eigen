@@ -692,7 +692,7 @@ export default class Maildir {
                                 body: parsed.subject
                                     ? `From ${parsed.fromShort}: ${parsed.subject}`
                                     : `New email from ${parsed.fromShort}`,
-                                tag: `mail:${id}`,
+                                tag: 'mail:new',
                             });
                         }
                     }
