@@ -34,6 +34,10 @@ const settingsStore = new JsonStore<ServerSettings>(serverFs, 'settings.json', {
             body: "Hi!\n\nYou've been invited to join {orgName} at {domain}.\n\nClick the link below to create your account:\n{inviteLink}\n\nThis link expires in 7 days.",
         },
     },
+    guests: {
+        openSignup: true,
+        inactivityDays: 7,
+    },
 });
 
 let loaded = false;
