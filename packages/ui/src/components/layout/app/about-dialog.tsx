@@ -1,3 +1,4 @@
+import { formatInputDate } from '@workspace/lib/date';
 import { usePublicConfig } from '@workspace/lib/public';
 import { Button } from '../../button.tsx';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '../../dialog.tsx';
@@ -32,7 +33,7 @@ export function AboutDialog({ open, onOpenChange }: AboutDialogProps) {
                             <>
                                 {' · '}
                                 {config.commit}
-                                {config.builtAt && ` · ${config.builtAt.slice(0, 10)}`}
+                                {config.builtAt && ` · ${formatInputDate(config.builtAt)}`}
                             </>
                         )}
                     </div>
