@@ -69,6 +69,12 @@ bun run check          # lint + typecheck + test
   more apps need it, it belongs in `packages/`. Never put `useQuery`, `useMutation`, error toasts, or `try/catch` +
   `toast.error()` in app components — all error handling lives in hooks using `onMutationError`.
   See [NOTIFICATIONS.md](docs/NOTIFICATIONS.md)
+- **Package dependency direction is one-way: `fortune-sheet → lib`, never the reverse.** `packages/lib` is shared
+  FE+BE; `packages/fortune-sheet` has React peer dependencies and DOM-coupled modules. If lib imported fortune-sheet,
+  the BE would transitively pull React in at module-eval time. Shared sheet types (`Cell`, `Sheet`, `Op`,
+  `CellMatrix`, `Range`, `SingleRange`, `ConditionalFormatRule`, …) live in `packages/lib/src/sheets/types.ts`;
+  fortune-sheet's `engine/types.ts` and `state/types.ts` re-export them. Sheet utilities that need to be importable
+  by both FE and BE (e.g. `opToPatchOnSheets`) live in `packages/lib/src/sheets/`
 - **Don't break the type chain** — types flow from Elysia route handlers → Eden Treaty → hooks → components
   automatically. No `as any`, no `as Type` casts. Fix types at the source (add return type annotations to backend
   handlers using shared types from `packages/lib/src/types/`). See CODE-STANDARDS.md § Typing

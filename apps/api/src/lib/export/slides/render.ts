@@ -10,9 +10,7 @@ import {
     type SlideObject,
 } from '@workspace/lib/slides';
 import DOMPurify from 'isomorphic-dompurify';
-
-export type SizeUnit = (px: number, axis: 'x' | 'y') => string;
-export type ImgSrcResolver = (mediaName: string) => string | null;
+import type { SizeUnit, SlideImgSrcResolver } from '../render-types';
 
 export const responsiveSizeUnit: SizeUnit = (px, axis) => {
     const base = axis === 'x' ? SLIDE_BASE_WIDTH : SLIDE_BASE_HEIGHT;
@@ -28,7 +26,11 @@ export function fixedSizeUnit(pageWidth: number, pageHeight: number): SizeUnit {
     };
 }
 
-export function renderSlideObjectHtml(obj: SlideObject, sizeUnit: SizeUnit, resolveImgSrc: ImgSrcResolver): string {
+export function renderSlideObjectHtml(
+    obj: SlideObject,
+    sizeUnit: SizeUnit,
+    resolveImgSrc: SlideImgSrcResolver,
+): string {
     const styles: string[] = [
         'position:absolute',
         `left:${pxToPercent(obj.x, 'x')}%`,
@@ -89,7 +91,7 @@ export function renderSlideHtml(
     slide: SlideItem,
     objects: SlideObject[],
     sizeUnit: SizeUnit,
-    resolveImgSrc: ImgSrcResolver,
+    resolveImgSrc: SlideImgSrcResolver,
     options?: { fillPage?: boolean; pageWidthPx?: number; pageHeightPx?: number },
 ): string {
     const fillPage = options?.fillPage ?? false;
@@ -125,7 +127,7 @@ export function renderSlideHtml(
 export function renderDeckHtml(
     deck: DeckData,
     sizeUnit: SizeUnit,
-    resolveImgSrc: ImgSrcResolver,
+    resolveImgSrc: SlideImgSrcResolver,
     slideOptions?: { fillPage?: boolean; pageWidthPx?: number; pageHeightPx?: number },
 ): string {
     return deck.slideOrder

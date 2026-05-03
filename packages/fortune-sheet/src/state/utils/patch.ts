@@ -1,5 +1,6 @@
 import {every, isEqual, isNil, isNumber, partition} from "es-toolkit/compat";
 import {Patch} from "immer";
+import {opToPatchOnSheets} from "@workspace/lib/sheets/yjs-ops";
 import {getSheetIndex} from ".";
 import {Context, getFlowdata} from "../context";
 import {Op, Sheet} from "../types";
@@ -376,31 +377,18 @@ export function patchToOp(
 }
 
 export function opToPatch(ctx: Context, ops: Op[]): [Patch[], Op[]] {
-    const [normalOps, specialOps] = partition(
-        ops,
-        (op) => op.op === "add" || op.op === "remove" || op.op === "replace"
-    );
-    const additionalPatches: Patch[] = [];
-    const patches = normalOps.map((op) => {
-        const patch: Patch = {
-            op: op.op as "add" | "remove" | "replace",
-            value: op.value,
-            path: op.path,
-        };
-        if (op.id) {
-            const i = getSheetIndex(ctx, op.id);
-            if (i != null) {
-                patch.path = ["luckysheetfile", i, ...op.path];
-            } else {
-                // throw new Error(`sheet id: ${op.id} not found`);
-            }
-            if (op.path[0] === "images" && op.id === ctx.currentSheetId) {
-                additionalPatches.push({...patch, path: ["insertedImgs"]});
-            }
+    const [pure, specialOps] = opToPatchOnSheets(ctx.luckysheetfile, ops);
+    const patches: Patch[] = pure.map((p) => ({...p, path: ["luckysheetfile", ...p.path]}));
+    for (const op of ops) {
+        if (op.id && op.path[0] === "images" && op.id === ctx.currentSheetId) {
+            patches.push({
+                op: op.op as "add" | "remove" | "replace",
+                value: op.value,
+                path: ["insertedImgs"],
+            });
         }
-        return patch;
-    });
-    return [patches.concat(additionalPatches), specialOps];
+    }
+    return [patches, specialOps];
 }
 
 export function inverseRowColOptions(

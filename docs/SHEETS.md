@@ -29,7 +29,9 @@ merge cleanly.
 **Flow**: Local edit → `onOp` callback → push to Y.Array → Yjs WebSocket → remote `applyOp()` (no React re-render).
 
 **Snapshot**: Saved on `beforeunload` (flushes latest data to `state.snapshot` and clears the ops array). New joiners
-load from the snapshot, then replay any pending ops that arrived during initial sync.
+load from the snapshot, then replay any pending ops that arrived during initial sync via the shared
+`replaySheetsOps(sheets, opBatches)` from `@workspace/fortune-sheet/engine` — the same function the BE document
+reader uses, so every consumer agrees on what "snapshot + ops → `Sheet[]`" means.
 
 ## Mount-time Bootstrap
 
@@ -75,6 +77,9 @@ evaluation (resolver reads from Yjs snapshot).
 engine/
 ├── formula-engine.ts       # FormulaEngine class (evaluate, evaluateAll, recalculateAll, getDependencies)
 ├── formula-utils.ts        # Pure utilities (iscelldata, checkBracketNum, calPostfixExpression)
+├── formula-shift.ts        # functionCopy + functionStrChange (formula relative-ref shifters)
+├── rowcol.ts               # applySheetsInsertRowCol / applySheetsDeleteRowCol (pure row/col data shifts)
+├── replay-ops.ts           # replaySheetsOps (snapshot + ops → Sheet[]; shared by BE + FE initial-load)
 ├── dependency-graph.ts     # Topological sort + cycle detection
 ├── cell-resolver.ts        # CellResolver interface + createArrayResolver
 ├── format.ts               # Format type inference (uses numfmt for rendering)
@@ -91,6 +96,16 @@ engine/
 - `recalculateAll(resolver)` — batch recalculation of all formulas in dependency order (server-side)
 - `getDependencies(formula, sheetId)` — extract cell references from a formula
 - `format(value, pattern)` — numfmt-backed number/date formatting
+- `replaySheetsOps(sheets, opBatches)` — pure snapshot + ops → `Sheet[]`. Handles `add`/`remove`/`replace`
+  patches via `opToPatchOnSheets`, `addSheet`/`deleteSheet` inline, and `insertRowCol`/`deleteRowCol` via
+  the typed shape-adapter + `applySheetsInsertRowCol`/`applySheetsDeleteRowCol`. Used by the BE document
+  reader and the FE Yjs sync handler — single source of truth for both initial-load paths.
+- `applySheetsInsertRowCol<S extends Sheet>(sheets, op)` / `applySheetsDeleteRowCol<S extends Sheet>(sheets, op)`
+  — pure data shifts for row/col ops over lib.Sheet-typed fields (`data`, `config.merge`, `config.rowhidden`,
+  `luckysheet_conditionformat_save`, cross-sheet formula refs). Generic over `S` so the editor's wider
+  `state.Sheet[]` flows through with its extras unchanged. State-only fields (filter / frozen /
+  dataVerification / hyperlink / calcChain / luckysheet_select_save) are shifted by the state wrapper
+  in `state/modules/rowcol.ts` after the engine call.
 
 **Architecture boundary:** Context-coupled orchestration functions (`execFunctionGroup`, `groupValuesRefresh`,
 etc.) live in `state/modules/formula-exec.ts`. The `formula-ui.ts` barrel re-exports from both, so UI consumers
@@ -98,10 +113,11 @@ don't see the split.
 
 ### Remaining Work — Server-side recalc
 
-The engine is extracted, but `readSheetContent()` (see [DOCUMENT-CONTENT-LAYER.md](DOCUMENT-CONTENT-LAYER.md))
-still returns the last-saved `cell.v` from the snapshot. To get fresh values, load the snapshot + replay
-pending ops, build a `CellResolver` over the resulting `Sheet[]`, and call `engine.recalculateAll(resolver)`
-before mapping to `SheetContent`. Consumers (export, search indexing, scripting) pick this up transparently.
+The engine is extracted and the BE replay path is wired (`apps/api/src/lib/document/sheets.ts` calls
+`replaySheetsOps`), so cell positions and formula text are correct. But `readSheetsContent()` still returns
+the last-saved `cell.v` from the post-replay snapshot — values aren't recomputed. To get fresh values,
+build a `CellResolver` over the replayed `Sheet[]` and call `engine.recalculateAll(resolver)` before mapping
+to `SheetContent`. Consumers (export, search indexing, scripting) pick this up transparently.
 
 ## Headless Conditional Formatting
 

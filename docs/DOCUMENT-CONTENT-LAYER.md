@@ -102,13 +102,14 @@ All live in `apps/api/src/lib/document/` as pure functions on `Y.Doc`.
 ### Sheets (`document/sheets.ts`)
 
 ```typescript
-// Snapshot = the JSON blob in Y.Map('state'). Pending ops in Y.Array('ops') are not
-// replayed server-side (fortune-sheet's applyOp is client-side). OK in Phase 1 because
-// clients flush the snapshot on save/beforeunload — see use-sheet.ts.
-function readSheets(doc: Y.Doc): Sheet[]
+// Snapshot = the JSON blob in Y.Map('state'); pending ops in Y.Array('ops') are replayed
+// via the shared `replaySheetsOps` from @workspace/fortune-sheet/engine, so reads return
+// post-shift sheets even when the client hasn't flushed. The same function runs on the FE
+// initial-load — single source of truth for "snapshot + ops → Sheet[]".
+function readSheetsContent(mount: Mount, path: DrivePath): Promise<Sheet[]>
 
-// Full replace. Used by import.
-function writeSheets(doc: Y.Doc, sheets: Sheet[]): void
+// Full replace into a Y.Doc. Used by import.
+function writeSheetsToYjs(doc: Y.Doc, sheets: Sheet[]): void
 
 // Future: granular writes for scripting. Pushes to Y.Array('ops') in the same op format
 // clients produce, so connected clients apply via workbook.applyOp() — no full reload.
