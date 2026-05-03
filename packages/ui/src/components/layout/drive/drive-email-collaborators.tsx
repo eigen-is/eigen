@@ -1,4 +1,5 @@
 import { useEmailCollaborators } from '@workspace/lib/drive';
+import { useSpaceSettings } from '@workspace/lib/space';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
@@ -20,20 +21,28 @@ const SUBJECT_LIMIT = 200;
 
 export function DriveEmailCollaborators({ path, open, onOpenChange }: DriveEmailCollaboratorsProps) {
     const defaultSubject = stripEigenExtension(path.name);
+    const { data: spaceSettings } = useSpaceSettings();
+    const signatureHtml = spaceSettings?.email?.signatures?.[0]?.html ?? '';
+
     const [subject, setSubject] = useState(defaultSubject);
-    const [message, setMessage] = useState('');
+    const [message, setMessage] = useState(signatureHtml);
     const [messageText, setMessageText] = useState('');
+    // Canonical text of the seeded signature, captured from LightEditor's onReady.
+    // Used to detect whether the user has actually typed something — otherwise an
+    // unedited signature would count as "non-empty" and let Send fire.
+    const [seedText, setSeedText] = useState('');
     const [sendCopyToSelf, setSendCopyToSelf] = useState(true);
     const emailMutation = useEmailCollaborators(path.ownerId, path.mountId);
 
     useEffect(() => {
         if (open) {
             setSubject(defaultSubject);
-            setMessage('');
+            setMessage(signatureHtml);
             setMessageText('');
+            setSeedText('');
             setSendCopyToSelf(true);
         }
-    }, [open, defaultSubject]);
+    }, [open, defaultSubject, signatureHtml]);
 
     const handleSend = () => {
         emailMutation.mutate(
@@ -49,6 +58,8 @@ export function DriveEmailCollaborators({ path, open, onOpenChange }: DriveEmail
         );
     };
 
+    const trimmedMessageText = messageText.trim();
+    const hasContent = trimmedMessageText.length > 0 && trimmedMessageText !== seedText.trim();
     const overLimit = messageText.length > MESSAGE_TEXT_LIMIT;
     const subjectOverLimit = subject.length > SUBJECT_LIMIT;
 
@@ -75,6 +86,7 @@ export function DriveEmailCollaborators({ path, open, onOpenChange }: DriveEmail
                                 content={message}
                                 onChange={setMessage}
                                 onChangeText={setMessageText}
+                                onReady={({ text }) => setSeedText(text)}
                                 placeholder="Write a message..."
                                 className="px-3 py-2"
                                 containerClassName="min-h-[180px] flex flex-col"
@@ -102,7 +114,7 @@ export function DriveEmailCollaborators({ path, open, onOpenChange }: DriveEmail
                     </Button>
                     <Button
                         onClick={handleSend}
-                        disabled={!messageText.trim() || overLimit || subjectOverLimit || emailMutation.isPending}
+                        disabled={!hasContent || overLimit || subjectOverLimit || emailMutation.isPending}
                     >
                         {emailMutation.isPending ? 'Sending...' : 'Send'}
                     </Button>
