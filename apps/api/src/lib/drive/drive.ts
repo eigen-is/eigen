@@ -319,7 +319,7 @@ export default class Drive {
                 }
             }
             if (item.acl) {
-                await propagateACLChange(item, item.acl, null);
+                await propagateACLChange(item, item.acl, null, null);
             }
         }
 
@@ -336,7 +336,7 @@ export default class Drive {
 
         // Re-propagate ACL
         if (restoredItem.acl) {
-            await propagateACLChange(restoredItem, null, restoredItem.acl);
+            await propagateACLChange(restoredItem, null, restoredItem.acl, null);
         }
         // For containers, re-propagate for descendants with ACL
         if (isContainerType(restoredItem.type)) {
@@ -418,7 +418,7 @@ export default class Drive {
         }
 
         await mount.updatePath(pathId, { name: newName });
-        await propagateACLChange(item, item.acl, item.acl);
+        await propagateACLChange(item, item.acl, item.acl, null);
         const renamedItem = await mount.getPath(pathId);
         if (renamedItem) this.emit(SSEventType.DRIVE_PATH_RENAMED, renamedItem);
     }
@@ -566,6 +566,7 @@ export default class Drive {
         acl: DriveACL[] | null,
         visibility?: DriveVisibility,
         sharingRestricted?: boolean,
+        actor?: { name: string; email: string } | null,
     ): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getPath(pathId);
@@ -602,7 +603,7 @@ export default class Drive {
         await mount.updatePath(pathId, updates);
         const updatedItem = await mount.getPath(pathId);
         if (updatedItem) {
-            await propagateACLChange(updatedItem, oldACL, normalizedACL, this.owner.email);
+            await propagateACLChange(updatedItem, oldACL, normalizedACL, actor ?? null);
             this.emit(SSEventType.DRIVE_ACL_UPDATED, updatedItem);
         }
     }
@@ -964,7 +965,7 @@ export default class Drive {
         const path = await mount.getPath(pathId);
         if (!path) return;
         if (path.acl) {
-            await propagateACLChange(path, path.acl, null);
+            await propagateACLChange(path, path.acl, null, null);
         }
         if (isContainerType(path.type)) {
             const children = await mount.listFolderAll(pathId);
@@ -979,7 +980,7 @@ export default class Drive {
         const children = await mount.listFolderAll(pathId);
         for (const child of children) {
             if (child.acl) {
-                await propagateACLChange(child, null, child.acl);
+                await propagateACLChange(child, null, child.acl, null);
             }
             if (isContainerType(child.type)) {
                 await this.propagateACLRestoreRecursively(mountId, child.id);
