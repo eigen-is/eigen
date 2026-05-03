@@ -204,6 +204,33 @@ describe('Guest Auth', () => {
         });
     });
 
+    describe('persistent share registry', () => {
+        test('reconciliation does not consume registry entries', async () => {
+            const { addRegistryEntry, getEntriesForTarget } = await import('../lib/share/registry');
+            const { reconcileSharesForNewUser } = await import('../lib/share');
+            const { getUserByEmail } = await import('../lib/user/user');
+
+            const guestEmail = `reg-keep-${randomUUID()}@example.com`;
+            await addRegistryEntry(ctx.alice.user.id, guestEmail);
+            expect(await getEntriesForTarget(guestEmail)).toContain(ctx.alice.user.id);
+
+            const created = await auth.api.createUser({
+                body: { email: guestEmail, password: randomUUID(), name: 'Reg Keep', role: 'user' },
+            });
+            getAuthDrizzleDb()
+                .update(userSchema)
+                .set({ role: 'guest' })
+                .where(eq(userSchema.id, created.user.id))
+                .run();
+            const guestUser = await getUserByEmail(guestEmail);
+            if (!guestUser) throw new Error('test setup');
+
+            await reconcileSharesForNewUser(guestUser);
+
+            expect(await getEntriesForTarget(guestEmail)).toContain(ctx.alice.user.id);
+        });
+    });
+
     describe('guest deletion', () => {
         test('deleting a guest user removes their data directory', async () => {
             const { existsSync } = await import('node:fs');
