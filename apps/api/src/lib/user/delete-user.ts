@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import { eq } from 'drizzle-orm';
-import { member, teamMember } from '../../../auth-schema';
+import { account, apikey, member, session, teamMember, twoFactor, user as userTable } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../auth/auth';
 import { getGuestHomePath, getUserHomePath } from '../config/paths';
 import { ApiError } from '../core';
@@ -10,7 +10,11 @@ import { removeEntriesForTarget } from '../share/registry';
 import { shareRegistry } from '../share/schema';
 import { getUserById } from './user';
 
-export async function deleteUserCompletely(userId: string, requestHeaders: Headers): Promise<void> {
+// Pass null for `requestHeaders` to delete without an authenticated admin caller —
+// used by the inactive-guest cleanup task. The admin API path runs better-auth's
+// removal hooks; the system path mirrors the same effect by deleting auth rows
+// directly (PRAGMA foreign_keys is OFF, so we can't rely on CASCADE).
+export async function deleteUserCompletely(userId: string, requestHeaders: Headers | null): Promise<void> {
     const user = await getUserById(userId);
     if (!user) {
         throw new ApiError(404, 'User not found');
@@ -34,13 +38,21 @@ export async function deleteUserCompletely(userId: string, requestHeaders: Heade
         await removeEntriesForTarget(user.email);
     }
 
-    // 4. Remove org/team memberships explicitly (PRAGMA foreign_keys is OFF by default
-    //    in SQLite, so CASCADE from user deletion won't clean these up, and orphaned
-    //    member rows crash better-auth's listMembers)
+    // 4. Remove org/team memberships explicitly (orphaned member rows crash
+    //    better-auth's listMembers)
     const authDb = getAuthDrizzleDb();
     authDb.delete(teamMember).where(eq(teamMember.userId, userId)).run();
     authDb.delete(member).where(eq(member.userId, userId)).run();
 
-    // 5. Delete user via better-auth (handles sessions, accounts, 2FA)
-    await auth.api.removeUser({ body: { userId }, headers: requestHeaders });
+    // 5. Delete the user — admin path delegates to better-auth (runs hooks, plugin
+    //    cleanup); system path deletes the auth rows we know about directly.
+    if (requestHeaders) {
+        await auth.api.removeUser({ body: { userId }, headers: requestHeaders });
+    } else {
+        authDb.delete(session).where(eq(session.userId, userId)).run();
+        authDb.delete(account).where(eq(account.userId, userId)).run();
+        authDb.delete(twoFactor).where(eq(twoFactor.userId, userId)).run();
+        authDb.delete(apikey).where(eq(apikey.referenceId, userId)).run();
+        authDb.delete(userTable).where(eq(userTable.id, userId)).run();
+    }
 }
