@@ -4,9 +4,8 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
-import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
-import { Textarea } from '@workspace/ui/components/textarea';
+import { LightEditor } from '@workspace/ui/components/layout/editor/light-editor';
 import { useEffect, useState } from 'react';
 
 type DriveEmailCollaboratorsProps = {
@@ -15,24 +14,21 @@ type DriveEmailCollaboratorsProps = {
     onOpenChange: (open: boolean) => void;
 };
 
-function fileNameWithoutExtension(name: string): string {
-    const dot = name.lastIndexOf('.');
-    return dot > 0 ? name.slice(0, dot) : name;
-}
+const MESSAGE_TEXT_LIMIT = 10000;
 
 export function DriveEmailCollaborators({ path, open, onOpenChange }: DriveEmailCollaboratorsProps) {
-    const [subject, setSubject] = useState('');
     const [message, setMessage] = useState('');
+    const [messageText, setMessageText] = useState('');
     const [sendCopyToSelf, setSendCopyToSelf] = useState(true);
     const emailMutation = useEmailCollaborators(path.ownerId, path.mountId);
 
     useEffect(() => {
         if (open) {
-            setSubject(fileNameWithoutExtension(path.name));
             setMessage('');
+            setMessageText('');
             setSendCopyToSelf(true);
         }
-    }, [open, path.name]);
+    }, [open]);
 
     const handleSend = () => {
         const documentUrl = getDriveShareUrl(path);
@@ -40,7 +36,6 @@ export function DriveEmailCollaborators({ path, open, onOpenChange }: DriveEmail
         emailMutation.mutate(
             {
                 pathId: path.id,
-                subject,
                 message,
                 documentUrl,
                 sendCopyToSelf,
@@ -51,6 +46,8 @@ export function DriveEmailCollaborators({ path, open, onOpenChange }: DriveEmail
         );
     };
 
+    const overLimit = messageText.length > MESSAGE_TEXT_LIMIT;
+
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent size="sm">
@@ -59,28 +56,20 @@ export function DriveEmailCollaborators({ path, open, onOpenChange }: DriveEmail
                 </DialogHeader>
                 <div className="space-y-4">
                     <div className="space-y-2">
-                        <Label htmlFor="email-subject">Subject</Label>
-                        <Input
-                            id="email-subject"
-                            value={subject}
-                            onChange={(e) => setSubject(e.target.value)}
-                            maxLength={200}
-                        />
-                        <div className="text-xs text-muted-foreground text-right">{subject.length}/200</div>
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="email-message">Message</Label>
-                        <Textarea
-                            id="email-message"
-                            autoFocus
-                            placeholder="Write a message..."
-                            value={message}
-                            onChange={(e) => setMessage(e.target.value)}
-                            className="min-h-[100px] resize-none"
-                            maxLength={5000}
-                        />
+                        <Label>Message</Label>
+                        <div className="rounded-md border">
+                            <LightEditor
+                                toolbar="fixed"
+                                content={message}
+                                onChange={setMessage}
+                                onChangeText={setMessageText}
+                                placeholder="Write a message..."
+                                proseStyle={false}
+                                containerClassName="min-h-[180px] flex flex-col"
+                            />
+                        </div>
                         <div className="text-xs text-muted-foreground text-right">
-                            {message.length.toLocaleString()}/{(5000).toLocaleString()}
+                            {messageText.length.toLocaleString()}/{MESSAGE_TEXT_LIMIT.toLocaleString()}
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -99,10 +88,7 @@ export function DriveEmailCollaborators({ path, open, onOpenChange }: DriveEmail
                     <Button variant="outline" onClick={() => onOpenChange(false)} disabled={emailMutation.isPending}>
                         Cancel
                     </Button>
-                    <Button
-                        onClick={handleSend}
-                        disabled={!subject.trim() || !message.trim() || emailMutation.isPending}
-                    >
+                    <Button onClick={handleSend} disabled={!messageText.trim() || overLimit || emailMutation.isPending}>
                         {emailMutation.isPending ? 'Sending...' : 'Send'}
                     </Button>
                 </DialogFooter>
