@@ -323,7 +323,10 @@ export const driveRouter = new Elysia({ name: 'drive' })
         async ({ params, body, user }) => {
             requireNonGuest(user);
             const drive = await getSharedDrive(params.ownerId, user);
-            await drive.updateACL(params.mountId, params.pathId, body.acl, body.visibility, body.sharingRestricted);
+            await drive.updateACL(params.mountId, params.pathId, body.acl, body.visibility, body.sharingRestricted, {
+                name: user.name,
+                email: user.email,
+            });
             return { success: true };
         },
         {

@@ -1,5 +1,8 @@
 import { parseOwnerId } from '@workspace/lib/types';
 import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
+import { getServerSettings } from '../config/server-settings';
+import { composeShareEmail } from '../core/mail-composers';
+import { sendMail } from '../core/mailer';
 import { sendToHome } from '../home/home-relay';
 import { addRegistryEntry } from '../share';
 import { getTeamMembers } from '../team';
@@ -59,19 +62,52 @@ export async function resolveACLToEmails(acls: DriveACL[]): Promise<Map<string, 
     return members;
 }
 
+async function emailNewlyAddedAclEntries(
+    path: DrivePath,
+    addedUserEmails: string[],
+    actor: { name: string; email: string },
+): Promise<void> {
+    const settings = getServerSettings();
+    for (const email of addedUserEmails) {
+        try {
+            const target = await getUserByEmail(email);
+            const isGuest = !target || target.role === 'guest';
+            const enabled = isGuest
+                ? settings.notifications.email.guestOnAclAdd
+                : settings.notifications.email.userOnAclAdd;
+            if (!enabled) continue;
+            sendMail(composeShareEmail(path, email, actor)).catch((err) =>
+                console.error('Failed to send share email:', err),
+            );
+        } catch (err) {
+            console.error('Failed to resolve share-email recipient:', err);
+        }
+    }
+}
+
 export async function propagateACLChange(
     path: DrivePath,
     oldACL: DriveACL[] | null,
     newACL: DriveACL[] | null,
-    actorEmail?: string,
+    actor: { name: string; email: string } | null,
 ): Promise<void> {
     const ids = await resolveACLUserIds(path.ownerId, [...(oldACL || []), ...(newACL || [])]);
 
     for (const id of ids) {
         try {
-            await sendToHome(id, { type: 'drive:acl-change', path, acl: newACL, actorEmail });
+            await sendToHome(id, { type: 'drive:acl-change', path, acl: newACL, actorEmail: actor?.email });
         } catch (error) {
             console.error('Failed to propagate ACL change:', error);
+        }
+    }
+
+    if (actor && newACL) {
+        const oldEmails = new Set((oldACL ?? []).map((e) => e.id.toLowerCase()));
+        const addedUserEmails = newACL
+            .filter((e) => parseOwnerId(e.id).type === 'user' && !oldEmails.has(e.id.toLowerCase()))
+            .map((e) => e.id);
+        if (addedUserEmails.length > 0) {
+            await emailNewlyAddedAclEntries(path, addedUserEmails, actor);
         }
     }
 }

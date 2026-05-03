@@ -276,6 +276,7 @@ export default class SharedDrive {
         acl: DriveACL[],
         visibility?: DriveVisibility,
         sharingRestricted?: boolean,
+        _actor?: { name: string; email: string } | null,
     ) {
         const memberships = await this.getUserMemberships();
         if (!(await this.canWrite(mountId, pathId, this.user, memberships))) {
@@ -297,6 +298,7 @@ export default class SharedDrive {
             acl,
             visibility,
             effectiveOwner ? sharingRestricted : undefined,
+            { name: this.user.name, email: this.user.email },
         );
     }
 
