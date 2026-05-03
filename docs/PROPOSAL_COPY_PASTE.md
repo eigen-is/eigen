@@ -467,8 +467,7 @@ The migration is non-breaking because:
    wraps v1 data in a v2 envelope. Old clipboard data written by code not yet migrated will still be readable.
 3. **Apps are migrated one at a time.** During migration, one app may write v2 while another still writes v1.
    The read path handles both.
-4. **Once all apps are on v2, v1 types and the upgrade function can be removed.** Since data is throwaway
-   during dev (per CLAUDE.md), there is no need for long-term v1 support.
+4. **Once all apps are on v2, v1 types and the upgrade function can be removed.**
 
 ---
 
