@@ -4,8 +4,9 @@ import { requestOtp, verifyOtpAndSignIn } from '../lib/auth/guest-auth';
 export const guestAuthRouter = new Elysia({ name: 'guest-auth' })
     .post(
         '/guest-auth/request-otp',
-        async ({ body }) => {
-            await requestOtp(body.email.toLowerCase().trim());
+        async ({ body, request, server }) => {
+            const ip = server?.requestIP(request)?.address ?? 'unknown';
+            await requestOtp(body.email.toLowerCase().trim(), ip);
             return { success: true };
         },
         { body: t.Object({ email: t.String() }) },

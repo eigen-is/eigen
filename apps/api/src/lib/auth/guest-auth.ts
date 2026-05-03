@@ -9,6 +9,7 @@ import { reconcileSharesForNewUser } from '../share';
 import { getEntriesForTarget } from '../share/registry';
 import { getUserByEmail } from '../user/user';
 import { auth, getAuthDrizzleDb } from './auth';
+import { checkOtpRateLimit } from './otp-rate-limit';
 
 const OTP_EXPIRY_MS = 5 * 60 * 1000;
 
@@ -25,7 +26,9 @@ function guestPassword(email: string): string {
     return createHmac('sha256', auth.options.secret).update(`guest:${email}`).digest('hex');
 }
 
-export async function requestOtp(email: string): Promise<void> {
+export async function requestOtp(email: string, ip: string): Promise<void> {
+    checkOtpRateLimit(email, ip);
+
     const existingUser = await getUserByEmail(email);
     if (existingUser) {
         if (existingUser.role !== 'guest') throw new ApiError(400, 'Use password login');
