@@ -1,17 +1,13 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { parseOwnerId } from '@workspace/lib/types/owner';
 import { Elysia, t } from 'elysia';
 import { getUploadMaxSize } from '../lib/config/enforcement';
-import { getServerSettings } from '../lib/config/server-settings';
 import { ApiError } from '../lib/core';
 import { requireNonGuest } from '../lib/core/access';
 import { contentDisposition, setCacheHeaders } from '../lib/core/http';
-import { composeAccessRequestEmail } from '../lib/core/mail-composers';
-import { sendMail } from '../lib/core/mailer';
 import { getDrive, getSharedDrive } from '../lib/drive';
+import { propagateAccessRequest } from '../lib/drive/access-request-propagation';
 import { exportDocument } from '../lib/export/export-document';
 import { getHome } from '../lib/home';
-import { sendToHome } from '../lib/home/home-relay';
 import { convertToDocument, importIntoDocument } from '../lib/import/import-document';
 import { getScreenPreview, getTextPreview } from '../lib/preview/preview-cache';
 import { getThumbnail } from '../lib/shared/thumbnails';
@@ -370,6 +366,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             return await drive.emailCollaborators(
                 params.mountId,
                 params.pathId,
+                body.subject ?? null,
                 body.message,
                 body.documentUrl,
                 body.sendCopyToSelf,
@@ -379,6 +376,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
         {
             body: t.Object({
+                subject: t.Optional(t.String({ maxLength: 200 })),
                 message: t.String({ maxLength: 12000 }),
                 documentUrl: t.String({ maxLength: 500 }),
                 sendCopyToSelf: t.Boolean(),
@@ -466,38 +464,13 @@ export const driveRouter = new Elysia({ name: 'drive' })
         '/drive/:ownerId/:mountId/path/:pathId/request-access',
         async ({ params, user, body }) => {
             const home = await getHome(params.ownerId); // ownerId-routed: request targets this home
-            const path = await home.drive.getPath(params.mountId, params.pathId);
-
-            if (path && !path.trashedAt) {
-                const requesterName = user.name || user.email;
-                await sendToHome(params.ownerId, {
-                    type: 'notification',
-                    notification: {
-                        type: 'access-request',
-                        tag: `access-request:${params.ownerId}:${params.mountId}:${params.pathId}:${user.email}`,
-                        title: `${requesterName} requested access to "${path.name}"`,
-                        body: body.message || null,
-                        actorEmail: user.email,
-                    },
-                });
-            }
-
-            if (
-                path &&
-                !path.trashedAt &&
-                parseOwnerId(params.ownerId).type === 'user' &&
-                getServerSettings().notifications.email.userOnAccessRequest
-            ) {
-                const requesterName = user.name || user.email;
-                const mail = composeAccessRequestEmail(
-                    path,
-                    { name: home.user.name, email: home.user.email },
-                    { name: requesterName, email: user.email },
-                    body.message ?? null,
-                );
-                sendMail(mail).catch((err) => console.error('Failed to send access-request email:', err));
-            }
-
+            await propagateAccessRequest(
+                home,
+                params.mountId,
+                params.pathId,
+                { name: user.name, email: user.email },
+                body.message ?? null,
+            );
             return { success: true };
         },
         {

@@ -441,7 +441,7 @@ describe('Email notification toggles', () => {
         expect(data.notifications.email.guestOnAclAdd).toBe(true);
         expect(data.notifications.email.userOnAclAdd).toBe(false);
         expect(data.notifications.email.userOnCalendarInvite).toBe(true);
-        expect(data.notifications.email.userOnAccessRequest).toBe(true);
+        expect(data.notifications.email.ownerOnAccessRequest).toBe(true);
     });
 
     test('PUT round-trips notifications.email', async () => {

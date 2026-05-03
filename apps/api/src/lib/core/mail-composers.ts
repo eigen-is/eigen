@@ -73,15 +73,17 @@ export function composeAccessRequestEmail(
 
 export function composeCollaboratorsEmail(
     path: DrivePath,
+    subject: string | null,
     htmlMessage: string,
     documentLink: string,
     sender: { name: string; email: string },
     recipientEmail: string,
 ): OutboundMail {
     const displayName = stripEigenExtension(path.name);
+    const resolvedSubject = subject?.trim() || displayName;
     const senderDisplay = sender.name || sender.email;
     const html = renderEigenEmail({
-        title: displayName,
+        title: resolvedSubject,
         bodyHtml: htmlMessage,
         attachmentLinks: [pathAsAttachmentLink(path)],
         footerLine: `Sent from ${senderDisplay}`,
@@ -91,7 +93,7 @@ export function composeCollaboratorsEmail(
     return {
         from: { name: sender.name, address: sender.email },
         to: [{ name: '', address: recipientEmail }],
-        subject: displayName,
+        subject: resolvedSubject,
         text: `${textBody}\n\n${documentLink}`,
         html,
     };
