@@ -8,7 +8,7 @@ import { getServerDataPath } from './paths';
 
 const VERSION: string = pkg.version;
 const COMMIT: string | undefined = process.env['EIGEN_COMMIT'] || undefined;
-const BUILT_AT: string | undefined = process.env['EIGEN_BUILT_AT'] || undefined;
+const BUILT_AT: Date | undefined = process.env['EIGEN_BUILT_AT'] ? new Date(process.env['EIGEN_BUILT_AT']) : undefined;
 
 export type ServerConfig = {
     domain: string;
