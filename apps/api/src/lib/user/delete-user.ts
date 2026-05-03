@@ -25,10 +25,14 @@ export async function deleteUserCompletely(userId: string, requestHeaders: Heade
         fs.rmSync(homePath, { recursive: true, force: true });
     }
 
-    // 3. Clean up share registry — entries FROM this user and TO this user
+    // 3. Clean up share registry — entries FROM this user always; entries TO this user
+    //    only for non-guests. Guest registry entries persist so re-OTP after deletion
+    //    rehydrates the same shared.db state.
     const eigenDb = await getEigenDb();
     eigenDb.delete(shareRegistry).where(eq(shareRegistry.fromUserId, userId)).run();
-    await removeEntriesForTarget(user.email);
+    if (user.role !== 'guest') {
+        await removeEntriesForTarget(user.email);
+    }
 
     // 4. Remove org/team memberships explicitly (PRAGMA foreign_keys is OFF by default
     //    in SQLite, so CASCADE from user deletion won't clean these up, and orphaned

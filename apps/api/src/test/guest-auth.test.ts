@@ -229,6 +229,29 @@ describe('Guest Auth', () => {
 
             expect(await getEntriesForTarget(guestEmail)).toContain(ctx.alice.user.id);
         });
+
+        test('deleting a guest preserves registry entries', async () => {
+            const { addRegistryEntry, getEntriesForTarget } = await import('../lib/share/registry');
+
+            const guestEmail = `reg-survive-${randomUUID()}@example.com`;
+            await addRegistryEntry(ctx.alice.user.id, guestEmail);
+
+            const created = await auth.api.createUser({
+                body: { email: guestEmail, password: randomUUID(), name: 'Reg Survive', role: 'user' },
+            });
+            getAuthDrizzleDb()
+                .update(userSchema)
+                .set({ role: 'guest' })
+                .where(eq(userSchema.id, created.user.id))
+                .run();
+
+            const res = await authedRequest(ctx.alice.user.sessionToken, `/settings/user/${created.user.id}`, {
+                method: 'DELETE',
+            });
+            expect(res.status).toBe(200);
+
+            expect(await getEntriesForTarget(guestEmail)).toContain(ctx.alice.user.id);
+        });
     });
 
     describe('guest deletion', () => {
