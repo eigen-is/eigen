@@ -1,9 +1,9 @@
 import type { BorderSide, Cell as FortuneCell, Sheet } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { Border, Cell as XlsxCell } from 'exceljs';
+import { readSheetsContent } from '../../document/sheets';
 import type { Mount } from '../../mount';
 import type { ExportResult } from '../export-document';
-import { loadSheetsContent } from './content';
 import { resolveFontFamily } from './fonts';
 
 // Excel's date epoch is 1899-12-30 (Lotus 1-2-3 1900 leap-year bug).
@@ -43,7 +43,7 @@ function hexToArgb(hex: string): string {
 }
 
 export async function exportSheetsToXlsx(mount: Mount, drivePath: DrivePath): Promise<ExportResult> {
-    const sheets = await loadSheetsContent(mount, drivePath);
+    const sheets = await readSheetsContent(mount, drivePath);
     const buffer = await sheetsToXlsx(sheets);
     const title = drivePath.name.replace(/\.eigensheets$/, '');
 

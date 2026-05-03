@@ -1,9 +1,9 @@
 import type { DeckData, SlideObject } from '@workspace/lib/slides';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type * as Y from 'yjs';
-import { COLLAB_DB_CONFIG } from '../../collab/db-config';
-import { loadYjsState } from '../../collab/yjs-loader';
-import type { Mount } from '../../mount';
+import { COLLAB_DB_CONFIG } from '../collab/db-config';
+import { loadYjsState } from '../collab/yjs-loader';
+import type { Mount } from '../mount';
 
 export type SlidesContent = {
     deck: DeckData;
@@ -55,10 +55,12 @@ function yMapToSlideObject(yMap: Y.Map<unknown>): SlideObject {
     return obj as SlideObject;
 }
 
-export async function loadSlidesContent(mount: Mount, drivePath: DrivePath): Promise<SlidesContent | null> {
+export async function readSlidesContent(mount: Mount, drivePath: DrivePath): Promise<SlidesContent> {
     const dataDbPath = await mount.getChildByName(drivePath.id, 'data.db');
-    if (!dataDbPath) return null;
+    if (!dataDbPath) throw new Error('eigenslides data.db missing');
 
+    // Open (or reuse) the database — don't close it, as a collab session may share
+    // this instance. Mount.closeAllDatabases handles cleanup on shutdown.
     const managedDb = await mount.openDatabase(COLLAB_DB_CONFIG, dataDbPath.id);
     const { doc: ydoc } = loadYjsState(managedDb);
 

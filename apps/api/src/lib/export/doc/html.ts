@@ -6,11 +6,11 @@ import DOMPurify from 'isomorphic-dompurify';
 import { common, createLowlight } from 'lowlight';
 // CSS embedded as string at build time by Bun's bundler — no runtime file resolution needed
 import eigenProseCSSRaw from '../../../../../../packages/ui/src/styles/eigen-prose.css' with { type: 'text' };
+import { readEigendocContent } from '../../document/doc';
 import type { Mount } from '../../mount';
 import type { ExportResult } from '../export-document';
 import { getFontCSS } from '../fonts';
 import { buildDataUriMap } from '../media';
-import { loadEigendocContent } from './content';
 import { renderCodeBlockNode, renderFigureNode, renderTaskItemNode, stripEigendocExtension } from './render';
 
 const lowlight = createLowlight(common);
@@ -33,14 +33,11 @@ export async function exportEigendocToHtml(mount: Mount, drivePath: DrivePath): 
 }
 
 export async function generateExportHtml(mount: Mount, drivePath: DrivePath): Promise<string> {
-    const content = await loadEigendocContent(mount, drivePath);
-    if (!content) return wrapInDocument(drivePath.name, '');
-
-    const { pmJson, mediaByName } = content;
+    const { json, mediaByName } = await readEigendocContent(mount, drivePath);
     const dataUriMap = await buildDataUriMap(mount, mediaByName);
 
     const bodyHtml = renderToHTMLString({
-        content: pmJson,
+        content: json,
         extensions,
         options: {
             nodeMapping: {

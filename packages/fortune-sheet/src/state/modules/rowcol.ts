@@ -1,9 +1,8 @@
-import {assign, clone, cloneDeep, forEach, isEmpty, isNil, size} from "es-toolkit/compat";
+import {assign, clone, cloneDeep, forEach, isEmpty, size} from "es-toolkit/compat";
+import {applySheetsDeleteRowCol, applySheetsInsertRowCol} from "../../engine/rowcol";
 import {Context} from "../context";
 import {Sheet} from "../types";
 import {getSheetIndex} from "../utils";
-import {getcellFormula} from "./cell";
-import {functionStrChange} from "./formula-ui";
 
 const refreshLocalMergeData = (merge_new: Record<string, any>, file: Sheet) => {
     Object.entries(merge_new).forEach(([, v]) => {
@@ -14,260 +13,58 @@ const refreshLocalMergeData = (merge_new: Record<string, any>, file: Sheet) => {
             cs: number;
         };
 
+        // Engine inserts null for new cells inside an expanded merge range; the
+        // canvas renderer needs `mc` on every cell of the range to hide them
+        // behind the top-left, so stamp through nulls too.
         for (let i = r; i < r + rs; i += 1) {
             for (let j = c; j < c + cs; j += 1) {
-                if (file?.data?.[i]?.[j]) {
-                    file.data[i][j] = assign(cloneDeep(file.data[i][j]), {mc: {r, c}});
-                }
+                if (!file?.data?.[i]) continue;
+                const existing = file.data[i][j];
+                file.data[i][j] = existing
+                    ? assign(cloneDeep(existing), {mc: {r, c}})
+                    : {mc: {r, c}};
             }
         }
 
-        if (file?.data?.[r]?.[c]) {
-            file.data[r][c] = assign(cloneDeep(file.data[r][c]), {mc: {r, c, rs, cs}});
+        if (file?.data?.[r]) {
+            const existing = file.data[r][c];
+            file.data[r][c] = existing
+                ? assign(cloneDeep(existing), {mc: {r, c, rs, cs}})
+                : {mc: {r, c, rs, cs}};
         }
     });
 };
 
-/**
- * Insert rows or columns
- * @param {string} type 'row' or 'column'
- * @param {number} index insertion position index
- * @param {number} count number of rows (or columns) to insert
- * @param {string} direction insertion direction: 'lefttop' or 'rightbottom'
- * @param {string | number} id target sheet id
- * @returns
- */
-export function insertRowCol(
+function shiftStateOnlyFieldsForInsert(
     ctx: Context,
-    op: {
-        type: "row" | "column";
-        index: number;
-        count: number;
-        direction: "lefttop" | "rightbottom";
-        id: string;
-    },
-    changeSelection: boolean = true
+    op: {type: "row" | "column"; index: number; count: number; direction: "lefttop" | "rightbottom"; id: string},
 ) {
-    let {count, id} = op;
-    const {type, index, direction} = op;
-    id = id || ctx.currentSheetId;
-
-    // if (
-    //   type === "row" &&
-    //   !checkProtectionAuthorityNormal(sheetId, "insertRows")
-    // ) {
-    //   return;
-    // } else if (
-    //   type === "column" &&
-    //   !checkProtectionAuthorityNormal(sheetId, "insertColumns")
-    // ) {
-    //   return;
-    // }
-
+    const {type, index, count, direction} = op;
+    const id = op.id || ctx.currentSheetId;
     const curOrder = getSheetIndex(ctx, id);
     if (curOrder == null) return;
-
     const file = ctx.luckysheetfile[curOrder];
     if (!file) return;
 
-    const d = file.data;
-    if (!d) return;
-
-    const cfg = file.config || {};
-
-    if (changeSelection) {
-        if (type === "row") {
-            if (cfg.rowReadOnly?.[index]) {
-                throw new Error("readOnly");
-            }
-        } else {
-            if (cfg.colReadOnly?.[index]) {
-                throw new Error("readOnly");
-            }
-        }
-    }
-
-    if (type === "row" && d.length + count >= 10000) {
-        throw new Error("maxExceeded");
-    }
-
-    if (type === "column" && d[0] && d[0].length + count >= 1000) {
-        throw new Error("maxExceeded");
-    }
-
-    count = Math.floor(count);
-
-    // Merged cells config update
-    if (cfg.merge == null) {
-        cfg.merge = {};
-    }
-
-    const merge_new: any = {};
-    forEach(cfg.merge, (mc) => {
-        const {r, c, rs, cs} = mc;
-
-        if (type === "row") {
-            if (index < r) {
-                merge_new[`${r + count}_${c}`] = {r: r + count, c, rs, cs};
-            } else if (index === r) {
-                if (direction === "lefttop") {
-                    merge_new[`${r + count}_${c}`] = {
-                        r: r + count,
-                        c,
-                        rs,
-                        cs,
-                    };
-                } else {
-                    merge_new[`${r}_${c}`] = {r, c, rs: rs + count, cs};
-                }
-            } else if (index < r + rs - 1) {
-                merge_new[`${r}_${c}`] = {r, c, rs: rs + count, cs};
-            } else if (index === r + rs - 1) {
-                if (direction === "lefttop") {
-                    merge_new[`${r}_${c}`] = {r, c, rs: rs + count, cs};
-                } else {
-                    merge_new[`${r}_${c}`] = {r, c, rs, cs};
-                }
+    // calcChain entries are sheet-local; cross-sheet formula text is rewritten by the engine.
+    const newCalcChain: any[] = [];
+    if (file.calcChain != null) {
+        for (const entry of file.calcChain) {
+            const calc: any = cloneDeep(entry);
+            if (type === "row") {
+                if (direction === "lefttop" && calc.r >= index) calc.r += count;
+                else if (direction === "rightbottom" && calc.r > index) calc.r += count;
             } else {
-                merge_new[`${r}_${c}`] = {r, c, rs, cs};
+                if (direction === "lefttop" && calc.c >= index) calc.c += count;
+                else if (direction === "rightbottom" && calc.c > index) calc.c += count;
             }
-        } else if (type === "column") {
-            if (index < c) {
-                merge_new[`${r}_${c + count}`] = {
-                    r,
-                    c: c + count,
-                    rs,
-                    cs,
-                };
-            } else if (index === c) {
-                if (direction === "lefttop") {
-                    merge_new[`${r}_${c + count}`] = {
-                        r,
-                        c: c + count,
-                        rs,
-                        cs,
-                    };
-                } else {
-                    merge_new[`${r}_${c}`] = {r, c, rs, cs: cs + count};
-                }
-            } else if (index < c + cs - 1) {
-                merge_new[`${r}_${c}`] = {r, c, rs, cs: cs + count};
-            } else if (index === c + cs - 1) {
-                if (direction === "lefttop") {
-                    merge_new[`${r}_${c}`] = {r, c, rs, cs: cs + count};
-                } else {
-                    merge_new[`${r}_${c}`] = {r, c, rs, cs};
-                }
-            } else {
-                merge_new[`${r}_${c}`] = {r, c, rs, cs};
-            }
-        }
-    });
-    cfg.merge = merge_new;
-
-    // Formula config update
-    const newCalcChain = [];
-    for (
-        let SheetIndex = 0;
-        SheetIndex < ctx.luckysheetfile.length;
-        SheetIndex += 1
-    ) {
-        if (
-            isNil(ctx.luckysheetfile[SheetIndex].calcChain) ||
-            ctx.luckysheetfile.length === 0
-        ) {
-            continue;
-        }
-        const {calcChain} = ctx.luckysheetfile[SheetIndex];
-        const {data} = ctx.luckysheetfile[SheetIndex];
-        for (let i = 0; i < calcChain!.length; i += 1) {
-            const calc: any = cloneDeep(calcChain![i]);
-            const calc_r = calc.r;
-            const calc_c = calc.c;
-            const calc_i = calc.id;
-            const calc_funcStr = getcellFormula(ctx, calc_r, calc_c, calc_i);
-
-            if (type === "row" && SheetIndex === curOrder) {
-                const functionStr = `=${functionStrChange(
-                    calc_funcStr,
-                    "add",
-                    "row",
-                    direction,
-                    index,
-                    count
-                )}`;
-
-                if (d[calc_r]?.[calc_c]?.f === calc_funcStr) {
-                    d[calc_r]![calc_c]!.f = functionStr;
-                }
-
-                if (direction === "lefttop") {
-                    if (calc_r >= index) {
-                        calc.r += count;
-                    }
-                } else if (direction === "rightbottom") {
-                    if (calc_r > index) {
-                        calc.r += count;
-                    }
-                }
-
-                newCalcChain.push(calc);
-            } else if (type === "row") {
-                const functionStr = `=${functionStrChange(
-                    calc_funcStr,
-                    "add",
-                    "row",
-                    direction,
-                    index,
-                    count
-                )}`;
-
-                if (data![calc_r]?.[calc_c]?.f === calc_funcStr) {
-                    data![calc_r]![calc_c]!.f = functionStr;
-                }
-            } else if (type === "column" && SheetIndex === curOrder) {
-                const functionStr = `=${functionStrChange(
-                    calc_funcStr,
-                    "add",
-                    "col",
-                    direction,
-                    index,
-                    count
-                )}`;
-
-                if (d[calc_r]?.[calc_c]?.f === calc_funcStr) {
-                    d[calc_r]![calc_c]!.f = functionStr;
-                }
-
-                if (direction === "lefttop") {
-                    if (calc_c >= index) {
-                        calc.c += count;
-                    }
-                } else if (direction === "rightbottom") {
-                    if (calc_c > index) {
-                        calc.c += count;
-                    }
-                }
-
-                newCalcChain.push(calc);
-            } else if (type === "column") {
-                const functionStr = `=${functionStrChange(
-                    calc_funcStr,
-                    "add",
-                    "col",
-                    direction,
-                    index,
-                    count
-                )}`;
-
-                if (data![calc_r]?.[calc_c]?.f === calc_funcStr) {
-                    data![calc_r]![calc_c]!.f = functionStr;
-                }
-            }
+            newCalcChain.push(calc);
         }
     }
+    file.calcChain = newCalcChain;
 
     // Filter config update
+    const cfg = file.config || {};
     const {filter_select} = file;
     const {filter} = file;
     let newFilterObj: any = null;
@@ -380,122 +177,9 @@ export function insertRowCol(
         });
     }
 
-    // Conditional formatting config update
-    const CFarr = file.luckysheet_conditionformat_save;
-    const newCFarr = [];
-    if (CFarr != null && CFarr.length > 0) {
-        for (let i = 0; i < CFarr.length; i += 1) {
-            const cf_range = CFarr[i].cellrange;
-            const cf_new_range = [];
-
-            for (let j = 0; j < cf_range.length; j += 1) {
-                let CFr1 = cf_range[j].row[0];
-                let CFr2 = cf_range[j].row[1];
-                let CFc1 = cf_range[j].column[0];
-                let CFc2 = cf_range[j].column[1];
-
-                if (type === "row") {
-                    if (CFr1 < index) {
-                        if (CFr2 === index && direction === "lefttop") {
-                            CFr2 += count;
-                        } else if (CFr2 > index) {
-                            CFr2 += count;
-                        }
-                    } else if (CFr1 === index) {
-                        if (direction === "lefttop") {
-                            CFr1 += count;
-                            CFr2 += count;
-                        } else if (direction === "rightbottom" && CFr2 > index) {
-                            CFr2 += count;
-                        }
-                    } else {
-                        CFr1 += count;
-                        CFr2 += count;
-                    }
-                } else if (type === "column") {
-                    if (CFc1 < index) {
-                        if (CFc2 === index && direction === "lefttop") {
-                            CFc2 += count;
-                        } else if (CFc2 > index) {
-                            CFc2 += count;
-                        }
-                    } else if (CFc1 === index) {
-                        if (direction === "lefttop") {
-                            CFc1 += count;
-                            CFc2 += count;
-                        } else if (direction === "rightbottom" && CFc2 > index) {
-                            CFc2 += count;
-                        }
-                    } else {
-                        CFc1 += count;
-                        CFc2 += count;
-                    }
-                }
-
-                cf_new_range.push({row: [CFr1, CFr2], column: [CFc1, CFc2]});
-            }
-
-            const cf = clone(CFarr[i]);
-            cf.cellrange = cf_new_range;
-
-            newCFarr.push(cf);
-        }
-    }
-
-    // Alternating colors config update
-    const AFarr = file.luckysheet_alternateformat_save;
-    const newAFarr = [];
-    if (AFarr != null && AFarr.length > 0) {
-        for (let i = 0; i < AFarr.length; i += 1) {
-            let AFr1 = AFarr[i].cellrange.row[0];
-            let AFr2 = AFarr[i].cellrange.row[1];
-            let AFc1 = AFarr[i].cellrange.column[0];
-            let AFc2 = AFarr[i].cellrange.column[1];
-
-            const af = clone(AFarr[i]);
-
-            if (type === "row") {
-                if (AFr1 < index) {
-                    if (AFr2 === index && direction === "lefttop") {
-                        AFr2 += count;
-                    } else if (AFr2 > index) {
-                        AFr2 += count;
-                    }
-                } else if (AFr1 === index) {
-                    if (direction === "lefttop") {
-                        AFr1 += count;
-                        AFr2 += count;
-                    } else if (direction === "rightbottom" && AFr2 > index) {
-                        AFr2 += count;
-                    }
-                } else {
-                    AFr1 += count;
-                    AFr2 += count;
-                }
-            } else if (type === "column") {
-                if (AFc1 < index) {
-                    if (AFc2 === index && direction === "lefttop") {
-                        AFc2 += count;
-                    } else if (AFc2 > index) {
-                        AFc2 += count;
-                    }
-                } else if (AFc1 === index) {
-                    if (direction === "lefttop") {
-                        AFc1 += count;
-                        AFc2 += count;
-                    } else if (direction === "rightbottom" && AFc2 > index) {
-                        AFc2 += count;
-                    }
-                } else {
-                    AFc1 += count;
-                    AFc2 += count;
-                }
-            }
-
-            af.cellrange = {row: [AFr1, AFr2], column: [AFc1, AFc2]};
-
-            newAFarr.push(af);
-        }
+    if (newFilterObj != null) {
+        file.filter = newFilterObj.filter;
+        file.filter_select = newFilterObj.filter_select;
     }
 
     // Freeze config update
@@ -572,6 +256,7 @@ export function insertRowCol(
             }
         });
     }
+    file.dataVerification = newDataVerification;
 
     // Hyperlink config update
     const {hyperlink} = file;
@@ -609,799 +294,46 @@ export function insertRowCol(
             }
         });
     }
-
-    if (type === "row") {
-        // Row height config update
-        if (cfg.rowlen != null) {
-            const rowlen_new: any = {};
-            const rowReadOnly_new: Record<number, number> = {};
-
-            forEach(cfg.rowlen, (v, rstr) => {
-                const r = parseFloat(rstr);
-
-                if (r < index) {
-                    rowlen_new[r] = cfg.rowlen![r];
-                } else if (r === index) {
-                    if (direction === "lefttop") {
-                        rowlen_new[r + count] = cfg.rowlen![r];
-                    } else if (direction === "rightbottom") {
-                        rowlen_new[r] = cfg.rowlen![r];
-                    }
-                } else {
-                    rowlen_new[r + count] = cfg.rowlen![r];
-                }
-            });
-            forEach(cfg.rowReadOnly, (v, rstr) => {
-                const r = parseFloat(rstr);
-                if (r < index) {
-                    rowReadOnly_new[r] = cfg.rowReadOnly![r];
-                } else if (r > index) {
-                    rowReadOnly_new[r + count] = cfg.rowReadOnly![r];
-                }
-            });
-
-            cfg.rowlen = rowlen_new;
-            cfg.rowReadOnly = rowReadOnly_new;
-        }
-
-        // Custom row height config update
-        if (cfg.customHeight != null) {
-            const customHeight_new: any = {};
-
-            forEach(cfg.customHeight, (v, rstr) => {
-                const r = parseFloat(rstr);
-
-                if (r < index) {
-                    customHeight_new[r] = cfg.customHeight![r];
-                } else if (r === index) {
-                    if (direction === "lefttop") {
-                        customHeight_new[r + count] = cfg.customHeight![r];
-                    } else if (direction === "rightbottom") {
-                        customHeight_new[r] = cfg.customHeight![r];
-                    }
-                } else {
-                    customHeight_new[r + count] = cfg.customHeight![r];
-                }
-            });
-
-            cfg.customHeight = customHeight_new;
-        }
-
-        // Custom row height config update
-        if (cfg.customHeight != null) {
-            const customHeight_new: any = {};
-
-            forEach(cfg.customHeight, (v, rstr) => {
-                const r = parseFloat(rstr);
-
-                if (r < index) {
-                    customHeight_new[r] = cfg.customHeight![r];
-                } else if (r === index) {
-                    if (direction === "lefttop") {
-                        customHeight_new[r + count] = cfg.customHeight![r];
-                    } else if (direction === "rightbottom") {
-                        customHeight_new[r] = cfg.customHeight![r];
-                    }
-                } else {
-                    customHeight_new[r + count] = cfg.customHeight![r];
-                }
-            });
-
-            cfg.customHeight = customHeight_new;
-        }
-
-        // Hidden rows config update
-        if (cfg.rowhidden != null) {
-            const rowhidden_new: any = {};
-
-            forEach(cfg.rowhidden, (v, rstr) => {
-                const r = parseFloat(rstr);
-
-                if (r < index) {
-                    rowhidden_new[r] = cfg.rowhidden![r];
-                } else if (r === index) {
-                    if (direction === "lefttop") {
-                        rowhidden_new[r + count] = cfg.rowhidden![r];
-                    } else if (direction === "rightbottom") {
-                        rowhidden_new[r] = cfg.rowhidden![r];
-                    }
-                } else {
-                    rowhidden_new[r + count] = cfg.rowhidden![r];
-                }
-            });
-
-            cfg.rowhidden = rowhidden_new;
-        }
-
-        // Empty row template
-        const row = [];
-        const curRow = [...d][index];
-        for (let c = 0; c < d[0].length; c += 1) {
-            const cell = curRow[c];
-            let templateCell = null;
-            if (cell?.mc && (direction === "rightbottom" || index !== cell.mc.r)) {
-                templateCell = cloneDeep(cell);
-                if (templateCell.mc!.rs) {
-                    templateCell.mc!.rs! += count;
-                }
-                if (!d?.[index + 1]?.[c]?.mc) {
-                    templateCell.mc = undefined;
-                }
-                delete templateCell.v;
-                delete templateCell.m;
-                delete templateCell.f;
-            }
-            row.push(templateCell);
-        }
-        const cellBorderConfig = [];
-        // Borders
-        if (cfg.borderInfo && cfg.borderInfo.length > 0) {
-            const borderInfo = [];
-
-            for (let i = 0; i < cfg.borderInfo.length; i += 1) {
-                const {rangeType} = cfg.borderInfo[i];
-
-                if (rangeType === "range") {
-                    const borderRange = cfg.borderInfo[i].range;
-
-                    const emptyRange = [];
-
-                    for (let j = 0; j < borderRange.length; j += 1) {
-                        let bd_r1 = borderRange[j].row[0];
-                        let bd_r2 = borderRange[j].row[1];
-
-                        if (direction === "lefttop") {
-                            if (index <= bd_r1) {
-                                bd_r1 += count;
-                                bd_r2 += count;
-                            } else if (index <= bd_r2) {
-                                bd_r2 += count;
-                            }
-                        } else {
-                            if (index < bd_r1) {
-                                bd_r1 += count;
-                                bd_r2 += count;
-                            } else if (index < bd_r2) {
-                                bd_r2 += count;
-                            }
-                        }
-
-                        if (bd_r2 >= bd_r1) {
-                            emptyRange.push({
-                                row: [bd_r1, bd_r2],
-                                column: borderRange[j].column,
-                            });
-                        }
-                    }
-
-                    if (emptyRange.length > 0) {
-                        const bd_obj = {
-                            rangeType: "range",
-                            borderType: cfg.borderInfo[i].borderType,
-                            style: cfg.borderInfo[i].style,
-                            color: cfg.borderInfo[i].color,
-                            range: emptyRange,
-                        };
-
-                        borderInfo.push(bd_obj);
-                    }
-                } else if (rangeType === "cell") {
-                    let {row_index} = cfg.borderInfo[i].value;
-                    // Cache border config at the same position
-                    if (row_index === index) {
-                        cellBorderConfig.push(
-                            JSON.parse(JSON.stringify(cfg.borderInfo[i]))
-                        );
-                    }
-
-                    if (direction === "lefttop") {
-                        if (index <= row_index) {
-                            row_index += count;
-                        }
-                    } else {
-                        if (index < row_index) {
-                            row_index += count;
-                        }
-                    }
-
-                    cfg.borderInfo[i].value.row_index = row_index;
-                    borderInfo.push(cfg.borderInfo[i]);
-                }
-            }
-
-            cfg.borderInfo = borderInfo;
-        }
-
-        const arr = [];
-        for (let r = 0; r < count; r += 1) {
-            arr.push(JSON.parse(JSON.stringify(row)));
-            // Copy cell-type borders for inserted rows
-            if (cellBorderConfig.length) {
-                const cellBorderConfigCopy = cloneDeep(cellBorderConfig);
-                cellBorderConfigCopy.forEach((item) => {
-                    if (direction === "rightbottom") {
-                        // Insert below: increment from template row position
-                        item.value.row_index += r + 1;
-                    } else if (direction === "lefttop") {
-                        // Insert above: target row shifts down, new rows inserted before it (increment from 0)
-                        item.value.row_index += r;
-                    }
-                });
-                cfg.borderInfo?.push(...cellBorderConfigCopy);
-            }
-        }
-
-        if (direction === "lefttop") {
-            if (index === 0) {
-                d.unshift(...arr);
-            } else {
-                d.splice(index, 0, ...arr);
-            }
-        } else {
-            d.splice(index + 1, 0, ...arr);
-        }
-    } else {
-        // Column width config update
-        if (cfg.columnlen != null) {
-            const columnlen_new: any = {};
-            const columnReadOnly_new: any = {};
-
-            forEach(cfg.columnlen, (v, cstr) => {
-                const c = parseFloat(cstr);
-
-                if (c < index) {
-                    columnlen_new[c] = cfg.columnlen![c];
-                } else if (c === index) {
-                    if (direction === "lefttop") {
-                        columnlen_new[c + count] = cfg.columnlen![c];
-                    } else if (direction === "rightbottom") {
-                        columnlen_new[c] = cfg.columnlen![c];
-                    }
-                } else {
-                    columnlen_new[c + count] = cfg.columnlen![c];
-                }
-            });
-
-            forEach(cfg.colReadOnly, (v, cstr) => {
-                const c = parseFloat(cstr);
-                if (c < index) {
-                    columnReadOnly_new[c] = cfg.colReadOnly![c];
-                } else if (c > index) {
-                    columnReadOnly_new[c + count] = cfg.colReadOnly![c];
-                }
-            });
-
-            cfg.columnlen = columnlen_new;
-            cfg.colReadOnly = columnReadOnly_new;
-        }
-
-        // Custom column width config update
-        if (cfg.customWidth != null) {
-            const customWidth_new: any = {};
-
-            forEach(cfg.customWidth, (v, cstr) => {
-                const c = parseFloat(cstr);
-
-                if (c < index) {
-                    customWidth_new[c] = cfg.customWidth![c];
-                } else if (c === index) {
-                    if (direction === "lefttop") {
-                        customWidth_new[c + count] = cfg.customWidth![c];
-                    } else if (direction === "rightbottom") {
-                        customWidth_new[c] = cfg.customWidth![c];
-                    }
-                } else {
-                    customWidth_new[c + count] = cfg.customWidth![c];
-                }
-            });
-
-            cfg.customWidth = customWidth_new;
-        }
-
-        // Custom column width config update
-        if (cfg.customWidth != null) {
-            const customWidth_new: any = {};
-
-            forEach(cfg.customWidth, (v, cstr) => {
-                const c = parseFloat(cstr);
-
-                if (c < index) {
-                    customWidth_new[c] = cfg.customWidth![c];
-                } else if (c === index) {
-                    if (direction === "lefttop") {
-                        customWidth_new[c + count] = cfg.customWidth![c];
-                    } else if (direction === "rightbottom") {
-                        customWidth_new[c] = cfg.customWidth![c];
-                    }
-                } else {
-                    customWidth_new[c + count] = cfg.customWidth![c];
-                }
-            });
-
-            cfg.customWidth = customWidth_new;
-        }
-
-        // Hidden columns config update
-        if (cfg.colhidden != null) {
-            const colhidden_new: any = {};
-
-            forEach(cfg.colhidden, (v, cstr) => {
-                const c = parseFloat(cstr);
-
-                if (c < index) {
-                    colhidden_new[c] = cfg.colhidden![c];
-                } else if (c === index) {
-                    if (direction === "lefttop") {
-                        colhidden_new[c + count] = cfg.colhidden![c];
-                    } else if (direction === "rightbottom") {
-                        colhidden_new[c] = cfg.colhidden![c];
-                    }
-                } else {
-                    colhidden_new[c + count] = cfg.colhidden![c];
-                }
-            });
-
-            cfg.colhidden = colhidden_new;
-        }
-
-        // Empty column template
-        const col: any[] = [];
-        const curd = [...d];
-        for (let r = 0; r < d.length; r += 1) {
-            const cell = curd[r][index];
-            let templateCell = null;
-            if (cell?.mc && (direction === "rightbottom" || index !== cell.mc.c)) {
-                templateCell = cloneDeep(cell);
-                if (templateCell.mc!.cs) {
-                    templateCell.mc!.cs! += count;
-                }
-                if (!curd?.[r]?.[index + 1]?.mc) {
-                    templateCell.mc = undefined;
-                }
-                delete templateCell.v;
-                delete templateCell.m;
-                delete templateCell.f;
-            }
-            col.push(templateCell);
-        }
-        const cellBorderConfig = [];
-        // Borders
-        if (cfg.borderInfo && cfg.borderInfo.length > 0) {
-            const borderInfo = [];
-
-            for (let i = 0; i < cfg.borderInfo.length; i += 1) {
-                const {rangeType} = cfg.borderInfo[i];
-
-                if (rangeType === "range") {
-                    const borderRange = cfg.borderInfo[i].range;
-
-                    const emptyRange = [];
-
-                    for (let j = 0; j < borderRange.length; j += 1) {
-                        let bd_c1 = borderRange[j].column[0];
-                        let bd_c2 = borderRange[j].column[1];
-
-                        if (direction === "lefttop") {
-                            if (index <= bd_c1) {
-                                bd_c1 += count;
-                                bd_c2 += count;
-                            } else if (index <= bd_c2) {
-                                bd_c2 += count;
-                            }
-                        } else {
-                            if (index < bd_c1) {
-                                bd_c1 += count;
-                                bd_c2 += count;
-                            } else if (index < bd_c2) {
-                                bd_c2 += count;
-                            }
-                        }
-
-                        if (bd_c2 >= bd_c1) {
-                            emptyRange.push({
-                                row: borderRange[j].row,
-                                column: [bd_c1, bd_c2],
-                            });
-                        }
-                    }
-
-                    if (emptyRange.length > 0) {
-                        const bd_obj = {
-                            rangeType: "range",
-                            borderType: cfg.borderInfo[i].borderType,
-                            style: cfg.borderInfo[i].style,
-                            color: cfg.borderInfo[i].color,
-                            range: emptyRange,
-                        };
-
-                        borderInfo.push(bd_obj);
-                    }
-                } else if (rangeType === "cell") {
-                    let {col_index} = cfg.borderInfo[i].value;
-                    // Cache border config at the same position
-                    if (col_index === index) {
-                        cellBorderConfig.push(
-                            JSON.parse(JSON.stringify(cfg.borderInfo[i]))
-                        );
-                    }
-
-                    if (direction === "lefttop") {
-                        if (index <= col_index) {
-                            col_index += count;
-                        }
-                    } else {
-                        if (index < col_index) {
-                            col_index += count;
-                        }
-                    }
-
-                    cfg.borderInfo[i].value.col_index = col_index;
-                    borderInfo.push(cfg.borderInfo[i]);
-                }
-            }
-
-            cfg.borderInfo = borderInfo;
-        }
-
-        // Copy cell-type borders for inserted columns
-        if (cellBorderConfig.length) {
-            for (let i = 0; i < count; i += 1) {
-                const cellBorderConfigCopy = cloneDeep(cellBorderConfig);
-                cellBorderConfigCopy.forEach((item) => {
-                    if (direction === "rightbottom") {
-                        // Insert right: increment from template column position
-                        item.value.col_index += i + 1;
-                    } else if (direction === "lefttop") {
-                        // Insert left: target column shifts right, new columns inserted before it (increment from 0)
-                        item.value.col_index += i;
-                    }
-                });
-                cfg.borderInfo?.push(...cellBorderConfigCopy);
-            }
-        }
-
-        for (let r = 0; r < d.length; r += 1) {
-            const row = d[r];
-            const template = col[r];
-            const newCells = Array.from({length: count}, () =>
-                template ? cloneDeep(template) : null
-            );
-
-            if (direction === "lefttop") {
-                if (index === 0) {
-                    row.unshift(...newCells);
-                } else {
-                    row.splice(index, 0, ...newCells);
-                }
-            } else {
-                row.splice(index + 1, 0, ...newCells);
-            }
-        }
-    }
-
-    // Refresh when modifying the current sheet
-    file.data = d;
-    file.config = cfg;
-    file.calcChain = newCalcChain;
-    if (newFilterObj != null) {
-        file.filter = newFilterObj.filter;
-        file.filter_select = newFilterObj.filter_select;
-    }
-    file.luckysheet_conditionformat_save = newCFarr;
-    file.luckysheet_alternateformat_save = newAFarr;
-    file.dataVerification = newDataVerification;
     file.hyperlink = newHyperlink;
-    if (file.id === ctx.currentSheetId) {
-        ctx.config = cfg;
-        // jfrefreshgrid_adRC(
-        //   d,
-        //   cfg,
-        //   "addRC",
-        //   {
-        //     index,
-        //     len: value,
-        //     direction,
-        //     rc: type1,
-        //     restore: false,
-        //   },
-        //   newCalcChain,
-        //   newFilterObj,
-        //   newCFarr,
-        //   newAFarr,
-        //   newFreezen,
-        //   newDataVerification,
-        //   newHyperlink
-        // );
-    }
-
-    let range = null;
-    if (type === "row") {
-        if (direction === "lefttop") {
-            range = [
-                {row: [index, index + count - 1], column: [0, d[0].length - 1]},
-            ];
-        } else {
-            range = [
-                {row: [index + 1, index + count], column: [0, d[0].length - 1]},
-            ];
-        }
-        file.row = file.data.length;
-    } else {
-        if (direction === "lefttop") {
-            range = [{row: [0, d.length - 1], column: [index, index + count - 1]}];
-        } else {
-            range = [{row: [0, d.length - 1], column: [index + 1, index + count]}];
-        }
-        file.column = file.data[0]?.length;
-    }
-
-    if (changeSelection) {
-        file.luckysheet_select_save = range;
-        if (file.id === ctx.currentSheetId) {
-            ctx.luckysheet_select_save = range;
-            // selectHightlightShow();
-        }
-    }
-
-    refreshLocalMergeData(merge_new, file);
-    ctx.formulaCache.formulaCellInfoMap = null;
-
-    // if (type === "row") {
-    //   const scrollLeft = $("#luckysheet-cell-main").scrollLeft();
-    //   const scrollTop = $("#luckysheet-cell-main").scrollTop();
-    //   const winH = $("#luckysheet-cell-main").height();
-    //   const winW = $("#luckysheet-cell-main").width();
-
-    //   const row = ctx.visibledatarow[range[0].row[1]];
-    //   const row_pre =
-    //     range[0].row[0] - 1 === -1 ? 0 : ctx.visibledatarow[range[0].row[0] - 1];
-
-    //   if (row - scrollTop - winH + 20 > 0) {
-    //     $("#luckysheet-scrollbar-y").scrollTop(row - winH + 20);
-    //   } else if (row_pre - scrollTop - 20 < 0) {
-    //     $("#luckysheet-scrollbar-y").scrollTop(row_pre - 20);
-    //   }
-
-    //   if (value > 30) {
-    //     $("#luckysheet-row-count-show").hide();
-    //   }
-    // }
 }
 
-export function deleteRowCol(
+function shiftStateOnlyFieldsForDelete(
     ctx: Context,
-    op: {
-        type: "row" | "column";
-        start: number;
-        end: number;
-        id?: string;
-    }
+    op: {type: "row" | "column"; start: number; end: number; id: string},
 ) {
-    const {type} = op;
-    let {start, end, id} = op;
-    id = id || ctx.currentSheetId;
-
-    // if (
-    //   type == "row" &&
-    //   !checkProtectionAuthorityNormal(sheetId, "deleteRows")
-    // ) {
-    //   return;
-    // }
-    // if (
-    //   type == "column" &&
-    //   !checkProtectionAuthorityNormal(sheetId, "deleteColumns")
-    // ) {
-    //   return;
-    // }
-
+    const {type, start, end} = op;
+    const id = op.id || ctx.currentSheetId;
     const curOrder = getSheetIndex(ctx, id);
     if (curOrder == null) return;
-
     const file = ctx.luckysheetfile[curOrder];
     if (!file) return;
-    const cfg = file.config || {};
-    if (type === "row") {
-        for (let r = start; r <= end; r += 1) {
-            if (cfg.rowReadOnly?.[r]) {
-                throw new Error("readOnly");
-            }
-        }
-    } else {
-        for (let c = start; c <= end; c += 1) {
-            if (cfg.colReadOnly?.[c]) {
-                throw new Error("readOnly");
-            }
-        }
-    }
-
-    const d = file.data;
-    if (!d) return;
-
-    if (start < 0) {
-        start = 0;
-    }
-
-    if (end < 0) {
-        end = 0;
-    }
-
-    if (type === "row") {
-        if (start > d.length - 1) {
-            start = d.length - 1;
-        }
-
-        if (end > d.length - 1) {
-            end = d.length - 1;
-        }
-    } else {
-        if (start > d[0].length - 1) {
-            start = d[0].length - 1;
-        }
-
-        if (end > d[0].length - 1) {
-            end = d[0].length - 1;
-        }
-    }
-
-    if (start > end) {
-        return;
-    }
 
     const slen = end - start + 1;
 
-    // Merged cells config update
-    if (cfg.merge == null) {
-        cfg.merge = {};
-    }
-
-    const merge_new: any = {};
-    forEach(cfg.merge, (mc) => {
-        const {r} = mc;
-        const {c} = mc;
-        const {rs} = mc;
-        const {cs} = mc;
-
-        if (type === "row") {
-            if (r < start) {
-                if (r + rs - 1 < start) {
-                    merge_new[`${r}_${c}`] = {r, c, rs, cs};
-                } else if (r + rs - 1 >= start && r + rs - 1 < end) {
-                    merge_new[`${r}_${c}`] = {r, c, rs: start - r, cs};
-                } else if (r + rs - 1 >= end) {
-                    merge_new[`${r}_${c}`] = {r, c, rs: rs - slen, cs};
-                }
-            } else if (r >= start && r <= end) {
-                if (r + rs - 1 > end) {
-                    merge_new[`${start}_${c}`] = {
-                        r: start,
-                        c,
-                        rs: r + rs - 1 - end,
-                        cs,
-                    };
-                }
-            } else if (r > end) {
-                merge_new[`${r - slen}_${c}`] = {r: r - slen, c, rs, cs};
-            }
-        } else if (type === "column") {
-            if (c < start) {
-                if (c + cs - 1 < start) {
-                    merge_new[`${r}_${c}`] = {r, c, rs, cs};
-                } else if (c + cs - 1 >= start && c + cs - 1 < end) {
-                    merge_new[`${r}_${c}`] = {r, c, rs, cs: start - c};
-                } else if (c + cs - 1 >= end) {
-                    merge_new[`${r}_${c}`] = {r, c, rs, cs: cs - slen};
-                }
-            } else if (c >= start && c <= end) {
-                if (c + cs - 1 > end) {
-                    merge_new[`${r}_${start}`] = {
-                        r,
-                        c: start,
-                        rs,
-                        cs: c + cs - 1 - end,
-                    };
-                }
-            } else if (c > end) {
-                merge_new[`${r}_${c - slen}`] = {r, c: c - slen, rs, cs};
-            }
-        }
-    });
-    cfg.merge = merge_new;
-
-    // Formula config update
-    const newCalcChain = [];
-    for (
-        let SheetIndex = 0;
-        SheetIndex < ctx.luckysheetfile.length;
-        SheetIndex += 1
-    ) {
-        if (
-            isNil(ctx.luckysheetfile[SheetIndex].calcChain) ||
-            ctx.luckysheetfile.length === 0
-        ) {
-            continue;
-        }
-        const {calcChain} = ctx.luckysheetfile[SheetIndex];
-        const {data} = ctx.luckysheetfile[SheetIndex];
-        for (let i = 0; i < calcChain!.length; i += 1) {
-            const calc: any = cloneDeep(calcChain![i]);
-            const calc_r = calc.r;
-            const calc_c = calc.c;
-            const calc_i = calc.id;
-            const calc_funcStr = getcellFormula(ctx, calc_r, calc_c, calc_i);
-
-            if (type === "row" && SheetIndex === curOrder) {
-                if (calc_r < start || calc_r > end) {
-                    const functionStr = `=${functionStrChange(
-                        calc_funcStr,
-                        "del",
-                        "row",
-                        null,
-                        start,
-                        slen
-                    )}`;
-
-                    if (data![calc_r]?.[calc_c]?.f === calc_funcStr) {
-                        data![calc_r]![calc_c]!.f = functionStr;
-                    }
-
-                    if (calc_r > end) {
-                        calc.r = calc_r - slen;
-                    }
-
+    // calcChain entries are sheet-local; entries inside the deleted range drop out.
+    const newCalcChain: any[] = [];
+    if (file.calcChain != null) {
+        for (const entry of file.calcChain) {
+            const calc: any = cloneDeep(entry);
+            if (type === "row") {
+                if (calc.r < start) newCalcChain.push(calc);
+                else if (calc.r > end) {
+                    calc.r -= slen;
                     newCalcChain.push(calc);
                 }
-            } else if (type === "row") {
-                const functionStr = `=${functionStrChange(
-                    calc_funcStr,
-                    "del",
-                    "row",
-                    null,
-                    start,
-                    slen
-                )}`;
-
-                if (data![calc_r]?.[calc_c]?.f === calc_funcStr) {
-                    data![calc_r]![calc_c]!.f = functionStr;
-                }
-            } else if (type === "column" && SheetIndex === curOrder) {
-                if (calc_c < start || calc_c > end) {
-                    const functionStr = `=${functionStrChange(
-                        calc_funcStr,
-                        "del",
-                        "col",
-                        null,
-                        start,
-                        slen
-                    )}`;
-
-                    if (data![calc_r]?.[calc_c]?.f === calc_funcStr) {
-                        data![calc_r]![calc_c]!.f = functionStr;
-                    }
-
-                    if (calc_c > end) {
-                        calc.c = calc_c - slen;
-                    }
-
+            } else {
+                if (calc.c < start) newCalcChain.push(calc);
+                else if (calc.c > end) {
+                    calc.c -= slen;
                     newCalcChain.push(calc);
-                }
-            } else if (type === "column") {
-                const functionStr = `=${functionStrChange(
-                    calc_funcStr,
-                    "del",
-                    "col",
-                    null,
-                    start,
-                    slen
-                )}`;
-
-                if (data![calc_r]?.[calc_c]?.f === calc_funcStr) {
-                    data![calc_r]![calc_c]!.f = functionStr;
                 }
             }
         }
     }
+    file.calcChain = newCalcChain;
 
     // Filter config update
+    const cfg = file.config || {};
     const {filter_select} = file;
     const {filter} = file;
     let newFilterObj: any = null;
@@ -1536,72 +468,512 @@ export function deleteRowCol(
         });
     }
 
-    // Conditional formatting config update
-    const CFarr = file.luckysheet_conditionformat_save;
-    const newCFarr = [];
-    if (CFarr != null && CFarr.length > 0) {
-        for (let i = 0; i < CFarr.length; i += 1) {
-            const cf_range = CFarr[i].cellrange;
-            const cf_new_range = [];
+    if (newFilterObj != null) {
+        file.filter = newFilterObj.filter;
+        file.filter_select = newFilterObj.filter_select;
+    }
 
-            for (let j = 0; j < cf_range.length; j += 1) {
-                let CFr1 = cf_range[j].row[0];
-                let CFr2 = cf_range[j].row[1];
-                let CFc1 = cf_range[j].column[0];
-                let CFc2 = cf_range[j].column[1];
+    // Freeze config update
+    const {frozen} = file;
+    if (frozen) {
+        if (
+            type === "row" &&
+            (frozen.type === "rangeRow" || frozen.type === "rangeBoth")
+        ) {
+            if ((frozen.range?.row_focus ?? -1) >= start) {
+                frozen.range!.row_focus -=
+                    Math.min(end, frozen.range!.row_focus) - start + 1;
+            }
+        }
+        if (
+            type === "column" &&
+            (frozen.type === "rangeColumn" || frozen.type === "rangeBoth")
+        ) {
+            if ((frozen.range?.column_focus ?? -1) >= start) {
+                frozen.range!.column_focus -=
+                    Math.min(end, frozen.range!.column_focus) - start + 1;
+            }
+        }
+    }
 
-                if (type === "row") {
-                    if (!(CFr1 >= start && CFr2 <= end)) {
-                        if (CFr1 > end) {
-                            CFr1 -= slen;
-                            CFr2 -= slen;
-                        } else if (CFr1 < start) {
-                            if (CFr2 < start) {
-                            } else if (CFr2 <= end) {
-                                CFr2 = start - 1;
-                            } else {
-                                CFr2 -= slen;
-                            }
-                        } else {
-                            if (CFr2 > end) {
-                                CFr1 = start;
-                                CFr2 -= slen;
-                            }
-                        }
+    // Data validation config update
+    const {dataVerification} = file;
+    const newDataVerification: any = {};
+    if (dataVerification != null) {
+        forEach(dataVerification, (v, key) => {
+            const r = Number(key.split("_")[0]);
+            const c = Number(key.split("_")[1]);
+            const item = dataVerification[key];
 
-                        cf_new_range.push({row: [CFr1, CFr2], column: [CFc1, CFc2]});
+            if (type === "row") {
+                if (r < start) {
+                    newDataVerification[`${r}_${c}`] = item;
+                } else if (r > end) {
+                    newDataVerification[`${r - slen}_${c}`] = item;
+                }
+            } else if (type === "column") {
+                if (c < start) {
+                    newDataVerification[`${r}_${c}`] = item;
+                } else if (c > end) {
+                    newDataVerification[`${r}_${c - slen}`] = item;
+                }
+            }
+        });
+    }
+    file.dataVerification = newDataVerification;
+
+    // Hyperlink config update
+    const {hyperlink} = file;
+    const newHyperlink: any = {};
+    if (hyperlink != null) {
+        forEach(hyperlink, (v, key) => {
+            const r = Number(key.split("_")[0]);
+            const c = Number(key.split("_")[1]);
+            const item = hyperlink[key];
+
+            if (type === "row") {
+                if (r < start) {
+                    newHyperlink[`${r}_${c}`] = item;
+                } else if (r > end) {
+                    newHyperlink[`${r - slen}_${c}`] = item;
+                }
+            } else if (type === "column") {
+                if (c < start) {
+                    newHyperlink[`${r}_${c}`] = item;
+                } else if (c > end) {
+                    newHyperlink[`${r}_${c - slen}`] = item;
+                }
+            }
+        });
+    }
+    file.hyperlink = newHyperlink;
+}
+
+function adjustSelectionForInsert(
+    ctx: Context,
+    op: {type: "row" | "column"; index: number; count: number; direction: "lefttop" | "rightbottom"; id: string},
+) {
+    const {type, index, count, direction} = op;
+    const id = op.id || ctx.currentSheetId;
+    const curOrder = getSheetIndex(ctx, id);
+    if (curOrder == null) return;
+    const file = ctx.luckysheetfile[curOrder];
+    if (!file) return;
+    const d = file.data;
+    if (!d) return;
+
+    let range = null;
+    if (type === "row") {
+        if (direction === "lefttop") {
+            range = [
+                {row: [index, index + count - 1], column: [0, d[0].length - 1]},
+            ];
+        } else {
+            range = [
+                {row: [index + 1, index + count], column: [0, d[0].length - 1]},
+            ];
+        }
+        file.row = d.length;
+    } else {
+        if (direction === "lefttop") {
+            range = [{row: [0, d.length - 1], column: [index, index + count - 1]}];
+        } else {
+            range = [{row: [0, d.length - 1], column: [index + 1, index + count]}];
+        }
+        file.column = d[0]?.length;
+    }
+
+    file.luckysheet_select_save = range;
+    if (file.id === ctx.currentSheetId) {
+        ctx.luckysheet_select_save = range;
+    }
+}
+
+
+/**
+ * Insert rows or columns
+ * @param {string} type 'row' or 'column'
+ * @param {number} index insertion position index
+ * @param {number} count number of rows (or columns) to insert
+ * @param {string} direction insertion direction: 'lefttop' or 'rightbottom'
+ * @param {string | number} id target sheet id
+ * @returns
+ */
+export function insertRowCol(
+    ctx: Context,
+    op: {
+        type: "row" | "column";
+        index: number;
+        count: number;
+        direction: "lefttop" | "rightbottom";
+        id: string;
+    },
+    changeSelection: boolean = true
+) {
+    const id = op.id || ctx.currentSheetId;
+    if (typeof id !== "string") return;
+
+    const {type, index, count, direction} = op;
+
+    // Per-sheet write-back, not `ctx.luckysheetfile = ...`: a wholesale
+    // reassignment makes immer emit one synthetic root-level replace patch
+    // carrying the whole workbook, which is then shipped over collab on every
+    // edit. See packages/fortune-sheet/src/state/test/modules/rowcol-patches.test.ts.
+    const insertedSheets = applySheetsInsertRowCol(ctx.luckysheetfile, {...op, id});
+    for (let i = 0; i < insertedSheets.length; i += 1) {
+        ctx.luckysheetfile[i] = insertedSheets[i];
+    }
+
+    const curOrder = getSheetIndex(ctx, id);
+    if (curOrder == null) return;
+
+    const file = ctx.luckysheetfile[curOrder];
+    if (!file) return;
+
+    const cfg = file.config || {};
+
+    // rowReadOnly/colReadOnly shift (state-only; engine handles rowlen/columnlen/rowhidden/colhidden)
+    if (type === "row") {
+        const rowReadOnly_new: Record<number, number> = {};
+        forEach(cfg.rowReadOnly, (v, rstr) => {
+            const r = parseFloat(rstr);
+            if (r < index) {
+                rowReadOnly_new[r] = cfg.rowReadOnly![r];
+            } else if (r > index) {
+                rowReadOnly_new[r + count] = cfg.rowReadOnly![r];
+            }
+        });
+        cfg.rowReadOnly = rowReadOnly_new;
+    } else {
+        const columnReadOnly_new: any = {};
+        forEach(cfg.colReadOnly, (v, cstr) => {
+            const c = parseFloat(cstr);
+            if (c < index) {
+                columnReadOnly_new[c] = cfg.colReadOnly![c];
+            } else if (c > index) {
+                columnReadOnly_new[c + count] = cfg.colReadOnly![c];
+            }
+        });
+        cfg.colReadOnly = columnReadOnly_new;
+    }
+
+    // Alternating colors config update
+    const AFarr = file.luckysheet_alternateformat_save;
+    const newAFarr = [];
+    if (AFarr != null && AFarr.length > 0) {
+        for (let i = 0; i < AFarr.length; i += 1) {
+            let AFr1 = AFarr[i].cellrange.row[0];
+            let AFr2 = AFarr[i].cellrange.row[1];
+            let AFc1 = AFarr[i].cellrange.column[0];
+            let AFc2 = AFarr[i].cellrange.column[1];
+
+            const af = clone(AFarr[i]);
+
+            if (type === "row") {
+                if (AFr1 < index) {
+                    if (AFr2 === index && direction === "lefttop") {
+                        AFr2 += count;
+                    } else if (AFr2 > index) {
+                        AFr2 += count;
                     }
-                } else if (type === "column") {
-                    if (!(CFc1 >= start && CFc2 <= end)) {
-                        if (CFc1 > end) {
-                            CFc1 -= slen;
-                            CFc2 -= slen;
-                        } else if (CFc1 < start) {
-                            if (CFc2 < start) {
-                            } else if (CFc2 <= end) {
-                                CFc2 = start - 1;
-                            } else {
-                                CFc2 -= slen;
-                            }
-                        } else {
-                            if (CFc2 > end) {
-                                CFc1 = start;
-                                CFc2 -= slen;
-                            }
-                        }
-
-                        cf_new_range.push({row: [CFr1, CFr2], column: [CFc1, CFc2]});
+                } else if (AFr1 === index) {
+                    if (direction === "lefttop") {
+                        AFr1 += count;
+                        AFr2 += count;
+                    } else if (direction === "rightbottom" && AFr2 > index) {
+                        AFr2 += count;
                     }
+                } else {
+                    AFr1 += count;
+                    AFr2 += count;
+                }
+            } else if (type === "column") {
+                if (AFc1 < index) {
+                    if (AFc2 === index && direction === "lefttop") {
+                        AFc2 += count;
+                    } else if (AFc2 > index) {
+                        AFc2 += count;
+                    }
+                } else if (AFc1 === index) {
+                    if (direction === "lefttop") {
+                        AFc1 += count;
+                        AFc2 += count;
+                    } else if (direction === "rightbottom" && AFc2 > index) {
+                        AFc2 += count;
+                    }
+                } else {
+                    AFc1 += count;
+                    AFc2 += count;
                 }
             }
 
-            if (cf_new_range.length > 0) {
-                const cf = clone(CFarr[i]);
-                cf.cellrange = cf_new_range;
+            af.cellrange = {row: [AFr1, AFr2], column: [AFc1, AFc2]};
 
-                newCFarr.push(cf);
+            newAFarr.push(af);
+        }
+    }
+
+    // Border config update
+    if (type === "row") {
+        const cellBorderConfig = [];
+        if (cfg.borderInfo && cfg.borderInfo.length > 0) {
+            const borderInfo = [];
+
+            for (let i = 0; i < cfg.borderInfo.length; i += 1) {
+                const {rangeType} = cfg.borderInfo[i];
+
+                if (rangeType === "range") {
+                    const borderRange = cfg.borderInfo[i].range;
+
+                    const emptyRange = [];
+
+                    for (let j = 0; j < borderRange.length; j += 1) {
+                        let bd_r1 = borderRange[j].row[0];
+                        let bd_r2 = borderRange[j].row[1];
+
+                        if (direction === "lefttop") {
+                            if (index <= bd_r1) {
+                                bd_r1 += count;
+                                bd_r2 += count;
+                            } else if (index <= bd_r2) {
+                                bd_r2 += count;
+                            }
+                        } else {
+                            if (index < bd_r1) {
+                                bd_r1 += count;
+                                bd_r2 += count;
+                            } else if (index < bd_r2) {
+                                bd_r2 += count;
+                            }
+                        }
+
+                        if (bd_r2 >= bd_r1) {
+                            emptyRange.push({
+                                row: [bd_r1, bd_r2],
+                                column: borderRange[j].column,
+                            });
+                        }
+                    }
+
+                    if (emptyRange.length > 0) {
+                        const bd_obj = {
+                            rangeType: "range",
+                            borderType: cfg.borderInfo[i].borderType,
+                            style: cfg.borderInfo[i].style,
+                            color: cfg.borderInfo[i].color,
+                            range: emptyRange,
+                        };
+
+                        borderInfo.push(bd_obj);
+                    }
+                } else if (rangeType === "cell") {
+                    let {row_index} = cfg.borderInfo[i].value;
+                    // Cache border config at the same position
+                    if (row_index === index) {
+                        cellBorderConfig.push(
+                            JSON.parse(JSON.stringify(cfg.borderInfo[i]))
+                        );
+                    }
+
+                    if (direction === "lefttop") {
+                        if (index <= row_index) {
+                            row_index += count;
+                        }
+                    } else {
+                        if (index < row_index) {
+                            row_index += count;
+                        }
+                    }
+
+                    cfg.borderInfo[i].value.row_index = row_index;
+                    borderInfo.push(cfg.borderInfo[i]);
+                }
+            }
+
+            cfg.borderInfo = borderInfo;
+        }
+
+        // Copy cell-type borders for inserted rows
+        if (cellBorderConfig.length) {
+            for (let r = 0; r < count; r += 1) {
+                const cellBorderConfigCopy = cloneDeep(cellBorderConfig);
+                cellBorderConfigCopy.forEach((item) => {
+                    if (direction === "rightbottom") {
+                        // Insert below: increment from template row position
+                        item.value.row_index += r + 1;
+                    } else if (direction === "lefttop") {
+                        // Insert above: target row shifts down, new rows inserted before it (increment from 0)
+                        item.value.row_index += r;
+                    }
+                });
+                cfg.borderInfo?.push(...cellBorderConfigCopy);
             }
         }
+    } else {
+        const cellBorderConfig = [];
+        if (cfg.borderInfo && cfg.borderInfo.length > 0) {
+            const borderInfo = [];
+
+            for (let i = 0; i < cfg.borderInfo.length; i += 1) {
+                const {rangeType} = cfg.borderInfo[i];
+
+                if (rangeType === "range") {
+                    const borderRange = cfg.borderInfo[i].range;
+
+                    const emptyRange = [];
+
+                    for (let j = 0; j < borderRange.length; j += 1) {
+                        let bd_c1 = borderRange[j].column[0];
+                        let bd_c2 = borderRange[j].column[1];
+
+                        if (direction === "lefttop") {
+                            if (index <= bd_c1) {
+                                bd_c1 += count;
+                                bd_c2 += count;
+                            } else if (index <= bd_c2) {
+                                bd_c2 += count;
+                            }
+                        } else {
+                            if (index < bd_c1) {
+                                bd_c1 += count;
+                                bd_c2 += count;
+                            } else if (index < bd_c2) {
+                                bd_c2 += count;
+                            }
+                        }
+
+                        if (bd_c2 >= bd_c1) {
+                            emptyRange.push({
+                                row: borderRange[j].row,
+                                column: [bd_c1, bd_c2],
+                            });
+                        }
+                    }
+
+                    if (emptyRange.length > 0) {
+                        const bd_obj = {
+                            rangeType: "range",
+                            borderType: cfg.borderInfo[i].borderType,
+                            style: cfg.borderInfo[i].style,
+                            color: cfg.borderInfo[i].color,
+                            range: emptyRange,
+                        };
+
+                        borderInfo.push(bd_obj);
+                    }
+                } else if (rangeType === "cell") {
+                    let {col_index} = cfg.borderInfo[i].value;
+                    // Cache border config at the same position
+                    if (col_index === index) {
+                        cellBorderConfig.push(
+                            JSON.parse(JSON.stringify(cfg.borderInfo[i]))
+                        );
+                    }
+
+                    if (direction === "lefttop") {
+                        if (index <= col_index) {
+                            col_index += count;
+                        }
+                    } else {
+                        if (index < col_index) {
+                            col_index += count;
+                        }
+                    }
+
+                    cfg.borderInfo[i].value.col_index = col_index;
+                    borderInfo.push(cfg.borderInfo[i]);
+                }
+            }
+
+            cfg.borderInfo = borderInfo;
+        }
+
+        // Copy cell-type borders for inserted columns
+        if (cellBorderConfig.length) {
+            for (let i = 0; i < count; i += 1) {
+                const cellBorderConfigCopy = cloneDeep(cellBorderConfig);
+                cellBorderConfigCopy.forEach((item) => {
+                    if (direction === "rightbottom") {
+                        // Insert right: increment from template column position
+                        item.value.col_index += i + 1;
+                    } else if (direction === "lefttop") {
+                        // Insert left: target column shifts right, new columns inserted before it (increment from 0)
+                        item.value.col_index += i;
+                    }
+                });
+                cfg.borderInfo?.push(...cellBorderConfigCopy);
+            }
+        }
+    }
+
+    file.luckysheet_alternateformat_save = newAFarr;
+    file.config = cfg;
+
+    shiftStateOnlyFieldsForInsert(ctx, {...op, id});
+    if (changeSelection) adjustSelectionForInsert(ctx, {...op, id});
+
+    const merge_new = file.config?.merge ?? {};
+    refreshLocalMergeData(merge_new, file);
+
+    if (id === ctx.currentSheetId) {
+        const i = getSheetIndex(ctx, id);
+        if (typeof i === "number") ctx.config = ctx.luckysheetfile[i].config!;
+    }
+    ctx.formulaCache.formulaCellInfoMap = null;
+}
+
+export function deleteRowCol(
+    ctx: Context,
+    op: {
+        type: "row" | "column";
+        start: number;
+        end: number;
+        id: string;
+    }
+) {
+    const id = op.id || ctx.currentSheetId;
+    if (typeof id !== "string") return;
+
+    const {type, start, end} = op;
+    const slen = end - start + 1;
+
+    // See insertRowCol above for why this isn't a wholesale reassignment.
+    const deletedSheets = applySheetsDeleteRowCol(ctx.luckysheetfile, {...op, id});
+    for (let i = 0; i < deletedSheets.length; i += 1) {
+        ctx.luckysheetfile[i] = deletedSheets[i];
+    }
+
+    const curOrder = getSheetIndex(ctx, id);
+    if (curOrder == null) return;
+
+    const file = ctx.luckysheetfile[curOrder];
+    if (!file) return;
+
+    const cfg = file.config || {};
+
+    // rowReadOnly/colReadOnly shift (state-only; engine handles rowlen/columnlen/rowhidden/colhidden)
+    if (type === "row") {
+        const rowReadOnly_new: Record<number, number> = {};
+        forEach(cfg.rowReadOnly, (v, rstr) => {
+            const r = parseFloat(rstr);
+            if (r < start) {
+                rowReadOnly_new[r] = cfg.rowReadOnly![r];
+            } else if (r > end) {
+                rowReadOnly_new[r - slen] = cfg.rowReadOnly![r];
+            }
+        });
+        cfg.rowReadOnly = rowReadOnly_new;
+    } else {
+        const columnReadOnly_new: any = {};
+        forEach(cfg.colReadOnly, (v, cstr) => {
+            const c = parseFloat(cstr);
+            if (c < start) {
+                columnReadOnly_new[c] = cfg.colReadOnly![c];
+            } else if (c > end) {
+                columnReadOnly_new[c - slen] = cfg.colReadOnly![c];
+            }
+        });
+        cfg.colReadOnly = columnReadOnly_new;
     }
 
     // Alternating colors config update
@@ -1668,160 +1040,8 @@ export function deleteRowCol(
         }
     }
 
-    // Freeze config update
-    const {frozen} = file;
-    if (frozen) {
-        if (
-            type === "row" &&
-            (frozen.type === "rangeRow" || frozen.type === "rangeBoth")
-        ) {
-            if ((frozen.range?.row_focus ?? -1) >= start) {
-                frozen.range!.row_focus -=
-                    Math.min(end, frozen.range!.row_focus) - start + 1;
-            }
-        }
-        if (
-            type === "column" &&
-            (frozen.type === "rangeColumn" || frozen.type === "rangeBoth")
-        ) {
-            if ((frozen.range?.column_focus ?? -1) >= start) {
-                frozen.range!.column_focus -=
-                    Math.min(end, frozen.range!.column_focus) - start + 1;
-            }
-        }
-    }
-
-    // Data validation config update
-    const {dataVerification} = file;
-    const newDataVerification: any = {};
-    if (dataVerification != null) {
-        forEach(dataVerification, (v, key) => {
-            const r = Number(key.split("_")[0]);
-            const c = Number(key.split("_")[1]);
-            const item = dataVerification[key];
-
-            if (type === "row") {
-                if (r < start) {
-                    newDataVerification[`${r}_${c}`] = item;
-                } else if (r > end) {
-                    newDataVerification[`${r - slen}_${c}`] = item;
-                }
-            } else if (type === "column") {
-                if (c < start) {
-                    newDataVerification[`${r}_${c}`] = item;
-                } else if (c > end) {
-                    newDataVerification[`${r}_${c - slen}`] = item;
-                }
-            }
-        });
-    }
-
-    // Hyperlink config update
-    const {hyperlink} = file;
-    const newHyperlink: any = {};
-    if (hyperlink != null) {
-        forEach(hyperlink, (v, key) => {
-            const r = Number(key.split("_")[0]);
-            const c = Number(key.split("_")[1]);
-            const item = hyperlink[key];
-
-            if (type === "row") {
-                if (r < start) {
-                    newHyperlink[`${r}_${c}`] = item;
-                } else if (r > end) {
-                    newHyperlink[`${r - slen}_${c}`] = item;
-                }
-            } else if (type === "column") {
-                if (c < start) {
-                    newHyperlink[`${r}_${c}`] = item;
-                } else if (c > end) {
-                    newHyperlink[`${r}_${c - slen}`] = item;
-                }
-            }
-        });
-    }
-
-    // Main logic
+    // Border config update
     if (type === "row") {
-        // Row height config update
-        if (cfg.rowlen == null) {
-            cfg.rowlen = {};
-        }
-
-        const rowlen_new: any = {};
-        const rowReadOnly_new: Record<number, number> = {};
-        forEach(cfg.rowlen, (v, rstr) => {
-            const r = parseFloat(rstr);
-            if (r < start) {
-                rowlen_new[r] = cfg.rowlen![r];
-            } else if (r > end) {
-                rowlen_new[r - slen] = cfg.rowlen![r];
-            }
-        });
-        forEach(cfg.rowReadOnly, (v, rstr) => {
-            const r = parseFloat(rstr);
-            if (r < start) {
-                rowReadOnly_new[r] = cfg.rowReadOnly![r];
-            } else if (r > end) {
-                rowReadOnly_new[r - slen] = cfg.rowReadOnly![r];
-            }
-        });
-
-        cfg.rowlen = rowlen_new;
-        cfg.rowReadOnly = rowReadOnly_new;
-
-        // Hidden rows config update
-        if (cfg.rowhidden == null) {
-            cfg.rowhidden = {};
-        }
-
-        const rowhidden_new: any = {};
-        forEach(cfg.rowhidden, (v, rstr) => {
-            const r = parseFloat(rstr);
-            if (r < start) {
-                rowhidden_new[r] = cfg.rowhidden![r];
-            } else if (r > end) {
-                rowhidden_new[r - slen] = cfg.rowhidden![r];
-            }
-        });
-
-        // Custom row height config update
-        if (cfg.customHeight == null) {
-            cfg.customHeight = {};
-
-            const customHeight_new: any = {};
-            forEach(cfg.customHeight, (v, rstr) => {
-                const r = parseFloat(rstr);
-                if (r < start) {
-                    customHeight_new[r] = cfg.customHeight![r];
-                } else if (r > end) {
-                    customHeight_new[r - slen] = cfg.customHeight![r];
-                }
-            });
-
-            cfg.customHeight = customHeight_new;
-        }
-
-        // Custom row height config update
-        if (cfg.customHeight == null) {
-            cfg.customHeight = {};
-
-            const customHeight_new: any = {};
-            forEach(cfg.customHeight, (v, rstr) => {
-                const r = parseFloat(rstr);
-                if (r < start) {
-                    customHeight_new[r] = cfg.customHeight![r];
-                } else if (r > end) {
-                    customHeight_new[r - slen] = cfg.customHeight![r];
-                }
-            });
-
-            cfg.customHeight = customHeight_new;
-        }
-
-        cfg.rowhidden = rowhidden_new;
-
-        // Border config update
         if (cfg.borderInfo && cfg.borderInfo.length > 0) {
             const borderInfo = [];
 
@@ -1879,93 +1099,7 @@ export function deleteRowCol(
 
             cfg.borderInfo = borderInfo;
         }
-
-        // Note: this approach has a bug when deleting multiple rows.
-        // Deleting multiple rows would push the same empty row array (reference type) as the data source
-        // for multiple rows, causing errors when setting data on those rows.
-        // Empty row template
-        // let row = [];
-        // for (let c = 0; c < d[0].length; c++) {
-        //     row.push(null);
-        // }
-
-        // // Delete selected rows
-        // d.splice(st, slen);
-
-        // // Append the same number of empty rows as deleted
-        // for (let r = 0; r < slen; r++) {
-        //     d.push(row);
-        // }
-
-        // Delete selected rows
-        d.splice(start, slen);
-
-        // Adjust row count after deletion
-        file.row = d.length;
     } else {
-        // Column width config update
-        if (cfg.columnlen == null) {
-            cfg.columnlen = {};
-        }
-
-        const columnlen_new: any = {};
-        const columnReadOnly_new: any = {};
-        forEach(cfg.columnlen, (v, cstr) => {
-            const c = parseFloat(cstr);
-            if (c < start) {
-                columnlen_new[c] = cfg.columnlen![c];
-            } else if (c > end) {
-                columnlen_new[c - slen] = cfg.columnlen![c];
-            }
-        });
-        forEach(cfg.colReadOnly, (v, cstr) => {
-            const c = parseFloat(cstr);
-            if (c < start) {
-                columnReadOnly_new[c] = cfg.colReadOnly![c];
-            } else if (c > end) {
-                columnReadOnly_new[c - slen] = cfg.colReadOnly![c];
-            }
-        });
-
-        cfg.columnlen = columnlen_new;
-        cfg.colReadOnly = columnReadOnly_new;
-
-        // Custom column width config update
-        if (cfg.customWidth == null) {
-            cfg.customWidth = {};
-
-            const customWidth_new: any = {};
-            forEach(cfg.customWidth, (v, rstr) => {
-                const r = parseFloat(rstr);
-                if (r < start) {
-                    customWidth_new[r] = cfg.customWidth![r];
-                } else if (r > end) {
-                    customWidth_new[r - slen] = cfg.customWidth![r];
-                }
-            });
-
-            cfg.customWidth = customWidth_new;
-        }
-        cfg.colReadOnly = columnReadOnly_new;
-
-        // Hidden columns config update
-        if (cfg.colhidden == null) {
-            cfg.colhidden = {};
-        }
-
-        const colhidden_new: any = {};
-        forEach(cfg.colhidden, (v, cstr) => {
-            const c = parseFloat(cstr);
-            if (c < start) {
-                colhidden_new[c] = cfg.colhidden![c];
-            } else if (c > end) {
-                colhidden_new[c - slen] = cfg.colhidden![c];
-            }
-        });
-
-        cfg.colhidden = colhidden_new;
-
-        // Border config update
         if (cfg.borderInfo && cfg.borderInfo.length > 0) {
             const borderInfo = [];
 
@@ -2023,52 +1157,22 @@ export function deleteRowCol(
 
             cfg.borderInfo = borderInfo;
         }
-
-        for (let r = 0; r < d.length; r += 1) {
-            // Delete selected columns
-            d[r].splice(start, slen);
-        }
-
-        // Adjust column count after deletion
-        file.column = d[0]?.length;
     }
 
-    // Clear selection when selected elements are deleted
+    file.luckysheet_alternateformat_save = newAFarr;
+    file.config = cfg;
+
+    shiftStateOnlyFieldsForDelete(ctx, {...op, id});
     ctx.luckysheet_select_save = undefined;
 
-    // Refresh when modifying the current sheet
-    file.data = d;
-    file.config = cfg;
-    file.calcChain = newCalcChain;
-    if (newFilterObj != null) {
-        file.filter = newFilterObj.filter;
-        file.filter_select = newFilterObj.filter_select;
-    }
-    file.luckysheet_conditionformat_save = newCFarr;
-    file.luckysheet_alternateformat_save = newAFarr;
-    file.dataVerification = newDataVerification;
-    file.hyperlink = newHyperlink;
-
+    const merge_new = file.config?.merge ?? {};
     refreshLocalMergeData(merge_new, file);
-    ctx.formulaCache.formulaCellInfoMap = null;
 
-    if (file.id === ctx.currentSheetId) {
-        ctx.config = cfg;
-        // jfrefreshgrid_adRC(
-        //   d,
-        //   cfg,
-        //   "delRC",
-        //   { index: st, len: ed - st + 1, rc: type1 },
-        //   newCalcChain,
-        //   newFilterObj,
-        //   newCFarr,
-        //   newAFarr,
-        //   newFreezen,
-        //   newDataVerification,
-        //   newHyperlink
-        // );
-    } else {
+    if (id === ctx.currentSheetId) {
+        const i = getSheetIndex(ctx, id);
+        if (typeof i === "number") ctx.config = ctx.luckysheetfile[i].config!;
     }
+    ctx.formulaCache.formulaCellInfoMap = null;
 }
 
 // Compute cumulative row height array

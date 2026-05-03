@@ -1,12 +1,12 @@
 import type { Sheet } from '@workspace/lib/sheets';
 import { DRIVE_MIME_DOC, DRIVE_MIME_SHEETS, type DrivePath } from '@workspace/lib/types/drive';
 import { ApiError } from '../core';
+import { writeEigendocToYjs } from '../document/doc';
+import { writeSheetsToYjs } from '../document/sheets';
 import type { Drive, SharedDrive } from '../drive';
 import type { Mount } from '../mount';
 import type { DocxImage } from './doc/from-docx';
-import { writeDocToYjs } from './doc/writer';
 import { xlsxToSheets } from './sheets/from-xlsx';
-import { writeSheetsToDoc } from './sheets/writer';
 
 // xlsx and docx are zip-based formats — the parsers need the full file in memory to read
 // the central directory and extract parts. Callers are expected to size-check before passing.
@@ -59,7 +59,7 @@ export async function convertToDocument(
         const name = sourcePath.name.replace(/\.xlsx$/i, '');
         const newPath = await drive.create(sourcePath.mountId, sourcePath.parentId, name, 'sheets');
         const collabDoc = await drive.getCollabDocument(sourcePath.mountId, newPath.id);
-        writeSheetsToDoc(collabDoc.doc, sheets);
+        writeSheetsToYjs(collabDoc.doc, sheets);
         return newPath;
     }
 
@@ -67,11 +67,11 @@ export async function convertToDocument(
         if (!sourcePath.name.toLowerCase().endsWith('.docx')) {
             throw new ApiError(400, 'Only .docx files can be converted to documents');
         }
-        const { pmJson, images, schema } = await parseDocxOrThrow(buffer);
+        const { json, images, schema } = await parseDocxOrThrow(buffer);
         const name = sourcePath.name.replace(/\.docx$/i, '');
         const newPath = await drive.create(sourcePath.mountId, sourcePath.parentId, name, 'doc');
         const collabDoc = await drive.getCollabDocument(sourcePath.mountId, newPath.id);
-        writeDocToYjs(collabDoc.doc, pmJson, schema);
+        writeEigendocToYjs(collabDoc.doc, json, schema);
         await saveDocImages(mount, newPath, images);
         return newPath;
     }
@@ -88,14 +88,14 @@ export async function importIntoDocument(
     if (path.mimeType === DRIVE_MIME_SHEETS) {
         const sheets = await parseXlsxOrThrow(buffer);
         const collabDoc = await drive.getCollabDocument(path.mountId, path.id);
-        writeSheetsToDoc(collabDoc.doc, sheets);
+        writeSheetsToYjs(collabDoc.doc, sheets);
         return;
     }
 
     if (path.mimeType === DRIVE_MIME_DOC) {
-        const { pmJson, images, schema } = await parseDocxOrThrow(buffer);
+        const { json, images, schema } = await parseDocxOrThrow(buffer);
         const collabDoc = await drive.getCollabDocument(path.mountId, path.id);
-        writeDocToYjs(collabDoc.doc, pmJson, schema);
+        writeEigendocToYjs(collabDoc.doc, json, schema);
         await saveDocImages(mount, path, images);
         return;
     }

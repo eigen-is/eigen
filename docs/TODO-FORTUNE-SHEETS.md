@@ -82,9 +82,25 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
    fresh values; today the consumer reads the last-saved `cell.v` from the
    snapshot, which is fine. See [SHEETS.md § Headless Formula Engine](SHEETS.md#headless-formula-engine).
 
+6. **`from-xlsx.ts::parseA1` duplicates engine's `parseA1`** —
+   `apps/api/src/lib/import/sheets/from-xlsx.ts:208-216` defines a private
+   `parseA1` that returns `{r, c}` and only handles plain `A1` addresses.
+   The engine's exported `parseA1` (`@workspace/fortune-sheet/engine`) returns
+   `{col, row}` and handles `$`-absolute references and sheet-name prefixes.
+   Replace and adapt the two `parseRange` callsites to swap the field names.
+
+7. **PDF export computes `buildBorderMap` + `getGridBounds` twice per sheet** —
+   `apps/api/src/lib/export/sheets/pdf.ts` calls `getSheetContentSize(sheet)`
+   for every sheet (which builds the border map + grid bounds), then calls
+   `renderSheetsHtml(sheets)` which calls `renderSheet` → `buildBorderMap` +
+   `getGridBounds` again per sheet. Border-info iteration is O(borderInfo
+   entries × cells); on dense workbooks this doubles the export work for no
+   benefit. Either pre-compute bounds once and pass through, or expose a
+   combined `{html, sizes}` from `html.ts`.
+
 ### Misc cleanups
 
-6. **`SheetTab` shadcn migration** — bottom tab bar
+8. **`SheetTab` shadcn migration** — bottom tab bar
    (`components/SheetTab/index.tsx` + `SheetItem.tsx`, ~580 LOC TSX) still
    has its own ~272 LOC `index.css` (also part of TODO #2's CSS migration —
    tackle them together). Add/delete/rename/hide/color all use bespoke
@@ -94,50 +110,59 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
    right-click on a tab) already uses shadcn — only the tab bar itself needs
    the pass.
 
-7. Move package to `apps/sheets/src/fortune-sheet/` — only `apps/sheets/`
-   consumes it. Low priority, rename-only with no code impact.
+9. **`initSheetData` inlines `celldataToData`** —
+   `state/api/sheet.ts:16-54` builds the dense `data` matrix manually
+   (`maxBy` / `times` / fill loop) when adding/initialising a sheet. Engine
+   has the canonical `celldataToData(celldata, rowCount?, colCount?)`
+   re-exported from `state/api/common.ts` since 2026-05-01. Replace the inline
+   loop, passing `row ?? defaultrowNum`, `column ?? defaultcolumnNum` to
+   preserve the editor's empty-grid fallback.
+
+10. **JSDoc sweep across `state/`** — CODE-STANDARDS.md "No JSDoc". Many
+    state-module functions still carry `/** @param {string} type ... */` blocks
+    that contradict the actual TS types. Pre-existing legacy; not worth a
+    targeted PR but delete on touch (e.g. `state/modules/rowcol.ts:593-601`
+    on `insertRowCol`).
+
+11. Move package to `apps/sheets/src/fortune-sheet/` — only `apps/sheets/`
+    consumes it. Low priority, rename-only with no code impact.
 
 ### Review-pass deferrals (BE replay code review, 2026-05-02)
 
-8. **Tagged engine errors instead of bare-string sentinels** — `engine/rowcol.ts`
-   throws `new Error('readOnly')` / `new Error('maxExceeded')` (lines 181-184,
-   384-389). `engine/replay-ops.ts` now catches by `(e as Error).message` so the
-   string is load-bearing. Replace with a `RowColError` class (or symbol-tagged
-   sentinel) so the contract is enforced at the type level and the catch site
-   doesn't depend on message punctuation.
+12. **Tagged engine errors instead of bare-string sentinels** — `engine/rowcol.ts`
+    throws `new Error('readOnly')` / `new Error('maxExceeded')` (lines 181-184,
+    384-389). `engine/replay-ops.ts` now catches by `(e as Error).message` so
+    the string is load-bearing. Replace with a `RowColError` class (or
+    symbol-tagged sentinel) so the contract is enforced at the type level and
+    the catch site doesn't depend on message punctuation.
 
-9. **`engine/replay-ops.ts::asSheet` should require `id: string`** — every
-   producer of `addSheet` ops stamps an id (`patchToOp` does this
-   unconditionally), but the validator currently accepts an `addSheet` op whose
-   `value` only has `name: string`. A sheet without an id silently breaks
-   subsequent ops referencing that sheet.
+13. **`engine/replay-ops.ts::asSheet` should require `id: string`** — every
+    producer of `addSheet` ops stamps an id (`patchToOp` does this
+    unconditionally), but the validator currently accepts an `addSheet` op
+    whose `value` only has `name: string`. A sheet without an id silently
+    breaks subsequent ops referencing that sheet.
 
-10. **`applyInsert` / `applyDelete` deep-clone the full target sheet** —
+14. **`applyInsert` / `applyDelete` deep-clone the full target sheet** —
     `cloneDeep(target)` at `engine/rowcol.ts:187,393` clones every field
     (state-only fields included) when the engine writes only `data`, `config`,
     and `luckysheet_conditionformat_save`. State wrapper then mutates the
     state-only fields, throwing away the wasteful clone. Profile first; only
     optimize if row/col ops show up hot.
 
-11. **Stale JSDoc on `state/modules/rowcol.ts::insertRowCol`** (lines 593-601) —
-    the heavy refactor on this branch left the doc block intact even though
-    the function is now a thin wrapper around the engine. Delete on next touch
-    per project's "delete on touch" policy.
-
-12. **`(delta.insert as Op[][])` cast in `apps/sheets/.../use-sheet.ts`** —
+15. **`(delta.insert as Op[][])` cast in `apps/sheets/.../use-sheet.ts`** —
     Yjs's delta type is `unknown` so a cast is unavoidable, but adding an
     `Array.isArray(delta.insert)` runtime check before the cast would be more
     honest.
 
 ### Pre-existing FE op-application caveats
 
-13. **`Workbook/api.ts:applyOp` only processes `specialOps[0]`** — when a remote
-    op batch contains 2+ special ops (e.g. two delete-rows), the receiver
-    silently drops everything after the first. `replaySheetsOps` does NOT have
-    this bug; only the live `applyOp` path. Today nothing emits multi-special
-    batches, but the guard is missing.
+16. **`Workbook/api.ts:applyOp` only processes `specialOps[0]`** — when a
+    remote op batch contains 2+ special ops (e.g. two delete-rows), the
+    receiver silently drops everything after the first. `replaySheetsOps`
+    does NOT have this bug; only the live `applyOp` path. Today nothing emits
+    multi-special batches, but the guard is missing.
 
-14. **`stateMap.observe` doesn't replay pending ops on remote snapshot flush**
+17. **`stateMap.observe` doesn't replay pending ops on remote snapshot flush**
     — when browser A flushes a snapshot while ops from B are in flight, B's
     local-but-unflushed edits can be lost. Pre-existing; not introduced or
     fixed by this branch.
@@ -184,11 +209,15 @@ off. Walk through if you touch the related surface.
   per-cell after relative-ref shifting; absolute `$A$1` rules anchor; cross-
   sheet refs resolve. Engine + html-export tests cover this; manual export
   smoke is the gap.
-- **BE replay-on-read end-to-end** (`document-cleanup` branch, 2026-05-02):
+- **Row/col op engine wrap + BE/FE replay (2026-05-01)** — right-click insert/delete row &
+  column on a sheet with merges, frozen rows, active filter, data-verification rule,
+  conditional format. Verify shifts correctly + selection follows + formulas update. Also:
+  cold-join with pending row/col ops (browser A inserts a row, closes tab without flushing;
+  browser B opens fresh and sees the inserted row); active-session remote op; snapshot-only
+  load path. Exercises the new shared `replaySheetsOps` on both BE and FE initial-load.
+- **BE replay-on-read end-to-end** (`document-cleanup` merge, 2026-05-02-03):
   - Edit a cell → reload before auto-flush → BE replay resurrects the
     unflushed edit and the page rehydrates with it.
-  - Cold-join with pending ops: edit in browser A, close before flush; open
-    same doc in browser B → edit appears.
   - Export to xlsx with pre-flush edits → opened workbook shows the edits
     (validates the celldata-resync-without-ops path that fixed the
     "exported sheet looks empty" bug, commit `e0124f02`).
@@ -287,6 +316,33 @@ priority — rename-only.
 ---
 
 ## Recently shipped
+
+### 2026-05-01
+
+- **Context-free row/col op replay** (spec: `docs/superpowers/specs/2026-05-01-context-free-row-col-ops-design.md`).
+  Pure data-shift logic for `insertRowCol` / `deleteRowCol` extracted from `state/modules/rowcol.ts`
+  into the headless engine. New exports from `@workspace/fortune-sheet/engine`:
+  - `applySheetsInsertRowCol<S extends Sheet>(sheets, op): S[]` and
+    `applySheetsDeleteRowCol<S extends Sheet>(sheets, op): S[]` — generic over sheet shape so
+    state.Sheet[] flows through with editor-runtime extras typed end-to-end (no `as any` casts).
+  - `replaySheetsOps(sheets, opBatches): Sheet[]` — single source of truth for "snapshot + ops →
+    `Sheet[]`". Used by both BE document reader (`apps/api/src/lib/document/sheets.ts`) and FE
+    initial-load (`apps/sheets/src/components/sheets/hooks/use-sheet.ts`); typed shape adapters
+    (`asInsertValue` / `asDeleteValue`) pin `op.value` so future field drift fails fast.
+  - `functionStrChange` relocated from `state/modules/formula-range.ts` to `engine/formula-shift.ts`.
+  - State's `insertRowCol` / `deleteRowCol` now wrap the engine and only handle state-only
+    fields (filter / frozen / dataVerification / hyperlink / calcChain / luckysheet_select_save).
+  - FE collapsed two-phase mount (snapshot then `applyOp(pendingOps)`) into single replay-then-mount;
+    `pendingOpsRef` and post-mount replay `useEffect` removed. Ongoing ops over WebSocket still
+    flow through `workbook.applyOp` as before.
+  - Reviewer-flagged followups also shipped: `RowColOp` discriminated union split into
+    `InsertRowColOp` + `DeleteRowColOp` (CODE-STANDARDS "no unnecessary discriminated union for two
+    cases"); dead all-sheet calcChain loop in state collapsed to single target-sheet pass (the
+    cross-sheet formula-text rewrite moved to engine, leaving the loop with only the target branch
+    active).
+  - Smoke test still owed: cold-join with pending ops; active-session remote op; snapshot-only
+    path. Already in "Smoke tests still owed" as the row/col op smoke item — extends to cover
+    the new BE/FE replay path.
 
 ### 2026-04-30
 

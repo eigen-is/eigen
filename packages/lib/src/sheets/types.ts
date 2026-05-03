@@ -54,6 +54,20 @@ export type CellWithRowAndCol = {
     v: Cell | null;
 };
 
+// Sheet operation produced by the editor's state layer (immer patch-to-op step)
+// and consumed by both fortune-sheet's runtime and the apps/api document reader.
+// Lives in lib so the BE can replay ops without pulling in the state barrel.
+// `value` stays `any` because the legacy state/ utils (patch.ts, Workbook/api.ts)
+// pass it as Cell, Sheet, RowColOp, calcChain, … without a discriminator; tightening
+// is part of TODO #1 (enable biome on state/).
+export type Op = {
+    op: 'replace' | 'remove' | 'add' | 'insertRowCol' | 'deleteRowCol' | 'addSheet' | 'deleteSheet';
+    id?: string;
+    path: (string | number)[];
+    // biome-ignore lint/suspicious/noExplicitAny: see comment above
+    value?: any;
+};
+
 // Single rectangular range in row/column coordinates. Used both as a CF rule's
 // `cellrange` element and as the engine's range descriptor.
 export type SingleRange = { row: number[]; column: number[] };
@@ -130,6 +144,8 @@ export type Sheet = {
     config?: SheetConfig;
     celldata?: CellWithRowAndCol[];
     data?: CellMatrix;
+    row?: number;
+    column?: number;
     showGridLines?: boolean | number;
     luckysheet_conditionformat_save?: ConditionalFormatRule[];
 };
