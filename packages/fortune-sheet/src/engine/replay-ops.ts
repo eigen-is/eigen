@@ -46,7 +46,15 @@ function withMaterializedData(s: Sheet): Sheet {
     return { ...s, data: celldataToData(s.celldata ?? [], s.row, s.column) };
 }
 
-function withSyncedCelldata(s: Sheet): Sheet {
+// Sheets reach this path with three possible shapes:
+//   - data only (FE flush — state edits update `data` and never refresh `celldata`)
+//   - celldata only (xlsx import / fresh doc)
+//   - both populated (after replay materialized data, or stale snapshot)
+// In every case where data exists, regenerate celldata from it; downstream
+// readers (HTML / PDF / XLSX export, preview) are celldata-keyed, so a stale
+// celldata field is what causes "exported sheet looks empty" bugs.
+function withSyncedCelldataIfData(s: Sheet): Sheet {
+    if (!s.data) return s;
     return { ...s, celldata: dataToCelldata(s.data) };
 }
 
@@ -70,7 +78,7 @@ function collectDataOpSheetIds(opBatches: Op[][]): Set<string> | null {
 }
 
 export function replaySheetsOps(sheets: Sheet[], opBatches: Op[][]): Sheet[] {
-    if (opBatches.length === 0) return sheets;
+    if (opBatches.length === 0) return sheets.map(withSyncedCelldataIfData);
     const dataOpIds = collectDataOpSheetIds(opBatches);
     let result = dataOpIds ? sheets.map((s) => (s.id && dataOpIds.has(s.id) ? withMaterializedData(s) : s)) : sheets;
     for (const batch of opBatches) {
@@ -119,5 +127,5 @@ export function replaySheetsOps(sheets: Sheet[], opBatches: Op[][]): Sheet[] {
         const [patches] = opToPatchOnSheets(result, normalOps);
         result = applyPatches(result, patches);
     }
-    return dataOpIds ? result.map((s) => (s.id && dataOpIds.has(s.id) ? withSyncedCelldata(s) : s)) : result;
+    return result.map(withSyncedCelldataIfData);
 }
