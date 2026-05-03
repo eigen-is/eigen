@@ -317,20 +317,6 @@ export async function completeSetup(input: SetupInput): Promise<SetupResult> {
             domain: input.domain,
             orgName: input.orgName,
             orgId: org.id,
-            storage: {
-                type: input.storageType,
-                s3:
-                    input.storageType === 's3'
-                        ? {
-                              bucket: input.s3Bucket!,
-                              region: input.s3Region!,
-                              accessKeyId: input.s3AccessKeyId!,
-                              secretAccessKey: input.s3SecretAccessKey!,
-                              endpoint: input.s3Endpoint ?? '',
-                              prefix: '',
-                          }
-                        : undefined,
-            },
             secret: randomBytes(32).toString('base64'),
             setupCompleted: true,
             setupCompletedAt: new Date().toISOString(),
@@ -338,8 +324,19 @@ export async function completeSetup(input: SetupInput): Promise<SetupResult> {
 
         await saveServerConfig(serverConfig);
 
+        const s3Config =
+            input.storageType === 's3'
+                ? {
+                      bucket: input.s3Bucket!,
+                      region: input.s3Region!,
+                      accessKeyId: input.s3AccessKeyId!,
+                      secretAccessKey: input.s3SecretAccessKey!,
+                      endpoint: input.s3Endpoint ?? '',
+                      prefix: '',
+                  }
+                : undefined;
         await updateServerSettings({
-            defaults: { mount: { storageType: input.storageType } },
+            defaults: { mount: { storageType: input.storageType, s3Config } },
         });
 
         return {

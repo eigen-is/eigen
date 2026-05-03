@@ -1,9 +1,9 @@
-import type { ServerSettings } from '@workspace/lib/types/settings';
+import type { S3Config } from '@workspace/lib/types';
+import type { ServerSettings, ServerStorageType } from '@workspace/lib/types/settings';
 import type { DeepPartial } from '@workspace/lib/types/util';
 import { JsonStore } from '../core/json-store';
 import { LocalFilesystem } from '../core/local-filesystem';
 import { getServerDataPath } from './paths';
-import { getStorageType, isSetupCompleted } from './server-config';
 
 export { mapStorageType } from '@workspace/lib/types/settings';
 
@@ -44,14 +44,7 @@ let loaded = false;
 
 async function ensureLoaded() {
     if (!loaded) {
-        const exists = await serverFs.file('settings.json').exists();
         await settingsStore.load();
-        if (!exists && isSetupCompleted()) {
-            const configType = getStorageType();
-            if (configType !== 'local-fullnames') {
-                await settingsStore.set({ defaults: { mount: { storageType: configType } } });
-            }
-        }
         loaded = true;
     }
 }
@@ -66,6 +59,14 @@ export async function updateServerSettings(update: DeepPartial<ServerSettings>):
 
 export function getMaxUploadSize(): number {
     return getServerSettings().quotas.maxUploadSizeMB * 1024 * 1024;
+}
+
+export function getStorageType(): ServerStorageType {
+    return getServerSettings().defaults.mount.storageType;
+}
+
+export function getS3Config(): S3Config | undefined {
+    return getServerSettings().defaults.mount.s3Config;
 }
 
 await ensureLoaded();

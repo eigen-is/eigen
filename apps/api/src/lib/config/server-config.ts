@@ -1,5 +1,3 @@
-import type { S3Config } from '@workspace/lib/types';
-import type { ServerStorageType } from '@workspace/lib/types/settings';
 import type { DeepPartial } from '@workspace/lib/types/util';
 import pkg from '../../../../../package.json' with { type: 'json' };
 import { JsonStore } from '../core/json-store';
@@ -10,14 +8,13 @@ const VERSION: string = pkg.version;
 const COMMIT: string | undefined = process.env['EIGEN_COMMIT'] || undefined;
 const BUILT_AT: Date | undefined = process.env['EIGEN_BUILT_AT'] ? new Date(process.env['EIGEN_BUILT_AT']) : undefined;
 
+// Identity + secrets for the deployment. Set once during setup and never via API
+// thereafter. Runtime-tunable defaults — including the storage backend — live in
+// ServerSettings (settings.json), not here.
 export type ServerConfig = {
     domain: string;
     orgName: string;
     orgId: string;
-    storage: {
-        type: ServerStorageType;
-        s3?: S3Config;
-    };
     secret: string;
     setupCompleted: boolean;
     setupCompletedAt?: string;
@@ -28,7 +25,6 @@ const store = new JsonStore<ServerConfig>(serverFs, 'config.json', {
     domain: 'localhost',
     orgName: '',
     orgId: '',
-    storage: { type: 'local-id' },
     secret: '',
     setupCompleted: false,
 });
@@ -62,14 +58,6 @@ export function isSetupCompleted(): boolean {
 
 export function isSetupRequired(): boolean {
     return !isSetupCompleted();
-}
-
-export function getStorageType(): ServerConfig['storage']['type'] {
-    return store.get().storage.type;
-}
-
-export function getS3Config(): S3Config | undefined {
-    return store.get().storage.s3;
 }
 
 export function getDomain(): string {
