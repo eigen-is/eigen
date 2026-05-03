@@ -4,8 +4,7 @@ import { and, eq, ne, notInArray } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';
 import { member, user } from '../../auth-schema.ts';
 import { getAuthDrizzleDb } from '../lib/auth/auth';
-import { getS3Config, updateServerConfig } from '../lib/config/server-config';
-import { getServerSettings, updateServerSettings } from '../lib/config/server-settings';
+import { getS3Config, getServerSettings, updateServerSettings } from '../lib/config/server-settings';
 import { ApiError } from '../lib/core';
 import { requireAdmin } from '../lib/core/access';
 import { checkS3Connection } from '../lib/storage/s3-storage';
@@ -108,7 +107,7 @@ export const settingsRouter = new Elysia({ name: 'settings' })
             const s3Config = toS3Config(body);
             const s3Result = await checkS3Connection(s3Config);
             if (!s3Result.ok) throw new ApiError(400, `S3 connection failed: ${s3Result.message}`);
-            await updateServerConfig({ storage: { s3: s3Config } });
+            await updateServerSettings({ defaults: { mount: { s3Config } } });
             return getS3Config() ?? null;
         },
         { body: s3ConfigBody, auth: true },

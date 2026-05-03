@@ -47,6 +47,7 @@ export type ServerSettings = {
     defaults: {
         mount: {
             storageType: ServerStorageType;
+            s3Config?: S3Config;
         };
     };
     onboarding: {
