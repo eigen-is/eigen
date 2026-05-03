@@ -437,19 +437,16 @@ export function useEmailCollaborators(ownerId: string, mountId: string) {
     return useMutation({
         mutationFn: async ({
             pathId,
-            subject,
             message,
             documentUrl,
             sendCopyToSelf,
         }: {
             pathId: string;
-            subject: string;
             message: string;
             documentUrl: string;
             sendCopyToSelf: boolean;
         }) => {
             const response = await driveApi({ ownerId })({ mountId }).path({ pathId })['email-collaborators'].post({
-                subject,
                 message,
                 documentUrl,
                 sendCopyToSelf,
