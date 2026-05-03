@@ -52,7 +52,7 @@ export function OnboardingSettingsPage() {
     };
 
     const handleSave = async () => {
-        await updateSettings.mutateAsync({ onboarding: draft } as Record<string, unknown>);
+        await updateSettings.mutateAsync({ onboarding: draft });
         setDraft({});
         setDirty(false);
     };
