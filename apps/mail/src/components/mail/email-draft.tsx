@@ -5,6 +5,7 @@ import { isContainerType } from '@workspace/lib/types/drive';
 import type { EmailDraft as EmailDraftType, NewDraft } from '@workspace/lib/types/mail';
 import { ContactAutosuggest, Toolbar, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
+import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import {
     Dialog,
     DialogContent,
@@ -14,7 +15,6 @@ import {
     DialogTitle,
 } from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
-import { ConfirmDialog } from '@workspace/ui/components/layout/delete/confirm-dialog';
 import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
 import { LightEditor } from '@workspace/ui/components/layout/editor';
 import { cn } from '@workspace/ui/lib/utils';

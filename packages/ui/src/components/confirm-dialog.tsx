@@ -1,5 +1,5 @@
-import { Button } from './../../button';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './../../dialog';
+import { Button } from './button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './dialog';
 
 export type ConfirmDialogProps = {
     open: boolean;

@@ -8,7 +8,7 @@ import { useSpaceSettings, useUpdateSpaceSettings } from '@workspace/lib/space';
 import { Grip, LogOut, Menu, Palette, Settings, Shield, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '../../button.tsx';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../dialog.tsx';
+import { ConfirmDialog } from '../../confirm-dialog.tsx';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -50,25 +50,15 @@ function LogoutDialog({
     onLogout: () => void;
 }) {
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent>
-                <DialogHeader>
-                    <DialogTitle>Log out?</DialogTitle>
-                    <DialogDescription>
-                        Logging out will end your current session. You will be logged out of your account and will need
-                        to log in again to continue.
-                    </DialogDescription>
-                </DialogHeader>
-                <DialogFooter>
-                    <Button variant="outline" onClick={() => onOpenChange(false)}>
-                        Go Back
-                    </Button>
-                    <Button variant="default" onClick={onLogout}>
-                        Log Out
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+        <ConfirmDialog
+            open={open}
+            onOpenChange={onOpenChange}
+            title="Log out?"
+            description="Logging out will end your current session. You will be logged out of your account and will need to log in again to continue."
+            cancelText="Go Back"
+            confirmText="Log Out"
+            onConfirm={onLogout}
+        />
     );
 }
 
