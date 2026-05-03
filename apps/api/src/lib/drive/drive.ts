@@ -31,6 +31,7 @@ import { isProduction } from '../config/env';
 import { getDomain, getMailDomain } from '../config/server-config';
 import { ApiError, type DatabaseConfig, type ManagedDatabase, type SchemaType } from '../core';
 import { contentDisposition } from '../core/http';
+import { composeCollaboratorsEmail } from '../core/mail-composers';
 import { sendMail } from '../core/mailer';
 import type { Home } from '../home';
 import { createDefaultMountConfig, createMountConfig, Mount } from '../mount';
@@ -656,7 +657,6 @@ export default class Drive {
     async emailCollaborators(
         mountId: string,
         pathId: string,
-        subject: string,
         message: string,
         documentUrl: string,
         sendCopyToSelf: boolean,
@@ -677,6 +677,9 @@ export default class Drive {
             throw new ApiError(400, 'Invalid document URL');
         }
 
+        const path = await this.getPath(mountId, pathId);
+        if (!path) throw new ApiError(404, 'Path not found');
+
         const members = await this.getEffectiveMembers(mountId, pathId);
         const self = senderEmail.toLowerCase();
         const recipients = members.filter((m) => sendCopyToSelf || m.email !== self);
@@ -688,12 +691,15 @@ export default class Drive {
                     ? `${documentUrl}${documentUrl.includes('?') ? '&' : '?'}email=${encodeURIComponent(member.email)}`
                     : documentUrl;
 
-                return sendMail({
-                    from: { name: senderName, address: senderEmail },
-                    to: [{ name: '', address: member.email }],
-                    subject,
-                    text: `${message}\n\n${link}`,
-                });
+                return sendMail(
+                    composeCollaboratorsEmail(
+                        path,
+                        message,
+                        link,
+                        { name: senderName, email: senderEmail },
+                        member.email,
+                    ),
+                );
             }),
         );
 

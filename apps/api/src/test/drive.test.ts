@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import {
     DRIVE_TYPE_DOC,
     DRIVE_TYPE_SHEETS,
@@ -3260,6 +3260,50 @@ describe('Drive', () => {
                 `/drive/${teamOwner}/nonexistent-mount/mime/text-plain`,
             );
             expect(res.status).toBe(404);
+        });
+    });
+
+    describe('emailCollaborators', () => {
+        test('sends HTML mail with body and link', async () => {
+            const mailer = await import('../lib/core/mailer');
+            const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+
+            const doc = await drivePost(
+                ctx.alice.user.sessionToken,
+                ctx.alice.user.id,
+                aliceMountId,
+                `folder/${aliceRootId}/create/doc`,
+                { fileName: 'collab-mail-test' },
+            );
+
+            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${doc.id}/acl`, {
+                acl: [{ id: ctx.bob.user.email, read: true, write: false }],
+                visibility: 'private',
+            });
+
+            await authedRequest(
+                ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${doc.id}/email-collaborators`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        subject: 'Hello',
+                        message: '<p>Take a look</p>',
+                        documentUrl: 'https://test.eigen.is/docs/doc/x/y/z',
+                        sendCopyToSelf: false,
+                    }),
+                },
+            );
+            await new Promise((r) => setTimeout(r, 100));
+
+            const calls = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === ctx.bob.user.email));
+            expect(calls.length).toBe(1);
+            const mail = calls[0][0];
+            expect(mail.html).toContain('Take a look');
+            expect(mail.html).toContain('https://test.eigen.is/docs/doc/x/y/z');
+            expect(mail.text).toContain('Take a look');
+            spy.mockRestore();
         });
     });
 });
