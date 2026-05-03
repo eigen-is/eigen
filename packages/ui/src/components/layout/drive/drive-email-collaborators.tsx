@@ -59,12 +59,10 @@ export function DriveEmailCollaborators({ path, open, onOpenChange }: DriveEmail
                         <Label>Message</Label>
                         <div className="rounded-md border">
                             <LightEditor
-                                toolbar="fixed"
                                 content={message}
                                 onChange={setMessage}
                                 onChangeText={setMessageText}
                                 placeholder="Write a message..."
-                                proseStyle={false}
                                 containerClassName="min-h-[180px] flex flex-col"
                             />
                         </div>
