@@ -3267,6 +3267,7 @@ describe('Drive', () => {
         test('sends HTML mail with body and link', async () => {
             const mailer = await import('../lib/core/mailer');
             const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+            spy.mockClear(); // spyOn returns a shared mock; reset call history per test
 
             const doc = await drivePost(
                 ctx.alice.user.sessionToken,

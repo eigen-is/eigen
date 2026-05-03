@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import type {
     CalendarEvent,
     CalendarEventOccurrence,
@@ -1590,14 +1590,15 @@ describe('Calendar invite email to Eigen user', () => {
         );
     }
 
-    afterEach(async () => {
-        await setToggle(true);
-    });
+    // JsonStore is shared across the suite — reset before AND after each test.
+    beforeEach(() => setToggle(true));
+    afterEach(() => setToggle(true));
 
     test('emails Eigen attendee when toggle on', async () => {
         await setToggle(true);
         const mailer = await import('../lib/core/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        spy.mockClear(); // spyOn returns a shared mock; reset call history per test
 
         await createEventWithBob('Invite-toggle-on');
         await new Promise((r) => setTimeout(r, 100));
@@ -1612,6 +1613,7 @@ describe('Calendar invite email to Eigen user', () => {
         await setToggle(false);
         const mailer = await import('../lib/core/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        spy.mockClear(); // spyOn returns a shared mock; reset call history per test
 
         await createEventWithBob('Invite-toggle-off');
         await new Promise((r) => setTimeout(r, 100));

@@ -459,6 +459,15 @@ describe('Email notification toggles', () => {
         expect(data.notifications.email.userOnAclAdd).toBe(true);
         expect(data.notifications.email.userOnCalendarInvite).toBe(false);
         expect(data.notifications.email.guestOnAclAdd).toBe(true); // deep-merge preserves untouched fields
+
+        // Reset to defaults — JsonStore is shared across the whole suite.
+        await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                notifications: { email: { userOnAclAdd: false, userOnCalendarInvite: true } },
+            }),
+        });
     });
 });
 

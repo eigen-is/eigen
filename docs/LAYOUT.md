@@ -191,7 +191,7 @@ menu needs submenu.
 | `DocumentModeButton` | `toolbar/document-mode-button.tsx` | Read-only/editing mode toggle                  |
 | `FileMenu`           | `toolbar/file-menu.tsx`            | File dropdown: rename, delete, revision history |
 | `DeleteDialog`       | `delete/delete-dialog.tsx`         | Confirmation dialog for destructive actions    |
-| `ConfirmDialog`      | `delete/confirm-dialog.tsx`        | Generic confirmation dialog (title + action)   |
+| `ConfirmDialog`      | `confirm-dialog.tsx`               | Generic confirmation dialog (title + action)   |
 | `ShadowContent`      | `shadow-content.tsx`               | Shadow DOM for style isolation (email bodies)  |
 | `ColorPicker`        | `media/color-picker.tsx`           | Color picker popover                           |
 | `FontPicker`         | `media/font-picker.tsx`            | Font family picker dropdown                    |

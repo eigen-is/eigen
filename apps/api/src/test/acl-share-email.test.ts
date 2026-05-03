@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { authedRequest, driveGet, drivePost, drivePut, getTestContext } from './setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
@@ -36,14 +36,20 @@ async function setAcl(pathId: string, acl: Array<{ id: string; read: boolean; wr
 }
 
 describe('ACL share email', () => {
-    afterEach(async () => {
+    // Reset toggles before AND after each test — JsonStore is shared across the whole
+    // suite, so we can't trust defaults coming in, and we mustn't leak state to other
+    // test files. beforeEach guards entry, afterEach guards exit.
+    async function resetToggles() {
         await setEmailToggle('userOnAclAdd', false);
         await setEmailToggle('guestOnAclAdd', true);
-    });
+    }
+    beforeEach(resetToggles);
+    afterEach(resetToggles);
 
-    test('does not email Eigen user when userOnAclAdd is off (default)', async () => {
+    test('does not email Eigen user when userOnAclAdd is off', async () => {
         const mailer = await import('../lib/core/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        spy.mockClear(); // spyOn returns a shared mock; reset call history per test
 
         const doc = await createDoc('share-default-off');
         await setAcl(doc.id, [{ id: ctx.bob.user.email, read: true, write: false }]);
@@ -58,6 +64,7 @@ describe('ACL share email', () => {
         await setEmailToggle('userOnAclAdd', true);
         const mailer = await import('../lib/core/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        spy.mockClear(); // spyOn returns a shared mock; reset call history per test
 
         const doc = await createDoc('share-toggle-on');
         await setAcl(doc.id, [{ id: ctx.bob.user.email, read: true, write: false }]);
@@ -77,6 +84,7 @@ describe('ACL share email', () => {
 
         const mailer = await import('../lib/core/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        spy.mockClear(); // spyOn returns a shared mock; reset call history per test
 
         await setAcl(doc.id, [{ id: ctx.bob.user.email, read: true, write: true }]);
         await new Promise((r) => setTimeout(r, 10));
@@ -94,6 +102,7 @@ describe('ACL share email', () => {
 
         const mailer = await import('../lib/core/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        spy.mockClear(); // spyOn returns a shared mock; reset call history per test
 
         await setAcl(doc.id, []);
         await new Promise((r) => setTimeout(r, 10));

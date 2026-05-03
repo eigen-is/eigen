@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { authedRequest, driveGet, drivePost, getTestContext } from './setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
@@ -29,13 +29,15 @@ async function createDoc(name: string): Promise<{ id: string }> {
 }
 
 describe('Access-request email', () => {
-    afterEach(async () => {
-        await setToggle(true);
-    });
+    // Reset toggle before AND after each test — JsonStore is shared across the whole
+    // suite, and the default for ownerOnAccessRequest is true.
+    beforeEach(() => setToggle(true));
+    afterEach(() => setToggle(true));
 
     test('emails owner when toggle on', async () => {
         const mailer = await import('../lib/core/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        spy.mockClear(); // spyOn returns a shared mock; reset call history per test
 
         const doc = await createDoc('access-request-on');
         await authedRequest(
@@ -60,6 +62,7 @@ describe('Access-request email', () => {
         await setToggle(false);
         const mailer = await import('../lib/core/mailer');
         const spy = spyOn(mailer, 'sendMail').mockResolvedValue(true);
+        spy.mockClear(); // spyOn returns a shared mock; reset call history per test
 
         const doc = await createDoc('access-request-off');
         await authedRequest(
