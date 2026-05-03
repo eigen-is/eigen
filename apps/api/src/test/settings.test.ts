@@ -1,5 +1,5 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
-import { teamOwnerId } from '@workspace/lib/types';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { type S3Config, teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type {
     HomeSizeResponse,
@@ -428,6 +428,40 @@ describe('Setup Flow', () => {
     });
 });
 
+describe('Email notification toggles', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+    });
+
+    test('GET exposes notifications.email with defaults', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, '/settings/server');
+        const data = await assertJson<ServerSettings>(res);
+        expect(data.notifications.email.guestOnAclAdd).toBe(true);
+        expect(data.notifications.email.userOnAclAdd).toBe(false);
+        expect(data.notifications.email.userOnCalendarInvite).toBe(true);
+        expect(data.notifications.email.userOnAccessRequest).toBe(true);
+    });
+
+    test('PUT round-trips notifications.email', async () => {
+        const putRes = await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                notifications: { email: { userOnAclAdd: true, userOnCalendarInvite: false } },
+            }),
+        });
+        expect(putRes.status).toBe(200);
+
+        const getRes = await authedRequest(ctx.alice.user.sessionToken, '/settings/server');
+        const data = await assertJson<ServerSettings>(getRes);
+        expect(data.notifications.email.userOnAclAdd).toBe(true);
+        expect(data.notifications.email.userOnCalendarInvite).toBe(false);
+        expect(data.notifications.email.guestOnAclAdd).toBe(true); // deep-merge preserves untouched fields
+    });
+});
+
 describe('User Settings', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
 
@@ -476,5 +510,110 @@ describe('User Settings', () => {
             body: JSON.stringify({ email: { signatures: [{ id: 'x', name: 'y' }] } }),
         });
         expect(res.status).toBe(422);
+    });
+});
+
+describe('S3 Config Persistence', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+    });
+
+    test('GET /settings/s3config returns null when not configured', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, '/settings/s3config');
+        expect(res.status).toBe(200);
+        const text = await res.text();
+        // Elysia serializes a `null` return as either empty body or the string "null"
+        expect(text === '' || text === 'null').toBe(true);
+    });
+
+    test('PUT /settings/s3config persists into ServerSettings and round-trips through GETs', async () => {
+        const s3Storage = await import('../lib/storage/s3-storage');
+        const spy = spyOn(s3Storage, 'checkS3Connection').mockResolvedValueOnce({
+            ok: true,
+            message: 'Connection successful',
+        });
+
+        const config: S3Config = {
+            endpoint: 'https://s3.example.com',
+            bucket: 'eigen-test',
+            prefix: 'data',
+            accessKeyId: 'AKIAEXAMPLE',
+            secretAccessKey: 'secret-example',
+            region: 'eu-west-1',
+        };
+
+        try {
+            const putRes = await authedRequest(ctx.alice.user.sessionToken, '/settings/s3config', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(config),
+            });
+            const persisted = await assertJson<S3Config>(putRes);
+            expect(persisted).toEqual(config);
+
+            const getRes = await authedRequest(ctx.alice.user.sessionToken, '/settings/s3config');
+            const fromGet = await assertJson<S3Config>(getRes);
+            expect(fromGet).toEqual(config);
+
+            const serverRes = await authedRequest(ctx.alice.user.sessionToken, '/settings/server');
+            const server = await assertJson<ServerSettings>(serverRes);
+            expect(server.defaults.mount.s3Config).toEqual(config);
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    test('PUT /settings/s3config returns 400 and does not persist when connection check fails', async () => {
+        const s3Storage = await import('../lib/storage/s3-storage');
+        const spy = spyOn(s3Storage, 'checkS3Connection').mockResolvedValueOnce({
+            ok: false,
+            message: 'invalid credentials',
+        });
+
+        const before = await assertJson<S3Config>(
+            await authedRequest(ctx.alice.user.sessionToken, '/settings/s3config'),
+        );
+
+        try {
+            const putRes = await authedRequest(ctx.alice.user.sessionToken, '/settings/s3config', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    endpoint: 'https://bad.example',
+                    bucket: 'bad',
+                    prefix: '',
+                    accessKeyId: 'bad',
+                    secretAccessKey: 'bad',
+                }),
+            });
+            expect(putRes.status).toBe(400);
+        } finally {
+            spy.mockRestore();
+        }
+
+        const after = await assertJson<S3Config>(
+            await authedRequest(ctx.alice.user.sessionToken, '/settings/s3config'),
+        );
+        expect(after).toEqual(before);
+    });
+
+    test('non-admin cannot read or update S3 config', async () => {
+        const getRes = await authedRequest(ctx.bob.user.sessionToken, '/settings/s3config');
+        expect(getRes.status).toBe(403);
+
+        const putRes = await authedRequest(ctx.bob.user.sessionToken, '/settings/s3config', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                endpoint: 'https://x',
+                bucket: 'x',
+                prefix: '',
+                accessKeyId: 'x',
+                secretAccessKey: 'x',
+            }),
+        });
+        expect(putRes.status).toBe(403);
     });
 });
