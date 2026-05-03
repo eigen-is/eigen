@@ -9,10 +9,11 @@ type LightEditorProps = {
     content: string;
     onChange: (html: string) => void;
     onChangeText?: (text: string) => void;
-    // Fires once after TipTap parses the initial content. Use it to read the editor's
-    // canonical HTML/text — useful for callers that fingerprint state and need the post-parse
-    // values to avoid spurious diffs on first interaction.
-    onReady?: (editor: Editor) => void;
+    // Fires once after TipTap parses the initial content. Receives the editor
+    // instance plus the canonical (trimmed) html/text — same shape onChange
+    // will emit, so callers that fingerprint state don't see spurious diffs on
+    // first interaction.
+    onReady?: (arg: { editor: Editor; html: string; text: string }) => void;
     placeholder?: string;
     toolbar?: 'floating' | 'fixed' | 'none';
     className?: string;
@@ -37,6 +38,16 @@ const LIGHT_EXTENSIONS = [
     }),
 ];
 
+// TipTap leaves an empty paragraph at the end after Enter and sometimes at the
+// start. Strip those from the emitted HTML so consumers (mail body, doc save)
+// don't carry trailing whitespace that renders as blank lines. Mid-content
+// empties are preserved — they're intentional spacing the user added.
+const EMPTY_PARA_LEADING = /^\s*(?:<p>(?:\s|&nbsp;|<br\s*\/?>)*<\/p>\s*)+/i;
+const EMPTY_PARA_TRAILING = /(?:\s*<p>(?:\s|&nbsp;|<br\s*\/?>)*<\/p>)+\s*$/i;
+function trimEmptyEdges(html: string): string {
+    return html.replace(EMPTY_PARA_LEADING, '').replace(EMPTY_PARA_TRAILING, '');
+}
+
 export function LightEditor({
     content,
     onChange,
@@ -60,8 +71,8 @@ export function LightEditor({
             },
         },
         onUpdate: ({ editor: e }) => {
-            onChange(e.getHTML());
-            onChangeText?.(e.getText());
+            onChange(trimEmptyEdges(e.getHTML()));
+            onChangeText?.(e.getText().trim());
         },
     });
 
@@ -69,7 +80,7 @@ export function LightEditor({
     useEffect(() => {
         if (!editor || readyFiredRef.current) return;
         readyFiredRef.current = true;
-        onReady?.(editor);
+        onReady?.({ editor, html: trimEmptyEdges(editor.getHTML()), text: editor.getText().trim() });
     }, [editor, onReady]);
 
     if (!editor) return null;

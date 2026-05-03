@@ -254,7 +254,7 @@ export const SlideObjectView = memo(function SlideObjectView({
                             proseStyle={false}
                             className="min-h-0 break-words"
                             containerClassName="relative flex flex-col w-full"
-                            onReady={(e) => e.chain().focus('end').run()}
+                            onReady={({ editor }) => editor.chain().focus('end').run()}
                         />
                     </div>
                 </div>

@@ -119,16 +119,8 @@ export async function resolveNotificationLink(
         case 'calendar-unshare':
             return getCalendarAppUrl();
 
-        case 'mail': {
-            // Tag is `mail:new` (post-dedupe) for fresh notifications; older rows from
-            // before the dedupe change may still carry `mail:{id}` and resolve to a
-            // specific message. Both forms degrade gracefully.
-            const after = tag.slice(5);
-            if (after && after !== 'new') {
-                return getMailAppUrl(`box/inbox?mailId=${encodeURIComponent(after)}`);
-            }
+        case 'mail':
             return getMailAppUrl('box/inbox');
-        }
 
         case 'access-request':
             return resolveAccessRequestLink(tag);
