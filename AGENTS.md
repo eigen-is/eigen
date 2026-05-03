@@ -61,7 +61,6 @@ bun run check          # lint + typecheck + test
 - **Read relevant docs before planning or coding** — check `docs/` for architecture docs on the domain you're
   touching (e.g., `docs/COMMENTS.md` before adding comment features, `docs/EXPORT.md` before changing export).
   Don't assume you know the conventions — verify them
-- **No migrations or backward compatibility** — data is throwaway during dev. Prefer clean schemas
 - **Always run `bun run check`** after changes (lint + typecheck + test). When multiple agents run in parallel,
   only the main agent should run check — concurrent runs cause deadlocks
 - **Code goes in the right layer** — hooks/mutations in `packages/lib/src/core/[domain]/hooks/`, shared types in
