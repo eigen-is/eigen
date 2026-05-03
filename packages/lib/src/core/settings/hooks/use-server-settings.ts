@@ -1,16 +1,9 @@
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { settingsApi } from '@workspace/lib/api';
 import type { ServerSettings } from '@workspace/lib/types/settings';
+import type { DeepPartial } from '@workspace/lib/types/util';
 import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
-
-// Mirrors the deep-optional shape of the PUT /settings/server body so callers can
-// patch a single nested field (e.g. just `guests.openSignup`) without spelling out
-// every sibling. Eden Treaty's inferred body would express the same thing, but a
-// hand-rolled DeepPartial keeps the hook signature readable.
-type DeepPartial<T> = {
-    [K in keyof T]?: T[K] extends Record<string, unknown> ? DeepPartial<T[K]> : T[K];
-};
 
 export const settingsKeys = {
     all: ['settings'] as const,
