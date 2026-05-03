@@ -1,6 +1,7 @@
 import { app } from './app';
-import { cleanupInactiveGuests } from './lib/auth/guest-cleanup';
 import { shutdownAllHomes } from './lib/home';
+import { registerScheduledJobs } from './lib/scheduler/jobs';
+import { stopAllSchedules } from './lib/scheduler/scheduler';
 
 const server = app.listen({
     port: 8000,
@@ -11,15 +12,11 @@ export type { App as app } from './app';
 
 console.log(`🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`);
 
-const GUEST_CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000;
-cleanupInactiveGuests().catch((error) => console.error('[guest-cleanup] sweep failed:', error));
-const guestCleanupTimer = setInterval(() => {
-    cleanupInactiveGuests().catch((error) => console.error('[guest-cleanup] sweep failed:', error));
-}, GUEST_CLEANUP_INTERVAL_MS);
+registerScheduledJobs();
 
 async function gracefulShutdown(signal: string) {
     console.log(`\n${signal} received, shutting down gracefully...`);
-    clearInterval(guestCleanupTimer);
+    stopAllSchedules();
     server.stop();
     await shutdownAllHomes();
     console.log('All homes shut down, exiting.');
