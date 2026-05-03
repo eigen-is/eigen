@@ -657,6 +657,7 @@ export default class Drive {
     async emailCollaborators(
         mountId: string,
         pathId: string,
+        subject: string | null,
         message: string,
         documentUrl: string,
         sendCopyToSelf: boolean,
@@ -694,6 +695,7 @@ export default class Drive {
                 return sendMail(
                     composeCollaboratorsEmail(
                         path,
+                        subject,
                         message,
                         link,
                         { name: senderName, email: senderEmail },

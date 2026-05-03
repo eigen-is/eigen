@@ -3288,6 +3288,7 @@ describe('Drive', () => {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
+                        subject: 'Custom subject',
                         message: '<p>Take a look</p>',
                         documentUrl: 'https://test.eigen.is/docs/doc/x/y/z',
                         sendCopyToSelf: false,
@@ -3299,9 +3300,13 @@ describe('Drive', () => {
             const calls = spy.mock.calls.filter((c) => c[0].to.some((t) => t.address === ctx.bob.user.email));
             expect(calls.length).toBe(1);
             const mail = calls[0][0];
+            expect(mail.subject).toBe('Custom subject');
             expect(mail.html).toContain('Take a look');
-            expect(mail.html).toContain('https://test.eigen.is/docs/doc/x/y/z');
+            // HTML attaches a paperclip pill built from the path, not the documentUrl.
+            expect(mail.html).toContain('Open collab-mail-test');
+            // Plain-text fallback carries the user-supplied documentUrl.
             expect(mail.text).toContain('Take a look');
+            expect(mail.text).toContain('https://test.eigen.is/docs/doc/x/y/z');
             spy.mockRestore();
         });
     });

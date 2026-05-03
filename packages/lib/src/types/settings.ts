@@ -73,7 +73,7 @@ export type ServerSettings = {
             guestOnAclAdd: boolean;
             userOnAclAdd: boolean;
             userOnCalendarInvite: boolean;
-            userOnAccessRequest: boolean;
+            ownerOnAccessRequest: boolean;
         };
     };
 };

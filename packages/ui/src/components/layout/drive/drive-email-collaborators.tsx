@@ -1,9 +1,11 @@
 import { getDriveShareUrl } from '@workspace/lib/api';
 import { useEmailCollaborators } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { LightEditor } from '@workspace/ui/components/layout/editor/light-editor';
 import { useEffect, useState } from 'react';
@@ -15,8 +17,11 @@ type DriveEmailCollaboratorsProps = {
 };
 
 const MESSAGE_TEXT_LIMIT = 10000;
+const SUBJECT_LIMIT = 200;
 
 export function DriveEmailCollaborators({ path, open, onOpenChange }: DriveEmailCollaboratorsProps) {
+    const defaultSubject = stripEigenExtension(path.name);
+    const [subject, setSubject] = useState(defaultSubject);
     const [message, setMessage] = useState('');
     const [messageText, setMessageText] = useState('');
     const [sendCopyToSelf, setSendCopyToSelf] = useState(true);
@@ -24,11 +29,12 @@ export function DriveEmailCollaborators({ path, open, onOpenChange }: DriveEmail
 
     useEffect(() => {
         if (open) {
+            setSubject(defaultSubject);
             setMessage('');
             setMessageText('');
             setSendCopyToSelf(true);
         }
-    }, [open]);
+    }, [open, defaultSubject]);
 
     const handleSend = () => {
         const documentUrl = getDriveShareUrl(path);
@@ -36,6 +42,7 @@ export function DriveEmailCollaborators({ path, open, onOpenChange }: DriveEmail
         emailMutation.mutate(
             {
                 pathId: path.id,
+                subject: subject.trim() || defaultSubject,
                 message,
                 documentUrl,
                 sendCopyToSelf,
@@ -47,6 +54,7 @@ export function DriveEmailCollaborators({ path, open, onOpenChange }: DriveEmail
     };
 
     const overLimit = messageText.length > MESSAGE_TEXT_LIMIT;
+    const subjectOverLimit = subject.length > SUBJECT_LIMIT;
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -55,6 +63,15 @@ export function DriveEmailCollaborators({ path, open, onOpenChange }: DriveEmail
                     <DialogTitle>Email collaborators</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="email-subject">Subject</Label>
+                        <Input
+                            id="email-subject"
+                            value={subject}
+                            onChange={(e) => setSubject(e.target.value)}
+                            maxLength={SUBJECT_LIMIT}
+                        />
+                    </div>
                     <div className="space-y-2">
                         <Label>Message</Label>
                         <div className="rounded-md border">
@@ -87,7 +104,10 @@ export function DriveEmailCollaborators({ path, open, onOpenChange }: DriveEmail
                     <Button variant="outline" onClick={() => onOpenChange(false)} disabled={emailMutation.isPending}>
                         Cancel
                     </Button>
-                    <Button onClick={handleSend} disabled={!messageText.trim() || overLimit || emailMutation.isPending}>
+                    <Button
+                        onClick={handleSend}
+                        disabled={!messageText.trim() || overLimit || subjectOverLimit || emailMutation.isPending}
+                    >
                         {emailMutation.isPending ? 'Sending...' : 'Send'}
                     </Button>
                 </DialogFooter>

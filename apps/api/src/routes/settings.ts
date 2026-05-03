@@ -93,7 +93,7 @@ export const settingsRouter = new Elysia({ name: 'settings' })
                                 guestOnAclAdd: t.Optional(t.Boolean()),
                                 userOnAclAdd: t.Optional(t.Boolean()),
                                 userOnCalendarInvite: t.Optional(t.Boolean()),
-                                userOnAccessRequest: t.Optional(t.Boolean()),
+                                ownerOnAccessRequest: t.Optional(t.Boolean()),
                             }),
                         ),
                     }),

@@ -43,7 +43,7 @@ const settingsStore = new JsonStore<ServerSettings>(serverFs, 'settings.json', {
             guestOnAclAdd: true,
             userOnAclAdd: false,
             userOnCalendarInvite: true,
-            userOnAccessRequest: true,
+            ownerOnAccessRequest: true,
         },
     },
 });

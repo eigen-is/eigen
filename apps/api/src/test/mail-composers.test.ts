@@ -66,16 +66,43 @@ describe('composeCollaboratorsEmail', () => {
     test('embeds user-typed HTML and attaches the path link', () => {
         const mail = composeCollaboratorsEmail(
             PATH,
+            null,
             '<p>Hi team</p>',
             'https://test.eigen.is/docs/doc/u-owner/m1/p1',
             { name: 'Alice', email: 'alice@test.eigen.is' },
             'bob@test.eigen.is',
         );
         expect(mail.to[0].address).toBe('bob@test.eigen.is');
+        expect(mail.subject).toBe('Quarterly Plan'); // falls back to doc name when subject is null
         expect(mail.html).toContain('<p>Hi team</p>');
         expect(mail.html).toContain('Quarterly Plan');
         expect(mail.text).toContain('Hi team');
         expect(mail.text).toContain('https://test.eigen.is/docs/doc/u-owner/m1/p1');
         expect(mail.from?.address).toBe('alice@test.eigen.is');
+    });
+
+    test('uses custom subject when provided', () => {
+        const mail = composeCollaboratorsEmail(
+            PATH,
+            'Quick review needed',
+            '<p>Hi team</p>',
+            'https://test.eigen.is/docs/doc/u-owner/m1/p1',
+            { name: 'Alice', email: 'alice@test.eigen.is' },
+            'bob@test.eigen.is',
+        );
+        expect(mail.subject).toBe('Quick review needed');
+        expect(mail.html).toContain('Quick review needed');
+    });
+
+    test('falls back to doc name for whitespace-only subject', () => {
+        const mail = composeCollaboratorsEmail(
+            PATH,
+            '   ',
+            '<p>Hi team</p>',
+            'https://test.eigen.is/docs/doc/u-owner/m1/p1',
+            { name: 'Alice', email: 'alice@test.eigen.is' },
+            'bob@test.eigen.is',
+        );
+        expect(mail.subject).toBe('Quarterly Plan');
     });
 });

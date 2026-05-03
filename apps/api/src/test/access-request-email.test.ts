@@ -18,7 +18,7 @@ async function setToggle(value: boolean) {
     await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notifications: { email: { userOnAccessRequest: value } } }),
+        body: JSON.stringify({ notifications: { email: { ownerOnAccessRequest: value } } }),
     });
 }
 

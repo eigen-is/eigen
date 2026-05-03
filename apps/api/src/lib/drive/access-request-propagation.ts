@@ -1,0 +1,35 @@
+import { parseOwnerId } from '@workspace/lib/types';
+import { getServerSettings } from '../config/server-settings';
+import { composeAccessRequestEmail } from '../core/mail-composers';
+import { sendMail } from '../core/mailer';
+import type { Home } from '../home';
+
+export async function propagateAccessRequest(
+    home: Home,
+    mountId: string,
+    pathId: string,
+    requester: { name: string; email: string },
+    message: string | null,
+): Promise<void> {
+    const path = await home.drive.getPath(mountId, pathId);
+    if (!path || path.trashedAt) return;
+
+    const requesterName = requester.name || requester.email;
+    home.notifications?.persist({
+        type: 'access-request',
+        tag: `access-request:${home.user.id}:${mountId}:${pathId}:${requester.email}`,
+        title: `${requesterName} requested access to "${path.name}"`,
+        body: message,
+        actorEmail: requester.email,
+    });
+
+    if (parseOwnerId(home.user.id).type === 'user' && getServerSettings().notifications.email.ownerOnAccessRequest) {
+        const mail = composeAccessRequestEmail(
+            path,
+            { name: home.user.name, email: home.user.email },
+            { name: requesterName, email: requester.email },
+            message,
+        );
+        sendMail(mail).catch((err) => console.error('Failed to send access-request email:', err));
+    }
+}

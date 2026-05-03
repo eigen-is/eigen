@@ -179,10 +179,10 @@ export function ServerSettingsPage() {
                         onChange={(v) => updateEmailFlag('userOnCalendarInvite', v)}
                     />
                     <SwitchRow
-                        label="Email users for access requests"
+                        label="Email owner on access request"
                         description="Reaches owners not actively in Eigen."
-                        checked={current.notifications.email.userOnAccessRequest}
-                        onChange={(v) => updateEmailFlag('userOnAccessRequest', v)}
+                        checked={current.notifications.email.ownerOnAccessRequest}
+                        onChange={(v) => updateEmailFlag('ownerOnAccessRequest', v)}
                     />
                 </div>
             </div>
