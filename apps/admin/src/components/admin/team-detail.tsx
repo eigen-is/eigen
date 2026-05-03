@@ -316,6 +316,7 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
                     submitLabel="Create Mount"
                     defaultStorageType={defaultMountStorageType}
                     defaultMaxSizeMB={serverSettings?.quotas.defaultMountMaxSizeMB}
+                    defaultS3Config={serverSettings?.defaults.mount.s3Config}
                 />
 
                 <MountDialog
