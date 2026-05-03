@@ -2,6 +2,7 @@ import { createHmac, randomUUID } from 'node:crypto';
 import { generateRandomString, hashPassword } from 'better-auth/crypto';
 import { and, eq, like, lt } from 'drizzle-orm';
 import { account, user as userTable, verification } from '../../../auth-schema.ts';
+import { getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core/errors';
 import { sendMail } from '../core/mailer';
 import { reconcileSharesForNewUser } from '../share';
@@ -28,7 +29,7 @@ export async function requestOtp(email: string): Promise<void> {
     const existingUser = await getUserByEmail(email);
     if (existingUser) {
         if (existingUser.role !== 'guest') throw new ApiError(400, 'Use password login');
-    } else {
+    } else if (!getServerSettings().guests.openSignup) {
         const entries = await getEntriesForTarget(email);
         if (entries.length === 0) throw new ApiError(400, 'No shared resources found for this email');
     }
