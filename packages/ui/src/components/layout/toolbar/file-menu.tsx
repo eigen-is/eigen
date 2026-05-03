@@ -12,6 +12,7 @@ import {
     DRIVE_MIME_STICKIES,
 } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
+import { ConfirmDialog } from '@workspace/ui/components/confirm-dialog';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -22,7 +23,6 @@ import {
     DropdownMenuSubTrigger,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { ConfirmDialog } from '@workspace/ui/components/layout/delete/confirm-dialog';
 import {
     Download,
     FileText,
