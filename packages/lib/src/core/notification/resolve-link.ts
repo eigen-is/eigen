@@ -120,8 +120,14 @@ export async function resolveNotificationLink(
             return getCalendarAppUrl();
 
         case 'mail': {
-            const mailId = tag.startsWith('mail:') ? tag.slice(5) : null;
-            return getMailAppUrl(mailId ? `box/inbox?mailId=${encodeURIComponent(mailId)}` : 'box/inbox');
+            // Tag is `mail:new` (post-dedupe) for fresh notifications; older rows from
+            // before the dedupe change may still carry `mail:{id}` and resolve to a
+            // specific message. Both forms degrade gracefully.
+            const after = tag.slice(5);
+            if (after && after !== 'new') {
+                return getMailAppUrl(`box/inbox?mailId=${encodeURIComponent(after)}`);
+            }
+            return getMailAppUrl('box/inbox');
         }
 
         case 'access-request':
