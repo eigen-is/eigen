@@ -5,9 +5,36 @@ import { replaySheetsOps } from '../replay-ops';
 const baseSheet = (id: string, name: string): Sheet => ({ id, name, order: 0, data: [[null]], config: {} });
 
 describe('replaySheetsOps', () => {
-    test('empty opBatches returns input by reference', () => {
-        const sheets = [baseSheet('s1', 'Sheet1')];
-        expect(replaySheetsOps(sheets, [])).toBe(sheets);
+    test('empty opBatches: celldata-only sheet passes through unchanged', () => {
+        const sheet: Sheet = {
+            id: 's1',
+            name: 'Sheet1',
+            order: 0,
+            celldata: [{ r: 0, c: 0, v: { v: 'a', m: 'a', ct: { fa: 'General', t: 'g' } } }],
+            config: {},
+        };
+        const result = replaySheetsOps([sheet], []);
+        expect(result[0].celldata).toEqual([{ r: 0, c: 0, v: { v: 'a', m: 'a', ct: { fa: 'General', t: 'g' } } }]);
+        expect(result[0].data).toBeUndefined();
+    });
+
+    test('empty opBatches: snapshot with fresh data + stale celldata gets celldata resynced', () => {
+        // Repro for the empty-export bug: FE state edits update `data` but
+        // never refresh `celldata`, so a flushed snapshot has fresh data and
+        // stale (often empty) celldata. Without ops, replay must still sync
+        // celldata — otherwise HTML/PDF/XLSX exports come out empty.
+        const sheet: Sheet = {
+            id: 's1',
+            name: 'Sheet1',
+            order: 0,
+            data: [[{ v: 'hello', m: 'hello', ct: { fa: 'General', t: 'g' } }]],
+            celldata: [], // stale: editor never updated it after the user typed "hello"
+            config: {},
+        };
+        const result = replaySheetsOps([sheet], []);
+        expect(result[0].celldata).toEqual([
+            { r: 0, c: 0, v: { v: 'hello', m: 'hello', ct: { fa: 'General', t: 'g' } } },
+        ]);
     });
 
     test('addSheet appends a sheet', () => {
