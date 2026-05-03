@@ -1,6 +1,19 @@
 import { describe, expect, test } from 'bun:test';
-import type { Sheet } from '@workspace/lib/sheets';
+import type { Sheet, SheetConfig } from '@workspace/lib/sheets';
 import { applySheetsDeleteRowCol, applySheetsInsertRowCol } from '../rowcol';
+
+// Sheet shape with the editor-runtime extras the engine passes through but lib's
+// canonical Sheet/SheetConfig don't type (rowReadOnly/colReadOnly guards,
+// frozen/filter/dataVerification state-only fields).
+type TestSheet = Sheet & {
+    config?: SheetConfig & {
+        rowReadOnly?: Record<string, number>;
+        colReadOnly?: Record<string, number>;
+    };
+    frozen?: unknown;
+    filter?: unknown;
+    dataVerification?: unknown;
+};
 
 const cell = (v: string | number) => ({ v, m: String(v), ct: { fa: 'General', t: 'g' } });
 
@@ -8,8 +21,8 @@ const makeSheet = (
     id: string,
     name: string,
     data: (ReturnType<typeof cell> | null)[][],
-    extras: Partial<Sheet> = {},
-): Sheet => ({
+    extras: Partial<TestSheet> = {},
+): TestSheet => ({
     id,
     name,
     order: 0,
@@ -194,7 +207,7 @@ describe('applySheetsInsertRowCol/Delete — cross-sheet formula refs', () => {
             id: 's2',
             name: 'Sheet2',
             order: 1,
-            data: [[{ v: '', m: '', ct: { fa: 'General', t: 'g' }, f: '=Sheet1!A1' } as any]],
+            data: [[{ v: '', m: '', ct: { fa: 'General', t: 'g' }, f: '=Sheet1!A1' }]],
             config: {},
         };
         const result = applySheetsInsertRowCol([s1, s2], {
@@ -212,7 +225,7 @@ describe('applySheetsInsertRowCol/Delete — cross-sheet formula refs', () => {
             id: 's1',
             name: 'Sheet1',
             order: 0,
-            data: [[cell(1)], [cell(2)], [{ v: 0, m: '0', ct: { fa: 'General', t: 'n' }, f: '=A1+A2' } as any]],
+            data: [[cell(1)], [cell(2)], [{ v: 0, m: '0', ct: { fa: 'General', t: 'n' }, f: '=A1+A2' }]],
             config: {},
         };
         const result = applySheetsInsertRowCol([s1], {
@@ -230,12 +243,7 @@ describe('applySheetsInsertRowCol/Delete — cross-sheet formula refs', () => {
             id: 's1',
             name: 'Sheet1',
             order: 0,
-            data: [
-                [cell(1)],
-                [cell(2)],
-                [cell(3)],
-                [{ v: 0, m: '0', ct: { fa: 'General', t: 'n' }, f: '=A1:A3' } as any],
-            ],
+            data: [[cell(1)], [cell(2)], [cell(3)], [{ v: 0, m: '0', ct: { fa: 'General', t: 'n' }, f: '=A1:A3' }]],
             config: {},
         };
         const result = applySheetsDeleteRowCol([s1], { type: 'row', start: 0, end: 2, id: 's1' });
@@ -246,9 +254,9 @@ describe('applySheetsInsertRowCol/Delete — cross-sheet formula refs', () => {
 
 describe('applySheetsInsertRowCol/Delete — guards', () => {
     test('throws readOnly when target row is read-only', () => {
-        const sheets: Sheet[] = [
+        const sheets: TestSheet[] = [
             makeSheet('s1', 'Sheet1', [[cell('a')]], {
-                config: { rowReadOnly: { '0': 1 } } as any,
+                config: { rowReadOnly: { '0': 1 } },
             }),
         ];
         expect(() =>
@@ -282,18 +290,18 @@ describe('applySheetsInsertRowCol/Delete — guards', () => {
     });
 
     test('delete throws readOnly when any row in [start, end] is read-only', () => {
-        const sheets: Sheet[] = [
+        const sheets: TestSheet[] = [
             makeSheet('s1', 'Sheet1', [[cell('a')], [cell('b')], [cell('c')]], {
-                config: { rowReadOnly: { '1': 1 } } as any,
+                config: { rowReadOnly: { '1': 1 } },
             }),
         ];
         expect(() => applySheetsDeleteRowCol(sheets, { type: 'row', start: 0, end: 2, id: 's1' })).toThrow('readOnly');
     });
 
     test('delete throws readOnly for column range', () => {
-        const sheets: Sheet[] = [
+        const sheets: TestSheet[] = [
             makeSheet('s1', 'Sheet1', [[cell('a'), cell('b'), cell('c')]], {
-                config: { colReadOnly: { '2': 1 } } as any,
+                config: { colReadOnly: { '2': 1 } },
             }),
         ];
         expect(() => applySheetsDeleteRowCol(sheets, { type: 'column', start: 1, end: 2, id: 's1' })).toThrow(
@@ -304,7 +312,7 @@ describe('applySheetsInsertRowCol/Delete — guards', () => {
 
 describe('applySheetsInsertRowCol — passthrough', () => {
     test('state-only fields on input pass through engine unchanged', () => {
-        const sheets: any[] = [
+        const sheets: TestSheet[] = [
             {
                 id: 's1',
                 name: 'Sheet1',
@@ -316,7 +324,7 @@ describe('applySheetsInsertRowCol — passthrough', () => {
                 dataVerification: { '0_0': { type: 'list', value1: 'a,b' } },
             },
         ];
-        const result = applySheetsInsertRowCol(sheets as Sheet[], {
+        const result = applySheetsInsertRowCol(sheets, {
             type: 'row',
             index: 0,
             count: 1,
@@ -324,8 +332,8 @@ describe('applySheetsInsertRowCol — passthrough', () => {
             id: 's1',
         });
         // Engine doesn't iterate these — they survive cloneDeep unchanged.
-        expect((result[0] as any).frozen).toEqual({ type: 'rangeRow', range: { row_focus: 5, column_focus: 0 } });
-        expect((result[0] as any).filter).toBeDefined();
-        expect((result[0] as any).dataVerification).toBeDefined();
+        expect(result[0].frozen).toEqual({ type: 'rangeRow', range: { row_focus: 5, column_focus: 0 } });
+        expect(result[0].filter).toBeDefined();
+        expect(result[0].dataVerification).toBeDefined();
     });
 });
