@@ -11,7 +11,7 @@ import type { Attachment } from '@workspace/lib/types/mail';
 import { externalOwnerId } from '@workspace/lib/types/owner';
 import { parseIcs } from '../caldav/ical-parse';
 import { serializeEventForImip } from '../caldav/ical-serialize';
-import { getDomain } from '../config/server-config';
+import { renderEigenEmail } from '../core/mail-template';
 import type { OutboundICalEvent, OutboundMail } from '../core/mailer';
 import type { Home } from '../home';
 import type { ReceiveInvitationPayload } from './calendar';
@@ -35,33 +35,23 @@ function buildSection(label: string, value: string): string {
     </div>`;
 }
 
-function buildEventHtml(event: CalendarEvent, organizer: Organizer, banner?: string): string {
-    const domain = getDomain();
-    const domainUrl = domain === 'localhost' ? '' : `https://${domain}`;
+function buildEventBodyHtml(event: CalendarEvent): string {
     const sections: string[] = [];
-
     const when = formatEventWhen(event.startTime, event.endTime, event.allDay, event.timezone);
     sections.push(buildSection('When', escapeHtml(when)));
     if (event.location) sections.push(buildSection('Where', escapeHtml(event.location)));
     if (event.description)
         sections.push(buildSection('Description', escapeHtml(event.description).replace(/\n/g, '<br>')));
+    return sections.join('\n');
+}
 
-    const bannerHtml = banner
-        ? `<div style="background:#fce8e6;color:#c5221f;font-weight:600;font-size:13px;padding:8px 12px;border-radius:4px;margin-bottom:16px">${banner}</div>`
-        : '';
-
-    const organizerName = escapeHtml(organizer.name || organizer.email);
-    const footerLink = domainUrl
-        ? `<a href="${domainUrl}" style="color:#1a73e8;text-decoration:none">Eigen Calendar</a>`
-        : 'Eigen Calendar';
-
-    return `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:0 16px">
-  <div style="border:1px solid #e0e0e0;border-radius:8px;padding:24px;margin:16px 0">
-    ${bannerHtml}<h2 style="margin:0 0 20px;font-size:18px;font-weight:600;color:#1a1a1a">${escapeHtml(event.title)}</h2>
-    ${sections.join('\n    ')}
-  </div>
-  <div style="font-size:12px;color:#5f6368;padding:0 4px">Invitation from ${organizerName} · ${footerLink}</div>
-</div>`;
+function buildEventHtml(event: CalendarEvent, organizer: Organizer, banner?: string): string {
+    return renderEigenEmail({
+        title: event.title,
+        bodyHtml: buildEventBodyHtml(event),
+        banner,
+        footerLine: `Invitation from ${organizer.name || organizer.email}`,
+    });
 }
 
 function withOrganizer(event: CalendarEvent, organizer: Organizer): CalendarEvent {
@@ -135,7 +125,12 @@ export function composeRsvpReply(
         to: [{ name: organizer.name ?? '', address: organizer.email }],
         subject: `${STATUS_LABELS[status]}: ${event.title}`,
         text: `${attendeeName} has ${statusLabel} the invitation: ${event.title}`,
-        html: buildEventHtml(event, organizer, `${escapeHtml(attendeeName)} has ${statusLabel} the invitation`),
+        html: renderEigenEmail({
+            title: event.title,
+            bodyHtml: buildEventBodyHtml(event),
+            banner: `${escapeHtml(attendeeName)} has ${statusLabel} the invitation`,
+            footerLine: `Reply from ${attendeeName}`,
+        }),
         icalEvent: icalEvent(replyEvent, 'REPLY'),
     };
 }
