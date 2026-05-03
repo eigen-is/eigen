@@ -12,7 +12,17 @@ import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
 import { UserAvatar } from '@workspace/ui/components/layout/user-avatar';
 import { Separator } from '@workspace/ui/components/separator';
-import { ClipboardList, Plus, Settings, UserMinus, UserPlus, UserRoundCheck, Users, UsersRound } from 'lucide-react';
+import {
+    ClipboardList,
+    KeyRound,
+    Plus,
+    Settings,
+    UserMinus,
+    UserPlus,
+    UserRoundCheck,
+    Users,
+    UsersRound,
+} from 'lucide-react';
 import { useState } from 'react';
 
 type AdminSidebarProps = {
@@ -65,6 +75,12 @@ export function AdminSidebar({
                                 icon={<ClipboardList className="h-4 w-4" />}
                                 label="Onboarding"
                                 to="/onboarding"
+                                condensed={condensed}
+                            />
+                            <SidebarItem
+                                icon={<KeyRound className="h-4 w-4" />}
+                                label="Guest access"
+                                to="/guest-settings"
                                 condensed={condensed}
                             />
                         </>
