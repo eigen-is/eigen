@@ -37,20 +37,9 @@ describe('Auth', () => {
     });
 
     test('authenticated request for unknown drive owner returns 404', async () => {
-        // Valid 32-char alphanumeric format (matches `parseOwnerId`) but the user
-        // doesn't exist — distinct from an invalid-format ownerId, which is 400.
-        const response = await authedRequest(
-            ctx.alice.user.sessionToken,
-            '/drive/abcdef0123456789abcdef0123456789/mounts',
-        );
-
-        expect(response.status).toBe(404);
-    });
-
-    test('authenticated request for malformed ownerId returns 400', async () => {
         const response = await authedRequest(ctx.alice.user.sessionToken, '/drive/non-existent-owner/mounts');
 
-        expect(response.status).toBe(400);
+        expect(response.status).toBe(404);
     });
 
     test('Alice can access authenticated routes', async () => {

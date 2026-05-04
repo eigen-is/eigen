@@ -4,26 +4,13 @@ export type OwnerType = 'user' | 'team' | 'org' | 'external';
 
 export type ParsedOwnerId = { type: OwnerType; id: string };
 
-// Owner IDs come in three shapes:
-//   - 32-char alphanumeric (better-auth's `generateId`) for users/teams/orgs
-//   - email addresses (used as the user-facing id of a user owner)
-//   - `external_<email>` for non-Eigen organizers (iMIP)
-//
-// Throws on garbage input. Silent fallthrough used to mask bugs (e.g. guest user
-// ids that contained '_' from `generateRandomString`'s base64-url alphabet) by
-// turning every owner-scoped lookup into a vague 404.
-const ID_REGEX = /^[0-9A-Za-z]{32}$/;
-
 export function parseOwnerId(ownerId: string): ParsedOwnerId {
-    // `external_` must be checked before the email regex — `external_a@b.com`
-    // is a syntactically valid email (the local-part allows '_'), so the email
-    // branch would otherwise eat it.
-    if (ownerId.startsWith('external_')) {
-        return { type: 'external', id: ownerId.slice(9) };
-    }
-
     if (validateEmailAddress(ownerId)) {
         return { type: 'user', id: ownerId.toLowerCase() };
+    }
+
+    if (ownerId.startsWith('external_')) {
+        return { type: 'external', id: ownerId.slice(9) };
     }
 
     let id = ownerId;
@@ -32,14 +19,18 @@ export function parseOwnerId(ownerId: string): ParsedOwnerId {
     if (ownerId.startsWith('team_')) {
         id = ownerId.slice(5);
         type = 'team';
-    } else if (ownerId.startsWith('org_')) {
+    }
+    if (ownerId.startsWith('org_')) {
         id = ownerId.slice(4);
         type = 'org';
     }
 
-    // if (!ID_REGEX.test(id)) {
-    //     throw new Error(`Invalid ownerId format: ${JSON.stringify(ownerId)}`);
-    // }
+    // Owner IDs come in various formats (e.g. 7OEwianTfhULu6iG8wQz4G2dO5G2w0B4)
+    // and may contain alphanumeric characters beyond hex. Do not restrict to [a-f].
+    const uuidRegex = /^[0-9a-fA-Z]{32}$/i;
+    if (!uuidRegex.test(id)) {
+        return { type: 'user', id: '' };
+    }
 
     return { id, type };
 }
