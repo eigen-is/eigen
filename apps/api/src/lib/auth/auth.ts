@@ -99,6 +99,11 @@ export const auth = betterAuth({
             },
         }),
         admin(),
+        // We use the organization plugin only for its data model (members, teams, RBAC) —
+        // not its invitation flow. New external users are onboarded via the waitlist
+        // (see apps/api/src/lib/waitlist), which is why no `sendInvitationEmail` hook is wired
+        // here. Existing users get auto-added to the default org via the user-create hook
+        // above, and to teams via `auth.api.addMember` (admin UI), which both bypass invites.
         organization({
             teams: {
                 enabled: true,
