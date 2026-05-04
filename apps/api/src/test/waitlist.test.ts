@@ -399,12 +399,33 @@ describe('Waitlist', () => {
         });
     });
 
+    test('welcomeMail encodes non-ASCII names in headers per RFC 2047', async () => {
+        // nodemailer's MailComposer should wrap non-ASCII in `=?UTF-8?...?=` encoded-words
+        // for headers (To, Subject, etc). Hand-rolled RFC822 used to skip this and the raw
+        // bytes ended up in the headers, which strict parsers reject.
+        await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                onboarding: { welcomeMail: { enabled: true, body: '<p>Hi {name}.</p>' } },
+            }),
+        });
+
+        const { welcomeMail } = await import('../lib/mail/welcome');
+        const raw = await welcomeMail('Café Owner', 'cafe@test.eigen.is');
+        const headerSection = raw!.toString('utf8').split('\r\n\r\n')[0] ?? '';
+
+        expect(headerSection).not.toContain('Café');
+        expect(headerSection).toMatch(/=\?UTF-8\?[QB]\?[^?]+\?=/);
+    });
+
     test('welcomeMail HTML-escapes the user name when substituted into the body', async () => {
         // Plant a welcome body that interpolates `{name}`. Names come straight from
         // registration and can contain HTML-special chars; the body is HTML so substitution
         // must escape — otherwise the script tag would land verbatim in the html/* part.
         // The text/plain part legitimately contains the raw chars (mail clients render that
-        // section as literal text, no interpretation), so we only assert against the html.
+        // section as literal text, no interpretation), so we only assert against the html
+        // after decoding any quoted-printable nodemailer applied.
         await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -414,11 +435,13 @@ describe('Waitlist', () => {
         });
 
         const { welcomeMail } = await import('../lib/mail/welcome');
-        const raw = welcomeMail('Alice <script>', 'alice@test.eigen.is');
+        const raw = await welcomeMail('Alice <script>', 'alice@test.eigen.is');
         expect(raw).not.toBeNull();
-        // Pull out just the text/html part of the multipart message.
-        const htmlPart = raw!.split('Content-Type: text/html;')[1];
-        expect(htmlPart).toBeDefined();
+        const text = raw!.toString('utf8');
+
+        // Pull out just the text/html part and undo QP soft line wraps so substring asserts
+        // don't break if nodemailer wrapped a long line mid-token.
+        const htmlPart = (text.split('Content-Type: text/html;')[1] ?? '').replace(/=\r?\n/g, '');
         expect(htmlPart).not.toContain('<script>');
         expect(htmlPart).toContain('&lt;script&gt;');
     });

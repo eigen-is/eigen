@@ -86,7 +86,7 @@ export default class Maildir {
         this.db = new MailDB(this.home);
         await this.db.init();
         if (isNew) {
-            const welcome = welcomeMail(this.home.user.name, this.home.user.email);
+            const welcome = await welcomeMail(this.home.user.name, this.home.user.email);
             if (welcome) await this.store.deliverAtomic(welcome, '');
         }
         this.store.watchMailboxes((mailbox) =>

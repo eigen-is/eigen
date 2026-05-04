@@ -171,9 +171,9 @@ export class MaildirStore {
         }
     }
 
-    async deliverAtomic(message: string, mailbox: string): Promise<{ uniqueId: string; size: number }> {
+    async deliverAtomic(message: string | Buffer, mailbox: string): Promise<{ uniqueId: string; size: number }> {
         const uniqueId = createUniqueMessageId();
-        const size = Buffer.byteLength(message, 'utf-8');
+        const size = typeof message === 'string' ? Buffer.byteLength(message, 'utf-8') : message.byteLength;
         const filename = `${uniqueId},S=${size}`;
         const mailboxPath = this.mailboxDir(mailbox);
 
