@@ -1,4 +1,4 @@
-import { parseOwnerId } from '@workspace/lib/types';
+import { type ParsedOwnerId, parseOwnerId } from '@workspace/lib/types';
 import { createAsyncSingleton } from '../../utils/singleton';
 import { ApiError } from '../core';
 import { getOrgExists } from '../org/org.ts';
@@ -28,8 +28,10 @@ export async function getHome(ownerId: string): Promise<Home> {
     homeFactories.set(
         ownerId,
         createAsyncSingleton(async () => {
-            const parsed = parseOwnerId(ownerId);
-            if (!parsed) {
+            let parsed: ParsedOwnerId;
+            try {
+                parsed = parseOwnerId(ownerId);
+            } catch {
                 throw new ApiError(400, 'Invalid ownerId format');
             }
             let home: Home;
