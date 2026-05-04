@@ -50,4 +50,22 @@ describe('renderEigenEmail', () => {
         const html = renderEigenEmail({ title: 'T', bodyHtml: '', footerLine: 'From Alice' });
         expect(html).toContain('From Alice');
     });
+
+    test('autolinks bare http(s) URLs in body so admin plaintext templates render clickable', () => {
+        const html = renderEigenEmail({
+            title: 'T',
+            bodyHtml: 'Click https://eigen.is/space/signup?token=abc to continue',
+        });
+        expect(html).toContain('<a href="https://eigen.is/space/signup?token=abc"');
+        expect(html).toMatch(/>https:\/\/eigen\.is\/space\/signup\?token=abc<\/a>/);
+    });
+
+    test('does not double-wrap URLs that already sit inside an anchor', () => {
+        const html = renderEigenEmail({
+            title: 'T',
+            bodyHtml: '<a href="https://eigen.is">https://eigen.is</a>',
+        });
+        // The anchor tag should appear exactly once — no nested <a><a>...</a></a>.
+        expect(html.match(/<a\s/g)?.length).toBe(1);
+    });
 });

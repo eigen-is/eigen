@@ -98,6 +98,17 @@ function renderFooter(footerLine: string): string {
     return `<div style="font-size:12px;color:${EMAIL_MUTED};padding:0 4px;margin-top:8px">${escapeHtml(footerLine)} · ${domainLink}</div>`;
 }
 
+// Wraps bare http(s) URLs in `<a href>` so admin-templated bodies (welcome, invite) get
+// clickable links even when the template stores the URL as plain text. URLs already inside
+// an existing `<a>...</a>` block are passed through; URLs inside double-quoted attribute
+// values (e.g. `<img src="…">`) are skipped via the negative lookbehind.
+function autolinkUrls(html: string): string {
+    return html.replace(
+        /(<a\s[^>]*>[\s\S]*?<\/a>)|(?<!["'])\b(https?:\/\/[^\s<>"']+)/gi,
+        (_, anchor, url) => anchor ?? `<a href="${url}" style="color:${EMAIL_LINK}">${url}</a>`,
+    );
+}
+
 export function renderEigenEmail(input: EmailShellInput): string {
     const banner = input.banner ? renderBanner(input.banner) : '';
     const pills = input.attachmentLinks?.length
@@ -108,7 +119,7 @@ export function renderEigenEmail(input: EmailShellInput): string {
     return `<div style="font-family:${EMAIL_FONT};padding:0 16px">
   <div style="border:1px solid ${EMAIL_BORDER};border-radius:${EMAIL_RADIUS};padding:24px;margin:16px 0;color:${EMAIL_TEXT}">
     ${banner}${title}
-    ${input.bodyHtml}
+    ${autolinkUrls(input.bodyHtml)}
     ${pills}
   </div>
   ${footer}
