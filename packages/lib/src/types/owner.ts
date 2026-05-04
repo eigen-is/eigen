@@ -5,12 +5,15 @@ export type OwnerType = 'user' | 'team' | 'org' | 'external';
 export type ParsedOwnerId = { type: OwnerType; id: string };
 
 export function parseOwnerId(ownerId: string): ParsedOwnerId {
-    if (validateEmailAddress(ownerId)) {
-        return { type: 'user', id: ownerId.toLowerCase() };
-    }
-
+    // `external_` must be checked before the email branch — `external_a@b.com`
+    // is a syntactically valid email (the local-part allows '_'), so the email
+    // branch would otherwise classify it as a user owner.
     if (ownerId.startsWith('external_')) {
         return { type: 'external', id: ownerId.slice(9) };
+    }
+
+    if (validateEmailAddress(ownerId)) {
+        return { type: 'user', id: ownerId.toLowerCase() };
     }
 
     let id = ownerId;
