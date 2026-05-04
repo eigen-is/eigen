@@ -4,7 +4,7 @@ import type { WaitlistEntry } from '@workspace/lib/types/waitlist';
 import { validateEmailAddress, validateUsername } from '@workspace/lib/validation';
 import { and, desc, eq } from 'drizzle-orm';
 import { getServerDataPath } from '../config/paths';
-import { getPublicConfig } from '../config/server-config';
+import { getDomain, getOrgName, getPublicConfig } from '../config/server-config';
 import { getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core/errors';
 import { composeInviteEmail } from '../core/mail-composers';
@@ -202,37 +202,26 @@ export function requireWaitlistEnabled() {
 }
 
 export function buildInviteEmail(entry: { email: string; inviteToken: string | null }): OutboundMail {
-    const settings = getServerSettings();
-    const config = getPublicConfig();
-    const template = settings.onboarding.inviteEmail;
-    const orgName = config?.orgName ?? 'Eigen';
-    const domain = config?.domain ?? 'localhost';
+    const template = getServerSettings().onboarding.inviteEmail;
+    const orgName = getOrgName();
+    const domain = getDomain();
     const inviteLink = `https://${domain}/space/signup?token=${entry.inviteToken}`;
 
+    const subject = template.subject
+        .replaceAll('{email}', entry.email)
+        .replaceAll('{orgName}', orgName)
+        .replaceAll('{domain}', domain)
+        .replaceAll('{inviteLink}', inviteLink);
+
     // Body template is HTML — escape token values so the recipient email or an admin-set
-    // orgName containing `<` / `&` can't break out of the wrapper. Subject is plain text;
-    // no escaping there. inviteToken is a UUID so the link is always URL-safe; we still
-    // HTML-escape it because it's interpolated into an `href` attribute value.
-    const subjectTokens = { email: entry.email, orgName, domain, inviteLink };
-    const bodyTokens = {
-        email: escapeHtml(entry.email),
-        orgName: escapeHtml(orgName),
-        domain: escapeHtml(domain),
-        inviteLink: escapeHtml(inviteLink),
-    };
+    // orgName containing `<` / `&` can't break out of the wrapper. inviteToken is a UUID so
+    // the link is always URL-safe, but we still HTML-escape it because it's interpolated
+    // into an `href` attribute value.
+    const bodyHtml = template.body
+        .replaceAll('{email}', escapeHtml(entry.email))
+        .replaceAll('{orgName}', escapeHtml(orgName))
+        .replaceAll('{domain}', escapeHtml(domain))
+        .replaceAll('{inviteLink}', escapeHtml(inviteLink));
 
-    return composeInviteEmail({
-        recipient: { email: entry.email },
-        subject: applyTokens(template.subject, subjectTokens),
-        bodyHtml: applyTokens(template.body, bodyTokens),
-        orgName,
-    });
-}
-
-function applyTokens(template: string, values: Record<string, string>): string {
-    let out = template;
-    for (const [key, val] of Object.entries(values)) {
-        out = out.replaceAll(`{${key}}`, val);
-    }
-    return out;
+    return composeInviteEmail(entry.email, subject, bodyHtml, orgName);
 }

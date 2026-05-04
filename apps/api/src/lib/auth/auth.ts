@@ -17,7 +17,7 @@ import {
     verification as verificationScheme,
 } from '../../../auth-schema.ts';
 import { getServerDataPath } from '../config/paths';
-import { getDomain, getServerConfig } from '../config/server-config';
+import { getDomain, getOrgName, getServerConfig } from '../config/server-config';
 import { ApiError } from '../core';
 import { composeOtpEmail } from '../core/mail-composers';
 import { sendMail } from '../core/mailer';
@@ -86,13 +86,7 @@ export const auth = betterAuth({
             otpOptions: {
                 async sendOTP({ user, otp }) {
                     const ok = await sendMail(
-                        composeOtpEmail({
-                            recipient: { name: user.name, email: user.email },
-                            code: otp,
-                            kind: '2fa',
-                            orgName: getServerConfig()?.orgName ?? 'Eigen',
-                            domain: getDomain(),
-                        }),
+                        composeOtpEmail({ name: user.name, email: user.email }, otp, '2fa', getOrgName(), getDomain()),
                     );
                     if (!ok) throw new ApiError(500, 'Failed to send verification code');
                 },

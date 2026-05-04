@@ -2,7 +2,7 @@ import { createHmac, randomUUID } from 'node:crypto';
 import { generateRandomString, hashPassword } from 'better-auth/crypto';
 import { and, eq, like, lt } from 'drizzle-orm';
 import { account, user as userTable, verification } from '../../../auth-schema.ts';
-import { getDomain, getServerConfig } from '../config/server-config';
+import { getDomain, getOrgName } from '../config/server-config';
 import { getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core/errors';
 import { composeOtpEmail } from '../core/mail-composers';
@@ -63,15 +63,7 @@ export async function requestOtp(email: string, ip: string): Promise<void> {
         })
         .run();
 
-    const ok = await sendMail(
-        composeOtpEmail({
-            recipient: { name: email, email },
-            code: otp,
-            kind: 'guest',
-            orgName: getServerConfig()?.orgName ?? 'Eigen',
-            domain: getDomain(),
-        }),
-    );
+    const ok = await sendMail(composeOtpEmail({ name: email, email }, otp, 'guest', getOrgName(), getDomain()));
     if (!ok) throw new ApiError(500, 'Failed to send verification code');
 }
 

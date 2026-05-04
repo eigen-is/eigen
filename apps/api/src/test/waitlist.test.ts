@@ -398,4 +398,28 @@ describe('Waitlist', () => {
             }),
         });
     });
+
+    test('welcomeMail HTML-escapes the user name when substituted into the body', async () => {
+        // Plant a welcome body that interpolates `{name}`. Names come straight from
+        // registration and can contain HTML-special chars; the body is HTML so substitution
+        // must escape — otherwise the script tag would land verbatim in the html/* part.
+        // The text/plain part legitimately contains the raw chars (mail clients render that
+        // section as literal text, no interpretation), so we only assert against the html.
+        await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                onboarding: { welcomeMail: { enabled: true, body: '<p>Hi {name}, welcome.</p>' } },
+            }),
+        });
+
+        const { welcomeMail } = await import('../lib/mail/welcome');
+        const raw = welcomeMail('Alice <script>', 'alice@test.eigen.is');
+        expect(raw).not.toBeNull();
+        // Pull out just the text/html part of the multipart message.
+        const htmlPart = raw!.split('Content-Type: text/html;')[1];
+        expect(htmlPart).toBeDefined();
+        expect(htmlPart).not.toContain('<script>');
+        expect(htmlPart).toContain('&lt;script&gt;');
+    });
 });

@@ -101,82 +101,63 @@ export function composeCollaboratorsEmail(
     };
 }
 
-// System emails (OTP, welcome, invite) — `From: noreply@…` and a {orgName} footer line so
-// every Eigen-authored email carries the same branding shell. Body HTML is admin-authored
-// for welcome/invite (LightEditor output) and hand-rolled for OTP.
+// System emails (OTP, invite) — sent via sendMail() with `From: noreply@…` and a {orgName}
+// footer line so every Eigen-authored email carries the same branding shell. Welcome lives
+// in the user's own maildir (apps/api/src/lib/mail/welcome.ts) so it builds RFC822 directly
+// using renderEigenEmail rather than going through a composer.
 
-export function composeOtpEmail(args: {
-    recipient: { name: string; email: string };
-    code: string;
-    kind: '2fa' | 'guest';
-    orgName: string;
+export function composeOtpEmail(
+    recipient: { name: string; email: string },
+    code: string,
+    kind: '2fa' | 'guest',
+    orgName: string,
     // Web domain — appended as `@domain #code` trailer in the plaintext so iOS Mail's
-    // Security Code AutoFill binds the code to this site. iOS scans the text/plain part
-    // of multipart/alternative; HTML isn't used for detection. Pass undefined on localhost
-    // (binding to localhost is meaningless and pollutes the message body).
-    domain?: string;
-}): OutboundMail {
-    const subject = args.kind === '2fa' ? 'Your verification code' : 'Your guest access code';
+    // Security Code AutoFill binds the code to this site. iOS scans the text/plain part of
+    // multipart/alternative; HTML isn't used for detection. Pass 'localhost' (or undefined)
+    // to skip the trailer — binding to localhost is meaningless and pollutes the body.
+    domain?: string,
+): OutboundMail {
+    const subject = kind === '2fa' ? 'Your verification code' : 'Your guest access code';
     const intro =
-        args.kind === '2fa'
+        kind === '2fa'
             ? 'Use the code below to finish signing in:'
             : 'Use the code below to access your shared documents:';
     const html = renderEigenEmail({
         title: subject,
         bodyHtml:
             `<p style="font-size:14px;line-height:1.5">${intro}</p>` +
-            `<p style="font-family:ui-monospace,Menlo,monospace;font-size:28px;font-weight:600;letter-spacing:4px;margin:16px 0">${escapeHtml(args.code)}</p>` +
+            `<p style="font-family:ui-monospace,Menlo,monospace;font-size:28px;font-weight:600;letter-spacing:4px;margin:16px 0">${escapeHtml(code)}</p>` +
             `<p style="font-size:13px;color:#5f6368">This code expires in 5 minutes.</p>`,
-        footerLine: args.orgName,
+        footerLine: orgName,
     });
-    const intoLine = `${intro.replace(/:$/, '')}: ${args.code}`;
-    const lines = [intoLine, '', 'This code expires in 5 minutes.'];
-    if (args.domain && args.domain !== 'localhost') {
-        lines.push('', `@${args.domain} #${args.code}`);
+    const lines = [`${intro.replace(/:$/, '')}: ${code}`, '', 'This code expires in 5 minutes.'];
+    if (domain && domain !== 'localhost') {
+        lines.push('', `@${domain} #${code}`);
     }
     return {
-        to: [{ name: args.recipient.name, address: args.recipient.email }],
+        to: [{ name: recipient.name, address: recipient.email }],
         subject,
         text: lines.join('\n'),
         html,
     };
 }
 
-export function composeWelcomeEmail(args: {
-    recipient: { name: string; email: string };
-    subject: string;
-    bodyHtml: string;
-    orgName: string;
-}): OutboundMail {
+export function composeInviteEmail(
+    recipientEmail: string,
+    subject: string,
+    bodyHtml: string,
+    orgName: string,
+): OutboundMail {
     const html = renderEigenEmail({
-        title: args.subject,
-        bodyHtml: args.bodyHtml,
-        footerLine: args.orgName,
+        title: subject,
+        bodyHtml,
+        footerLine: orgName,
+        recipientEmail,
     });
     return {
-        to: [{ name: args.recipient.name, address: args.recipient.email }],
-        subject: args.subject,
-        text: stripTagsServer(args.bodyHtml),
-        html,
-    };
-}
-
-export function composeInviteEmail(args: {
-    recipient: { email: string };
-    subject: string;
-    bodyHtml: string;
-    orgName: string;
-}): OutboundMail {
-    const html = renderEigenEmail({
-        title: args.subject,
-        bodyHtml: args.bodyHtml,
-        footerLine: args.orgName,
-        recipientEmail: args.recipient.email,
-    });
-    return {
-        to: [{ name: '', address: args.recipient.email }],
-        subject: args.subject,
-        text: stripTagsServer(args.bodyHtml),
+        to: [{ name: '', address: recipientEmail }],
+        subject,
+        text: stripTagsServer(bodyHtml),
         html,
     };
 }
