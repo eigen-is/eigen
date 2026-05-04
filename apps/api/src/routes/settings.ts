@@ -69,6 +69,7 @@ export const settingsRouter = new Elysia({ name: 'settings' })
                         welcomeMail: t.Optional(
                             t.Object({
                                 enabled: t.Optional(t.Boolean()),
+                                subject: t.Optional(t.String()),
                                 body: t.Optional(t.String()),
                             }),
                         ),

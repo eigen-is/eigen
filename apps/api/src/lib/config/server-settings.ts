@@ -27,11 +27,12 @@ const settingsStore = new JsonStore<ServerSettings>(serverFs, 'settings.json', {
         autoAddOwnerContact: false,
         welcomeMail: {
             enabled: true,
-            body: 'Welcome to {orgName}, {name}!\n\nA personal workspace in the cloud. Simple and secure. You control your data.',
+            subject: 'Welcome to {orgName}!',
+            body: '<p>Hi {name},</p><p>A personal workspace in the cloud. Simple and secure. You control your data.</p>',
         },
         inviteEmail: {
             subject: "You're invited to {orgName}",
-            body: "Hi!\n\nYou've been invited to join {orgName} at {domain}.\n\nClick the link below to create your account:\n{inviteLink}\n\nThis link expires in 7 days.",
+            body: '<p>Hi!</p><p>You\'ve been invited to join {orgName} at {domain}.</p><p><a href="{inviteLink}">Create your account</a></p><p>This link expires in 7 days.</p>',
         },
     },
     guests: {

@@ -57,6 +57,7 @@ export type ServerSettings = {
         autoAddOwnerContact: boolean;
         welcomeMail: {
             enabled: boolean;
+            subject: string;
             body: string;
         };
         inviteEmail: {
