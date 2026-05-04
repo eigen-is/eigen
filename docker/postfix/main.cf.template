@@ -12,6 +12,9 @@ mynetworks = 127.0.0.0/8 172.16.0.0/12
 
 virtual_mailbox_domains = $MAIL_DOMAIN
 virtual_transport = eigen
+# Pipe `D` flag (prepend Delivered-To:) requires one recipient per pipe invocation.
+# Without this, multi-recipient messages to the eigen domain defer with dsn=4.3.5.
+eigen_destination_recipient_limit = 1
 
 # IPv4 only — simplifies DNS resolution in Docker environments.
 inet_protocols = ipv4
