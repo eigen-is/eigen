@@ -6,6 +6,8 @@ import { getServerDataPath } from '../config/paths';
 import { getPublicConfig } from '../config/server-config';
 import { getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core/errors';
+import { composeInviteEmail } from '../core/mail-composers';
+import type { OutboundMail } from '../core/mailer';
 import { ManagedDatabase } from '../core/managed-database';
 import { WAITLIST_DB_CONFIG } from './db-config';
 import * as schema from './schema';
@@ -198,22 +200,25 @@ export function requireWaitlistEnabled() {
     }
 }
 
-export function buildInviteEmail(entry: { email: string; inviteToken: string | null }) {
+export function buildInviteEmail(entry: { email: string; inviteToken: string | null }): OutboundMail {
     const settings = getServerSettings();
     const config = getPublicConfig();
     const template = settings.onboarding.inviteEmail;
-    const inviteLink = `https://${config?.domain ?? 'localhost'}/space/signup?token=${entry.inviteToken}`;
+    const orgName = config?.orgName ?? 'Eigen';
+    const domain = config?.domain ?? 'localhost';
+    const inviteLink = `https://${domain}/space/signup?token=${entry.inviteToken}`;
 
     const replace = (text: string) =>
         text
             .replace(/\{email\}/g, entry.email)
-            .replace(/\{orgName\}/g, config?.orgName ?? 'Eigen')
-            .replace(/\{domain\}/g, config?.domain ?? 'localhost')
+            .replace(/\{orgName\}/g, orgName)
+            .replace(/\{domain\}/g, domain)
             .replace(/\{inviteLink\}/g, inviteLink);
 
-    return {
-        to: [{ name: '', address: entry.email }],
+    return composeInviteEmail({
+        recipient: { email: entry.email },
         subject: replace(template.subject),
-        text: replace(template.body),
-    };
+        bodyHtml: replace(template.body),
+        orgName,
+    });
 }

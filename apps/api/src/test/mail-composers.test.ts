@@ -1,6 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { composeAccessRequestEmail, composeCollaboratorsEmail, composeShareEmail } from '../lib/core/mail-composers';
+import {
+    composeAccessRequestEmail,
+    composeCollaboratorsEmail,
+    composeInviteEmail,
+    composeOtpEmail,
+    composeShareEmail,
+    composeWelcomeEmail,
+} from '../lib/core/mail-composers';
 
 const PATH: DrivePath = {
     id: 'p1',
@@ -102,5 +109,99 @@ describe('composeCollaboratorsEmail', () => {
             'bob@test.eigen.is',
         );
         expect(mail.subject).toBe('Quarterly Plan');
+    });
+});
+
+describe('composeOtpEmail', () => {
+    test('2fa: subject + HTML carry the code; plaintext keeps "code" word for iOS autofill', () => {
+        const mail = composeOtpEmail({
+            recipient: { name: 'Alice', email: 'alice@test.eigen.is' },
+            code: '123456',
+            kind: '2fa',
+            orgName: 'Acme',
+            domain: 'acme.example.com',
+        });
+        expect(mail.subject).toBe('Your verification code');
+        expect(mail.html).toContain('123456');
+        expect(mail.text).toContain('code');
+        expect(mail.text).toContain('123456');
+        // iOS Security Code AutoFill domain-bound trailer
+        expect(mail.text).toContain('@acme.example.com #123456');
+        // Branded shell: footer line carries org name
+        expect(mail.html).toContain('Acme');
+    });
+
+    test('guest: distinct subject and intro copy', () => {
+        const mail = composeOtpEmail({
+            recipient: { name: 'guest@example.com', email: 'guest@example.com' },
+            code: '654321',
+            kind: 'guest',
+            orgName: 'Acme',
+            domain: 'acme.example.com',
+        });
+        expect(mail.subject).toBe('Your guest access code');
+        expect(mail.text).toContain('shared documents');
+    });
+
+    test('omits domain trailer when running on localhost', () => {
+        const mail = composeOtpEmail({
+            recipient: { name: 'a', email: 'a@b.test' },
+            code: '111111',
+            kind: '2fa',
+            orgName: 'Acme',
+            domain: 'localhost',
+        });
+        expect(mail.text).not.toContain('@localhost');
+        expect(mail.text).not.toContain('#111111');
+    });
+
+    test('omits domain trailer when domain undefined', () => {
+        const mail = composeOtpEmail({
+            recipient: { name: 'a', email: 'a@b.test' },
+            code: '222222',
+            kind: 'guest',
+            orgName: 'Acme',
+        });
+        expect(mail.text).not.toContain(' #222222');
+    });
+});
+
+describe('composeWelcomeEmail', () => {
+    test('wraps admin-authored body in branded shell with org footer', () => {
+        const mail = composeWelcomeEmail({
+            recipient: { name: 'Alice', email: 'alice@test.eigen.is' },
+            subject: 'Welcome to Acme!',
+            bodyHtml: '<p>Hi Alice,</p><p>A personal workspace.</p>',
+            orgName: 'Acme',
+        });
+        expect(mail.subject).toBe('Welcome to Acme!');
+        expect(mail.to[0].address).toBe('alice@test.eigen.is');
+        expect(mail.html).toContain('Welcome to Acme!');
+        expect(mail.html).toContain('Hi Alice');
+        expect(mail.html).toContain('A personal workspace');
+        expect(mail.html).toContain('Acme'); // footer
+        // text fallback derived from HTML body
+        expect(mail.text).toContain('Hi Alice');
+        expect(mail.text).not.toContain('<p>');
+    });
+});
+
+describe('composeInviteEmail', () => {
+    test('wraps admin-authored body in branded shell; recipient email passed for guest pill links', () => {
+        const mail = composeInviteEmail({
+            recipient: { email: 'newuser@example.com' },
+            subject: "You're invited to Acme",
+            bodyHtml:
+                '<p>Hi!</p><p><a href="https://acme.example.com/space/signup?token=abc">Create your account</a></p>',
+            orgName: 'Acme',
+        });
+        expect(mail.subject).toBe("You're invited to Acme");
+        expect(mail.to[0].address).toBe('newuser@example.com');
+        // Title is HTML-escaped in the shell — apostrophe becomes &#39;
+        expect(mail.html).toContain('invited to Acme');
+        expect(mail.html).toContain('Create your account');
+        expect(mail.html).toContain('Acme'); // footer
+        expect(mail.text).toContain('Create your account');
+        expect(mail.text).not.toContain('<p>');
     });
 });

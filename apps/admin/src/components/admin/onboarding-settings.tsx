@@ -4,9 +4,9 @@ import { LoadingState } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
+import { LightEditor } from '@workspace/ui/components/layout/editor';
 import { Separator } from '@workspace/ui/components/separator';
 import { Switch } from '@workspace/ui/components/switch';
-import { Textarea } from '@workspace/ui/components/textarea';
 import { useState } from 'react';
 
 type OnboardingDraft = {
@@ -22,16 +22,15 @@ export function OnboardingSettingsPage() {
 
     const [draft, setDraft] = useState<OnboardingDraft>({});
     const [dirty, setDirty] = useState(false);
+    // LightEditor reads `content` once at init and ignores later prop changes. Bumping this
+    // key remounts both editors so Reset re-seeds them from server state.
+    const [editorKey, setEditorKey] = useState(0);
 
     if (isLoading || !settings) {
         return <LoadingState />;
     }
 
-    const onboarding = settings.onboarding ?? {
-        waitlist: { enabled: false },
-        autoAddOwnerContact: false,
-        welcomeMail: { enabled: true, body: '' },
-    };
+    const onboarding = settings.onboarding;
 
     const current = {
         waitlist: { ...onboarding.waitlist, ...draft.waitlist },
@@ -60,6 +59,7 @@ export function OnboardingSettingsPage() {
     const handleReset = () => {
         setDraft({});
         setDirty(false);
+        setEditorKey((k) => k + 1);
     };
 
     return (
@@ -96,11 +96,15 @@ export function OnboardingSettingsPage() {
                     </div>
                     <div className="space-y-1.5">
                         <Label>Body</Label>
-                        <Textarea
-                            rows={6}
-                            value={current.inviteEmail.body}
-                            onChange={(e) => update({ inviteEmail: { body: e.target.value } })}
-                        />
+                        <div className="border rounded-md p-3 min-h-[160px] bg-background">
+                            <LightEditor
+                                key={`invite-${editorKey}`}
+                                content={current.inviteEmail.body}
+                                onChange={(body) => update({ inviteEmail: { body } })}
+                                toolbar="floating"
+                                containerClassName="relative flex flex-col"
+                            />
+                        </div>
                         <p className="text-xs text-muted-foreground">
                             Available placeholders: {'{email}'}, {'{orgName}'}, {'{domain}'}, {'{inviteLink}'}
                         </p>
@@ -144,17 +148,30 @@ export function OnboardingSettingsPage() {
                 </div>
 
                 {current.welcomeMail.enabled && (
-                    <div className="space-y-1.5">
-                        <Label>Email body</Label>
-                        <Textarea
-                            rows={6}
-                            value={current.welcomeMail.body}
-                            onChange={(e) => update({ welcomeMail: { body: e.target.value } })}
-                        />
-                        <p className="text-xs text-muted-foreground">
-                            Available placeholders: {'{name}'}, {'{orgName}'}, {'{domain}'}
-                        </p>
-                    </div>
+                    <>
+                        <div className="space-y-1.5">
+                            <Label>Subject</Label>
+                            <Input
+                                value={current.welcomeMail.subject}
+                                onChange={(e) => update({ welcomeMail: { subject: e.target.value } })}
+                            />
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label>Body</Label>
+                            <div className="border rounded-md p-3 min-h-[160px] bg-background">
+                                <LightEditor
+                                    key={`welcome-${editorKey}`}
+                                    content={current.welcomeMail.body}
+                                    onChange={(body) => update({ welcomeMail: { body } })}
+                                    toolbar="floating"
+                                    containerClassName="relative flex flex-col"
+                                />
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                Available placeholders: {'{name}'}, {'{orgName}'}, {'{domain}'}
+                            </p>
+                        </div>
+                    </>
                 )}
             </div>
 

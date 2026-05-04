@@ -2,8 +2,10 @@ import { createHmac, randomUUID } from 'node:crypto';
 import { generateRandomString, hashPassword } from 'better-auth/crypto';
 import { and, eq, like, lt } from 'drizzle-orm';
 import { account, user as userTable, verification } from '../../../auth-schema.ts';
+import { getDomain, getServerConfig } from '../config/server-config';
 import { getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core/errors';
+import { composeOtpEmail } from '../core/mail-composers';
 import { sendMail } from '../core/mailer';
 import { reconcileSharesForNewUser } from '../share';
 import { getEntriesForTarget } from '../share/registry';
@@ -61,11 +63,15 @@ export async function requestOtp(email: string, ip: string): Promise<void> {
         })
         .run();
 
-    const ok = await sendMail({
-        to: [{ name: email, address: email }],
-        subject: 'Your guest access code',
-        text: `Your guest access code is: ${otp}\n\nThis code expires in 5 minutes.`,
-    });
+    const ok = await sendMail(
+        composeOtpEmail({
+            recipient: { name: email, email },
+            code: otp,
+            kind: 'guest',
+            orgName: getServerConfig()?.orgName ?? 'Eigen',
+            domain: getDomain(),
+        }),
+    );
     if (!ok) throw new ApiError(500, 'Failed to send verification code');
 }
 
