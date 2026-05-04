@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { escapeHtml } from '@workspace/lib/html';
 import type { WaitlistEntry } from '@workspace/lib/types/waitlist';
 import { validateEmailAddress, validateUsername } from '@workspace/lib/validation';
 import { and, desc, eq } from 'drizzle-orm';
@@ -208,17 +209,30 @@ export function buildInviteEmail(entry: { email: string; inviteToken: string | n
     const domain = config?.domain ?? 'localhost';
     const inviteLink = `https://${domain}/space/signup?token=${entry.inviteToken}`;
 
-    const replace = (text: string) =>
-        text
-            .replace(/\{email\}/g, entry.email)
-            .replace(/\{orgName\}/g, orgName)
-            .replace(/\{domain\}/g, domain)
-            .replace(/\{inviteLink\}/g, inviteLink);
+    // Body template is HTML — escape token values so the recipient email or an admin-set
+    // orgName containing `<` / `&` can't break out of the wrapper. Subject is plain text;
+    // no escaping there. inviteToken is a UUID so the link is always URL-safe; we still
+    // HTML-escape it because it's interpolated into an `href` attribute value.
+    const subjectTokens = { email: entry.email, orgName, domain, inviteLink };
+    const bodyTokens = {
+        email: escapeHtml(entry.email),
+        orgName: escapeHtml(orgName),
+        domain: escapeHtml(domain),
+        inviteLink: escapeHtml(inviteLink),
+    };
 
     return composeInviteEmail({
         recipient: { email: entry.email },
-        subject: replace(template.subject),
-        bodyHtml: replace(template.body),
+        subject: applyTokens(template.subject, subjectTokens),
+        bodyHtml: applyTokens(template.body, bodyTokens),
         orgName,
     });
+}
+
+function applyTokens(template: string, values: Record<string, string>): string {
+    let out = template;
+    for (const [key, val] of Object.entries(values)) {
+        out = out.replaceAll(`{${key}}`, val);
+    }
+    return out;
 }

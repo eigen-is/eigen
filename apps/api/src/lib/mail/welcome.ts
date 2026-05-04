@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { escapeHtml } from '@workspace/lib/html';
 import { getDomain, getMailDomain, getServerConfig } from '../config/server-config';
 import { getServerSettings } from '../config/server-settings';
 import { composeWelcomeEmail } from '../core/mail-composers';
@@ -15,16 +16,19 @@ export function welcomeMail(name: string, email: string): string | null {
     const mailDomain = getMailDomain();
     const orgName = config?.orgName || 'Eigen';
 
-    const replace = (template: string) =>
-        template
-            .replace(/\{name\}/g, name)
-            .replace(/\{orgName\}/g, orgName)
-            .replace(/\{domain\}/g, domain);
+    // Body template is HTML — escape token values so a name like `<script>` can't break out
+    // of the wrapper. Subject is plain text; no escaping needed there.
+    const subject = applyTokens(settings.onboarding.welcomeMail.subject, { name, orgName, domain });
+    const bodyHtml = applyTokens(settings.onboarding.welcomeMail.body, {
+        name: escapeHtml(name),
+        orgName: escapeHtml(orgName),
+        domain: escapeHtml(domain),
+    });
 
     const mail = composeWelcomeEmail({
         recipient: { name, email },
-        subject: replace(settings.onboarding.welcomeMail.subject),
-        bodyHtml: replace(settings.onboarding.welcomeMail.body),
+        subject,
+        bodyHtml,
         orgName,
     });
 
@@ -54,4 +58,12 @@ ${mail.html ?? ''}
 
 --${boundary}--
 `;
+}
+
+function applyTokens(template: string, values: Record<string, string>): string {
+    let out = template;
+    for (const [key, val] of Object.entries(values)) {
+        out = out.replaceAll(`{${key}}`, val);
+    }
+    return out;
 }

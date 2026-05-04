@@ -1,6 +1,9 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { ServerSettings } from '@workspace/lib/types/settings';
 import type { WaitlistEntry } from '@workspace/lib/types/waitlist';
+// `setup` must run before any module that touches server-config — it sets EIGEN_DATA_ROOT
+// at module-load time. Importing waitlist statically would pull in server-config under the
+// production default, so buildInviteEmail is dynamically imported inside the test below.
 import { assertJson, authedRequest, getTestContext } from './setup';
 
 describe('Waitlist', () => {
@@ -358,5 +361,41 @@ describe('Waitlist', () => {
         });
         const data = await assertJson<ServerSettings>(res);
         expect(data.onboarding.inviteEmail.subject).toBe('Welcome to {orgName}!');
+    });
+
+    // -- HTML body escaping (regression for HTML-injection in templated tokens) --
+
+    test('buildInviteEmail HTML-escapes substituted tokens in the body', async () => {
+        // Plant a body that interpolates `{email}` inside an HTML template. A waitlist email
+        // would normally be validated, but the substitution path must still escape — defense
+        // in depth, and required once admin/orgName starts containing HTML-special chars.
+        await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                onboarding: { inviteEmail: { body: '<p>Hi {email} on {domain}</p>' } },
+            }),
+        });
+
+        const { buildInviteEmail } = await import('../lib/waitlist/waitlist');
+        const mail = buildInviteEmail({ email: 'a<script>@x.test', inviteToken: 'tok-abc' });
+
+        // The literal `<script>` tag must not appear in the rendered HTML body —
+        // it should be escaped to `&lt;script&gt;`.
+        expect(mail.html).not.toContain('a<script>@x.test');
+        expect(mail.html).toContain('a&lt;script&gt;@x.test');
+
+        // Restore default for downstream tests.
+        await authedRequest(ctx.alice.user.sessionToken, '/settings/server', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                onboarding: {
+                    inviteEmail: {
+                        body: '<p>Hi!</p><p>You\'ve been invited to join {orgName} at {domain}.</p><p><a href="{inviteLink}">Create your account</a></p><p>This link expires in 7 days.</p>',
+                    },
+                },
+            }),
+        });
     });
 });
