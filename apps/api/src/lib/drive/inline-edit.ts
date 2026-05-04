@@ -1,6 +1,6 @@
 import { getTextPreviewMode } from '@workspace/lib/constants';
 import { DRIVE_TYPE_FILE } from '@workspace/lib/types';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DrivePath, EditorContent } from '@workspace/lib/types/drive';
 import { ApiError } from '../core';
 import type { Mount } from '../mount';
 
@@ -19,7 +19,7 @@ export function reattachFrontmatter(body: string, frontmatter: string | null): s
     return `---\n${frontmatter}\n---\n${body}`;
 }
 
-export async function getEditableContent(mount: Mount, path: DrivePath) {
+export async function getEditableContent(mount: Mount, path: DrivePath): Promise<EditorContent> {
     if (path.type !== DRIVE_TYPE_FILE) throw new ApiError(404, 'File not found');
 
     const editMode = getTextPreviewMode(path.mimeType, path.name);
@@ -43,21 +43,20 @@ export async function getEditableContent(mount: Mount, path: DrivePath) {
                   frontmatter: null,
                   body: content,
               };
-    return { editMode, content: body, frontmatter, mimeType: path.mimeType, updatedAt: path.updatedAt.toISOString() };
+    return { editMode, content: body, frontmatter, mimeType: path.mimeType, updatedAt: path.updatedAt };
 }
 
 export function prepareSaveContent(
     path: DrivePath,
     content: string,
     frontmatter: string | null,
-    expectedUpdatedAt: string,
+    expectedUpdatedAt: Date,
     force: boolean,
-): { conflict: true; currentUpdatedAt: string } | { conflict: false; data: Buffer } {
+): { conflict: true; currentUpdatedAt: Date } | { conflict: false; data: Buffer } {
     if (path.type !== DRIVE_TYPE_FILE) throw new ApiError(404, 'File not found');
 
-    const currentUpdatedAt = path.updatedAt.toISOString();
-    if (expectedUpdatedAt !== currentUpdatedAt && !force) {
-        return { conflict: true, currentUpdatedAt };
+    if (path.updatedAt.getTime() !== expectedUpdatedAt.getTime() && !force) {
+        return { conflict: true, currentUpdatedAt: path.updatedAt };
     }
 
     const fullContent = reattachFrontmatter(content, frontmatter);

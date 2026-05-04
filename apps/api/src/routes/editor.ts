@@ -32,13 +32,13 @@ export const editorRouter = new Elysia({ name: 'editor' })
             );
             if (result.conflict) return { conflict: true as const, currentUpdatedAt: result.currentUpdatedAt };
             const updated = await drive.writeFileContent(params.mountId, params.pathId, result.data);
-            return { conflict: false as const, updatedAt: updated.updatedAt.toISOString() };
+            return { conflict: false as const, updatedAt: updated.updatedAt };
         },
         {
             body: t.Object({
                 content: t.String(),
                 frontmatter: t.Optional(t.String()),
-                expectedUpdatedAt: t.String(),
+                expectedUpdatedAt: t.Date(),
                 force: t.Optional(t.Boolean()),
             }),
             auth: true,

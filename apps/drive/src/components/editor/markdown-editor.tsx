@@ -62,7 +62,7 @@ function useMarkdownExtensions(content: string) {
 type MarkdownEditorProps = {
     content: string;
     frontmatter: string | null;
-    updatedAt: string;
+    updatedAt: Date;
     ownerId: string;
     mountId: string;
     pathId: string;

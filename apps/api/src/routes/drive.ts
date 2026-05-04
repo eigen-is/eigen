@@ -275,7 +275,9 @@ export const driveRouter = new Elysia({ name: 'drive' })
             setCacheHeaders(set, 60);
             return result;
         },
-        { auth: true },
+        // updatedAt is a cache-buster — browser HTTP cache and TanStack queryKey both key
+        // off the URL, so a stale URL serves stale content after an inline edit.
+        { auth: true, query: t.Object({ updatedAt: t.Optional(t.String()) }) },
     )
     // Path operations (rename, move, delete, acl, breadcrumb)
     .get(
