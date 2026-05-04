@@ -8,7 +8,7 @@ type EditorSaveOptions = {
     ownerId: string;
     mountId: string;
     pathId: string;
-    updatedAt: string;
+    updatedAt: Date;
     getContent: () => string;
     getFrontmatter?: () => string | undefined;
 };

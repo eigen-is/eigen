@@ -252,11 +252,11 @@ export type EditorContent = {
     content: string;
     frontmatter: string | null;
     mimeType: string;
-    updatedAt: string;
+    updatedAt: Date;
 };
 
 export type EditorSaveResult = {
     conflict: boolean;
-    updatedAt?: string;
-    currentUpdatedAt?: string;
+    updatedAt?: Date;
+    currentUpdatedAt?: Date;
 };

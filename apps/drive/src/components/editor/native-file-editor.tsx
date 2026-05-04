@@ -26,7 +26,7 @@ export function NativeFileEditor({ path, onClose }: NativeFileEditorProps) {
     const canWrite = permissions?.canWrite ?? false;
     const queryClient = useQueryClient();
     const { isMobile } = useLayout();
-    const { data: preview } = useTextPreview(path.ownerId, path.mountId, path.id, !editing);
+    const { data: preview } = useTextPreview(path.ownerId, path.mountId, path.id, path.updatedAt, !editing);
 
     const handleReload = () => {
         invalidateEditorContent(queryClient, path.ownerId, path.mountId, path.id);

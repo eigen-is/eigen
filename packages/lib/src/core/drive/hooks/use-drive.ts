@@ -39,8 +39,8 @@ export const driveKeys = {
         [...driveKeys.owner(ownerId), 'permissions', mountId, pathId] as const,
     shared: (ownerId: string, to: 'by-me' | 'with-me') => [...driveKeys.owner(ownerId), 'shared', to] as const,
     textPreviews: (ownerId: string) => [...driveKeys.owner(ownerId), 'text-preview'] as const,
-    textPreview: (ownerId: string, mountId: string, pathId: string) =>
-        [...driveKeys.textPreviews(ownerId), mountId, pathId] as const,
+    textPreview: (ownerId: string, mountId: string, pathId: string, updatedAt?: Date) =>
+        [...driveKeys.textPreviews(ownerId), mountId, pathId, updatedAt?.getTime()] as const,
     effectiveMembers: (ownerId: string, mountId: string, pathId: string) =>
         [...driveKeys.owner(ownerId), 'effective-members', mountId, pathId] as const,
     trash: (ownerId: string) => [...driveKeys.owner(ownerId), 'trash'] as const,
@@ -558,11 +558,19 @@ export function useSharedPaths(ownerId: string, to: 'by-me' | 'with-me') {
 }
 
 // TEXT PREVIEW
-export function useTextPreview(ownerId: string, mountId: string, pathId: string, enabled: boolean) {
+export function useTextPreview(
+    ownerId: string,
+    mountId: string,
+    pathId: string,
+    updatedAt: Date | undefined,
+    enabled: boolean,
+) {
     return useQuery({
-        queryKey: driveKeys.textPreview(ownerId, mountId, pathId),
+        queryKey: driveKeys.textPreview(ownerId, mountId, pathId, updatedAt),
         queryFn: async () => {
-            const response = await driveApi({ ownerId })({ mountId }).file({ pathId })['text-preview'].get();
+            const response = await driveApi({ ownerId })({ mountId })
+                .file({ pathId })
+                ['text-preview'].get({ query: { updatedAt: updatedAt?.toISOString() } });
             if (response.error) throw new AppError(response);
             return response.data;
         },

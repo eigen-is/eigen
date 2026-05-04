@@ -7,7 +7,7 @@ import { editorKeys } from './use-file-content';
 type SaveParams = {
     content: string;
     frontmatter?: string;
-    expectedUpdatedAt: string;
+    expectedUpdatedAt: Date;
     force?: boolean;
 };
 

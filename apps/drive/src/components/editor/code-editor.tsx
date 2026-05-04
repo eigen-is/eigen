@@ -197,7 +197,7 @@ export const CodeEditorView = forwardRef<
 // Full standalone code editor
 type CodeEditorProps = {
     content: string;
-    updatedAt: string;
+    updatedAt: Date;
     ownerId: string;
     mountId: string;
     pathId: string;

@@ -243,7 +243,7 @@ export function FilePreview({
 }
 
 function TextPreviewContent({ path }: { path: DrivePath }) {
-    const { data, isLoading } = useTextPreview(path.ownerId, path.mountId, path.id, true);
+    const { data, isLoading } = useTextPreview(path.ownerId, path.mountId, path.id, path.updatedAt, true);
 
     if (isLoading) {
         return (
