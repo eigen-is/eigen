@@ -2,9 +2,7 @@ import { parseOwnerId } from '../types';
 
 export function validateACLEntries(acl: { id: string }[]): string | null {
     for (const entry of acl) {
-        try {
-            parseOwnerId(entry.id);
-        } catch {
+        if (parseOwnerId(entry.id).id === '') {
             return `Invalid ACL entry: '${entry.id}'`;
         }
     }
