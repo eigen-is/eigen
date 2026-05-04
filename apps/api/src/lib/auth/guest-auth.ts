@@ -1,5 +1,6 @@
 import { createHmac, randomUUID } from 'node:crypto';
-import { generateRandomString, hashPassword } from 'better-auth/crypto';
+import { generateId } from '@better-auth/core/utils/id';
+import { hashPassword } from 'better-auth/crypto';
 import { and, eq, like, lt } from 'drizzle-orm';
 import { account, user as userTable, verification } from '../../../auth-schema.ts';
 import { getDomain, getOrgName } from '../config/server-config';
@@ -41,27 +42,32 @@ export async function requestOtp(email: string, ip: string): Promise<void> {
 
     const db = getAuthDrizzleDb();
     const now = new Date();
-
-    // Purge expired guest OTPs
-    db.delete(verification)
-        .where(and(like(verification.identifier, 'guest-otp:%'), lt(verification.expiresAt, now)))
-        .run();
-
     const otp = generateOtp();
     const identifier = `guest-otp:${email}`;
+    // Hash before any DB writes — `Bun.password.hash` yields the event loop, and
+    // doing it between the delete and insert lets a concurrent request for the same
+    // email interleave (delete each other's row, both insert) and end up with two
+    // live OTPs racing in the verification table.
+    const hashedOtp = await Bun.password.hash(otp);
 
-    // Replace any existing OTP for this email
-    db.delete(verification).where(eq(verification.identifier, identifier)).run();
-    db.insert(verification)
-        .values({
-            id: randomUUID(),
-            identifier,
-            value: await Bun.password.hash(otp),
-            expiresAt: new Date(now.getTime() + OTP_EXPIRY_MS),
-            createdAt: now,
-            updatedAt: now,
-        })
-        .run();
+    db.transaction((tx) => {
+        // Purge expired guest OTPs
+        tx.delete(verification)
+            .where(and(like(verification.identifier, 'guest-otp:%'), lt(verification.expiresAt, now)))
+            .run();
+        // Replace any existing OTP for this email
+        tx.delete(verification).where(eq(verification.identifier, identifier)).run();
+        tx.insert(verification)
+            .values({
+                id: randomUUID(),
+                identifier,
+                value: hashedOtp,
+                expiresAt: new Date(now.getTime() + OTP_EXPIRY_MS),
+                createdAt: now,
+                updatedAt: now,
+            })
+            .run();
+    });
 
     const ok = await sendMail(composeOtpEmail({ name: email, email }, otp, 'guest', getOrgName(), getDomain()));
     if (!ok) throw new ApiError(500, 'Failed to send verification code');
@@ -90,10 +96,13 @@ export async function verifyOtpAndSignIn(email: string, otp: string): Promise<Re
 
     if (!guestUser) {
         const now = new Date();
-        // Insert directly to bypass databaseHooks (guests must not be auto-added to org)
+        // Insert directly to bypass databaseHooks (guests must not be auto-added to org).
+        // `generateId` (clean a-zA-Z0-9) — NOT `generateRandomString` (base64-url, includes
+        // '_' and '-'); `parseOwnerId` only accepts alphanumeric, and a guest id with '_'
+        // would fail every owner-scoped lookup.
         db.insert(userTable)
             .values({
-                id: generateRandomString(32),
+                id: generateId(),
                 email,
                 name: email.split('@')[0] ?? email,
                 emailVerified: true,
@@ -104,8 +113,13 @@ export async function verifyOtpAndSignIn(email: string, otp: string): Promise<Re
             .run();
         guestUser = await getUserByEmail(email);
         if (!guestUser) throw new ApiError(500, 'Failed to create guest user');
-        await reconcileSharesForNewUser(guestUser);
     }
+
+    // Reconcile every successful login, not just the first. The previous version only
+    // ran inside the create branch, so any error after creation (including the parseOwnerId
+    // bug above) left the guest's shared_paths permanently empty — the second login would
+    // succeed but "Shared with me" stayed blank.
+    await reconcileSharesForNewUser(guestUser);
 
     // Upsert credential account so sign-in works
     const password = guestPassword(email);
@@ -119,7 +133,7 @@ export async function verifyOtpAndSignIn(email: string, otp: string): Promise<Re
     } else {
         db.insert(account)
             .values({
-                id: generateRandomString(32),
+                id: generateId(),
                 accountId: guestUser.id,
                 providerId: 'credential',
                 userId: guestUser.id,
