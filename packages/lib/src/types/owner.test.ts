@@ -23,13 +23,10 @@ describe('parseOwnerId', () => {
         expect(parseOwnerId(`org_${ALNUM_32}`)).toEqual({ type: 'org', id: ALNUM_32 });
     });
 
-    test('external_<email> → external', () => {
-        // KNOWN QUIRK: the email regex matches `external_a@b.com` first (emails permit '_'
-        // in the local-part), so the external prefix branch never fires for that input.
-        // The helper round-trip below documents this — fix it separately if/when needed.
+    test('external_<email> → external (prefix wins over email regex)', () => {
         expect(parseOwnerId('external_alice@example.com')).toEqual({
-            type: 'user',
-            id: 'external_alice@example.com',
+            type: 'external',
+            id: 'alice@example.com',
         });
     });
 
@@ -47,6 +44,7 @@ describe('parseOwnerId', () => {
         expect(parseOwnerId(userOwnerId(userId))).toEqual({ type: 'user', id: userId });
         expect(parseOwnerId(teamOwnerId(userId))).toEqual({ type: 'team', id: userId });
         expect(parseOwnerId(orgOwnerId(userId))).toEqual({ type: 'org', id: userId });
+        expect(parseOwnerId(externalOwnerId('a@b.com'))).toEqual({ type: 'external', id: 'a@b.com' });
     });
 
     test('isExternalOwnerId only true for external_ prefix', () => {
