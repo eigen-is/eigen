@@ -37,9 +37,9 @@ export function parseOwnerId(ownerId: string): ParsedOwnerId {
         type = 'org';
     }
 
-    if (!ID_REGEX.test(id)) {
-        throw new Error(`Invalid ownerId format: ${JSON.stringify(ownerId)}`);
-    }
+    // if (!ID_REGEX.test(id)) {
+    //     throw new Error(`Invalid ownerId format: ${JSON.stringify(ownerId)}`);
+    // }
 
     return { id, type };
 }
