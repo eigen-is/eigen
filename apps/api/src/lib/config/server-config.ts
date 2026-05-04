@@ -72,6 +72,12 @@ export function getMailDomain(): string {
     return process.env['MAIL_DOMAIN'] || getDomain();
 }
 
+// Display name for the deployment. Used in email shells and similar branding spots — falls
+// back to "Eigen" before setup completes (when orgName is empty) or if config isn't loaded.
+export function getOrgName(): string {
+    return store.get().orgName || 'Eigen';
+}
+
 export function getPublicConfig() {
     const config = store.get();
     return {
