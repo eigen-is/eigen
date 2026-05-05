@@ -46,7 +46,8 @@ Eigen ships as a monorepo with a single API server and a set of tightly integrat
   web UI.
 - **Drive** — File storage with folders, sharing, ACL, thumbnails, file previews, and pluggable storage backends
   (local filesystem, flat key-based, or S3-compatible). Soft delete with configurable trash retention. Supports inline
-  editing of text, code, and Markdown files.
+  editing of text, code, and Markdown files. Mount your drives as a network drive in Finder, Windows Explorer, or any
+  WebDAV client.
 - **Docs** — Collaborative document editor built on Tiptap and Yjs. Multiple users edit the same document in
   real time. Export to DOCX, PDF, and HTML. Embedded comment threads with @mentions.
 - **Sheets** — Collaborative spreadsheets using a fully forked fortune-sheet engine with Yjs-based op-level sync.
@@ -73,6 +74,8 @@ Eigen doesn't lock you into its web interface. Standard protocols let you use yo
 - **IMAP** — Via Dovecot. Eigen writes Maildir++, Dovecot serves it over IMAP. They coexist on the same filesystem.
 - **CalDAV** — Built-in CalDAV server with discovery, sync-collection, and recurring event support. Tested with
   Thunderbird.
+- **WebDAV** — Built-in WebDAV server (RFC 4918 Class 1+2). Mount your Drive as a network drive in Finder, Windows
+  Explorer, Mountain Duck, rclone, or any standard WebDAV client.
 - **SMTP** — Postfix handles inbound and outbound email, with DKIM signing and relay support.
 
 ## Getting started
