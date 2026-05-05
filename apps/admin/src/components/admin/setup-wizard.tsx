@@ -33,6 +33,8 @@ export function SetupWizard() {
     const [s3Verified, setS3Verified] = useState(true);
     const onS3Verified = useCallback((verified: boolean) => setS3Verified(verified), []);
 
+    // Mirrors backend getMailDomain(): MAIL_DOMAIN env → DOMAIN env → user-typed domain.
+    const effectiveMailDomain = mailDomain || domain;
     const formReady = !!(domain && orgName && adminUsername && adminName && adminPassword.length >= 8 && s3Verified);
 
     useEffect(() => {
@@ -68,7 +70,7 @@ export function SetupWizard() {
                 domain,
                 orgName,
                 storageType,
-                adminEmail: `${adminUsername}@${mailDomain}`,
+                adminEmail: `${adminUsername}@${effectiveMailDomain}`,
                 adminPassword,
                 adminName,
                 ...(storageType === 's3'
@@ -237,7 +239,7 @@ export function SetupWizard() {
                                         className="rounded-r-none"
                                     />
                                     <span className="inline-flex items-center px-3 rounded-r-md border border-l-0 border-input bg-muted text-muted-foreground text-sm">
-                                        @{mailDomain}
+                                        @{effectiveMailDomain}
                                     </span>
                                 </div>
                             </div>
