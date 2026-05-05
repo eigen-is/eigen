@@ -1,5 +1,6 @@
 import { eq, max } from 'drizzle-orm';
 import { session, user as userTable } from '../../../auth-schema';
+import { isSetupRequired } from '../config/server-config';
 import { getServerSettings } from '../config/server-settings';
 import { atHome } from '../home/get-home';
 import { deleteUserCompletely } from '../user/delete-user';
@@ -15,6 +16,9 @@ export type GuestCleanupResult = {
 // roughly daily granularity. Falls back to user.updatedAt for guests that have no
 // sessions yet (e.g. just-created accounts).
 export async function cleanupInactiveGuests(): Promise<GuestCleanupResult> {
+    // Auth tables don't exist until completeSetup() runs initializeDatabaseSchema().
+    if (isSetupRequired()) return { deleted: [], skipped: [] };
+
     const days = getServerSettings().guests.inactivityDays;
     const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 

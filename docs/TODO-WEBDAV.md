@@ -14,7 +14,7 @@ follow-up session.
 > between suites (`TESTS='locks http' ./litmus …` after a wait clears
 > the window).
 
-For protocol architecture see `docs/PROPOSAL_DRIVE_MOUNT.md`.
+For protocol architecture see `docs/WEBDAV.md`.
 For client recipes see `docs/WEBDAV-RCLONE.md`, `docs/WEBDAV-MOUNTAIN-DUCK.md`.
 
 ---
