@@ -8,7 +8,7 @@ please report it privately — not via a public GitHub issue or pull request.
 Two ways, preferred first:
 
 - **GitHub private vulnerability reporting**:
-  [Report a vulnerability](https://github.com/eigen-foundation/eigen/security/advisories/new).
+  [Report a vulnerability](https://github.com/eigen-is/eigen/security/advisories/new).
 - **Email**: [reinder@eigen.is](mailto:reinder@eigen.is).
 
 I'll do my best to acknowledge reports within 72 hours and share a rough timeline for a fix. Eigen is an

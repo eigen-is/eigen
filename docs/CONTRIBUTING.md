@@ -108,7 +108,7 @@ A simple rule:
 Fastest way to get going. Runs the API and frontend apps directly on your machine.
 
 ```bash
-git clone https://github.com/eigen-foundation/eigen.git
+git clone https://github.com/eigen-is/eigen.git
 cd eigen
 cp .env.development .env
 bun install
