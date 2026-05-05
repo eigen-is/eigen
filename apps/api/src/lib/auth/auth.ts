@@ -24,6 +24,7 @@ import { sendMail } from '../core/mailer';
 import { reconcileSharesForNewTeamMember, reconcileSharesForNewUser } from '../share';
 import type { User } from '../user';
 
+const deploymentDomain = getDomain();
 export const trustedOrigins = [
     'http://localhost',
     'https://localhost',
@@ -41,7 +42,7 @@ export const trustedOrigins = [
     'http://localhost:3011',
     'http://localhost:3012',
     'http://localhost:3013',
-    'https://eigen.is',
+    ...(deploymentDomain !== 'localhost' ? [`https://${deploymentDomain}`] : []),
 ];
 
 export const auth = betterAuth({

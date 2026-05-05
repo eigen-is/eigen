@@ -26,6 +26,7 @@ export function CreateUserDialog({ open, onOpenChange }: CreateUserDialogProps) 
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!config) return;
         const normalized = username.toLowerCase().split('@')[0];
         const validationError = validateUsername(normalized);
         if (validationError) {
@@ -33,7 +34,7 @@ export function CreateUserDialog({ open, onOpenChange }: CreateUserDialogProps) 
             return;
         }
         setUsernameError('');
-        const email = `${normalized}@${config?.mailDomain ?? 'eigen.is'}`;
+        const email = `${normalized}@${config.mailDomain}`;
         if (!name || !username || !password) return;
 
         await createUser.mutateAsync({ name, email, password, role });
@@ -71,7 +72,7 @@ export function CreateUserDialog({ open, onOpenChange }: CreateUserDialogProps) 
                                         required
                                     />
                                     <InputGroupAddon align="inline-end">
-                                        <InputGroupText>@{config?.mailDomain ?? 'eigen.is'}</InputGroupText>
+                                        <InputGroupText>@{config?.mailDomain}</InputGroupText>
                                     </InputGroupAddon>
                                 </InputGroup>
                                 {usernameError && <p className="text-sm text-destructive">{usernameError}</p>}
