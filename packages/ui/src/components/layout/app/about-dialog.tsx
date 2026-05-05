@@ -1,5 +1,6 @@
 import { formatInputDate } from '@workspace/lib/date';
 import { usePublicConfig } from '@workspace/lib/public';
+import { Github } from 'lucide-react';
 import { Button } from '../../button.tsx';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '../../dialog.tsx';
 
@@ -38,19 +39,17 @@ export function AboutDialog({ open, onOpenChange }: AboutDialogProps) {
                         )}
                     </div>
 
-                    <p className="text-muted-foreground">
-                        Not a launch, not a beta. Eigen is in a testing phase: a few weeks of real use by real people to
-                        find bugs, fix what's broken and figure out what to build next.{' '}
+                    <div className="flex justify-center text-xs text-muted-foreground">
                         <a
-                            href="https://eigen.is/blog/eigen-six-months-later"
-                            className="underline text-foreground"
+                            href="https://github.com/eigen-is/eigen"
                             target="_blank"
                             rel="noreferrer"
+                            className="inline-flex items-center gap-1.5 hover:text-foreground"
                         >
-                            Read more
+                            <Github className="size-3.5" />
+                            github.com/eigen-is/eigen
                         </a>
-                        .
-                    </p>
+                    </div>
                 </div>
 
                 <DialogFooter>
