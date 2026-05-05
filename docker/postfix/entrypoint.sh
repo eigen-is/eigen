@@ -60,6 +60,17 @@ fi
 # Ensure correct ownership for OpenDKIM
 chown opendkim:opendkim /data/dkim /data/dkim/eigen.private /data/dkim/eigen.txt 2>/dev/null || true
 
+# Hosts whose mail OpenDKIM signs (rather than just verifying). Must include the
+# docker bridge subnet — eigen-api submits SMTP from 172.20.0.x, and OpenDKIM's
+# default InternalHosts is loopback only, which would silently fall back to
+# verify-only and ship mail unsigned.
+mkdir -p /etc/opendkim
+cat > /etc/opendkim/TrustedHosts <<EOF
+127.0.0.0/8
+::1
+172.16.0.0/12
+EOF
+
 # OpenDKIM config — signs outbound mail as ${MAIL_DOMAIN}.
 cat > /etc/opendkim.conf <<EOF
 Syslog              yes
@@ -71,6 +82,7 @@ Selector            eigen
 KeyFile             /data/dkim/eigen.private
 Canonicalization    relaxed/simple
 UserID              opendkim
+InternalHosts       /etc/opendkim/TrustedHosts
 EOF
 
 # --- Start services ---
