@@ -70,7 +70,7 @@ Eigen doesn't lock you into its web interface. Standard protocols let you use yo
 ### Quick start
 
 ```bash
-git clone https://github.com/eigen-foundation/eigen.git
+git clone https://github.com/eigen-is/eigen.git
 cd eigen
 cp .env.development .env
 bun install

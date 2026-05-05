@@ -6,7 +6,7 @@ body:
     attributes:
       value: |
         Rough ideas are welcome. For anything larger than a small change, please open an issue
-        before writing code — see [CONTRIBUTING.md](https://github.com/eigen-foundation/eigen/blob/main/docs/CONTRIBUTING.md).
+        before writing code — see [CONTRIBUTING.md](https://github.com/eigen-is/eigen/blob/main/docs/CONTRIBUTING.md).
 
   - type: textarea
     id: problem

@@ -7,7 +7,7 @@ body:
       value: |
         Thanks for taking the time to report a bug. Please fill out as much as you can.
 
-        For security issues, **do not** use this form — see [SECURITY.md](https://github.com/eigen-foundation/eigen/blob/main/SECURITY.md).
+        For security issues, **do not** use this form — see [SECURITY.md](https://github.com/eigen-is/eigen/blob/main/SECURITY.md).
 
   - type: textarea
     id: what-happened
