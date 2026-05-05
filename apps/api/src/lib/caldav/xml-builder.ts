@@ -32,7 +32,7 @@ export function calendarCollectionProps(cal: CalendarItem): string[] {
         `<D:displayname>${escapeXml(cal.name)}</D:displayname>`,
         `<ICAL:calendar-color>${escapeXml(cal.color)}</ICAL:calendar-color>`,
         `<CS:getctag>${cal.ctag}</CS:getctag>`,
-        `<D:sync-token>https://eigen.is/ns/sync/${cal.ctag}</D:sync-token>`,
+        `<D:sync-token>urn:eigen:sync:${cal.ctag}</D:sync-token>`,
         `<C:supported-calendar-component-set><C:comp name="VEVENT"/></C:supported-calendar-component-set>`,
     ];
 }

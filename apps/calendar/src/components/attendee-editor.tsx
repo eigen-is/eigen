@@ -96,7 +96,7 @@ export function AttendeeEditor({ attendees, onChange, currentUserEmail }: Attend
                         id="attendee-input"
                         value={input}
                         onChange={handleContactSelected}
-                        onlyEigenIsMails={false}
+                        onlyInternalMails={false}
                         placeholder="Add guests"
                         inputRef={inputRef}
                         onSubmit={handleAddClick}

@@ -5,7 +5,7 @@ export type ContactAutosuggestProps = {
     value?: string;
     onChange?: (value: string) => void;
     appendMode?: boolean;
-    onlyEigenIsMails?: boolean;
+    onlyInternalMails?: boolean;
     excludeEmails?: string[];
     className?: string;
     suggestionsClassName?: string;

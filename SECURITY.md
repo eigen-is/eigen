@@ -11,8 +11,10 @@ Two ways, preferred first:
   [Report a vulnerability](https://github.com/eigen-is/eigen/security/advisories/new).
 - **Email**: [reinder@eigen.is](mailto:reinder@eigen.is).
 
-I'll do my best to acknowledge reports within 72 hours and share a rough timeline for a fix. Eigen is an
-early-stage project without a dedicated security team, so response times may vary.
+I aim to acknowledge reports within a week and share a rough timeline for a fix once triaged. Critical
+issues affecting user data are prioritized; lower-severity issues may take longer. Eigen is a side project
+with a single maintainer, so response times may vary — especially around holidays. If you haven't heard
+back within two weeks, please send a follow-up email.
 
 ## Scope
 

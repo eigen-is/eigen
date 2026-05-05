@@ -4,12 +4,12 @@ import { usePublicConfig } from '@workspace/lib/public';
 import { useMemo } from 'react';
 import type { ContactSuggestion } from './types';
 
-export function useContactSuggestions(query: string, onlyEigenIsMails: boolean = false, excludeEmails: string[] = []) {
+export function useContactSuggestions(query: string, onlyInternalMails: boolean = false, excludeEmails: string[] = []) {
     const { data: contacts, isLoading: contactsLoading } = useContacts();
     const { data: myTeams } = useMyTeams();
     const { data: config } = usePublicConfig();
     // 'Internal' suggestions are scoped by the mail domain — same suffix the user's address has.
-    const domain = config?.mailDomain ?? 'eigen.is';
+    const domain = config?.mailDomain;
 
     // Collect all unique team members across teams, deduped by email
     const teamMembers = useMemo(() => {
@@ -37,7 +37,7 @@ export function useContactSuggestions(query: string, onlyEigenIsMails: boolean =
             if (excludeSet.has(emailKey)) continue;
             const name = (member.name || '').toLowerCase();
             if (!name.includes(lowerQuery) && !emailKey.includes(lowerQuery)) continue;
-            if (onlyEigenIsMails && !emailKey.endsWith(`@${domain}`)) continue;
+            if (onlyInternalMails && !emailKey.endsWith(`@${domain}`)) continue;
             if (query.includes(member.email)) continue;
 
             seenEmails.add(emailKey);
@@ -61,7 +61,7 @@ export function useContactSuggestions(query: string, onlyEigenIsMails: boolean =
                 let bestEmail = emailMatch || contact.email[0] || '';
                 const eigenIsMail = contact.email.find((e) => e.endsWith(`@${domain}`));
                 if (eigenIsMail && !emailMatch) bestEmail = eigenIsMail;
-                if (onlyEigenIsMails && !bestEmail.endsWith(`@${domain}`)) continue;
+                if (onlyInternalMails && !bestEmail.endsWith(`@${domain}`)) continue;
                 if (excludeSet.has(bestEmail.toLowerCase())) continue;
                 if (query.includes(bestEmail)) continue;
                 if (seenEmails.has(bestEmail.toLowerCase())) continue;
@@ -77,7 +77,7 @@ export function useContactSuggestions(query: string, onlyEigenIsMails: boolean =
         }
 
         return results;
-    }, [contacts, teamMembers, lowerQuery, onlyEigenIsMails, excludeSet, query, domain]);
+    }, [contacts, teamMembers, lowerQuery, onlyInternalMails, excludeSet, query, domain]);
 
     return {
         suggestions,

@@ -231,7 +231,7 @@ export function DriveAccessListEdit({
                             id="new-contact"
                             value={newContactInput}
                             onChange={handleContactSelected}
-                            onlyEigenIsMails={false}
+                            onlyInternalMails={false}
                             excludeEmails={excludeEmails}
                             placeholder="Enter email addresses"
                             inputRef={inputRef}

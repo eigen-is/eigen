@@ -131,7 +131,9 @@ function handleSyncCollection(
         responses.push(...buildEventResponses(events, ownerId, calendarId, wantsData));
     } else {
         // Incremental sync — parse ctag from token
-        const tokenMatch = report.syncToken.match(/\/sync\/(\d+)$/);
+        // Accept both old `/sync/N` and new `:sync:N` separators so clients with stored
+        // pre-rename tokens don't need a forced full resync.
+        const tokenMatch = report.syncToken.match(/sync[/:](\d+)$/);
         if (!tokenMatch) {
             // Invalid sync token — client must do full resync
             return new Response(
@@ -158,7 +160,7 @@ function handleSyncCollection(
     }
 
     // Build response with sync-token appended after responses (required by RFC 6578)
-    const syncToken = `https://eigen.is/ns/sync/${currentCtag}`;
+    const syncToken = `urn:eigen:sync:${currentCtag}`;
     const xml = multistatus(responses, `<D:sync-token>${syncToken}</D:sync-token>`);
 
     return new Response(xml, {

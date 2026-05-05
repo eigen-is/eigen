@@ -9,7 +9,7 @@ export function ContactAutosuggest({
     value: controlledValue,
     onChange,
     appendMode = false,
-    onlyEigenIsMails = false,
+    onlyInternalMails = false,
     excludeEmails,
     className = '',
     suggestionsClassName = '',
@@ -31,7 +31,7 @@ export function ContactAutosuggest({
     const [internalValue, setInternalValue] = useState(initialValue);
     const inputValue = controlledValue !== undefined ? controlledValue : internalValue;
 
-    const { suggestions, isLoading } = useContactSuggestions(inputValue, onlyEigenIsMails, excludeEmails);
+    const { suggestions, isLoading } = useContactSuggestions(inputValue, onlyInternalMails, excludeEmails);
 
     const handleSelect = useCallback(
         (suggestion: ContactSuggestion) => {
