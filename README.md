@@ -22,6 +22,21 @@ The first goal is a **self-hostable workspace for individuals, enthusiasts, and 
 development, expect rough edges — but the core is functional and improving fast. As the project matures and stabilizes,
 the aim is to make Eigen reliable enough for mid-to-large organizations as well.
 
+## Status & responsibilities
+
+Eigen is **pre-1.0 and actively developed**. The core works, but be deliberate about what you put on it:
+
+- **Breaking changes** are likely between minor versions until 1.0; expect occasional manual migration.
+- **You own your data, including the backups.** Use `scripts/backup.sh` (or your own routine) and verify
+  it restores. Eigen does not back up your data for you.
+- **You own your server's security.** Keep the host patched, lock down SSH, use strong passwords, and
+  watch your logs. A self-hosted server is your responsibility end-to-end.
+- **No warranty** — see [LICENSE.txt](LICENSE.txt). Eigen is built by a single developer in their spare
+  time. It's provided as-is, in good faith, with no SLA.
+
+If data loss in your workspace would be catastrophic, wait for 1.0. For personal use, hobbyists, and
+small teams comfortable with rough edges, the current build is functional and improving fast.
+
 ## Apps
 
 Eigen ships as a monorepo with a single API server and a set of tightly integrated frontend apps:
