@@ -483,10 +483,7 @@ export class Calendar {
             .map(dbEventToCalendarEventRow);
     }
 
-    public getRawEventsInRange(calendarId: string, from: number, to: number): CalendarEventRow[] {
-        const fromDate = new Date(from * 1000);
-        const toDate = new Date(to * 1000);
-
+    public getRawEventsInRange(calendarId: string, from: Date, to: Date): CalendarEventRow[] {
         // 1. Non-recurring events that overlap the range
         const nonRecurring = this.db
             .select()
@@ -496,8 +493,8 @@ export class Calendar {
                     eq(schema.events.calendarId, calendarId),
                     isNull(schema.events.rrule),
                     isNull(schema.events.parentEventId),
-                    lte(schema.events.startTime, toDate),
-                    gte(schema.events.endTime, fromDate),
+                    lte(schema.events.startTime, to),
+                    gte(schema.events.endTime, from),
                 ),
             )
             .all()
@@ -742,14 +739,11 @@ export class Calendar {
         if (cal) notifySharedCalendarUsers(this.home, cal, sseEvent).catch(() => {});
     }
 
-    public getEventsInRange(from: number, to: number, calendarId?: string): CalendarEventOccurrence[] {
+    public getEventsInRange(from: Date, to: Date, calendarId?: string): CalendarEventOccurrence[] {
         const conditions = [];
         if (calendarId) {
             conditions.push(eq(schema.events.calendarId, calendarId));
         }
-
-        const fromDate = new Date(from * 1000);
-        const toDate = new Date(to * 1000);
 
         const nonRecurring = this.db
             .select()
@@ -759,8 +753,8 @@ export class Calendar {
                     ...conditions,
                     isNull(schema.events.rrule),
                     isNull(schema.events.parentEventId),
-                    lte(schema.events.startTime, toDate),
-                    gte(schema.events.endTime, fromDate),
+                    lte(schema.events.startTime, to),
+                    gte(schema.events.endTime, from),
                 ),
             )
             .all();
@@ -1476,13 +1470,11 @@ export class Calendar {
     }
 }
 
-function expandRecurrence(event: CalendarEvent, rangeFrom: number, rangeTo: number): CalendarEventOccurrence[] {
+function expandRecurrence(event: CalendarEvent, rangeStart: Date, rangeEnd: Date): CalendarEventOccurrence[] {
     if (!event.rrule) return [];
 
     const durationMs = event.endTime.getTime() - event.startTime.getTime();
     const tz = event.timezone;
-    const rangeStart = new Date(rangeFrom * 1000);
-    const rangeEnd = new Date(rangeTo * 1000);
 
     if (tz) {
         // Timezone-aware expansion: convert to wall-clock, let rrule work in wall-clock space,
