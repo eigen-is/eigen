@@ -132,7 +132,7 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
         async ({ params, user }): Promise<CalendarEventOccurrence[]> => {
             requireNonGuest(user);
             const cal = await resolveCalendar(user, params.ownerId);
-            return cal.getEventsInRange(params.from, params.to);
+            return cal.getEventsInRange(new Date(params.from * 1000), new Date(params.to * 1000));
         },
         {
             params: t.Object({ ownerId: t.String(), from: t.Numeric(), to: t.Numeric() }),
@@ -145,7 +145,11 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
         async ({ params, user }) => {
             requireNonGuest(user);
             const { calendar, permission } = await resolveCalendarForEvents(user, params.ownerId, params.calId);
-            const events = calendar.getEventsInRange(params.from, params.to, params.calId);
+            const events = calendar.getEventsInRange(
+                new Date(params.from * 1000),
+                new Date(params.to * 1000),
+                params.calId,
+            );
             if (permission === 'free-busy') {
                 return events.map(
                     (e): FreeBusyBlock => ({

@@ -12,7 +12,7 @@ export type ReportType = 'calendar-query' | 'calendar-multiget' | 'sync-collecti
 export type ReportRequest = {
     type: ReportType;
     hrefs: string[];
-    timeRange?: { start: number; end: number };
+    timeRange?: { start: Date; end: Date };
     syncToken?: string;
     propNames: string[];
 };
@@ -45,15 +45,12 @@ export function parseReport(xml: string): ReportRequest {
     const veventFilter = compFilter['comp-filter'] || compFilter['C:comp-filter'] || {};
     const timeRange = veventFilter['time-range'] || veventFilter['C:time-range'];
 
-    let parsedTimeRange: { start: number; end: number } | undefined;
+    let parsedTimeRange: { start: Date; end: Date } | undefined;
     if (timeRange) {
         const start = timeRange['@_start'];
         const end = timeRange['@_end'];
         if (start && end) {
-            parsedTimeRange = {
-                start: Math.floor(new Date(start).getTime() / 1000),
-                end: Math.floor(new Date(end).getTime() / 1000),
-            };
+            parsedTimeRange = { start: new Date(start), end: new Date(end) };
         }
     }
 
