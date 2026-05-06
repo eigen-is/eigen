@@ -113,8 +113,8 @@ describe('Calendar', () => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         title: 'Team Standup',
-                        startTime: 1741773600,
-                        endTime: 1741777200,
+                        startTime: new Date(1741773600 * 1000),
+                        endTime: new Date(1741777200 * 1000),
                         allDay: false,
                         description: 'Daily sync',
                         location: 'Room A',
@@ -126,8 +126,8 @@ describe('Calendar', () => {
             expect(event.title).toBe('Team Standup');
             expect(event.description).toBe('Daily sync');
             expect(event.location).toBe('Room A');
-            expect(event.startTime).toBe(1741773600);
-            expect(event.endTime).toBe(1741777200);
+            expect(new Date(event.startTime).toISOString()).toBe(new Date(1741773600 * 1000).toISOString());
+            expect(new Date(event.endTime).toISOString()).toBe(new Date(1741777200 * 1000).toISOString());
             expect(event.allDay).toBe(false);
             expect(event.status).toBe('confirmed');
             expect(event.uid).toBeDefined();
@@ -145,8 +145,8 @@ describe('Calendar', () => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         title: 'Lunch',
-                        startTime: 1741780800,
-                        endTime: 1741784400,
+                        startTime: new Date(1741780800 * 1000),
+                        endTime: new Date(1741784400 * 1000),
                         allDay: false,
                     }),
                 },
@@ -167,8 +167,8 @@ describe('Calendar', () => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         title: 'Company Holiday',
-                        startTime: 1741737600,
-                        endTime: 1741824000,
+                        startTime: new Date(1741737600 * 1000),
+                        endTime: new Date(1741824000 * 1000),
                         allDay: true,
                     }),
                 },
@@ -228,8 +228,8 @@ describe('Calendar', () => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         title: 'To Delete',
-                        startTime: 1741780800,
-                        endTime: 1741784400,
+                        startTime: new Date(1741780800 * 1000),
+                        endTime: new Date(1741784400 * 1000),
                         allDay: false,
                     }),
                 },
@@ -262,8 +262,8 @@ describe('Calendar', () => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         title: 'Weekly Sync',
-                        startTime: 1741773600,
-                        endTime: 1741777200,
+                        startTime: new Date(1741773600 * 1000),
+                        endTime: new Date(1741777200 * 1000),
                         allDay: false,
                         rrule: 'FREQ=WEEKLY;BYDAY=WE',
                     }),
@@ -283,8 +283,8 @@ describe('Calendar', () => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         title: 'Monthly Review',
-                        startTime: 1741773600,
-                        endTime: 1741777200,
+                        startTime: new Date(1741773600 * 1000),
+                        endTime: new Date(1741777200 * 1000),
                         allDay: false,
                         rrule: 'FREQ=MONTHLY;BYMONTHDAY=15;COUNT=12',
                     }),
@@ -303,8 +303,8 @@ describe('Calendar', () => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         title: 'Every 3 Days',
-                        startTime: 1741773600,
-                        endTime: 1741777200,
+                        startTime: new Date(1741773600 * 1000),
+                        endTime: new Date(1741777200 * 1000),
                         allDay: false,
                         rrule: 'FREQ=DAILY;INTERVAL=3',
                     }),
@@ -323,8 +323,8 @@ describe('Calendar', () => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         title: 'Last Friday',
-                        startTime: 1741773600,
-                        endTime: 1741777200,
+                        startTime: new Date(1741773600 * 1000),
+                        endTime: new Date(1741777200 * 1000),
                         allDay: false,
                         rrule: 'FREQ=MONTHLY;BYDAY=FR;BYSETPOS=-1',
                     }),
@@ -343,8 +343,8 @@ describe('Calendar', () => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         title: 'CalDAV Complex',
-                        startTime: 1741773600,
-                        endTime: 1741777200,
+                        startTime: new Date(1741773600 * 1000),
+                        endTime: new Date(1741777200 * 1000),
                         allDay: false,
                         rrule: 'FREQ=WEEKLY;BYDAY=MO;BYHOUR=9;BYMINUTE=30',
                     }),
@@ -363,8 +363,8 @@ describe('Calendar', () => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         title: 'One-off Meeting',
-                        startTime: 1741773600,
-                        endTime: 1741777200,
+                        startTime: new Date(1741773600 * 1000),
+                        endTime: new Date(1741777200 * 1000),
                         allDay: false,
                     }),
                 },
@@ -520,8 +520,8 @@ describe('Calendar', () => {
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
                             title: 'Weekly Sync (moved)',
-                            startTime: first.startTime + 3600,
-                            endTime: first.endTime + 3600,
+                            startTime: new Date(new Date(first.startTime).getTime() + 3600_000),
+                            endTime: new Date(new Date(first.endTime).getTime() + 3600_000),
                             allDay: false,
                             parentEventId: aliceRecurringEventId,
                             recurrenceDate: first.occurrenceDate,
@@ -536,7 +536,7 @@ describe('Calendar', () => {
                 );
                 const afterEvents = await assertJson<CalendarEventOccurrence[]>(afterRes);
                 const modified = findOrFail(afterEvents, (e) => e.title === 'Weekly Sync (moved)');
-                expect(modified.startTime).toBe(first.startTime + 3600);
+                expect(new Date(modified.startTime).getTime()).toBe(new Date(first.startTime).getTime() + 3600_000);
             }
         });
     });
@@ -555,8 +555,8 @@ describe('Calendar', () => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         title: 'Exception Delete Test',
-                        startTime: from + 3600,
-                        endTime: from + 7200,
+                        startTime: new Date((from + 3600) * 1000),
+                        endTime: new Date((from + 7200) * 1000),
                         allDay: false,
                         rrule: 'FREQ=WEEKLY;COUNT=4',
                     }),
@@ -581,8 +581,8 @@ describe('Calendar', () => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         title: 'Exception Delete Test (modified)',
-                        startTime: firstOcc.startTime + 1800,
-                        endTime: firstOcc.endTime + 1800,
+                        startTime: new Date(new Date(firstOcc.startTime).getTime() + 1800_000),
+                        endTime: new Date(new Date(firstOcc.endTime).getTime() + 1800_000),
                         allDay: false,
                         parentEventId: parent.id,
                         recurrenceDate: firstOcc.occurrenceDate,
@@ -633,8 +633,8 @@ describe('Calendar', () => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         title: 'Daily Standup',
-                        startTime: 1741773600,
-                        endTime: 1741777200,
+                        startTime: new Date(1741773600 * 1000),
+                        endTime: new Date(1741777200 * 1000),
                         allDay: false,
                         rrule: 'FREQ=DAILY',
                     }),
@@ -699,8 +699,8 @@ describe('Calendar', () => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         title: 'Weekly Review',
-                        startTime: 1741773600,
-                        endTime: 1741777200,
+                        startTime: new Date(1741773600 * 1000),
+                        endTime: new Date(1741777200 * 1000),
                         allDay: false,
                         rrule: 'FREQ=WEEKLY;BYDAY=WE',
                     }),
@@ -748,8 +748,8 @@ describe('Calendar', () => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         title: 'Weekly Review (updated)',
-                        startTime: cutoffOcc.startTime + 3600,
-                        endTime: cutoffOcc.endTime + 3600,
+                        startTime: new Date(new Date(cutoffOcc.startTime).getTime() + 3600_000),
+                        endTime: new Date(new Date(cutoffOcc.endTime).getTime() + 3600_000),
                         allDay: false,
                         rrule: 'FREQ=WEEKLY;BYDAY=WE',
                     }),
@@ -815,8 +815,8 @@ describe('Calendar', () => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         title: 'Shared Event',
-                        startTime: 1741773600,
-                        endTime: 1741777200,
+                        startTime: new Date(1741773600 * 1000),
+                        endTime: new Date(1741777200 * 1000),
                         allDay: false,
                     }),
                 },
@@ -864,8 +864,8 @@ describe('Calendar', () => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         title: 'Bob Event',
-                        startTime: 1741773600,
-                        endTime: 1741777200,
+                        startTime: new Date(1741773600 * 1000),
+                        endTime: new Date(1741777200 * 1000),
                         allDay: false,
                     }),
                 },
@@ -903,8 +903,8 @@ describe('Calendar', () => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         title: 'Bob Event',
-                        startTime: 1741780800,
-                        endTime: 1741784400,
+                        startTime: new Date(1741780800 * 1000),
+                        endTime: new Date(1741784400 * 1000),
                         allDay: false,
                     }),
                 },
@@ -1008,8 +1008,8 @@ describe('Calendar', () => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         title: 'Bob Created Event',
-                        startTime: 1741780800,
-                        endTime: 1741784400,
+                        startTime: new Date(1741780800 * 1000),
+                        endTime: new Date(1741784400 * 1000),
                         allDay: false,
                     }),
                 },
@@ -1092,8 +1092,8 @@ describe('Calendar', () => {
         });
 
         test('create timed event (like FE sends) and verify occurrenceDate in range response', async () => {
-            const startTime = Math.floor(new Date('2026-03-10T09:00:00Z').getTime() / 1000);
-            const endTime = Math.floor(new Date('2026-03-10T10:00:00Z').getTime() / 1000);
+            const startTime = new Date('2026-03-10T09:00:00Z');
+            const endTime = new Date('2026-03-10T10:00:00Z');
 
             const createRes = await authedRequest(
                 ctx.bob.user.sessionToken,
@@ -1129,8 +1129,8 @@ describe('Calendar', () => {
         });
 
         test('create all-day event (FE style: midnight UTC to next midnight UTC) and verify occurrenceDate', async () => {
-            const startTime = Math.floor(new Date('2026-03-15T00:00:00Z').getTime() / 1000);
-            const endTime = Math.floor(new Date('2026-03-16T00:00:00Z').getTime() / 1000);
+            const startTime = new Date('2026-03-15T00:00:00Z');
+            const endTime = new Date('2026-03-16T00:00:00Z');
 
             const createRes = await authedRequest(
                 ctx.bob.user.sessionToken,
@@ -1161,8 +1161,8 @@ describe('Calendar', () => {
         });
 
         test('create multi-day all-day event and verify occurrenceDate is start date', async () => {
-            const startTime = Math.floor(new Date('2026-03-20T00:00:00Z').getTime() / 1000);
-            const endTime = Math.floor(new Date('2026-03-23T00:00:00Z').getTime() / 1000);
+            const startTime = new Date('2026-03-20T00:00:00Z');
+            const endTime = new Date('2026-03-23T00:00:00Z');
 
             await authedRequest(
                 ctx.bob.user.sessionToken,
@@ -1191,8 +1191,8 @@ describe('Calendar', () => {
         });
 
         test('event at end of day boundary is included in correct range', async () => {
-            const startTime = Math.floor(new Date('2026-03-31T23:00:00Z').getTime() / 1000);
-            const endTime = Math.floor(new Date('2026-04-01T00:30:00Z').getTime() / 1000);
+            const startTime = new Date('2026-03-31T23:00:00Z');
+            const endTime = new Date('2026-04-01T00:30:00Z');
 
             const createRes = await authedRequest(
                 ctx.bob.user.sessionToken,
@@ -1244,8 +1244,8 @@ describe('Calendar', () => {
         });
 
         test('timed event created in UTC+1 style (local midnight = 23:00 UTC prev day) appears correctly', async () => {
-            const startTime = Math.floor(new Date('2026-03-10T08:00:00Z').getTime() / 1000);
-            const endTime = Math.floor(new Date('2026-03-10T09:00:00Z').getTime() / 1000);
+            const startTime = new Date('2026-03-10T08:00:00Z');
+            const endTime = new Date('2026-03-10T09:00:00Z');
 
             const createRes = await authedRequest(
                 ctx.bob.user.sessionToken,
@@ -1275,8 +1275,8 @@ describe('Calendar', () => {
         });
 
         test('all-day event with FE UTC midnight matches backend occurrenceDate', async () => {
-            const startTime = Math.floor(new Date('2026-06-15T00:00:00Z').getTime() / 1000);
-            const endTime = Math.floor(new Date('2026-06-16T00:00:00Z').getTime() / 1000);
+            const startTime = new Date('2026-06-15T00:00:00Z');
+            const endTime = new Date('2026-06-16T00:00:00Z');
 
             await authedRequest(
                 ctx.bob.user.sessionToken,
@@ -1305,8 +1305,8 @@ describe('Calendar', () => {
         });
 
         test('recurring weekly event creates correct occurrences in range', async () => {
-            const startTime = Math.floor(new Date('2026-04-06T14:00:00Z').getTime() / 1000);
-            const endTime = Math.floor(new Date('2026-04-06T15:00:00Z').getTime() / 1000);
+            const startTime = new Date('2026-04-06T14:00:00Z');
+            const endTime = new Date('2026-04-06T15:00:00Z');
 
             await authedRequest(
                 ctx.bob.user.sessionToken,
@@ -1341,13 +1341,13 @@ describe('Calendar', () => {
             expect(dates).toContain('2026-04-27');
 
             for (const s of standups) {
-                expect(s.endTime - s.startTime).toBe(3600);
+                expect(new Date(s.endTime).getTime() - new Date(s.startTime).getTime()).toBe(3600_000);
             }
         });
 
         test('daily recurring event with COUNT limits occurrences', async () => {
-            const startTime = Math.floor(new Date('2026-05-01T10:00:00Z').getTime() / 1000);
-            const endTime = Math.floor(new Date('2026-05-01T11:00:00Z').getTime() / 1000);
+            const startTime = new Date('2026-05-01T10:00:00Z');
+            const endTime = new Date('2026-05-01T11:00:00Z');
 
             await authedRequest(
                 ctx.bob.user.sessionToken,
@@ -1405,8 +1405,8 @@ describe('Calendar', () => {
             );
             const sideCal = await assertJson<CalendarItem>(createCalRes);
 
-            const startTime = Math.floor(new Date('2026-03-12T15:00:00Z').getTime() / 1000);
-            const endTime = Math.floor(new Date('2026-03-12T16:00:00Z').getTime() / 1000);
+            const startTime = new Date('2026-03-12T15:00:00Z');
+            const endTime = new Date('2026-03-12T16:00:00Z');
             await authedRequest(
                 ctx.bob.user.sessionToken,
                 `/calendar/${ctx.bob.user.id}/calendars/${sideCal.id}/events`,
@@ -1457,8 +1457,8 @@ describe('Calendar', () => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         title: 'Bad Recurrence',
-                        startTime: 1741773600,
-                        endTime: 1741777200,
+                        startTime: new Date(1741773600 * 1000),
+                        endTime: new Date(1741777200 * 1000),
                         allDay: false,
                         rrule: 'INVALID_RRULE_STRING',
                     }),
@@ -1476,8 +1476,8 @@ describe('Calendar', () => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         title: 'Garbage Recurrence',
-                        startTime: 1741773600,
-                        endTime: 1741777200,
+                        startTime: new Date(1741773600 * 1000),
+                        endTime: new Date(1741777200 * 1000),
                         allDay: false,
                         rrule: ';;;not-a-rule;;;',
                     }),
@@ -1496,8 +1496,8 @@ describe('Calendar', () => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         title: 'Valid Event For RRULE Update Test',
-                        startTime: 1741773600,
-                        endTime: 1741777200,
+                        startTime: new Date(1741773600 * 1000),
+                        endTime: new Date(1741777200 * 1000),
                         allDay: false,
                     }),
                 },
@@ -1528,8 +1528,8 @@ describe('Calendar', () => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         title: 'Valid After Invalid',
-                        startTime: 1741773600,
-                        endTime: 1741777200,
+                        startTime: new Date(1741773600 * 1000),
+                        endTime: new Date(1741777200 * 1000),
                         allDay: false,
                         rrule: 'FREQ=DAILY;COUNT=5',
                     }),
@@ -1572,8 +1572,8 @@ describe('Calendar invite email to Eigen user', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     title,
-                    startTime: 1745000000,
-                    endTime: 1745003600,
+                    startTime: new Date(1745000000 * 1000),
+                    endTime: new Date(1745003600 * 1000),
                     allDay: false,
                     data: {
                         attendees: [

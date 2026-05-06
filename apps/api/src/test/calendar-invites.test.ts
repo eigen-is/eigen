@@ -23,8 +23,8 @@ describe('Calendar Invites', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     title,
-                    startTime: Math.floor(Date.now() / 1000) + 3600,
-                    endTime: Math.floor(Date.now() / 1000) + 7200,
+                    startTime: new Date(Date.now() + 3600_000),
+                    endTime: new Date(Date.now() + 7200_000),
                     allDay: false,
                     data: {
                         attendees: attendees.map((a) => ({ ...a, status: 'pending', role: 'required' })),
@@ -265,7 +265,8 @@ describe('Calendar Invites', () => {
     });
 
     describe('Per-occurrence RSVP', () => {
-        const baseTime = Math.floor(new Date('2026-06-01T10:00:00Z').getTime() / 1000);
+        const baseTime = new Date('2026-06-01T10:00:00Z');
+        const baseTimeSec = Math.floor(baseTime.getTime() / 1000);
         let bobCalId: string;
 
         async function createRecurringInvite(title: string) {
@@ -278,7 +279,7 @@ describe('Calendar Invites', () => {
                     body: JSON.stringify({
                         title,
                         startTime: baseTime,
-                        endTime: baseTime + 3600,
+                        endTime: new Date(baseTime.getTime() + 3600_000),
                         allDay: false,
                         rrule: 'FREQ=WEEKLY;COUNT=5',
                         data: {
@@ -300,8 +301,8 @@ describe('Calendar Invites', () => {
         }
 
         async function getEventsInRange(token: string, ownerId: string) {
-            const from = baseTime - 86400;
-            const to = baseTime + 86400 * 42;
+            const from = baseTimeSec - 86400;
+            const to = baseTimeSec + 86400 * 42;
             const res = await authedRequest(token, `/calendar/${ownerId}/event-range/${from}/${to}`);
             return assertJson<CalendarEventOccurrence[]>(res);
         }
@@ -461,7 +462,7 @@ describe('Calendar Invites', () => {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        rrule: `FREQ=WEEKLY;UNTIL=${new Date((baseTime + 86400 * 20) * 1000).toISOString().replace(/[-:]/g, '').split('.')[0]}Z`,
+                        rrule: `FREQ=WEEKLY;UNTIL=${new Date(baseTime.getTime() + 86400_000 * 20).toISOString().replace(/[-:]/g, '').split('.')[0]}Z`,
                         data: { attendees: event.data!.attendees },
                     }),
                 },

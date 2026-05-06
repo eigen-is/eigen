@@ -10,8 +10,8 @@ export const calendars = sqliteTable('calendars', {
     visible: integer('visible', { mode: 'boolean' }).notNull().default(true),
     ctag: integer('ctag').notNull().default(0),
     shares: text('shares', { mode: 'json' }).$type<CalendarShare[] | null>(),
-    createdAt: integer('createdAt').default(sql`(unixepoch())`),
-    updatedAt: integer('updatedAt').default(sql`(unixepoch())`),
+    createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+    updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 });
 
 export const events = sqliteTable(
@@ -26,8 +26,8 @@ export const events = sqliteTable(
         title: text('title').notNull(),
         description: text('description'),
         location: text('location'),
-        startTime: integer('startTime').notNull(),
-        endTime: integer('endTime').notNull(),
+        startTime: integer('startTime', { mode: 'timestamp' }).notNull(),
+        endTime: integer('endTime', { mode: 'timestamp' }).notNull(),
         allDay: integer('allDay', { mode: 'boolean' }).notNull().default(false),
         rrule: text('rrule'),
         timezone: text('timezone'),
@@ -40,8 +40,8 @@ export const events = sqliteTable(
         organizerUserId: text('organizerUserId'),
         sequence: integer('sequence').notNull().default(0),
         createByUserId: text('createByUserId'),
-        createdAt: integer('createdAt').default(sql`(unixepoch())`),
-        updatedAt: integer('updatedAt').default(sql`(unixepoch())`),
+        createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+        updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
         icsBlob: text('icsBlob'),
         eventCtag: integer('eventCtag'),
     },
@@ -77,6 +77,6 @@ export const sharedCalendars = sqliteTable('shared_calendars', {
     permission: text('permission').notNull(),
     color: text('color'),
     visible: integer('visible', { mode: 'boolean' }).notNull().default(true),
-    createdAt: integer('createdAt').default(sql`(unixepoch())`),
-    updatedAt: integer('updatedAt').default(sql`(unixepoch())`),
+    createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
+    updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
 });

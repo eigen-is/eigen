@@ -128,27 +128,23 @@ export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCale
 
         setIsLoading(true);
         try {
-            let startTimestamp: number;
-            let endTimestamp: number;
+            let start: Date;
+            let end: Date;
 
             if (allDay) {
-                const sd = new Date(`${startDate}T00:00:00Z`);
-                const ed = new Date(`${endDate}T00:00:00Z`);
-                ed.setUTCDate(ed.getUTCDate() + 1);
-                startTimestamp = Math.floor(sd.getTime() / 1000);
-                endTimestamp = Math.floor(ed.getTime() / 1000);
+                start = new Date(`${startDate}T00:00:00Z`);
+                end = new Date(`${endDate}T00:00:00Z`);
+                end.setUTCDate(end.getUTCDate() + 1);
             } else {
-                const sd = new Date(`${startDate}T${startTime}`);
-                const ed = new Date(`${endDate}T${endTime}`);
-                startTimestamp = Math.floor(sd.getTime() / 1000);
-                endTimestamp = Math.floor(ed.getTime() / 1000);
+                start = new Date(`${startDate}T${startTime}`);
+                end = new Date(`${endDate}T${endTime}`);
             }
 
             await createEvent.mutateAsync({
                 calendarId: selectedCal.id,
                 title: title.trim(),
-                startTime: startTimestamp,
-                endTime: endTimestamp,
+                startTime: start,
+                endTime: end,
                 allDay,
                 description: description.trim() || null,
                 location: location.trim() || null,

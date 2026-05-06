@@ -99,7 +99,7 @@ export function MonthView({
                                 const allDayEvents = dayEvents.filter((e) => e.allDay);
                                 const timedEvents = dayEvents
                                     .filter((e) => !e.allDay)
-                                    .sort((a, b) => a.startTime - b.startTime);
+                                    .sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
                                 const sortedEvents = [...allDayEvents, ...timedEvents];
                                 const visibleEvents = sortedEvents.slice(0, MAX_VISIBLE_EVENTS);
                                 const moreCount = sortedEvents.length - MAX_VISIBLE_EVENTS;

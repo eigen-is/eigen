@@ -52,12 +52,7 @@ export function formatInputDate(date: Date | string | number): string {
     return new Date(date).toISOString().slice(0, 10);
 }
 
-export function formatEventWhen(
-    startEpoch: number,
-    endEpoch: number,
-    allDay: boolean,
-    timezone?: string | null,
-): string {
+export function formatEventWhen(start: Date, end: Date, allDay: boolean, timezone?: string | null): string {
     const tz = timezone || 'UTC';
     const dateOpts: Intl.DateTimeFormatOptions = {
         weekday: 'long',
@@ -67,8 +62,6 @@ export function formatEventWhen(
         timeZone: tz,
     };
     const timeOpts: Intl.DateTimeFormatOptions = { hour: '2-digit', minute: '2-digit', timeZone: tz };
-    const start = new Date(startEpoch * 1000);
-    const end = new Date(endEpoch * 1000);
     const sameDay =
         start.toLocaleDateString('en-GB', { timeZone: tz }) === end.toLocaleDateString('en-GB', { timeZone: tz });
 

@@ -123,19 +123,17 @@ export function EditEventDialog({
             );
 
             if (event.allDay) {
-                const sd = new Date(event.startTime * 1000);
-                const ed = new Date((event.endTime - 86400) * 1000);
+                const sd = event.startTime;
+                const ed = new Date(event.endTime.getTime() - 86400_000);
                 setStartDate(toLocalDateString(new Date(sd.getUTCFullYear(), sd.getUTCMonth(), sd.getUTCDate())));
                 setEndDate(toLocalDateString(new Date(ed.getUTCFullYear(), ed.getUTCMonth(), ed.getUTCDate())));
                 setStartTime('00:00');
                 setEndTime('00:00');
             } else {
-                const sd = new Date(event.startTime * 1000);
-                const ed = new Date(event.endTime * 1000);
-                setStartDate(toLocalDateString(sd));
-                setStartTime(toLocalTimeString(sd));
-                setEndDate(toLocalDateString(ed));
-                setEndTime(toLocalTimeString(ed));
+                setStartDate(toLocalDateString(event.startTime));
+                setStartTime(toLocalTimeString(event.startTime));
+                setEndDate(toLocalDateString(event.endTime));
+                setEndTime(toLocalTimeString(event.endTime));
             }
         }
     }, [event, open, calendarOptions, eventOwnerId]);
@@ -145,23 +143,14 @@ export function EditEventDialog({
     const isRecurring = !!event.rrule;
     const isLinkedEvent = !!event.data?.organizer;
 
-    const buildTimestamps = () => {
-        let startTimestamp: number;
-        let endTimestamp: number;
-
+    const buildTimestamps = (): { start: Date; end: Date } => {
         if (allDay) {
-            const sd = new Date(`${startDate}T00:00:00Z`);
-            const ed = new Date(`${endDate}T00:00:00Z`);
-            ed.setUTCDate(ed.getUTCDate() + 1);
-            startTimestamp = Math.floor(sd.getTime() / 1000);
-            endTimestamp = Math.floor(ed.getTime() / 1000);
-        } else {
-            const sd = new Date(`${startDate}T${startTime}`);
-            const ed = new Date(`${endDate}T${endTime}`);
-            startTimestamp = Math.floor(sd.getTime() / 1000);
-            endTimestamp = Math.floor(ed.getTime() / 1000);
+            const start = new Date(`${startDate}T00:00:00Z`);
+            const end = new Date(`${endDate}T00:00:00Z`);
+            end.setUTCDate(end.getUTCDate() + 1);
+            return { start, end };
         }
-        return { startTimestamp, endTimestamp };
+        return { start: new Date(`${startDate}T${startTime}`), end: new Date(`${endDate}T${endTime}`) };
     };
 
     const handleSaveClick = () => {
@@ -191,13 +180,13 @@ export function EditEventDialog({
     const doSave = async (action: RecurringAction) => {
         setIsLoading(true);
         try {
-            const { startTimestamp, endTimestamp } = buildTimestamps();
+            const { start, end } = buildTimestamps();
             const data = { ...event.data, attendees: attendees.length > 0 ? attendees : undefined };
             const timezone = allDay ? null : (event.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
             const updates = {
                 title: title.trim(),
-                startTime: startTimestamp,
-                endTime: endTimestamp,
+                startTime: start,
+                endTime: end,
                 allDay,
                 description: description.trim() || null,
                 location: location.trim() || null,

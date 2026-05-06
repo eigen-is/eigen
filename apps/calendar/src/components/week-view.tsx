@@ -94,7 +94,7 @@ export function WeekView({
                         const allDayEvents = dayEvents.filter((e) => e.allDay);
                         const timedEvents = dayEvents
                             .filter((e) => !e.allDay)
-                            .sort((a, b) => a.startTime - b.startTime);
+                            .sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
 
                         return (
                             <div

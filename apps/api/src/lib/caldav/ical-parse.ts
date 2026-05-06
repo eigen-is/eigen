@@ -6,8 +6,8 @@ export type ParsedEvent = {
     title: string;
     description: string | null;
     location: string | null;
-    startTime: number;
-    endTime: number;
+    startTime: Date;
+    endTime: Date;
     allDay: boolean;
     rrule: string | null;
     timezone: string | null;
@@ -54,20 +54,20 @@ export function parseIcs(icsText: string): IcsParseResult {
 
         // For all-day events (VALUE=DATE), construct UTC midnight manually.
         // ical.js toJSDate() converts through local timezone, shifting the date.
-        let startTime: number;
-        let endTime: number;
+        let startTime: Date;
+        let endTime: Date;
         if (allDay) {
             const s = event.startDate;
-            startTime = Math.floor(Date.UTC(s.year, s.month - 1, s.day) / 1000);
+            startTime = new Date(Date.UTC(s.year, s.month - 1, s.day));
             if (dtend) {
                 const e = event.endDate;
-                endTime = Math.floor(Date.UTC(e.year, e.month - 1, e.day) / 1000);
+                endTime = new Date(Date.UTC(e.year, e.month - 1, e.day));
             } else {
-                endTime = startTime + 86400;
+                endTime = new Date(startTime.getTime() + 86400_000);
             }
         } else {
-            startTime = Math.floor(event.startDate.toJSDate().getTime() / 1000);
-            endTime = dtend ? Math.floor(event.endDate.toJSDate().getTime() / 1000) : startTime + 3600;
+            startTime = event.startDate.toJSDate();
+            endTime = dtend ? event.endDate.toJSDate() : new Date(startTime.getTime() + 3600_000);
         }
 
         const tzidRaw = dtstart?.getParameter('tzid') || null;
@@ -190,14 +190,14 @@ export function parseIcs(icsText: string): IcsParseResult {
                     const pad = (n: number) => String(n).padStart(2, '0');
                     const exDateStr = `${exVal.year}-${pad(exVal.month)}-${pad(exVal.day)}`;
 
-                    let exStartTime: number;
-                    let exEndTime: number;
+                    let exStartTime: Date;
+                    let exEndTime: Date;
                     if (isDateOnly) {
-                        exStartTime = Math.floor(Date.UTC(exVal.year, exVal.month - 1, exVal.day) / 1000);
-                        exEndTime = exStartTime + 86400;
+                        exStartTime = new Date(Date.UTC(exVal.year, exVal.month - 1, exVal.day));
+                        exEndTime = new Date(exStartTime.getTime() + 86400_000);
                     } else {
-                        exStartTime = Math.floor(exVal.toJSDate().getTime() / 1000);
-                        exEndTime = exStartTime + (endTime - startTime);
+                        exStartTime = exVal.toJSDate();
+                        exEndTime = new Date(exStartTime.getTime() + (endTime.getTime() - startTime.getTime()));
                     }
 
                     results.push({
