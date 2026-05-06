@@ -13,8 +13,8 @@ const MOCK_EVENT: CalendarEvent = {
     title: 'Team Standup',
     description: 'Daily sync',
     location: 'Room 42',
-    startTime: Math.floor(new Date('2026-04-15T10:00:00Z').getTime() / 1000),
-    endTime: Math.floor(new Date('2026-04-15T11:00:00Z').getTime() / 1000),
+    startTime: new Date('2026-04-15T10:00:00Z'),
+    endTime: new Date('2026-04-15T11:00:00Z'),
     allDay: false,
     rrule: null,
     timezone: null,
@@ -28,8 +28,8 @@ const MOCK_EVENT: CalendarEvent = {
         organizer: { userId: 'alice-id', email: 'alice@eigen.example', name: 'Alice' },
     },
     createByUserId: 'alice-id',
-    createdAt: Math.floor(Date.now() / 1000),
-    updatedAt: Math.floor(Date.now() / 1000),
+    createdAt: new Date(),
+    updatedAt: new Date(),
 };
 
 describe('iMIP Serialization', () => {
@@ -330,8 +330,8 @@ describe('iMIP Outbound via Invite Propagation (integration)', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     title: 'iMIP External Test',
-                    startTime: Math.floor(Date.now() / 1000) + 86400,
-                    endTime: Math.floor(Date.now() / 1000) + 86400 + 3600,
+                    startTime: new Date(Date.now() + 86400_000),
+                    endTime: new Date(Date.now() + 86400_000 + 3600_000),
                     allDay: false,
                     data: {
                         attendees: [
@@ -359,8 +359,8 @@ describe('iMIP Outbound via Invite Propagation (integration)', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     title: 'iMIP Cancel Test',
-                    startTime: Math.floor(Date.now() / 1000) + 86400 * 2,
-                    endTime: Math.floor(Date.now() / 1000) + 86400 * 2 + 3600,
+                    startTime: new Date(Date.now() + 86400_000 * 2),
+                    endTime: new Date(Date.now() + 86400_000 * 2 + 3600_000),
                     allDay: false,
                     data: {
                         attendees: [
@@ -407,8 +407,8 @@ describe('iMIP METHOD:REPLY inbound (integration)', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     title: 'Reply Flow Test',
-                    startTime: Math.floor(Date.now() / 1000) + 86400 * 5,
-                    endTime: Math.floor(Date.now() / 1000) + 86400 * 5 + 3600,
+                    startTime: new Date(Date.now() + 86400_000 * 5),
+                    endTime: new Date(Date.now() + 86400_000 * 5 + 3600_000),
                     allDay: false,
                     data: {
                         attendees: [

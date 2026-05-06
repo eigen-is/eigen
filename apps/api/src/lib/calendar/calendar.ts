@@ -35,8 +35,8 @@ export type ReceiveInvitationPayload = {
     title: string;
     description: string | null;
     location: string | null;
-    startTime: number;
-    endTime: number;
+    startTime: Date;
+    endTime: Date;
     allDay: boolean;
     rrule: string | null;
     timezone: string | null;
@@ -52,8 +52,8 @@ export type InvitationUpdatePayload = {
     title: string;
     description: string | null;
     location: string | null;
-    startTime: number;
-    endTime: number;
+    startTime: Date;
+    endTime: Date;
     allDay: boolean;
     rrule: string | null;
     timezone?: string | null;
@@ -70,14 +70,14 @@ function computeEtag(event: {
     title: string;
     description?: string | null;
     location?: string | null;
-    startTime: number;
-    endTime: number;
+    startTime: Date;
+    endTime: Date;
     allDay: boolean;
     rrule?: string | null;
     timezone?: string | null;
     status: string;
     data?: EventData | null;
-    updatedAt?: number | null;
+    updatedAt?: Date | null;
 }): string {
     const hash = createHash('md5');
     hash.update(
@@ -120,9 +120,9 @@ function getIntlFormatter(tz: string): Intl.DateTimeFormat {
     return fmt;
 }
 
-function utcToLocal(epochSeconds: number, tz: string): LocalComponents {
+function utcToLocal(date: Date, tz: string): LocalComponents {
     const fmt = getIntlFormatter(tz);
-    const parts = fmt.formatToParts(new Date(epochSeconds * 1000));
+    const parts = fmt.formatToParts(date);
     const get = (type: Intl.DateTimeFormatPartTypes) => parseInt(parts.find((p) => p.type === type)!.value, 10);
     return {
         year: get('year'),
@@ -134,7 +134,7 @@ function utcToLocal(epochSeconds: number, tz: string): LocalComponents {
     };
 }
 
-function localToUtcSeconds(
+function localToUtc(
     tz: string,
     year: number,
     month: number,
@@ -142,18 +142,17 @@ function localToUtcSeconds(
     hour: number,
     minute: number,
     second: number,
-): number {
+): Date {
     const guessMs = Date.UTC(year, month - 1, day, hour, minute, second);
-    const guessEpoch = Math.floor(guessMs / 1000);
-    const local = utcToLocal(guessEpoch, tz);
+    const local = utcToLocal(new Date(guessMs), tz);
     const localMs = Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute, local.second);
     const offsetMs = localMs - guessMs;
-    const adjusted = Math.floor((guessMs - offsetMs) / 1000);
+    const adjusted = new Date(guessMs - offsetMs);
     const verify = utcToLocal(adjusted, tz);
     const verifyMs = Date.UTC(verify.year, verify.month - 1, verify.day, verify.hour, verify.minute, verify.second);
     if (verifyMs !== guessMs) {
         const offsetMs2 = verifyMs - guessMs;
-        return Math.floor((new Date(guessMs).getTime() - offsetMs2) / 1000);
+        return new Date(guessMs - offsetMs2);
     }
     return adjusted;
 }
@@ -177,10 +176,10 @@ function dbEventToCalendarEvent(row: typeof schema.events.$inferSelect): Calenda
         status: row.status as CalendarEvent['status'],
         sequence: row.sequence,
         etag: row.etag,
-        data: (row.data as EventData) ?? null,
+        data: row.data ?? null,
         createByUserId: row.createByUserId ?? null,
-        createdAt: row.createdAt as number,
-        updatedAt: row.updatedAt as number,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
     };
 }
 
@@ -200,8 +199,8 @@ function dbCalendarToCalendarItem(row: typeof schema.calendars.$inferSelect): Ca
         visible: row.visible,
         ctag: row.ctag,
         shares: row.shares ?? null,
-        createdAt: row.createdAt as number,
-        updatedAt: row.updatedAt as number,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
     };
 }
 
@@ -215,8 +214,8 @@ function dbRowToSharedCalendar(row: typeof schema.sharedCalendars.$inferSelect):
         permission: row.permission as SharedCalendar['permission'],
         color: row.color ?? null,
         visible: row.visible,
-        createdAt: row.createdAt as number,
-        updatedAt: row.updatedAt as number,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
     };
 }
 
@@ -334,8 +333,8 @@ export class Calendar {
         calendarId: string,
         input: {
             title: string;
-            startTime: number;
-            endTime: number;
+            startTime: Date;
+            endTime: Date;
             allDay: boolean;
             description?: string | null;
             location?: string | null;
@@ -454,7 +453,7 @@ export class Calendar {
         if (!event) {
             return;
         }
-        const etag = computeEtag({ ...event, updatedAt: Math.floor(Date.now() / 1000) });
+        const etag = computeEtag({ ...event, updatedAt: new Date() });
         this.db
             .update(schema.events)
             .set({
@@ -485,6 +484,9 @@ export class Calendar {
     }
 
     public getRawEventsInRange(calendarId: string, from: number, to: number): CalendarEventRow[] {
+        const fromDate = new Date(from * 1000);
+        const toDate = new Date(to * 1000);
+
         // 1. Non-recurring events that overlap the range
         const nonRecurring = this.db
             .select()
@@ -494,8 +496,8 @@ export class Calendar {
                     eq(schema.events.calendarId, calendarId),
                     isNull(schema.events.rrule),
                     isNull(schema.events.parentEventId),
-                    lte(schema.events.startTime, to),
-                    gte(schema.events.endTime, from),
+                    lte(schema.events.startTime, toDate),
+                    gte(schema.events.endTime, fromDate),
                 ),
             )
             .all()
@@ -588,8 +590,8 @@ export class Calendar {
         id: string,
         input: {
             title?: string;
-            startTime?: number;
-            endTime?: number;
+            startTime?: Date;
+            endTime?: Date;
             allDay?: boolean;
             description?: string | null;
             location?: string | null;
@@ -746,6 +748,9 @@ export class Calendar {
             conditions.push(eq(schema.events.calendarId, calendarId));
         }
 
+        const fromDate = new Date(from * 1000);
+        const toDate = new Date(to * 1000);
+
         const nonRecurring = this.db
             .select()
             .from(schema.events)
@@ -754,8 +759,8 @@ export class Calendar {
                     ...conditions,
                     isNull(schema.events.rrule),
                     isNull(schema.events.parentEventId),
-                    lte(schema.events.startTime, to),
-                    gte(schema.events.endTime, from),
+                    lte(schema.events.startTime, toDate),
+                    gte(schema.events.endTime, fromDate),
                 ),
             )
             .all();
@@ -796,10 +801,9 @@ export class Calendar {
 
         for (const row of nonRecurring) {
             const evt = dbEventToCalendarEvent(row);
-            const d = new Date(evt.startTime * 1000);
             results.push({
                 ...evt,
-                occurrenceDate: `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`,
+                occurrenceDate: formatOccurrenceDate(evt.startTime),
             });
         }
 
@@ -827,10 +831,9 @@ export class Calendar {
                 const modified = modifiedDates.get(occ.occurrenceDate);
                 if (modified) {
                     const modEvt = dbEventToCalendarEvent(modified);
-                    const d = new Date(modEvt.startTime * 1000);
                     results.push({
                         ...modEvt,
-                        occurrenceDate: `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`,
+                        occurrenceDate: formatOccurrenceDate(modEvt.startTime),
                     });
                 } else {
                     results.push(occ);
@@ -838,7 +841,7 @@ export class Calendar {
             }
         }
 
-        results.sort((a, b) => a.startTime - b.startTime);
+        results.sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
         return results;
     }
 
@@ -1124,7 +1127,7 @@ export class Calendar {
             type: 'calendar-invite',
             actorEmail: payload.data?.organizer?.email,
             title: `New invitation: ${payload.title}`,
-            tag: `calendar-invite:${payload.organizerEventId}:${payload.startTime}`,
+            tag: `calendar-invite:${payload.organizerEventId}:${payload.startTime.getTime()}`,
         });
         return id;
     }
@@ -1182,7 +1185,7 @@ export class Calendar {
             type: 'calendar-invite-updated',
             actorEmail: linked.data?.organizer?.email,
             title: `Updated: ${payload.title}`,
-            tag: `calendar-invite:${orgEventId}:${payload.startTime}`,
+            tag: `calendar-invite:${orgEventId}:${payload.startTime.getTime()}`,
         });
     }
 
@@ -1197,7 +1200,7 @@ export class Calendar {
             type: 'calendar-invite-cancelled',
             actorEmail: linked.data?.organizer?.email,
             title: `Cancelled: ${linked.title}`,
-            tag: `calendar-invite:${orgEventId}:${linked.startTime}`,
+            tag: `calendar-invite:${orgEventId}:${linked.startTime.getTime()}`,
         });
     }
 
@@ -1205,7 +1208,7 @@ export class Calendar {
         this.db.transaction((tx) => {
             const row = tx.select().from(schema.events).where(eq(schema.events.id, eventId)).get();
             if (!row) return;
-            const data = (row.data as EventData) ?? null;
+            const data = row.data;
             if (!data?.attendees) return;
 
             const attendees = data.attendees.map((a) =>
@@ -1251,7 +1254,7 @@ export class Calendar {
         const existing = this.getException(eventId, recurrenceDate);
 
         if (existing) {
-            const data = (existing.data as EventData) ?? parent.data ?? {};
+            const data: EventData = existing.data ?? parent.data ?? {};
             const attendees = (data.attendees || parent.data?.attendees || []).map((a) =>
                 a.email.toLowerCase() === email.toLowerCase() ? { ...a, status } : a,
             );
@@ -1476,8 +1479,10 @@ export class Calendar {
 function expandRecurrence(event: CalendarEvent, rangeFrom: number, rangeTo: number): CalendarEventOccurrence[] {
     if (!event.rrule) return [];
 
-    const eventDuration = event.endTime - event.startTime;
+    const durationMs = event.endTime.getTime() - event.startTime.getTime();
     const tz = event.timezone;
+    const rangeStart = new Date(rangeFrom * 1000);
+    const rangeEnd = new Date(rangeTo * 1000);
 
     if (tz) {
         // Timezone-aware expansion: convert to wall-clock, let rrule work in wall-clock space,
@@ -1493,7 +1498,7 @@ function expandRecurrence(event: CalendarEvent, rangeFrom: number, rangeTo: numb
         });
 
         // Pad range by ±1 day to handle timezone offset edge cases, then filter
-        const localFrom = utcToLocal(rangeFrom - 86400, tz);
+        const localFrom = utcToLocal(new Date(rangeStart.getTime() - 86400_000), tz);
         const wallClockFrom = new Date(
             Date.UTC(
                 localFrom.year,
@@ -1504,7 +1509,7 @@ function expandRecurrence(event: CalendarEvent, rangeFrom: number, rangeTo: numb
                 localFrom.second,
             ),
         );
-        const localTo = utcToLocal(rangeTo + 86400, tz);
+        const localTo = utcToLocal(new Date(rangeEnd.getTime() + 86400_000), tz);
         const wallClockTo = new Date(
             Date.UTC(localTo.year, localTo.month - 1, localTo.day, localTo.hour, localTo.minute, localTo.second),
         );
@@ -1513,7 +1518,7 @@ function expandRecurrence(event: CalendarEvent, rangeFrom: number, rangeTo: numb
         const results: CalendarEventOccurrence[] = [];
 
         for (const date of dates) {
-            const ts = localToUtcSeconds(
+            const startTime = localToUtc(
                 tz,
                 date.getUTCFullYear(),
                 date.getUTCMonth() + 1,
@@ -1522,11 +1527,11 @@ function expandRecurrence(event: CalendarEvent, rangeFrom: number, rangeTo: numb
                 date.getUTCMinutes(),
                 date.getUTCSeconds(),
             );
-            if (ts >= rangeFrom && ts <= rangeTo) {
+            if (startTime >= rangeStart && startTime <= rangeEnd) {
                 results.push({
                     ...event,
-                    startTime: ts,
-                    endTime: ts + eventDuration,
+                    startTime,
+                    endTime: new Date(startTime.getTime() + durationMs),
                     occurrenceDate: formatOccurrenceDate(date),
                 });
             }
@@ -1535,25 +1540,19 @@ function expandRecurrence(event: CalendarEvent, rangeFrom: number, rangeTo: numb
     }
 
     // No timezone: original UTC behavior
-    const dtstart = new Date(event.startTime * 1000);
     const rule = new RRule({
         ...RRule.parseString(event.rrule),
-        dtstart,
+        dtstart: event.startTime,
     });
 
-    const rangeStart = new Date(rangeFrom * 1000);
-    const rangeEnd = new Date(rangeTo * 1000);
     const dates = rule.between(rangeStart, rangeEnd, true);
 
-    return dates.map((date) => {
-        const ts = Math.floor(date.getTime() / 1000);
-        return {
-            ...event,
-            startTime: ts,
-            endTime: ts + eventDuration,
-            occurrenceDate: formatOccurrenceDate(date),
-        };
-    });
+    return dates.map((date) => ({
+        ...event,
+        startTime: date,
+        endTime: new Date(date.getTime() + durationMs),
+        occurrenceDate: formatOccurrenceDate(date),
+    }));
 }
 
 function formatOccurrenceDate(date: Date): string {
@@ -1583,10 +1582,9 @@ function truncateRRule(rruleStr: string, beforeDate: Date): string {
     return result.replace(/^RRULE:/, '');
 }
 
-function computeOccurrenceTimes(parent: CalendarEvent, recurrenceDate: string): { startTime: number; endTime: number } {
-    const duration = parent.endTime - parent.startTime;
+function computeOccurrenceTimes(parent: CalendarEvent, recurrenceDate: string): { startTime: Date; endTime: Date } {
+    const durationMs = parent.endTime.getTime() - parent.startTime.getTime();
     const tz = parent.timezone;
-    const dtstart = new Date(parent.startTime * 1000);
     const occDate = new Date(`${recurrenceDate}T00:00:00Z`);
 
     if (parent.rrule) {
@@ -1603,7 +1601,7 @@ function computeOccurrenceTimes(parent: CalendarEvent, recurrenceDate: string): 
             const matches = rule.between(dayStart, dayEnd, true);
             if (matches.length > 0) {
                 const match = matches[0];
-                const startTime = localToUtcSeconds(
+                const startTime = localToUtc(
                     tz,
                     match.getUTCFullYear(),
                     match.getUTCMonth() + 1,
@@ -1612,17 +1610,17 @@ function computeOccurrenceTimes(parent: CalendarEvent, recurrenceDate: string): 
                     match.getUTCMinutes(),
                     match.getUTCSeconds(),
                 );
-                return { startTime, endTime: startTime + duration };
+                return { startTime, endTime: new Date(startTime.getTime() + durationMs) };
             }
         } else {
-            const rule = new RRule({ ...RRule.parseString(parent.rrule), dtstart });
+            const rule = new RRule({ ...RRule.parseString(parent.rrule), dtstart: parent.startTime });
             const dayStart = new Date(occDate);
             const dayEnd = new Date(occDate);
             dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
             const matches = rule.between(dayStart, dayEnd, true);
             if (matches.length > 0) {
-                const startTime = Math.floor(matches[0].getTime() / 1000);
-                return { startTime, endTime: startTime + duration };
+                const startTime = matches[0];
+                return { startTime, endTime: new Date(startTime.getTime() + durationMs) };
             }
         }
     }
@@ -1631,7 +1629,7 @@ function computeOccurrenceTimes(parent: CalendarEvent, recurrenceDate: string): 
     if (tz) {
         const local = utcToLocal(parent.startTime, tz);
         const occDateParts = occDate.toISOString().substring(0, 10).split('-');
-        const startTime = localToUtcSeconds(
+        const startTime = localToUtc(
             tz,
             parseInt(occDateParts[0], 10),
             parseInt(occDateParts[1], 10),
@@ -1640,13 +1638,14 @@ function computeOccurrenceTimes(parent: CalendarEvent, recurrenceDate: string): 
             local.minute,
             local.second,
         );
-        return { startTime, endTime: startTime + duration };
+        return { startTime, endTime: new Date(startTime.getTime() + durationMs) };
     }
 
-    const startTime =
-        Math.floor(occDate.getTime() / 1000) +
-        dtstart.getUTCHours() * 3600 +
-        dtstart.getUTCMinutes() * 60 +
-        dtstart.getUTCSeconds();
-    return { startTime, endTime: startTime + duration };
+    const startTime = new Date(
+        occDate.getTime() +
+            parent.startTime.getUTCHours() * 3600_000 +
+            parent.startTime.getUTCMinutes() * 60_000 +
+            parent.startTime.getUTCSeconds() * 1000,
+    );
+    return { startTime, endTime: new Date(startTime.getTime() + durationMs) };
 }

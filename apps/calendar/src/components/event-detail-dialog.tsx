@@ -43,8 +43,8 @@ type EventDetailDialogProps = {
     sharedCalendar?: SharedCalendar | null;
 };
 
-function formatFullDate(timestamp: number): string {
-    return new Date(timestamp * 1000).toLocaleDateString('en', {
+function formatFullDate(date: Date): string {
+    return date.toLocaleDateString('en', {
         weekday: 'long',
         year: 'numeric',
         month: 'long',
@@ -56,19 +56,18 @@ function formatFullDate(timestamp: number): string {
 function formatTimeRange(event: CalendarEventOccurrence): string {
     if (event.allDay) {
         const start = formatFullDate(event.startTime);
-        const endDate = new Date((event.endTime - 86400) * 1000);
-        const startDate = new Date(event.startTime * 1000);
-        if (startDate.toDateString() === endDate.toDateString()) {
+        const endDate = new Date(event.endTime.getTime() - 86400_000);
+        if (event.startTime.toDateString() === endDate.toDateString()) {
             return start;
         }
-        return `${start} — ${formatFullDate(event.endTime - 86400)}`;
+        return `${start} — ${formatFullDate(endDate)}`;
     }
-    const startStr = new Date(event.startTime * 1000).toLocaleString('en', {
+    const startStr = event.startTime.toLocaleString('en', {
         weekday: 'long',
         month: 'long',
         day: 'numeric',
     });
-    return `${startStr} · ${formatTime(new Date(event.startTime * 1000))} – ${formatTime(new Date(event.endTime * 1000))}`;
+    return `${startStr} · ${formatTime(event.startTime)} – ${formatTime(event.endTime)}`;
 }
 
 export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedCalendar }: EventDetailDialogProps) {

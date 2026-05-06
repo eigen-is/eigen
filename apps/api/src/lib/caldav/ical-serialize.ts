@@ -38,21 +38,18 @@ function foldLine(line: string): string {
     return parts.join('\r\n ');
 }
 
-function formatDateTimeUTC(epochSeconds: number): string {
-    const d = new Date(epochSeconds * 1000);
+function formatDateTimeUTC(d: Date): string {
     const pad = (n: number) => n.toString().padStart(2, '0');
     return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}Z`;
 }
 
-function formatDateUTC(epochSeconds: number): string {
-    const d = new Date(epochSeconds * 1000);
+function formatDateUTC(d: Date): string {
     const pad = (n: number) => n.toString().padStart(2, '0');
     return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}`;
 }
 
-// Convert epoch seconds to local time in the given IANA timezone, formatted as YYYYMMDDTHHmmSS
-function formatDateTimeInTZ(epochSeconds: number, tz: string): string {
-    const d = new Date(epochSeconds * 1000);
+// Format a Date as local wall-clock time in the given IANA timezone (YYYYMMDDTHHmmSS)
+function formatDateTimeInTZ(d: Date, tz: string): string {
     // Use Intl to extract local-time parts in the target timezone
     const fmt = new Intl.DateTimeFormat('en-CA', {
         timeZone: tz,
@@ -111,9 +108,9 @@ function buildVEvent(event: CalendarEvent, options?: { rsvp?: boolean }): string
 
     prop(`STATUS:${event.status.toUpperCase()}`);
     prop(`SEQUENCE:${event.sequence}`);
-    prop(`CREATED:${formatDateTimeUTC(event.createdAt ?? 0)}`);
-    prop(`LAST-MODIFIED:${formatDateTimeUTC(event.updatedAt ?? 0)}`);
-    prop(`DTSTAMP:${formatDateTimeUTC(event.updatedAt ?? 0)}`);
+    prop(`CREATED:${formatDateTimeUTC(event.createdAt)}`);
+    prop(`LAST-MODIFIED:${formatDateTimeUTC(event.updatedAt)}`);
+    prop(`DTSTAMP:${formatDateTimeUTC(event.updatedAt)}`);
 
     if (event.rrule) {
         // Eigen's frontend stores RRULE with "RRULE:" prefix; strip it to avoid doubling

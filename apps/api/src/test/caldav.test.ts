@@ -193,14 +193,14 @@ describe('CalDAV', () => {
                 headers: { Cookie: `better-auth.session_token=${ctx.alice.user.sessionToken}` },
             }),
         );
-        const events = (await res.json()) as { title: string; allDay: boolean; startTime: number; endTime: number }[];
+        const events = (await res.json()) as { title: string; allDay: boolean; startTime: string; endTime: string }[];
         const allDayEvent = events.find((e) => e.title === 'All Day Event');
         expect(allDayEvent).toBeDefined();
         expect(allDayEvent!.allDay).toBe(true);
         // April 15 00:00:00 UTC
-        expect(new Date(allDayEvent!.startTime * 1000).toISOString()).toBe('2026-04-15T00:00:00.000Z');
+        expect(new Date(allDayEvent!.startTime).toISOString()).toBe('2026-04-15T00:00:00.000Z');
         // April 16 00:00:00 UTC (exclusive end)
-        expect(new Date(allDayEvent!.endTime * 1000).toISOString()).toBe('2026-04-16T00:00:00.000Z');
+        expect(new Date(allDayEvent!.endTime).toISOString()).toBe('2026-04-16T00:00:00.000Z');
     });
 
     test('recurring event exception sync — master etag changes when exception created', async () => {

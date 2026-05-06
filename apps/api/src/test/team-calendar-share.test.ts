@@ -176,7 +176,7 @@ describe('Team Calendar Share (push to existing members)', () => {
         const teamCalendars = await assertJson<CalendarItem[]>(teamCalRes);
         const teamCalId = teamCalendars[0].id;
 
-        const now = Math.floor(Date.now() / 1000);
+        const now = new Date();
         const createRes = await authedRequest(
             ctx.bob.user.sessionToken,
             `/calendar/team_${teamId}/calendars/${teamCalId}/events`,
@@ -186,7 +186,7 @@ describe('Team Calendar Share (push to existing members)', () => {
                 body: JSON.stringify({
                     title: 'Bob Team Event',
                     startTime: now,
-                    endTime: now + 3600,
+                    endTime: new Date(now.getTime() + 3600_000),
                     allDay: false,
                 }),
             },
@@ -239,7 +239,8 @@ describe('Team Calendar Share (push to existing members)', () => {
     });
 
     test('Alice creates event in shared calendar, Bob can read it via shared access', async () => {
-        const now = Math.floor(Date.now() / 1000);
+        const now = new Date();
+        const nowSec = Math.floor(now.getTime() / 1000);
         const createRes = await authedRequest(
             ctx.alice.user.sessionToken,
             `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`,
@@ -249,7 +250,7 @@ describe('Team Calendar Share (push to existing members)', () => {
                 body: JSON.stringify({
                     title: 'Team Shared Event',
                     startTime: now,
-                    endTime: now + 3600,
+                    endTime: new Date(now.getTime() + 3600_000),
                     allDay: false,
                 }),
             },
@@ -259,7 +260,7 @@ describe('Team Calendar Share (push to existing members)', () => {
         // Bob reads events from Alice's shared calendar
         const eventsRes = await authedRequest(
             ctx.bob.user.sessionToken,
-            `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/event-range/${now - 86400}/${now + 86400}`,
+            `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/event-range/${nowSec - 86400}/${nowSec + 86400}`,
         );
         const events = await assertJson<CalendarEventOccurrence[]>(eventsRes);
         const found = events.find((e: CalendarEventOccurrence) => e.title === 'Team Shared Event');
@@ -327,16 +328,16 @@ describe('Regression: Team calendar permission enforcement', () => {
     });
 
     test('Bob with read permission can read events', async () => {
-        const now = Math.floor(Date.now() / 1000);
+        const nowSec = Math.floor(Date.now() / 1000);
         const eventsRes = await authedRequest(
             ctx.bob.user.sessionToken,
-            `/calendar/team_${permTeamId}/calendars/${permTeamCalId}/event-range/${now - 86400}/${now + 86400}`,
+            `/calendar/team_${permTeamId}/calendars/${permTeamCalId}/event-range/${nowSec - 86400}/${nowSec + 86400}`,
         );
         expect(eventsRes.status).toBe(200);
     });
 
     test('Bob with read permission cannot create events', async () => {
-        const now = Math.floor(Date.now() / 1000);
+        const now = new Date();
         const createRes = await authedRequest(
             ctx.bob.user.sessionToken,
             `/calendar/team_${permTeamId}/calendars/${permTeamCalId}/events`,
@@ -346,7 +347,7 @@ describe('Regression: Team calendar permission enforcement', () => {
                 body: JSON.stringify({
                     title: 'Should Fail',
                     startTime: now,
-                    endTime: now + 3600,
+                    endTime: new Date(now.getTime() + 3600_000),
                     allDay: false,
                 }),
             },
@@ -374,7 +375,7 @@ describe('Regression: Team calendar permission enforcement', () => {
         expect(teamCal.permission).toBe('write');
 
         // Bob can now create events
-        const now = Math.floor(Date.now() / 1000);
+        const now = new Date();
         const createRes = await authedRequest(
             ctx.bob.user.sessionToken,
             `/calendar/team_${permTeamId}/calendars/${permTeamCalId}/events`,
@@ -384,7 +385,7 @@ describe('Regression: Team calendar permission enforcement', () => {
                 body: JSON.stringify({
                     title: 'Permitted Event',
                     startTime: now,
-                    endTime: now + 3600,
+                    endTime: new Date(now.getTime() + 3600_000),
                     allDay: false,
                 }),
             },
@@ -404,7 +405,7 @@ describe('Regression: Team calendar permission enforcement', () => {
         });
 
         // Bob should be denied event creation again
-        const now = Math.floor(Date.now() / 1000);
+        const now = new Date();
         const createRes = await authedRequest(
             ctx.bob.user.sessionToken,
             `/calendar/team_${permTeamId}/calendars/${permTeamCalId}/events`,
@@ -414,7 +415,7 @@ describe('Regression: Team calendar permission enforcement', () => {
                 body: JSON.stringify({
                     title: 'Should Fail Again',
                     startTime: now,
-                    endTime: now + 3600,
+                    endTime: new Date(now.getTime() + 3600_000),
                     allDay: false,
                 }),
             },

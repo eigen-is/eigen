@@ -36,8 +36,8 @@ export type CalendarItem = {
     visible: boolean;
     ctag: number;
     shares: CalendarShare[] | null;
-    createdAt: number;
-    updatedAt: number;
+    createdAt: Date;
+    updatedAt: Date;
 };
 
 export type CalendarEvent = {
@@ -48,8 +48,8 @@ export type CalendarEvent = {
     title: string;
     description: string | null;
     location: string | null;
-    startTime: number;
-    endTime: number;
+    startTime: Date;
+    endTime: Date;
     allDay: boolean;
     rrule: string | null;
     timezone: string | null;
@@ -60,8 +60,8 @@ export type CalendarEvent = {
     etag: string;
     data: EventData | null;
     createByUserId: string | null;
-    createdAt: number;
-    updatedAt: number;
+    createdAt: Date;
+    updatedAt: Date;
 };
 
 export type CalendarEventOccurrence = CalendarEvent & {
@@ -69,8 +69,8 @@ export type CalendarEventOccurrence = CalendarEvent & {
 };
 
 export type FreeBusyBlock = {
-    startTime: number;
-    endTime: number;
+    startTime: Date;
+    endTime: Date;
     allDay: boolean;
     status: 'confirmed' | 'tentative';
 };
@@ -78,8 +78,8 @@ export type FreeBusyBlock = {
 export type CreateEventInput = {
     calendarId: string;
     title: string;
-    startTime: number;
-    endTime: number;
+    startTime: Date;
+    endTime: Date;
     allDay: boolean;
     description?: string | null;
     location?: string | null;
@@ -95,8 +95,8 @@ export type UpdateEventInput = {
     calendarId: string;
     id: string;
     title?: string;
-    startTime?: number;
-    endTime?: number;
+    startTime?: Date;
+    endTime?: Date;
     allDay?: boolean;
     description?: string | null;
     location?: string | null;
@@ -129,6 +129,6 @@ export type SharedCalendar = {
     permission: 'free-busy' | 'read' | 'write';
     color: string | null;
     visible: boolean;
-    createdAt: number;
-    updatedAt: number;
+    createdAt: Date;
+    updatedAt: Date;
 };

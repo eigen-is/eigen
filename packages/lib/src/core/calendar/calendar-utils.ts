@@ -70,12 +70,12 @@ export function getEventsForDay(events: CalendarEventOccurrence[], day: Date): C
     return events.filter((e) => {
         if (e.allDay) {
             const dayUtcMs = Date.UTC(day.getFullYear(), day.getMonth(), day.getDate());
-            const dayEndUtcMs = dayUtcMs + 86400000;
-            return e.startTime * 1000 < dayEndUtcMs && e.endTime * 1000 > dayUtcMs;
+            const dayEndUtcMs = dayUtcMs + 86400_000;
+            return e.startTime.getTime() < dayEndUtcMs && e.endTime.getTime() > dayUtcMs;
         }
-        const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime() / 1000;
-        const dayEnd = dayStart + 86400;
-        return e.startTime < dayEnd && e.endTime > dayStart;
+        const dayStartMs = new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime();
+        const dayEndMs = dayStartMs + 86400_000;
+        return e.startTime.getTime() < dayEndMs && e.endTime.getTime() > dayStartMs;
     });
 }
 
@@ -88,7 +88,7 @@ export function toISODateString(date: Date): string {
 
 export function formatEventTime(event: CalendarEventOccurrence): string {
     if (event.allDay) return '';
-    return formatTime(new Date(event.startTime * 1000));
+    return formatTime(event.startTime);
 }
 
 export function getCalendarColor(
@@ -110,8 +110,8 @@ export function isFreeBusyEvent(event: CalendarEventOccurrence): boolean {
     return !event.id;
 }
 
-export function formatFreeBusyTitle(endTime: number): string {
-    return `Busy until ${formatTime(new Date(endTime * 1000))}`;
+export function formatFreeBusyTitle(endTime: Date): string {
+    return `Busy until ${formatTime(endTime)}`;
 }
 
 export function getInviteStatus(event: CalendarEventOccurrence, userEmail?: string): 'pending' | 'declined' | null {

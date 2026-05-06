@@ -47,8 +47,8 @@ const EventDataSchema = t.Object({
 
 const CreateEventSchema = t.Object({
     title: t.String(),
-    startTime: t.Number(),
-    endTime: t.Number(),
+    startTime: t.Date(),
+    endTime: t.Date(),
     allDay: t.Boolean(),
     description: t.Optional(t.Nullable(t.String())),
     location: t.Optional(t.Nullable(t.String())),
@@ -62,8 +62,8 @@ const CreateEventSchema = t.Object({
 
 const UpdateEventSchema = t.Object({
     title: t.Optional(t.String()),
-    startTime: t.Optional(t.Number()),
-    endTime: t.Optional(t.Number()),
+    startTime: t.Optional(t.Date()),
+    endTime: t.Optional(t.Date()),
     allDay: t.Optional(t.Boolean()),
     description: t.Optional(t.Nullable(t.String())),
     location: t.Optional(t.Nullable(t.String())),
