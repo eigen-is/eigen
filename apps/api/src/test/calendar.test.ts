@@ -126,8 +126,8 @@ describe('Calendar', () => {
             expect(event.title).toBe('Team Standup');
             expect(event.description).toBe('Daily sync');
             expect(event.location).toBe('Room A');
-            expect(new Date(event.startTime).toISOString()).toBe(new Date(1741773600 * 1000).toISOString());
-            expect(new Date(event.endTime).toISOString()).toBe(new Date(1741777200 * 1000).toISOString());
+            expect(new Date(event.startTime).getTime()).toBe(1741773600 * 1000);
+            expect(new Date(event.endTime).getTime()).toBe(1741777200 * 1000);
             expect(event.allDay).toBe(false);
             expect(event.status).toBe('confirmed');
             expect(event.uid).toBeDefined();
