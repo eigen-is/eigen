@@ -210,8 +210,8 @@ export function useAllSharedCalendarEvents(sharedCalendars: SharedCalendar[], fr
                             etag: '',
                             data: null,
                             createByUserId: null,
-                            createdAt: block.startTime,
-                            updatedAt: block.startTime,
+                            createdAt: new Date(0),
+                            updatedAt: new Date(0),
                             occurrenceDate: toISODateString(block.startTime),
                         }),
                     );

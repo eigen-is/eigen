@@ -143,16 +143,6 @@ export function EditEventDialog({
     const isRecurring = !!event.rrule;
     const isLinkedEvent = !!event.data?.organizer;
 
-    const buildTimestamps = (): { start: Date; end: Date } => {
-        if (allDay) {
-            const start = new Date(`${startDate}T00:00:00Z`);
-            const end = new Date(`${endDate}T00:00:00Z`);
-            end.setUTCDate(end.getUTCDate() + 1);
-            return { start, end };
-        }
-        return { start: new Date(`${startDate}T${startTime}`), end: new Date(`${endDate}T${endTime}`) };
-    };
-
     const handleSaveClick = () => {
         if (!title.trim()) return;
         if (isRecurring && !calendarChanged) {
@@ -180,7 +170,18 @@ export function EditEventDialog({
     const doSave = async (action: RecurringAction) => {
         setIsLoading(true);
         try {
-            const { start, end } = buildTimestamps();
+            let start: Date;
+            let end: Date;
+
+            if (allDay) {
+                start = new Date(`${startDate}T00:00:00Z`);
+                end = new Date(`${endDate}T00:00:00Z`);
+                end.setUTCDate(end.getUTCDate() + 1);
+            } else {
+                start = new Date(`${startDate}T${startTime}`);
+                end = new Date(`${endDate}T${endTime}`);
+            }
+
             const data = { ...event.data, attendees: attendees.length > 0 ? attendees : undefined };
             const timezone = allDay ? null : (event.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
             const updates = {
