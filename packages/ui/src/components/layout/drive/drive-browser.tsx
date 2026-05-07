@@ -232,6 +232,7 @@ export function DriveBrowser({
                 sortFn={defaultDriveSort}
                 showParentRow={breadcrumbPaths.length > 1}
                 hideModified
+                hideOwner
                 hideShareClick
                 hideHeader={hideHeader}
                 externalSelectedIds={externalSelectedIds}

@@ -39,6 +39,7 @@ import { useListSelection } from '../../../hooks/use-list-selection';
 import { ContextMenuAnchor, useContextMenu } from '../context-menu';
 import { formatDownloadLabel } from '../toolbar/file-menu';
 import { UnreadDot } from '../unread-dot';
+import { UserAvatar } from '../user-avatar';
 import { DriveShareSummary } from './drive-share-summary';
 
 export function defaultDriveSort(a: DrivePath, b: DrivePath): number {
@@ -71,6 +72,7 @@ export type DriveTableProps = {
     showParentRow?: boolean;
     unreadPathIds?: Set<string>;
     hideModified?: boolean;
+    hideOwner?: boolean;
     hideShareClick?: boolean;
     hideHeader?: boolean;
     externalSelectedIds?: Set<string>;
@@ -103,6 +105,7 @@ export function DriveTable({
     showParentRow,
     unreadPathIds,
     hideModified = false,
+    hideOwner = false,
     hideShareClick = false,
     hideHeader = false,
     externalSelectedIds,
@@ -201,23 +204,35 @@ export function DriveTable({
         return !drag.draggedItems.some((d) => d.id === targetItem.id);
     };
 
-    const gridCols = hideModified
-        ? 'grid-cols-[minmax(0,1fr)] sm:grid-cols-[minmax(0,1fr)_10%]'
-        : 'grid-cols-[minmax(0,1fr)] sm:grid-cols-[minmax(0,1fr)_10%_15%]';
+    const gridCols =
+        hideModified && hideOwner
+            ? 'grid-cols-[minmax(0,1fr)] @[800px]:grid-cols-[minmax(0,1fr)_10%]'
+            : hideModified
+              ? 'grid-cols-[minmax(0,1fr)] @[800px]:grid-cols-[minmax(0,1fr)_8%_10%]'
+              : hideOwner
+                ? 'grid-cols-[minmax(0,1fr)] @[600px]:grid-cols-[minmax(0,1fr)_15%] @[800px]:grid-cols-[minmax(0,1fr)_10%_15%]'
+                : 'grid-cols-[minmax(0,1fr)] @[600px]:grid-cols-[minmax(0,1fr)_15%] @[800px]:grid-cols-[minmax(0,1fr)_8%_10%_15%]';
 
     return (
         <div
             ref={containerRef}
             tabIndex={0}
             onKeyDown={handleKeyDown}
-            className="flex-1 overflow-auto relative w-full text-sm focus:outline-none"
+            className="@container flex-1 overflow-auto relative w-full text-sm focus:outline-none"
         >
             {!hideHeader && (
                 <div className={cn('grid border-b', gridCols)}>
                     <div className="text-muted-foreground h-10 px-2 flex items-center font-medium">Name</div>
-                    <div className="text-muted-foreground h-10 px-2 hidden sm:flex items-center font-medium">Share</div>
+                    {!hideOwner && (
+                        <div className="text-muted-foreground h-10 px-2 hidden @[800px]:flex items-center justify-center font-medium">
+                            Owner
+                        </div>
+                    )}
+                    <div className="text-muted-foreground h-10 px-2 hidden @[800px]:flex items-center justify-center font-medium whitespace-nowrap">
+                        Shared with
+                    </div>
                     {!hideModified && (
-                        <div className="text-muted-foreground h-10 px-2 hidden sm:flex items-center font-medium">
+                        <div className="text-muted-foreground h-10 pl-2 pr-4 hidden @[600px]:flex items-center justify-end font-medium">
                             Modified
                         </div>
                     )}
@@ -246,8 +261,9 @@ export function DriveTable({
                         <ChevronLeft className="h-4 w-4 mr-2 text-muted-foreground" />
                         <span>..</span>
                     </div>
-                    <div className="hidden sm:block px-2 py-1.5" />
-                    {!hideModified && <div className="hidden sm:block px-2 py-1.5">-</div>}
+                    {!hideOwner && <div className="hidden @[800px]:block px-2 py-1.5" />}
+                    <div className="hidden @[800px]:block px-2 py-1.5" />
+                    {!hideModified && <div className="hidden @[600px]:block pl-2 pr-4 py-1.5 text-right">-</div>}
                 </div>
             )}
 
@@ -331,7 +347,14 @@ export function DriveTable({
                                 <span className="truncate">{stripEigenExtension(item.name)}</span>
                             )}
                         </div>
-                        <div className="hidden sm:flex items-center px-2 py-1.5 group">
+                        {!hideOwner && (
+                            <div className="hidden @[800px]:flex items-center justify-center px-2 py-1.5">
+                                <div className="-my-0.5">
+                                    <UserAvatar userId={item.ownerId} size="sm" tooltip />
+                                </div>
+                            </div>
+                        )}
+                        <div className="hidden @[800px]:flex items-center justify-center px-2 py-1.5 group">
                             <DriveShareSummary
                                 path={item}
                                 onClick={hideShareClick ? undefined : () => onShareClick?.(item)}
@@ -340,7 +363,7 @@ export function DriveTable({
                             />
                         </div>
                         {!hideModified && (
-                            <div className="hidden sm:flex items-center px-2 py-1.5 whitespace-nowrap">
+                            <div className="hidden @[600px]:flex items-center justify-end pl-2 pr-4 py-1.5 whitespace-nowrap">
                                 {item.updatedAt ? formatDateTime(item.updatedAt) : 'Unknown'}
                             </div>
                         )}
