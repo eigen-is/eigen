@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useCollabDocumentInfo } from '@workspace/lib/collab';
 import { LoadingState, RequestAccessView } from '@workspace/ui';
 import { useLayout } from '@workspace/ui/components/layout/app/layout-context';
@@ -16,6 +16,7 @@ export const Route = createFileRoute('/_auth/board/$ownerId/$mountId/$pathId')({
 function StickiesRoute() {
     const { ownerId, mountId, pathId } = Route.useParams();
     const { chat } = Route.useSearch();
+    const navigate = useNavigate();
     const { data: docInfo, isLoading } = useCollabDocumentInfo(ownerId, mountId, pathId);
     const { setDocumentTitle } = useLayout();
     const [accessDialogOpen, setAccessDialogOpen] = useState(false);
@@ -29,6 +30,15 @@ function StickiesRoute() {
     const handleAccessDialogOpen = useCallback(() => {
         setAccessDialogOpen(true);
     }, [setAccessDialogOpen]);
+
+    const handleClearChat = useCallback(() => {
+        navigate({
+            to: Route.fullPath,
+            params: { ownerId, mountId, pathId },
+            search: (prev) => ({ ...prev, chat: undefined }),
+            replace: true,
+        });
+    }, [navigate, ownerId, mountId, pathId]);
 
     const chatFolderId = useMemo(() => {
         return docInfo?.folderContents?.find((item) => item.name === 'chat')?.id ?? null;
@@ -48,6 +58,7 @@ function StickiesRoute() {
                 chatFolderId={chatFolderId}
                 onAccessDialogOpen={handleAccessDialogOpen}
                 initialChatName={chat}
+                onClearInitialChat={handleClearChat}
             />
             <DriveAccessDialog open={accessDialogOpen} onOpenChange={setAccessDialogOpen} path={docInfo.path} />
         </>

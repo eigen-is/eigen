@@ -1,16 +1,10 @@
 import { useNavigate } from '@tanstack/react-router';
-import {
-    useAddTeamMember,
-    useMembers,
-    useRemoveTeam,
-    useRemoveTeamMember,
-    useTeamMembers,
-    useUpdateTeam,
-} from '@workspace/lib/admin';
+import { useAddTeamMember, useMembers, useRemoveTeam, useRemoveTeamMember, useUpdateTeam } from '@workspace/lib/admin';
 import { useCalendars, useUpdateCalendar } from '@workspace/lib/calendar';
 import { useCheckS3Connection, useServerSettings } from '@workspace/lib/settings';
 import {
     useAddTeamMount,
+    useTeamMembers,
     useTeamMounts,
     useTeamSettings,
     useUpdateTeamMount,
@@ -83,10 +77,10 @@ export function TeamDetail({ team, organizationId }: TeamDetailProps) {
     const [draftMountMax, setDraftMountMax] = useState('');
 
     const updateTeam = useUpdateTeam(organizationId);
-    const { data: teamMembers = [] } = useTeamMembers(organizationId, team.id);
+    const { data: teamMembers = [] } = useTeamMembers(team.id);
     const { data: allMembers = [] } = useMembers(organizationId);
-    const addMember = useAddTeamMember(organizationId);
-    const removeMember = useRemoveTeamMember(organizationId);
+    const addMember = useAddTeamMember();
+    const removeMember = useRemoveTeamMember();
 
     const ownerId = teamOwnerId(team.id);
     const { data: calendars = [] } = useCalendars(ownerId);

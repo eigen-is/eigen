@@ -1,6 +1,7 @@
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { horizontalListSortingStrategy, SortableContext } from '@dnd-kit/sortable';
 import { useHotkey } from '@tanstack/react-hotkeys';
+import { getDriveItemUrl } from '@workspace/lib/api';
 import { useComments } from '@workspace/lib/chat';
 import { restoreYjsDoc } from '@workspace/lib/collab';
 import { MediaResolverProvider } from '@workspace/lib/drive';
@@ -10,10 +11,11 @@ import { LoadingState, NoteCard, NoteCardContextMenu } from '@workspace/ui';
 import { ColumnLayout, Column as LayoutColumn } from '@workspace/ui/components/layout/app/column-layout';
 import { ContextMenuAnchor, useContextMenu } from '@workspace/ui/components/layout/context-menu';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as Y from 'yjs';
 import { AddCardDialog } from './add-card-dialog';
 import { AddColumnDialog } from './add-column-dialog';
+import { CardDialog } from './card-dialog';
 import { CardSettingsDialog } from './card-settings-dialog';
 import { Column } from './column';
 import { ColumnSettingsDialog } from './column-settings-dialog';
@@ -29,6 +31,7 @@ type StickiesBoardProps = {
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
     initialChatName?: string;
+    onClearInitialChat?: () => void;
 };
 
 export function StickiesBoard({
@@ -38,6 +41,7 @@ export function StickiesBoard({
     chatFolderId,
     onAccessDialogOpen,
     initialChatName,
+    onClearInitialChat,
 }: StickiesBoardProps) {
     const {
         board,
@@ -109,6 +113,37 @@ export function StickiesBoard({
     const cardContextMenu = useContextMenu<CardItem>();
     const [editCardId, setEditCardId] = useState<string | null>(null);
     const [deleteCardId, setDeleteCardId] = useState<string | null>(null);
+    const [openCardId, setOpenCardId] = useState<string | null>(null);
+
+    // Track the chatName we've already auto-opened for so a YJS update arriving before the URL
+    // clear navigates can't re-apply the auto-open after the user has closed the dialog.
+    const autoOpenedForRef = useRef<string | undefined>(undefined);
+    useEffect(() => {
+        if (!initialChatName) {
+            autoOpenedForRef.current = undefined;
+            return;
+        }
+        if (!isSynced) return;
+        if (autoOpenedForRef.current === initialChatName) return;
+        autoOpenedForRef.current = initialChatName;
+        const card = Object.values(board.tasks).find((t) => t.chatName === initialChatName);
+        if (card) {
+            setOpenCardId(card.id);
+        } else {
+            onClearInitialChat?.();
+        }
+    }, [initialChatName, board.tasks, isSynced, onClearInitialChat]);
+
+    const openCard = openCardId ? (board.tasks[openCardId] ?? null) : null;
+
+    const handleCardOpen = useCallback((cardId: string) => {
+        setOpenCardId(cardId);
+    }, []);
+
+    const handleCardClose = useCallback(() => {
+        setOpenCardId(null);
+        onClearInitialChat?.();
+    }, [onClearInitialChat]);
 
     const handleCardContextEdit = () => {
         if (cardContextMenu.item) setEditCardId(cardContextMenu.item.id);
@@ -192,9 +227,6 @@ export function StickiesBoard({
                     onAddCard={handleAddCardClick}
                     onEditColumn={handleEditColumn}
                     isMobile={isMobile}
-                    yjsDoc={yjsDoc}
-                    ownerId={ownerId}
-                    mountId={path.mountId}
                 />
             );
         }
@@ -273,14 +305,11 @@ export function StickiesBoard({
                                                     canWrite={canWrite}
                                                     onAddCard={handleAddCardClick}
                                                     onEditColumn={handleEditColumn}
+                                                    onCardOpen={handleCardOpen}
                                                     onCardContextMenu={
                                                         canWrite ? cardContextMenu.handleContextMenu : undefined
                                                     }
                                                     isMobile={isMobile}
-                                                    yjsDoc={yjsDoc}
-                                                    ownerId={ownerId}
-                                                    mountId={path.mountId}
-                                                    initialChatName={initialChatName}
                                                 />
                                             );
                                         })}
@@ -344,6 +373,21 @@ export function StickiesBoard({
                                 title="Delete Card"
                                 description="This will permanently delete the card. This action cannot be undone."
                                 onDelete={handleDeleteCard}
+                            />
+
+                            <CardDialog
+                                isOpen={!!openCard}
+                                onClose={handleCardClose}
+                                card={openCard}
+                                canWrite={canWrite}
+                                yjsDoc={yjsDoc}
+                                ownerId={ownerId}
+                                mountId={path.mountId}
+                                copyLinkUrl={
+                                    openCard?.chatName
+                                        ? `${getDriveItemUrl(path)}?chat=${encodeURIComponent(openCard.chatName)}`
+                                        : undefined
+                                }
                             />
                         </div>
                     </div>

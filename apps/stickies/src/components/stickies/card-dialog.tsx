@@ -65,9 +65,19 @@ type CardDialogProps = {
     yjsDoc: Y.Doc | null;
     ownerId: string;
     mountId: string;
+    copyLinkUrl?: string;
 };
 
-export function CardDialog({ isOpen, onClose, card, canWrite = true, yjsDoc, ownerId, mountId }: CardDialogProps) {
+export function CardDialog({
+    isOpen,
+    onClose,
+    card,
+    canWrite = true,
+    yjsDoc,
+    ownerId,
+    mountId,
+    copyLinkUrl,
+}: CardDialogProps) {
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const meta = useCreatedByMeta(card?.creator || undefined, card?.createdAt || 0);
 
@@ -84,6 +94,7 @@ export function CardDialog({ isOpen, onClose, card, canWrite = true, yjsDoc, own
                 color={card.color}
                 canWrite={canWrite}
                 onEdit={() => setIsSettingsOpen(true)}
+                copyLinkUrl={copyLinkUrl}
             >
                 {card.chatName ? (
                     <CardChat ownerId={ownerId} mountId={mountId} chatName={card.chatName} />

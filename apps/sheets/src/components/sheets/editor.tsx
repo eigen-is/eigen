@@ -1,4 +1,5 @@
 import { Workbook, type WorkbookInstance } from '@workspace/fortune-sheet';
+import { getDriveItemUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { useComments, useResolveComment, useUpdateCommentColor } from '@workspace/lib/chat';
 import { EIGEN_STICKIES_COLORS, EIGEN_STICKIES_INDICATOR_MAP } from '@workspace/lib/constants/colors';
@@ -290,6 +291,7 @@ export function SheetEditor({
                     title={activeComments.anchorTexts.get(viewCommentChatName) || viewCommentChatName}
                     ownerId={ownerId}
                     mountId={path.mountId}
+                    copyLinkUrl={`${getDriveItemUrl(path)}?chat=${encodeURIComponent(viewCommentChatName)}`}
                     onClose={() => setViewCommentChatName(null)}
                     onResolve={(chatName, status) => resolveComment.mutate({ chatName, status })}
                 />

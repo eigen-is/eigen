@@ -40,7 +40,7 @@ function AuthenticatedAdmin() {
     const { data: config } = usePublicConfig();
     const { data: teams = [] } = useTeams(config?.orgId);
     const { data: members = [] } = useMembers(config?.orgId);
-    const addMember = useAddTeamMember(config?.orgId);
+    const addMember = useAddTeamMember();
     const location = useLocation();
 
     const { data: serverSettings } = useServerSettings();

@@ -16,11 +16,20 @@ type CommentDialogProps = {
     title: string;
     ownerId: string;
     mountId: string;
+    copyLinkUrl?: string;
     onClose: () => void;
     onResolve: (chatName: string, status: 'resolved' | 'open') => void;
 };
 
-export function CommentDialog({ comment, title, ownerId, mountId, onClose, onResolve }: CommentDialogProps) {
+export function CommentDialog({
+    comment,
+    title,
+    ownerId,
+    mountId,
+    copyLinkUrl,
+    onClose,
+    onResolve,
+}: CommentDialogProps) {
     const meta = useCreatedByMeta(comment.lastAuthorEmail ?? undefined, comment.createdAt);
 
     return (
@@ -35,6 +44,7 @@ export function CommentDialog({ comment, title, ownerId, mountId, onClose, onRes
             actionIcon={comment.status === 'open' ? Check : RotateCcw}
             actionTooltip={comment.status === 'open' ? 'Resolve' : 'Re-open'}
             onAction={() => onResolve(comment.chatName, comment.status === 'open' ? 'resolved' : 'open')}
+            copyLinkUrl={copyLinkUrl}
         >
             <CommentThread ownerId={ownerId} mountId={mountId} chatName={comment.chatName} />
         </NoteCardDialog>
