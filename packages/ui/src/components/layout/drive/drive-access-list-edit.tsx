@@ -3,7 +3,7 @@ import { useAuth } from '@workspace/lib/auth';
 import { copyToClipboard } from '@workspace/lib/clipboard';
 import { type DirectAccessItem, useDriveAccess, useIsEffectiveOwner } from '@workspace/lib/drive';
 import { useMyTeams } from '@workspace/lib/home';
-import { teamOwnerId } from '@workspace/lib/types';
+import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
 import type { DriveACL, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import { AvatarIcon } from '@workspace/ui/components/avatar';
@@ -289,7 +289,7 @@ export function DriveAccessListEdit({
                 {directList.map((access: DirectAccessItem) => {
                     return (
                         <div key={access.id} className="flex items-center justify-between">
-                            <UserItem email={access.id} />
+                            <UserItem email={access.id} popover={parseOwnerId(access.id).type === 'team'} />
                             {access.owner ? (
                                 <span className="text-xs text-muted-foreground w-28 text-right">Owner</span>
                             ) : (
@@ -314,7 +314,11 @@ export function DriveAccessListEdit({
                 {inheritedList.map((access) => {
                     return (
                         <div key={access.id} className="flex items-center justify-between">
-                            <UserItem email={access.id} label={<>(inherited from /{access.sourceFolderName})</>} />
+                            <UserItem
+                                email={access.id}
+                                label={<>(inherited from /{access.sourceFolderName})</>}
+                                popover={parseOwnerId(access.id).type === 'team'}
+                            />
                             <span className="text-xs text-muted-foreground w-28 text-right">
                                 {access.write ? 'Editor' : 'Viewer'}
                             </span>

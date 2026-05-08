@@ -1,8 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useChatEditing, useChatRoom } from '@workspace/lib/chat';
 import { useCheckPermissions } from '@workspace/lib/drive';
-import { useMyTeams } from '@workspace/lib/home';
-import { useTeamMembers } from '@workspace/lib/team';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import {
     ChatMessageInput,
@@ -15,55 +13,13 @@ import {
     UserAvatar,
 } from '@workspace/ui';
 import { Column, ColumnLayout } from '@workspace/ui/components/layout/app/column-layout.tsx';
-import { CollapsibleUserList } from '@workspace/ui/components/layout/collapsible-user-list';
 import { DeleteDialog } from '@workspace/ui/components/layout/delete/delete-dialog';
 import { DriveAccessDialog } from '@workspace/ui/components/layout/drive/drive-access-dialog';
 import { DrivePickerWithUpload } from '@workspace/ui/components/layout/drive/drive-picker-with-upload';
 import { DriveRenameItem } from '@workspace/ui/components/layout/drive/drive-rename-item';
 import { DriveShareSummary } from '@workspace/ui/components/layout/drive/drive-share-summary';
-import { UserItem } from '@workspace/ui/components/layout/user-item';
-import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
 import { Pencil, UserRoundPlus } from 'lucide-react';
 import { useRef, useState } from 'react';
-
-function TeamAvatarPopover({ ownerId }: { ownerId: string }) {
-    const teamId = parseOwnerId(ownerId).id;
-    const { data: teams } = useMyTeams();
-    const team = teams?.find((t) => t.id === teamId);
-    const { data: members = [] } = useTeamMembers(teamId);
-
-    return (
-        <Popover>
-            <Tooltip delayDuration={300}>
-                <TooltipTrigger asChild>
-                    <PopoverTrigger asChild>
-                        <button
-                            type="button"
-                            aria-label={team?.name ? `${team.name} members` : 'Team members'}
-                            className="rounded-full cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        >
-                            <UserAvatar email={ownerId} size="sm" />
-                        </button>
-                    </PopoverTrigger>
-                </TooltipTrigger>
-                <TooltipContent>{team?.name ?? 'Team'}</TooltipContent>
-            </Tooltip>
-            <PopoverContent align="start" className="w-80 p-2 max-h-[70vh] overflow-y-auto">
-                <CollapsibleUserList
-                    title={team?.name ?? 'Team'}
-                    count={members.length}
-                    collapseThreshold={Number.POSITIVE_INFINITY}
-                    summaryLines={[`${members.length} ${members.length === 1 ? 'member' : 'members'}`]}
-                >
-                    {members.map((m) => (
-                        <UserItem key={m.userId} userId={m.userId} name={m.name} email={m.email} />
-                    ))}
-                </CollapsibleUserList>
-            </PopoverContent>
-        </Popover>
-    );
-}
 
 function ChatView() {
     const { ownerId, mountId, chatId } = Route.useParams();
@@ -88,7 +44,7 @@ function ChatView() {
         <Toolbar>
             {chat.chatPath &&
                 (isTeam ? (
-                    <TeamAvatarPopover ownerId={ownerId} />
+                    <UserAvatar email={ownerId} size="sm" popover tooltip />
                 ) : (
                     <DriveShareSummary
                         path={chat.chatPath}

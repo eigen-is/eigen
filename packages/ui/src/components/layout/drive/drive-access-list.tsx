@@ -1,5 +1,6 @@
 import { useDriveAccess } from '@workspace/lib/drive';
 import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
+import { parseOwnerId } from '@workspace/lib/types/owner';
 import { AvatarIcon } from '@workspace/ui/components/avatar';
 import { Separator } from '@workspace/ui/components/separator';
 import { cn } from '@workspace/ui/lib/utils';
@@ -63,6 +64,7 @@ export function DriveAccessList({ path, className, onShareClick, scrollable }: D
                             key={access.id}
                             email={access.id}
                             label={access.owner ? 'Owner' : <AccessLabel access={access} />}
+                            popover={parseOwnerId(access.id).type === 'team'}
                         />
                     ))}
                 </CollapsibleUserList>

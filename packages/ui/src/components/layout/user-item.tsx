@@ -4,8 +4,9 @@ import { cn } from '@workspace/ui/lib/utils';
 import type { HTMLAttributes, ReactNode } from 'react';
 import { Avatar, AvatarImage } from '../avatar.tsx';
 import { EigenLoader } from './braket/eigen-loader.tsx';
+import { OwnerInfoPopover } from './owner-info-popover';
 
-export type UserItemProps = HTMLAttributes<HTMLDivElement> & {
+export type UserItemProps = Omit<HTMLAttributes<HTMLDivElement>, 'popover'> & {
     name?: string;
     email?: string;
     imageUrl?: string;
@@ -13,6 +14,7 @@ export type UserItemProps = HTMLAttributes<HTMLDivElement> & {
     label?: ReactNode;
     className?: string;
     mailLink?: boolean;
+    popover?: boolean;
 };
 
 export function UserItem({
@@ -23,6 +25,7 @@ export function UserItem({
     label,
     className,
     mailLink = false,
+    popover = false,
     ...props
 }: UserItemProps) {
     const { displayName, resolvedEmail, avatarSrc, isLoading } = useResolvedUser({
@@ -34,7 +37,7 @@ export function UserItem({
 
     if (isLoading) return <EigenLoader />;
 
-    return (
+    const row = (
         <div className={cn('flex items-center', className)} {...props}>
             <Avatar className={'h-8 w-8 print-exact select-none'}>
                 <AvatarImage src={avatarSrc} alt={displayName} />
@@ -59,4 +62,14 @@ export function UserItem({
             </div>
         </div>
     );
+
+    if (popover) {
+        return (
+            <OwnerInfoPopover userId={userId} email={email} name={name} triggerClassName="w-full text-left rounded">
+                {row}
+            </OwnerInfoPopover>
+        );
+    }
+
+    return row;
 }
