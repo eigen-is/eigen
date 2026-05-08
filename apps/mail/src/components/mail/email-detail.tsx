@@ -1,15 +1,14 @@
 import { formatFullDateTime } from '@workspace/lib/date';
-import type { AddressObject, Attachment, Email, MaildirMailbox } from '@workspace/lib/types/mail';
-import { Toolbar, TooltipButton } from '@workspace/ui';
+import type { AddressObject, Attachment, Email, EmailAddress, MaildirMailbox } from '@workspace/lib/types/mail';
+import { Toolbar, TooltipButton, UserAvatar } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@workspace/ui/components/dropdown-menu';
 import { ShadowContent } from '@workspace/ui/components/layout/shadow-content';
-import { UserItem } from '@workspace/ui/components/layout/user-item';
+import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
 import { Separator } from '@workspace/ui/components/separator';
-import { Table, TableBody, TableCell, TableRow } from '@workspace/ui/components/table';
 import { printDocument } from '@workspace/ui/lib/printElement';
-import { AlertTriangle, Archive, Forward, MoreVertical, Reply, ReplyAll, Trash2 } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { AlertTriangle, Archive, ChevronDown, Forward, MoreVertical, Reply, ReplyAll, Trash2 } from 'lucide-react';
+import { type ReactNode, useEffect, useRef } from 'react';
 import { CalendarInviteWidget } from './calendar-invite-widget';
 import { EmailContextMenu } from './email-context-menu';
 import { ReadAttachments } from './read-attachments';
@@ -163,6 +162,82 @@ function formatContactObjects(contacts: AddressObject | AddressObject[], compact
         : formatContactObject(contacts, compact);
 }
 
+function flattenAddresses(contacts?: AddressObject | AddressObject[]): EmailAddress[] {
+    if (!contacts) return [];
+    return Array.isArray(contacts) ? contacts.flatMap((c) => c.value) : contacts.value;
+}
+
+function MailHeaderDetails({ email, formattedDate }: { email: Email; formattedDate: string }) {
+    const rows: { label: string; node: ReactNode }[] = [];
+    if (email.from) rows.push({ label: 'from', node: formatContactObjects(email.from) });
+    if (email.replyTo) rows.push({ label: 'reply-to', node: formatContactObjects(email.replyTo) });
+    if (email.to) rows.push({ label: 'to', node: formatContactObjects(email.to) });
+    if (email.cc) rows.push({ label: 'cc', node: formatContactObjects(email.cc) });
+    if (email.bcc) rows.push({ label: 'bcc', node: formatContactObjects(email.bcc) });
+    rows.push({ label: 'date', node: <span className="text-foreground">{formattedDate}</span> });
+    if (email.subject) rows.push({ label: 'subject', node: <span className="text-foreground">{email.subject}</span> });
+
+    return (
+        <div className="text-sm">
+            {rows.map((r) => (
+                <div key={r.label} className="grid grid-cols-[80px_1fr] gap-2 py-1">
+                    <span className="text-muted-foreground">{r.label}:</span>
+                    <span className="break-words">{r.node}</span>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+function MailHeader({ email, formattedDate }: { email: Email; formattedDate: string }) {
+    const isSent = email.mailbox === 'Sent';
+    const recipients = [...flattenAddresses(email.to), ...flattenAddresses(email.cc), ...flattenAddresses(email.bcc)];
+    const primary = isSent ? recipients[0] : email.from?.value[0];
+    const primaryName = primary?.name || primary?.address || 'Unknown';
+    const primaryEmail = primary?.address || '';
+
+    const summaryNames = recipients.map((a) => a.name || a.address || '').filter(Boolean);
+
+    return (
+        <div className="flex items-center">
+            <UserAvatar name={primaryName} email={primaryEmail} />
+            <div className="ml-3 flex-1 min-w-0">
+                <div className="flex items-baseline gap-2 min-w-0">
+                    <span className="text-sm font-medium text-foreground truncate">{primaryName}</span>
+                    {primaryEmail && primaryEmail !== primaryName && (
+                        <span className="text-xs text-muted-foreground truncate">&lt;{primaryEmail}&gt;</span>
+                    )}
+                </div>
+                <div className="flex justify-between items-center gap-1 text-xs text-muted-foreground whitespace-nowrap">
+                    {summaryNames.length > 0 ? (
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <button
+                                    type="button"
+                                    className="flex items-center gap-1 min-w-0 hover:text-foreground rounded cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                >
+                                    <span className="truncate">to: {summaryNames.join(', ')}</span>
+                                    <ChevronDown className="h-3 w-3 shrink-0" />
+                                </button>
+                            </PopoverTrigger>
+                            <PopoverContent
+                                align="start"
+                                collisionPadding={8}
+                                className="w-[28rem] max-w-[calc(100vw-2rem)] max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
+                            >
+                                <MailHeaderDetails email={email} formattedDate={formattedDate} />
+                            </PopoverContent>
+                        </Popover>
+                    ) : (
+                        <span />
+                    )}
+                    <span className="ml-auto shrink-0">{formattedDate}</span>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export function EmailDetail({ email, toggleMailRead }: EmailDetailProps) {
     const hasMarkedAsRead = useRef<string | null>(null);
 
@@ -182,28 +257,6 @@ export function EmailDetail({ email, toggleMailRead }: EmailDetailProps) {
         );
     }
 
-    const firstFrom = email.from?.value[0];
-    const fromName = firstFrom?.name || firstFrom?.address || 'Unknown';
-    const fromEmail = firstFrom?.address || 'unknown@example.com';
-
-    const needsToShowTo = email.to
-        ? Array.isArray(email.to)
-            ? email.to.length > 1
-            : email.to.value.length > 1
-        : false;
-    const needsToShowCc = email.cc
-        ? Array.isArray(email.cc)
-            ? email.cc.length > 1
-            : email.cc.value.length > 1
-        : false;
-    const needsToShowBcc = email.bcc
-        ? Array.isArray(email.bcc)
-            ? email.bcc.length > 1
-            : email.bcc.value.length > 1
-        : false;
-
-    const needsToShowDetails = needsToShowTo || needsToShowCc || needsToShowBcc;
-
     const formattedDate = email.date ? formatFullDateTime(new Date(email.date)) : 'Unknown date';
 
     // Get email content
@@ -219,58 +272,8 @@ export function EmailDetail({ email, toggleMailRead }: EmailDetailProps) {
                             {email.subject ? String(email.subject) : '(No subject)'}
                         </h1>
 
-                        <div className="mt-4 ">
-                            <UserItem name={fromName} email={fromEmail} label={formattedDate} mailLink={true} />
-                        </div>
+                        <MailHeader email={email} formattedDate={formattedDate} />
                     </div>
-
-                    {needsToShowDetails && (
-                        <details className="group">
-                            <summary className="text-xs truncate p-1 cursor-pointer hover:bg-muted rounded-md">
-                                <span className="opacity-100 group-open:opacity-0">
-                                    {needsToShowTo && email.to && <> to: {formatContactObjects(email.to, true)}</>}
-                                    {needsToShowCc && email.cc && <> cc: {formatContactObjects(email.cc, true)}</>}
-                                    {needsToShowBcc && email.bcc && <> bcc: {formatContactObjects(email.bcc, true)}</>}
-                                </span>
-                            </summary>
-                            <div>
-                                <Table className="text-sm text-muted-foreground">
-                                    <TableBody>
-                                        <TableRow className="border-none">
-                                            <TableCell className="text-xs w-10 px-1 py-1">From</TableCell>
-                                            <TableCell className="truncate px-1 py-1">
-                                                {email.from && formatContactObjects(email.from)}
-                                            </TableCell>
-                                        </TableRow>
-                                        {needsToShowTo ? (
-                                            <TableRow className="border-none">
-                                                <TableCell className="text-xs w-10 px-1 py-1">To</TableCell>
-                                                <TableCell className="truncate px-1 py-1">
-                                                    {email.to && formatContactObjects(email.to)}
-                                                </TableCell>
-                                            </TableRow>
-                                        ) : null}
-                                        {needsToShowCc && email.cc ? (
-                                            <TableRow className="border-none">
-                                                <TableCell className="text-xs px-1 py-1">Cc</TableCell>
-                                                <TableCell className="truncate px-1 py-1">
-                                                    {email.cc && formatContactObjects(email.cc)}
-                                                </TableCell>
-                                            </TableRow>
-                                        ) : null}
-                                        {needsToShowBcc && email.bcc ? (
-                                            <TableRow className="border-none">
-                                                <TableCell className="text-xs px-1 py-1">Bcc</TableCell>
-                                                <TableCell className="truncate px-1 py-1">
-                                                    {formatContactObjects(email.bcc)}
-                                                </TableCell>
-                                            </TableRow>
-                                        ) : null}
-                                    </TableBody>
-                                </Table>
-                            </div>
-                        </details>
-                    )}
 
                     <Separator />
 
