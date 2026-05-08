@@ -53,7 +53,11 @@ export function OwnerInfoPopover({
             ) : (
                 triggerButton
             )}
-            <PopoverContent align="start" className="w-80 p-2 max-h-[70vh] overflow-y-auto">
+            <PopoverContent
+                align="start"
+                collisionPadding={8}
+                className="w-80 p-2 max-h-[var(--radix-popover-content-available-height)] overflow-y-auto"
+            >
                 {isTeam ? (
                     <TeamMembersContent teamId={parsed.id} />
                 ) : (
