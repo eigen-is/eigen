@@ -8,7 +8,9 @@ export async function parseEml(messageId: string, mailbox: string, file: BunFile
         const parsedMail = await simpleParser(Buffer.from(await file.arrayBuffer()), {});
 
         if (parsedMail.html) {
-            parsedMail.html = DOMPurify.sanitize(parsedMail.html, { FORCE_BODY: true });
+            // ADD_ATTR keeps `target` on anchors so eigen-doc attachment pills (and any other
+            // sender-set target=_blank link) open in a new tab instead of replacing the mail view.
+            parsedMail.html = DOMPurify.sanitize(parsedMail.html, { FORCE_BODY: true, ADD_ATTR: ['target'] });
             parsedMail.html = parsedMail.html.replace(/\s+/g, ' ').trim();
         }
 
