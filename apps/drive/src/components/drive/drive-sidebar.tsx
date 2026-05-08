@@ -199,7 +199,9 @@ export function DriveSidebar({ condensed = false, onClose, isMobile = false, roo
                     label="Drive"
                     condensed={condensed}
                 />
-
+            </SidebarSection>
+            <Separator />
+            <SidebarSection condensed={condensed} title={condensed ? undefined : 'Filters'}>
                 <SidebarItem
                     icon={<Image className="h-4 w-4" />}
                     to="/mime/image"
@@ -238,7 +240,7 @@ export function DriveSidebar({ condensed = false, onClose, isMobile = false, roo
                 />
             </SidebarSection>
             <Separator />
-            <SidebarSection condensed={condensed}>
+            <SidebarSection condensed={condensed} title={condensed ? undefined : 'Sharing'}>
                 <SidebarItem
                     icon={<UsersRound className="h-4 w-4" />}
                     to="/shared/by-me"
@@ -266,7 +268,7 @@ export function DriveSidebar({ condensed = false, onClose, isMobile = false, roo
             {myTeams?.some((t) => t.mounts.length > 0) && (
                 <>
                     <Separator />
-                    <SidebarSection condensed={condensed} title={condensed ? undefined : 'Shared Drives'}>
+                    <SidebarSection condensed={condensed} title={condensed ? undefined : 'Team Drives'}>
                         {myTeams.flatMap((team) =>
                             team.mounts.map((mount) => (
                                 <TeamMountItem
