@@ -45,7 +45,7 @@ import { DriveRenameItem } from '../drive/drive-rename-item';
 const OPEN_LABELS: Record<EigenDocType, { mime: string; title: string }> = {
     doc: { mime: DRIVE_MIME_DOC, title: 'Open doc' },
     stickies: { mime: DRIVE_MIME_STICKIES, title: 'Open stickies' },
-    slides: { mime: DRIVE_MIME_SLIDES, title: 'Open slides' },
+    slides: { mime: DRIVE_MIME_SLIDES, title: 'Open slide' },
     sheets: { mime: DRIVE_MIME_SHEETS, title: 'Open sheet' },
     chat: { mime: DRIVE_MIME_CHAT, title: 'Open chat' },
 };

@@ -177,11 +177,11 @@ export function DriveSidebar({ condensed = false, onClose, isMobile = false, roo
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setCreateType('slides')}>
                             <Presentation className="h-4 w-4 mr-2" />
-                            New slides
+                            New slide
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setCreateType('sheets')}>
                             <Sheet className="h-4 w-4 mr-2" />
-                            New sheets
+                            New sheet
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setUploadOpen(true)}>
                             <UploadIcon className="h-4 w-4 mr-2" />

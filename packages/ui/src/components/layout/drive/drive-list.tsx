@@ -40,8 +40,8 @@ const CREATE_MENU_DEFS: { key: keyof CreateCallbacks; icon: typeof FolderPlus; l
         { key: 'onCreateDoc', icon: FileText, label: 'New doc', buttonLabel: 'New doc' },
         { key: 'onCreateStickies', icon: SquareKanban, label: 'New stickies', buttonLabel: 'New stickies' },
         { key: 'onCreateChat', icon: MessageSquare, label: 'New chat', buttonLabel: 'New chat' },
-        { key: 'onCreateSlides', icon: Presentation, label: 'New slides', buttonLabel: 'New slides' },
-        { key: 'onCreateSheets', icon: Sheet, label: 'New sheets', buttonLabel: 'New sheets' },
+        { key: 'onCreateSlides', icon: Presentation, label: 'New slide', buttonLabel: 'New slide' },
+        { key: 'onCreateSheets', icon: Sheet, label: 'New sheet', buttonLabel: 'New sheet' },
         { key: 'onUploadFile', icon: UploadIcon, label: 'Upload file', buttonLabel: 'Upload' },
     ];
 

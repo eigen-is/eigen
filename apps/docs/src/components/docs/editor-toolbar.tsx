@@ -195,7 +195,7 @@ export const EditorToolbar = ({
                     onExport={handleExport}
                     onImport={handleImport}
                     importLabel="Import docx file…"
-                    createLabel="New document"
+                    createLabel="New doc"
                     createType="doc"
                 >
                     <DropdownMenuItem onClick={printDocument}>
