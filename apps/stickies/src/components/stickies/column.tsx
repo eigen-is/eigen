@@ -2,7 +2,6 @@ import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-
 import { CSS } from '@dnd-kit/utilities';
 import { TooltipButton } from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
 import { Pencil, Plus } from 'lucide-react';
-import type * as Y from 'yjs';
 import { StickyCard } from './card';
 import type { CardItem, ColumnItem } from './types';
 
@@ -13,12 +12,9 @@ type ColumnProps = {
     isDropAnimating?: boolean;
     onAddCard: (columnId: string) => void;
     onEditColumn: (columnId: string) => void;
+    onCardOpen?: (cardId: string) => void;
     onCardContextMenu?: (e: React.MouseEvent, card: CardItem) => void;
     isMobile: boolean;
-    yjsDoc: Y.Doc | null;
-    ownerId: string;
-    mountId: string;
-    initialChatName?: string;
 };
 
 export function Column({
@@ -28,12 +24,9 @@ export function Column({
     isDropAnimating,
     onAddCard,
     onEditColumn,
+    onCardOpen,
     onCardContextMenu,
     isMobile,
-    yjsDoc,
-    ownerId,
-    mountId,
-    initialChatName,
 }: ColumnProps) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
         id: column.id,
@@ -97,11 +90,8 @@ export function Column({
                                     key={card.id}
                                     card={card}
                                     canWrite={canWrite}
-                                    yjsDoc={yjsDoc}
-                                    ownerId={ownerId}
-                                    mountId={mountId}
+                                    onOpen={onCardOpen}
                                     onContextMenu={onCardContextMenu}
-                                    autoOpen={initialChatName !== undefined && card.chatName === initialChatName}
                                 />
                             ))}
                         </SortableContext>

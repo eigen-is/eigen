@@ -1,6 +1,7 @@
+import { copyToClipboard } from '@workspace/lib/clipboard';
 import { isLightColor, lightenColor } from '@workspace/lib/constants';
 import type { LucideIcon } from 'lucide-react';
-import { Pencil } from 'lucide-react';
+import { Link as LinkIcon, Pencil } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../dialog';
 import { Separator } from '../../separator';
@@ -33,6 +34,7 @@ type NoteCardDialogProps = {
     actionIcon?: LucideIcon;
     actionTooltip?: string;
     onAction?: () => void;
+    copyLinkUrl?: string;
     children: ReactNode;
 };
 
@@ -48,6 +50,7 @@ export function NoteCardDialog({
     actionIcon,
     actionTooltip,
     onAction,
+    copyLinkUrl,
     children,
 }: NoteCardDialogProps) {
     return (
@@ -70,9 +73,16 @@ export function NoteCardDialog({
                         </div>
                     )}
 
-                    {(meta || (canWrite && onEdit) || onAction) && (
-                        <div className={`flex items-center px-4 pb-2 ${!description ? 'pt-2' : ''}`}>
+                    {(meta || copyLinkUrl || (canWrite && onEdit) || onAction) && (
+                        <div className={`flex items-center gap-2 px-4 pb-2 ${!description ? 'pt-2' : ''}`}>
                             {meta && <p className="flex-1 text-xs text-muted-foreground">{meta}</p>}
+                            {copyLinkUrl && (
+                                <IconAction
+                                    icon={LinkIcon}
+                                    tooltip="Copy link"
+                                    onClick={() => copyToClipboard(copyLinkUrl, 'Link copied to clipboard')}
+                                />
+                            )}
                             {canWrite && onEdit && <IconAction icon={Pencil} tooltip="Edit" onClick={onEdit} />}
                             <IconAction icon={actionIcon} tooltip={actionTooltip} onClick={onAction} />
                         </div>

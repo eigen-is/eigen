@@ -5,7 +5,7 @@ import { Selection } from '@tiptap/pm/state';
 import type { Editor } from '@tiptap/react';
 import { EditorContent, useEditor, useEditorState } from '@tiptap/react';
 import { yUndoPluginKey } from '@tiptap/y-tiptap';
-import { getCollabWebSocketUrl } from '@workspace/lib/api';
+import { getCollabWebSocketUrl, getDriveItemUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { useComments, useResolveComment, useUpdateCommentColor } from '@workspace/lib/chat';
 import { needsReUpload, readEigenClipboard, reUploadImage, writeEigenClipboard } from '@workspace/lib/clipboard';
@@ -671,6 +671,7 @@ const TiptapEditor = ({
                     title={activeComments.anchorTexts.get(viewCommentChatName) || viewCommentChatName}
                     ownerId={path.ownerId}
                     mountId={path.mountId}
+                    copyLinkUrl={`${getDriveItemUrl(path)}?chat=${encodeURIComponent(viewCommentChatName)}`}
                     onClose={() => setViewCommentChatName(null)}
                     onResolve={(chatName, status) => resolveComment.mutate({ chatName, status })}
                 />

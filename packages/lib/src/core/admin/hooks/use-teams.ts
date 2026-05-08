@@ -1,16 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { teamApi } from '@workspace/lib/api';
-import { teamOwnerId } from '@workspace/lib/types';
 import type { OrgTeam } from '@workspace/lib/types/admin';
 import { onMutationError } from '../../api-error';
 import { authClient } from '../../auth/hooks/use-auth-client';
 import { useIsGuest } from '../../auth/hooks/use-is-guest';
 import { invalidateMyTeams } from '../../home';
+import { invalidateTeamMembers } from '../../team';
 import { adminKeys } from './keys';
 
-// Admin-only hooks for team management (org settings UI).
-// For listing the current user's teams and members in normal app contexts,
-// use useMyTeams() from '@workspace/lib/home' instead.
+// Admin hooks for team management (org settings UI). Mutations here require
+// admin auth at the better-auth plugin level. For viewing teams the current
+// user belongs to, use useMyTeams() from '@workspace/lib/home'; for listing
+// members of any team you have access to, use useTeamMembers() from
+// '@workspace/lib/team'.
 
 export function useTeams(organizationId?: string) {
     const isGuest = useIsGuest();
@@ -29,18 +30,6 @@ export function useTeams(organizationId?: string) {
             }));
         },
         enabled: !!organizationId && !isGuest,
-        staleTime: 1000 * 60 * 2,
-    });
-}
-
-export function useTeamMembers(organizationId?: string, teamId?: string) {
-    return useQuery({
-        queryKey: adminKeys.teamMembers(organizationId ?? '', teamId ?? ''),
-        queryFn: async () => {
-            const response = await teamApi({ ownerId: teamOwnerId(teamId!) }).members.get();
-            return response.data ?? [];
-        },
-        enabled: !!teamId,
         staleTime: 1000 * 60 * 2,
     });
 }
@@ -83,7 +72,7 @@ export function useRemoveTeam(organizationId?: string) {
     });
 }
 
-export function useAddTeamMember(organizationId?: string) {
+export function useAddTeamMember() {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async ({ teamId, userId }: { teamId: string; userId: string }) => {
@@ -95,14 +84,14 @@ export function useAddTeamMember(organizationId?: string) {
             return data;
         },
         onSuccess: (_data, variables) => {
-            queryClient.invalidateQueries({ queryKey: adminKeys.teamMembers(organizationId ?? '', variables.teamId) });
+            invalidateTeamMembers(queryClient, variables.teamId);
             invalidateMyTeams(queryClient);
         },
         onError: onMutationError,
     });
 }
 
-export function useRemoveTeamMember(organizationId?: string) {
+export function useRemoveTeamMember() {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async ({ teamId, userId }: { teamId: string; userId: string }) => {
@@ -114,7 +103,7 @@ export function useRemoveTeamMember(organizationId?: string) {
             return data;
         },
         onSuccess: (_data, variables) => {
-            queryClient.invalidateQueries({ queryKey: adminKeys.teamMembers(organizationId ?? '', variables.teamId) });
+            invalidateTeamMembers(queryClient, variables.teamId);
             invalidateMyTeams(queryClient);
         },
         onError: onMutationError,
