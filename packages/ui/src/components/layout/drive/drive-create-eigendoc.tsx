@@ -6,8 +6,8 @@ import { DriveLocationPicker } from './drive-location-picker';
 const LABELS: Record<EigenDocType, { title: string; nameLabel: string }> = {
     doc: { title: 'New doc', nameLabel: 'Doc name' },
     stickies: { title: 'New stickies', nameLabel: 'Stickies name' },
-    slides: { title: 'New slides', nameLabel: 'Slides name' },
-    sheets: { title: 'New sheets', nameLabel: 'Sheets name' },
+    slides: { title: 'New slide', nameLabel: 'Slide name' },
+    sheets: { title: 'New sheet', nameLabel: 'Sheet name' },
     chat: { title: 'New chat', nameLabel: 'Chat name' },
 };
 

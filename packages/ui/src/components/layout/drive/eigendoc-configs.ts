@@ -27,7 +27,7 @@ export const SLIDES_CONFIG: EigenDocAppConfig = {
     mimeType: 'application-eigenslides',
     driveType: DRIVE_TYPE_SLIDES,
     icon: Presentation,
-    newLabel: 'New slides',
+    newLabel: 'New slide',
     allLabel: 'All slides',
     createType: 'slides',
 };
@@ -37,7 +37,7 @@ export const SHEETS_CONFIG: EigenDocAppConfig = {
     mimeType: 'application-eigensheets',
     driveType: DRIVE_TYPE_SHEETS,
     icon: Sheet,
-    newLabel: 'New sheets',
+    newLabel: 'New sheet',
     allLabel: 'All sheets',
     createType: 'sheets',
 };

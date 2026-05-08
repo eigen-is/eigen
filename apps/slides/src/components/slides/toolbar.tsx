@@ -78,7 +78,7 @@ export function Toolbar({
                         onRestore={onRestore}
                         onExport={handleExport}
                         exportFormats={['pdf', 'html']}
-                        createLabel="New slides"
+                        createLabel="New slide"
                         createIcon={Presentation}
                         createType="slides"
                     />
