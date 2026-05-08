@@ -95,7 +95,7 @@ export function EigenDocSidebar({
             {myTeams?.some((t) => t.mounts.length > 0) && (
                 <>
                     <Separator />
-                    <SidebarSection condensed={condensed} title={condensed ? undefined : 'Shared Drives'}>
+                    <SidebarSection condensed={condensed} title={condensed ? undefined : 'Team Drives'}>
                         {myTeams.flatMap((team) =>
                             team.mounts
                                 .filter((mount) => mount.rootPathId)
