@@ -77,7 +77,7 @@ export function renderAttachmentPills(references: AttachmentReference[], recipie
         const name = escapeHtml(stripEigenExtension(ref.name));
         cards.push(
             `<div style="display:inline-block;border:1px solid ${EMAIL_BORDER};border-radius:6px;padding:6px 10px;margin:4px 4px 4px 0;font-size:13px;font-family:${EMAIL_FONT};color:#333;text-decoration:none;">` +
-                `<a href="${escapeHtml(href)}" style="color:#333;text-decoration:none;">${PAPERCLIP_SVG}Open ${name} →</a>` +
+                `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" style="color:#333;text-decoration:none;">${PAPERCLIP_SVG}Open ${name} →</a>` +
                 '</div>',
         );
     }

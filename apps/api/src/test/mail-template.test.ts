@@ -44,6 +44,8 @@ describe('renderEigenEmail', () => {
         });
         expect(html).toContain('doc'); // .eigendoc stripped
         expect(html).toMatch(/svg/i); // paperclip
+        expect(html).toContain('target="_blank"'); // open eigen doc in a new tab
+        expect(html).toContain('rel="noopener noreferrer"');
     });
 
     test('emits footer line when present', () => {
