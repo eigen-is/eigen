@@ -74,7 +74,7 @@ export function cancelActiveImgItem(ctx: Context, globalCache: GlobalCache) {
     globalCache.image = undefined;
 }
 
-export function onImageMoveStart(ctx: Context, globalCache: GlobalCache, e: MouseEvent) {
+export function onImageMoveStart(_ctx: Context, globalCache: GlobalCache, e: MouseEvent) {
     const position = getImagePosition();
     if (position) {
         const { top, left } = position;

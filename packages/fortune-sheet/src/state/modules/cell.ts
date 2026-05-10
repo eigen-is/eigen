@@ -12,10 +12,11 @@ import {
     kebabCase,
     map,
 } from 'es-toolkit/compat';
+import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
 import { genarate, update } from '../../engine/format';
-import type { Cell, CellMatrix, FormulaDependency } from '../../engine/types';
+import type { Cell, CellMatrix, CellType, FormulaDependency } from '../../engine/types';
 import { type Context, getFlowdata } from '../context';
-import type { Range, Selection, SingleRange } from '../types';
+import type { Range, Selection, SheetConfig, SingleRange } from '../types';
 import { getSheetIndex, indexToColumnChar, rgbToHex } from '../utils';
 import { checkCF, getComputeMap } from './conditionFormat';
 import { getFailureText, validateCellData } from './dataVerification';
@@ -38,8 +39,13 @@ import { isRealNull, isRealNum, valueIsError } from './validation';
 // let rangedrag_column_start = false;
 // let rangedrag_row_start = false;
 
+// Returns the cell attribute value, normalized to a default when missing. Result is a
+// value-space union (string for color/format/alignment, number for fs, CellType for ct, …);
+// callers narrow at use, e.g. `Number(value)` or `String(value)` per attr.
+// biome-ignore lint/suspicious/noExplicitAny: per-attr return shape varies (string default vs Cell[attr]); tightening forces casts at every call site
 export function normalizedCellAttr(cell: Cell, attr: keyof Cell, defaultFontSize = 10): any {
     const tf = { bl: 1, it: 1, ff: 1, cl: 1, un: 1 };
+    // biome-ignore lint/suspicious/noExplicitAny: same union as the return type
     let value: any = cell?.[attr];
 
     if (attr in tf || (attr === 'fs' && isInlineStringCell(cell))) {
@@ -68,8 +74,9 @@ export function normalizedCellAttr(cell: Cell, attr: keyof Cell, defaultFontSize
     return value;
 }
 
+// biome-ignore lint/suspicious/noExplicitAny: passes through normalizedCellAttr's per-attr union
 export function normalizedAttr(data: CellMatrix, r: number, c: number, attr: keyof Cell): any {
-    if (!data || !data[r]) {
+    if (!data?.[r]) {
         return null;
     }
     const cell = data[r][c];
@@ -77,19 +84,22 @@ export function normalizedAttr(data: CellMatrix, r: number, c: number, attr: key
     return normalizedCellAttr(cell, attr);
 }
 
-export function getCellValue(r: number, c: number, data: CellMatrix, attr?: keyof Cell) {
+// Polymorphic accessor: returns Cell, row, column, full matrix, or a single attr value
+// depending on which of r/c are nil. Callers narrow at use.
+// biome-ignore lint/suspicious/noExplicitAny: per-overload result varies (Cell | row | col | matrix | Cell[attr]); tightening forces casts at every call site
+export function getCellValue(r: number, c: number, data: CellMatrix, attr?: keyof Cell): any {
     if (!attr) {
         attr = 'v';
     }
 
-    let d_value;
+    let d_value: Cell | (Cell | null)[] | null | undefined;
 
     if (!isNil(r) && !isNil(c)) {
         d_value = data[r][c];
     } else if (!isNil(r)) {
         d_value = data[r];
     } else if (!isNil(c)) {
-        const newData = data[0].map((col, i) => {
+        const newData = data[0].map((_col, i) => {
             return data.map((row) => {
                 return row[i];
             });
@@ -99,6 +109,7 @@ export function getCellValue(r: number, c: number, data: CellMatrix, attr?: keyo
         return data;
     }
 
+    // biome-ignore lint/suspicious/noExplicitAny: same return-type union as the function
     let retv: any = d_value;
 
     if (isPlainObject(d_value)) {
@@ -109,7 +120,7 @@ export function getCellValue(r: number, c: number, data: CellMatrix, attr?: keyo
             retv = functionHTMLGenerate(retv);
         } else if (attr === 'f') {
             retv = (d as Cell).v;
-        } else if (d && d.ct && d.ct.t === 'd') {
+        } else if (d?.ct && d.ct.t === 'd') {
             retv = d.m;
         }
     }
@@ -121,6 +132,10 @@ export function getCellValue(r: number, c: number, data: CellMatrix, attr?: keyo
     return retv;
 }
 
+// `v` covers every shape callers feed in: scalar (string/number/boolean), Cell-like patch
+// ({v, f, ct, …}), or null/undefined. Re-used by formula-eval, search/replace, dataVerification,
+// the public API, etc. — keeping the parameter shape here is the project-wide escape hatch.
+// biome-ignore lint/suspicious/noExplicitAny: cross-cutting setter, callers pass scalars and Cell-like patches indistinguishably
 export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix | null | undefined, v: any) {
     if (isNil(d)) {
         d = getFlowdata(ctx);
@@ -131,7 +146,8 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
     // let cell = $.extend(true, {}, d[r][c]);
     let cell = d[r][c];
 
-    let vupdate;
+    // biome-ignore lint/suspicious/noExplicitAny: tracks v's shape (scalar or cell.v from a patch)
+    let vupdate: any;
 
     if (isPlainObject(v)) {
         if (isNil(cell)) {
@@ -230,7 +246,7 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
                 cell.m = cell.v.toString();
             } else {
                 if (cell.v.toString().indexOf('e') > -1) {
-                    let len;
+                    let len: number;
                     if (cell.v.toString().split('.').length === 1) {
                         len = 0;
                     } else {
@@ -258,7 +274,7 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
             cell.m = vupdateStr;
             cell.v = vupdate;
         } else if (cell.ct != null && cell.ct.t === 'd' && isString(vupdate)) {
-            const mask = genarate(vupdate) as any;
+            const mask = genarate(vupdate);
             if (mask[1].t !== 'd' || mask[1].fa === cell.ct.fa) {
                 [cell.m, cell.ct, cell.v] = mask;
             } else {
@@ -270,16 +286,16 @@ export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix |
                 vupdate = parseFloat(vupdate);
             }
 
-            let mask = update(cell.ct.fa, vupdate);
+            let mask: string | [string, CellType, string | number | boolean] = update(cell.ct.fa, vupdate);
 
             if (mask === vupdate) {
                 // If the original cell format cannot be applied to the updated value, get the format of the updated value
                 const newMask = genarate(vupdate);
-                mask = (newMask || mask) as any;
+                mask = newMask || mask;
 
-                cell.m = mask && mask[0] ? mask[0].toString() : '';
-                if (mask && mask.length >= 3) {
-                    cell.ct = mask[1] as any;
+                cell.m = typeof mask !== 'string' && mask[0] ? mask[0].toString() : '';
+                if (typeof mask !== 'string' && mask.length >= 3) {
+                    cell.ct = mask[1];
                     cell.v = mask[2];
                 }
             } else {
@@ -359,7 +375,7 @@ export function getRealCellValue(r: number, c: number, data: CellMatrix, attr?: 
 }
 
 export function mergeBorder(ctx: Context, d: CellMatrix, row_index: number, col_index: number) {
-    if (!d || !d[row_index]) {
+    if (!d?.[row_index]) {
         return null;
     }
     const value = d[row_index][col_index];
@@ -441,7 +457,7 @@ export function mergeBorder(ctx: Context, d: CellMatrix, row_index: number, col_
 
 function mergeMove(
     ctx: Context,
-    mc: any,
+    mc: { r: number; c: number; rs: number; cs: number },
     columnseleted: number[],
     rowseleted: number[],
     s: Partial<Selection>,
@@ -548,7 +564,7 @@ export function mergeMoveMain(
     columnseleted[1] = Math.max(columnseleted[0], columnseleted[1]);
 
     let offloop = true;
-    const mergeMoveData: any = {};
+    const mergeMoveData: Record<string, { r: number; c: number; rs: number; cs: number }> = {};
 
     while (offloop) {
         offloop = false;
@@ -610,6 +626,7 @@ export function updateCell(
     r: number,
     c: number,
     $input?: HTMLDivElement | null,
+    // biome-ignore lint/suspicious/noExplicitAny: forwarded straight to setCellValue, same scalar/Cell-patch union
     value?: any,
     canvas?: CanvasRenderingContext2D,
 ) {
@@ -725,7 +742,7 @@ export function updateCell(
         }
 
         if (isString(value) && value.slice(0, 1) === '=' && value.length > 1) {
-        } else if (isPlainObject(curv) && curv && curv.ct && curv.ct.fa && curv.ct.fa !== '@' && !isRealNull(value)) {
+        } else if (isPlainObject(curv) && curv?.ct?.fa && curv.ct.fa !== '@' && !isRealNull(value)) {
             delete curv.m; // Update time m processing will actually delete the parameters of the cell data (the flowdata has been deleted)
             if (curv.f) {
                 // If it turns out to be a formula but the updated data is not a formula, delete the formula.
@@ -885,14 +902,14 @@ export function getOrigincell(ctx: Context, r: number, c: number, i: string) {
         return null;
     }
 
-    if (!data || !data[r] || !data[r][c]) {
+    if (!data?.[r]?.[c]) {
         return null;
     }
     return data[r][c];
 }
 
-export function getcellFormula(ctx: Context, r: number, c: number, i: string, data?: any) {
-    let cell;
+export function getcellFormula(ctx: Context, r: number, c: number, i: string, data?: CellMatrix) {
+    let cell: Cell | null;
     if (isNil(data)) {
         cell = getOrigincell(ctx, r, c, i);
     } else {
@@ -956,8 +973,8 @@ export function getRangetxt(ctx: Context, sheetId: string, range: SingleRange, c
         sheettxt = ctx.luckysheetfile[index].name.replace(/'/g, "''");
         // If the name contains characters other than a-z, A-Z, 0-9, underscore, etc., wrap it in single quotes
         if (
-            // eslint-disable-next-line no-misleading-character-class
-            /^[:A-Z_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C-\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD][:A-Z_a-z\u00C0-\u00D6\u00D8-\u00F6\u00F8-\u02FF\u0370-\u037D\u037F-\u1FFF\u200C-\u200D\u2070-\u218F\u2C00-\u2FEF\u3001-\uD7FF\uF900-\uFDCF\uFDF0-\uFFFD\-.0-9\u00B7\u0300-\u036F\u203F-\u2040]*$/.test(
+            // biome-ignore lint/suspicious/noMisleadingCharacterClass: matches XML 1.0 NameStartChar/NameChar — combining marks are spec-required in the continuation class
+            /^[:A-Z_a-zÀ-ÖØ-öø-˿Ͱ-ͽͿ-῿‌-‍⁰-↏Ⰰ-⿯、-퟿豈-﷏ﷰ-�][:A-Z_a-zÀ-ÖØ-öø-˿Ͱ-ͽͿ-῿‌-‍⁰-↏Ⰰ-⿯、-퟿豈-﷏ﷰ-�\-.0-9·̀-ͯ‿-⁀]*$/.test(
                 sheettxt,
             )
         ) {
@@ -1007,6 +1024,9 @@ export function getRangeByTxt(ctx: Context, txt: string) {
     return range;
 }
 
+// `status` is the value to compare a cell attribute against — Cell['attr'] for some attr,
+// which spans the full Cell value-space (string/number/CellType/InlineStringSegment[]/…).
+// biome-ignore lint/suspicious/noExplicitAny: compared against Cell[attr] which is the full cell value union
 export function isAllSelectedCellsInStatus(ctx: Context, attr: keyof Cell, status: any) {
     // editing mode
     if (!isEmpty(ctx.luckysheetCellUpdate)) {
@@ -1056,13 +1076,18 @@ export function isAllSelectedCellsInStatus(ctx: Context, attr: keyof Cell, statu
     });
 }
 
-export function getFontStyleByCell(cell: Cell | null | undefined, checksAF?: any[], checksCF?: any, isCheck = true) {
-    const style: any = {};
+export function getFontStyleByCell(
+    cell: Cell | null | undefined,
+    checksAF?: string[],
+    checksCF?: CellFormatStyle | null,
+    isCheck = true,
+) {
+    const style: Record<string, string> = {};
     if (!cell) {
         return style;
     }
     // @ts-expect-error
-    forEach(cell, (v, key: keyof Cell) => {
+    forEach(cell, (_v, key: keyof Cell) => {
         let value = cell[key];
         if (isCheck) {
             value = normalizedCellAttr(cell, key);
@@ -1090,7 +1115,7 @@ export function getFontStyleByCell(cell: Cell | null | undefined, checksAF?: any
             } else if ((checksAF?.length ?? 0) > 0) {
                 [style.color] = checksAF!;
             } else {
-                style.color = value;
+                style.color = String(value);
             }
         }
 
@@ -1109,13 +1134,13 @@ export function getFontStyleByCell(cell: Cell | null | undefined, checksAF?: any
     return style;
 }
 
-export function getStyleByCell(ctx: Context, d: CellMatrix, r: number, c: number, cfCompute?: any) {
-    let style: any = {};
+export function getStyleByCell(ctx: Context, d: CellMatrix, r: number, c: number, cfCompute?: ComputeMap | null) {
+    let style: Record<string, string> = {};
 
     // Alternating colors
     //   const af_compute = alternateformat.getComputeMap();
     //   const checksAF = alternateformat.checksAF(r, c, af_compute);
-    const checksAF: any = [];
+    const checksAF: string[] = [];
     // Conditional format
     const cf_compute = cfCompute ?? getComputeMap(ctx);
     const checksCF = checkCF(r, c, cf_compute);
@@ -1245,8 +1270,8 @@ export function getdatabyselection(ctx: Context, range: Selection | undefined, s
     }
 
     // Fetch data
-    let d;
-    let cfg;
+    let d: CellMatrix | null | undefined;
+    let cfg: SheetConfig | undefined;
     if (sheetId != null && sheetId !== ctx.currentSheetId) {
         d = ctx.luckysheetfile[getSheetIndex(ctx, sheetId)!].data;
         cfg = ctx.luckysheetfile[getSheetIndex(ctx, sheetId)!].config;
@@ -1283,7 +1308,7 @@ export function luckysheetUpdateCell(ctx: Context, row_index: number, col_index:
 }
 
 export function getDataBySelectionNoCopy(ctx: Context, range: Selection) {
-    if (!range || !range.row || range.row.length === 0) return [];
+    if (!range?.row || range.row.length === 0) return [];
     const data = [];
     const flowData = getFlowdata(ctx);
     if (!flowData) return [];

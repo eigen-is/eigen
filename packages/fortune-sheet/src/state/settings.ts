@@ -1,10 +1,15 @@
 import { v4 as uuidv4 } from 'uuid';
 import type { Cell, CellMatrix } from '../engine/types';
-import type { Selection, Sheet } from './types';
+import type { Selection, Sheet, SheetConfig } from './types';
+
+// Cell value as accepted by setCellValue / surfaced through update hooks. Covers
+// raw scalar input from the formula bar / paste path plus the `Cell` object form
+// passed by callers like `api.setCellValue(0, 0, { f: '=SUM(A1:B1)', bg: '#0188fb' })`.
+export type CellValueInput = Cell | string | number | boolean | null | undefined;
 
 export type Hooks = {
-    beforeUpdateCell?: (r: number, c: number, value: any) => boolean;
-    afterUpdateCell?: (row: number, column: number, oldValue: any, newValue: any) => void;
+    beforeUpdateCell?: (r: number, c: number, value: CellValueInput) => boolean;
+    afterUpdateCell?: (row: number, column: number, oldValue: CellValueInput, newValue: CellValueInput) => void;
     afterSelectionChange?: (sheetId: string, selection: Selection) => void;
     beforeRenderRowHeaderCell?: (
         rowNumber: string,
@@ -117,7 +122,7 @@ export type Settings = {
     showFormulaBar?: boolean;
     showSheetTabs?: boolean;
     data: Sheet[];
-    config?: any;
+    config?: SheetConfig;
     devicePixelRatio?: number;
     forceCalculation?: boolean;
     rowHeaderWidth?: number;
@@ -132,7 +137,7 @@ export type Settings = {
     generateSheetId?: () => string;
     hooks?: Hooks;
     currency?: string;
-    fontList?: any[];
+    fontList?: unknown[];
 };
 
 export const defaultSettings: Required<Settings> = {

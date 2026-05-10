@@ -14,7 +14,7 @@ import {
 // Make sure setFormulaObject() is executed *after* the cell modifications
 export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?: CellMatrix) {
     const key = `r${formulaCell.r}c${formulaCell.c}i${formulaCell.id}`;
-    const calc_funcStr: string | undefined = getcellFormula(ctx, formulaCell.r, formulaCell.c, formulaCell.id, data);
+    const calc_funcStr = getcellFormula(ctx, formulaCell.r, formulaCell.c, formulaCell.id, data);
     if (isNil(calc_funcStr)) {
         delete ctx.formulaCache.formulaCellInfoMap?.[key];
         return;

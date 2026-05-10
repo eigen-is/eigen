@@ -65,7 +65,7 @@ export function setCaretPosition(ctx: Context, textDom: HTMLElement, children: n
         el.focus();
     } catch (err) {
         console.error(err);
-        moveToEnd(ctx.formulaCache.rangeResizeTo[0]);
+        moveToEnd(ctx.formulaCache.rangeResizeTo![0]);
     }
 }
 

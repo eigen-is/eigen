@@ -1,17 +1,18 @@
 import { assign, clone, cloneDeep, forEach, isEmpty, size } from 'es-toolkit/compat';
 import { applySheetsDeleteRowCol, applySheetsInsertRowCol } from '../../engine/rowcol';
 import type { Context } from '../context';
-import type { Sheet } from '../types';
+import type { Sheet, SheetConfig } from '../types';
 import { getSheetIndex } from '../utils';
 
-const refreshLocalMergeData = (merge_new: Record<string, any>, file: Sheet) => {
+type MergeCell = { r: number; c: number; rs: number; cs: number };
+type CalcChainEntry = { r: number; c: number; id: string };
+type FilterSelect = { row: number[]; column: number[] };
+type FilterEntry = { rowhidden?: Record<number, number>; [key: string]: unknown };
+type FilterObj = { filter_select: FilterSelect | null; filter: Record<string, FilterEntry> | null };
+
+const refreshLocalMergeData = (merge_new: Record<string, MergeCell>, file: Sheet) => {
     Object.entries(merge_new).forEach(([, v]) => {
-        const { r, c, rs, cs } = v as {
-            r: number;
-            c: number;
-            rs: number;
-            cs: number;
-        };
+        const { r, c, rs, cs } = v;
 
         // Engine inserts null for new cells inside an expanded merge range; the
         // canvas renderer needs `mc` on every cell of the range to hide them
@@ -45,10 +46,10 @@ function shiftStateOnlyFieldsForInsert(
     if (!file) return;
 
     // calcChain entries are sheet-local; cross-sheet formula text is rewritten by the engine.
-    const newCalcChain: any[] = [];
+    const newCalcChain: CalcChainEntry[] = [];
     if (file.calcChain != null) {
         for (const entry of file.calcChain) {
-            const calc: any = cloneDeep(entry);
+            const calc: CalcChainEntry = cloneDeep(entry);
             if (type === 'row') {
                 if (direction === 'lefttop' && calc.r >= index) calc.r += count;
                 else if (direction === 'rightbottom' && calc.r > index) calc.r += count;
@@ -65,7 +66,7 @@ function shiftStateOnlyFieldsForInsert(
     const cfg = file.config || {};
     const { filter_select } = file;
     const { filter } = file;
-    let newFilterObj: any = null;
+    let newFilterObj: FilterObj | null = null;
     if (!isEmpty(filter_select) && filter_select != null) {
         newFilterObj = { filter_select: null, filter: null };
 
@@ -98,7 +99,7 @@ function shiftStateOnlyFieldsForInsert(
 
                 forEach(filter, (_v, k) => {
                     const f_rowhidden = filter[k].rowhidden;
-                    const f_rowhidden_new: any = {};
+                    const f_rowhidden_new: Record<number, number> = {};
                     forEach(f_rowhidden, (_v1, nstr) => {
                         const n = parseFloat(nstr);
 
@@ -114,10 +115,10 @@ function shiftStateOnlyFieldsForInsert(
                             f_rowhidden_new[n + count] = 0;
                         }
                     });
-                    newFilterObj.filter[k] = cloneDeep(filter[k]);
-                    newFilterObj.filter[k].rowhidden = f_rowhidden_new;
-                    newFilterObj.filter[k].str = f_r1;
-                    newFilterObj.filter[k].edr = f_r2;
+                    newFilterObj!.filter![k] = cloneDeep(filter[k]);
+                    newFilterObj!.filter![k].rowhidden = f_rowhidden_new;
+                    newFilterObj!.filter![k].str = f_r1;
+                    newFilterObj!.filter![k].edr = f_r2;
                 });
             }
         } else if (type === 'column') {
@@ -151,10 +152,10 @@ function shiftStateOnlyFieldsForInsert(
                         f_cindex += count;
                     }
 
-                    newFilterObj.filter[f_cindex - f_c1] = cloneDeep(filter[k]);
-                    newFilterObj.filter[f_cindex - f_c1].cindex = f_cindex;
-                    newFilterObj.filter[f_cindex - f_c1].stc = f_c1;
-                    newFilterObj.filter[f_cindex - f_c1].edc = f_c2;
+                    newFilterObj!.filter![f_cindex - f_c1] = cloneDeep(filter[k]);
+                    newFilterObj!.filter![f_cindex - f_c1].cindex = f_cindex;
+                    newFilterObj!.filter![f_cindex - f_c1].stc = f_c1;
+                    newFilterObj!.filter![f_cindex - f_c1].edc = f_c2;
                 });
             }
         }
@@ -168,7 +169,7 @@ function shiftStateOnlyFieldsForInsert(
         }
 
         forEach(newFilterObj.filter, (_v, k) => {
-            const f_rowhidden = newFilterObj.filter[k].rowhidden;
+            const f_rowhidden = newFilterObj!.filter![k].rowhidden;
             forEach(f_rowhidden, (_v1, n) => {
                 cfg.rowhidden![n] = 0;
             });
@@ -176,8 +177,8 @@ function shiftStateOnlyFieldsForInsert(
     }
 
     if (newFilterObj != null) {
-        file.filter = newFilterObj.filter;
-        file.filter_select = newFilterObj.filter_select;
+        file.filter = newFilterObj.filter ?? undefined;
+        file.filter_select = newFilterObj.filter_select ?? undefined;
     }
 
     // Freeze config update
@@ -196,9 +197,11 @@ function shiftStateOnlyFieldsForInsert(
         }
     }
 
-    // Data validation config update
+    // Data validation config update. `dataVerification` is loosely typed (`any`)
+    // on Sheet — the editor mutates it through many entry points; we just
+    // re-key entries here without inspecting their shape.
     const { dataVerification } = file;
-    const newDataVerification: any = {};
+    const newDataVerification: Record<string, unknown> = {};
     if (dataVerification != null) {
         forEach(dataVerification, (_v, key) => {
             const r = Number(key.split('_')[0]);
@@ -252,7 +255,7 @@ function shiftStateOnlyFieldsForInsert(
 
     // Hyperlink config update
     const { hyperlink } = file;
-    const newHyperlink: any = {};
+    const newHyperlink: Record<string, { linkType: string; linkAddress: string }> = {};
     if (hyperlink != null) {
         forEach(hyperlink, (_v, key) => {
             const r = Number(key.split('_')[0]);
@@ -303,10 +306,10 @@ function shiftStateOnlyFieldsForDelete(
     const slen = end - start + 1;
 
     // calcChain entries are sheet-local; entries inside the deleted range drop out.
-    const newCalcChain: any[] = [];
+    const newCalcChain: CalcChainEntry[] = [];
     if (file.calcChain != null) {
         for (const entry of file.calcChain) {
-            const calc: any = cloneDeep(entry);
+            const calc: CalcChainEntry = cloneDeep(entry);
             if (type === 'row') {
                 if (calc.r < start) newCalcChain.push(calc);
                 else if (calc.r > end) {
@@ -328,7 +331,7 @@ function shiftStateOnlyFieldsForDelete(
     const cfg = file.config || {};
     const { filter_select } = file;
     const { filter } = file;
-    let newFilterObj: any = null;
+    let newFilterObj: FilterObj | null = null;
     if (!isEmpty(filter_select) && filter_select != null) {
         newFilterObj = { filter_select: null, filter: null };
 
@@ -363,7 +366,7 @@ function shiftStateOnlyFieldsForDelete(
             if (newFilterObj.filter_select != null && filter != null) {
                 forEach(filter, (_v, k) => {
                     const f_rowhidden = filter[k].rowhidden;
-                    const f_rowhidden_new: any = {};
+                    const f_rowhidden_new: Record<number, number> = {};
                     forEach(f_rowhidden, (_v1, nstr) => {
                         const n = parseFloat(nstr);
 
@@ -375,14 +378,14 @@ function shiftStateOnlyFieldsForDelete(
                     });
 
                     if (!isEmpty(f_rowhidden_new)) {
-                        if (newFilterObj.filter == null) {
-                            newFilterObj.filter = {};
+                        if (newFilterObj!.filter == null) {
+                            newFilterObj!.filter = {};
                         }
 
-                        newFilterObj.filter[k] = cloneDeep(filter[k]);
-                        newFilterObj.filter[k].rowhidden = f_rowhidden_new;
-                        newFilterObj.filter[k].str = f_r1;
-                        newFilterObj.filter[k].edr = f_r2;
+                        newFilterObj!.filter[k] = cloneDeep(filter[k]);
+                        newFilterObj!.filter[k].rowhidden = f_rowhidden_new;
+                        newFilterObj!.filter[k].str = f_r1;
+                        newFilterObj!.filter[k].edr = f_r2;
                     }
                 });
             }
@@ -424,23 +427,23 @@ function shiftStateOnlyFieldsForDelete(
                     let f_cindex = filter[k].cindex;
 
                     if (f_cindex < start) {
-                        if (newFilterObj.filter == null) {
-                            newFilterObj.filter = {};
+                        if (newFilterObj!.filter == null) {
+                            newFilterObj!.filter = {};
                         }
 
-                        newFilterObj.filter[f_cindex - f_c1] = cloneDeep(filter[k]);
-                        newFilterObj.filter[f_cindex - f_c1].edc = f_c2;
+                        newFilterObj!.filter[f_cindex - f_c1] = cloneDeep(filter[k]);
+                        newFilterObj!.filter[f_cindex - f_c1].edc = f_c2;
                     } else if (f_cindex > end) {
                         f_cindex -= slen;
 
-                        if (newFilterObj.filter == null) {
-                            newFilterObj.filter = {};
+                        if (newFilterObj!.filter == null) {
+                            newFilterObj!.filter = {};
                         }
 
-                        newFilterObj.filter[f_cindex - f_c1] = cloneDeep(filter[k]);
-                        newFilterObj.filter[f_cindex - f_c1].cindex = f_cindex;
-                        newFilterObj.filter[f_cindex - f_c1].stc = f_c1;
-                        newFilterObj.filter[f_cindex - f_c1].edc = f_c2;
+                        newFilterObj!.filter[f_cindex - f_c1] = cloneDeep(filter[k]);
+                        newFilterObj!.filter[f_cindex - f_c1].cindex = f_cindex;
+                        newFilterObj!.filter[f_cindex - f_c1].stc = f_c1;
+                        newFilterObj!.filter[f_cindex - f_c1].edc = f_c2;
                     }
                 });
             }
@@ -453,7 +456,7 @@ function shiftStateOnlyFieldsForDelete(
         }
 
         forEach(newFilterObj.filter, (_v, k) => {
-            const f_rowhidden = newFilterObj.filter[k].rowhidden;
+            const f_rowhidden = newFilterObj!.filter![k].rowhidden;
             forEach(f_rowhidden, (_v1, n) => {
                 cfg.rowhidden![n] = 0;
             });
@@ -461,8 +464,8 @@ function shiftStateOnlyFieldsForDelete(
     }
 
     if (newFilterObj != null) {
-        file.filter = newFilterObj.filter;
-        file.filter_select = newFilterObj.filter_select;
+        file.filter = newFilterObj.filter ?? undefined;
+        file.filter_select = newFilterObj.filter_select ?? undefined;
     }
 
     // Freeze config update
@@ -480,9 +483,10 @@ function shiftStateOnlyFieldsForDelete(
         }
     }
 
-    // Data validation config update
+    // Data validation config update. `dataVerification` is loosely typed (`any`)
+    // on Sheet — see the matching block in shiftStateOnlyFieldsForInsert.
     const { dataVerification } = file;
-    const newDataVerification: any = {};
+    const newDataVerification: Record<string, unknown> = {};
     if (dataVerification != null) {
         forEach(dataVerification, (_v, key) => {
             const r = Number(key.split('_')[0]);
@@ -508,7 +512,7 @@ function shiftStateOnlyFieldsForDelete(
 
     // Hyperlink config update
     const { hyperlink } = file;
-    const newHyperlink: any = {};
+    const newHyperlink: Record<string, { linkType: string; linkAddress: string }> = {};
     if (hyperlink != null) {
         forEach(hyperlink, (_v, key) => {
             const r = Number(key.split('_')[0]);
@@ -624,7 +628,7 @@ export function insertRowCol(
         });
         cfg.rowReadOnly = rowReadOnly_new;
     } else {
-        const columnReadOnly_new: any = {};
+        const columnReadOnly_new: Record<number, number> = {};
         forEach(cfg.colReadOnly, (_v, cstr) => {
             const c = parseFloat(cstr);
             if (c < index) {
@@ -939,7 +943,7 @@ export function deleteRowCol(
         });
         cfg.rowReadOnly = rowReadOnly_new;
     } else {
-        const columnReadOnly_new: any = {};
+        const columnReadOnly_new: Record<number, number> = {};
         forEach(cfg.colReadOnly, (_v, cstr) => {
             const c = parseFloat(cstr);
             if (c < start) {
@@ -1151,7 +1155,7 @@ export function deleteRowCol(
 }
 
 // Compute cumulative row height array
-export function computeRowlenArr(ctx: Context, rowHeight: number, cfg: any) {
+export function computeRowlenArr(ctx: Context, rowHeight: number, cfg: SheetConfig) {
     const rowlenArr = [];
     let rh_height = 0;
 

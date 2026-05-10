@@ -13,7 +13,7 @@ import {
 } from 'es-toolkit/compat';
 import { cfSplitRange } from '../../engine';
 import { genarate, update } from '../../engine/format';
-import type { Cell, CellMatrix } from '../../engine/types';
+import type { Cell, CellMatrix, InlineStringSegment, SingleRange } from '../../engine/types';
 import { setRowHeight } from '../api';
 import { type Context, getFlowdata } from '../context';
 import { locale } from '../locale';
@@ -25,11 +25,27 @@ import { jfrefreshgrid } from '../modules/refresh';
 import { normalizeSelection, selectionCache } from '../modules/selection';
 import { expandRowsAndColumns, storeSheetParamALL } from '../modules/sheet';
 import { hasPartMC, isRealNum } from '../modules/validation';
+import type { SheetConfig } from '../types';
 import { getSheetIndex, isAllowEdit } from '../utils';
 
-function postPasteCut(ctx: Context, source: any, target: any, RowlChange: boolean) {
+// Snapshot built by pasteHandlerOfCutPaste describing the source and target
+// sides of a cut/paste so postPasteCut can splice both sheets at once.
+type CutPasteSide = {
+    sheetId: string;
+    data: CellMatrix | undefined;
+    curData: CellMatrix;
+    config: SheetConfig | undefined;
+    curConfig: SheetConfig;
+    cdformat: unknown[] | undefined;
+    curCdformat: unknown[] | undefined;
+    dataVerification: Record<string, unknown> | undefined;
+    curDataVerification: Record<string, unknown>;
+    range: { row: number[]; column: number[] };
+};
+
+function postPasteCut(ctx: Context, source: CutPasteSide, target: CutPasteSide, RowlChange: boolean) {
     // trigger linked cell data updates
-    const execF_rc: any = {};
+    const execF_rc: Record<string, number> = {};
     ctx.formulaCache.execFunctionExist = [];
     // clearTimeout(refreshCanvasTimeOut);
     for (let r = source.range.row[0]; r <= source.range.row[1]; r += 1) {
@@ -57,7 +73,7 @@ function postPasteCut(ctx: Context, source: any, target: any, RowlChange: boolea
     }
 
     // config
-    let rowHeight;
+    let rowHeight = 0;
     if (ctx.currentSheetId === source.sheetId) {
         ctx.config = source.curConfig;
         rowHeight = source.curData.length;
@@ -203,7 +219,15 @@ function postPasteCut(ctx: Context, source: any, target: any, RowlChange: boolea
     // });
 }
 
-function pasteHandler(ctx: Context, data: any, borderInfo?: any) {
+// Per-cell border map produced by the HTML paste path before being attached to
+// cfg.borderInfo. Keyed by `${row}_${col}` relative to the pasted block.
+// Style/color are the tuple slots from getQKBorder which is typed loosely as
+// (number | string)[].
+type CellBorderSide = { style: number | string; color: number | string };
+type CellBorderEntry = { l?: CellBorderSide; r?: CellBorderSide; t?: CellBorderSide; b?: CellBorderSide };
+type CellBorderMap = Record<string, CellBorderEntry>;
+
+function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: CellBorderMap) {
     // if (
     //   !checkProtectionLockedRangeList(
     //     ctx.luckysheet_select_save,
@@ -285,7 +309,7 @@ function pasteHandler(ctx: Context, data: any, borderInfo?: any) {
             cfg.rowlen = {};
         }
 
-        const offsetMC: any = {};
+        const offsetMC: Record<string, [number, number]> = {};
         for (let h = minh; h <= maxh; h += 1) {
             const x = d[h];
 
@@ -302,42 +326,49 @@ function pasteHandler(ctx: Context, data: any, borderInfo?: any) {
                     delete x![c]!.mc;
                 }
 
-                let value = null;
+                let value: Cell | null = null;
                 if (data[h - minh] != null && data[h - minh][c - minc] != null) {
                     value = data[h - minh][c - minc];
                 }
 
                 x[c] = value;
 
-                if (value != null && x?.[c]?.mc) {
-                    if (x![c]!.mc!.rs != null) {
-                        x![c]!.mc!.r = h;
-                        x![c]!.mc!.c = c;
+                const cellMc = x[c]?.mc;
+                if (value != null && cellMc) {
+                    const valueMc = value.mc;
+                    if (cellMc.rs != null && valueMc != null) {
+                        cellMc.r = h;
+                        cellMc.c = c;
 
-                        // @ts-expect-error
-                        cfg.merge[`${x[c]!.mc!.r}_${x[c]!.mc!.c}`] = x[c]!.mc!;
+                        cfg.merge[`${cellMc.r}_${cellMc.c}`] = {
+                            r: cellMc.r,
+                            c: cellMc.c,
+                            rs: cellMc.rs,
+                            cs: cellMc.cs ?? 1,
+                        };
 
-                        offsetMC[`${value.mc.r}_${value.mc.c}`] = [x[c]!.mc!.r, x[c]!.mc!.c];
-                    } else {
+                        offsetMC[`${valueMc.r}_${valueMc.c}`] = [cellMc.r, cellMc.c];
+                    } else if (valueMc != null) {
                         x[c] = {
                             mc: {
-                                r: offsetMC[`${value.mc.r}_${value.mc.c}`][0],
-                                c: offsetMC[`${value.mc.r}_${value.mc.c}`][1],
+                                r: offsetMC[`${valueMc.r}_${valueMc.c}`][0],
+                                c: offsetMC[`${valueMc.r}_${valueMc.c}`][1],
                             },
                         };
                     }
                 }
 
-                if (borderInfo[`${h - minh}_${c - minc}`]) {
+                const borderEntry = borderInfo?.[`${h - minh}_${c - minc}`];
+                if (borderEntry) {
                     const bd_obj = {
                         rangeType: 'cell',
                         value: {
                             row_index: h,
                             col_index: c,
-                            l: borderInfo[`${h - minh}_${c - minc}`].l,
-                            r: borderInfo[`${h - minh}_${c - minc}`].r,
-                            t: borderInfo[`${h - minh}_${c - minc}`].t,
-                            b: borderInfo[`${h - minh}_${c - minc}`].b,
+                            l: borderEntry.l,
+                            r: borderEntry.r,
+                            t: borderEntry.t,
+                            b: borderEntry.b,
                         },
                     };
 
@@ -409,14 +440,14 @@ function pasteHandler(ctx: Context, data: any, borderInfo?: any) {
             const x = d[r + curR];
             for (let c = 0; c < clen; c += 1) {
                 const originCell = x[c + curC];
-                let value = dataChe[r][c];
+                let value: string | number = dataChe[r][c];
                 if (isRealNum(value)) {
                     // if the cell is formatted as plain text, do not convert to a numeric type
                     // to prevent large numbers from being automatically displayed in scientific notation
                     if (originCell?.ct && originCell.ct.fa === '@') {
                         value = String(value);
                     } else {
-                        value = parseFloat(value);
+                        value = parseFloat(value as string);
                     }
                 }
                 if (originCell) {
@@ -602,7 +633,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['luckysheet_cop
 
                 if (bd_rangeType === 'range') {
                     const bd_range = cfg.borderInfo[i].range;
-                    let bd_emptyRange: any = [];
+                    let bd_emptyRange: SingleRange[] = [];
 
                     for (let j = 0; j < bd_range.length; j += 1) {
                         bd_emptyRange = bd_emptyRange.concat(
@@ -632,7 +663,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['luckysheet_cop
         }
     }
 
-    const offsetMC: any = {};
+    const offsetMC: Record<string, [number, number]> = {};
     for (let h = minh; h <= maxh; h += 1) {
         const x = d[h];
 
@@ -704,27 +735,33 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['luckysheet_cop
                 delete x[c]!.mc;
             }
 
-            let value = null;
+            let value: Cell | null = null;
             if (copyData[h - minh] != null && copyData[h - minh][c - minc] != null) {
                 value = copyData[h - minh][c - minc];
             }
 
             x[c] = cloneDeep(value);
 
-            if (value != null && copyHasMC && x[c]?.mc) {
-                if (x[c]!.mc!.rs != null) {
-                    x[c]!.mc!.r = h;
-                    x[c]!.mc!.c = c;
+            const cellMc = x[c]?.mc;
+            if (value != null && copyHasMC && cellMc) {
+                const valueMc = value.mc;
+                if (cellMc.rs != null && valueMc != null) {
+                    cellMc.r = h;
+                    cellMc.c = c;
 
-                    // @ts-expect-error
-                    cfg.merge[`${x[c]!.mc!.r}_${x[c]!.mc!.c}`] = x[c]!.mc!;
+                    cfg.merge[`${cellMc.r}_${cellMc.c}`] = {
+                        r: cellMc.r,
+                        c: cellMc.c,
+                        rs: cellMc.rs,
+                        cs: cellMc.cs ?? 1,
+                    };
 
-                    offsetMC[`${value.mc!.r}_${value.mc!.c}`] = [x[c]!.mc!.r, x[c]!.mc!.c];
-                } else {
+                    offsetMC[`${valueMc.r}_${valueMc.c}`] = [cellMc.r, cellMc.c];
+                } else if (valueMc != null) {
                     x[c] = {
                         mc: {
-                            r: offsetMC[`${value.mc!.r}_${value.mc!.c}`][0],
-                            c: offsetMC[`${value.mc!.r}_${value.mc!.c}`][1],
+                            r: offsetMC[`${valueMc.r}_${valueMc.c}`][0],
+                            c: offsetMC[`${valueMc.r}_${valueMc.c}`][1],
                         },
                     };
                 }
@@ -737,8 +774,8 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['luckysheet_cop
     last.row = [minh, maxh];
     last.column = [minc, maxc];
 
-    let source;
-    let target;
+    let source: CutPasteSide;
+    let target: CutPasteSide;
     if (ctx.currentSheetId !== copySheetId) {
         // cross-sheet operation
         const sourceData = cloneDeep(ctx.luckysheetfile[getSheetIndex(ctx, copySheetId)!].data!);
@@ -773,7 +810,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['luckysheet_cop
 
                 if (bd_rangeType === 'range') {
                     const bd_range = sourceCurConfig.borderInfo[i].range;
-                    let bd_emptyRange: any = [];
+                    let bd_emptyRange: SingleRange[] = [];
 
                     for (let j = 0; j < bd_range.length; j += 1) {
                         bd_emptyRange = bd_emptyRange.concat(
@@ -807,13 +844,13 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['luckysheet_cop
             ctx.luckysheetfile[getSheetIndex(ctx, copySheetId)!].luckysheet_conditionformat_save,
         );
         const source_curCdformat = cloneDeep(source_cdformat);
-        const ruleArr: any[] = [];
+        const ruleArr: unknown[] = [];
 
         if (source_curCdformat != null && source_curCdformat.length > 0) {
             for (let i = 0; i < source_curCdformat.length; i += 1) {
                 const source_curCdformat_cellrange = source_curCdformat[i].cellrange;
-                let emptyRange: any = [];
-                let emptyRange2: any = [];
+                let emptyRange: SingleRange[] = [];
+                let emptyRange2: SingleRange[] = [];
 
                 for (let j = 0; j < source_curCdformat_cellrange.length; j += 1) {
                     const range = cfSplitRange(
@@ -879,7 +916,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['luckysheet_cop
         };
         target = {
             sheetId: ctx.currentSheetId,
-            data: getFlowdata(ctx),
+            data: getFlowdata(ctx) ?? undefined,
             curData: d,
             config: cloneDeep(ctx.config),
             curConfig: cfg,
@@ -901,7 +938,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['luckysheet_cop
         if (curCdformat != null && curCdformat.length > 0) {
             for (let i = 0; i < curCdformat.length; i += 1) {
                 const { cellrange } = curCdformat[i];
-                let emptyRange: any = [];
+                let emptyRange: SingleRange[] = [];
                 for (let j = 0; j < cellrange.length; j += 1) {
                     const range = cfSplitRange(
                         cellrange[j],
@@ -918,7 +955,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['luckysheet_cop
         // same-sheet operation
         source = {
             sheetId: ctx.currentSheetId,
-            data: getFlowdata(ctx),
+            data: getFlowdata(ctx) ?? undefined,
             curData: d,
             config: cloneDeep(ctx.config),
             curConfig: cfg,
@@ -933,7 +970,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['luckysheet_cop
         };
         target = {
             sheetId: ctx.currentSheetId,
-            data: getFlowdata(ctx),
+            data: getFlowdata(ctx) ?? undefined,
             curData: d,
             config: cloneDeep(ctx.config),
             curConfig: cfg,
@@ -1091,7 +1128,7 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['luckysheet_co
     const borderInfoCompute = getBorderInfoCompute(ctx, copySheetIndex);
     const c_dataVerification =
         cloneDeep(ctx.luckysheetfile[getSheetIndex(ctx, copySheetIndex)!].dataVerification) || {};
-    let dataVerification = null;
+    let dataVerification: Record<string, unknown> | null = null;
 
     let mth = 0;
     let mtc = 0;
@@ -1113,7 +1150,7 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['luckysheet_co
             const offsetRow = mth - c_r1;
             const offsetCol = mtc - c_c1;
 
-            const offsetMC: any = {};
+            const offsetMC: Record<string, [number, number]> = {};
             for (let h = mth; h < maxrowCache; h += 1) {
                 // skip if row is hidden
                 if (hiddenRows?.has(h.toString())) continue;
@@ -1178,13 +1215,13 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['luckysheet_co
 
                     // data validation: copy
                     if (c_dataVerification[`${c_r1 + h - mth}_${c_c1 + c - mtc}`]) {
-                        if (isNil(dataVerification)) {
+                        if (dataVerification == null) {
                             dataVerification = cloneDeep(
                                 ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId)!]?.dataVerification || {},
-                            );
+                            ) as Record<string, unknown>;
                         }
 
-                        dataVerification[`${h}_${c}`] = c_dataVerification[`${c_r1 + h - mth}_${c_c1 + c - mtc}`];
+                        dataVerification![`${h}_${c}`] = c_dataVerification[`${c_r1 + h - mth}_${c_c1 + c - mtc}`];
                     }
 
                     if (x[c]?.mc != null) {
@@ -1194,7 +1231,7 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['luckysheet_co
                         delete x[c]!.mc;
                     }
 
-                    let value = null;
+                    let value: Cell | null = null;
                     if (copyData[h - mth]?.[c - mtc]) {
                         value = cloneDeep(copyData[h - mth][c - mtc]);
                     }
@@ -1231,20 +1268,26 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['luckysheet_co
 
                     x[c] = cloneDeep(value);
 
-                    if (value != null && copyHasMC && x?.[c]?.mc) {
-                        if (x?.[c]?.mc?.rs != null) {
-                            x![c]!.mc!.r = h;
-                            x![c]!.mc!.c = c;
+                    const cellMc = x[c]?.mc;
+                    if (value != null && copyHasMC && cellMc) {
+                        const valueMc = value.mc;
+                        if (cellMc.rs != null && valueMc != null) {
+                            cellMc.r = h;
+                            cellMc.c = c;
 
-                            // @ts-expect-error
-                            cfg.merge[`${h}_${c}`] = x![c]!.mc!;
+                            cfg.merge[`${h}_${c}`] = {
+                                r: cellMc.r,
+                                c: cellMc.c,
+                                rs: cellMc.rs,
+                                cs: cellMc.cs ?? 1,
+                            };
 
-                            offsetMC[`${value!.mc!.r}_${value!.mc!.c}`] = [x![c]!.mc!.r, x![c]!.mc!.c];
-                        } else {
+                            offsetMC[`${valueMc.r}_${valueMc.c}`] = [cellMc.r, cellMc.c];
+                        } else if (valueMc != null) {
                             x[c] = {
                                 mc: {
-                                    r: offsetMC[`${value!.mc!.r}_${value!.mc!.c}`][0],
-                                    c: offsetMC[`${value!.mc!.r}_${value!.mc!.c}`][1],
+                                    r: offsetMC[`${valueMc.r}_${valueMc.c}`][0],
+                                    c: offsetMC[`${valueMc.r}_${valueMc.c}`][1],
                                 },
                             };
                         }
@@ -1256,7 +1299,7 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['luckysheet_co
     }
 
     // check whether the copy range has conditional formatting and data validation
-    let cdformat: any = null;
+    let cdformat: unknown[] | undefined;
     if (copyRange.copyRange.length === 1) {
         const c_file = ctx.luckysheetfile[getSheetIndex(ctx, copySheetIndex) as number];
         const a_file = ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId) as number];
@@ -1269,7 +1312,7 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['luckysheet_co
             for (let i = 0; i < ruleArr_cf.length; i += 1) {
                 const cf_range = ruleArr_cf[i].cellrange;
 
-                let emptyRange: any = [];
+                let emptyRange: SingleRange[] = [];
 
                 for (let th = 1; th <= timesH; th += 1) {
                     for (let tc = 1; tc <= timesC; tc += 1) {
@@ -1408,7 +1451,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
 
             const copy_index = ctx.luckysheet_copy_save.dataSheetId;
 
-            let d;
+            let d: CellMatrix | null | undefined;
             if (copy_index === ctx.currentSheetId) {
                 d = getFlowdata(ctx);
             } else {
@@ -1430,7 +1473,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                         continue;
                     }
 
-                    let v;
+                    let v: Cell['v'] | undefined;
                     if (!isNil(cell)) {
                         if ((cell.ct?.fa?.indexOf('w') ?? -1) > -1) {
                             v = d[r]?.[c]?.v;
@@ -1442,7 +1485,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                     }
 
                     if (isNil(v) && d[r]?.[c]?.ct?.t === 'inlineStr') {
-                        v = d[r]![c]!.ct!.s!.map((val: any) => val.v).join('');
+                        v = d[r]![c]!.ct!.s!.map((val: InlineStringSegment) => val.v).join('');
                         isInlineStr = true;
                     }
                     if (isNil(v)) {
@@ -1516,13 +1559,13 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                 }
 
                 let r = 0;
-                const borderInfo: any = {};
+                const borderInfo: CellBorderMap = {};
                 const styleInner = ele.querySelectorAll('style')[0]?.innerHTML || '';
                 const patternReg = /{([^}]*)}/g;
                 const patternStyle = styleInner.match(patternReg);
                 const nameReg = /^[^\t].*/gm;
                 const patternName = initial(styleInner.match(nameReg));
-                const allStyleList =
+                const allStyleList: Record<string, string> =
                     patternName.length === patternStyle?.length && typeof patternName === typeof patternStyle
                         ? fromPairs(zip(patternName, patternStyle))
                         : {};
@@ -1604,9 +1647,8 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                             const ff = td.style.fontFamily || styles['font-family'] || '';
                             const ffs = ff.split(',');
                             for (let i = 0; i < ffs.length; i += 1) {
-                                let fa = trim(ffs[i].toLowerCase());
-                                // @ts-expect-error
-                                fa = locale_fontjson[fa];
+                                const faKey = trim(ffs[i].toLowerCase());
+                                const fa: number | undefined = (locale_fontjson as Record<string, number>)[faKey];
                                 if (isNil(fa)) {
                                     cell.ff = 0;
                                 } else {
@@ -1633,12 +1675,12 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                             }
 
                             const regex = /vertical-align:\s*(.*?);/;
+                            const tdStyle = allStyleList.td;
+                            const tdMatch = tdStyle ? tdStyle.match(regex) : null;
                             const vt =
                                 td.style.verticalAlign ||
                                 styles['vertical-align'] ||
-                                (!isNil(allStyleList.td) &&
-                                    allStyleList.td.match(regex).length > 0 &&
-                                    allStyleList.td.match(regex)[1]) ||
+                                (tdMatch && tdMatch.length > 0 && tdMatch[1]) ||
                                 'top';
                             if (vt === 'middle') {
                                 cell.vt = 0;
@@ -1663,10 +1705,8 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
 
                             if (isNil(data[r][c])) {
                                 data[r][c] = cell;
-                                // @ts-expect-error
-                                let rowspan = parseInt(td.getAttribute('rowspan'), 10);
-                                // @ts-expect-error
-                                let colspan = parseInt(td.getAttribute('colspan'), 10);
+                                let rowspan = parseInt(td.getAttribute('rowspan') ?? '1', 10);
+                                let colspan = parseInt(td.getAttribute('colspan') ?? '1', 10);
 
                                 if (Number.isNaN(rowspan)) {
                                     rowspan = 1;

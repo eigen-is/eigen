@@ -72,7 +72,6 @@ export function addSheet(
         delete sheetData.data;
         ctx.luckysheetfile.forEach((sheet) => {
             sheet.order = (sheet.order as number) < sheetData.order! ? sheet.order : (sheet.order as number) + 1;
-            return sheet;
         });
     }
     const sheetconfig: Sheet = isNil(sheetData)

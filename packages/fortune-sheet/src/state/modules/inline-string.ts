@@ -191,7 +191,7 @@ function getClassWithcss(cssText: string, ukey: string) {
     return '';
 }
 
-function upsetClassWithCss(cssText: string, ukey: string, uvalue: any) {
+function upsetClassWithCss(cssText: string, ukey: string, uvalue: string) {
     const cssTextArray = cssText.split(';');
     let newCss = '';
     if (ukey == null || ukey.length === 0) {
@@ -250,9 +250,9 @@ function removeClassWidthCss(cssText: string, ukey: string) {
     return newCss;
 }
 
-function getCssText(cssText: string, attr: keyof Cell, value: any) {
-    const styleObj: any = {};
-    styleObj[attr] = value;
+function getCssText(cssText: string, attr: keyof Cell, value: unknown) {
+    const styleObj: Cell & { _fontSize?: number; _color?: string } = {};
+    (styleObj as Record<string, unknown>)[attr] = value;
     if (attr === 'un') {
         let fontColor = getClassWithcss(cssText, 'color');
         if (fontColor === '') {
@@ -267,7 +267,7 @@ function getCssText(cssText: string, attr: keyof Cell, value: any) {
     }
     const s = getFontStyleByCell(styleObj, undefined, undefined, false);
     const ukey = kebabCase(Object.keys(s)[0]);
-    const uvalue = Object.values(s)[0];
+    const uvalue = Object.values(s)[0] as string;
     // let cssText = span.style.cssText;
     cssText = removeClassWidthCss(cssText, attr);
 
@@ -281,7 +281,7 @@ function extendCssText(origin: string, cover: string, isLimit = true) {
     const coverArray = cover.split(';');
     let newCss = '';
 
-    const addKeyList: any = {};
+    const addKeyList: Record<string, number> = {};
     for (let i = 0; i < originArray.length; i += 1) {
         let so = originArray[i];
         let isAdd = true;
@@ -341,10 +341,10 @@ function extendCssText(origin: string, cover: string, isLimit = true) {
 }
 
 export function updateInlineStringFormat(
-    ctx: Context,
-    cell: Cell,
+    _ctx: Context,
+    _cell: Cell,
     attr: keyof Cell,
-    value: any,
+    value: unknown,
     cellInput: HTMLDivElement,
 ) {
     // let s = ctx.inlineStringEditCache;
@@ -510,8 +510,8 @@ export function updateInlineStringFormat(
 
                 $textEditor.innerHTML = cont;
 
-                let startSeletedNodeIndex;
-                let endSeletedNodeIndex;
+                let startSeletedNodeIndex: number;
+                let endSeletedNodeIndex: number;
                 if (s1 === s2) {
                     startSeletedNodeIndex = startSpanIndex;
                     endSeletedNodeIndex = endSpanIndex;

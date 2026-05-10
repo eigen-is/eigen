@@ -80,7 +80,7 @@ export function setSelection(ctx: Context, range: Range, options: CommonOptions)
 
 export function setCellValuesByRange(
     ctx: Context,
-    data: any[][],
+    data: unknown[][],
     range: SingleRange,
     cellInput: HTMLDivElement | null,
     options: CommonOptions = {},
@@ -108,7 +108,14 @@ export function setCellValuesByRange(
         for (let j = 0; j < columnCount; j += 1) {
             const row = range.row[0] + i;
             const column = range.column[0] + j;
-            setCellValue(ctx, row, column, data[i][j], cellInput, options);
+            setCellValue(
+                ctx,
+                row,
+                column,
+                data[i][j] as Cell | string | number | boolean | null | undefined,
+                cellInput,
+                options,
+            );
         }
     }
 }
@@ -116,7 +123,7 @@ export function setCellValuesByRange(
 export function setCellFormatByRange(
     ctx: Context,
     attr: keyof Cell,
-    value: any,
+    value: unknown,
     range: Range | SingleRange,
     options: CommonOptions = {},
 ) {

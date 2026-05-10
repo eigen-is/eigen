@@ -17,11 +17,10 @@ export function freeze(
         row: 'rangeRow',
         column: 'rangeColumn',
         both: 'rangeBoth',
-    };
+    } as const;
     const innerType = typeMap[type];
 
     sheet.frozen = {
-        // @ts-expect-error
         type: innerType,
         range: {
             column_focus: range.column,
@@ -57,7 +56,7 @@ export function insertRowOrColumn(
             direction,
             id: sheet.id!,
         });
-    } catch (e: any) {
+    } catch (e: unknown) {
         console.error(e);
     }
 }

@@ -2,7 +2,7 @@ import { cloneDeep, forEach, includes, isNil, isPlainObject, pick, round, set } 
 import { cfSplitRange } from '../../engine';
 import { genarate, is_date, update } from '../../engine/format';
 // import { locale } from "../locale";
-import type { Cell, CellMatrix } from '../../engine/types';
+import type { Cell, CellMatrix, SingleRange } from '../../engine/types';
 import { type Context, getFlowdata } from '../context';
 import type { GlobalCache } from '../types';
 import { getSheetIndex, isAllowEdit } from '../utils';
@@ -34,7 +34,7 @@ export function updateFormatCell(
     ctx: Context,
     d: CellMatrix,
     attr: keyof Cell,
-    foucsStatus: any,
+    foucsStatus: string | number,
     row_st: number,
     row_ed: number,
     col_st: number,
@@ -64,7 +64,7 @@ export function updateFormatCell(
                     value = Number(value!);
                 }
 
-                const mask = update(foucsStatus, value);
+                const mask = update(String(foucsStatus), value);
                 let type = 'n';
 
                 if (
@@ -95,11 +95,11 @@ export function updateFormatCell(
                     if (isNil(cell.ct)) {
                         cell.ct = {};
                     }
-                    cell.ct.fa = foucsStatus;
+                    cell.ct.fa = String(foucsStatus);
                     cell.ct.t = type;
                 } else {
                     d[r][c] = {
-                        ct: { fa: foucsStatus, t: type },
+                        ct: { fa: String(foucsStatus), t: type },
                         v: value as string,
                         m: mask,
                     };
@@ -147,10 +147,10 @@ export function updateFormatCell(
 
                 if (value && isPlainObject(value)) {
                     // if(attr in inlineStyleAffectAttribute && isInlineStringCell(value)){
-                    updateInlineStringFormatOutside(value!, attr, foucsStatus);
+                    updateInlineStringFormatOutside(value, attr, foucsStatus);
                     // }
                     // else{
-                    value[attr] = foucsStatus;
+                    (value as Record<string, unknown>)[attr as string] = foucsStatus;
                     // }
                     ctx.luckysheetfile[sheetIndex].config ||= {};
                     const cfg = ctx.luckysheetfile[sheetIndex].config!;
@@ -171,10 +171,9 @@ export function updateFormatCell(
                         }
                     }
                 } else {
-                    // @ts-expect-error
-                    d[r][c] = { v: value };
-                    // @ts-expect-error
-                    d[r][c][attr] = foucsStatus;
+                    const newCell: Cell = { v: value as Cell['v'] };
+                    (newCell as Record<string, unknown>)[attr as string] = foucsStatus;
+                    d[r][c] = newCell;
                 }
             }
         }
@@ -186,7 +185,7 @@ export function updateFormat(
     $input: HTMLDivElement,
     d: CellMatrix,
     attr: keyof Cell,
-    foucsStatus: any,
+    foucsStatus: string | number,
     canvas?: CanvasRenderingContext2D,
 ) {
     //   if (!checkProtectionFormatCells(ctx.currentSheetId)) {
@@ -236,7 +235,7 @@ function setAttr(
     ctx: Context,
     cellInput: HTMLDivElement,
     attr: keyof Cell,
-    value: any,
+    value: string | number,
     canvas?: CanvasRenderingContext2D,
 ) {
     const flowdata = getFlowdata(ctx);
@@ -246,9 +245,9 @@ function setAttr(
 }
 
 function checkNoNullValue(cell: Cell | null) {
-    let v: any = cell;
+    let v: Cell | Cell['v'] | null = cell;
     if (isPlainObject(v)) {
-        v = v.v;
+        v = (v as Cell).v;
     }
 
     if (
@@ -263,9 +262,9 @@ function checkNoNullValue(cell: Cell | null) {
 }
 
 function checkNoNullValueAll(cell: Cell | null) {
-    let v: any = cell;
+    let v: Cell | Cell['v'] | null = cell;
     if (isPlainObject(v)) {
-        v = v.v;
+        v = (v as Cell).v;
     }
 
     if (!isRealNull(v)) {
@@ -282,7 +281,7 @@ function getNoNullValue(d: CellMatrix, st_x: number, ed: number, type: string) {
     let nullTime = 0;
 
     for (let r = ed - 1; r >= 0; r -= 1) {
-        let cell;
+        let cell: Cell | null;
         if (type === 'c') {
             cell = d[st_x][r];
         } else {
@@ -316,8 +315,8 @@ function activeFormulaInput(
     ctx: Context,
     row_index: number,
     col_index: number,
-    rowh: any,
-    columnh: any,
+    rowh: number[] | null,
+    columnh: number[] | null,
     formula: string,
     cache: GlobalCache,
     isnull?: boolean,
@@ -339,6 +338,8 @@ function activeFormulaInput(
         return;
     }
 
+    // Non-null past the `isnull` early-return: callers pass null only with isnull=true.
+    if (rowh == null || columnh == null) return;
     const row_pre = rowLocationByIndex(rowh[0], ctx.visibledatarow)[0];
     const row = rowLocationByIndex(rowh[1], ctx.visibledatarow)[1];
     const col_pre = colLocationByIndex(columnh[0], ctx.visibledatacolumn)[0];
@@ -392,7 +393,15 @@ function activeFormulaInput(
     // $("#luckysheet-formula-help-c").hide();
 }
 
-function backFormulaInput(d: CellMatrix, r: number, c: number, rowh: any, columnh: any, formula: string, ctx: Context) {
+function backFormulaInput(
+    d: CellMatrix,
+    r: number,
+    c: number,
+    rowh: number[],
+    columnh: number[],
+    formula: string,
+    ctx: Context,
+) {
     const f = `=${formula.toUpperCase()}(${getRangetxt(
         ctx,
         ctx.currentSheetId,
@@ -768,7 +777,7 @@ export function handleNumberDecrease(ctx: Context, cellInput: HTMLDivElement) {
     }
 
     if (foucsStatus.fa === 'General') {
-        if (!cell || !cell.v) return;
+        if (!cell?.v) return;
 
         [, foucsStatus] = genarate(cell.v);
     }
@@ -843,7 +852,7 @@ export function handleNumberIncrease(ctx: Context, cellInput: HTMLDivElement) {
     }
 
     if (foucsStatus.fa === 'General') {
-        if (!cell || !cell.v) return;
+        if (!cell?.v) return;
         [, foucsStatus] = genarate(cell.v);
     }
 
@@ -1068,7 +1077,7 @@ export function handleClearFormat(ctx: Context) {
 
                 if (bd_rangeType === 'range' && cfg.borderInfo[i].borderType !== 'border-slash') {
                     const bd_range = cfg.borderInfo[i].range;
-                    let bd_emptyRange: any = [];
+                    let bd_emptyRange: SingleRange[] = [];
 
                     for (let j = 0; j < bd_range.length; j += 1) {
                         bd_emptyRange = bd_emptyRange.concat(
