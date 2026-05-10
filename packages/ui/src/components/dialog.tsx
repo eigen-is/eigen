@@ -69,15 +69,23 @@ function DialogContent({
                     size ? dialogSizeMap[size] : 'sm:max-w-xl',
                     className,
                 )}
-                // For dialogs rendered above an open preview, a pointer-down on the preview
-                // overlay should close the preview (and keep the dialog open) instead of the
-                // default "click outside closes the dialog" behaviour.
+                // While a preview is open, never let an outside pointer-down close the
+                // dialog — Radix's detector fires per layer, so a click inside the
+                // save-to-drive picker (portaled to body) registers as "outside" the
+                // sticky dialog underneath and would otherwise dismiss it.
+                //
+                // Only the dialog flagged abovePreview is responsible for closing the
+                // preview when its own overlay (which covers the preview) is clicked.
+                // For lower-stack dialogs we just preventDefault and let FilePreview's
+                // own onClick close the preview when the user taps its overlay directly.
                 onPointerDownOutside={(e) => {
-                    if (abovePreview && preview?.isPreviewOpen) {
+                    if (preview?.isPreviewOpen) {
                         e.preventDefault();
-                        const target = e.target as HTMLElement;
-                        if (!target.closest('[data-preview-overlay]')) {
-                            preview.closePreview();
+                        if (abovePreview) {
+                            const target = e.target as HTMLElement;
+                            if (!target.closest('[data-preview-overlay]')) {
+                                preview.closePreview();
+                            }
                         }
                     }
                     onPointerDownOutside?.(e);
