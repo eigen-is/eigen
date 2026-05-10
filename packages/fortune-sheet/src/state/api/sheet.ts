@@ -1,26 +1,22 @@
-import {cloneDeep, isUndefined, maxBy, times} from "es-toolkit/compat";
-import {v4 as uuidv4} from "uuid";
-import {dataToCelldata, getSheet} from "./common";
-import {Context} from "../context";
-import type {CellMatrix} from "../../engine/types";
-import {CellWithRowAndCol, Sheet, SingleRange} from "../types";
-import {getSheetIndex} from "../utils";
-import {api, execfunction, insertUpdateFunctionGroup, locale} from "..";
+import { cloneDeep, isUndefined, maxBy, times } from 'es-toolkit/compat';
+import { v4 as uuidv4 } from 'uuid';
+import type { CellMatrix } from '../../engine/types';
+import { api, execfunction, insertUpdateFunctionGroup, locale } from '..';
+import type { Context } from '../context';
+import type { CellWithRowAndCol, Sheet, SingleRange } from '../types';
+import { getSheetIndex } from '../utils';
+import { dataToCelldata, getSheet } from './common';
 
 export function getAllSheets(ctx: Context) {
     return ctx.luckysheetfile;
 }
 
-export {getSheet};
+export { getSheet };
 
-export function initSheetData(
-    draftCtx: Context,
-    index: number,
-    newData: Sheet
-): CellMatrix | null {
-    const {celldata, row, column} = newData;
-    const lastRow = maxBy<CellWithRowAndCol>(celldata, "r");
-    const lastCol = maxBy(celldata, "c");
+export function initSheetData(draftCtx: Context, index: number, newData: Sheet): CellMatrix | null {
+    const { celldata, row, column } = newData;
+    const lastRow = maxBy<CellWithRowAndCol>(celldata, 'r');
+    const lastCol = maxBy(celldata, 'c');
     let lastRowNum = (lastRow?.r ?? 0) + 1;
     let lastColNum = (lastCol?.c ?? 0) + 1;
     if (row != null && column != null && row > 0 && column > 0) {
@@ -31,9 +27,7 @@ export function initSheetData(
         lastColNum = Math.max(lastColNum, draftCtx.defaultcolumnNum);
     }
     if (lastRowNum && lastColNum) {
-        const expandedData: Sheet["data"] = times(lastRowNum, () =>
-            times(lastColNum, () => null)
-        );
+        const expandedData: Sheet['data'] = times(lastRowNum, () => times(lastColNum, () => null));
         celldata?.forEach((d) => {
             expandedData[d.r][d.c] = d.v;
         });
@@ -57,9 +51,7 @@ export function hideSheet(ctx: Context, sheetId: string) {
     const index = getSheetIndex(ctx, sheetId) as number;
     ctx.luckysheetfile[index].hide = 1;
     ctx.luckysheetfile[index].status = 0;
-    const shownSheets = ctx.luckysheetfile.filter(
-        (sheet) => isUndefined(sheet.hide) || sheet?.hide !== 1
-    );
+    const shownSheets = ctx.luckysheetfile.filter((sheet) => isUndefined(sheet.hide) || sheet?.hide !== 1);
     ctx.currentSheetId = shownSheets[0].id as string;
 }
 
@@ -69,7 +61,7 @@ export function showSheet(ctx: Context, sheetId: string) {
 }
 
 function generateCopySheetName(ctx: Context, sheetId: string) {
-    const {info} = locale(ctx);
+    const { info } = locale(ctx);
     const copyWord = `(${info.copy}`;
     const SheetIndex = getSheetIndex(ctx, sheetId) as number;
     let sheetName = ctx.luckysheetfile[SheetIndex].name;
@@ -90,12 +82,9 @@ function generateCopySheetName(ctx: Context, sheetId: string) {
 
         if (st_i === 0) {
             index = index || 2;
-            const ed_i = fileName.indexOf(")", st_i + nameCopy.length);
+            const ed_i = fileName.indexOf(')', st_i + nameCopy.length);
             // Excel-style copy suffix: "Sheet1 (2)". Extract and bump.
-            const num = Number.parseInt(
-                fileName.substring(st_i + nameCopy.length, ed_i),
-                10,
-            );
+            const num = Number.parseInt(fileName.substring(st_i + nameCopy.length, ed_i), 10);
             if (Number.isFinite(num) && num >= index) {
                 index = num + 1;
             }
@@ -105,7 +94,7 @@ function generateCopySheetName(ctx: Context, sheetId: string) {
     let sheetCopyName;
 
     do {
-        const postfix = `${copyWord + (index || "")})`;
+        const postfix = `${copyWord + (index || '')})`;
         const lengthLimit = 31 - postfix.length;
         sheetCopyName = sheetName;
         if (sheetCopyName.length > lengthLimit) {
@@ -127,18 +116,9 @@ export function copySheet(ctx: Context, sheetId: string) {
     delete sheetData.status;
     sheetData.celldata = dataToCelldata(sheetData.data);
     delete sheetData.data;
-    api.addSheet(
-        ctx,
-        undefined,
-        uuidv4(),
-        ctx.luckysheetfile[index].isPivotTable,
-        sheetName,
-        sheetData
-    );
+    api.addSheet(ctx, undefined, uuidv4(), ctx.luckysheetfile[index].isPivotTable, sheetName, sheetData);
     const sheetOrderList: Record<string, number> = {};
-    sheetOrderList[
-        ctx.luckysheetfile[ctx.luckysheetfile.length - 1].id as string
-        ] = order;
+    sheetOrderList[ctx.luckysheetfile[ctx.luckysheetfile.length - 1].id as string] = order;
     api.setSheetOrder(ctx, sheetOrderList);
 }
 
@@ -163,24 +143,14 @@ function calculateSheetFromula(ctx: Context, id: string, range?: SingleRange) {
             if (!ctx.luckysheetfile[index].data![r][c]?.f) {
                 continue;
             }
-            const result = execfunction(
-                ctx,
-                ctx.luckysheetfile[index].data![r][c]?.f!,
-                r,
-                c,
-                id
-            );
-            api.setCellValue(ctx, r, c, result[1], null, {id});
+            const result = execfunction(ctx, ctx.luckysheetfile[index].data![r][c]?.f!, r, c, id);
+            api.setCellValue(ctx, r, c, result[1], null, { id });
             insertUpdateFunctionGroup(ctx, r, c, id);
         }
     }
 }
 
-export function calculateFormula(
-    ctx: Context,
-    id?: string,
-    range?: SingleRange
-) {
+export function calculateFormula(ctx: Context, id?: string, range?: SingleRange) {
     if (id) {
         calculateSheetFromula(ctx, id, range);
         return;

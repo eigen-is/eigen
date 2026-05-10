@@ -1,15 +1,10 @@
-import {v4 as uuidv4} from "uuid";
-import type {Cell, CellMatrix} from "../engine/types";
-import {Selection, Sheet} from "./types";
+import { v4 as uuidv4 } from 'uuid';
+import type { Cell, CellMatrix } from '../engine/types';
+import type { Selection, Sheet } from './types';
 
 export type Hooks = {
     beforeUpdateCell?: (r: number, c: number, value: any) => boolean;
-    afterUpdateCell?: (
-        row: number,
-        column: number,
-        oldValue: any,
-        newValue: any
-    ) => void;
+    afterUpdateCell?: (row: number, column: number, oldValue: any, newValue: any) => void;
     afterSelectionChange?: (sheetId: string, selection: Selection) => void;
     beforeRenderRowHeaderCell?: (
         rowNumber: string,
@@ -17,7 +12,7 @@ export type Hooks = {
         top: number,
         width: number,
         height: number,
-        ctx: CanvasRenderingContext2D
+        ctx: CanvasRenderingContext2D,
     ) => boolean;
     afterRenderRowHeaderCell?: (
         rowNumber: string,
@@ -25,7 +20,7 @@ export type Hooks = {
         top: number,
         width: number,
         height: number,
-        ctx: CanvasRenderingContext2D
+        ctx: CanvasRenderingContext2D,
     ) => void;
     beforeRenderColumnHeaderCell?: (
         columnChar: string,
@@ -33,7 +28,7 @@ export type Hooks = {
         left: number,
         width: number,
         height: number,
-        ctx: CanvasRenderingContext2D
+        ctx: CanvasRenderingContext2D,
     ) => boolean;
     afterRenderColumnHeaderCell?: (
         columnChar: string,
@@ -41,12 +36,9 @@ export type Hooks = {
         left: number,
         width: number,
         height: number,
-        ctx: CanvasRenderingContext2D
+        ctx: CanvasRenderingContext2D,
     ) => void;
-    beforeRenderCellArea?: (
-        cells: CellMatrix,
-        ctx: CanvasRenderingContext2D
-    ) => boolean;
+    beforeRenderCellArea?: (cells: CellMatrix, ctx: CanvasRenderingContext2D) => boolean;
     beforeRenderCell?: (
         cell: Cell | null,
         cellInfo: {
@@ -57,7 +49,7 @@ export type Hooks = {
             endX: number;
             endY: number;
         },
-        ctx: CanvasRenderingContext2D
+        ctx: CanvasRenderingContext2D,
     ) => boolean;
     afterRenderCell?: (
         cell: Cell | null,
@@ -69,7 +61,7 @@ export type Hooks = {
             endX: number;
             endY: number;
         },
-        ctx: CanvasRenderingContext2D
+        ctx: CanvasRenderingContext2D,
     ) => void;
     beforeCellMouseDown?: (
         cell: Cell | null,
@@ -80,7 +72,7 @@ export type Hooks = {
             startColumn: number;
             endRow: number;
             endColumn: number;
-        }
+        },
     ) => boolean;
     afterCellMouseDown?: (
         cell: Cell | null,
@@ -91,23 +83,16 @@ export type Hooks = {
             startColumn: number;
             endRow: number;
             endColumn: number;
-        }
+        },
     ) => void;
-    beforePaste?: (
-        selection: Selection[] | undefined,
-        content: string
-    ) => boolean;
+    beforePaste?: (selection: Selection[] | undefined, content: string) => boolean;
     beforeAddSheet?: (sheet: Sheet) => boolean;
     afterAddSheet?: (sheet: Sheet) => void;
     beforeActivateSheet?: (id: string) => boolean;
     afterActivateSheet?: (id: string) => void;
     beforeDeleteSheet?: (id: string) => boolean;
     afterDeleteSheet?: (id: string) => void;
-    beforeUpdateSheetName?: (
-        id: string,
-        oldName: string,
-        newName: string
-    ) => boolean;
+    beforeUpdateSheetName?: (id: string, oldName: string, newName: string) => boolean;
     afterUpdateSheetName?: (id: string, oldName: string, newName: string) => void;
     onAddComment?: (row: number, column: number) => void;
     onViewComment?: (row: number, column: number) => void;
@@ -115,7 +100,10 @@ export type Hooks = {
     onCommentColor?: (row: number, column: number, color: string | null) => void;
     onCommentResolve?: (row: number, column: number) => void;
     onCommentReopen?: (row: number, column: number) => void;
-    getCommentInfo?: (row: number, column: number) => { color: string | null; indicatorColor?: string | null; status: 'open' | 'resolved' } | null;
+    getCommentInfo?: (
+        row: number,
+        column: number,
+    ) => { color: string | null; indicatorColor?: string | null; status: 'open' | 'resolved' } | null;
     onInsertImage?: () => void;
     resolveImageUrl?: (mediaName: string) => string | null;
 };
@@ -165,74 +153,74 @@ export const defaultSettings: Required<Settings> = {
     defaultRowHeight: 19,
     defaultFontSize: 10,
     cellContextMenu: [
-        "copy", // copy
-        "paste", // paste
-        "|",
-        "insert-row", // insert row
-        "insert-column", // insert column
-        "delete-row", // delete selected row(s)
-        "delete-column", // delete selected column(s)
-        "delete-cell", // delete cell
-        "hide-row", // hide/show selected row(s)
-        "hide-column", // hide/show selected column(s)
-        "set-row-height", // set row height
-        "set-column-width", // set column width
-        "|",
-        "clear", // clear content
-        "sort", // sort selection
-        "|",
-        "comment",
-        "|",
-        "orderAZ", // sort ascending
-        "orderZA", // sort descending
-        "filter", // filter selection
-        "chart", // generate chart
-        "image", // insert image
-        "link", // insert link
-        "data", // data validation
-        "cell-format", // set cell format
+        'copy', // copy
+        'paste', // paste
+        '|',
+        'insert-row', // insert row
+        'insert-column', // insert column
+        'delete-row', // delete selected row(s)
+        'delete-column', // delete selected column(s)
+        'delete-cell', // delete cell
+        'hide-row', // hide/show selected row(s)
+        'hide-column', // hide/show selected column(s)
+        'set-row-height', // set row height
+        'set-column-width', // set column width
+        '|',
+        'clear', // clear content
+        'sort', // sort selection
+        '|',
+        'comment',
+        '|',
+        'orderAZ', // sort ascending
+        'orderZA', // sort descending
+        'filter', // filter selection
+        'chart', // generate chart
+        'image', // insert image
+        'link', // insert link
+        'data', // data validation
+        'cell-format', // set cell format
     ], // custom cell right-click menu
     headerContextMenu: [
-        "copy", // copy
-        "paste", // paste
-        "|",
-        "insert-row", // insert row
-        "insert-column", // insert column
-        "delete-row", // delete selected row(s)
-        "delete-column", // delete selected column(s)
-        "delete-cell", // delete cell
-        "hide-row", // hide/show selected row(s)
-        "hide-column", // hide/show selected column(s)
-        "set-row-height", // set row height
-        "set-column-width", // set column width
-        "|",
-        "clear", // clear content
-        "sort", // sort selection
-        "orderAZ", // sort ascending
-        "orderZA", // sort descending
+        'copy', // copy
+        'paste', // paste
+        '|',
+        'insert-row', // insert row
+        'insert-column', // insert column
+        'delete-row', // delete selected row(s)
+        'delete-column', // delete selected column(s)
+        'delete-cell', // delete cell
+        'hide-row', // hide/show selected row(s)
+        'hide-column', // hide/show selected column(s)
+        'set-row-height', // set row height
+        'set-column-width', // set column width
+        '|',
+        'clear', // clear content
+        'sort', // sort selection
+        'orderAZ', // sort ascending
+        'orderZA', // sort descending
     ], // header context menu
     sheetTabContextMenu: [
-        "delete",
-        "copy",
-        "rename",
-        "color",
-        "hide",
-        "|",
-        "move",
+        'delete',
+        'copy',
+        'rename',
+        'color',
+        'hide',
+        '|',
+        'move',
         // "focus",
     ], // custom sheet tab right-click menu
     filterContextMenu: [
-        "sort-by-asc",
-        "sort-by-desc",
-        "|",
-        "filter-by-color",
-        "|",
+        'sort-by-asc',
+        'sort-by-desc',
+        '|',
+        'filter-by-color',
+        '|',
         // "filter-by-condition",
         // "|",
-        "filter-by-value",
+        'filter-by-value',
     ], // filter context menu
     generateSheetId: () => uuidv4(),
     hooks: {},
-    currency: "€",
+    currency: '€',
     fontList: [],
 };

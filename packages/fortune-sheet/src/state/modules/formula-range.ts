@@ -1,34 +1,21 @@
-import type {Context} from "../context";
-import type {Rect} from "../types";
-import {getRangetxt, mergeMoveMain} from "./cell";
-import {moveToEnd} from "./cursor";
-import {colLocation, mousePosition, rowLocation} from "./location";
-import {seletedHighlistByindex} from ".";
-import {
-    colors,
-    formulaUIState,
-    getcellrange,
-    setFunctionHTMLIndex,
-} from "./formula-ui";
-import {israngeseleciton} from "./formula-editor";
+import type { Context } from '../context';
+import type { Rect } from '../types';
+import { seletedHighlistByindex } from '.';
+import { getRangetxt, mergeMoveMain } from './cell';
+import { moveToEnd } from './cursor';
+import { israngeseleciton } from './formula-editor';
+import { colors, formulaUIState, getcellrange, setFunctionHTMLIndex } from './formula-ui';
+import { colLocation, mousePosition, rowLocation } from './location';
 
 function parseElement(eleString: string) {
-    return new DOMParser().parseFromString(eleString, "text/html").body
-        .childNodes[0];
+    return new DOMParser().parseFromString(eleString, 'text/html').body.childNodes[0];
 }
 
-export function createFormulaRangeSelect(
-    ctx: Context,
-    select: { rangeIndex: number } & Rect
-) {
+export function createFormulaRangeSelect(ctx: Context, select: { rangeIndex: number } & Rect) {
     ctx.formulaRangeSelect = select;
 }
 
-export function createRangeHightlight(
-    ctx: Context,
-    inputInnerHtmlStr: string,
-    ignoreRangeIndex = -1
-) {
+export function createRangeHightlight(ctx: Context, inputInnerHtmlStr: string, ignoreRangeIndex = -1) {
     const $span = parseElement(`<div>${inputInnerHtmlStr}</div>`) as HTMLElement;
     const formulaRanges: {
         rangeIndex: number;
@@ -38,47 +25,35 @@ export function createRangeHightlight(
         height: number;
         backgroundColor: string;
     }[] = [];
-    $span
-        .querySelectorAll("span.fortune-formula-functionrange-cell")
-        .forEach((ele) => {
-            const rangeIndex = parseInt(ele.getAttribute("rangeindex") || "0", 10);
-            if (rangeIndex === ignoreRangeIndex) return;
-            const cellrange = getcellrange(ctx, ele.textContent || "");
-            if (
-                rangeIndex === ctx.formulaCache.selectingRangeIndex ||
-                cellrange == null
-            )
-                return;
-            if (
-                cellrange.sheetId === ctx.currentSheetId ||
-                (!cellrange.sheetId &&
-                    ctx.formulaCache.rangetosheet === ctx.currentSheetId)
-            ) {
-                const rect = seletedHighlistByindex(
-                    ctx,
-                    cellrange.row[0],
-                    cellrange.row[1],
-                    cellrange.column[0],
-                    cellrange.column[1]
-                );
-                if (rect) {
-                    formulaRanges.push({
-                        rangeIndex,
-                        ...rect,
-                        backgroundColor: colors[rangeIndex],
-                    });
-                }
+    $span.querySelectorAll('span.fortune-formula-functionrange-cell').forEach((ele) => {
+        const rangeIndex = parseInt(ele.getAttribute('rangeindex') || '0', 10);
+        if (rangeIndex === ignoreRangeIndex) return;
+        const cellrange = getcellrange(ctx, ele.textContent || '');
+        if (rangeIndex === ctx.formulaCache.selectingRangeIndex || cellrange == null) return;
+        if (
+            cellrange.sheetId === ctx.currentSheetId ||
+            (!cellrange.sheetId && ctx.formulaCache.rangetosheet === ctx.currentSheetId)
+        ) {
+            const rect = seletedHighlistByindex(
+                ctx,
+                cellrange.row[0],
+                cellrange.row[1],
+                cellrange.column[0],
+                cellrange.column[1],
+            );
+            if (rect) {
+                formulaRanges.push({
+                    rangeIndex,
+                    ...rect,
+                    backgroundColor: colors[rangeIndex],
+                });
             }
-        });
+        }
+    });
     ctx.formulaRangeHighlight = formulaRanges;
 }
 
-export function setCaretPosition(
-    ctx: Context,
-    textDom: HTMLElement,
-    children: number,
-    pos: number
-) {
+export function setCaretPosition(ctx: Context, textDom: HTMLElement, children: number, pos: number) {
     try {
         const el = textDom;
         const range = document.createRange();
@@ -94,19 +69,14 @@ export function setCaretPosition(
     }
 }
 
-export function rangeSetValue(
-    ctx: Context,
-    cellInput: HTMLDivElement,
-    selected: any,
-    fxInput?: HTMLDivElement | null
-) {
+export function rangeSetValue(ctx: Context, cellInput: HTMLDivElement, selected: any, fxInput?: HTMLDivElement | null) {
     let $editor = cellInput;
     let $copyTo = fxInput;
-    if (document.activeElement?.id === "luckysheet-functionbox-cell") {
+    if (document.activeElement?.id === 'luckysheet-functionbox-cell') {
         $editor = fxInput!;
         $copyTo = cellInput;
     }
-    let range = "";
+    let range = '';
     const rf = selected.row[0];
     const cf = selected.column[0];
     if (ctx.config.merge != null && `${rf}_${cf}` in ctx.config.merge) {
@@ -117,25 +87,18 @@ export function rangeSetValue(
                 column: [cf, cf],
                 row: [rf, rf],
             },
-            ctx.formulaCache.rangetosheet
+            ctx.formulaCache.rangetosheet,
         );
     } else {
-        range = getRangetxt(
-            ctx,
-            ctx.currentSheetId,
-            selected,
-            ctx.formulaCache.rangetosheet
-        );
+        range = getRangetxt(ctx, ctx.currentSheetId, selected, ctx.formulaCache.rangetosheet);
     }
 
     if (
         !israngeseleciton(ctx) &&
-        (ctx.formulaCache.rangestart ||
-            ctx.formulaCache.rangedrag_column_start ||
-            ctx.formulaCache.rangedrag_row_start)
+        (ctx.formulaCache.rangestart || ctx.formulaCache.rangedrag_column_start || ctx.formulaCache.rangedrag_row_start)
     ) {
         const span = $editor.querySelector(
-            `span[rangeindex='${ctx.formulaCache.rangechangeindex}']`
+            `span[rangeindex='${ctx.formulaCache.rangechangeindex}']`,
         ) as HTMLSpanElement;
         if (span) {
             span.innerHTML = range;
@@ -145,20 +108,12 @@ export function rangeSetValue(
         const function_str = `<span class="fortune-formula-functionrange-cell" rangeindex="${formulaUIState.functionHTMLIndex}" dir="auto" style="color:${colors[formulaUIState.functionHTMLIndex]};">${range}</span>`;
         const newEle = parseElement(function_str);
         const refEle = ctx.formulaCache.rangeSetValueTo;
-        if (refEle && refEle.parentNode) {
-            const leftPar = document.getElementsByClassName(
-                "luckysheet-formula-text-lpar"
-            )?.[0];
+        if (refEle?.parentNode) {
+            const leftPar = document.getElementsByClassName('luckysheet-formula-text-lpar')?.[0];
 
             // handle case when user autocompletes the formula
-            if (
-                leftPar?.parentElement?.classList.contains(
-                    "luckysheet-formula-text-color"
-                )
-            ) {
-                document
-                    .getElementsByClassName("luckysheet-formula-text-lpar")?.[0]
-                    .parentNode?.appendChild(newEle);
+            if (leftPar?.parentElement?.classList.contains('luckysheet-formula-text-color')) {
+                document.getElementsByClassName('luckysheet-formula-text-lpar')?.[0].parentNode?.appendChild(newEle);
             } else {
                 refEle.parentNode.insertBefore(newEle, refEle.nextSibling);
             }
@@ -167,7 +122,7 @@ export function rangeSetValue(
         }
         ctx.formulaCache.rangechangeindex = formulaUIState.functionHTMLIndex;
         const span = $editor.querySelector(
-            `span[rangeindex='${ctx.formulaCache.rangechangeindex}']`
+            `span[rangeindex='${ctx.formulaCache.rangechangeindex}']`,
         ) as HTMLSpanElement;
 
         setCaretPosition(ctx, span, 0, range.length);
@@ -205,16 +160,8 @@ export function onFormulaRangeDragEnd(ctx: Context) {
     ctx.formulaCache.selectingRangeIndex = -1;
 }
 
-function setRangeSelect(
-    container: HTMLDivElement,
-    left: number,
-    top: number,
-    height: number,
-    width: number
-) {
-    const rangeElement = container.querySelector(
-        ".fortune-formula-functionrange-select"
-    ) as HTMLDivElement;
+function setRangeSelect(container: HTMLDivElement, left: number, top: number, height: number, width: number) {
+    const rangeElement = container.querySelector('.fortune-formula-functionrange-select') as HTMLDivElement;
     if (rangeElement == null) return;
     rangeElement.style.left = `${left}px`;
     rangeElement.style.top = `${top}px`;
@@ -229,9 +176,9 @@ export function rangeDrag(
     scrollLeft: number,
     scrollTop: number,
     container: HTMLDivElement,
-    fxInput?: HTMLDivElement | null
+    fxInput?: HTMLDivElement | null,
 ) {
-    const {func_selectedrange} = ctx.formulaCache;
+    const { func_selectedrange } = ctx.formulaCache;
     if (
         !func_selectedrange ||
         func_selectedrange.left == null ||
@@ -284,16 +231,7 @@ export function rangeDrag(
         columnseleted = [func_selectedrange.column[0], col_index];
     }
 
-    const changeparam = mergeMoveMain(
-        ctx,
-        columnseleted,
-        rowseleted,
-        func_selectedrange,
-        top,
-        height,
-        left,
-        width
-    );
+    const changeparam = mergeMoveMain(ctx, columnseleted, rowseleted, func_selectedrange, top, height, left, width);
     if (changeparam != null) {
         [columnseleted, rowseleted, top, height, left, width] = changeparam;
     }
@@ -313,7 +251,7 @@ export function rangeDrag(
             row: rowseleted,
             column: columnseleted,
         },
-        fxInput
+        fxInput,
     );
 
     setRangeSelect(container, left, top, height, width);
@@ -325,11 +263,11 @@ export function rangeDragColumn(
     e: MouseEvent,
     cellInput: HTMLDivElement,
     scrollLeft: number,
-    scrollTop: number,
+    _scrollTop: number,
     container: HTMLDivElement,
-    fxInput?: HTMLDivElement | null
+    fxInput?: HTMLDivElement | null,
 ) {
-    const {func_selectedrange} = ctx.formulaCache;
+    const { func_selectedrange } = ctx.formulaCache;
     if (
         !func_selectedrange ||
         func_selectedrange.left == null ||
@@ -341,7 +279,7 @@ export function rangeDragColumn(
     const mouse = mousePosition(e.pageX, e.pageY, ctx);
     const x = mouse[0] + scrollLeft;
 
-    const {visibledatarow} = ctx;
+    const { visibledatarow } = ctx;
     const row_index = visibledatarow.length - 1;
     const row = visibledatarow[row_index];
     const row_pre = 0;
@@ -374,7 +312,7 @@ export function rangeDragColumn(
         row_pre,
         row - row_pre - 1,
         left,
-        width
+        width,
     );
     if (changeparam != null) {
         [columnseleted, , , , left, width] = changeparam;
@@ -391,7 +329,7 @@ export function rangeDragColumn(
             row: [null, null],
             column: columnseleted,
         },
-        fxInput
+        fxInput,
     );
 
     setRangeSelect(container, left, row_pre, row - row_pre - 1, width);
@@ -401,12 +339,12 @@ export function rangeDragRow(
     ctx: Context,
     e: MouseEvent,
     cellInput: HTMLDivElement,
-    scrollLeft: number,
+    _scrollLeft: number,
     scrollTop: number,
     container: HTMLDivElement,
-    fxInput?: HTMLDivElement | null
+    fxInput?: HTMLDivElement | null,
 ) {
-    const {func_selectedrange} = ctx.formulaCache;
+    const { func_selectedrange } = ctx.formulaCache;
     if (
         !func_selectedrange ||
         func_selectedrange.left == null ||
@@ -421,7 +359,7 @@ export function rangeDragRow(
 
     const [row_pre, row, row_index] = rowLocation(y, ctx.visibledatarow);
 
-    const {visibledatacolumn} = ctx;
+    const { visibledatacolumn } = ctx;
     const col_index = visibledatacolumn.length - 1;
     const col = visibledatacolumn[col_index];
     const col_pre = 0;
@@ -452,7 +390,7 @@ export function rangeDragRow(
         top,
         height,
         col_pre,
-        col - col_pre - 1
+        col - col_pre - 1,
     );
     if (changeparam != null) {
         [, rowseleted, top, height] = changeparam;
@@ -469,8 +407,7 @@ export function rangeDragRow(
             row: rowseleted,
             column: [null, null],
         },
-        fxInput
+        fxInput,
     );
     setRangeSelect(container, col_pre, top, height, col - col_pre - 1);
 }
-

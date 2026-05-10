@@ -1,10 +1,10 @@
-import {isEmpty, isNil, isPlainObject} from "es-toolkit/compat";
-import {isdatatypemulti} from ".";
-import type {Context} from "../context";
-import {locale} from "../locale";
-import type {Cell} from "../../engine/types";
-import {normalizedCellAttr} from "./cell";
-import {isInlineStringCell} from "./inline-string";
+import { isEmpty, isNil, isPlainObject } from 'es-toolkit/compat';
+import type { Cell } from '../../engine/types';
+import type { Context } from '../context';
+import { locale } from '../locale';
+import { isdatatypemulti } from '.';
+import { normalizedCellAttr } from './cell';
+import { isInlineStringCell } from './inline-string';
 
 // Geometry the canvas painter walks back to draw text-decoration overlays.
 type LineSegment = {
@@ -47,7 +47,7 @@ export type CellTextInfoOption = {
 
 export type CellTextInfo = {
     values: CellTextWordGroup[];
-    type?: "verticalWrap" | "plainWrap" | "plain";
+    type?: 'verticalWrap' | 'plainWrap' | 'plain';
     textWidthAll?: number;
     textHeightAll?: number;
     rotate?: number;
@@ -84,12 +84,12 @@ function getTextSize(text: string, font: string) {
         return textHeightCache[font];
     }
 
-    const ele = document.createElement("span");
-    ele.style.float = "left";
-    ele.style.whiteSpace = "nowrap";
-    ele.style.visibility = "hidden";
-    ele.style.margin = "0";
-    ele.style.padding = "0";
+    const ele = document.createElement('span');
+    ele.style.float = 'left';
+    ele.style.whiteSpace = 'nowrap';
+    ele.style.visibility = 'hidden';
+    ele.style.margin = '0';
+    ele.style.padding = '0';
     ele.innerHTML = text;
     document.body.append(ele);
 
@@ -106,11 +106,7 @@ export function defaultFont(defaultFontSize: number) {
     return `normal normal normal ${defaultFontSize}pt "Helvetica Neue", Helvetica, Arial, "PingFang SC", "Hiragino Sans GB", "Heiti SC",  "WenQuanYi Micro Hei", sans-serif`;
 }
 
-export function getFontSet(
-    format: any,
-    defaultFontSize: number,
-    ctx: Context
-) {
+export function getFontSet(format: any, defaultFontSize: number, ctx: Context) {
     if (!isPlainObject(format)) {
         return defaultFont(defaultFontSize);
     }
@@ -118,22 +114,18 @@ export function getFontSet(
     const fontAttr: string[] = [];
 
     // font-style
-    fontAttr.push(
-        format.it === "0" || format.it === 0 || isNil(format.it) ? "normal" : "italic"
-    );
+    fontAttr.push(format.it === '0' || format.it === 0 || isNil(format.it) ? 'normal' : 'italic');
 
     // font-variant
-    fontAttr.push("normal");
+    fontAttr.push('normal');
 
     // font-weight
-    fontAttr.push(
-        format.bl === "0" || format.bl === 0 || isNil(format.bl) ? "normal" : "bold"
-    );
+    fontAttr.push(format.bl === '0' || format.bl === 0 || isNil(format.bl) ? 'normal' : 'bold');
 
     // font-size
     fontAttr.push(`${format.fs ? Math.ceil(format.fs) : defaultFontSize}pt`);
 
-    const {fontarray} = locale(ctx);
+    const { fontarray } = locale(ctx);
     const fallback = `"Helvetica Neue", Helvetica, Arial, "PingFang SC", "Hiragino Sans GB", "Heiti SC", "Microsoft YaHei", "WenQuanYi Micro Hei", sans-serif`;
 
     let primary: string;
@@ -142,19 +134,15 @@ export function getFontSet(
     } else if (isdatatypemulti(format.ff).num) {
         primary = fontarray[parseInt(format.ff, 10)];
     } else {
-        const stripped = format.ff.replace(/["']/g, "");
-        primary = stripped.includes(" ") ? `"${stripped}"` : stripped;
+        const stripped = format.ff.replace(/["']/g, '');
+        primary = stripped.includes(' ') ? `"${stripped}"` : stripped;
     }
 
-    return `${fontAttr.join(" ")} ${primary},${fallback}`;
+    return `${fontAttr.join(' ')} ${primary},${fallback}`;
 }
 
 // Get text size for cells with a value
-export function getMeasureText(
-    value: any,
-    renderCtx: CanvasRenderingContext2D,
-    fontset?: string
-) {
+export function getMeasureText(value: any, renderCtx: CanvasRenderingContext2D, fontset?: string) {
     let mtc = measureTextCache[`${value}_${renderCtx.font}`];
     if (fontset) {
         mtc = measureTextCache[`${value}_${fontset}`];
@@ -180,15 +168,15 @@ export function getMeasureText(
         Number.isNaN(cache.actualBoundingBoxDescent) ||
         Number.isNaN(cache.actualBoundingBoxAscent)
     ) {
-        let commonWord = "M";
+        let commonWord = 'M';
         if (hasChinaword(value)) {
-            commonWord = "田";
+            commonWord = '田';
         }
         const oneLineTextHeight = getTextSize(commonWord, renderCtx.font)[1] * 0.8;
-        if (renderCtx.textBaseline === "top") {
+        if (renderCtx.textBaseline === 'top') {
             cache.actualBoundingBoxDescent = oneLineTextHeight;
             cache.actualBoundingBoxAscent = 0;
-        } else if (renderCtx.textBaseline === "middle") {
+        } else if (renderCtx.textBaseline === 'middle') {
             cache.actualBoundingBoxDescent = oneLineTextHeight / 2;
             cache.actualBoundingBoxAscent = oneLineTextHeight / 2;
         } else {
@@ -197,9 +185,9 @@ export function getMeasureText(
         }
     }
 
-    if (renderCtx.textBaseline === "alphabetic") {
-        const descText = "gjpqy";
-        const matchText = "abcdABCD";
+    if (renderCtx.textBaseline === 'alphabetic') {
+        const descText = 'gjpqy';
+        const matchText = 'abcdABCD';
         let descTextMeasure = measureTextCache[`${descText}_${renderCtx.font}`];
         if (fontset) {
             descTextMeasure = measureTextCache[`${descText}_${fontset}`];
@@ -218,10 +206,7 @@ export function getMeasureText(
             matchTextMeasure = renderCtx.measureText(matchText);
         }
 
-        if (
-            cache.actualBoundingBoxDescent <=
-            matchTextMeasure.actualBoundingBoxDescent
-        ) {
+        if (cache.actualBoundingBoxDescent <= matchTextMeasure.actualBoundingBoxDescent) {
             cache.actualBoundingBoxDescent = descTextMeasure.actualBoundingBoxDescent;
             if (!cache.actualBoundingBoxDescent) {
                 cache.actualBoundingBoxDescent = 0;
@@ -234,25 +219,20 @@ export function getMeasureText(
 }
 
 export function isSupportBoundingBox(ctx: CanvasRenderingContext2D) {
-    const measureText = ctx.measureText("田");
+    const measureText = ctx.measureText('田');
     if (isNil(measureText.actualBoundingBoxAscent)) {
         return false;
     }
     return true;
 }
 
-export function drawLineInfo(
-    wordGroup: any,
-    cancelLine: string,
-    underLine: string,
-    option: any
-) {
-    const {left} = option;
-    const {top} = option;
-    const {width} = option;
-    const {asc} = option;
-    const {desc} = option;
-    const {fs} = option;
+export function drawLineInfo(wordGroup: any, cancelLine: string, underLine: string, option: any) {
+    const { left } = option;
+    const { top } = option;
+    const { width } = option;
+    const { asc } = option;
+    const { desc } = option;
+    const { fs } = option;
 
     if (wordGroup.wrap === true) {
         return;
@@ -340,43 +320,42 @@ export function getCellTextInfo(
     cell: Cell,
     renderCtx: CanvasRenderingContext2D,
     sheetCtx: Context,
-    option: CellTextInfoOption
+    option: CellTextInfoOption,
 ): CellTextInfo | null {
     const cellWidth = option.cellWidth ?? 0;
     const cellHeight = option.cellHeight ?? 0;
     const space_width = option.space_width ?? 2;
     const space_height = option.space_height ?? 2;
-    const isMode = option.cellWidth == null ? "onlyWidth" : "";
-    const isModeSplit = isMode === "onlyWidth" ? "_" : "";
-    const textInfo =
-        measureTextCellInfoCache[`${option.r}_${option.c}${isModeSplit}${isMode}`];
+    const isMode = option.cellWidth == null ? 'onlyWidth' : '';
+    const isModeSplit = isMode === 'onlyWidth' ? '_' : '';
+    const textInfo = measureTextCellInfoCache[`${option.r}_${option.c}${isModeSplit}${isMode}`];
     if (textInfo) {
         return textInfo;
     }
 
     // Horizontal alignment
-    const horizonAlign = normalizedCellAttr(cell, "ht");
+    const horizonAlign = normalizedCellAttr(cell, 'ht');
     // Vertical alignment
-    const verticalAlign = normalizedCellAttr(cell, "vt");
+    const verticalAlign = normalizedCellAttr(cell, 'vt');
 
-    const tb = normalizedCellAttr(cell, "tb"); // wrap overflow
+    const tb = normalizedCellAttr(cell, 'tb'); // wrap overflow
     // rt: signed degrees in [-90, 90] (positive = CCW / "up", negative = CW / "down"),
     // or 'vertical' for stacked text. The two branches that follow (vertical-stack vs.
     // diagonal/horizontal) stay separate; only the diagonal branch needs the magnitude
     // and direction split into Math.abs(rt) + isRotateUp.
-    const rtRaw = normalizedCellAttr(cell, "rt");
-    const isVertical = rtRaw === "vertical";
-    let rt: number = typeof rtRaw === "number" && rtRaw >= -90 && rtRaw <= 90 ? rtRaw : 0;
+    const rtRaw = normalizedCellAttr(cell, 'rt');
+    const isVertical = rtRaw === 'vertical';
+    let rt: number = typeof rtRaw === 'number' && rtRaw >= -90 && rtRaw <= 90 ? rtRaw : 0;
     const isRotateUp = rt >= 0 ? 1 : 0;
 
-    renderCtx.textAlign = "start";
+    renderCtx.textAlign = 'start';
 
     const textContent: any = {};
     textContent.values = [];
 
     let fontset;
-    let cancelLine = "0";
-    let underLine = "0";
+    let cancelLine = '0';
+    let underLine = '0';
     let fontSize = 11;
     let isInline = false;
     let value: any;
@@ -397,17 +376,17 @@ export function getCellTextInfo(
         for (let i = 0; i < sharedStrings.length; i += 1) {
             const shareCell = sharedStrings[i];
             const scfontset = getFontSet(shareCell, sheetCtx.defaultFontSize, sheetCtx);
-            const {fc} = shareCell;
-            const {cl} = shareCell;
-            const {un} = shareCell;
-            let {v} = shareCell;
-            const {fs} = shareCell;
+            const { fc } = shareCell;
+            const { cl } = shareCell;
+            const { un } = shareCell;
+            let { v } = shareCell;
+            const { fs } = shareCell;
             v = (v ?? '')
-                .replace(/\r\n/g, "_x000D_")
-                .replace(/&#13;&#10;/g, "_x000D_")
-                .replace(/\r/g, "_x000D_")
-                .replace(/\n/g, "_x000D_");
-            const splitArr = v.split("_x000D_");
+                .replace(/\r\n/g, '_x000D_')
+                .replace(/&#13;&#10;/g, '_x000D_')
+                .replace(/\r/g, '_x000D_')
+                .replace(/\n/g, '_x000D_');
+            const splitArr = v.split('_x000D_');
             for (let x = 0; x < splitArr.length; x += 1) {
                 const newValue = splitArr[x];
 
@@ -423,10 +402,10 @@ export function getCellTextInfo(
                 //     fs: !fs ? 11 : fs,
                 //   });
                 // } else
-                if (newValue === "" && x !== splitArr.length - 1) {
+                if (newValue === '' && x !== splitArr.length - 1) {
                     inlineStringArr.push({
                         fontset: scfontset,
-                        fc: !fc ? "#000" : fc,
+                        fc: !fc ? '#000' : fc,
                         cl: !cl ? 0 : cl,
                         un: !un ? 0 : un,
                         wrap: true,
@@ -436,7 +415,7 @@ export function getCellTextInfo(
                 } else {
                     inlineStringArr.push({
                         fontset: scfontset,
-                        fc: !fc ? "#000" : fc,
+                        fc: !fc ? '#000' : fc,
                         cl: !cl ? 0 : cl,
                         un: !un ? 0 : un,
                         v: newValue,
@@ -447,7 +426,7 @@ export function getCellTextInfo(
                     if (x !== splitArr.length - 1) {
                         inlineStringArr.push({
                             fontset: scfontset,
-                            fc: !fc ? "#000" : fc,
+                            fc: !fc ? '#000' : fc,
                             cl: !cl ? 0 : cl,
                             un: !un ? 0 : un,
                             wrap: true,
@@ -465,9 +444,9 @@ export function getCellTextInfo(
         fontset = getFontSet(cell, sheetCtx.defaultFontSize, sheetCtx);
         renderCtx.font = fontset;
 
-        cancelLine = normalizedCellAttr(cell, "cl"); // cancelLine
-        underLine = normalizedCellAttr(cell, "un"); // underLine
-        fontSize = normalizedCellAttr(cell, "fs");
+        cancelLine = normalizedCellAttr(cell, 'cl'); // cancelLine
+        underLine = normalizedCellAttr(cell, 'un'); // underLine
+        fontSize = normalizedCellAttr(cell, 'fs');
 
         if (cell instanceof Object) {
             value = cell.m;
@@ -485,7 +464,7 @@ export function getCellTextInfo(
 
     if (isVertical) {
         // vertical text (stacked top-to-bottom characters)
-        renderCtx.textBaseline = "top";
+        renderCtx.textBaseline = 'top';
 
         let textW_all = 0; // Total width/height after splitting
         let textH_all = 0;
@@ -500,14 +479,10 @@ export function getCellTextInfo(
                 let value1 = shareCell.v;
                 let showValue = shareCell.v;
                 if (shareCell.wrap === true) {
-                    value1 = "M";
-                    showValue = "";
+                    value1 = 'M';
+                    showValue = '';
 
-                    if (
-                        !isNil(preShareCell) &&
-                        preShareCell.wrap !== true &&
-                        i < inlineStringArr.length - 1
-                    ) {
+                    if (!isNil(preShareCell) && preShareCell.wrap !== true && i < inlineStringArr.length - 1) {
                         textH_all_ColumnHeight.push(textH_all_cache);
                         textH_all_cache = 0;
                         colIndex += 1;
@@ -517,26 +492,16 @@ export function getCellTextInfo(
                     }
                 }
 
-                const measureText = getMeasureText(
-                    value1,
-                    renderCtx,
-                    shareCell.fontset
-                );
+                const measureText = getMeasureText(value1, renderCtx, shareCell.fontset);
 
                 const textW = measureText.width + space_width;
-                const textH =
-                    measureText.actualBoundingBoxAscent +
-                    measureText.actualBoundingBoxDescent +
-                    space_height;
+                const textH = measureText.actualBoundingBoxAscent + measureText.actualBoundingBoxDescent + space_height;
 
                 // textW_all += textW;
                 textH_all_cache += textH;
 
-                if (tb === "2" && !shareCell.wrap) {
-                    if (
-                        textH_all_cache > cellHeight &&
-                        !isNil(textH_all_Column[colIndex])
-                    ) {
+                if (tb === '2' && !shareCell.wrap) {
+                    if (textH_all_cache > cellHeight && !isNil(textH_all_Column[colIndex])) {
                         // textW_all += textW;
                         // textH_all = Math.max(textH_all,textH_all_cache);
                         textH_all_ColumnHeight.push(textH_all_cache - textH);
@@ -576,15 +541,13 @@ export function getCellTextInfo(
             }
         } else {
             const measureText = getMeasureText(value, renderCtx);
-            const textHeight =
-                measureText.actualBoundingBoxDescent +
-                measureText.actualBoundingBoxAscent;
+            const textHeight = measureText.actualBoundingBoxDescent + measureText.actualBoundingBoxAscent;
 
             value = value.toString();
 
             let vArr = [];
             if (value.length > 1) {
-                vArr = value.split("");
+                vArr = value.split('');
             } else {
                 vArr.push(value);
             }
@@ -597,11 +560,8 @@ export function getCellTextInfo(
                 // textW_all += textW;
                 textH_all_cache += textH;
 
-                if (tb === "2") {
-                    if (
-                        textH_all_cache > cellHeight &&
-                        !isNil(textH_all_Column[colIndex])
-                    ) {
+                if (tb === '2') {
+                    if (textH_all_cache > cellHeight && !isNil(textH_all_Column[colIndex])) {
                         // textW_all += textW;
                         // textH_all = Math.max(textH_all,textH_all_cache);
                         textH_all_ColumnHeight.push(textH_all_cache - textH);
@@ -646,11 +606,11 @@ export function getCellTextInfo(
             textH_all = Math.max(textH_all, columnHeight);
         }
 
-        textContent.type = "verticalWrap";
+        textContent.type = 'verticalWrap';
         textContent.textWidthAll = textW_all;
         textContent.textHeightAll = textH_all;
 
-        if (isMode === "onlyWidth") {
+        if (isMode === 'onlyWidth') {
             return textContent;
         }
 
@@ -665,20 +625,16 @@ export function getCellTextInfo(
                 const word = col[c];
 
                 let left = space_width + cumColumnWidth;
-                if (horizonAlign === "0") {
-                    left =
-                        cellWidth / 2 +
-                        cumColumnWidth -
-                        textW_all / 2 +
-                        space_width * textH_all_ColumnHeight.length;
-                } else if (horizonAlign === "2") {
+                if (horizonAlign === '0') {
+                    left = cellWidth / 2 + cumColumnWidth - textW_all / 2 + space_width * textH_all_ColumnHeight.length;
+                } else if (horizonAlign === '2') {
                     left = cellWidth + cumColumnWidth - textW_all + space_width;
                 }
 
                 let top = cellHeight - space_height + cumWordHeight - columnHeight;
-                if (verticalAlign === "0") {
+                if (verticalAlign === '0') {
                     top = cellHeight / 2 + cumWordHeight - columnHeight / 2;
-                } else if (verticalAlign === "1") {
+                } else if (verticalAlign === '1') {
                     top = space_height + cumWordHeight;
                 }
 
@@ -705,12 +661,12 @@ export function getCellTextInfo(
     } else {
         const supportBoundBox = isSupportBoundingBox(renderCtx);
         if (supportBoundBox) {
-            renderCtx.textBaseline = "alphabetic";
+            renderCtx.textBaseline = 'alphabetic';
         } else {
-            renderCtx.textBaseline = "bottom";
+            renderCtx.textBaseline = 'bottom';
         }
 
-        if (tb === "2" || isInline) {
+        if (tb === '2' || isInline) {
             // wrap
 
             let textW_all = 0; // Total width/height after splitting
@@ -768,21 +724,15 @@ export function getCellTextInfo(
 
                         if (shareCells.length === 1) {
                             const sc = shareCells[0];
-                            const measureText = getMeasureText(
-                                "M",
-                                renderCtx,
-                                sc.fontset
-                            );
+                            const measureText = getMeasureText('M', renderCtx, sc.fontset);
                             if (isNil(text_all_split[splitIndex])) {
                                 text_all_split[splitIndex] = [];
                             }
                             text_all_split[splitIndex].push({
-                                content: "",
+                                content: '',
                                 style: sc,
                                 width: measureText.width,
-                                height:
-                                    measureText.actualBoundingBoxAscent +
-                                    measureText.actualBoundingBoxDescent,
+                                height: measureText.actualBoundingBoxAscent + measureText.actualBoundingBoxDescent,
                                 left: 0,
                                 top: 0,
                                 splitIndex,
@@ -806,41 +756,30 @@ export function getCellTextInfo(
                     for (let s = 0; s < shareCells.length; s += 1) {
                         const sc = shareCells[s];
                         if (isNil(sc.measureText)) {
-                            sc.measureText = getMeasureText(
-                                sc.v,
-                                renderCtx,
-                                sc.fontset
-                            );
+                            sc.measureText = getMeasureText(sc.v, renderCtx, sc.fontset);
                         }
                         textWidth += sc.measureText.width;
                         textHeight = Math.max(
-                            sc.measureText.actualBoundingBoxAscent +
-                            sc.measureText.actualBoundingBoxDescent
+                            sc.measureText.actualBoundingBoxAscent + sc.measureText.actualBoundingBoxDescent,
                         );
                     }
 
                     const width =
-                        textWidth * Math.cos((rt * Math.PI) / 180) +
-                        textHeight * Math.sin((rt * Math.PI) / 180); // consider text box wdith and line height
+                        textWidth * Math.cos((rt * Math.PI) / 180) + textHeight * Math.sin((rt * Math.PI) / 180); // consider text box wdith and line height
 
                     const height =
-                        textWidth * Math.sin((rt * Math.PI) / 180) +
-                        textHeight * Math.cos((rt * Math.PI) / 180); // consider text box wdith and line height
+                        textWidth * Math.sin((rt * Math.PI) / 180) + textHeight * Math.cos((rt * Math.PI) / 180); // consider text box wdith and line height
 
                     // textW_all += textW;
 
                     const lastWord = shareCells[shareCells.length - 1];
-                    if (lastWord.v === " " || checkWordByteLength(lastWord.v) === 2) {
+                    if (lastWord.v === ' ' || checkWordByteLength(lastWord.v) === 2) {
                         spaceOrTwoByteIndex = i;
                     }
 
                     if (rt !== 0) {
                         // rotate
-                        if (
-                            height + space_height > cellHeight &&
-                            !isNil(text_all_split[splitIndex]) &&
-                            tb === "2"
-                        ) {
+                        if (height + space_height > cellHeight && !isNil(text_all_split[splitIndex]) && tb === '2') {
                             if (!isNil(spaceOrTwoByteIndex) && spaceOrTwoByteIndex < i) {
                                 for (let s = 0; s < spaceOrTwoByteIndex - anchor; s += 1) {
                                     const sc = shareCells[s];
@@ -922,11 +861,7 @@ export function getCellTextInfo(
                         }
                     } else {
                         // plain
-                        if (
-                            width + space_width > cellWidth &&
-                            !isNil(text_all_split[splitIndex]) &&
-                            tb === "2"
-                        ) {
+                        if (width + space_width > cellWidth && !isNil(text_all_split[splitIndex]) && tb === '2') {
                             if (!isNil(spaceOrTwoByteIndex) && spaceOrTwoByteIndex < i) {
                                 for (let s = 0; s < spaceOrTwoByteIndex - anchor; s += 1) {
                                     const sc = shareCells[s];
@@ -1017,19 +952,15 @@ export function getCellTextInfo(
                     const str = value.substring(anchor, i);
                     const measureText = getMeasureText(str, renderCtx);
                     const textWidth = measureText.width;
-                    const textHeight =
-                        measureText.actualBoundingBoxAscent +
-                        measureText.actualBoundingBoxDescent;
+                    const textHeight = measureText.actualBoundingBoxAscent + measureText.actualBoundingBoxDescent;
 
                     const width =
-                        textWidth * Math.cos((rt * Math.PI) / 180) +
-                        textHeight * Math.sin((rt * Math.PI) / 180); // consider text box wdith and line height
+                        textWidth * Math.cos((rt * Math.PI) / 180) + textHeight * Math.sin((rt * Math.PI) / 180); // consider text box wdith and line height
 
                     const height =
-                        textWidth * Math.sin((rt * Math.PI) / 180) +
-                        textHeight * Math.cos((rt * Math.PI) / 180); // consider text box wdith and line height
+                        textWidth * Math.sin((rt * Math.PI) / 180) + textHeight * Math.cos((rt * Math.PI) / 180); // consider text box wdith and line height
                     const lastWord = str.substr(str.length - 1, 1);
-                    if (lastWord === " " || checkWordByteLength(lastWord) === 2) {
+                    if (lastWord === ' ' || checkWordByteLength(lastWord) === 2) {
                         spaceOrTwoByte = {
                             index: i,
                             str,
@@ -1042,10 +973,7 @@ export function getCellTextInfo(
                     // textW_all += textW;
                     if (rt !== 0) {
                         // rotate
-                        if (
-                            height + space_height > cellHeight &&
-                            !isNil(text_all_split[splitIndex])
-                        ) {
+                        if (height + space_height > cellHeight && !isNil(text_all_split[splitIndex])) {
                             if (!isNil(spaceOrTwoByte) && spaceOrTwoByte.index < i) {
                                 anchor = spaceOrTwoByte.index;
 
@@ -1110,10 +1038,7 @@ export function getCellTextInfo(
                         }
                     } else {
                         // plain
-                        if (
-                            width + space_width > cellWidth &&
-                            !isNil(text_all_split[splitIndex])
-                        ) {
+                        if (width + space_width > cellWidth && !isNil(text_all_split[splitIndex])) {
                             if (!isNil(spaceOrTwoByte) && spaceOrTwoByte.index < i) {
                                 anchor = spaceOrTwoByte.index;
 
@@ -1211,17 +1136,11 @@ export function getCellTextInfo(
                     if (rt !== 0) {
                         // rotate
                         sWidth += sp.width;
-                        sHeight = Math.max(
-                            sHeight,
-                            sp.height - (supportBoundBox ? sp.desc : 0)
-                        );
+                        sHeight = Math.max(sHeight, sp.height - (supportBoundBox ? sp.desc : 0));
                     } else {
                         // plain
                         sWidth += sp.width;
-                        sHeight = Math.max(
-                            sHeight,
-                            sp.height - (supportBoundBox ? sp.desc : 0)
-                        );
+                        sHeight = Math.max(sHeight, sp.height - (supportBoundBox ? sp.desc : 0));
                     }
                     maxDesc = Math.max(maxDesc, supportBoundBox ? sp.desc : 0);
                     maxAsc = Math.max(maxAsc, sp.asc);
@@ -1277,12 +1196,12 @@ export function getCellTextInfo(
                 textContent.textHeightAll = textH_all;
             }
 
-            if (isMode === "onlyWidth") {
+            if (isMode === 'onlyWidth') {
                 return textContent;
             }
 
             if (rt !== 0 && Number(isRotateUp) === 1) {
-                renderCtx.textAlign = "end";
+                renderCtx.textAlign = 'end';
                 for (let j = 0; j < splitLen; j += 1) {
                     const splitLists = text_all_split[j];
                     if (isNil(splitLists)) {
@@ -1299,68 +1218,48 @@ export function getCellTextInfo(
                         if (rt !== 0) {
                             // rotate
                             const y = cumWordHeight + size.asc;
-                            const x =
-                                cumWordHeight / Math.tan(rtPI) -
-                                cumColumnWidth +
-                                textW_all_inner;
-                            if (horizonAlign === "0") {
+                            const x = cumWordHeight / Math.tan(rtPI) - cumColumnWidth + textW_all_inner;
+                            if (horizonAlign === '0') {
                                 // center
-                                if (verticalAlign === "0") {
+                                if (verticalAlign === '0') {
                                     // mid
 
                                     left =
-                                        x +
-                                        cellWidth / 2 -
-                                        textW_all / 2 +
-                                        (lastLineSpaceHeight * Math.cos(rtPI)) / 2;
+                                        x + cellWidth / 2 - textW_all / 2 + (lastLineSpaceHeight * Math.cos(rtPI)) / 2;
                                     top =
-                                        y +
-                                        cellHeight / 2 -
-                                        textH_all / 2 -
-                                        (lastLineSpaceHeight * Math.cos(rtPI)) / 2;
-                                } else if (verticalAlign === "1") {
+                                        y + cellHeight / 2 - textH_all / 2 - (lastLineSpaceHeight * Math.cos(rtPI)) / 2;
+                                } else if (verticalAlign === '1') {
                                     // top
                                     left = x + cellWidth / 2 - textW_all / 2;
                                     top = y - (textH_all / 2 - rh / 2);
-                                } else if (verticalAlign === "2") {
+                                } else if (verticalAlign === '2') {
                                     // bottom
-                                    left =
-                                        x +
-                                        cellWidth / 2 -
-                                        textW_all / 2 +
-                                        lastLineSpaceHeight * Math.cos(rtPI);
+                                    left = x + cellWidth / 2 - textW_all / 2 + lastLineSpaceHeight * Math.cos(rtPI);
                                     top =
-                                        y +
-                                        cellHeight -
-                                        rh / 2 -
-                                        textH_all / 2 -
-                                        lastLineSpaceHeight * Math.cos(rtPI);
+                                        y + cellHeight - rh / 2 - textH_all / 2 - lastLineSpaceHeight * Math.cos(rtPI);
                                 }
-                            } else if (horizonAlign === "1") {
+                            } else if (horizonAlign === '1') {
                                 // left
-                                if (verticalAlign === "0") {
+                                if (verticalAlign === '0') {
                                     // mid
-                                    left =
-                                        x -
-                                        (rh * Math.sin(rtPI)) / 2 +
-                                        (lastLineSpaceHeight * Math.cos(rtPI)) / 2;
+                                    left = x - (rh * Math.sin(rtPI)) / 2 + (lastLineSpaceHeight * Math.cos(rtPI)) / 2;
                                     top =
                                         y +
                                         cellHeight / 2 +
                                         (rh * Math.cos(rtPI)) / 2 -
                                         (lastLineSpaceHeight * Math.cos(rtPI)) / 2;
-                                } else if (verticalAlign === "1") {
+                                } else if (verticalAlign === '1') {
                                     // top
                                     left = x - rh * Math.sin(rtPI);
                                     top = y + rh * Math.cos(rtPI);
-                                } else if (verticalAlign === "2") {
+                                } else if (verticalAlign === '2') {
                                     // bottom
                                     left = x + lastLineSpaceHeight * Math.cos(rtPI);
                                     top = y + cellHeight - lastLineSpaceHeight * Math.cos(rtPI);
                                 }
-                            } else if (horizonAlign === "2") {
+                            } else if (horizonAlign === '2') {
                                 // right
-                                if (verticalAlign === "0") {
+                                if (verticalAlign === '0') {
                                     // mid
                                     left =
                                         x +
@@ -1369,26 +1268,15 @@ export function getCellTextInfo(
                                         (textW_all_inner / 2 + textH_all / 2 / Math.tan(rtPI)) +
                                         (lastLineSpaceHeight * Math.cos(rtPI)) / 2;
                                     top =
-                                        y +
-                                        cellHeight / 2 -
-                                        textH_all / 2 -
-                                        (lastLineSpaceHeight * Math.cos(rtPI)) / 2;
-                                } else if (verticalAlign === "1") {
+                                        y + cellHeight / 2 - textH_all / 2 - (lastLineSpaceHeight * Math.cos(rtPI)) / 2;
+                                } else if (verticalAlign === '1') {
                                     // top fixOneLineLeft
                                     left = x + cellWidth - textW_all + fixOneLineLeft;
                                     top = y - textH_all;
-                                } else if (verticalAlign === "2") {
+                                } else if (verticalAlign === '2') {
                                     // bottom
-                                    left =
-                                        x +
-                                        cellWidth -
-                                        rw * Math.cos(rtPI) +
-                                        lastLineSpaceHeight * Math.cos(rtPI);
-                                    top =
-                                        y +
-                                        cellHeight -
-                                        rw * Math.sin(rtPI) -
-                                        lastLineSpaceHeight * Math.cos(rtPI);
+                                    left = x + cellWidth - rw * Math.cos(rtPI) + lastLineSpaceHeight * Math.cos(rtPI);
+                                    top = y + cellHeight - rw * Math.sin(rtPI) - lastLineSpaceHeight * Math.cos(rtPI);
                                 }
                             }
                         }
@@ -1430,73 +1318,46 @@ export function getCellTextInfo(
                         if (rt !== 0) {
                             // rotate
                             const y = cumWordHeight + size.asc;
-                            const x =
-                                (textH_all - cumWordHeight) / Math.tan(rtPI) + cumColumnWidth;
+                            const x = (textH_all - cumWordHeight) / Math.tan(rtPI) + cumColumnWidth;
 
-                            if (horizonAlign === "0") {
+                            if (horizonAlign === '0') {
                                 // center
-                                if (verticalAlign === "0") {
+                                if (verticalAlign === '0') {
                                     // mid
 
                                     left =
-                                        x +
-                                        cellWidth / 2 -
-                                        textW_all / 2 -
-                                        (lastLineSpaceHeight * Math.cos(rtPI)) / 2;
+                                        x + cellWidth / 2 - textW_all / 2 - (lastLineSpaceHeight * Math.cos(rtPI)) / 2;
                                     top =
-                                        y +
-                                        cellHeight / 2 -
-                                        textH_all / 2 +
-                                        (lastLineSpaceHeight * Math.cos(rtPI)) / 2;
-                                } else if (verticalAlign === "1") {
+                                        y + cellHeight / 2 - textH_all / 2 + (lastLineSpaceHeight * Math.cos(rtPI)) / 2;
+                                } else if (verticalAlign === '1') {
                                     // top
                                     left =
-                                        x +
-                                        cellWidth / 2 -
-                                        textW_all / 2 -
-                                        (lastLineSpaceHeight * Math.cos(rtPI)) / 2;
-                                    top =
-                                        y -
-                                        (textH_all / 2 - rh / 2) +
-                                        (lastLineSpaceHeight * Math.cos(rtPI)) / 2;
-                                } else if (verticalAlign === "2") {
+                                        x + cellWidth / 2 - textW_all / 2 - (lastLineSpaceHeight * Math.cos(rtPI)) / 2;
+                                    top = y - (textH_all / 2 - rh / 2) + (lastLineSpaceHeight * Math.cos(rtPI)) / 2;
+                                } else if (verticalAlign === '2') {
                                     // bottom
-                                    left =
-                                        x +
-                                        cellWidth / 2 -
-                                        textW_all / 2 -
-                                        lastLineSpaceHeight * Math.cos(rtPI);
+                                    left = x + cellWidth / 2 - textW_all / 2 - lastLineSpaceHeight * Math.cos(rtPI);
                                     top =
-                                        y +
-                                        cellHeight -
-                                        rh / 2 -
-                                        textH_all / 2 -
-                                        lastLineSpaceHeight * Math.cos(rtPI);
+                                        y + cellHeight - rh / 2 - textH_all / 2 - lastLineSpaceHeight * Math.cos(rtPI);
                                 }
-                            } else if (horizonAlign === "1") {
+                            } else if (horizonAlign === '1') {
                                 // left
-                                if (verticalAlign === "0") {
+                                if (verticalAlign === '0') {
                                     // mid
-                                    left =
-                                        x -
-                                        (rh * Math.sin(rtPI)) / 2 -
-                                        (lastLineSpaceHeight * Math.cos(rtPI)) / 2;
+                                    left = x - (rh * Math.sin(rtPI)) / 2 - (lastLineSpaceHeight * Math.cos(rtPI)) / 2;
                                     top =
                                         y -
                                         textH_all +
                                         cellHeight / 2 -
                                         (rh * Math.cos(rtPI)) / 2 -
                                         (lastLineSpaceHeight * Math.cos(rtPI)) / 2;
-                                } else if (verticalAlign === "1") {
+                                } else if (verticalAlign === '1') {
                                     // top
                                     left = x;
                                     top = y - textH_all;
-                                } else if (verticalAlign === "2") {
+                                } else if (verticalAlign === '2') {
                                     // bottom
-                                    left =
-                                        x -
-                                        rh * Math.sin(rtPI) -
-                                        lastLineSpaceHeight * Math.cos(rtPI);
+                                    left = x - rh * Math.sin(rtPI) - lastLineSpaceHeight * Math.cos(rtPI);
                                     top =
                                         y -
                                         textH_all +
@@ -1504,9 +1365,9 @@ export function getCellTextInfo(
                                         rh * Math.cos(rtPI) -
                                         lastLineSpaceHeight * Math.cos(rtPI);
                                 }
-                            } else if (horizonAlign === "2") {
+                            } else if (horizonAlign === '2') {
                                 // right
-                                if (verticalAlign === "0") {
+                                if (verticalAlign === '0') {
                                     // mid
                                     left =
                                         x +
@@ -1515,15 +1376,12 @@ export function getCellTextInfo(
                                         textW_all / 2 -
                                         (lastLineSpaceHeight * Math.cos(rtPI)) / 2;
                                     top =
-                                        y +
-                                        cellHeight / 2 -
-                                        textH_all / 2 -
-                                        (lastLineSpaceHeight * Math.cos(rtPI)) / 2;
-                                } else if (verticalAlign === "1") {
+                                        y + cellHeight / 2 - textH_all / 2 - (lastLineSpaceHeight * Math.cos(rtPI)) / 2;
+                                } else if (verticalAlign === '1') {
                                     // top fixOneLineLeft
                                     left = x + cellWidth - rw * Math.cos(rtPI);
                                     top = y + rh * Math.cos(rtPI);
-                                } else if (verticalAlign === "2") {
+                                } else if (verticalAlign === '2') {
                                     // bottom
                                     left =
                                         x +
@@ -1547,22 +1405,17 @@ export function getCellTextInfo(
                         } else {
                             // plain
                             left = space_width + cumColumnWidth;
-                            if (horizonAlign === "0") {
+                            if (horizonAlign === '0') {
                                 // + space_width*textH_all_ColumnHeight.length
                                 left = cellWidth / 2 + cumColumnWidth - size.width / 2;
-                            } else if (horizonAlign === "2") {
+                            } else if (horizonAlign === '2') {
                                 left = cellWidth + cumColumnWidth - size.width;
                             }
 
-                            top =
-                                cellHeight -
-                                space_height +
-                                cumWordHeight +
-                                size.asc -
-                                textH_all;
-                            if (verticalAlign === "0") {
+                            top = cellHeight - space_height + cumWordHeight + size.asc - textH_all;
+                            if (verticalAlign === '0') {
                                 top = cellHeight / 2 + cumWordHeight - textH_all / 2 + size.asc;
-                            } else if (verticalAlign === "1") {
+                            } else if (verticalAlign === '1') {
                                 top = space_height + cumWordHeight + size.asc;
                             }
 
@@ -1589,7 +1442,7 @@ export function getCellTextInfo(
                 }
             }
 
-            textContent.type = "plainWrap";
+            textContent.type = 'plainWrap';
 
             if (rt !== 0) {
                 // let leftCenter = (textW_all + textH_all/Math.tan(rt*Math.PI/180))/2;
@@ -1604,45 +1457,45 @@ export function getCellTextInfo(
                 //     textContent.textTopAll -= topCenter;
                 // }
 
-                if (horizonAlign === "0") {
+                if (horizonAlign === '0') {
                     // center
                     textContent.textLeftAll = cellWidth / 2;
-                    if (verticalAlign === "0") {
+                    if (verticalAlign === '0') {
                         // mid
                         textContent.textTopAll = cellHeight / 2;
-                    } else if (verticalAlign === "1") {
+                    } else if (verticalAlign === '1') {
                         // top
                         textContent.textTopAll = rh / 2;
-                    } else if (verticalAlign === "2") {
+                    } else if (verticalAlign === '2') {
                         // bottom
                         textContent.textTopAll = cellHeight - rh / 2;
                     }
-                } else if (horizonAlign === "1") {
+                } else if (horizonAlign === '1') {
                     // left
-                    if (verticalAlign === "0") {
+                    if (verticalAlign === '0') {
                         // mid
                         textContent.textLeftAll = 0;
                         textContent.textTopAll = cellHeight / 2;
-                    } else if (verticalAlign === "1") {
+                    } else if (verticalAlign === '1') {
                         // top
                         textContent.textLeftAll = 0;
                         textContent.textTopAll = 0;
-                    } else if (verticalAlign === "2") {
+                    } else if (verticalAlign === '2') {
                         // bottom
                         textContent.textLeftAll = 0;
                         textContent.textTopAll = cellHeight;
                     }
-                } else if (horizonAlign === "2") {
+                } else if (horizonAlign === '2') {
                     // right
-                    if (verticalAlign === "0") {
+                    if (verticalAlign === '0') {
                         // mid
                         textContent.textLeftAll = cellWidth - rw / 2;
                         textContent.textTopAll = cellHeight / 2;
-                    } else if (verticalAlign === "1") {
+                    } else if (verticalAlign === '1') {
                         // top
                         textContent.textLeftAll = cellWidth;
                         textContent.textTopAll = 0;
-                    } else if (verticalAlign === "2") {
+                    } else if (verticalAlign === '2') {
                         // bottom
                         textContent.textLeftAll = cellWidth;
                         textContent.textTopAll = cellHeight;
@@ -1656,33 +1509,26 @@ export function getCellTextInfo(
         } else {
             const measureText = getMeasureText(value, renderCtx);
             const textWidth = measureText.width;
-            const textHeight =
-                measureText.actualBoundingBoxDescent +
-                measureText.actualBoundingBoxAscent;
+            const textHeight = measureText.actualBoundingBoxDescent + measureText.actualBoundingBoxAscent;
 
             textContent.rotate = rt;
 
             rt = Math.abs(rt);
             const rtPI = (rt * Math.PI) / 180;
 
-            const textWidthAll =
-                textWidth * Math.cos(rtPI) + textHeight * Math.sin(rtPI); // consider text box wdith and line height
+            const textWidthAll = textWidth * Math.cos(rtPI) + textHeight * Math.sin(rtPI); // consider text box wdith and line height
 
-            const textHeightAll =
-                textWidth * Math.sin(rtPI) + textHeight * Math.cos(rtPI); // consider text box wdith and line height
+            const textHeightAll = textWidth * Math.sin(rtPI) + textHeight * Math.cos(rtPI); // consider text box wdith and line height
 
             if (rt !== 0) {
                 textContent.textHeightAll = textHeightAll;
             } else {
                 textContent.textHeightAll =
-                    textHeightAll +
-                    textHeight / 2 -
-                    measureText.actualBoundingBoxDescent -
-                    space_height;
+                    textHeightAll + textHeight / 2 - measureText.actualBoundingBoxDescent - space_height;
             }
             textContent.textWidthAll = textWidthAll;
 
-            if (isMode === "onlyWidth") {
+            if (isMode === 'onlyWidth') {
                 return textContent;
             }
 
@@ -1690,17 +1536,12 @@ export function getCellTextInfo(
             const height = textHeightAll;
 
             let left = space_width + textHeight * Math.sin(rtPI) * isRotateUp; // Default: left-align (ht=1)
-            if (horizonAlign === "0") {
+            if (horizonAlign === '0') {
                 // Center-align
-                left =
-                    cellWidth / 2 - width / 2 + textHeight * Math.sin(rtPI) * isRotateUp;
-            } else if (horizonAlign === "2") {
+                left = cellWidth / 2 - width / 2 + textHeight * Math.sin(rtPI) * isRotateUp;
+            } else if (horizonAlign === '2') {
                 // Right-align
-                left =
-                    cellWidth -
-                    space_width -
-                    width +
-                    textHeight * Math.sin(rtPI) * isRotateUp;
+                left = cellWidth - space_width - width + textHeight * Math.sin(rtPI) * isRotateUp;
             }
 
             let top =
@@ -1709,14 +1550,14 @@ export function getCellTextInfo(
                 height +
                 measureText.actualBoundingBoxAscent * Math.cos(rtPI) +
                 textWidth * Math.sin(rtPI) * isRotateUp; // Default: bottom-align (vt=2)
-            if (verticalAlign === "0") {
+            if (verticalAlign === '0') {
                 // Center-align
                 top =
                     cellHeight / 2 -
                     height / 2 +
                     measureText.actualBoundingBoxAscent * Math.cos(rtPI) +
                     textWidth * Math.sin(rtPI) * isRotateUp;
-            } else if (verticalAlign === "1") {
+            } else if (verticalAlign === '1') {
                 // Top-align
                 top =
                     space_height +
@@ -1724,7 +1565,7 @@ export function getCellTextInfo(
                     textWidth * Math.sin(rtPI) * isRotateUp;
             }
 
-            textContent.type = "plain";
+            textContent.type = 'plain';
 
             const wordGroup = {
                 content: value,

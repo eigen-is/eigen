@@ -1,5 +1,5 @@
-import {sortedIndex} from "es-toolkit/compat";
-import {Context} from "../context";
+import { sortedIndex } from 'es-toolkit/compat';
+import type { Context } from '../context';
 
 export function mousePosition(x: number, y: number, ctx: Context) {
     const newX = x - ctx.rowHeaderWidth;

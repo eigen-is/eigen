@@ -1,29 +1,20 @@
-import {every, isNil, isUndefined} from "es-toolkit/compat";
-import {Context} from "../context";
-import {locale} from "../locale";
-import {Sheet} from "../types";
-import {checkCellIsLocked} from "../modules";
+import { every, isNil, isUndefined } from 'es-toolkit/compat';
+import type { Context } from '../context';
+import { locale } from '../locale';
+import { checkCellIsLocked } from '../modules';
+import type { Sheet } from '../types';
 
-export * from "./patch";
+export * from './patch';
 
-export function generateRandomSheetName(
-    file: Sheet[],
-    isPivotTable: boolean,
-    ctx: Context
-) {
+export function generateRandomSheetName(file: Sheet[], isPivotTable: boolean, ctx: Context) {
     let index = file.length;
 
     const locale_pivotTable = locale(ctx).pivotTable;
-    const {title} = locale_pivotTable;
+    const { title } = locale_pivotTable;
 
     for (let i = 0; i < file.length; i += 1) {
-        if (
-            file[i].name.indexOf("Sheet") > -1 ||
-            file[i].name.indexOf(title) > -1
-        ) {
-            const suffix = parseFloat(
-                file[i].name.replace("Sheet", "").replace(title, "")
-            );
+        if (file[i].name.indexOf('Sheet') > -1 || file[i].name.indexOf(title) > -1) {
+            const suffix = parseFloat(file[i].name.replace('Sheet', '').replace(title, ''));
 
             if (!Number.isNaN(suffix) && Math.ceil(suffix) > index) {
                 index = Math.ceil(suffix);
@@ -41,10 +32,10 @@ export function generateRandomSheetName(
 export function rgbToHex(color: string): string {
     let rgb;
 
-    if (color.indexOf("rgba") > -1) {
-        rgb = color.replace("rgba(", "").replace(")", "").split(",");
+    if (color.indexOf('rgba') > -1) {
+        rgb = color.replace('rgba(', '').replace(')', '').split(',');
     } else {
-        rgb = color.replace("rgb(", "").replace(")", "").split(",");
+        rgb = color.replace('rgb(', '').replace(')', '').split(',');
     }
 
     const r = Number(rgb[0]);
@@ -56,10 +47,10 @@ export function rgbToHex(color: string): string {
 
 // column index: number to letter
 export function indexToColumnChar(n: number) {
-    const orda = "a".charCodeAt(0);
-    const ordz = "z".charCodeAt(0);
+    const orda = 'a'.charCodeAt(0);
+    const ordz = 'z'.charCodeAt(0);
     const len = ordz - orda + 1;
-    let s = "";
+    let s = '';
     while (n >= 0) {
         s = String.fromCharCode((n % len) + orda) + s;
         n = Math.floor(n / len) - 1;
@@ -72,7 +63,7 @@ export function columnCharToIndex(a: string) {
     if (a == null || a.length === 0) {
         return NaN;
     }
-    const str = a.toLowerCase().split("");
+    const str = a.toLowerCase().split('');
     const al = str.length;
     const getCharNumber = (charx: string) => {
         return charx.charCodeAt(0) - 96;
@@ -90,18 +81,16 @@ export function columnCharToIndex(a: string) {
 }
 
 export function escapeScriptTag(str: string) {
-    if (typeof str !== "string") return str;
-    return str
-        .replace(/<script>/g, "&lt;script&gt;")
-        .replace(/<\/script>/, "&lt;/script&gt;");
+    if (typeof str !== 'string') return str;
+    return str.replace(/<script>/g, '&lt;script&gt;').replace(/<\/script>/, '&lt;/script&gt;');
 }
 
 export function escapeHTMLTag(str: string) {
-    if (typeof str !== "string") return str;
-    if (str.substr(0, 5) === "<span" || str.startsWith("=")) {
+    if (typeof str !== 'string') return str;
+    if (str.substr(0, 5) === '<span' || str.startsWith('=')) {
         return str;
     }
-    return str.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    return str.replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 export function getSheetIndex(ctx: Context, id: string) {
@@ -150,7 +139,7 @@ export function getNowDateTime(format: number) {
     if (minu < 10) minu = `0${minu}`;
     if (sec < 10) sec = `0${sec}`;
 
-    let time = "";
+    let time = '';
 
     // date
     if (format === 1) {
@@ -170,7 +159,7 @@ export function getNowDateTime(format: number) {
 export function replaceHtml(temp: string, dataarry: any) {
     return temp.replace(/\$\{([\w]+)\}/g, (s1, s2) => {
         const s = dataarry[s2];
-        if (typeof s !== "undefined") {
+        if (typeof s !== 'undefined') {
             return s;
         }
         return s1;
@@ -179,12 +168,7 @@ export function replaceHtml(temp: string, dataarry: any) {
 
 // get regex string (handle . * ? ~* ~?)
 export function getRegExpStr(str: string) {
-    return str
-        .replace("~*", "\\*")
-        .replace("~?", "\\?")
-        .replace(".", "\\.")
-        .replace("*", ".*")
-        .replace("?", ".");
+    return str.replace('~*', '\\*').replace('~?', '\\?').replace('.', '\\.').replace('*', '.*').replace('?', '.');
 }
 
 // column index: number to letter
@@ -228,13 +212,13 @@ export function chatatABC(n: number) {
     //     }
     // }
 
-    const orda = "a".charCodeAt(0);
+    const orda = 'a'.charCodeAt(0);
 
-    const ordz = "z".charCodeAt(0);
+    const ordz = 'z'.charCodeAt(0);
 
     const len = ordz - orda + 1;
 
-    let s = "";
+    let s = '';
 
     while (n >= 0) {
         s = String.fromCharCode((n % len) + orda) + s;
@@ -245,10 +229,7 @@ export function chatatABC(n: number) {
     return s.toUpperCase();
 }
 
-export function isAllowEdit(
-    ctx: Context,
-    range?: Sheet["luckysheet_select_save"]
-) {
+export function isAllowEdit(ctx: Context, range?: Sheet['luckysheet_select_save']) {
     const cfg = ctx.config;
     const judgeRange = isUndefined(range) ? ctx.luckysheet_select_save : range;
     return (

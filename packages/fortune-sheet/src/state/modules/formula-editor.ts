@@ -1,8 +1,9 @@
-import {indexOf, isEmpty, isNil, last, startsWith, trim} from "es-toolkit/compat";
-import type {Context} from "../context";
-import {escapeHTMLTag, escapeScriptTag} from "../utils";
-import {locale} from "../locale";
-import {cancelFunctionrangeSelected} from ".";
+import { indexOf, isEmpty, isNil, last, startsWith, trim } from 'es-toolkit/compat';
+import type { Context } from '../context';
+import { locale } from '../locale';
+import { escapeHTMLTag, escapeScriptTag } from '../utils';
+import { cancelFunctionrangeSelected } from '.';
+import { createRangeHightlight, setCaretPosition } from './formula-range';
 import {
     colors,
     formulaUIState,
@@ -12,18 +13,17 @@ import {
     resetRangeIndexes,
     setFunctionHTMLIndex,
     setRangeIndexes,
-} from "./formula-ui";
-import {createRangeHightlight, setCaretPosition} from "./formula-range";
+} from './formula-ui';
 
 function functionHTML(txt: string) {
-    if (txt[0] === "=") {
+    if (txt[0] === '=') {
         txt = txt.slice(1);
     }
 
-    const funcstack = txt.split("");
+    const funcstack = txt.split('');
     let i = 0;
-    let str = "";
-    let function_str = "";
+    let str = '';
+    let function_str = '';
     const matchConfig = {
         bracket: 0,
         comma: 0,
@@ -35,46 +35,25 @@ function functionHTML(txt: string) {
     while (i < funcstack.length) {
         const s = funcstack[i];
 
-        if (
-            s === "(" &&
-            matchConfig.squote === 0 &&
-            matchConfig.dquote === 0 &&
-            matchConfig.braces === 0
-        ) {
+        if (s === '(' && matchConfig.squote === 0 && matchConfig.dquote === 0 && matchConfig.braces === 0) {
             matchConfig.bracket += 1;
 
             if (str.length > 0) {
                 function_str += `<span dir="auto" class="luckysheet-formula-text-func">${str}</span><span dir="auto" class="luckysheet-formula-text-lpar">(</span>`;
             } else {
-                function_str +=
-                    '<span dir="auto" class="luckysheet-formula-text-lpar">(</span>';
+                function_str += '<span dir="auto" class="luckysheet-formula-text-lpar">(</span>';
             }
 
-            str = "";
-        } else if (
-            s === ")" &&
-            matchConfig.squote === 0 &&
-            matchConfig.dquote === 0 &&
-            matchConfig.braces === 0
-        ) {
+            str = '';
+        } else if (s === ')' && matchConfig.squote === 0 && matchConfig.dquote === 0 && matchConfig.braces === 0) {
             matchConfig.bracket -= 1;
-            function_str += `${functionHTML(
-                str
-            )}<span dir="auto" class="luckysheet-formula-text-rpar">)</span>`;
-            str = "";
-        } else if (
-            s === "{" &&
-            matchConfig.squote === 0 &&
-            matchConfig.dquote === 0
-        ) {
-            str += "{";
+            function_str += `${functionHTML(str)}<span dir="auto" class="luckysheet-formula-text-rpar">)</span>`;
+            str = '';
+        } else if (s === '{' && matchConfig.squote === 0 && matchConfig.dquote === 0) {
+            str += '{';
             matchConfig.braces += 1;
-        } else if (
-            s === "}" &&
-            matchConfig.squote === 0 &&
-            matchConfig.dquote === 0
-        ) {
-            str += "}";
+        } else if (s === '}' && matchConfig.squote === 0 && matchConfig.dquote === 0) {
+            str += '}';
             matchConfig.braces -= 1;
         } else if (s === '"' && matchConfig.squote === 0) {
             if (matchConfig.dquote > 0) {
@@ -85,56 +64,33 @@ function functionHTML(txt: string) {
                 }
 
                 matchConfig.dquote -= 1;
-                str = "";
+                str = '';
             } else {
                 matchConfig.dquote += 1;
 
                 if (str.length > 0) {
-                    function_str += `${functionHTML(
-                        str
-                    )}<span dir="auto" class="luckysheet-formula-text-string">"`;
+                    function_str += `${functionHTML(str)}<span dir="auto" class="luckysheet-formula-text-string">"`;
                 } else {
-                    function_str +=
-                        '<span dir="auto" class="luckysheet-formula-text-string">"';
+                    function_str += '<span dir="auto" class="luckysheet-formula-text-string">"';
                 }
 
-                str = "";
+                str = '';
             }
         }
         // Fix the issue where entering a formula like ='1-2'!A1 causes only 2'!A1 to be colored as fortune-formula-functionrange-cell, while '1- remains black.
         else if (s === "'" && matchConfig.dquote === 0) {
             str += "'";
             matchConfig.squote = matchConfig.squote === 0 ? 1 : 0;
-        } else if (
-            s === "," &&
-            matchConfig.squote === 0 &&
-            matchConfig.dquote === 0 &&
-            matchConfig.braces === 0
-        ) {
+        } else if (s === ',' && matchConfig.squote === 0 && matchConfig.dquote === 0 && matchConfig.braces === 0) {
             // matchConfig.comma += 1;
-            function_str += `${functionHTML(
-                str
-            )}<span dir="auto" class="luckysheet-formula-text-comma">,</span>`;
-            str = "";
-        } else if (
-            s === "&" &&
-            matchConfig.squote === 0 &&
-            matchConfig.dquote === 0 &&
-            matchConfig.braces === 0
-        ) {
+            function_str += `${functionHTML(str)}<span dir="auto" class="luckysheet-formula-text-comma">,</span>`;
+            str = '';
+        } else if (s === '&' && matchConfig.squote === 0 && matchConfig.dquote === 0 && matchConfig.braces === 0) {
             if (str.length > 0) {
-                function_str +=
-                    `${functionHTML(
-                        str
-                    )}<span dir="auto" class="luckysheet-formula-text-calc">` +
-                    `&` +
-                    `</span>`;
-                str = "";
+                function_str += `${functionHTML(str)}<span dir="auto" class="luckysheet-formula-text-calc">&</span>`;
+                str = '';
             } else {
-                function_str +=
-                    '<span dir="auto" class="luckysheet-formula-text-calc">' +
-                    "&" +
-                    "</span>";
+                function_str += '<span dir="auto" class="luckysheet-formula-text-calc">' + '&' + '</span>';
             }
         } else if (
             s in operatorjson &&
@@ -142,7 +98,7 @@ function functionHTML(txt: string) {
             matchConfig.dquote === 0 &&
             matchConfig.braces === 0
         ) {
-            let s_next = "";
+            let s_next = '';
             if (i + 1 < funcstack.length) {
                 s_next = funcstack[i + 1];
             }
@@ -153,15 +109,15 @@ function functionHTML(txt: string) {
                 do {
                     s_pre = funcstack[p];
                     p -= 1;
-                } while (p >= 0 && s_pre === " ");
+                } while (p >= 0 && s_pre === ' ');
             }
 
             if (s + s_next in operatorjson) {
                 if (str.length > 0) {
                     function_str += `${functionHTML(
-                        str
+                        str,
                     )}<span dir="auto" class="luckysheet-formula-text-calc">${s}${s_next}</span>`;
-                    str = "";
+                    str = '';
                 } else {
                     function_str += `<span dir="auto" class="luckysheet-formula-text-calc">${s}${s_next}</span>`;
                 }
@@ -169,20 +125,16 @@ function functionHTML(txt: string) {
                 i += 1;
             } else if (
                 !/[^0-9]/.test(s_next) &&
-                s === "-" &&
-                (s_pre === "(" ||
-                    isNil(s_pre) ||
-                    s_pre === "," ||
-                    s_pre === " " ||
-                    s_pre in operatorjson)
+                s === '-' &&
+                (s_pre === '(' || isNil(s_pre) || s_pre === ',' || s_pre === ' ' || s_pre in operatorjson)
             ) {
                 str += s;
             } else {
                 if (str.length > 0) {
                     function_str += `${functionHTML(
-                        str
+                        str,
                     )}<span dir="auto" class="luckysheet-formula-text-calc">${s}</span>`;
-                    str = "";
+                    str = '';
                 } else {
                     function_str += `<span dir="auto" class="luckysheet-formula-text-calc">${s}</span>`;
                 }
@@ -202,18 +154,18 @@ function functionHTML(txt: string) {
                 setFunctionHTMLIndex(formulaUIState.functionHTMLIndex + 1);
             } else if (matchConfig.dquote > 0) {
                 function_str += `${str}</span>`;
-            } else if (str.indexOf("</span>") === -1 && str.length > 0) {
+            } else if (str.indexOf('</span>') === -1 && str.length > 0) {
                 const regx = /{.*?}/;
 
                 if (regx.test(trim(str))) {
                     const arraytxt = regx.exec(str)![0];
                     const arraystart = str.search(regx);
-                    let alltxt = "";
+                    let alltxt = '';
 
                     if (arraystart > 0) {
                         alltxt += `<span dir="auto" class="luckysheet-formula-text-color">${str.slice(
                             0,
-                            arraystart
+                            arraystart,
                         )}</span>`;
                     }
 
@@ -221,7 +173,7 @@ function functionHTML(txt: string) {
 
                     if (arraystart + arraytxt.length < str.length) {
                         alltxt += `<span dir="auto" class="luckysheet-formula-text-color">${str.slice(
-                            arraystart + arraytxt.length
+                            arraystart + arraytxt.length,
                         )}</span>`;
                     }
 
@@ -239,33 +191,29 @@ function functionHTML(txt: string) {
 }
 
 export function functionHTMLGenerate(txt: string) {
-    if (txt.length === 0 || txt.substring(0, 1) !== "=") {
+    if (txt.length === 0 || txt.substring(0, 1) !== '=') {
         return txt;
     }
 
     resetFunctionHTMLIndex();
 
-    return `<span dir="auto" class="luckysheet-formula-text-color">=</span>${functionHTML(
-        txt
-    )}`;
+    return `<span dir="auto" class="luckysheet-formula-text-color">=</span>${functionHTML(txt)}`;
 }
 
 function getRangeIndexes($editor: HTMLDivElement) {
     const res: number[] = [];
-    $editor
-        .querySelectorAll("span.fortune-formula-functionrange-cell")
-        .forEach((ele) => {
-            const indexStr = ele.getAttribute("rangeindex");
-            if (indexStr) {
-                const rangeIndex = parseInt(indexStr, 10);
-                res.push(rangeIndex);
-            }
-        });
+    $editor.querySelectorAll('span.fortune-formula-functionrange-cell').forEach((ele) => {
+        const indexStr = ele.getAttribute('rangeindex');
+        if (indexStr) {
+            const rangeIndex = parseInt(indexStr, 10);
+            res.push(rangeIndex);
+        }
+    });
     return res;
 }
 
 function searchFunction(ctx: Context, searchtxt: string) {
-    const {functionlist} = locale(ctx);
+    const { functionlist } = locale(ctx);
 
     // // This logic has been modified from the original project
     // if (isNil($editer)) {
@@ -288,7 +236,7 @@ function searchFunction(ctx: Context, searchtxt: string) {
 
     for (let i = 0; i < functionlist.length; i += 1) {
         const item = functionlist[i];
-        const {n} = item;
+        const { n } = item;
 
         if (n === searchtxt) {
             f.unshift(item);
@@ -315,7 +263,7 @@ function searchFunction(ctx: Context, searchtxt: string) {
 }
 
 export function insertFormulaFunctionDom(target: HTMLElement, formulaName: string): boolean {
-    const searchTxt = getrangeseleciton()?.textContent || "";
+    const searchTxt = getrangeseleciton()?.textContent || '';
     const deleteCount = searchTxt.length;
     target.focus();
 
@@ -333,8 +281,8 @@ export function insertFormulaFunctionDom(target: HTMLElement, formulaName: strin
 
     const functionStr = `<span dir="auto" class="luckysheet-formula-text-func">${formulaName}</span>`;
     const lParStr = `<span dir="auto" class="luckysheet-formula-text-lpar">(</span>`;
-    const functionNode = new DOMParser().parseFromString(functionStr, "text/html").body.childNodes[0];
-    const lParNode = new DOMParser().parseFromString(lParStr, "text/html").body.childNodes[0];
+    const functionNode = new DOMParser().parseFromString(functionStr, 'text/html').body.childNodes[0];
+    const lParNode = new DOMParser().parseFromString(lParStr, 'text/html').body.childNodes[0];
 
     if (range.startContainer.parentNode) {
         range.setStart(range.startContainer.parentNode, 1);
@@ -350,43 +298,36 @@ export function insertFormulaFunctionDom(target: HTMLElement, formulaName: strin
 export function getrangeseleciton() {
     const currSelection = window.getSelection();
     if (!currSelection) return null;
-    const {anchorNode, anchorOffset} = currSelection;
+    const { anchorNode, anchorOffset } = currSelection;
 
     if (!anchorNode) return null;
 
-    if (
-        anchorNode.parentNode?.nodeName?.toLowerCase() === "span" &&
-        anchorOffset !== 0
-    ) {
-        let txt = trim(anchorNode.textContent || "");
+    if (anchorNode.parentNode?.nodeName?.toLowerCase() === 'span' && anchorOffset !== 0) {
+        let txt = trim(anchorNode.textContent || '');
         if (txt.length === 0 && anchorNode.parentNode.previousSibling) {
             const ahr = anchorNode.parentNode.previousSibling;
-            txt = trim(ahr.textContent || "");
+            txt = trim(ahr.textContent || '');
             return ahr;
         }
         return anchorNode.parentNode;
     }
     const anchorElement = anchorNode as HTMLElement;
-    if (
-        anchorElement.id === "luckysheet-rich-text-editor" ||
-        anchorElement.id === "luckysheet-functionbox-cell"
-    ) {
-        let txt = trim(last(anchorElement.querySelectorAll("span"))?.innerText);
+    if (anchorElement.id === 'luckysheet-rich-text-editor' || anchorElement.id === 'luckysheet-functionbox-cell') {
+        let txt = trim(last(anchorElement.querySelectorAll('span'))?.innerText);
 
-        if (txt.length === 0 && anchorElement.querySelectorAll("span").length > 1) {
-            const ahr = anchorElement.querySelectorAll("span");
+        if (txt.length === 0 && anchorElement.querySelectorAll('span').length > 1) {
+            const ahr = anchorElement.querySelectorAll('span');
             txt = trim(ahr[ahr.length - 2].innerText);
             return ahr?.[0];
         }
-        return last(anchorElement.querySelectorAll("span"));
+        return last(anchorElement.querySelectorAll('span'));
     }
     if (
-        anchorNode?.parentElement?.id === "luckysheet-rich-text-editor" ||
-        anchorNode?.parentElement?.id === "luckysheet-functionbox-cell" ||
+        anchorNode?.parentElement?.id === 'luckysheet-rich-text-editor' ||
+        anchorNode?.parentElement?.id === 'luckysheet-functionbox-cell' ||
         anchorOffset === 0
     ) {
-        const newAnchorNode =
-            anchorOffset === 0 ? anchorNode?.parentNode : anchorNode;
+        const newAnchorNode = anchorOffset === 0 ? anchorNode?.parentNode : anchorNode;
 
         if (newAnchorNode?.previousSibling) {
             return newAnchorNode?.previousSibling;
@@ -396,12 +337,8 @@ export function getrangeseleciton() {
     return null;
 }
 
-function helpFunctionExe(
-    $editer: HTMLDivElement,
-    currSelection: Node,
-    ctx: Context
-) {
-    const {functionlist} = locale(ctx);
+function helpFunctionExe($editer: HTMLDivElement, currSelection: Node, ctx: Context) {
+    const { functionlist } = locale(ctx);
     if (isEmpty(ctx.formulaCache.functionlistMap)) {
         for (let i = 0; i < functionlist.length; i += 1) {
             ctx.formulaCache.functionlistMap[functionlist[i].n] = functionlist[i];
@@ -412,11 +349,8 @@ function helpFunctionExe(
     }
 
     const $prev = currSelection;
-    const $span = $editer.querySelectorAll("span");
-    const currentIndex = indexOf(
-        currSelection.parentNode?.childNodes,
-        currSelection
-    );
+    const $span = $editer.querySelectorAll('span');
+    const currentIndex = indexOf(currSelection.parentNode?.childNodes, currSelection);
     let i = currentIndex;
 
     if ($prev == null) {
@@ -426,7 +360,7 @@ function helpFunctionExe(
     let funcName = null;
     let paramindex = null;
 
-    if ($span[i].classList.contains("luckysheet-formula-text-func")) {
+    if ($span[i].classList.contains('luckysheet-formula-text-func')) {
         funcName = $span[i].textContent;
     } else {
         let $cur = null;
@@ -437,9 +371,8 @@ function helpFunctionExe(
             $cur = $span[i];
 
             if (
-                $cur.classList.contains("luckysheet-formula-text-func") ||
-                trim($cur.textContent || "").toUpperCase() in
-                ctx.formulaCache.functionlistMap
+                $cur.classList.contains('luckysheet-formula-text-func') ||
+                trim($cur.textContent || '').toUpperCase() in ctx.formulaCache.functionlistMap
             ) {
                 funcName = $cur.textContent;
                 paramindex = null;
@@ -455,14 +388,14 @@ function helpFunctionExe(
                     }
 
                     $cur = $span[a];
-                    if ($cur.classList.contains("luckysheet-formula-text-rpar")) {
+                    if ($cur.classList.contains('luckysheet-formula-text-rpar')) {
                         exceptIndex = [i, a];
                         funcName = null;
                         endstate = false;
                         break;
                     }
 
-                    if ($cur.classList.contains("luckysheet-formula-text-comma")) {
+                    if ($cur.classList.contains('luckysheet-formula-text-comma')) {
                         paramindex += 1;
                     }
                 }
@@ -481,7 +414,7 @@ export function rangeHightlightselected(ctx: Context, $editor: HTMLDivElement) {
     const currSelection = getrangeseleciton();
     if (!currSelection) return;
 
-    const currText = trim(currSelection.textContent || "");
+    const currText = trim(currSelection.textContent || '');
     if (currText?.match(/^[a-zA-Z_]+$/)) {
         searchFunction(ctx, currText.toUpperCase());
         ctx.functionHint = null;
@@ -501,19 +434,16 @@ export function israngeseleciton(ctx: Context, istooltip?: boolean) {
     if (currSelection == null) return false;
     let anchor = currSelection.anchorNode;
     if (!anchor?.textContent) return false;
-    const {anchorOffset} = currSelection;
+    const { anchorOffset } = currSelection;
     const anchorElement = anchor as HTMLElement;
     const parentElement = anchor.parentNode as HTMLElement;
-    if (
-        anchor?.parentNode?.nodeName.toLowerCase() === "span" &&
-        anchorOffset !== 0
-    ) {
+    if (anchor?.parentNode?.nodeName.toLowerCase() === 'span' && anchorOffset !== 0) {
         let txt = trim(anchor.textContent);
-        let lasttxt = "";
+        let lasttxt = '';
 
         if (txt.length === 0 && anchor.parentNode.previousSibling) {
             const ahr = anchor.parentNode.previousSibling;
-            txt = trim(ahr.textContent || "");
+            txt = trim(ahr.textContent || '');
             lasttxt = txt.substring(txt.length - 1, 1);
             ctx.formulaCache.rangeSetValueTo = anchor.parentNode;
         } else {
@@ -522,28 +452,22 @@ export function israngeseleciton(ctx: Context, istooltip?: boolean) {
         }
 
         if (
-            (istooltip && (lasttxt === "(" || lasttxt === ",")) ||
+            (istooltip && (lasttxt === '(' || lasttxt === ',')) ||
             (!istooltip &&
-                (lasttxt === "(" ||
-                    lasttxt === "," ||
-                    lasttxt === "=" ||
-                    lasttxt in operatorjson ||
-                    lasttxt === "&"))
+                (lasttxt === '(' || lasttxt === ',' || lasttxt === '=' || lasttxt in operatorjson || lasttxt === '&'))
         ) {
             return true;
         }
     } else if (
-        anchorElement.id === "luckysheet-rich-text-editor" ||
-        anchorElement.id === "luckysheet-functionbox-cell"
+        anchorElement.id === 'luckysheet-rich-text-editor' ||
+        anchorElement.id === 'luckysheet-functionbox-cell'
     ) {
-        let txt = trim(last(anchorElement.querySelectorAll("span"))?.innerText);
+        let txt = trim(last(anchorElement.querySelectorAll('span'))?.innerText);
 
-        ctx.formulaCache.rangeSetValueTo = last(
-            anchorElement.querySelectorAll("span")
-        );
+        ctx.formulaCache.rangeSetValueTo = last(anchorElement.querySelectorAll('span'));
 
-        if (txt.length === 0 && anchorElement.querySelectorAll("span").length > 1) {
-            const ahr = anchorElement.querySelectorAll("span");
+        if (txt.length === 0 && anchorElement.querySelectorAll('span').length > 1) {
+            const ahr = anchorElement.querySelectorAll('span');
             txt = trim(ahr[ahr.length - 2].innerText);
 
             txt = trim(ahr[ahr.length - 2].innerText);
@@ -553,19 +477,15 @@ export function israngeseleciton(ctx: Context, istooltip?: boolean) {
         const lasttxt = txt.substring(txt.length - 1, 1);
 
         if (
-            (istooltip && (lasttxt === "(" || lasttxt === ",")) ||
+            (istooltip && (lasttxt === '(' || lasttxt === ',')) ||
             (!istooltip &&
-                (lasttxt === "(" ||
-                    lasttxt === "," ||
-                    lasttxt === "=" ||
-                    lasttxt in operatorjson ||
-                    lasttxt === "&"))
+                (lasttxt === '(' || lasttxt === ',' || lasttxt === '=' || lasttxt in operatorjson || lasttxt === '&'))
         ) {
             return true;
         }
     } else if (
-        parentElement.id === "luckysheet-rich-text-editor" ||
-        parentElement.id === "luckysheet-functionbox-cell" ||
+        parentElement.id === 'luckysheet-rich-text-editor' ||
+        parentElement.id === 'luckysheet-functionbox-cell' ||
         anchorOffset === 0
     ) {
         if (anchorOffset === 0) {
@@ -580,13 +500,13 @@ export function israngeseleciton(ctx: Context, istooltip?: boolean) {
             ctx.formulaCache.rangeSetValueTo = anchor.previousSibling;
 
             if (
-                (istooltip && (lasttxt === "(" || lasttxt === ",")) ||
+                (istooltip && (lasttxt === '(' || lasttxt === ',')) ||
                 (!istooltip &&
-                    (lasttxt === "(" ||
-                        lasttxt === "," ||
-                        lasttxt === "=" ||
+                    (lasttxt === '(' ||
+                        lasttxt === ',' ||
+                        lasttxt === '=' ||
                         lasttxt in operatorjson ||
-                        lasttxt === "&"))
+                        lasttxt === '&'))
             ) {
                 return true;
             }
@@ -596,12 +516,7 @@ export function israngeseleciton(ctx: Context, istooltip?: boolean) {
     return false;
 }
 
-function functionRange(
-    ctx: Context,
-    obj: HTMLDivElement,
-    v: string,
-    vp: string
-) {
+function functionRange(ctx: Context, obj: HTMLDivElement, v: string, vp: string) {
     const currSelection = window.getSelection();
     if (!currSelection) return;
     const fri = findrangeindex(ctx, v, vp);
@@ -610,16 +525,16 @@ function functionRange(
         currSelection.selectAllChildren(obj);
         currSelection.collapseToEnd();
     } else {
-        setCaretPosition(ctx, obj.querySelectorAll("span")[fri[0]], 0, fri[1]);
+        setCaretPosition(ctx, obj.querySelectorAll('span')[fri[0]], 0, fri[1]);
     }
 }
 
 function findrangeindex(ctx: Context, v: string, vp: string) {
     const re = /<span.*?>/g;
-    const v_a = v.replace(re, "").split("</span>");
-    const vp_a = vp.replace(re, "").split("</span>");
+    const v_a = v.replace(re, '').split('</span>');
+    const vp_a = vp.replace(re, '').split('</span>');
     v_a.pop();
-    if (vp_a[vp_a.length - 1] === "") vp_a.pop();
+    if (vp_a[vp_a.length - 1] === '') vp_a.pop();
 
     let pfri = ctx.formulaCache.functionRangeIndex;
     if (pfri == null) return [];
@@ -642,11 +557,7 @@ function findrangeindex(ctx: Context, v: string, vp: string) {
             return pfri;
         }
         if (p.length === n.length) {
-            if (
-                !isNil(vp_a[i + 1]) &&
-                !isNil(v_a[i + 1]) &&
-                vp_a[i + 1].length < v_a[i + 1].length
-            ) {
+            if (!isNil(vp_a[i + 1]) && !isNil(v_a[i + 1]) && vp_a[i + 1].length < v_a[i + 1].length) {
                 pfri[0] += 1;
                 pfri[1] = 1;
             }
@@ -658,7 +569,7 @@ function findrangeindex(ctx: Context, v: string, vp: string) {
                 !isNil(p) &&
                 !isNil(v_a[i + 1]) &&
                 v_a[i + 1].substring(0, 1) === '"' &&
-                (p.indexOf("{") > -1 || p.indexOf("}") > -1)
+                (p.indexOf('{') > -1 || p.indexOf('}') > -1)
             ) {
                 pfri[0] += 1;
                 pfri[1] = 1;
@@ -681,9 +592,9 @@ function findrangeindex(ctx: Context, v: string, vp: string) {
         const n = v_a[i];
 
         if (isNil(n)) {
-            if (v_a[i - 1].indexOf("{") > -1) {
+            if (v_a[i - 1].indexOf('{') > -1) {
                 pfri[0] -= 1;
-                const start = v_a[i - 1].search("{");
+                const start = v_a[i - 1].search('{');
                 pfri[1] += start;
             } else {
                 pfri[0] = 0;
@@ -693,23 +604,18 @@ function findrangeindex(ctx: Context, v: string, vp: string) {
             if (
                 !isNil(v_a[i + 1]) &&
                 (v_a[i + 1].substring(0, 1) === '"' ||
-                    v_a[i + 1].substring(0, 1) === "{" ||
-                    v_a[i + 1].substring(0, 1) === "}")
+                    v_a[i + 1].substring(0, 1) === '{' ||
+                    v_a[i + 1].substring(0, 1) === '}')
             ) {
                 pfri[0] += 1;
                 pfri[1] = 1;
-            } else if (
-                !isNil(p) &&
-                p.length > 2 &&
-                p.substring(0, 1) === '"' &&
-                p.substring(p.length - 1, 1) === '"'
-            ) {
+            } else if (!isNil(p) && p.length > 2 && p.substring(0, 1) === '"' && p.substring(p.length - 1, 1) === '"') {
                 // pfri[1] = n.length-1;
             } else if (!isNil(v_a[i]) && v_a[i] === '")') {
                 pfri[1] = 1;
             } else if (!isNil(v_a[i]) && v_a[i] === '"}') {
                 pfri[1] = 1;
-            } else if (!isNil(v_a[i]) && v_a[i] === "{)") {
+            } else if (!isNil(v_a[i]) && v_a[i] === '{)') {
                 pfri[1] = 1;
             } else {
                 pfri[1] = n.length;
@@ -720,8 +626,8 @@ function findrangeindex(ctx: Context, v: string, vp: string) {
             if (
                 !isNil(v_a[i + 1]) &&
                 (v_a[i + 1].substring(0, 1) === '"' ||
-                    v_a[i + 1].substring(0, 1) === "{" ||
-                    v_a[i + 1].substring(0, 1) === "}")
+                    v_a[i + 1].substring(0, 1) === '{' ||
+                    v_a[i + 1].substring(0, 1) === '}')
             ) {
                 pfri[0] += 1;
                 pfri[1] = 1;
@@ -752,15 +658,14 @@ function findrangeindex(ctx: Context, v: string, vp: string) {
             if (
                 vp_a[i + 1] != null &&
                 (vp_a[i + 1].substring(0, 1) === '"' ||
-                    vp_a[i + 1].substring(0, 1) === "{" ||
-                    vp_a[i + 1].substring(0, 1) === "}")
+                    vp_a[i + 1].substring(0, 1) === '{' ||
+                    vp_a[i + 1].substring(0, 1) === '}')
             ) {
                 pfri[1] = n.length;
             } else if (
                 !isNil(v_a[i + 1]) &&
                 v_a[i + 1].substring(0, 1) === '"' &&
-                (v_a[i + 1].substring(0, 1) === "{" ||
-                    v_a[i + 1].substring(0, 1) === "}")
+                (v_a[i + 1].substring(0, 1) === '{' || v_a[i + 1].substring(0, 1) === '}')
             ) {
                 pfri[0] += 1;
                 pfri[1] = 1;
@@ -769,15 +674,15 @@ function findrangeindex(ctx: Context, v: string, vp: string) {
                 n.substring(0, 1) === '"' &&
                 n.substring(n.length - 1, 1) === '"' &&
                 p.substring(0, 1) === '"' &&
-                p.substring(p.length - 1, 1) === ")"
+                p.substring(p.length - 1, 1) === ')'
             ) {
                 pfri[1] = n.length;
             } else if (
                 !isNil(n) &&
-                n.substring(0, 1) === "{" &&
-                n.substring(n.length - 1, 1) === "}" &&
-                p.substring(0, 1) === "{" &&
-                p.substring(p.length - 1, 1) === ")"
+                n.substring(0, 1) === '{' &&
+                n.substring(n.length - 1, 1) === '}' &&
+                p.substring(0, 1) === '{' &&
+                p.substring(p.length - 1, 1) === ')'
             ) {
                 pfri[1] = n.length;
             } else {
@@ -799,16 +704,12 @@ function findrangeindex(ctx: Context, v: string, vp: string) {
             } else if (
                 !isNil(p) &&
                 v_a[i + 1].substring(0, 1) === '"' &&
-                (p.indexOf("{") > -1 || p.indexOf("}") > -1)
+                (p.indexOf('{') > -1 || p.indexOf('}') > -1)
             ) {
                 pfri[0] += 1;
                 pfri[1] = 1;
-            } else if (!isNil(p) && (p.indexOf("{") > -1 || p.indexOf("}") > -1)) {
-            } else if (
-                !isNil(p) &&
-                !startsWith(p[0], "=") &&
-                startsWith(n, "=")
-            ) {
+            } else if (!isNil(p) && (p.indexOf('{') > -1 || p.indexOf('}') > -1)) {
+            } else if (!isNil(p) && !startsWith(p[0], '=') && startsWith(n, '=')) {
                 return [vlen - 1, v_a[vlen - 1].length];
             } else {
                 pfri[0] = pfri[0] + vlen - vplen - 1;
@@ -832,17 +733,13 @@ export function handleFormulaInput(
     $editor: HTMLDivElement,
     kcode: number,
     preText?: string,
-    refreshRangeSelect = true
+    refreshRangeSelect = true,
 ) {
     let value1: string;
     const value1txt = preText ?? $editor.innerText;
     let value = $editor.innerText;
     value = escapeScriptTag(value);
-    if (
-        value.length > 0 &&
-        value.substring(0, 1) === "=" &&
-        (kcode !== 229 || value.length === 1)
-    ) {
+    if (value.length > 0 && value.substring(0, 1) === '=' && (kcode !== 229 || value.length === 1)) {
         if (!refreshRangeSelect) setRangeIndexes(getRangeIndexes($editor));
         value = functionHTMLGenerate(value);
         if (!refreshRangeSelect && formulaUIState.functionHTMLIndex < formulaUIState.rangeIndexes.length)
@@ -853,20 +750,19 @@ export function handleFormulaInput(
 
         const currSelection = window.getSelection();
         if (!currSelection) return;
-        if (currSelection.anchorNode?.nodeName.toLowerCase() === "div") {
-            const editorlen = $editor.querySelectorAll("span").length;
+        if (currSelection.anchorNode?.nodeName.toLowerCase() === 'div') {
+            const editorlen = $editor.querySelectorAll('span').length;
             if (editorlen > 0)
                 ctx.formulaCache.functionRangeIndex = [
                     editorlen - 1,
-                    $editor.querySelectorAll("span").item(editorlen - 1).textContent
-                        ?.length!,
+                    $editor.querySelectorAll('span').item(editorlen - 1).textContent?.length!,
                 ];
         } else {
             ctx.formulaCache.functionRangeIndex = [
                 indexOf(
                     currSelection.anchorNode?.parentNode?.parentNode?.childNodes,
-                    // @ts-ignore
-                    currSelection.anchorNode?.parentNode
+                    // @ts-expect-error
+                    currSelection.anchorNode?.parentNode,
                 ),
                 currSelection.anchorOffset,
             ];
@@ -893,13 +789,13 @@ export function handleFormulaInput(
 
             rangeHightlightselected(ctx, $editor);
         }
-    } else if (startsWith(value1txt, "=") && !startsWith(value, "=")) {
+    } else if (startsWith(value1txt, '=') && !startsWith(value, '=')) {
         if ($copyTo) $copyTo.innerHTML = value;
         $editor.innerHTML = escapeHTMLTag(value);
-    } else if (!startsWith(value1txt, "=")) {
+    } else if (!startsWith(value1txt, '=')) {
         if (!$copyTo) return;
-        if ($copyTo.id === "luckysheet-rich-text-editor") {
-            if (!startsWith($copyTo.innerHTML, "<span")) {
+        if ($copyTo.id === 'luckysheet-rich-text-editor') {
+            if (!startsWith($copyTo.innerHTML, '<span')) {
                 $copyTo.innerHTML = escapeHTMLTag(value);
             }
         } else {

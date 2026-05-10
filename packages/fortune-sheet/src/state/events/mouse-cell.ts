@@ -1,5 +1,5 @@
-import {indexOf, isEmpty, isNil, last, set} from "es-toolkit/compat";
-import {Context, getFlowdata} from "../context";
+import { indexOf, isEmpty, isNil, last, set } from 'es-toolkit/compat';
+import { type Context, getFlowdata } from '../context';
 import {
     cancelActiveImgItem,
     cellFocus,
@@ -9,22 +9,22 @@ import {
     israngeseleciton,
     rangeHightlightselected,
     rangeSetValue,
-} from "../modules";
+} from '../modules';
 import {
     cancelFunctionrangeSelected,
     luckysheetUpdateCell,
     mergeBorder,
     mergeMoveMain,
     updateCell,
-} from "../modules/cell";
-import {colLocation, colLocationByIndex, rowLocation, rowLocationByIndex} from "../modules/location";
-import {checkProtectionSelectLockedOrUnLockedCells} from "../modules/protection";
-import {normalizeSelection} from "../modules/selection";
-import {Settings} from "../settings";
-import {GlobalCache} from "../types";
-import {getSheetIndex, isAllowEdit} from "../utils";
-import {showLinkCard} from "../modules/hyperlink";
-import {fixPositionOnFrozenCells} from "./mouse-resize";
+} from '../modules/cell';
+import { showLinkCard } from '../modules/hyperlink';
+import { colLocation, colLocationByIndex, rowLocation, rowLocationByIndex } from '../modules/location';
+import { checkProtectionSelectLockedOrUnLockedCells } from '../modules/protection';
+import { normalizeSelection } from '../modules/selection';
+import type { Settings } from '../settings';
+import type { GlobalCache } from '../types';
+import { getSheetIndex, isAllowEdit } from '../utils';
+import { fixPositionOnFrozenCells } from './mouse-resize';
 
 export function handleCellAreaMouseDown(
     ctx: Context,
@@ -33,7 +33,7 @@ export function handleCellAreaMouseDown(
     cellInput: HTMLDivElement,
     container: HTMLDivElement,
     fxInput?: HTMLDivElement | null,
-    canvas?: CanvasRenderingContext2D
+    canvas?: CanvasRenderingContext2D,
 ) {
     ctx.contextMenu = {};
     ctx.filterContextMenu = undefined;
@@ -50,8 +50,7 @@ export function handleCellAreaMouseDown(
         return;
     }
     const freeze = globalCache.freezen?.[ctx.currentSheetId];
-    const {x, y, inHorizontalFreeze, inVerticalFreeze} =
-        fixPositionOnFrozenCells(freeze, _x, _y, mouseX, mouseY);
+    const { x, y, inHorizontalFreeze, inVerticalFreeze } = fixPositionOnFrozenCells(freeze, _x, _y, mouseX, mouseY);
 
     const row_location = rowLocation(y, ctx.visibledatarow);
     let row = row_location[1];
@@ -109,7 +108,7 @@ export function handleCellAreaMouseDown(
                 row_index >= obj_s.row[0] &&
                 row_index <= obj_s.row[1] &&
                 col_index >= obj_s.column[0] &&
-                col_index <= obj_s.column[1]
+                col_index <= obj_s.column[1],
         );
         if (isInSelection) return;
     }
@@ -201,16 +200,7 @@ export function handleCellAreaMouseDown(
                     columnseleted = [last.column[0], col_index];
                 }
 
-                const changeparam = mergeMoveMain(
-                    ctx,
-                    columnseleted,
-                    rowseleted,
-                    last,
-                    top,
-                    height,
-                    left,
-                    width
-                );
+                const changeparam = mergeMoveMain(ctx, columnseleted, rowseleted, last, top, height, left, width);
                 if (changeparam != null) {
                     [columnseleted, rowseleted, top, height, left, width] = changeparam;
                 }
@@ -224,24 +214,21 @@ export function handleCellAreaMouseDown(
                 last.height_move = height;
 
                 ctx.formulaCache.func_selectedrange = last;
-            } else if (
-                e.ctrlKey &&
-                last(cellInput.querySelectorAll("span"))?.innerText !== ","
-            ) {
+            } else if (e.ctrlKey && last(cellInput.querySelectorAll('span'))?.innerText !== ',') {
                 // Ctrl held: finalize previous range
                 let vText = cellInput.innerText;
 
-                if (vText[vText.length - 1] === ")") {
+                if (vText[vText.length - 1] === ')') {
                     vText = vText.substring(0, vText.length - 1); // Remove trailing closing parenthesis
                 }
 
                 if (vText.length > 0) {
                     const lastWord = vText.substring(vText.length - 1, 1);
-                    if (lastWord !== "," && lastWord !== "=" && lastWord !== "(") {
-                        vText += ",";
+                    if (lastWord !== ',' && lastWord !== '=' && lastWord !== '(') {
+                        vText += ',';
                     }
                 }
-                if (vText.length > 0 && vText.substring(0, 1) === "=") {
+                if (vText.length > 0 && vText.substring(0, 1) === '=') {
                     vText = functionHTMLGenerate(vText);
 
                     const currSelection = window.getSelection();
@@ -249,8 +236,8 @@ export function handleCellAreaMouseDown(
                     ctx.formulaCache.functionRangeIndex = [
                         indexOf(
                             currSelection.anchorNode?.parentNode?.parentNode?.childNodes,
-                            // @ts-ignore
-                            currSelection.anchorNode?.parentNode
+                            // @ts-expect-error
+                            currSelection.anchorNode?.parentNode,
                         ),
                         currSelection.anchorOffset,
                     ];
@@ -310,7 +297,7 @@ export function handleCellAreaMouseDown(
                     row: rowseleted,
                     column: columnseleted,
                 },
-                fxInput
+                fxInput,
             );
 
             ctx.formulaCache.rangestart = true;
@@ -318,14 +305,8 @@ export function handleCellAreaMouseDown(
             ctx.formulaCache.rangedrag_row_start = false;
 
             ctx.formulaCache.selectingRangeIndex = ctx.formulaCache.rangechangeindex!;
-            if (
-                ctx.formulaCache.rangechangeindex! > ctx.formulaRangeHighlight.length
-            ) {
-                createRangeHightlight(
-                    ctx,
-                    cellInput.innerHTML,
-                    ctx.formulaCache.rangechangeindex!
-                );
+            if (ctx.formulaCache.rangechangeindex! > ctx.formulaRangeHighlight.length) {
+                createRangeHightlight(ctx, cellInput.innerHTML, ctx.formulaCache.rangechangeindex!);
             }
             createFormulaRangeSelect(ctx, {
                 rangeIndex: ctx.formulaCache.rangechangeindex || 0,
@@ -337,32 +318,17 @@ export function handleCellAreaMouseDown(
             e.preventDefault();
             return; // skip ctx.luckysheet_select_save to prevent clearing cellInput
         }
-        updateCell(
-            ctx,
-            ctx.luckysheetCellUpdate[0],
-            ctx.luckysheetCellUpdate[1],
-            cellInput,
-            undefined,
-            canvas
-        );
+        updateCell(ctx, ctx.luckysheetCellUpdate[0], ctx.luckysheetCellUpdate[1], cellInput, undefined, canvas);
         ctx.luckysheet_select_status = true;
     }
-    if (
-        checkProtectionSelectLockedOrUnLockedCells(
-            ctx,
-            row_index,
-            col_index,
-            ctx.currentSheetId
-        )
-    ) {
+    if (checkProtectionSelectLockedOrUnLockedCells(ctx, row_index, col_index, ctx.currentSheetId)) {
         ctx.luckysheet_select_status = true;
     }
 
     if (ctx.luckysheet_select_status) {
         if (e.shiftKey) {
             // Shift+click: select range
-            const last =
-                ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1]; // last selection
+            const last = ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1]; // last selection
             if (
                 last &&
                 last.top != null &&
@@ -416,16 +382,7 @@ export function handleCellAreaMouseDown(
                     }
                     columnseleted = [last.column[0], col_index];
                 }
-                const changeparam = mergeMoveMain(
-                    ctx,
-                    columnseleted,
-                    rowseleted,
-                    last,
-                    top,
-                    height,
-                    left,
-                    width
-                );
+                const changeparam = mergeMoveMain(ctx, columnseleted, rowseleted, last, top, height, left, width);
                 if (changeparam != null) {
                     [columnseleted, rowseleted, top, height, left, width] = changeparam;
                 }
@@ -435,8 +392,7 @@ export function handleCellAreaMouseDown(
                 last.width_move = width;
                 last.top_move = top;
                 last.height_move = height;
-                ctx.luckysheet_select_save![ctx.luckysheet_select_save!.length - 1] =
-                    last;
+                ctx.luckysheet_select_save![ctx.luckysheet_select_save!.length - 1] = last;
             }
         } else if (e.ctrlKey || e.metaKey) {
             // Add to selection
@@ -477,10 +433,7 @@ export function handleCellAreaMouseDown(
         }
     }
 
-    ctx.luckysheet_select_save = normalizeSelection(
-        ctx,
-        ctx.luckysheet_select_save
-    );
+    ctx.luckysheet_select_save = normalizeSelection(ctx, ctx.luckysheet_select_save);
 
     if (ctx.hooks.afterCellMouseDown) {
         setTimeout(() => {
@@ -499,9 +452,9 @@ export function handleCellAreaMouseDown(
 export function handleCellAreaDoubleClick(
     ctx: Context,
     globalCache: GlobalCache,
-    settings: Settings,
+    _settings: Settings,
     e: MouseEvent,
-    container: HTMLElement
+    container: HTMLElement,
 ) {
     const flowdata = getFlowdata(ctx);
     if (!flowdata) return;
@@ -525,7 +478,7 @@ export function handleCellAreaDoubleClick(
     const _y = mouseY + ctx.scrollTop;
 
     const freeze = globalCache.freezen?.[ctx.currentSheetId];
-    const {x, y} = fixPositionOnFrozenCells(freeze, _x, _y, mouseX, mouseY);
+    const { x, y } = fixPositionOnFrozenCells(freeze, _x, _y, mouseX, mouseY);
 
     const row_location = rowLocation(y, ctx.visibledatarow);
     let row_index = row_location[2];
@@ -535,11 +488,11 @@ export function handleCellAreaDoubleClick(
 
     // Cancel double-click for checkbox cells -- do not allow editing
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
-    const {dataVerification} = ctx.luckysheetfile[index];
+    const { dataVerification } = ctx.luckysheetfile[index];
 
     if (dataVerification) {
         const item = dataVerification[`${row_index}_${col_index}`];
-        if (item && item.type === "checkbox") return;
+        if (item && item.type === 'checkbox') return;
     }
 
     const margeset = mergeBorder(ctx, flowdata, row_index, col_index);
@@ -549,12 +502,8 @@ export function handleCellAreaDoubleClick(
     }
 
     // Check if current and focus coordinates match; correct if not
-    const {column_focus, row_focus} = ctx.luckysheet_select_save![0];
-    if (
-        !isNil(column_focus) &&
-        !isNil(row_focus) &&
-        (column_focus !== col_index || row_focus !== row_index)
-    ) {
+    const { column_focus, row_focus } = ctx.luckysheet_select_save![0];
+    if (!isNil(column_focus) && !isNil(row_focus) && (column_focus !== col_index || row_focus !== row_index)) {
         row_index = row_focus;
         col_index = column_focus;
     }
@@ -568,7 +517,7 @@ export function handleContextMenu(
     e: MouseEvent,
     workbookContainer: HTMLDivElement,
     container: HTMLDivElement,
-    area: "cell" | "rowHeader" | "columnHeader"
+    area: 'cell' | 'rowHeader' | 'columnHeader',
 ) {
     if (!ctx.allowEdit) {
         return;
@@ -578,7 +527,7 @@ export function handleContextMenu(
 
     const workbookRect = workbookContainer.getBoundingClientRect();
 
-    const {cellContextMenu} = settings;
+    const { cellContextMenu } = settings;
 
     // If all buttons hidden, hide the menu container
     if (isEmpty(cellContextMenu)) {
@@ -596,19 +545,19 @@ export function handleContextMenu(
     };
     // select current cell when clicking the right button
     e.preventDefault();
-    if (area === "cell") {
-        set(ctx.contextMenu, "headerMenu", undefined);
+    if (area === 'cell') {
+        set(ctx.contextMenu, 'headerMenu', undefined);
         const rect = container.getBoundingClientRect();
         const mouseX = e.pageX - rect.left - window.scrollX;
         const mouseY = e.pageY - rect.top - window.scrollY;
         const _selected_x = mouseX + ctx.scrollLeft;
         const _selected_y = mouseY + ctx.scrollTop;
-        const {x: selected_x, y: selected_y} = fixPositionOnFrozenCells(
+        const { x: selected_x, y: selected_y } = fixPositionOnFrozenCells(
             ctx.getRefs().globalCache.freezen?.[ctx.currentSheetId],
             _selected_x,
             _selected_y,
             mouseX,
-            mouseY
+            mouseY,
         );
         const row_location = rowLocation(selected_y, ctx.visibledatarow);
         const row = row_location[1];
@@ -626,7 +575,7 @@ export function handleContextMenu(
                 row_index >= obj_s.row[0] &&
                 row_index <= obj_s.row[1] &&
                 col_index >= obj_s.column[0] &&
-                col_index <= obj_s.column[1]
+                col_index <= obj_s.column[1],
         );
         if (!isInSelection && (e.metaKey || e.ctrlKey)) {
             // Add to selection
@@ -636,15 +585,14 @@ export function handleContextMenu(
                     ctx,
                     [col_index, col_index],
                     [row_index, row_index],
-                    {row_focus: row_index, column_focus: col_index},
+                    { row_focus: row_index, column_focus: col_index },
                     row_pre,
                     row,
                     col_pre,
-                    col
+                    col,
                 );
                 if (changeparam != null) {
-                    const [columnseleted, rowseleted, top, height, left, width] =
-                        changeparam;
+                    const [columnseleted, rowseleted, top, height, left, width] = changeparam;
                     ctx.luckysheet_select_save?.push({
                         left,
                         width: width - 1,
@@ -687,15 +635,14 @@ export function handleContextMenu(
                 ctx,
                 [col_index, col_index],
                 [row_index, row_index],
-                {row_focus: row_index, column_focus: col_index},
+                { row_focus: row_index, column_focus: col_index },
                 row_pre,
                 row,
                 col_pre,
-                col
+                col,
             );
             if (changeparam != null) {
-                const [columnseleted, rowseleted, top, height, left, width] =
-                    changeparam;
+                const [columnseleted, rowseleted, top, height, left, width] = changeparam;
                 ctx.luckysheet_select_save = [
                     {
                         left,
@@ -731,17 +678,17 @@ export function handleContextMenu(
                 column_focus: col_index,
             },
         ];
-    } else if (area === "rowHeader") {
-        set(ctx.contextMenu, "headerMenu", "row");
+    } else if (area === 'rowHeader') {
+        set(ctx.contextMenu, 'headerMenu', 'row');
         const rect = container.getBoundingClientRect();
         const mouseY = e.pageY - rect.top - window.scrollY;
         const _selected_y = mouseY + ctx.scrollTop;
-        const {y: selected_y} = fixPositionOnFrozenCells(
+        const { y: selected_y } = fixPositionOnFrozenCells(
             ctx.getRefs().globalCache.freezen?.[ctx.currentSheetId],
             0,
             _selected_y,
             0,
-            mouseY
+            mouseY,
         );
         const row_location = rowLocation(selected_y, ctx.visibledatarow);
         const row = row_location[1];
@@ -750,10 +697,7 @@ export function handleContextMenu(
         // If right-click is inside selection, skip selection handling
         const isInSelection = ctx.luckysheet_select_save?.some(
             (obj_s) =>
-                obj_s.row != null &&
-                row_index >= obj_s.row[0] &&
-                row_index <= obj_s.row[1] &&
-                !obj_s.column_select
+                obj_s.row != null && row_index >= obj_s.row[0] && row_index <= obj_s.row[1] && !obj_s.column_select,
         );
 
         if (isInSelection) return;
@@ -767,9 +711,7 @@ export function handleContextMenu(
         ctx.luckysheet_select_save.push({
             left: colLocationByIndex(0, ctx.visibledatacolumn)[0],
             width:
-                colLocationByIndex(0, ctx.visibledatacolumn)[1] -
-                colLocationByIndex(0, ctx.visibledatacolumn)[0] -
-                1,
+                colLocationByIndex(0, ctx.visibledatacolumn)[1] - colLocationByIndex(0, ctx.visibledatacolumn)[0] - 1,
             top,
             height,
             left_move: col_pre,
@@ -782,17 +724,17 @@ export function handleContextMenu(
             column_focus: 0,
             row_select: true,
         });
-    } else if (area === "columnHeader") {
-        set(ctx.contextMenu, "headerMenu", "column");
+    } else if (area === 'columnHeader') {
+        set(ctx.contextMenu, 'headerMenu', 'column');
         const rect = container.getBoundingClientRect();
         const mouseX = e.pageX - rect.left - window.scrollX;
         const _selected_x = mouseX + ctx.scrollLeft;
-        const {x: selected_x} = fixPositionOnFrozenCells(
+        const { x: selected_x } = fixPositionOnFrozenCells(
             ctx.getRefs().globalCache.freezen?.[ctx.currentSheetId],
             _selected_x,
             0,
             mouseX,
-            0
+            0,
         );
         const row_index = ctx.visibledatarow.length - 1;
         const row = ctx.visibledatarow[row_index];
@@ -804,10 +746,7 @@ export function handleContextMenu(
         // If right-click is inside selection, skip selection handling
         const isInSelection = ctx.luckysheet_select_save?.some(
             (obj_s) =>
-                obj_s.row != null &&
-                col_index >= obj_s.column[0] &&
-                col_index <= obj_s.column[1] &&
-                !obj_s.row_select
+                obj_s.row != null && col_index >= obj_s.column[0] && col_index <= obj_s.column[1] && !obj_s.row_select,
         );
 
         if (isInSelection) return;
@@ -819,10 +758,7 @@ export function handleContextMenu(
             left,
             width,
             top: rowLocationByIndex(0, ctx.visibledatarow)[0],
-            height:
-                rowLocationByIndex(0, ctx.visibledatarow)[1] -
-                rowLocationByIndex(0, ctx.visibledatarow)[0] -
-                1,
+            height: rowLocationByIndex(0, ctx.visibledatarow)[1] - rowLocationByIndex(0, ctx.visibledatarow)[0] - 1,
             left_move: left,
             width_move: width,
             top_move: row_pre,

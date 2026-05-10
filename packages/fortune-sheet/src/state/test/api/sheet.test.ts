@@ -1,69 +1,69 @@
-import {contextFactory, selectionFactory} from "../factories/context";
-import {Context} from "../../context";
-import {calculateFormula, getAllSheets} from "../../api/sheet";
-import {getCellValue} from "../../api/cell";
-import {describe, expect, test} from "bun:test";
+import { describe, expect, test } from 'bun:test';
+import { getCellValue } from '../../api/cell';
+import { calculateFormula, getAllSheets } from '../../api/sheet';
+import type { Context } from '../../context';
+import { contextFactory, selectionFactory } from '../factories/context';
 
-describe("fortune-sheet/core/api/sheet", () => {
+describe('fortune-sheet/core/api/sheet', () => {
     const getContext = () =>
         contextFactory({
             luckysheet_select_save: selectionFactory([0, 0], [0, 0], 0, 0),
         }) as Context;
-    test("getAllSheets", () => {
+    test('getAllSheets', () => {
         const ctx = getContext();
         expect(getAllSheets(ctx).length).toBe(2);
-        expect(getAllSheets(ctx)).toMatchObject([{id: "id_1"}, {id: "id_2"}]);
+        expect(getAllSheets(ctx)).toMatchObject([{ id: 'id_1' }, { id: 'id_2' }]);
     });
 
-    test("calculateFormula works before currentSheetId is initialized", () => {
+    test('calculateFormula works before currentSheetId is initialized', () => {
         const ctx = contextFactory({
-            currentSheetId: "",
+            currentSheetId: '',
             luckysheetfile: [
                 {
-                    name: "Sheet1",
-                    id: "id_1",
+                    name: 'Sheet1',
+                    id: 'id_1',
                     order: 0,
                     data: [
                         [
-                            {v: 10, ct: {t: "n", fa: "General"}},
-                            {f: "=A1+A2", ct: {t: "n", fa: "General"}},
+                            { v: 10, ct: { t: 'n', fa: 'General' } },
+                            { f: '=A1+A2', ct: { t: 'n', fa: 'General' } },
                         ],
-                        [{v: 5, ct: {t: "n", fa: "General"}}, null],
+                        [{ v: 5, ct: { t: 'n', fa: 'General' } }, null],
                     ],
                 },
             ],
         }) as Context;
 
         expect(() => calculateFormula(ctx)).not.toThrow();
-        expect(getCellValue(ctx, 0, 1, {id: "id_1", type: "v"})).toBe(15);
+        expect(getCellValue(ctx, 0, 1, { id: 'id_1', type: 'v' })).toBe(15);
     });
 
     test("calculateFormula without id writes each sheet's result to its own sheet", () => {
         const ctx = contextFactory({
-            currentSheetId: "id_1",
+            currentSheetId: 'id_1',
             luckysheetfile: [
                 {
-                    name: "Sheet1",
-                    id: "id_1",
+                    name: 'Sheet1',
+                    id: 'id_1',
                     order: 0,
                     data: [
                         [
-                            {v: 10, ct: {t: "n", fa: "General"}},
-                            {f: "=A1+A2", ct: {t: "n", fa: "General"}},
+                            { v: 10, ct: { t: 'n', fa: 'General' } },
+                            { f: '=A1+A2', ct: { t: 'n', fa: 'General' } },
                         ],
-                        [{v: 5, ct: {t: "n", fa: "General"}}, null],
+                        [{ v: 5, ct: { t: 'n', fa: 'General' } }, null],
                     ],
                 },
                 {
-                    name: "Sheet2",
-                    id: "id_2",
+                    name: 'Sheet2',
+                    id: 'id_2',
                     order: 1,
                     data: [
                         [
-                            {v: 20, ct: {t: "n", fa: "General"}},
-                            {f: "=A1+A2", ct: {t: "n", fa: "General"}},
+                            { v: 20, ct: { t: 'n', fa: 'General' } },
+                            { f: '=A1+A2', ct: { t: 'n', fa: 'General' } },
                         ],
-                        [{v: 7, ct: {t: "n", fa: "General"}}, null],
+                        [{ v: 7, ct: { t: 'n', fa: 'General' } }, null],
                     ],
                 },
             ],
@@ -71,7 +71,7 @@ describe("fortune-sheet/core/api/sheet", () => {
 
         calculateFormula(ctx);
 
-        expect(getCellValue(ctx, 0, 1, {id: "id_1", type: "v"})).toBe(15);
-        expect(getCellValue(ctx, 0, 1, {id: "id_2", type: "v"})).toBe(27);
+        expect(getCellValue(ctx, 0, 1, { id: 'id_1', type: 'v' })).toBe(15);
+        expect(getCellValue(ctx, 0, 1, { id: 'id_2', type: 'v' })).toBe(27);
     });
 });

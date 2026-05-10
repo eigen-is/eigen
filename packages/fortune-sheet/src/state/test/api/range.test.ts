@@ -1,5 +1,4 @@
-import {contextFactory, selectionFactory} from "../factories/context";
-import {Context} from "../../context";
+import { describe, expect, test } from 'bun:test';
 import {
     getCellsByFlattenRange,
     getCellsByRange,
@@ -10,16 +9,17 @@ import {
     setCellFormatByRange,
     setCellValuesByRange,
     setSelection,
-} from "../../api/range";
-import {describe, expect, test} from "bun:test";
+} from '../../api/range';
+import type { Context } from '../../context';
+import { contextFactory, selectionFactory } from '../factories/context';
 
-describe("fortune-sheet/core/api/range", () => {
+describe('fortune-sheet/core/api/range', () => {
     const getContext = () =>
         contextFactory({
             luckysheet_select_save: selectionFactory([0, 0], [0, 0], 0, 0),
         }) as Context;
 
-    test("getSelection", async () => {
+    test('getSelection', async () => {
         const ctx = getContext();
         ctx.luckysheet_select_save = [
             {
@@ -36,76 +36,73 @@ describe("fortune-sheet/core/api/range", () => {
             },
         ];
         expect(getSelection(ctx)).toEqual([
-            {row: [0, 0], column: [0, 1]},
-            {row: [2, 3], column: [2, 3]},
+            { row: [0, 0], column: [0, 1] },
+            { row: [2, 3], column: [2, 3] },
         ]);
     });
 
-    test("getFlattenRange", async () => {
+    test('getFlattenRange', async () => {
         const ctx = getContext();
         const result = getFlattenRange(ctx, [
-            {row: [0, 0], column: [0, 1]},
-            {row: [2, 3], column: [2, 3]},
+            { row: [0, 0], column: [0, 1] },
+            { row: [2, 3], column: [2, 3] },
         ]);
         expect(result.length).toBe(6);
     });
 
-    test("getCellsByFlattenRange", async () => {
+    test('getCellsByFlattenRange', async () => {
         const ctx = getContext();
         if (ctx.luckysheetfile[0]?.data) {
             ctx.luckysheetfile[0].data = [
-                [{v: 1}, {v: 2}, {v: 3}, {v: 4}],
-                [{v: 1}, {v: 2}, {v: 3}, {v: 4}],
-                [{v: 1}, {v: 2}, {v: 3}, {v: 4}],
-                [{v: 1}, {v: 2}, {v: 3}, {v: 4}],
+                [{ v: 1 }, { v: 2 }, { v: 3 }, { v: 4 }],
+                [{ v: 1 }, { v: 2 }, { v: 3 }, { v: 4 }],
+                [{ v: 1 }, { v: 2 }, { v: 3 }, { v: 4 }],
+                [{ v: 1 }, { v: 2 }, { v: 3 }, { v: 4 }],
             ];
         }
         const range = getFlattenRange(ctx, [
-            {row: [0, 0], column: [0, 1]},
-            {row: [2, 3], column: [2, 3]},
+            { row: [0, 0], column: [0, 1] },
+            { row: [2, 3], column: [2, 3] },
         ]);
         const result = getCellsByFlattenRange(ctx, range);
-        expect(result).toEqual([
-            {v: 1},
-            {v: 2},
-            {v: 3},
-            {v: 4},
-            {v: 3},
-            {v: 4},
-        ]);
+        expect(result).toEqual([{ v: 1 }, { v: 2 }, { v: 3 }, { v: 4 }, { v: 3 }, { v: 4 }]);
     });
 
-    test("getSelectionCoordinates", async () => {
+    test('getSelectionCoordinates', async () => {
         const ctx = getContext();
         ctx.luckysheet_select_save = [
-            {row: [0, 0], column: [0, 1]},
-            {row: [2, 3], column: [2, 3]},
+            { row: [0, 0], column: [0, 1] },
+            { row: [2, 3], column: [2, 3] },
         ];
         const result = getSelectionCoordinates(ctx);
-        expect(result).toEqual(["A1:B1", "C3:D4"]);
+        expect(result).toEqual(['A1:B1', 'C3:D4']);
     });
 
-    test("getCellsByRange", async () => {
+    test('getCellsByRange', async () => {
         const ctx = getContext();
         if (ctx.luckysheetfile[0]?.data?.[0]) {
-            ctx.luckysheetfile[0].data[0][0] = {v: 66};
+            ctx.luckysheetfile[0].data[0][0] = { v: 66 };
         }
-        expect(getCellsByRange(ctx, {row: [0, 0], column: [0, 0]})).toEqual([[{v: 66}]]);
+        expect(getCellsByRange(ctx, { row: [0, 0], column: [0, 0] })).toEqual([[{ v: 66 }]]);
     });
 
-    test("getHtmlByRange", async () => {
+    test('getHtmlByRange', async () => {
         const ctx = getContext();
-        expect(getHtmlByRange(ctx, [{row: [0, 0], column: [0, 0]}])).toBe(
-            '<table data-type="fortune-copy-action-table"><colgroup width="72px"></colgroup><tr><td  style="height:19px;"></td></tr></table>'
+        expect(getHtmlByRange(ctx, [{ row: [0, 0], column: [0, 0] }])).toBe(
+            '<table data-type="fortune-copy-action-table"><colgroup width="72px"></colgroup><tr><td  style="height:19px;"></td></tr></table>',
         );
     });
 
-    test("setSelection", async () => {
+    test('setSelection', async () => {
         const ctx = getContext();
-        setSelection(ctx, [
-            {row: [0, 0], column: [0, 1]},
-            {row: [2, 3], column: [2, 3]},
-        ], {});
+        setSelection(
+            ctx,
+            [
+                { row: [0, 0], column: [0, 1] },
+                { row: [2, 3], column: [2, 3] },
+            ],
+            {},
+        );
         if (ctx.luckysheet_select_save) {
             expect(ctx.luckysheet_select_save[0]).toMatchObject({
                 row: [0, 0],
@@ -118,33 +115,21 @@ describe("fortune-sheet/core/api/range", () => {
         }
     });
 
-    test("setCellValuesByRange", async () => {
+    test('setCellValuesByRange', async () => {
         const ctx = getContext();
         const expectedData = [
             [2, 3],
             [5, 7],
         ];
-        setCellValuesByRange(
-            ctx,
-            expectedData,
-            {row: [1, 2], column: [1, 2]},
-            null,
-            {id: "id_2"}
-        );
+        setCellValuesByRange(ctx, expectedData, { row: [1, 2], column: [1, 2] }, null, { id: 'id_2' });
         expect(ctx.luckysheetfile[1]?.data?.[2]?.[2]?.v).toBe(7);
         expect(ctx.luckysheetfile[1]?.data?.[1]?.[2]?.v).toBe(3);
     });
 
-    test("setCellFormatByRange", async () => {
+    test('setCellFormatByRange', async () => {
         const ctx = getContext();
-        setCellFormatByRange(
-            ctx,
-            "bg",
-            "#f00",
-            {row: [1, 2], column: [1, 2]},
-            {id: "id_2"}
-        );
-        expect(ctx.luckysheetfile[1]?.data?.[2]?.[2]).toEqual({bg: "#f00"});
-        expect(ctx.luckysheetfile[1]?.data?.[2]?.[1]).toEqual({bg: "#f00"});
+        setCellFormatByRange(ctx, 'bg', '#f00', { row: [1, 2], column: [1, 2] }, { id: 'id_2' });
+        expect(ctx.luckysheetfile[1]?.data?.[2]?.[2]).toEqual({ bg: '#f00' });
+        expect(ctx.luckysheetfile[1]?.data?.[2]?.[1]).toEqual({ bg: '#f00' });
     });
 });

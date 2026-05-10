@@ -1,7 +1,7 @@
-import {describe, expect, test} from "bun:test";
+import { describe, expect, test } from 'bun:test';
 
-describe("fortune-sheet/core/toolbar/clear-format", () => {
-    test("basic clear format test", async () => {
+describe('fortune-sheet/core/toolbar/clear-format', () => {
+    test('basic clear format test', () => {
         expect(true).toBe(true);
     });
 });

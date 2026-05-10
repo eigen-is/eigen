@@ -1,25 +1,25 @@
-import {cloneDeep, omit, set} from "es-toolkit/compat";
-import {Context, getFlowdata} from "../context";
-import {getSheetIndex, isAllowEdit} from "../utils";
-import {mergeBorder} from "./cell";
-import {getcellrange, iscelldata} from "./formula-ui";
-import {colLocation, rowLocation} from "./location";
-import {normalizeSelection} from "./selection";
-import {changeSheet} from "./sheet";
-import {locale} from "../locale";
-import {GlobalCache} from "../types";
+import { cloneDeep, omit, set } from 'es-toolkit/compat';
+import { type Context, getFlowdata } from '../context';
+import { locale } from '../locale';
+import type { GlobalCache } from '../types';
+import { getSheetIndex, isAllowEdit } from '../utils';
+import { mergeBorder } from './cell';
+import { getcellrange, iscelldata } from './formula-ui';
+import { colLocation, rowLocation } from './location';
+import { normalizeSelection } from './selection';
+import { changeSheet } from './sheet';
 
 export function getCellRowColumn(
     ctx: Context,
     e: MouseEvent,
     container: HTMLDivElement,
     scrollX: HTMLDivElement,
-    scrollY: HTMLDivElement
+    scrollY: HTMLDivElement,
 ) {
     const flowdata = getFlowdata(ctx);
     if (flowdata == null) return undefined;
-    const {scrollLeft} = scrollX;
-    const {scrollTop} = scrollY;
+    const { scrollLeft } = scrollX;
+    const { scrollTop } = scrollY;
     const rect = container.getBoundingClientRect();
     let x = e.pageX - rect.left - ctx.rowHeaderWidth;
     let y = e.pageY - rect.top - ctx.columnHeaderHeight;
@@ -34,7 +34,7 @@ export function getCellRowColumn(
         [, , c] = margeset.column;
     }
 
-    return {r, c};
+    return { r, c };
 }
 
 export function getCellHyperlink(ctx: Context, r: number, c: number) {
@@ -51,22 +51,22 @@ export function saveHyperlink(
     c: number,
     linkText: string,
     linkType: string,
-    linkAddress: string
+    linkAddress: string,
 ) {
     const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
     const flowdata = getFlowdata(ctx);
     if (sheetIndex != null && flowdata != null && linkType && linkAddress) {
         let cell = flowdata[r][c];
         if (cell == null) cell = {};
-        set(ctx.luckysheetfile[sheetIndex], ["hyperlink", `${r}_${c}`], {
+        set(ctx.luckysheetfile[sheetIndex], ['hyperlink', `${r}_${c}`], {
             linkType,
             linkAddress,
         });
-        cell.fc = "rgb(0, 0, 255)";
+        cell.fc = 'rgb(0, 0, 255)';
         cell.un = 1;
         cell.v = linkText || linkAddress;
         cell.m = linkText || linkAddress;
-        cell.hl = {r, c, id: ctx.currentSheetId};
+        cell.hl = { r, c, id: ctx.currentSheetId };
         flowdata[r][c] = cell;
         ctx.linkCard = undefined;
     }
@@ -78,26 +78,17 @@ export function removeHyperlink(ctx: Context, r: number, c: number) {
     const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
     const flowdata = getFlowdata(ctx);
     if (flowdata != null && sheetIndex != null) {
-        const hyperlink = omit(
-            ctx.luckysheetfile[sheetIndex].hyperlink,
-            `${r}_${c}`
-        );
-        set(ctx.luckysheetfile[sheetIndex], "hyperlink", hyperlink);
+        const hyperlink = omit(ctx.luckysheetfile[sheetIndex].hyperlink, `${r}_${c}`);
+        set(ctx.luckysheetfile[sheetIndex], 'hyperlink', hyperlink);
         const cell = flowdata[r][c];
         if (cell != null) {
-            flowdata[r][c] = {v: cell.v, m: cell.m};
+            flowdata[r][c] = { v: cell.v, m: cell.m };
         }
     }
     ctx.linkCard = undefined;
 }
 
-export function showLinkCard(
-    ctx: Context,
-    r: number,
-    c: number,
-    isEditing = false,
-    isMouseDown = false
-) {
+export function showLinkCard(ctx: Context, r: number, c: number, isEditing = false, isMouseDown = false) {
     if (ctx.linkCard?.selectingCellRange) return;
     if (`${r}_${c}` === ctx.linkCard?.rc) return;
     const link = getCellHyperlink(ctx, r, c);
@@ -105,9 +96,7 @@ export function showLinkCard(
     if (
         !isEditing &&
         link == null &&
-        (isMouseDown ||
-            !ctx.linkCard?.isEditing ||
-            ctx.linkCard.sheetId !== ctx.currentSheetId)
+        (isMouseDown || !ctx.linkCard?.isEditing || ctx.linkCard.sheetId !== ctx.currentSheetId)
     ) {
         ctx.linkCard = undefined;
         return;
@@ -124,9 +113,9 @@ export function showLinkCard(
             r,
             c,
             rc: `${r}_${c}`,
-            originText: cell?.v == null ? "" : `${cell.v}`,
-            originType: link?.linkType || "webpage",
-            originAddress: link?.linkAddress || "",
+            originText: cell?.v == null ? '' : `${cell.v}`,
+            originType: link?.linkType || 'webpage',
+            originAddress: link?.linkAddress || '',
             position: {
                 cellLeft: col_pre,
                 cellBottom: row,
@@ -143,19 +132,19 @@ export function goToLink(
     linkType: string,
     linkAddress: string,
     scrollbarX: HTMLDivElement,
-    scrollbarY: HTMLDivElement
+    scrollbarY: HTMLDivElement,
 ) {
     const currSheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
     if (currSheetIndex == null) return;
     if (ctx.luckysheetfile[currSheetIndex].hyperlink?.[`${r}_${c}`] == null) {
         return;
     }
-    if (linkType === "webpage") {
+    if (linkType === 'webpage') {
         if (!/^http[s]?:\/\//.test(linkAddress)) {
             linkAddress = `https://${linkAddress}`;
         }
         window.open(linkAddress);
-    } else if (linkType === "sheet") {
+    } else if (linkType === 'sheet') {
         let sheetId;
         ctx.luckysheetfile.forEach((f) => {
             if (linkAddress === f.name) {
@@ -166,12 +155,8 @@ export function goToLink(
     } else {
         const range = cloneDeep(getcellrange(ctx, linkAddress));
         if (range == null) return;
-        const row_pre =
-            range.row[0] - 1 === -1 ? 0 : ctx.visibledatarow[range.row[0] - 1];
-        const col_pre =
-            range.column[0] - 1 === -1
-                ? 0
-                : ctx.visibledatacolumn[range.column[0] - 1];
+        const row_pre = range.row[0] - 1 === -1 ? 0 : ctx.visibledatarow[range.row[0] - 1];
+        const col_pre = range.column[0] - 1 === -1 ? 0 : ctx.visibledatacolumn[range.column[0] - 1];
         scrollbarX.scrollLeft = col_pre;
         scrollbarY.scrollLeft = row_pre;
         ctx.luckysheet_select_save = normalizeSelection(ctx, [range]);
@@ -180,45 +165,33 @@ export function goToLink(
     ctx.linkCard = undefined;
 }
 
-export function isLinkValid(
-    ctx: Context,
-    linkType: string,
-    linkAddress: string
-) {
-    if (!linkAddress) return {isValid: false, tooltip: ""};
-    const {insertLink} = locale(ctx);
-    if (linkType === "webpage") {
+export function isLinkValid(ctx: Context, linkType: string, linkAddress: string) {
+    if (!linkAddress) return { isValid: false, tooltip: '' };
+    const { insertLink } = locale(ctx);
+    if (linkType === 'webpage') {
         if (!/^http[s]?:\/\//.test(linkAddress)) {
             linkAddress = `https://${linkAddress}`;
         }
         if (
             // eslint-disable-next-line no-useless-escape
-            !/^http[s]?:\/\/([\w\-\.]+)+[\w-]*([\w\-\.\/\?%&=]+)?$/gi.test(
-                linkAddress
-            )
+            !/^http[s]?:\/\/([\w\-.]+)+[\w-]*([\w\-./?%&=]+)?$/gi.test(linkAddress)
         )
-            return {isValid: false, tooltip: insertLink.tooltipInfo1};
+            return { isValid: false, tooltip: insertLink.tooltipInfo1 };
     }
-    if (linkType === "cellrange" && !iscelldata(linkAddress)) {
-        return {isValid: false, tooltip: insertLink.invalidCellRangeTip};
+    if (linkType === 'cellrange' && !iscelldata(linkAddress)) {
+        return { isValid: false, tooltip: insertLink.invalidCellRangeTip };
     }
-    return {isValid: true, tooltip: ""};
+    return { isValid: true, tooltip: '' };
 }
 
-export function onRangeSelectionModalMoveStart(
-    ctx: Context,
-    globalCache: GlobalCache,
-    e: MouseEvent
-) {
-    const box = document.querySelector(
-        "div.fortune-link-modify-modal.range-selection-modal"
-    ) as HTMLDivElement;
+export function onRangeSelectionModalMoveStart(ctx: Context, globalCache: GlobalCache, e: MouseEvent) {
+    const box = document.querySelector('div.fortune-link-modify-modal.range-selection-modal') as HTMLDivElement;
     if (!box) return;
-    const {width, height} = box.getBoundingClientRect();
+    const { width, height } = box.getBoundingClientRect();
     const left = box.offsetLeft;
     const top = box.offsetTop;
-    const initialPosition = {left, top, width, height};
-    set(globalCache, "linkCard.rangeSelectionModal", {
+    const initialPosition = { left, top, width, height };
+    set(globalCache, 'linkCard.rangeSelectionModal', {
         cursorMoveStartPosition: {
             x: e.pageX,
             y: e.pageY,
@@ -227,17 +200,12 @@ export function onRangeSelectionModalMoveStart(
     });
 }
 
-export function onRangeSelectionModalMove(
-    globalCache: GlobalCache,
-    e: MouseEvent
-) {
+export function onRangeSelectionModalMove(globalCache: GlobalCache, e: MouseEvent) {
     const moveProps = globalCache.linkCard?.rangeSelectionModal;
     if (moveProps == null) return;
-    const modal = document.querySelector(
-        "div.fortune-link-modify-modal.range-selection-modal"
-    );
-    const {x: startX, y: startY} = moveProps.cursorMoveStartPosition!;
-    let {top, left} = moveProps.initialPosition!;
+    const modal = document.querySelector('div.fortune-link-modify-modal.range-selection-modal');
+    const { x: startX, y: startY } = moveProps.cursorMoveStartPosition!;
+    let { top, left } = moveProps.initialPosition!;
     left += e.pageX - startX;
     top += e.pageY - startY;
     if (top < 0) top = 0;
@@ -246,5 +214,5 @@ export function onRangeSelectionModalMove(
 }
 
 export function onRangeSelectionModalMoveEnd(globalCache: GlobalCache) {
-    set(globalCache, "linkCard.rangeSelectionModal", undefined);
+    set(globalCache, 'linkCard.rangeSelectionModal', undefined);
 }

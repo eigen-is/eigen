@@ -129,8 +129,8 @@ href="file:////Users/mac/Library/Group%20Containers/UBF8T346G9.Office/TemporaryI
 href="file:////Users/mac/Library/Group%20Containers/UBF8T346G9.Office/TemporaryItems/msohtmlclip/clip_filelist.xml">
 <style>
 <!--table
-        {mso-displayed-decimal-separator:"\.";
-        mso-displayed-thousand-separator:"\,";}
+        {mso-displayed-decimal-separator:".";
+        mso-displayed-thousand-separator:",";}
 @page
         {margin:.75in .7in .75in .7in;
         mso-header-margin:.3in;
@@ -228,12 +228,12 @@ rt
 </html>
 `;
 
-export function pastedHtmlFactory(source: "WPS" | "Excel") {
-    if (source === "WPS") {
+export function pastedHtmlFactory(source: 'WPS' | 'Excel') {
+    if (source === 'WPS') {
         return wpsHtml;
     }
-    if (source === "Excel") {
+    if (source === 'Excel') {
         return excelHtml;
     }
-    return "";
+    return '';
 }

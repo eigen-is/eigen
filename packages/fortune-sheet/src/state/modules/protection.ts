@@ -1,18 +1,13 @@
-import {isNil} from "es-toolkit/compat";
-import {Context} from "../context";
-import {getSheetByIndex} from "../utils";
+import { isNil } from 'es-toolkit/compat';
+import type { Context } from '../context';
+import { getSheetByIndex } from '../utils';
 
-export function checkCellIsLocked(
-    ctx: Context,
-    r: number,
-    c: number,
-    sheetId: string
-) {
+export function checkCellIsLocked(ctx: Context, r: number, c: number, sheetId: string) {
     const sheetFile = getSheetByIndex(ctx, sheetId);
     if (isNil(sheetFile)) {
         return false;
     }
-    const {data} = sheetFile;
+    const { data } = sheetFile;
     const cell = data?.[r]?.[c];
     // cell have lo attribute
     if (!isNil(cell?.lo)) {
@@ -25,12 +20,7 @@ export function checkCellIsLocked(
     return !sheetInEditable;
 }
 
-export function checkProtectionSelectLockedOrUnLockedCells(
-    ctx: Context,
-    r: number,
-    c: number,
-    sheetId: string
-) {
+export function checkProtectionSelectLockedOrUnLockedCells(ctx: Context, r: number, c: number, sheetId: string) {
     //   const _locale = locale();
     //   const local_protection = _locale.protection;
     const sheetFile = getSheetByIndex(ctx, sheetId);
@@ -48,7 +38,7 @@ export function checkProtectionSelectLockedOrUnLockedCells(
         return true;
     }
 
-    const {data} = sheetFile;
+    const { data } = sheetFile;
     const cell = data?.[r]?.[c];
 
     if (cell && cell.lo === 0) {
@@ -129,7 +119,7 @@ export function checkProtectionFormatCells(ctx: Context) {
         return true;
     }
 
-    let ht = "";
+    let ht = '';
     if (!isNil(aut.hintText) && aut.hintText.length > 0) {
         ht = aut.hintText;
     } else {

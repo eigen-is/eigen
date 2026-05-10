@@ -1,5 +1,5 @@
-import {cloneDeep, indexOf, isEmpty, isNil, last} from "es-toolkit/compat";
-import {Context, getFlowdata} from "../context";
+import { cloneDeep, indexOf, isEmpty, isNil, last } from 'es-toolkit/compat';
+import { type Context, getFlowdata } from '../context';
 import {
     cancelActiveImgItem,
     createFormulaRangeSelect,
@@ -8,16 +8,12 @@ import {
     israngeseleciton,
     rangeHightlightselected,
     rangeSetValue,
-} from "../modules";
-import {
-    cancelFunctionrangeSelected,
-    mergeMoveMain,
-    updateCell,
-} from "../modules/cell";
-import {colLocation, colLocationByIndex, rowLocation, rowLocationByIndex} from "../modules/location";
-import {checkProtectionAllSelected} from "../modules/protection";
-import {GlobalCache} from "../types";
-import {fixPositionOnFrozenCells} from "./mouse-resize";
+} from '../modules';
+import { cancelFunctionrangeSelected, mergeMoveMain, updateCell } from '../modules/cell';
+import { colLocation, colLocationByIndex, rowLocation, rowLocationByIndex } from '../modules/location';
+import { checkProtectionAllSelected } from '../modules/protection';
+import type { GlobalCache } from '../types';
+import { fixPositionOnFrozenCells } from './mouse-resize';
 
 export function handleRowHeaderMouseDown(
     ctx: Context,
@@ -25,7 +21,7 @@ export function handleRowHeaderMouseDown(
     e: MouseEvent,
     container: HTMLDivElement,
     cellInput: HTMLDivElement,
-    fxInput: HTMLDivElement | null
+    fxInput: HTMLDivElement | null,
 ) {
     if (!checkProtectionAllSelected(ctx, ctx.currentSheetId)) {
         return;
@@ -38,7 +34,7 @@ export function handleRowHeaderMouseDown(
     const _y = mouseY + ctx.scrollTop;
 
     const freeze = globalCache.freezen?.[ctx.currentSheetId];
-    const {y} = fixPositionOnFrozenCells(freeze, 0, _y, 0, mouseY);
+    const { y } = fixPositionOnFrozenCells(freeze, 0, _y, 0, mouseY);
 
     const row_location = rowLocation(y, ctx.visibledatarow);
     const row = row_location[1];
@@ -58,7 +54,7 @@ export function handleRowHeaderMouseDown(
                 row_index >= obj_s.row[0] &&
                 row_index <= obj_s.row[1] &&
                 obj_s.column[0] === 0 &&
-                obj_s.column[1] === (flowdata?.[0]?.length ?? 0) - 1
+                obj_s.column[1] === (flowdata?.[0]?.length ?? 0) - 1,
         );
         if (isInSelection) return;
     }
@@ -82,18 +78,14 @@ export function handleRowHeaderMouseDown(
                 ctx,
                 [0, col_index],
                 rowseleted,
-                {row_focus: row_index, column_focus: 0},
+                { row_focus: row_index, column_focus: 0 },
                 top,
                 height,
                 col_pre,
-                col
+                col,
             );
             if (changeparam != null) {
-                [rowseleted, top, height] = [
-                    changeparam[1],
-                    changeparam[2],
-                    changeparam[3],
-                ];
+                [rowseleted, top, height] = [changeparam[1], changeparam[2], changeparam[3]];
             }
 
             if (e.shiftKey) {
@@ -138,18 +130,14 @@ export function handleRowHeaderMouseDown(
                     ctx,
                     [0, col_index],
                     rowseleted,
-                    {row_focus: row_index, column_focus: 0},
+                    { row_focus: row_index, column_focus: 0 },
                     top,
                     height,
                     col_pre,
-                    col
+                    col,
                 );
                 if (changeparam != null) {
-                    [rowseleted, top, height] = [
-                        changeparam[1],
-                        changeparam[2],
-                        changeparam[3],
-                    ];
+                    [rowseleted, top, height] = [changeparam[1], changeparam[2], changeparam[3]];
                 }
 
                 last.row = rowseleted;
@@ -158,13 +146,10 @@ export function handleRowHeaderMouseDown(
                 last.height_move = height;
 
                 ctx.formulaCache.func_selectedrange = last;
-            } else if (
-                e.ctrlKey &&
-                last(cellInput.querySelectorAll("span"))?.innerText !== ","
-            ) {
+            } else if (e.ctrlKey && last(cellInput.querySelectorAll('span'))?.innerText !== ',') {
                 // Ctrl held: finalize previous range selection first
                 let vText = `${cellInput.innerText},`;
-                if (vText.length > 0 && vText.substring(0, 1) === "=") {
+                if (vText.length > 0 && vText.substring(0, 1) === '=') {
                     vText = functionHTMLGenerate(vText);
 
                     const currSelection = window.getSelection();
@@ -172,8 +157,8 @@ export function handleRowHeaderMouseDown(
                     ctx.formulaCache.functionRangeIndex = [
                         indexOf(
                             currSelection.anchorNode?.parentNode?.parentNode?.childNodes,
-                            // @ts-ignore
-                            currSelection.anchorNode?.parentNode
+                            // @ts-expect-error
+                            currSelection.anchorNode?.parentNode,
                         ),
                         currSelection.anchorOffset,
                     ];
@@ -243,7 +228,7 @@ export function handleRowHeaderMouseDown(
                         row: rowseleted,
                         column: [null, null],
                     },
-                    fxInput
+                    fxInput,
                 );
             }
 
@@ -252,14 +237,8 @@ export function handleRowHeaderMouseDown(
             ctx.formulaCache.rangedrag_column_start = false;
 
             ctx.formulaCache.selectingRangeIndex = ctx.formulaCache.rangechangeindex!;
-            if (
-                ctx.formulaCache.rangechangeindex! > ctx.formulaRangeHighlight.length
-            ) {
-                createRangeHightlight(
-                    ctx,
-                    cellInput.innerHTML,
-                    ctx.formulaCache.rangechangeindex!
-                );
+            if (ctx.formulaCache.rangechangeindex! > ctx.formulaRangeHighlight.length) {
+                createRangeHightlight(ctx, cellInput.innerHTML, ctx.formulaCache.rangechangeindex!);
             }
             createFormulaRangeSelect(ctx, {
                 rangeIndex: ctx.formulaCache.rangechangeindex || 0,
@@ -273,12 +252,7 @@ export function handleRowHeaderMouseDown(
             return;
         }
 
-        updateCell(
-            ctx,
-            ctx.luckysheetCellUpdate[0],
-            ctx.luckysheetCellUpdate[1],
-            cellInput
-        );
+        updateCell(ctx, ctx.luckysheetCellUpdate[0], ctx.luckysheetCellUpdate[1], cellInput);
         ctx.luckysheet_rows_selected_status = true;
     } else {
         ctx.luckysheet_rows_selected_status = true;
@@ -287,15 +261,8 @@ export function handleRowHeaderMouseDown(
     if (ctx.luckysheet_rows_selected_status) {
         if (e.shiftKey) {
             // Shift+click on row header to select range
-            const last = cloneDeep(
-                ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1]
-            ); // Last selection
-            if (
-                !last ||
-                isNil(last.top) ||
-                isNil(last.height) ||
-                isNil(last.row_focus)
-            ) {
+            const last = cloneDeep(ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1]); // Last selection
+            if (!last || isNil(last.top) || isNil(last.height) || isNil(last.row_focus)) {
                 return;
             }
 
@@ -331,8 +298,7 @@ export function handleRowHeaderMouseDown(
             last.top_move = _top;
             last.height_move = _height;
 
-            ctx.luckysheet_select_save![ctx.luckysheet_select_save!.length - 1] =
-                last;
+            ctx.luckysheet_select_save![ctx.luckysheet_select_save!.length - 1] = last;
         } else if (e.ctrlKey || e.metaKey) {
             ctx.luckysheet_select_save?.push({
                 left: colLocationByIndex(0, ctx.visibledatacolumn)[0],
@@ -391,7 +357,7 @@ export function handleColumnHeaderMouseDown(
     e: MouseEvent,
     container: HTMLElement,
     cellInput: HTMLDivElement,
-    fxInput: HTMLDivElement | null
+    fxInput: HTMLDivElement | null,
 ) {
     if (!checkProtectionAllSelected(ctx, ctx.currentSheetId)) {
         return;
@@ -403,7 +369,7 @@ export function handleColumnHeaderMouseDown(
     const mouseX = e.pageX - rect.left - window.scrollX;
     const _x = mouseX + ctx.scrollLeft;
     const freeze = globalCache.freezen?.[ctx.currentSheetId];
-    const {x} = fixPositionOnFrozenCells(freeze, _x, 0, mouseX, 0);
+    const { x } = fixPositionOnFrozenCells(freeze, _x, 0, mouseX, 0);
 
     const row_index = ctx.visibledatarow.length - 1;
     const row = ctx.visibledatarow[row_index];
@@ -424,7 +390,7 @@ export function handleColumnHeaderMouseDown(
                 col_index >= obj_s.column[0] &&
                 col_index <= obj_s.column[1] &&
                 obj_s.row[0] === 0 &&
-                obj_s.row[1] === (flowdata?.length ?? 0) - 1
+                obj_s.row[1] === (flowdata?.length ?? 0) - 1,
         );
         if (isInSelection) return;
     }
@@ -448,18 +414,14 @@ export function handleColumnHeaderMouseDown(
                 ctx,
                 columnseleted,
                 [0, row_index],
-                {row_focus: 0, column_focus: col_index},
+                { row_focus: 0, column_focus: col_index },
                 row_pre,
                 row,
                 left,
-                width
+                width,
             );
             if (changeparam != null) {
-                [columnseleted, left, width] = [
-                    changeparam[0],
-                    changeparam[4],
-                    changeparam[5],
-                ];
+                [columnseleted, left, width] = [changeparam[0], changeparam[4], changeparam[5]];
             }
 
             if (e.shiftKey) {
@@ -504,18 +466,14 @@ export function handleColumnHeaderMouseDown(
                     ctx,
                     columnseleted,
                     [0, row_index],
-                    {row_focus: 0, column_focus: col_index},
+                    { row_focus: 0, column_focus: col_index },
                     row_pre,
                     row,
                     left,
-                    width
+                    width,
                 );
                 if (changeparam != null) {
-                    [columnseleted, left, width] = [
-                        changeparam[0],
-                        changeparam[4],
-                        changeparam[5],
-                    ];
+                    [columnseleted, left, width] = [changeparam[0], changeparam[4], changeparam[5]];
                 }
 
                 last.column = columnseleted;
@@ -524,13 +482,10 @@ export function handleColumnHeaderMouseDown(
                 last.width_move = width;
 
                 ctx.formulaCache.func_selectedrange = last;
-            } else if (
-                e.ctrlKey &&
-                last(cellInput.querySelectorAll("span"))?.innerText !== ","
-            ) {
+            } else if (e.ctrlKey && last(cellInput.querySelectorAll('span'))?.innerText !== ',') {
                 // Ctrl held: finalize previous range selection first
                 let vText = `${cellInput.innerText},`;
-                if (vText.length > 0 && vText.substring(0, 1) === "=") {
+                if (vText.length > 0 && vText.substring(0, 1) === '=') {
                     vText = functionHTMLGenerate(vText);
 
                     const currSelection = window.getSelection();
@@ -538,8 +493,8 @@ export function handleColumnHeaderMouseDown(
                     ctx.formulaCache.functionRangeIndex = [
                         indexOf(
                             currSelection.anchorNode?.parentNode?.parentNode?.childNodes,
-                            // @ts-ignore
-                            currSelection.anchorNode?.parentNode
+                            // @ts-expect-error
+                            currSelection.anchorNode?.parentNode,
                         ),
                         currSelection.anchorOffset,
                     ];
@@ -566,9 +521,7 @@ export function handleColumnHeaderMouseDown(
                     width,
                     top: rowLocationByIndex(0, ctx.visibledatarow)[0],
                     height:
-                        rowLocationByIndex(0, ctx.visibledatarow)[1] -
-                        rowLocationByIndex(0, ctx.visibledatarow)[0] -
-                        1,
+                        rowLocationByIndex(0, ctx.visibledatarow)[1] - rowLocationByIndex(0, ctx.visibledatarow)[0] - 1,
                     left_move: left,
                     width_move: width,
                     top_move: row_pre,
@@ -584,9 +537,7 @@ export function handleColumnHeaderMouseDown(
                     width,
                     top: rowLocationByIndex(0, ctx.visibledatarow)[0],
                     height:
-                        rowLocationByIndex(0, ctx.visibledatarow)[1] -
-                        rowLocationByIndex(0, ctx.visibledatarow)[0] -
-                        1,
+                        rowLocationByIndex(0, ctx.visibledatarow)[1] - rowLocationByIndex(0, ctx.visibledatarow)[0] - 1,
                     left_move: left,
                     width_move: width,
                     top_move: row_pre,
@@ -611,7 +562,7 @@ export function handleColumnHeaderMouseDown(
                         row: [null, null],
                         column: columnseleted,
                     },
-                    fxInput
+                    fxInput,
                 );
             }
 
@@ -620,14 +571,8 @@ export function handleColumnHeaderMouseDown(
             ctx.formulaCache.rangedrag_row_start = false;
 
             ctx.formulaCache.selectingRangeIndex = ctx.formulaCache.rangechangeindex!;
-            if (
-                ctx.formulaCache.rangechangeindex! > ctx.formulaRangeHighlight.length
-            ) {
-                createRangeHightlight(
-                    ctx,
-                    cellInput.innerHTML,
-                    ctx.formulaCache.rangechangeindex!
-                );
+            if (ctx.formulaCache.rangechangeindex! > ctx.formulaRangeHighlight.length) {
+                createRangeHightlight(ctx, cellInput.innerHTML, ctx.formulaCache.rangechangeindex!);
             }
             createFormulaRangeSelect(ctx, {
                 rangeIndex: ctx.formulaCache.rangechangeindex || 0,
@@ -640,12 +585,7 @@ export function handleColumnHeaderMouseDown(
 
             return;
         }
-        updateCell(
-            ctx,
-            ctx.luckysheetCellUpdate[0],
-            ctx.luckysheetCellUpdate[1],
-            cellInput
-        );
+        updateCell(ctx, ctx.luckysheetCellUpdate[0], ctx.luckysheetCellUpdate[1], cellInput);
         ctx.luckysheet_cols_selected_status = true;
     } else {
         ctx.luckysheet_cols_selected_status = true;
@@ -654,20 +594,13 @@ export function handleColumnHeaderMouseDown(
     if (ctx.luckysheet_cols_selected_status) {
         if (e.shiftKey) {
             // Shift+click on column header to select range
-            const last = cloneDeep(
-                ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1]
-            ); // Last selection
+            const last = cloneDeep(ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1]); // Last selection
 
             let _left = 0;
             let _width = 0;
             let _columnseleted = [];
 
-            if (
-                !last ||
-                isNil(last.left) ||
-                isNil(last.width) ||
-                isNil(last.column_focus)
-            ) {
+            if (!last || isNil(last.left) || isNil(last.width) || isNil(last.column_focus)) {
                 return;
             }
 
@@ -700,18 +633,14 @@ export function handleColumnHeaderMouseDown(
             last.left_move = _left;
             last.width_move = _width;
 
-            ctx.luckysheet_select_save![ctx.luckysheet_select_save!.length - 1] =
-                last;
+            ctx.luckysheet_select_save![ctx.luckysheet_select_save!.length - 1] = last;
         } else if (e.ctrlKey || e.metaKey) {
             // Add to selection
             ctx.luckysheet_select_save?.push({
                 left,
                 width,
                 top: rowLocationByIndex(0, ctx.visibledatarow)[0],
-                height:
-                    rowLocationByIndex(0, ctx.visibledatarow)[1] -
-                    rowLocationByIndex(0, ctx.visibledatarow)[0] -
-                    1,
+                height: rowLocationByIndex(0, ctx.visibledatarow)[1] - rowLocationByIndex(0, ctx.visibledatarow)[0] - 1,
                 left_move: left,
                 width_move: width,
                 top_move: row_pre,
@@ -728,10 +657,7 @@ export function handleColumnHeaderMouseDown(
                 left,
                 width,
                 top: rowLocationByIndex(0, ctx.visibledatarow)[0],
-                height:
-                    rowLocationByIndex(0, ctx.visibledatarow)[1] -
-                    rowLocationByIndex(0, ctx.visibledatarow)[0] -
-                    1,
+                height: rowLocationByIndex(0, ctx.visibledatarow)[1] - rowLocationByIndex(0, ctx.visibledatarow)[0] - 1,
                 left_move: left,
                 width_move: width,
                 top_move: row_pre,

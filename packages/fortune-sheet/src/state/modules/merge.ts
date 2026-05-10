@@ -1,15 +1,10 @@
-import {cloneDeep, isEmpty} from "es-toolkit/compat";
-import {Context} from "../context";
-import {Range} from "../types";
-import {getSheetIndex} from "../utils";
-import {isInlineStringCT} from "./inline-string";
+import { cloneDeep, isEmpty } from 'es-toolkit/compat';
+import type { Context } from '../context';
+import type { Range } from '../types';
+import { getSheetIndex } from '../utils';
+import { isInlineStringCT } from './inline-string';
 
-export function mergeCells(
-    ctx: Context,
-    sheetId: string,
-    ranges: Range,
-    type: string
-) {
+export function mergeCells(ctx: Context, sheetId: string, ranges: Range, type: string) {
     // if (!checkIsAllowEdit()) {
     //   tooltip.info("", locale().pivotTable.errorNotAllowEdit);
     //   return;
@@ -29,7 +24,7 @@ export function mergeCells(
     // if (!checkProtectionNotEnable(ctx.currentSheetId)) {
     //   return;
     // }
-    if (type === "merge-cancel") {
+    if (type === 'merge-cancel') {
         for (let i = 0; i < ranges.length; i += 1) {
             const range = ranges[i];
             const r1 = range.row[0];
@@ -51,7 +46,7 @@ export function mergeCells(
                         const mc_r = cell.mc.r;
                         const mc_c = cell.mc.c;
 
-                        if ("rs" in cell.mc) {
+                        if ('rs' in cell.mc) {
                             delete cell.mc;
                             delete cfg.merge[`${mc_r}_${mc_c}`];
 
@@ -116,7 +111,7 @@ export function mergeCells(
                             const mc_r = cell.mc.r;
                             const mc_c = cell.mc.c;
 
-                            if ("rs" in cell.mc) {
+                            if ('rs' in cell.mc) {
                                 delete cell.mc;
                                 delete cfg.merge[`${mc_r}_${mc_c}`];
 
@@ -148,7 +143,7 @@ export function mergeCells(
                     continue;
                 }
 
-                if (type === "merge-all") {
+                if (type === 'merge-all') {
                     let fv = {};
                     let isfirst = false;
 
@@ -158,23 +153,21 @@ export function mergeCells(
 
                             if (
                                 cell != null &&
-                                (isInlineStringCT(cell.ct) ||
-                                    !isEmpty(cell.v) ||
-                                    cell.f != null) &&
+                                (isInlineStringCT(cell.ct) || !isEmpty(cell.v) || cell.f != null) &&
                                 !isfirst
                             ) {
                                 fv = cloneDeep(cell) || {};
                                 isfirst = true;
                             }
 
-                            d[r][c] = {mc: {r: r1, c: c1}};
+                            d[r][c] = { mc: { r: r1, c: c1 } };
                         }
                     }
 
                     d[r1][c1] = fv;
                     const a = d[r1][c1];
                     if (!a) return;
-                    a.mc = {r: r1, c: c1, rs: r2 - r1 + 1, cs: c2 - c1 + 1};
+                    a.mc = { r: r1, c: c1, rs: r2 - r1 + 1, cs: c2 - c1 + 1 };
 
                     cfg.merge[`${r1}_${c1}`] = {
                         r: r1,
@@ -182,7 +175,7 @@ export function mergeCells(
                         rs: r2 - r1 + 1,
                         cs: c2 - c1 + 1,
                     };
-                } else if (type === "merge-vertical") {
+                } else if (type === 'merge-vertical') {
                     for (let c = c1; c <= c2; c += 1) {
                         let fv = {};
                         let isfirst = false;
@@ -190,22 +183,18 @@ export function mergeCells(
                         for (let r = r1; r <= r2; r += 1) {
                             const cell = d[r][c];
 
-                            if (
-                                cell != null &&
-                                (!isEmpty(cell.v) || cell.f != null) &&
-                                !isfirst
-                            ) {
+                            if (cell != null && (!isEmpty(cell.v) || cell.f != null) && !isfirst) {
                                 fv = cloneDeep(cell) || {};
                                 isfirst = true;
                             }
 
-                            d[r][c] = {mc: {r: r1, c}};
+                            d[r][c] = { mc: { r: r1, c } };
                         }
 
                         d[r1][c] = fv;
                         const a = d[r1][c];
                         if (!a) return;
-                        a.mc = {r: r1, c, rs: r2 - r1 + 1, cs: 1};
+                        a.mc = { r: r1, c, rs: r2 - r1 + 1, cs: 1 };
 
                         cfg.merge[`${r1}_${c}`] = {
                             r: r1,
@@ -214,7 +203,7 @@ export function mergeCells(
                             cs: 1,
                         };
                     }
-                } else if (type === "merge-horizontal") {
+                } else if (type === 'merge-horizontal') {
                     for (let r = r1; r <= r2; r += 1) {
                         let fv = {};
                         let isfirst = false;
@@ -222,22 +211,18 @@ export function mergeCells(
                         for (let c = c1; c <= c2; c += 1) {
                             const cell = d[r][c];
 
-                            if (
-                                cell != null &&
-                                (!isEmpty(cell.v) || cell.f != null) &&
-                                !isfirst
-                            ) {
+                            if (cell != null && (!isEmpty(cell.v) || cell.f != null) && !isfirst) {
                                 fv = cloneDeep(cell) || {};
                                 isfirst = true;
                             }
 
-                            d[r][c] = {mc: {r, c: c1}};
+                            d[r][c] = { mc: { r, c: c1 } };
                         }
 
                         d[r][c1] = fv;
                         const a = d[r][c1];
                         if (!a) return;
-                        a.mc = {r, c: c1, rs: 1, cs: c2 - c1 + 1};
+                        a.mc = { r, c: c1, rs: 1, cs: c2 - c1 + 1 };
 
                         cfg.merge[`${r}_${c1}`] = {
                             r,

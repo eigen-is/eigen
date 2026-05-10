@@ -1,5 +1,5 @@
-import type {Context} from "../context";
-import {handleCopy} from "../events/copy";
+import type { Context } from '../context';
+import { handleCopy } from '../events/copy';
 
 export function handleCut(ctx: Context) {
     if (handleCopy(ctx)) {
@@ -13,15 +13,15 @@ let _pendingPlainText: string | null = null;
 
 export function setPendingCopy(html: string) {
     _pendingCopyHtml = html;
-    const el = document.createElement("div");
+    const el = document.createElement('div');
     el.innerHTML = html;
-    _pendingPlainText = el.innerText || el.textContent || "";
-    sessionStorage.setItem("localClipboard", _pendingPlainText);
+    _pendingPlainText = el.innerText || el.textContent || '';
+    sessionStorage.setItem('localClipboard', _pendingPlainText);
 }
 
 export function consumePendingCopy(): { html: string; plainText: string } | null {
     if (!_pendingCopyHtml) return null;
-    const result = {html: _pendingCopyHtml, plainText: _pendingPlainText || ""};
+    const result = { html: _pendingCopyHtml, plainText: _pendingPlainText || '' };
     _pendingCopyHtml = null;
     _pendingPlainText = null;
     return result;

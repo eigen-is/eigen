@@ -1,8 +1,7 @@
-import {describe, expect, test} from "bun:test";
+import { describe, expect, test } from 'bun:test';
 
-describe("fortune-sheet/core/toolbar/auto-formula", () => {
-    test("basic auto formula test", async () => {
-        // Basic test - just ensure it doesn't crash
+describe('fortune-sheet/core/toolbar/auto-formula', () => {
+    test('basic auto formula test', () => {
         expect(true).toBe(true);
     });
 });

@@ -1,27 +1,27 @@
-import {forEach, isNumber, isPlainObject, isUndefined} from "es-toolkit/compat";
-import {Context} from "../context";
-import {deleteRowCol, insertRowCol} from "../modules";
-import {CommonOptions, getSheet} from "./common";
-import {invalidParams} from "./errors";
-import {getSheetIndex} from "../utils";
+import { forEach, isNumber, isPlainObject, isUndefined } from 'es-toolkit/compat';
+import type { Context } from '../context';
+import { deleteRowCol, insertRowCol } from '../modules';
+import { getSheetIndex } from '../utils';
+import { type CommonOptions, getSheet } from './common';
+import { invalidParams } from './errors';
 
 export function freeze(
     ctx: Context,
-    type: "row" | "column" | "both",
+    type: 'row' | 'column' | 'both',
     range: { row: number; column: number },
-    options: CommonOptions = {}
+    options: CommonOptions = {},
 ) {
     const sheet = getSheet(ctx, options);
 
     const typeMap = {
-        row: "rangeRow",
-        column: "rangeColumn",
-        both: "rangeBoth",
+        row: 'rangeRow',
+        column: 'rangeColumn',
+        both: 'rangeBoth',
     };
     const innerType = typeMap[type];
 
     sheet.frozen = {
-        // @ts-ignore
+        // @ts-expect-error
         type: innerType,
         range: {
             column_focus: range.column,
@@ -32,17 +32,17 @@ export function freeze(
 
 export function insertRowOrColumn(
     ctx: Context,
-    type: "row" | "column",
+    type: 'row' | 'column',
     index: number,
     count: number,
-    direction: "lefttop" | "rightbottom",
-    options: CommonOptions = {}
+    direction: 'lefttop' | 'rightbottom',
+    options: CommonOptions = {},
 ) {
     if (
-        !["row", "column"].includes(type) ||
+        !['row', 'column'].includes(type) ||
         !isNumber(index) ||
         !isNumber(count) ||
-        !["lefttop", "rightbottom"].includes(direction)
+        !['lefttop', 'rightbottom'].includes(direction)
     ) {
         throw invalidParams();
     }
@@ -64,38 +64,30 @@ export function insertRowOrColumn(
 
 export function deleteRowOrColumn(
     ctx: Context,
-    type: "row" | "column",
+    type: 'row' | 'column',
     start: number,
     end: number,
-    options: CommonOptions = {}
+    options: CommonOptions = {},
 ) {
-    if (
-        !["row", "column"].includes(type) ||
-        !isNumber(start) ||
-        !isNumber(end)
-    ) {
+    if (!['row', 'column'].includes(type) || !isNumber(start) || !isNumber(end)) {
         throw invalidParams();
     }
 
     const sheet = getSheet(ctx, options);
 
-    deleteRowCol(ctx, {type, start, end, id: sheet.id!});
+    deleteRowCol(ctx, { type, start, end, id: sheet.id! });
 }
 
-export function hideRowOrColumn(
-    ctx: Context,
-    rowColInfo: string[],
-    type: "row" | "column"
-) {
-    if (!["row", "column"].includes(type)) {
+export function hideRowOrColumn(ctx: Context, rowColInfo: string[], type: 'row' | 'column') {
+    if (!['row', 'column'].includes(type)) {
         throw invalidParams();
     }
 
-    if (!ctx || !ctx.config) return;
+    if (!ctx?.config) return;
 
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
 
-    if (type === "row") {
+    if (type === 'row') {
         /* TODO: worksheet protection check
         if (
           !checkProtectionAuthorityNormal(Store.currentSheetIndex, "formatRows")
@@ -126,7 +118,7 @@ export function hideRowOrColumn(
          * conditions for being the last column: the index to hide === sheet length - 1, or
          * the number in the hidden array - 1 === the index to hide
          */
-    } else if (type === "column") {
+    } else if (type === 'column') {
         // hide column
         const colhidden = ctx.config.colhidden ?? {};
 
@@ -140,20 +132,16 @@ export function hideRowOrColumn(
     ctx.luckysheetfile[index].config = ctx.config;
 }
 
-export function showRowOrColumn(
-    ctx: Context,
-    rowColInfo: string[],
-    type: "row" | "column"
-) {
-    if (!["row", "column"].includes(type)) {
+export function showRowOrColumn(ctx: Context, rowColInfo: string[], type: 'row' | 'column') {
+    if (!['row', 'column'].includes(type)) {
         throw invalidParams();
     }
 
-    if (!ctx || !ctx.config) return;
+    if (!ctx?.config) return;
 
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
 
-    if (type === "row") {
+    if (type === 'row') {
         /* TODO: worksheet protection check
         if (
           !checkProtectionAuthorityNormal(Store.currentSheetIndex, "formatRows")
@@ -184,7 +172,7 @@ export function showRowOrColumn(
          * conditions for being the last column: the index to hide === sheet length - 1, or
          * the number in the hidden array - 1 === the index to hide
          */
-    } else if (type === "column") {
+    } else if (type === 'column') {
         // hide column
         const colhidden = ctx.config.colhidden ?? {};
 
@@ -202,7 +190,7 @@ export function setRowHeight(
     ctx: Context,
     rowInfo: Record<string, number>,
     options: CommonOptions = {},
-    custom: boolean = false
+    custom: boolean = false,
 ) {
     if (!isPlainObject(rowInfo)) {
         throw invalidParams();
@@ -220,7 +208,7 @@ export function setRowHeight(
             if (Number(len) >= 0) {
                 cfg.rowlen![Number(r)] = Number(len);
                 if (custom && isUndefined(cfg.customHeight)) {
-                    cfg.customHeight = {[r]: 1};
+                    cfg.customHeight = { [r]: 1 };
                 } else if (custom) {
                     cfg.customHeight![r] = 1;
                 }
@@ -241,7 +229,7 @@ export function setColumnWidth(
     ctx: Context,
     columnInfo: Record<string, number>,
     options: CommonOptions = {},
-    custom: boolean = false
+    custom: boolean = false,
 ) {
     if (!isPlainObject(columnInfo)) {
         throw invalidParams();
@@ -259,7 +247,7 @@ export function setColumnWidth(
             if (Number(len) >= 0) {
                 cfg.columnlen![Number(c)] = Number(len);
                 if (custom && isUndefined(cfg.customWidth)) {
-                    cfg.customWidth = {[c]: 1};
+                    cfg.customWidth = { [c]: 1 };
                 } else if (custom) {
                     cfg.customWidth![c] = 1;
                 }
@@ -276,11 +264,7 @@ export function setColumnWidth(
     // server.saveParam("cg", file.id, cfg.columnlen, { k: "columnlen" });
 }
 
-export function getRowHeight(
-    ctx: Context,
-    rows: number[],
-    options: CommonOptions = {}
-) {
+export function getRowHeight(ctx: Context, rows: number[], options: CommonOptions = {}) {
     if (!Array.isArray(rows) || rows.length === 0) {
         throw invalidParams();
     }
@@ -302,11 +286,7 @@ export function getRowHeight(
     return rowlenObj;
 }
 
-export function getColumnWidth(
-    ctx: Context,
-    columns: number[],
-    options: CommonOptions = {}
-) {
+export function getColumnWidth(ctx: Context, columns: number[], options: CommonOptions = {}) {
     if (!Array.isArray(columns) || columns.length === 0) {
         throw invalidParams();
     }
