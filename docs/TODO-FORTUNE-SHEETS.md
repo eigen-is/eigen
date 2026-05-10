@@ -166,6 +166,11 @@ at the cleanup. Not introduced by the cleanup, worth fixing in follow-ups:
 - **`formula-editor.ts:353-363` — pre-existing crash path on `$span[i]`** —
   `indexOf` returns `-1`, `$span[-1].classList` throws. Already on the
   Group F ts-ignore list above; the review re-confirmed it.
+- **`selection.ts:pasteHandlerOfPaintModel` — dead-write on `cdformat`** —
+  function builds up a `cdformat: ConditionalFormatRule[]` array but never
+  writes it back to `ctx.luckysheetfile[currentIndex].luckysheet_conditionformat_save`.
+  Format-painter doesn't propagate CF rules. Pre-existing; surfaced during
+  the Task 5 type-tightening (2026-05-10).
 
 ### Review-pass deferrals (BE replay code review, 2026-05-02)
 
