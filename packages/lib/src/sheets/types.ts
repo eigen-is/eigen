@@ -85,17 +85,40 @@ export type CellBorderInfo = {
         b?: BorderSide;
     };
 };
+// Editor's range-border has the same row/column rectangle as a SingleRange plus
+// optional `row_focus`/`column_focus` carried over from the `Selection` the
+// toolbar cloned when emitting the border (read by the 'border-slash' branch in
+// state/modules/border.ts).
+export type BorderRange = SingleRange & { row_focus?: number; column_focus?: number };
+// Toolbar-emitted border layouts. The exhaustive set the state/modules/border.ts
+// switch handles. Listed here so consumers narrow via `borderType === '…'`.
+export type BorderType =
+    | 'border-all'
+    | 'border-slash'
+    | 'border-left'
+    | 'border-right'
+    | 'border-top'
+    | 'border-bottom'
+    | 'border-outside'
+    | 'border-inside'
+    | 'border-horizontal'
+    | 'border-vertical'
+    | 'border-none';
 export type RangeBorderInfo = {
     rangeType: 'range';
-    borderType: string;
+    borderType: BorderType;
     color: string;
-    style: number;
-    range: SingleRange[];
+    // FE toolbar pushes strings like '1'..'13'; xlsx import never emits this variant.
+    // Canvas painter coerces via `.toString()` before dispatch in setLineDash().
+    style: number | string;
+    range: BorderRange[];
 };
 export type BorderInfo = CellBorderInfo | RangeBorderInfo;
 
+export type MergeCell = { r: number; c: number; rs: number; cs: number };
+
 export type SheetConfig = {
-    merge?: Record<string, { r: number; c: number; rs: number; cs: number }>;
+    merge?: Record<string, MergeCell>;
     rowlen?: Record<string, number>;
     columnlen?: Record<string, number>;
     rowhidden?: Record<string, number>;

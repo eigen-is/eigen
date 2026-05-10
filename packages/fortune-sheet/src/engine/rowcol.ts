@@ -1,4 +1,4 @@
-import type { Sheet, SheetConfig } from '@workspace/lib/sheets';
+import type { MergeCell, Sheet, SheetConfig } from '@workspace/lib/sheets';
 import { cloneDeep } from 'es-toolkit/compat';
 import { functionStrChange } from './formula-shift';
 
@@ -47,8 +47,8 @@ function shiftMergeForInsert(
     index: number,
     count: number,
     direction: 'lefttop' | 'rightbottom',
-): Record<string, { r: number; c: number; rs: number; cs: number }> {
-    const merge_new: Record<string, { r: number; c: number; rs: number; cs: number }> = {};
+): Record<string, MergeCell> {
+    const merge_new: Record<string, MergeCell> = {};
     for (const mc of Object.values(cfg.merge ?? {})) {
         const { r, c, rs, cs } = mc;
         if (type === 'row') {
@@ -101,9 +101,9 @@ function shiftMergeForDelete(
     type: 'row' | 'column',
     start: number,
     slen: number,
-): Record<string, { r: number; c: number; rs: number; cs: number }> {
+): Record<string, MergeCell> {
     const end = start + slen - 1;
-    const merge_new: Record<string, { r: number; c: number; rs: number; cs: number }> = {};
+    const merge_new: Record<string, MergeCell> = {};
     for (const mc of Object.values(cfg.merge ?? {})) {
         const { r, c, rs, cs } = mc;
         if (type === 'row') {

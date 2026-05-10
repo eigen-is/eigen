@@ -1,3 +1,4 @@
+import type { MergeCell } from '@workspace/lib/sheets';
 import { opToPatchOnSheets } from '@workspace/lib/sheets/yjs-ops';
 import { every, isEqual, isNil, isNumber, partition } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
@@ -37,11 +38,10 @@ export type PatchOptions = {
 };
 
 const addtionalMergeOps = (ops: Op[], id: string) => {
-    type MergeEntry = { r: number; c: number; rs: number; cs: number };
-    let merge_new: Record<string, MergeEntry> = {};
+    let merge_new: Record<string, MergeCell> = {};
     ops.some((op) => {
         if (op.op === 'replace' && op.path[0] === 'config' && op.path[1] === 'merge') {
-            merge_new = op.value as Record<string, MergeEntry>;
+            merge_new = op.value as Record<string, MergeCell>;
             return true;
         }
         return false;

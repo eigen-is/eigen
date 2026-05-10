@@ -1,15 +1,15 @@
+import type { BorderInfo, MergeCell, Op } from '@workspace/lib/sheets';
 import type { Patch as ImmerPatch } from 'immer';
 import type { Cell, CellMatrix, CellWithRowAndCol, Range, SingleRange } from '../engine/types';
 import type { PatchOptions } from './utils';
 
-export type { Op } from '@workspace/lib/sheets';
 // Shared sheet data shapes (Cell, CellMatrix, CellWithRowAndCol, SingleRange,
 // Range, …) live in @workspace/lib/sheets and are re-exported through
 // ../engine/types — surfaced here so state-side consumers don't have to know
-// the canonical home. `Op` lives in lib too (the BE document reader replays
-// ops without the engine), but it isn't engine-conceptual — re-exported
-// directly from lib here.
-export type { Cell, CellMatrix, CellWithRowAndCol, Range, SingleRange };
+// the canonical home. `Op` and `BorderInfo` live in lib too (the BE document
+// reader replays ops without the engine, and the HTML export reads borderInfo);
+// neither is engine-conceptual so they're re-exported directly from lib here.
+export type { BorderInfo, Cell, CellMatrix, CellWithRowAndCol, MergeCell, Op, Range, SingleRange };
 
 export type Rect = {
     top: number;
@@ -49,19 +49,21 @@ export type Presence = {
 
 // Editor-runtime SheetConfig. Some fields (merge / rowlen / columnlen / rowhidden /
 // colhidden / borderInfo) overlap with lib's API-shape `SheetConfig`; the editor
-// keeps borderInfo loosely typed (`any[]`) since state code constructs both 'cell'
-// and 'range' BorderInfo variants without `as const` discriminators. Tightening
-// this is part of TODO #1 (enable biome on state/) — at which point this type
-// should collapse into `Omit<ApiSheetConfig, ...> & { editor extras }`.
+// keeps borderInfo loosely typed (`any[]`) because state producer sites (paste,
+// rowcol, toolbar, selection, dropCell, api/cell) push raw object literals whose
+// `rangeType: 'cell' | 'range'` discriminator isn't `as const`-tagged. Tightening
+// to `BorderInfo[]` is part of TODO #1 — at that point this type should collapse
+// into `Omit<ApiSheetConfig, ...> & { editor extras }`. Readers (border.ts,
+// canvas.ts) narrow at the use-site via assignment to a `BorderInfo[]` local.
 export type SheetConfig = {
-    merge?: Record<string, { r: number; c: number; rs: number; cs: number }>; // merged cells
+    merge?: Record<string, MergeCell>;
     rowlen?: Record<string, number>; // row heights
     columnlen?: Record<string, number>; // column widths
     rowhidden?: Record<string, number>; // hidden rows
     colhidden?: Record<string, number>; // hidden columns
     customHeight?: Record<string, number>;
     customWidth?: Record<string, number>;
-    borderInfo?: any[]; // tighten to lib's BorderInfo[] under TODO #1
+    borderInfo?: any[];
     authority?: any;
     rowReadOnly?: Record<number, number>;
     colReadOnly?: Record<number, number>;
