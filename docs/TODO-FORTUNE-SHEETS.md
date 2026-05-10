@@ -17,13 +17,28 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
 
 ### Core technical debt
 
-1. **Enable biome on `state/`** — biggest lift. Currently excluded in `biome.jsonc`
-   line 14. ~90 files / 48k LOC. Three pre-pass blockers before flipping the switch:
-   - **~25 `@ts-ignore` directives remaining** (Group F — real type/data gaps,
-     per-site judgment, not a mechanical sweep). Sites listed below.
-   - **~232 `any` annotations** (31 in `api/rowcol.ts` alone) → biome's
-     `noExplicitAny` rule.
-   - **Formatter sweep** across all state files.
+1. **Enable biome on `state/`** — in progress on branch `biome-state-cleanup`
+   (3 commits). The biome exclusion in `biome.jsonc` was removed; formatter +
+   bulk dead-code/IE-fallback removal applied across all 88 state files
+   (–3280 LOC net); ~150 `any` annotations replaced with concrete types;
+   16 of 25 `@ts-ignore` directives resolved; 12 critical issues from a
+   parallel code-review pass fixed.
+
+   **Status as of 2026-05-10:** biome on state/ at 96 errors / 122 warnings
+   (down from 134 / 302). Typecheck + 749 tests pass.
+
+   **Remaining before merge / final flip:**
+   - 7 files reverted to wave-1-only state during the parallel sweep due to
+     stash conflicts with the `bun run lint:fix` PostToolUse hook —
+     `selection.ts`, `border.ts`, `text.ts`, `dataVerification.ts`,
+     `dropCell.ts`, `canvas.ts`, `formula-range.ts`. Each needs a focused
+     type-tightening pass (best done in a worktree or with the hook
+     temporarily disabled). These files account for the bulk of the
+     remaining 96 biome errors.
+   - `state/types.ts` (14 diagnostics) intentionally untouched in this
+     branch; needs its own focused pass once dependents are clean.
+   - 9 of the original 25 `@ts-ignore` directives remain (mostly in the
+     7 reverted files); see Group F list below.
 
    Once typing tightens, collapse state's `Sheet` / `SheetConfig`
    (`state/types.ts`) into `Omit<lib.Sheet, …> & {editor extras}` — the shared
@@ -124,6 +139,33 @@ For architecture see [SHEETS.md](SHEETS.md). For component layering see
 
 11. Move package to `apps/sheets/src/fortune-sheet/` — only `apps/sheets/`
     consumes it. Low priority, rename-only with no code impact.
+
+### Bugs surfaced during the biome-state-cleanup review (2026-05-10)
+
+These are pre-existing bugs the parallel code review pass found while looking
+at the cleanup. Not introduced by the cleanup, worth fixing in follow-ups:
+
+- **`formula-exec.ts:470` — off-by-one** — `dynamicArray_compute[0]` inside a
+  `j`-indexed loop reads the first element on every iteration; should be
+  `[j]`. Causes `getAllFunctionGroup` to return duplicates of the first
+  dynamic-array cell instead of all of them.
+- **`api/range.ts:62` — dead `throw invalidParams()`** — `if (!range || typeof
+  range === 'object')` is always true for `Selection`-typed input, making the
+  fallthrough unreachable. Either remove the dead throw or swap to
+  `isPlainObject(range)`.
+- **`api/rowcol.ts:59` — silently-swallowed `insertRowCol` errors** — `try
+  { insertRowCol(...) } catch (e) { console.error(e); }` returns undefined to
+  callers with no signal that the insert failed. Re-throw or convert to a
+  typed `RowColError` (see #12 below).
+- **`formula-cache.ts:121` cross-file DOM mismatch** — `rangeSetValueTo`
+  carries an explicit `biome-ignore noExplicitAny` because `formula-editor.ts
+  :474` assigns a `NodeListOf<HTMLSpanElement>` to it while
+  `formula-range.ts:111` reads `.parentNode` (which exists on `Node`, not
+  `NodeList`). The latter call silently falls through. Fix the assignment in
+  `formula-editor.ts:474` to set the right kind of node.
+- **`formula-editor.ts:353-363` — pre-existing crash path on `$span[i]`** —
+  `indexOf` returns `-1`, `$span[-1].classList` throws. Already on the
+  Group F ts-ignore list above; the review re-confirmed it.
 
 ### Review-pass deferrals (BE replay code review, 2026-05-02)
 
