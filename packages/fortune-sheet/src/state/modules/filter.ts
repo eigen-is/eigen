@@ -3,6 +3,7 @@ import { update } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
 import { type Context, getFlowdata } from '../context';
 import { locale } from '../locale';
+import type { Selection } from '../types';
 import { getSheetIndex, isAllowEdit, rgbToHex } from '../utils';
 import { normalizedAttr } from './cell';
 import { checkCF, getComputeMap } from './conditionFormat';
@@ -15,7 +16,7 @@ export function labelFilterOptionState(
     ctx: Context,
     optionstate: boolean,
     rowhidden: Record<string, number>,
-    caljs: any,
+    caljs: unknown,
     str: number,
     edr: number,
     cindex: number,
@@ -36,9 +37,6 @@ export function labelFilterOptionState(
 
     if (optionstate) {
         ctx.filter[cindex - stc] = param;
-        // Conditional format parameters
-        if (caljs != null) {
-        }
     } else {
         delete ctx.filter[cindex - stc];
     }
@@ -57,10 +55,6 @@ export function labelFilterOptionState(
         } else {
             delete file.filter[cindex - stc];
         }
-
-        // server.saveParam("all", Store.currentSheetIndex, file.filter, {
-        //   k: "filter",
-        // });
     }
 }
 
@@ -100,12 +94,7 @@ export function orderbydatafiler(
 
     if (hasMc) {
         const { filter } = locale(ctx);
-
-        // if (isEditMode()) {
-        //   alert(locale_filter.mergeError);
-        // } else {
         return filter.mergeError;
-        // }
     }
 
     sortDataRange(ctx, d, data, curr - stc, asc, str, edr, stc, edc);
@@ -123,12 +112,8 @@ export function createFilterOptions(
           }
         | undefined,
     sheetId: string | undefined,
-    filterObj?: any,
     saveData?: boolean,
 ) {
-    // $(`#luckysheet-filter-selected-sheet${ctx.currentSheetIndex}`).remove();
-    // $(`#luckysheet-filter-options-sheet${ctx.currentSheetIndex}`).remove();
-    // eslint-disable-next-line no-undef
     const allowEdit = isAllowEdit(ctx);
     if (!allowEdit) return;
     if (sheetId != null && sheetId !== ctx.currentSheetId) return;
@@ -161,10 +146,6 @@ export function createFilterOptions(
     };
 
     for (let c = c1; c <= c2; c += 1) {
-        // TODO: filterObj
-        if (filterObj == null || filterObj?.[c - c1] == null) {
-        } else {
-        }
         let left = 0;
         if (ctx.visibledatacolumn[c]) {
             left = ctx.visibledatacolumn[c] - 20;
@@ -201,19 +182,7 @@ export function clearFilter(ctx: Context) {
 }
 
 export function createFilter(ctx: Context) {
-    // if (!checkProtectionAuthorityNormal(ctx.currentSheetIndex, "filter")) {
-    //   return;
-    // }
-
     if (size(ctx.luckysheet_select_save) > 1) {
-        // const locale_splitText = locale().splitText;
-
-        // if (isEditMode()) {
-        //   alert(locale_splitText.tipNoMulti);
-        // } else {
-        //   tooltip.info(locale_splitText.tipNoMulti, "");
-        // }
-
         return;
     }
     if (size(ctx.luckysheet_filter_save) > 0) {
@@ -226,17 +195,13 @@ export function createFilter(ctx: Context) {
         return;
     }
 
-    // $(
-    //   `#luckysheet-filter-selected-sheet${sheetId}, #luckysheet-filter-options-sheet${ctx.currentSheetId}`
-    // ).remove();
-
     const last = ctx.luckysheet_select_save?.[0];
     const flowdata = getFlowdata(ctx);
-    let filterSave;
+    let filterSave: Selection[] | undefined;
     if (last == null || flowdata == null) return;
     if (last.row[0] === last.row[1] && last.column[0] === last.column[1]) {
-        let st_c;
-        let ed_c;
+        let st_c: number | undefined;
+        let ed_c: number | undefined;
         const curR = last.row[1];
 
         for (let c = 0; c < flowdata[curR].length; c += 1) {
@@ -256,35 +221,17 @@ export function createFilter(ctx: Context) {
             ed_c = flowdata[curR].length - 1;
         }
 
-        filterSave = normalizeSelection(ctx, [
-            { row: [curR, curR], column: [st_c || 0, ed_c] }, // st_c default 0 ?
-        ]);
+        filterSave = normalizeSelection(ctx, [{ row: [curR, curR], column: [st_c ?? 0, ed_c] }]);
         ctx.luckysheet_select_save = filterSave;
 
         ctx.luckysheet_shiftpositon = cloneDeep(last);
-        // luckysheetMoveEndCell("down", "range");
     } else if (last.row[1] - last.row[0] < 2) {
         ctx.luckysheet_shiftpositon = cloneDeep(last);
-        // luckysheetMoveEndCell("down", "range");
     }
 
     ctx.luckysheet_filter_save = cloneDeep(filterSave?.[0] || ctx.luckysheet_select_save?.[0]);
 
-    createFilterOptions(ctx, ctx.luckysheet_filter_save, undefined, {}, true);
-
-    // server.saveParam("all", ctx.currentSheetIndex, ctx.luckysheet_filter_save, {
-    //   k: "filter_select",
-    // });
-
-    // if (ctx.filterchage) {
-    //   ctx.jfredo.push({
-    //     type: "filtershow",
-    //     data: [],
-    //     curdata: [],
-    //     sheetIndex: ctx.currentSheetIndex,
-    //     filter_save: ctx.luckysheet_filter_save,
-    //   });
-    // }
+    createFilterOptions(ctx, ctx.luckysheet_filter_save, undefined, true);
 }
 
 export type FilterDate = {
@@ -299,8 +246,8 @@ export type FilterDate = {
 
 export type FilterValue = {
     key: string;
-    value: any;
-    mask: any;
+    value: Cell['v'] | null;
+    mask: Cell['m'] | null;
     text: string;
     rows: number[];
 };
@@ -415,8 +362,8 @@ export function getFilterColumnValues(ctx: Context, col: number, startRow: numbe
                 datesUncheck = union(datesUncheck, [dateStr]);
             }
         } else {
-            let v;
-            let m: string | number | null | undefined;
+            let v: Cell['v'] | null;
+            let m: Cell['m'] | null;
             if (cell == null || isRealNull(cell.v)) {
                 v = null;
                 m = null;
@@ -472,35 +419,23 @@ export type FilterColor = {
 };
 
 export function getFilterColumnColors(ctx: Context, col: number, startRow: number, endRow: number) {
-    // Iterate over filter column colors
     const bgMap: Map<string, FilterColor> = new Map(); // Cell background color
     const fcMap: Map<string, FilterColor> = new Map(); // Font color
 
-    // const af_compute = alternateformat.getComputeMap();
-    const cf_compute: any = getComputeMap(ctx);
+    const cf_compute = getComputeMap(ctx);
     const flowdata = getFlowdata(ctx);
     if (flowdata == null) return { bgColors: [], fcColors: [] };
 
     for (let r = startRow + 1; r <= endRow; r += 1) {
         const cell = flowdata[r][col];
 
-        // Cell background color
         let bg = normalizedAttr(flowdata, r, col, 'bg');
-
         if (bg == null) {
             bg = '#ffffff';
         }
 
-        // const checksAF = alternateformat.checksAF(r, col, af_compute);
-        const checksAF: any = [];
-        if (checksAF.length > 1) {
-            // If the cell has alternating colors
-            [, bg] = checksAF;
-        }
-
         const checksCF = checkCF(r, col, cf_compute);
         if (checksCF != null && checksCF.cellColor != null) {
-            // If the cell has conditional formatting
             bg = checksCF.cellColor;
         }
 
@@ -512,16 +447,9 @@ export function getFilterColumnColors(ctx: Context, col: number, startRow: numbe
             bg = bg.substr(0, 1) + bg.substr(1, 1).repeat(2) + bg.substr(2, 1).repeat(2) + bg.substr(3, 1).repeat(2);
         }
 
-        // Font color
         let fc = normalizedAttr(flowdata, r, col, 'fc');
 
-        if (checksAF.length > 0) {
-            // If the cell has alternating colors
-            [fc] = checksAF;
-        }
-
         if (checksCF != null && checksCF.textColor != null) {
-            // If the cell has conditional formatting
             fc = checksCF.textColor;
         }
 
@@ -566,7 +494,7 @@ export function saveFilter(
     ctx: Context,
     optionState: boolean,
     hiddenRows: Record<string, number>,
-    caljs: any,
+    caljs: unknown,
     st_r: number,
     ed_r: number,
     cindex: number,
@@ -581,15 +509,10 @@ export function saveFilter(
     const cfg = cloneDeep(ctx.config);
     cfg.rowhidden = rowHiddenAll;
 
-    // config
     ctx.config = cfg;
     const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
     if (sheetIndex == null) {
         return;
     }
     ctx.luckysheetfile[sheetIndex].config = cfg;
-
-    // server.saveParam("cg", Store.currentSheetIndex, cfg.rowhidden, {
-    //   k: "rowhidden",
-    // });
 }
