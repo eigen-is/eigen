@@ -1,5 +1,12 @@
-import {sortedIndex} from "es-toolkit/compat";
-import {colLocationByIndex, Context, Freezen, getSheetIndex, GlobalCache, rowLocationByIndex,} from "..";
+import { sortedIndex } from 'es-toolkit/compat';
+import {
+    type Context,
+    colLocationByIndex,
+    type Freezen,
+    type GlobalCache,
+    getSheetIndex,
+    rowLocationByIndex,
+} from '..';
 
 function cutVolumn(arr: number[], cutindex: number) {
     if (cutindex <= 0) {
@@ -12,7 +19,7 @@ function cutVolumn(arr: number[], cutindex: number) {
 function frozenTofreezen(ctx: Context, cache: GlobalCache, sheetId: string) {
     // get frozen type
     const file = ctx.luckysheetfile[getSheetIndex(ctx, sheetId)!];
-    const {frozen} = file;
+    const { frozen } = file;
 
     if (frozen == null) {
         delete cache.freezen;
@@ -21,28 +28,28 @@ function frozenTofreezen(ctx: Context, cache: GlobalCache, sheetId: string) {
 
     const freezen: Freezen = {};
 
-    let {range} = frozen;
+    let { range } = frozen;
     if (!range) {
         range = {
             row_focus: 0,
             column_focus: 0,
         };
     }
-    let {type} = frozen;
-    if (type === "row") {
-        type = "rangeRow";
-    } else if (type === "column") {
-        type = "rangeColumn";
-    } else if (type === "both") {
-        type = "rangeBoth";
+    let { type } = frozen;
+    if (type === 'row') {
+        type = 'rangeRow';
+    } else if (type === 'column') {
+        type = 'rangeColumn';
+    } else if (type === 'both') {
+        type = 'rangeBoth';
     }
 
     // transform to freezen
-    if (type === "rangeRow" || type === "rangeBoth") {
+    if (type === 'rangeRow' || type === 'rangeBoth') {
         const scrollTop = 0;
         let row_st = sortedIndex(ctx.visibledatarow, scrollTop);
 
-        const {row_focus} = range;
+        const { row_focus } = range;
 
         if (row_focus > row_st) {
             row_st = row_focus;
@@ -52,8 +59,7 @@ function frozenTofreezen(ctx: Context, cache: GlobalCache, sheetId: string) {
             row_st = 0;
         }
 
-        const top =
-            ctx.visibledatarow[row_st] - 2 - scrollTop + ctx.columnHeaderHeight;
+        const top = ctx.visibledatarow[row_st] - 2 - scrollTop + ctx.columnHeaderHeight;
         const freezenhorizontaldata = [
             ctx.visibledatarow[row_st],
             row_st + 1,
@@ -67,11 +73,11 @@ function frozenTofreezen(ctx: Context, cache: GlobalCache, sheetId: string) {
             top,
         };
     }
-    if (type === "rangeColumn" || type === "rangeBoth") {
+    if (type === 'rangeColumn' || type === 'rangeBoth') {
         const scrollLeft = 0;
         let col_st = sortedIndex(ctx.visibledatacolumn, scrollLeft);
 
-        const {column_focus} = range;
+        const { column_focus } = range;
 
         if (column_focus > col_st) {
             col_st = column_focus;
@@ -81,8 +87,7 @@ function frozenTofreezen(ctx: Context, cache: GlobalCache, sheetId: string) {
             col_st = 0;
         }
 
-        const left =
-            ctx.visibledatacolumn[col_st] - 2 - scrollLeft + ctx.rowHeaderWidth;
+        const left = ctx.visibledatacolumn[col_st] - 2 - scrollLeft + ctx.rowHeaderWidth;
         const freezenverticaldata = [
             ctx.visibledatacolumn[col_st],
             col_st + 1,
@@ -105,15 +110,12 @@ export function initFreeze(ctx: Context, cache: GlobalCache, sheetId: string) {
     frozenTofreezen(ctx, cache, sheetId);
 }
 
-export function scrollToFrozenRowCol(
-    ctx: Context,
-    freeze: Freezen | undefined
-) {
+export function scrollToFrozenRowCol(ctx: Context, freeze: Freezen | undefined) {
     const select_save = ctx.luckysheet_select_save;
     if (!select_save) return;
 
     let row;
-    const {row_focus} = select_save[0];
+    const { row_focus } = select_save[0];
     if (row_focus === select_save[0].row[0]) {
         [, row] = select_save[0].row;
     } else if (row_focus === select_save[0].row[1]) {
@@ -121,7 +123,7 @@ export function scrollToFrozenRowCol(
     }
 
     let column;
-    const {column_focus} = select_save[0];
+    const { column_focus } = select_save[0];
     if (column_focus === select_save[0].column[0]) {
         [, column] = select_save[0].column;
     } else if (column_focus === select_save[0].column[1]) {
@@ -194,17 +196,12 @@ export function getFrozenHandleTop(ctx: Context) {
 
     const sheet = ctx.luckysheetfile[idx];
     if (
-        sheet?.frozen?.type === "row" ||
-        sheet?.frozen?.type === "rangeRow" ||
-        sheet?.frozen?.type === "rangeBoth" ||
-        sheet?.frozen?.type === "both"
+        sheet?.frozen?.type === 'row' ||
+        sheet?.frozen?.type === 'rangeRow' ||
+        sheet?.frozen?.type === 'rangeBoth' ||
+        sheet?.frozen?.type === 'both'
     ) {
-        return (
-            rowLocationByIndex(
-                sheet?.frozen?.range?.row_focus || 0,
-                ctx.visibledatarow
-            )[1] + ctx.scrollTop
-        );
+        return rowLocationByIndex(sheet?.frozen?.range?.row_focus || 0, ctx.visibledatarow)[1] + ctx.scrollTop;
     }
     return ctx.scrollTop;
 }
@@ -215,18 +212,13 @@ export function getFrozenHandleLeft(ctx: Context) {
 
     const sheet = ctx.luckysheetfile[idx];
     if (
-        sheet?.frozen?.type === "column" ||
-        sheet?.frozen?.type === "rangeColumn" ||
-        sheet?.frozen?.type === "rangeBoth" ||
-        sheet?.frozen?.type === "both"
+        sheet?.frozen?.type === 'column' ||
+        sheet?.frozen?.type === 'rangeColumn' ||
+        sheet?.frozen?.type === 'rangeBoth' ||
+        sheet?.frozen?.type === 'both'
     ) {
         return (
-            colLocationByIndex(
-                sheet?.frozen?.range?.column_focus || 0,
-                ctx.visibledatacolumn
-            )[1] -
-            2 +
-            ctx.scrollLeft
+            colLocationByIndex(sheet?.frozen?.range?.column_focus || 0, ctx.visibledatacolumn)[1] - 2 + ctx.scrollLeft
         );
     }
     return ctx.scrollLeft;

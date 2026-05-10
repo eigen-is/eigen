@@ -1,15 +1,11 @@
-import numeral from "numeral";
-import {clone, findIndex} from "es-toolkit/compat";
-import {execfunction, functionCopy, update} from ".";
-import type {Cell, CellMatrix} from "../../engine/types";
-import {Context, diff, getFlowdata, isdatetime, isRealNull, isRealNum,} from "..";
-import {jfrefreshgrid} from "./refresh";
+import { clone, findIndex } from 'es-toolkit/compat';
+import numeral from 'numeral';
+import type { Cell, CellMatrix } from '../../engine/types';
+import { type Context, diff, getFlowdata, isdatetime, isRealNull, isRealNum } from '..';
+import { execfunction, functionCopy, update } from '.';
+import { jfrefreshgrid } from './refresh';
 
-export function orderbydata(
-    isAsc: boolean,
-    index: number,
-    data: (Cell | null)[][]
-) {
+export function orderbydata(isAsc: boolean, index: number, data: (Cell | null)[][]) {
     if (isAsc == null) {
         isAsc = true;
     }
@@ -39,7 +35,7 @@ export function orderbydata(
             return x1Value - y1Value;
         }
         if (!isRealNum(x1) && !isRealNum(y1)) {
-            return x1.localeCompare(y1, "zh");
+            return x1.localeCompare(y1, 'zh');
         }
         if (!isRealNum(x1)) {
             return 1;
@@ -59,7 +55,7 @@ export function orderbydata(
         return i - origIndex;
     });
 
-    return {sortedData, rowOffsets};
+    return { sortedData, rowOffsets };
 }
 
 export function sortDataRange(
@@ -71,9 +67,9 @@ export function sortDataRange(
     str: number,
     edr: number,
     stc: number,
-    edc: number
+    edc: number,
 ) {
-    const {sortedData, rowOffsets} = orderbydata(isAsc, index, dataRange);
+    const { sortedData, rowOffsets } = orderbydata(isAsc, index, dataRange);
 
     for (let r = str; r <= edr; r += 1) {
         for (let c = stc; c <= edc; c += 1) {
@@ -82,26 +78,22 @@ export function sortDataRange(
                 const moveOffset = rowOffsets[r - str];
                 let func = cell?.f!;
                 if (moveOffset > 0) {
-                    func = `=${functionCopy(func, "down", moveOffset)}`;
+                    func = `=${functionCopy(func, 'down', moveOffset)}`;
                 } else if (moveOffset < 0) {
-                    func = `=${functionCopy(func, "up", -moveOffset)}`;
+                    func = `=${functionCopy(func, 'up', -moveOffset)}`;
                 }
                 const funcV = execfunction(ctx, func, r, c, undefined, undefined, true);
                 [, cell!.v, cell!.f] = funcV;
-                cell.m = update(cell.ct?.fa || "General", cell.v);
+                cell.m = update(cell.ct?.fa || 'General', cell.v);
             }
             sheetData[r][c] = cell;
         }
     }
 
-    jfrefreshgrid(ctx, sheetData, [{row: [str, edr], column: [stc, edc]}]);
+    jfrefreshgrid(ctx, sheetData, [{ row: [str, edr], column: [stc, edc] }]);
 }
 
-export function sortSelection(
-    ctx: Context,
-    isAsc: boolean,
-    colIndex: number = 0
-) {
+export function sortSelection(ctx: Context, isAsc: boolean, colIndex: number = 0) {
     // if (!checkProtectionAuthorityNormal(ctx.currentSheetIndex, "sort")) {
     //   return;
     // }

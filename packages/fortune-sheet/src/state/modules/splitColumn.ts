@@ -1,5 +1,5 @@
-import {Context, getFlowdata} from "../context";
-import {getCellValue, setCellValue} from "./cell";
+import { type Context, getFlowdata } from '../context';
+import { getCellValue, setCellValue } from './cell';
 
 // Generate 2D array
 export function getNullData(rlen: number, clen: number) {
@@ -8,7 +8,7 @@ export function getNullData(rlen: number, clen: number) {
         const rowArr = [];
 
         for (let c = 0; c < clen; c += 1) {
-            rowArr.push("");
+            rowArr.push('');
         }
         arr.push(rowArr);
     }
@@ -16,16 +16,11 @@ export function getNullData(rlen: number, clen: number) {
 }
 
 // Batch update data to table
-export function updateMoreCell(
-    r: number,
-    c: number,
-    dataMatrix: string[][],
-    ctx: Context
-) {
+export function updateMoreCell(r: number, c: number, dataMatrix: string[][], ctx: Context) {
     if (ctx.allowEdit === false) return;
     const flowdata = getFlowdata(ctx);
     dataMatrix.forEach((datas, i) => {
-        datas.forEach((data, j) => {
+        datas.forEach((_data, j) => {
             const v = dataMatrix[i][j];
             setCellValue(ctx, r + i, c + j, flowdata, v);
         });
@@ -38,30 +33,30 @@ export function updateMoreCell(
 // Order matters: each separator appends to the alternation; "splitsimple" wraps
 // the result with `[...]+` and must be applied last.
 export function getRegStr(selected: ReadonlySet<string>, otherValue: string) {
-    let regStr = "";
+    let regStr = '';
     let mark = 0;
-    const append = (token: string, separator = "|") => {
+    const append = (token: string, separator = '|') => {
         if (mark > 0) regStr += separator;
         regStr += token;
         mark += 1;
     };
-    if (selected.has("Tab")) {
-        regStr += "\\t";
+    if (selected.has('Tab')) {
+        regStr += '\\t';
         mark += 1;
     }
-    if (selected.has("semicolon")) {
-        append(";");
+    if (selected.has('semicolon')) {
+        append(';');
     }
-    if (selected.has("comma")) {
-        append(",");
+    if (selected.has('comma')) {
+        append(',');
     }
-    if (selected.has("space")) {
-        append("\\s");
+    if (selected.has('space')) {
+        append('\\s');
     }
-    if (selected.has("other") && otherValue !== "") {
+    if (selected.has('other') && otherValue !== '') {
         append(otherValue);
     }
-    if (selected.has("splitsimple")) {
+    if (selected.has('splitsimple')) {
         regStr = `[${regStr}]+`;
     }
     return regStr;
@@ -74,8 +69,8 @@ export function getDataArr(regStr: string, ctx: Context) {
     const r2 = ctx.luckysheet_select_save![0].row[1];
     const c = ctx.luckysheet_select_save![0].column[0];
     const data = getFlowdata(ctx);
-    if (regStr !== null && regStr !== "") {
-        const reg = new RegExp(regStr, "g");
+    if (regStr !== null && regStr !== '') {
+        const reg = new RegExp(regStr, 'g');
         const dataArr = [];
         for (let r = r1; r <= r2; r += 1) {
             let rowArr = [];
@@ -87,7 +82,7 @@ export function getDataArr(regStr: string, ctx: Context) {
                 value = getCellValue(r, c, data!);
             }
             if (value === null || value === undefined) {
-                value = "";
+                value = '';
             }
             rowArr = value.toString().split(reg);
             dataArr.push(rowArr);
@@ -119,7 +114,7 @@ export function getDataArr(regStr: string, ctx: Context) {
             }
 
             if (value === null) {
-                value = "";
+                value = '';
             }
 
             rowArr.push(value);

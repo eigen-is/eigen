@@ -1,11 +1,6 @@
-import {Context, FormulaCache} from "../../index";
+import { type Context, FormulaCache } from '../../index';
 
-export function selectionFactory(
-    row: number[],
-    column: number[],
-    row_focus: number,
-    column_focus: number
-) {
+export function selectionFactory(row: number[], column: number[], row_focus: number, column_focus: number) {
     return [
         {
             row,
@@ -16,11 +11,9 @@ export function selectionFactory(
     ];
 }
 
-export function contextFactory({
-                                   ...params
-                               }: Partial<Context> = {}): Partial<Context> {
+export function contextFactory({ ...params }: Partial<Context> = {}): Partial<Context> {
     return {
-        currentSheetId: "id_1",
+        currentSheetId: 'id_1',
         allowEdit: true,
         config: {},
         luckysheet_select_save: [
@@ -33,8 +26,8 @@ export function contextFactory({
         ],
         luckysheetfile: [
             {
-                name: "sheet",
-                id: "id_1",
+                name: 'sheet',
+                id: 'id_1',
                 data: [
                     [null, null, null, null],
                     [null, null, null, null],
@@ -44,8 +37,8 @@ export function contextFactory({
                 order: 0,
             },
             {
-                name: "sheet",
-                id: "id_2",
+                name: 'sheet',
+                id: 'id_2',
                 data: [
                     [null, null, null, null],
                     [null, null, null, null],

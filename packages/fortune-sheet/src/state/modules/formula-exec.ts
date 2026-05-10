@@ -1,37 +1,30 @@
 // Context-coupled formula execution. These functions read/write Context
 // (formula caches, sheet data, calc chains) so they stay in the state layer.
 // The engine directory has zero state-runtime dependencies.
-import {forEach, isEmpty} from "es-toolkit/compat";
-import type {Cell, CellMatrix, FormulaCellInfo, FormulaDependency} from "../../engine/types";
-import type {FormulaCell} from "../types";
-import { Context, getFlowdata } from "../context";
-import { columnCharToIndex, getSheetIndex } from "../utils";
-import { setCellValue } from "./cell";
-import { error } from "./validation";
+import { forEach, isEmpty } from 'es-toolkit/compat';
 import {
-    arrayMatch,
-    executeAffectedFormulas,
-    getFormulaRunList,
-    setFormulaCellInfo,
-} from "./formulaHelper";
-import {
+    calPostfixExpression,
+    checkBracketNum,
     iscelldata,
     operatorjson,
     operatorPriority,
-    calPostfixExpression,
-    checkBracketNum,
-} from "../../engine/formula-utils";
-import { createContextResolver } from "./formula-cache";
+} from '../../engine/formula-utils';
+import type { Cell, CellMatrix, FormulaCellInfo, FormulaDependency } from '../../engine/types';
+import { type Context, getFlowdata } from '../context';
+import type { FormulaCell } from '../types';
+import { columnCharToIndex, getSheetIndex } from '../utils';
+import { setCellValue } from './cell';
+import { createContextResolver } from './formula-cache';
+import { arrayMatch, executeAffectedFormulas, getFormulaRunList, setFormulaCellInfo } from './formulaHelper';
+import { error } from './validation';
 
 // Regex for cell label extraction
-const simpleSheetName = "[A-Za-z0-9_\u00C0-\u02AF]+";
+const simpleSheetName = '[A-Za-z0-9_\u00C0-\u02AF]+';
 const quotedSheetName = "'(?:(?!').|'')*'";
 const sheetNameRegexp = `(${simpleSheetName}|${quotedSheetName})!`;
 const rowColumnRegexp = `[$]?[A-Za-z]+[$]?[0-9]+`;
 const rowColumnWithSheetName = `(?:${sheetNameRegexp})?(${rowColumnRegexp})`;
-const LABEL_EXTRACT_REGEXP = new RegExp(
-    `^${rowColumnWithSheetName}(?:[:]${rowColumnWithSheetName})?$`
-);
+const LABEL_EXTRACT_REGEXP = new RegExp(`^${rowColumnWithSheetName}(?:[:]${rowColumnWithSheetName})?$`);
 
 function addToCellIndexList(ctx: Context, txt: string, infoObj: FormulaDependency | null): void {
     if (txt == null || txt.length === 0 || infoObj == null) {
@@ -41,7 +34,7 @@ function addToCellIndexList(ctx: Context, txt: string, infoObj: FormulaDependenc
         ctx.formulaCache.cellTextToIndexList = {};
     }
 
-    if (txt.indexOf("!") > -1) {
+    if (txt.indexOf('!') > -1) {
         txt = txt.replace(/\\'/g, "'").replace(/''/g, "'");
         ctx.formulaCache.cellTextToIndexList[txt] = infoObj;
     } else {
@@ -52,44 +45,36 @@ function addToCellIndexList(ctx: Context, txt: string, infoObj: FormulaDependenc
 function checkSpecialFunctionRange(
     ctx: Context,
     function_str: string,
-    r: number | null,
-    c: number | null,
+    _r: number | null,
+    _c: number | null,
     id: string,
-    dynamicArray_compute?: unknown,
-    cellRangeFunction?: ((str: string) => void) | null
+    _dynamicArray_compute?: unknown,
+    cellRangeFunction?: ((str: string) => void) | null,
 ): void {
     if (
-        function_str.substring(0, 30) === "luckysheet_getSpecialReference" ||
-        function_str.substring(0, 20) === "luckysheet_function."
+        function_str.substring(0, 30) === 'luckysheet_getSpecialReference' ||
+        function_str.substring(0, 20) === 'luckysheet_function.'
     ) {
-        if (function_str.substring(0, 20) === "luckysheet_function.") {
-            let funcName = function_str.split(".")[1];
+        if (function_str.substring(0, 20) === 'luckysheet_function.') {
+            let funcName = function_str.split('.')[1];
             if (funcName != null) {
                 funcName = funcName.toUpperCase();
-                if (
-                    funcName !== "INDIRECT" &&
-                    funcName !== "OFFSET" &&
-                    funcName !== "INDEX"
-                ) {
+                if (funcName !== 'INDIRECT' && funcName !== 'OFFSET' && funcName !== 'INDEX') {
                     return;
                 }
             }
         }
         try {
             ctx.calculateSheetId = id;
-            const str = function_str
-                .split(",")
-                [function_str.split(",").length - 1].split("'")[1]
-                .split("'")[0];
+            const str = function_str.split(',')[function_str.split(',').length - 1].split("'")[1].split("'")[0];
 
             const str_nb = str.trim();
             if (iscelldata(str_nb)) {
-                if (typeof cellRangeFunction === "function") {
+                if (typeof cellRangeFunction === 'function') {
                     cellRangeFunction(str_nb);
                 }
             }
-        } catch {
-        }
+        } catch {}
     }
 }
 
@@ -97,21 +82,21 @@ export function getcellrange(
     ctx: Context,
     txt: string,
     formulaId?: string,
-    data?: CellMatrix
+    data?: CellMatrix,
 ): FormulaDependency | null {
     if (txt == null || txt.length === 0) {
         return null;
     }
     const flowdata = data || getFlowdata(ctx, formulaId);
 
-    let sheettxt = "";
-    let rangetxt = "";
+    let sheettxt = '';
+    let rangetxt = '';
     let sheetId;
     let sheetdata = null;
 
     const { luckysheetfile } = ctx;
 
-    if (txt.indexOf("!") > -1) {
+    if (txt.indexOf('!') > -1) {
         if (txt in ctx.formulaCache.cellTextToIndexList) {
             return ctx.formulaCache.cellTextToIndexList[txt];
         }
@@ -125,10 +110,7 @@ export function getcellrange(
             return null;
         }
         rangetxt = starttxt2 ? `${starttxt1}:${starttxt2}` : starttxt1;
-        sheettxt = sheettxt1
-            .replace(/^'|'$/g, "")
-            .replace(/\\'/g, "'")
-            .replace(/''/g, "'");
+        sheettxt = sheettxt1.replace(/^'|'$/g, '').replace(/\\'/g, "'").replace(/''/g, "'");
 
         forEach(luckysheetfile, (f) => {
             if (sheettxt === f.name) {
@@ -160,9 +142,9 @@ export function getcellrange(
         return null;
     }
 
-    if (rangetxt.indexOf(":") === -1) {
-        const row = parseInt(rangetxt.replace(/[^0-9]/g, ""), 10) - 1;
-        const col = columnCharToIndex(rangetxt.replace(/[^A-Za-z]/g, ""));
+    if (rangetxt.indexOf(':') === -1) {
+        const row = parseInt(rangetxt.replace(/[^0-9]/g, ''), 10) - 1;
+        const col = columnCharToIndex(rangetxt.replace(/[^A-Za-z]/g, ''));
 
         if (!Number.isNaN(row) && !Number.isNaN(col)) {
             const item: FormulaDependency = {
@@ -175,11 +157,11 @@ export function getcellrange(
         }
         return null;
     }
-    const rangetxtArr = rangetxt.split(":");
+    const rangetxtArr = rangetxt.split(':');
     const row: [number, number] = [-1, -1];
     const col: [number, number] = [-1, -1];
-    row[0] = parseInt(rangetxtArr[0].replace(/[^0-9]/g, ""), 10) - 1;
-    row[1] = parseInt(rangetxtArr[1].replace(/[^0-9]/g, ""), 10) - 1;
+    row[0] = parseInt(rangetxtArr[0].replace(/[^0-9]/g, ''), 10) - 1;
+    row[1] = parseInt(rangetxtArr[1].replace(/[^0-9]/g, ''), 10) - 1;
     if (Number.isNaN(row[0])) {
         row[0] = 0;
     }
@@ -189,8 +171,8 @@ export function getcellrange(
     if (row[0] > row[1]) {
         return null;
     }
-    col[0] = columnCharToIndex(rangetxtArr[0].replace(/[^A-Za-z]/g, ""));
-    col[1] = columnCharToIndex(rangetxtArr[1].replace(/[^A-Za-z]/g, ""));
+    col[0] = columnCharToIndex(rangetxtArr[0].replace(/[^A-Za-z]/g, ''));
+    col[1] = columnCharToIndex(rangetxtArr[1].replace(/[^A-Za-z]/g, ''));
     if (Number.isNaN(col[0])) {
         col[0] = 0;
     }
@@ -217,16 +199,16 @@ export function isFunctionRange(
     c: number | null,
     id: string,
     dynamicArray_compute: unknown,
-    cellRangeFunction: ((str: string) => void) | null
+    cellRangeFunction: ((str: string) => void) | null,
 ): string {
-    if (txt.substring(0, 1) === "=") {
+    if (txt.substring(0, 1) === '=') {
         txt = txt.substring(1);
     }
 
-    const funcstack = txt.split("");
+    const funcstack = txt.split('');
     let i = 0;
-    let str = "";
-    let function_str = "";
+    let str = '';
+    let function_str = '';
 
     const matchConfig = {
         bracket: 0,
@@ -244,80 +226,52 @@ export function isFunctionRange(
     while (i < funcstack.length) {
         const s = funcstack[i];
 
-        if (
-            s === "(" &&
-            matchConfig.squote === 0 &&
-            matchConfig.dquote === 0 &&
-            matchConfig.braces === 0
-        ) {
+        if (s === '(' && matchConfig.squote === 0 && matchConfig.dquote === 0 && matchConfig.braces === 0) {
             if (str.length > 0 && bracket.length === 0) {
                 str = str.toUpperCase();
-                if (str.indexOf(":") > -1) {
-                    const funcArray = str.split(":");
+                if (str.indexOf(':') > -1) {
+                    const funcArray = str.split(':');
                     function_str += `luckysheet_getSpecialReference(true,'${funcArray[0]
                         .trim()
-                        .replace(/'/g, "\\'")}', luckysheet_function.${
-                        funcArray[1]
-                    }.f(#lucky#`;
+                        .replace(/'/g, "\\'")}', luckysheet_function.${funcArray[1]}.f(#lucky#`;
                 } else {
                     function_str += `luckysheet_function.${str}.f(`;
                 }
                 bracket.push(1);
-                str = "";
+                str = '';
             } else if (bracket.length === 0) {
-                function_str += "(";
+                function_str += '(';
                 bracket.push(0);
-                str = "";
+                str = '';
             } else {
                 bracket.push(0);
                 str += s;
             }
-        } else if (
-            s === ")" &&
-            matchConfig.squote === 0 &&
-            matchConfig.dquote === 0 &&
-            matchConfig.braces === 0
-        ) {
+        } else if (s === ')' && matchConfig.squote === 0 && matchConfig.dquote === 0 && matchConfig.braces === 0) {
             bracket.pop();
 
             if (bracket.length === 0) {
-                let functionS = isFunctionRange(
-                    ctx,
-                    str,
-                    r,
-                    c,
-                    id,
-                    dynamicArray_compute,
-                    cellRangeFunction
-                );
-                if (functionS.indexOf("#lucky#") > -1) {
-                    functionS = `${functionS.replace(/#lucky#/g, "")})`;
+                let functionS = isFunctionRange(ctx, str, r, c, id, dynamicArray_compute, cellRangeFunction);
+                if (functionS.indexOf('#lucky#') > -1) {
+                    functionS = `${functionS.replace(/#lucky#/g, '')})`;
                 }
                 function_str += `${functionS})`;
-                str = "";
+                str = '';
             } else {
                 str += s;
             }
-        } else if (
-            s === "{" &&
-            matchConfig.squote === 0 &&
-            matchConfig.dquote === 0
-        ) {
-            str += "{";
+        } else if (s === '{' && matchConfig.squote === 0 && matchConfig.dquote === 0) {
+            str += '{';
             matchConfig.braces += 1;
-        } else if (
-            s === "}" &&
-            matchConfig.squote === 0 &&
-            matchConfig.dquote === 0
-        ) {
-            str += "}";
+        } else if (s === '}' && matchConfig.squote === 0 && matchConfig.dquote === 0) {
+            str += '}';
             matchConfig.braces -= 1;
         } else if (s === '"' && matchConfig.squote === 0) {
             if (matchConfig.dquote > 0) {
                 // If "" is found, it represents an escaped quote character "
                 if (i < funcstack.length - 1 && funcstack[i + 1] === '"') {
                     i += 1;
-                    str += "\x7F"; // Replace "" with DEL character
+                    str += '\x7F'; // Replace "" with DEL character
                 } else {
                     matchConfig.dquote -= 1;
                     str += '"';
@@ -341,29 +295,16 @@ export function isFunctionRange(
             } else {
                 matchConfig.squote += 1;
             }
-        } else if (
-            s === "," &&
-            matchConfig.squote === 0 &&
-            matchConfig.dquote === 0 &&
-            matchConfig.braces === 0
-        ) {
+        } else if (s === ',' && matchConfig.squote === 0 && matchConfig.dquote === 0 && matchConfig.braces === 0) {
             if (bracket.length <= 1) {
-                let functionS = isFunctionRange(
-                    ctx,
-                    str,
-                    r,
-                    c,
-                    id,
-                    dynamicArray_compute,
-                    cellRangeFunction
-                );
-                if (functionS.indexOf("#lucky#") > -1) {
-                    functionS = `${functionS.replace(/#lucky#/g, "")})`;
+                let functionS = isFunctionRange(ctx, str, r, c, id, dynamicArray_compute, cellRangeFunction);
+                if (functionS.indexOf('#lucky#') > -1) {
+                    functionS = `${functionS.replace(/#lucky#/g, '')})`;
                 }
                 function_str += `${functionS},`;
-                str = "";
+                str = '';
             } else {
-                str += ",";
+                str += ',';
             }
         } else if (
             s in operatorjson &&
@@ -371,7 +312,7 @@ export function isFunctionRange(
             matchConfig.dquote === 0 &&
             matchConfig.braces === 0
         ) {
-            let s_next = "";
+            let s_next = '';
             const op = operatorPriority;
 
             if (i + 1 < funcstack.length) {
@@ -382,15 +323,7 @@ export function isFunctionRange(
                 if (bracket.length === 0) {
                     if (str.trim().length > 0) {
                         cal2.unshift(
-                            isFunctionRange(
-                                ctx,
-                                str.trim(),
-                                r,
-                                c,
-                                id,
-                                dynamicArray_compute,
-                                cellRangeFunction
-                            )
+                            isFunctionRange(ctx, str.trim(), r, c, id, dynamicArray_compute, cellRangeFunction),
                         );
                     } else if (function_str.trim().length > 0) {
                         cal2.unshift(function_str.trim());
@@ -407,8 +340,8 @@ export function isFunctionRange(
 
                     cal1.unshift(s + s_next);
 
-                    function_str = "";
-                    str = "";
+                    function_str = '';
+                    str = '';
                 } else {
                     str += s + s_next;
                 }
@@ -418,15 +351,7 @@ export function isFunctionRange(
                 if (bracket.length === 0) {
                     if (str.trim().length > 0) {
                         cal2.unshift(
-                            isFunctionRange(
-                                ctx,
-                                str.trim(),
-                                r,
-                                c,
-                                id,
-                                dynamicArray_compute,
-                                cellRangeFunction
-                            )
+                            isFunctionRange(ctx, str.trim(), r, c, id, dynamicArray_compute, cellRangeFunction),
                         );
                     } else if (function_str.trim().length > 0) {
                         cal2.unshift(function_str.trim());
@@ -449,8 +374,8 @@ export function isFunctionRange(
 
                     cal1.unshift(s);
 
-                    function_str = "";
-                    str = "";
+                    function_str = '';
+                    str = '';
                 } else {
                     str += s;
                 }
@@ -464,11 +389,11 @@ export function isFunctionRange(
         }
 
         if (i === funcstack.length - 1) {
-            let endstr = "";
+            let endstr = '';
             let str_nb = str.trim().replace(/'/g, "\\'");
-            if (iscelldata(str_nb) && str_nb.substring(0, 1) !== ":") {
+            if (iscelldata(str_nb) && str_nb.substring(0, 1) !== ':') {
                 endstr = `luckysheet_getcelldata('${str_nb}')`;
-            } else if (str_nb.substring(0, 1) === ":") {
+            } else if (str_nb.substring(0, 1) === ':') {
                 str_nb = str_nb.substring(1);
                 if (iscelldata(str_nb)) {
                     endstr = `luckysheet_getSpecialReference(false,${function_str},'${str_nb}')`;
@@ -477,11 +402,7 @@ export function isFunctionRange(
                 str = str.trim();
 
                 const regx = /{.*?}/;
-                if (
-                    regx.test(str) &&
-                    str.substring(0, 1) !== '"' &&
-                    str.substring(str.length - 1, 1) !== '"'
-                ) {
+                if (regx.test(str) && str.substring(0, 1) !== '"' && str.substring(str.length - 1, 1) !== '"') {
                     const arraytxt = regx.exec(str)?.[0];
                     const arraystart = str.search(regx);
 
@@ -506,7 +427,7 @@ export function isFunctionRange(
             if (cal1.length > 0) {
                 if (function_str.length > 0) {
                     cal2.unshift(function_str);
-                    function_str = "";
+                    function_str = '';
                 }
 
                 while (cal1.length > 0) {
@@ -523,15 +444,7 @@ export function isFunctionRange(
 
         i += 1;
     }
-    checkSpecialFunctionRange(
-        ctx,
-        function_str,
-        r,
-        c,
-        id,
-        dynamicArray_compute,
-        cellRangeFunction
-    );
+    checkSpecialFunctionRange(ctx, function_str, r, c, id, dynamicArray_compute, cellRangeFunction);
     return function_str;
 }
 
@@ -566,12 +479,7 @@ export function getAllFunctionGroup(ctx: Context): FormulaCell[] {
     return ret;
 }
 
-export function delFunctionGroup(
-    ctx: Context,
-    r: number,
-    c: number,
-    id?: string
-): void {
+export function delFunctionGroup(ctx: Context, r: number, c: number, id?: string): void {
     if (id == null) {
         id = ctx.currentSheetId;
     }
@@ -601,11 +509,7 @@ export function delFunctionGroup(
         const dynamicArrayClone = dynamicArray.slice();
         for (let i = 0; i < dynamicArrayClone.length; i += 1) {
             const calc = dynamicArrayClone[i];
-            if (
-                calc.r === r &&
-                calc.c === c &&
-                (calc.id == null || calc.id === id)
-            ) {
+            if (calc.r === r && calc.c === c && (calc.id == null || calc.id === id)) {
                 dynamicArrayClone.splice(i, 1);
                 modified = true;
                 break;
@@ -622,7 +526,7 @@ export function insertUpdateFunctionGroup(
     r: number,
     c: number,
     id?: string,
-    calcChainSet?: Set<string>
+    calcChainSet?: Set<string>,
 ): void {
     if (id == null) {
         id = ctx.currentSheetId;
@@ -661,7 +565,7 @@ export function insertUpdateFunctionGroup(
     ctx.luckysheetfile = luckysheetfile;
 }
 
-export type ExecFunctionResult = [boolean, Cell["v"], string];
+export type ExecFunctionResult = [boolean, Cell['v'], string];
 
 export function execfunction(
     ctx: Context,
@@ -671,14 +575,14 @@ export function execfunction(
     id?: string,
     calcChainSet?: Set<string>,
     isrefresh?: boolean,
-    notInsertFunc?: boolean
+    notInsertFunc?: boolean,
 ): ExecFunctionResult {
     if (txt.indexOf(error.r) > -1) {
         return [false, error.r, txt];
     }
 
     if (!checkBracketNum(txt)) {
-        txt += ")";
+        txt += ')';
     }
 
     if (id == null) {
@@ -722,11 +626,7 @@ export function groupValuesRefresh(ctx: Context): void {
     ctx.groupValuesRefreshData = [];
 }
 
-export function setFormulaCellInfoMap(
-    ctx: Context,
-    calcChains?: FormulaCell[],
-    data?: CellMatrix | null
-): void {
+export function setFormulaCellInfoMap(ctx: Context, calcChains?: FormulaCell[], data?: CellMatrix | null): void {
     if (calcChains == null) return;
     for (let i = 0; i < calcChains.length; i += 1) {
         const formulaCell = calcChains[i];
@@ -741,7 +641,7 @@ export function execFunctionGroup(
     value: unknown,
     id?: string | null,
     data?: CellMatrix | null,
-    isForce = false
+    isForce = false,
 ): void {
     // 0. null checks
     if (data == null) {
@@ -758,13 +658,7 @@ export function execFunctionGroup(
     if (value != null) {
         const cellCache: Cell[][] = [[{ v: undefined }]];
         setCellValue(ctx, 0, 0, cellCache, value);
-        [
-            [
-                ctx.formulaCache.execFunctionGlobalData[
-                    `${origin_r}_${origin_c}_${id}`
-                ],
-            ],
-        ] = cellCache;
+        [[ctx.formulaCache.execFunctionGlobalData[`${origin_r}_${origin_c}_${id}`]]] = cellCache;
     }
 
     // 1. get list of all functions in the sheet
@@ -783,10 +677,7 @@ export function execFunctionGroup(
     }
 
     // 3. formulaCellInfoMap: a cache of ALL formulas vs their ranges
-    if (
-        !ctx.formulaCache.formulaCellInfoMap ||
-        isEmpty(ctx.formulaCache.formulaCellInfoMap)
-    ) {
+    if (!ctx.formulaCache.formulaCellInfoMap || isEmpty(ctx.formulaCache.formulaCellInfoMap)) {
         ctx.formulaCache.formulaCellInfoMap = {};
         setFormulaCellInfoMap(ctx, calcChains, data);
     }
@@ -795,10 +686,7 @@ export function execFunctionGroup(
     // 4. Form a graph structure of references between formulas
     // basically fills parents in formulaCellInfoMap[i]
     const updateValueArray: FormulaCellInfo[] = [];
-    const arrayMatchCache: Record<
-        string,
-        { key: string; r: number; c: number; sheetId: string }[]
-    > = {};
+    const arrayMatchCache: Record<string, { key: string; r: number; c: number; sheetId: string }[]> = {};
     Object.keys(formulaCellInfoMap).forEach((key) => {
         const formulaObject = formulaCellInfoMap[key];
         arrayMatch(
@@ -815,7 +703,7 @@ export function execFunctionGroup(
                 if (!isForce && childKey in updateValueObjects) {
                     updateValueArray.push(formulaObject);
                 }
-            }
+            },
         );
 
         if (isForce) {
@@ -824,10 +712,7 @@ export function execFunctionGroup(
     });
 
     // 5. Get list of affected formulas using the graph structure by depth-first traversal
-    const formulaRunList = getFormulaRunList(
-        updateValueArray,
-        formulaCellInfoMap
-    );
+    const formulaRunList = getFormulaRunList(updateValueArray, formulaCellInfoMap);
 
     // 6. execute relevant formulas
     executeAffectedFormulas(ctx, formulaRunList, calcChains);

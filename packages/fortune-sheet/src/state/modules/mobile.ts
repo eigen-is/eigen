@@ -1,16 +1,13 @@
-import {GlobalCache} from "../types";
+import type { GlobalCache } from '../types';
 
-export function handleOverlayTouchStart(
-    e: TouchEvent,
-    globalCache: GlobalCache
-) {
+export function handleOverlayTouchStart(e: TouchEvent, globalCache: GlobalCache) {
     globalCache.touchMoveStatus = true;
     const touch = e.targetTouches[0];
     globalCache.touchMoveStartPos = {
         x: touch.pageX,
         y: touch.pageY,
         vy: 0,
-        moveType: "y",
+        moveType: 'y',
     };
 }
 
@@ -18,7 +15,7 @@ export function handleOverlayTouchMove(
     e: TouchEvent,
     globalCache: GlobalCache,
     scrollbarX: HTMLDivElement,
-    scrollbarY: HTMLDivElement
+    scrollbarY: HTMLDivElement,
 ) {
     if (e.targetTouches.length > 1) return;
     const touch = e.targetTouches[0];

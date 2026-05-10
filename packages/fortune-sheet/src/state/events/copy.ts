@@ -1,8 +1,8 @@
-import {isEmpty, isNil} from "es-toolkit/compat";
-import {cancelPaintModel, checkCF, getComputeMap, getSheetIndex} from "..";
-import type {Context} from "../context";
-import {copy, selectIsOverlap} from "../modules/selection";
-import {hasPartMC} from "../modules/validation";
+import { isEmpty, isNil } from 'es-toolkit/compat';
+import { cancelPaintModel, checkCF, getComputeMap, getSheetIndex } from '..';
+import type { Context } from '../context';
+import { copy, selectIsOverlap } from '../modules/selection';
+import { hasPartMC } from '../modules/validation';
 
 export function handleCopy(ctx: Context): boolean {
     // if (imageCtrl.currentImgId != null) {
@@ -49,8 +49,7 @@ export function handleCopy(ctx: Context): boolean {
 
     // warn when multiple selections have conditional formatting
     const cdformat =
-        ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId) as number]
-            .luckysheet_conditionformat_save;
+        ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId) as number].luckysheet_conditionformat_save;
     if (
         !isNil(ctx.luckysheet_select_save) &&
         ctx.luckysheet_select_save.length > 1 &&
@@ -107,10 +106,7 @@ export function handleCopy(ctx: Context): boolean {
             if (selection[s].row[0] !== str_r || selection[s].row[1] !== end_r) {
                 isSameRow = false;
             }
-            if (
-                selection[s].column[0] !== str_c ||
-                selection[s].column[1] !== end_c
-            ) {
+            if (selection[s].column[0] !== str_c || selection[s].column[1] !== end_c) {
                 isSameCol = false;
             }
         }

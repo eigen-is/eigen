@@ -1,12 +1,12 @@
-import {cloneDeep, isPlainObject} from "es-toolkit/compat";
-import {getdatabyselection, getFlowdata, getRangetxt, Selection} from "..";
-import {Context} from "../context";
-import {normalizeSelection, rangeValueToHtml} from "../modules";
-import type {Cell} from "../../engine/types";
-import {Range, SingleRange} from "../types";
-import {setCellFormat, setCellValue} from "./cell";
-import {CommonOptions, getSheet} from "./common";
-import {invalidParams} from "./errors";
+import { cloneDeep, isPlainObject } from 'es-toolkit/compat';
+import type { Cell } from '../../engine/types';
+import { getdatabyselection, getFlowdata, getRangetxt, type Selection } from '..';
+import type { Context } from '../context';
+import { normalizeSelection, rangeValueToHtml } from '../modules';
+import type { Range, SingleRange } from '../types';
+import { setCellFormat, setCellValue } from './cell';
+import { type CommonOptions, getSheet } from './common';
+import { invalidParams } from './errors';
 
 export function getSelection(ctx: Context) {
     return ctx.luckysheet_select_save?.map((selection) => ({
@@ -25,17 +25,14 @@ export function getFlattenRange(ctx: Context, range?: Range) {
         const cs = ele.column;
         for (let r = rs[0]; r <= rs[1]; r += 1) {
             for (let c = cs[0]; c <= cs[1]; c += 1) {
-                result.push({r, c});
+                result.push({ r, c });
             }
         }
     });
     return result;
 }
 
-export function getCellsByFlattenRange(
-    ctx: Context,
-    range?: { r: number; c: number }[]
-) {
+export function getCellsByFlattenRange(ctx: Context, range?: { r: number; c: number }[]) {
     range = range || getFlattenRange(ctx);
 
     const flowdata = getFlowdata(ctx);
@@ -59,33 +56,21 @@ export function getSelectionCoordinates(ctx: Context) {
     return result;
 }
 
-export function getCellsByRange(
-    ctx: Context,
-    range: Selection,
-    options: CommonOptions = {}
-) {
+export function getCellsByRange(ctx: Context, range: Selection, options: CommonOptions = {}) {
     const sheet = getSheet(ctx, options);
 
-    if (!range || typeof range === "object") {
+    if (!range || typeof range === 'object') {
         return getdatabyselection(ctx, range, sheet.id!);
     }
     throw invalidParams();
 }
 
-export function getHtmlByRange(
-    ctx: Context,
-    range: Range,
-    options: CommonOptions = {}
-) {
+export function getHtmlByRange(ctx: Context, range: Range, options: CommonOptions = {}) {
     const sheet = getSheet(ctx, options);
     return rangeValueToHtml(ctx, sheet.id!, range);
 }
 
-export function setSelection(
-    ctx: Context,
-    range: Range,
-    options: CommonOptions
-) {
+export function setSelection(ctx: Context, range: Range, options: CommonOptions) {
     const sheet = getSheet(ctx, options);
     sheet.luckysheet_select_save = normalizeSelection(ctx, range);
     if (ctx.currentSheetId === sheet.id) {
@@ -98,14 +83,14 @@ export function setCellValuesByRange(
     data: any[][],
     range: SingleRange,
     cellInput: HTMLDivElement | null,
-    options: CommonOptions = {}
+    options: CommonOptions = {},
 ) {
     if (data == null) {
         throw invalidParams();
     }
 
-    if (range instanceof Array) {
-        throw new Error("setCellValuesByRange does not support multiple ranges");
+    if (Array.isArray(range)) {
+        throw new Error('setCellValuesByRange does not support multiple ranges');
     }
 
     if (!isPlainObject(range)) {
@@ -116,7 +101,7 @@ export function setCellValuesByRange(
     const columnCount = range.column[1] - range.column[0] + 1;
 
     if (data.length !== rowCount || data[0].length !== columnCount) {
-        throw new Error("data size does not match range");
+        throw new Error('data size does not match range');
     }
 
     for (let i = 0; i < rowCount; i += 1) {
@@ -133,7 +118,7 @@ export function setCellFormatByRange(
     attr: keyof Cell,
     value: any,
     range: Range | SingleRange,
-    options: CommonOptions = {}
+    options: CommonOptions = {},
 ) {
     if (isPlainObject(range)) {
         range = [range as SingleRange];

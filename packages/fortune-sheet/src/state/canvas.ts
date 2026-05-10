@@ -1,26 +1,25 @@
-import {isEmpty, isPlainObject, sortedIndex} from "es-toolkit/compat";
-import {defaultContext, getFlowdata} from "./context";
-import {getRealCellValue, normalizedAttr} from "./modules/cell";
-import {clearMeasureTextCache, defaultFont, getCellTextInfo, getFontSet, getMeasureText,} from "./modules/text";
-import type {CellTextInfo} from "./modules/text";
-import {isInlineStringCell} from "./modules/inline-string";
-import {getSheetIndex, indexToColumnChar} from "./utils";
-import {getBorderInfoComputeRange} from "./modules/border";
-import {checkCF, getComputeMap, validateCellData} from "./modules";
+import { isEmpty, isPlainObject, sortedIndex } from 'es-toolkit/compat';
+import { type defaultContext, getFlowdata } from './context';
+import { checkCF, getComputeMap, validateCellData } from './modules';
+import { getBorderInfoComputeRange } from './modules/border';
+import { getRealCellValue, normalizedAttr } from './modules/cell';
+import { isInlineStringCell } from './modules/inline-string';
+import type { CellTextInfo } from './modules/text';
+import { clearMeasureTextCache, defaultFont, getCellTextInfo, getFontSet, getMeasureText } from './modules/text';
+import { getSheetIndex, indexToColumnChar } from './utils';
 
 export const defaultStyle = {
-    fillStyle: "#000000",
-    textBaseline: "middle",
-    strokeStyle: "rgba(0, 0, 0, 0.1)",
-    rowFillStyle: "#5e5e5e",
-    textAlign: "center",
+    fillStyle: '#000000',
+    textBaseline: 'middle',
+    strokeStyle: 'rgba(0, 0, 0, 0.1)',
+    rowFillStyle: '#5e5e5e',
+    textAlign: 'center',
 } as const;
 
 // Check if value is a pure number
 function isRealNum(val: any) {
     return !Number.isNaN(Number(val));
 }
-
 
 const BORDER_FIX = [-1, 0, 0, -1] as const;
 
@@ -31,37 +30,37 @@ function setLineDash(
     moveX: number,
     moveY: number,
     toX: number,
-    toY: number
+    toY: number,
 ) {
     const borderType: any = {
-        "0": "none",
-        "1": "Thin",
-        "2": "Hair",
-        "3": "Dotted",
-        "4": "Dashed",
-        "5": "DashDot",
-        "6": "DashDotDot",
-        "7": "Double",
-        "8": "Medium",
-        "9": "MediumDashed",
-        "10": "MediumDashDot",
-        "11": "MediumDashDotDot",
-        "12": "SlantedDashDot",
-        "13": "Thick",
+        '0': 'none',
+        '1': 'Thin',
+        '2': 'Hair',
+        '3': 'Dotted',
+        '4': 'Dashed',
+        '5': 'DashDot',
+        '6': 'DashDotDot',
+        '7': 'Double',
+        '8': 'Medium',
+        '9': 'MediumDashed',
+        '10': 'MediumDashDot',
+        '11': 'MediumDashDotDot',
+        '12': 'SlantedDashDot',
+        '13': 'Thick',
     };
 
     type = borderType[type.toString()];
 
     try {
-        if (type === "Hair") {
+        if (type === 'Hair') {
             canvasborder.setLineDash([1, 2]);
-        } else if (type.includes("DashDotDot")) {
+        } else if (type.includes('DashDotDot')) {
             canvasborder.setLineDash([2, 2, 5, 2, 2]);
-        } else if (type.includes("DashDot")) {
+        } else if (type.includes('DashDot')) {
             canvasborder.setLineDash([2, 5, 2]);
-        } else if (type.includes("Dotted")) {
+        } else if (type.includes('Dotted')) {
             canvasborder.setLineDash([2]);
-        } else if (type.includes("Dashed")) {
+        } else if (type.includes('Dashed')) {
             canvasborder.setLineDash([3]);
         } else {
             canvasborder.setLineDash([0]);
@@ -72,8 +71,8 @@ function setLineDash(
 
     canvasborder.beginPath();
 
-    if (type.includes("Medium")) {
-        if (hv === "h") {
+    if (type.includes('Medium')) {
+        if (hv === 'h') {
             canvasborder.moveTo(moveX, moveY - 0.5);
             canvasborder.lineTo(toX, toY - 0.5);
         } else {
@@ -82,7 +81,7 @@ function setLineDash(
         }
 
         canvasborder.lineWidth = 2;
-    } else if (type === "Thick") {
+    } else if (type === 'Thick') {
         canvasborder.moveTo(moveX, moveY);
         canvasborder.lineTo(toX, toY);
         canvasborder.lineWidth = 3;
@@ -105,10 +104,7 @@ export class Canvas {
 
     private sheetCtx: ReturnType<typeof defaultContext>;
 
-    constructor(
-        canvasElement: HTMLCanvasElement,
-        ctx: ReturnType<typeof defaultContext>
-    ) {
+    constructor(canvasElement: HTMLCanvasElement, ctx: ReturnType<typeof defaultContext>) {
         this.canvasElement = canvasElement;
         this.sheetCtx = ctx;
     }
@@ -122,21 +118,13 @@ export class Canvas {
             offsetTop = this.sheetCtx.columnHeaderHeight;
         }
 
-        const renderCtx = this.canvasElement.getContext("2d");
+        const renderCtx = this.canvasElement.getContext('2d');
         if (!renderCtx) return;
 
         renderCtx.save();
-        renderCtx.scale(
-            this.sheetCtx.devicePixelRatio,
-            this.sheetCtx.devicePixelRatio
-        );
+        renderCtx.scale(this.sheetCtx.devicePixelRatio, this.sheetCtx.devicePixelRatio);
 
-        renderCtx.clearRect(
-            0,
-            offsetTop,
-            this.sheetCtx.rowHeaderWidth - 1,
-            drawHeight
-        );
+        renderCtx.clearRect(0, offsetTop, this.sheetCtx.rowHeaderWidth - 1, drawHeight);
 
         renderCtx.font = defaultFont(this.sheetCtx.defaultFontSize);
         renderCtx.textBaseline = defaultStyle.textBaseline;
@@ -145,10 +133,7 @@ export class Canvas {
         let dataset_row_st;
         let dataset_row_ed;
         dataset_row_st = sortedIndex(this.sheetCtx.visibledatarow, scrollHeight);
-        dataset_row_ed = sortedIndex(
-            this.sheetCtx.visibledatarow,
-            scrollHeight + drawHeight
-        );
+        dataset_row_ed = sortedIndex(this.sheetCtx.visibledatarow, scrollHeight + drawHeight);
 
         if (dataset_row_st === -1) {
             dataset_row_st = 0;
@@ -159,12 +144,7 @@ export class Canvas {
 
         renderCtx.save();
         renderCtx.beginPath();
-        renderCtx.rect(
-            0,
-            offsetTop - 1,
-            this.sheetCtx.rowHeaderWidth - 1,
-            drawHeight - 2
-        );
+        renderCtx.rect(0, offsetTop - 1, this.sheetCtx.rowHeaderWidth - 1, drawHeight - 2);
         renderCtx.clip();
 
         let end_r;
@@ -189,46 +169,35 @@ export class Canvas {
                     start_r + offsetTop + firstOffset,
                     this.sheetCtx.rowHeaderWidth - 1,
                     end_r - start_r + 1 + lastOffset - firstOffset,
-                    renderCtx
+                    renderCtx,
                 ) === false
             ) {
                 continue;
             }
 
             if (this.sheetCtx.config?.rowhidden?.[r] == null) {
-                renderCtx.fillStyle = "#ffffff";
+                renderCtx.fillStyle = '#ffffff';
                 renderCtx.fillRect(
                     0,
                     start_r + offsetTop + firstOffset,
                     this.sheetCtx.rowHeaderWidth - 1,
-                    end_r - start_r + 1 + lastOffset - firstOffset
+                    end_r - start_r + 1 + lastOffset - firstOffset,
                 );
-                renderCtx.fillStyle = "#000000";
+                renderCtx.fillStyle = '#000000';
 
                 // Row header sequence number
                 const textMetrics = getMeasureText(r + 1, renderCtx);
 
-                const horizonAlignPos =
-                    (this.sheetCtx.rowHeaderWidth - textMetrics.width) / 2;
+                const horizonAlignPos = (this.sheetCtx.rowHeaderWidth - textMetrics.width) / 2;
                 const verticalAlignPos = start_r + (end_r - start_r) / 2 + offsetTop;
 
-                renderCtx.fillText(
-                    `${r + 1}`,
-                    horizonAlignPos,
-                    verticalAlignPos
-                );
+                renderCtx.fillText(`${r + 1}`, horizonAlignPos, verticalAlignPos);
             }
 
             // vertical
             renderCtx.beginPath();
-            renderCtx.moveTo(
-                this.sheetCtx.rowHeaderWidth - 2 + bodrder05,
-                start_r + offsetTop - 2
-            );
-            renderCtx.lineTo(
-                this.sheetCtx.rowHeaderWidth - 2 + bodrder05,
-                end_r + offsetTop - 2
-            );
+            renderCtx.moveTo(this.sheetCtx.rowHeaderWidth - 2 + bodrder05, start_r + offsetTop - 2);
+            renderCtx.lineTo(this.sheetCtx.rowHeaderWidth - 2 + bodrder05, end_r + offsetTop - 2);
             renderCtx.lineWidth = 1;
 
             renderCtx.strokeStyle = defaultStyle.strokeStyle;
@@ -243,37 +212,22 @@ export class Canvas {
             ) {
                 renderCtx.beginPath();
                 renderCtx.moveTo(-1, end_r + offsetTop - 4 + bodrder05);
-                renderCtx.lineTo(
-                    this.sheetCtx.rowHeaderWidth - 1,
-                    end_r + offsetTop - 4 + bodrder05
-                );
+                renderCtx.lineTo(this.sheetCtx.rowHeaderWidth - 1, end_r + offsetTop - 4 + bodrder05);
                 renderCtx.closePath();
                 renderCtx.stroke();
-            } else if (
-                this.sheetCtx.config.rowhidden == null ||
-                this.sheetCtx.config.rowhidden[r] == null
-            ) {
+            } else if (this.sheetCtx.config.rowhidden == null || this.sheetCtx.config.rowhidden[r] == null) {
                 renderCtx.beginPath();
                 renderCtx.moveTo(-1, end_r + offsetTop - 2 + bodrder05);
-                renderCtx.lineTo(
-                    this.sheetCtx.rowHeaderWidth - 1,
-                    end_r + offsetTop - 2 + bodrder05
-                );
+                renderCtx.lineTo(this.sheetCtx.rowHeaderWidth - 1, end_r + offsetTop - 2 + bodrder05);
 
                 renderCtx.closePath();
                 renderCtx.stroke();
             }
 
-            if (
-                this.sheetCtx.config?.rowhidden?.[r - 1] != null &&
-                preEndR !== undefined
-            ) {
+            if (this.sheetCtx.config?.rowhidden?.[r - 1] != null && preEndR !== undefined) {
                 renderCtx.beginPath();
                 renderCtx.moveTo(-1, preEndR + offsetTop + bodrder05);
-                renderCtx.lineTo(
-                    this.sheetCtx.rowHeaderWidth - 1,
-                    preEndR + offsetTop + bodrder05
-                );
+                renderCtx.lineTo(this.sheetCtx.rowHeaderWidth - 1, preEndR + offsetTop + bodrder05);
                 renderCtx.closePath();
                 renderCtx.stroke();
             }
@@ -286,7 +240,7 @@ export class Canvas {
                 start_r + offsetTop + firstOffset,
                 this.sheetCtx.rowHeaderWidth - 1,
                 end_r - start_r + 1 + lastOffset - firstOffset,
-                renderCtx
+                renderCtx,
             );
         }
 
@@ -295,11 +249,7 @@ export class Canvas {
         renderCtx.restore();
     }
 
-    public drawColumnHeader(
-        scrollWidth: number,
-        drawWidth?: number,
-        offsetLeft?: number
-    ) {
+    public drawColumnHeader(scrollWidth: number, drawWidth?: number, offsetLeft?: number) {
         if (drawWidth === undefined) {
             [drawWidth] = this.sheetCtx.luckysheetTableContentHW;
         }
@@ -308,20 +258,12 @@ export class Canvas {
             offsetLeft = this.sheetCtx.rowHeaderWidth;
         }
 
-        const renderCtx = this.canvasElement.getContext("2d");
+        const renderCtx = this.canvasElement.getContext('2d');
         if (!renderCtx) return;
 
         renderCtx.save();
-        renderCtx.scale(
-            this.sheetCtx.devicePixelRatio,
-            this.sheetCtx.devicePixelRatio
-        );
-        renderCtx.clearRect(
-            offsetLeft,
-            0,
-            drawWidth,
-            this.sheetCtx.columnHeaderHeight - 1
-        );
+        renderCtx.scale(this.sheetCtx.devicePixelRatio, this.sheetCtx.devicePixelRatio);
+        renderCtx.clearRect(offsetLeft, 0, drawWidth, this.sheetCtx.columnHeaderHeight - 1);
 
         renderCtx.font = defaultFont(this.sheetCtx.defaultFontSize);
         renderCtx.textBaseline = defaultStyle.textBaseline;
@@ -329,14 +271,8 @@ export class Canvas {
 
         let dataset_col_st;
         let dataset_col_ed;
-        dataset_col_st = sortedIndex(
-            this.sheetCtx.visibledatacolumn,
-            scrollWidth
-        );
-        dataset_col_ed = sortedIndex(
-            this.sheetCtx.visibledatacolumn,
-            scrollWidth + drawWidth
-        );
+        dataset_col_st = sortedIndex(this.sheetCtx.visibledatacolumn, scrollWidth);
+        dataset_col_ed = sortedIndex(this.sheetCtx.visibledatacolumn, scrollWidth + drawWidth);
 
         if (dataset_col_st === -1) {
             dataset_col_st = 0;
@@ -347,12 +283,7 @@ export class Canvas {
 
         renderCtx.save();
         renderCtx.beginPath();
-        renderCtx.rect(
-            offsetLeft - 1,
-            0,
-            drawWidth,
-            this.sheetCtx.columnHeaderHeight - 1
-        );
+        renderCtx.rect(offsetLeft - 1, 0, drawWidth, this.sheetCtx.columnHeaderHeight - 1);
         renderCtx.clip();
 
         let end_c;
@@ -376,37 +307,26 @@ export class Canvas {
                     start_c + offsetLeft - 1,
                     end_c - start_c,
                     this.sheetCtx.columnHeaderHeight - 1,
-                    renderCtx
+                    renderCtx,
                 ) === false
             ) {
                 continue;
             }
 
             if (this.sheetCtx.config?.colhidden?.[c] == null) {
-                renderCtx.fillStyle = "#ffffff";
-                renderCtx.fillRect(
-                    start_c + offsetLeft - 1,
-                    0,
-                    end_c - start_c,
-                    this.sheetCtx.columnHeaderHeight - 1
-                );
-                renderCtx.fillStyle = "#000000";
+                renderCtx.fillStyle = '#ffffff';
+                renderCtx.fillRect(start_c + offsetLeft - 1, 0, end_c - start_c, this.sheetCtx.columnHeaderHeight - 1);
+                renderCtx.fillStyle = '#000000';
 
                 // Column header sequence number
                 const textMetrics = getMeasureText(abc, renderCtx);
 
                 const horizonAlignPos = Math.round(
-                    start_c + (end_c - start_c) / 2 + offsetLeft - textMetrics.width / 2
+                    start_c + (end_c - start_c) / 2 + offsetLeft - textMetrics.width / 2,
                 );
-                const verticalAlignPos = Math.round(
-                    this.sheetCtx.columnHeaderHeight / 2
-                );
+                const verticalAlignPos = Math.round(this.sheetCtx.columnHeaderHeight / 2);
 
-                renderCtx.fillText(
-                    abc,
-                    horizonAlignPos,
-                    verticalAlignPos
-                );
+                renderCtx.fillText(abc, horizonAlignPos, verticalAlignPos);
             }
 
             // Column header vertical line
@@ -417,24 +337,15 @@ export class Canvas {
             ) {
                 renderCtx.beginPath();
                 renderCtx.moveTo(end_c + offsetLeft - 4 + bodrder05, 0);
-                renderCtx.lineTo(
-                    end_c + offsetLeft - 4 + bodrder05,
-                    this.sheetCtx.columnHeaderHeight - 2
-                );
+                renderCtx.lineTo(end_c + offsetLeft - 4 + bodrder05, this.sheetCtx.columnHeaderHeight - 2);
                 renderCtx.lineWidth = 1;
                 renderCtx.strokeStyle = defaultStyle.strokeStyle;
                 renderCtx.closePath();
                 renderCtx.stroke();
-            } else if (
-                this.sheetCtx.config.colhidden == null ||
-                this.sheetCtx.config.colhidden[c] == null
-            ) {
+            } else if (this.sheetCtx.config.colhidden == null || this.sheetCtx.config.colhidden[c] == null) {
                 renderCtx.beginPath();
                 renderCtx.moveTo(end_c + offsetLeft - 2 + bodrder05, 0);
-                renderCtx.lineTo(
-                    end_c + offsetLeft - 2 + bodrder05,
-                    this.sheetCtx.columnHeaderHeight - 2
-                );
+                renderCtx.lineTo(end_c + offsetLeft - 2 + bodrder05, this.sheetCtx.columnHeaderHeight - 2);
 
                 renderCtx.lineWidth = 1;
                 renderCtx.strokeStyle = defaultStyle.strokeStyle;
@@ -442,30 +353,18 @@ export class Canvas {
                 renderCtx.stroke();
             }
 
-            if (
-                this.sheetCtx.config?.colhidden?.[c - 1] != null &&
-                preEndC !== undefined
-            ) {
+            if (this.sheetCtx.config?.colhidden?.[c - 1] != null && preEndC !== undefined) {
                 renderCtx.beginPath();
                 renderCtx.moveTo(preEndC + offsetLeft + bodrder05, 0);
-                renderCtx.lineTo(
-                    preEndC + offsetLeft + bodrder05,
-                    this.sheetCtx.columnHeaderHeight - 2
-                );
+                renderCtx.lineTo(preEndC + offsetLeft + bodrder05, this.sheetCtx.columnHeaderHeight - 2);
                 renderCtx.closePath();
                 renderCtx.stroke();
             }
 
             // horizen
             renderCtx.beginPath();
-            renderCtx.moveTo(
-                start_c + offsetLeft - 1,
-                this.sheetCtx.columnHeaderHeight - 2 + bodrder05
-            );
-            renderCtx.lineTo(
-                end_c + offsetLeft - 1,
-                this.sheetCtx.columnHeaderHeight - 2 + bodrder05
-            );
+            renderCtx.moveTo(start_c + offsetLeft - 1, this.sheetCtx.columnHeaderHeight - 2 + bodrder05);
+            renderCtx.lineTo(end_c + offsetLeft - 1, this.sheetCtx.columnHeaderHeight - 2 + bodrder05);
             renderCtx.stroke();
             renderCtx.closePath();
 
@@ -477,7 +376,7 @@ export class Canvas {
                 start_c + offsetLeft - 1,
                 end_c - start_c,
                 this.sheetCtx.columnHeaderHeight - 1,
-                renderCtx
+                renderCtx,
             );
         }
 
@@ -487,16 +386,16 @@ export class Canvas {
     }
 
     public drawMain({
-                        scrollWidth,
-                        scrollHeight,
-                        drawWidth,
-                        drawHeight,
-                        offsetLeft,
-                        offsetTop,
-                        columnOffsetCell,
-                        rowOffsetCell,
-                        clear,
-                    }: {
+        scrollWidth,
+        scrollHeight,
+        drawWidth,
+        drawHeight,
+        offsetLeft,
+        offsetTop,
+        columnOffsetCell,
+        rowOffsetCell,
+        clear,
+    }: {
         scrollWidth: number;
         scrollHeight: number;
         drawWidth?: number;
@@ -536,20 +435,17 @@ export class Canvas {
             rowOffsetCell = 0;
         }
 
-        const renderCtx = this.canvasElement.getContext("2d");
+        const renderCtx = this.canvasElement.getContext('2d');
         if (!renderCtx) return;
 
         renderCtx.save();
-        renderCtx.scale(
-            this.sheetCtx.devicePixelRatio,
-            this.sheetCtx.devicePixelRatio
-        );
+        renderCtx.scale(this.sheetCtx.devicePixelRatio, this.sheetCtx.devicePixelRatio);
         if (clear) {
             renderCtx.clearRect(
                 0,
                 0,
                 this.sheetCtx.luckysheetTableContentHW[0],
-                this.sheetCtx.luckysheetTableContentHW[1]
+                this.sheetCtx.luckysheetTableContentHW[1],
             );
         }
 
@@ -560,10 +456,7 @@ export class Canvas {
         let colEnd: number;
 
         rowStart = sortedIndex(this.sheetCtx.visibledatarow, scrollHeight);
-        rowEnd = sortedIndex(
-            this.sheetCtx.visibledatarow,
-            scrollHeight + drawHeight
-        );
+        rowEnd = sortedIndex(this.sheetCtx.visibledatarow, scrollHeight + drawHeight);
 
         if (rowStart === -1) {
             rowStart = 0;
@@ -582,10 +475,7 @@ export class Canvas {
         }
 
         colStart = sortedIndex(this.sheetCtx.visibledatacolumn, scrollWidth);
-        colEnd = sortedIndex(
-            this.sheetCtx.visibledatacolumn,
-            scrollWidth + drawWidth
-        );
+        colEnd = sortedIndex(this.sheetCtx.visibledatacolumn, scrollWidth + drawWidth);
 
         if (colStart === -1) {
             colStart = 0;
@@ -608,13 +498,8 @@ export class Canvas {
         const colEndX = this.sheetCtx.visibledatacolumn[colEnd];
 
         // Initialize table canvas area
-        renderCtx.fillStyle = "#ffffff";
-        renderCtx.fillRect(
-            offsetLeft - 1,
-            offsetTop - 1,
-            colEndX - scrollWidth,
-            rowEndY - scrollHeight
-        );
+        renderCtx.fillStyle = '#ffffff';
+        renderCtx.fillRect(offsetLeft - 1, offsetTop - 1, colEndX - scrollWidth, rowEndY - scrollHeight);
         renderCtx.font = defaultFont(this.sheetCtx.defaultFontSize);
         renderCtx.fillStyle = defaultStyle.fillStyle;
 
@@ -632,9 +517,7 @@ export class Canvas {
         const borderOffset: any = {};
 
         const bodrder05 = 0.5; // Default 0.5
-        const drawGridLines =
-            !this.sheetCtx.luckysheetcurrentisPivotTable &&
-            this.sheetCtx.showGridLines;
+        const drawGridLines = !this.sheetCtx.luckysheetcurrentisPivotTable && this.sheetCtx.showGridLines;
 
         this.sheetCtx.hooks.beforeRenderCellArea?.(flowdata, renderCtx);
 
@@ -682,7 +565,7 @@ export class Canvas {
                             endX,
                         };
 
-                        if ("rs" in value.mc) {
+                        if ('rs' in value.mc) {
                             const key = `r${r}c${c}`;
                             mergeCache[key] = cellupdate.length;
                         } else {
@@ -738,24 +621,18 @@ export class Canvas {
         const cfCompute: any = getComputeMap(this.sheetCtx);
 
         // Overflow cell configuration for render area
-        const cellOverflowMap = this.getCellOverflowMap(
-            renderCtx,
-            colStart,
-            colEnd,
-            rowStart,
-            rowEnd
-        );
+        const cellOverflowMap = this.getCellOverflowMap(renderCtx, colStart, colEnd, rowStart, rowEnd);
 
         const mcArr: typeof cellupdate = [];
 
         for (let cud = 0; cud < cellupdate.length; cud += 1) {
             const item = cellupdate[cud];
-            const {r} = item;
-            const {c} = item;
-            const {startY} = item;
-            const {startX} = item;
-            const {endY} = item;
-            const {endX} = item;
+            const { r } = item;
+            const { c } = item;
+            const { startY } = item;
+            const { startX } = item;
+            const { endY } = item;
+            const { endX } = item;
 
             if (flowdata[r] == null) {
                 continue;
@@ -782,7 +659,7 @@ export class Canvas {
                     scrollWidth,
                     bodrder05,
                     flowdata,
-                    drawGridLines
+                    drawGridLines,
                 );
             } else {
                 const cell = flowdata[r][c];
@@ -814,7 +691,7 @@ export class Canvas {
                         scrollWidth,
                         bodrder05,
                         flowdata,
-                        drawGridLines
+                        drawGridLines,
                     );
                 } else {
                     if (`${r}_${c}` in dynamicArrayCompute) {
@@ -841,7 +718,7 @@ export class Canvas {
                         scrollWidth,
                         bodrder05,
                         flowdata,
-                        drawGridLines
+                        drawGridLines,
                     );
                 }
             }
@@ -850,10 +727,10 @@ export class Canvas {
         // Reprocess merged cells
         for (let m = 0; m < mcArr.length; m += 1) {
             const item = mcArr[m];
-            let {r} = item;
-            let {c} = item;
-            let {startY} = item;
-            let {startX} = item;
+            let { r } = item;
+            let { c } = item;
+            let { startY } = item;
+            let { startX } = item;
             let endY = item.endY - 1;
             let endX = item.endX - 1;
 
@@ -888,10 +765,8 @@ export class Canvas {
                 startY = this.sheetCtx.visibledatarow[r - 1] - scrollHeight - 1;
             }
 
-            endY =
-                this.sheetCtx.visibledatarow[r + mainCell.mc.rs - 1] - scrollHeight;
-            endX =
-                this.sheetCtx.visibledatacolumn[c + mainCell.mc.cs - 1] - scrollWidth;
+            endY = this.sheetCtx.visibledatarow[r + mainCell.mc.rs - 1] - scrollHeight;
+            endX = this.sheetCtx.visibledatacolumn[c + mainCell.mc.cs - 1] - scrollWidth;
 
             if (value == null || value.toString().length === 0) {
                 this.nullCellRender(
@@ -914,7 +789,7 @@ export class Canvas {
                     bodrder05,
                     flowdata,
                     drawGridLines,
-                    true
+                    true,
                 );
             } else {
                 if (`${r}_${c}` in dynamicArrayCompute) {
@@ -941,7 +816,7 @@ export class Canvas {
                     bodrder05,
                     flowdata,
                     drawGridLines,
-                    true
+                    true,
                 );
             }
         }
@@ -955,7 +830,7 @@ export class Canvas {
                 moveX: number,
                 moveY: number,
                 toX: number,
-                toY: number
+                toY: number,
             ) => {
                 renderCtx.save();
                 setLineDash(renderCtx, style, dir, moveX, moveY, toX, toY);
@@ -965,43 +840,29 @@ export class Canvas {
                 renderCtx.restore();
             };
 
-            const borderInfoCompute = getBorderInfoComputeRange(
-                this.sheetCtx,
-                rowStart,
-                rowEnd,
-                colStart,
-                colEnd
-            );
+            const borderInfoCompute = getBorderInfoComputeRange(this.sheetCtx, rowStart, rowEnd, colStart, colEnd);
 
             const oL = offsetLeft!;
             const oT = offsetTop!;
 
             for (const [x, bdInfo] of Object.entries(borderInfoCompute)) {
-                const sepIdx = x.indexOf("_");
+                const sepIdx = x.indexOf('_');
                 const bdRow = Number(x.substring(0, sepIdx));
                 const bdCol = Number(x.substring(sepIdx + 1));
 
                 const bdOffset = borderOffset[x];
                 if (!bdOffset) continue;
 
-                const {startY, startX, endY, endX} = bdOffset;
+                const { startY, startX, endY, endX } = bdOffset;
 
                 const leftX = startX - 2 + bodrder05 + oL;
                 const rightX = endX - 2 + bodrder05 + oL;
                 const topY = startY + oT;
                 const bottomY = endY - 2 + bodrder05 + oT;
 
-                const cellOverflow_colInObj = this.cellOverflow_colIn(
-                    cellOverflowMap,
-                    bdRow,
-                    bdCol,
-                    colStart,
-                    colEnd
-                );
+                const cellOverflow_colInObj = this.cellOverflow_colIn(cellOverflowMap, bdRow, bdCol, colStart, colEnd);
 
-                const notOverflowOrFirst =
-                    !cellOverflow_colInObj.colIn ||
-                    cellOverflow_colInObj.stc === bdCol;
+                const notOverflowOrFirst = !cellOverflow_colInObj.colIn || cellOverflow_colInObj.stc === bdCol;
 
                 if (bdInfo.s && notOverflowOrFirst) {
                     const mergeMap = this.sheetCtx.config.merge;
@@ -1009,31 +870,28 @@ export class Canvas {
                     let slashEndX = rightX;
                     let slashEndY = bottomY;
                     if (mergeCell) {
-                        const mergeCellOffset =
-                            borderOffset[
-                                `${bdRow + mergeCell.rs - 1}_${bdCol + mergeCell.cs - 1}`
-                                ];
+                        const mergeCellOffset = borderOffset[`${bdRow + mergeCell.rs - 1}_${bdCol + mergeCell.cs - 1}`];
                         slashEndX = mergeCellOffset.endX - 2 + bodrder05 + oL;
                         slashEndY = mergeCellOffset.endY - 2 + bodrder05 + oT;
                     }
-                    renderBorder(bdInfo.s.style, bdInfo.s.color, "v", leftX, topY, slashEndX, slashEndY);
+                    renderBorder(bdInfo.s.style, bdInfo.s.color, 'v', leftX, topY, slashEndX, slashEndY);
                 }
 
                 if (bdInfo.l && notOverflowOrFirst) {
-                    renderBorder(bdInfo.l.style, bdInfo.l.color, "v", leftX, topY - 1, leftX, bottomY);
+                    renderBorder(bdInfo.l.style, bdInfo.l.color, 'v', leftX, topY - 1, leftX, bottomY);
                 }
 
                 if (bdInfo.r && (!cellOverflow_colInObj.colIn || cellOverflow_colInObj.colLast)) {
-                    renderBorder(bdInfo.r.style, bdInfo.r.color, "v", rightX, topY - 1, rightX, bottomY);
+                    renderBorder(bdInfo.r.style, bdInfo.r.color, 'v', rightX, topY - 1, rightX, bottomY);
                 }
 
                 if (bdInfo.t) {
                     const tY = startY - 1 + bodrder05 + oT;
-                    renderBorder(bdInfo.t.style, bdInfo.t.color, "h", leftX, tY, rightX, tY);
+                    renderBorder(bdInfo.t.style, bdInfo.t.color, 'h', leftX, tY, rightX, tY);
                 }
 
                 if (bdInfo.b) {
-                    renderBorder(bdInfo.b.style, bdInfo.b.color, "h", leftX, bottomY, rightX, bottomY);
+                    renderBorder(bdInfo.b.style, bdInfo.b.color, 'h', leftX, bottomY, rightX, bottomY);
                 }
             }
         }
@@ -1044,7 +902,7 @@ export class Canvas {
                 colEndX - scrollWidth + offsetLeft - 1,
                 offsetTop - 1,
                 this.sheetCtx.ch_width - this.sheetCtx.visibledatacolumn[colEnd],
-                rowEndY - scrollHeight
+                rowEndY - scrollHeight,
             );
         }
 
@@ -1056,22 +914,13 @@ export class Canvas {
         }, 100);
     }
 
-    public drawFreezeLine({
-                              horizontalTop,
-                              verticalLeft,
-                          }: {
-        horizontalTop?: number;
-        verticalLeft?: number;
-    }) {
-        const renderCtx = this.canvasElement.getContext("2d");
+    public drawFreezeLine({ horizontalTop, verticalLeft }: { horizontalTop?: number; verticalLeft?: number }) {
+        const renderCtx = this.canvasElement.getContext('2d');
         if (!renderCtx) return;
 
         renderCtx.save();
-        renderCtx.scale(
-            this.sheetCtx.devicePixelRatio,
-            this.sheetCtx.devicePixelRatio
-        );
-        renderCtx.strokeStyle = "#ccc";
+        renderCtx.scale(this.sheetCtx.devicePixelRatio, this.sheetCtx.devicePixelRatio);
+        renderCtx.strokeStyle = '#ccc';
         renderCtx.lineWidth = 2;
 
         if (horizontalTop) {
@@ -1099,7 +948,7 @@ export class Canvas {
         colStart: number,
         colEnd: number,
         rowStart: number,
-        rowEnd: number
+        rowEnd: number,
     ) {
         const flowdata = getFlowdata(this.sheetCtx);
         const map: any = {};
@@ -1133,13 +982,8 @@ export class Canvas {
                     continue;
                 }
 
-                if (
-                    cell &&
-                    (!isEmpty(cell.v) || isInlineStringCell(cell)) &&
-                    cell.mc == null &&
-                    cell.tb === "1"
-                ) {
-                    const horizonAlign = normalizedAttr(data, r, c, "ht");
+                if (cell && (!isEmpty(cell.v) || isInlineStringCell(cell)) && cell.mc == null && cell.tb === '1') {
+                    const horizonAlign = normalizedAttr(data, r, c, 'ht');
 
                     const textMetricsObj = getCellTextInfo(cell, canvas, this.sheetCtx, {
                         r,
@@ -1156,23 +1000,23 @@ export class Canvas {
                     let edc;
 
                     if (endX - startX < textMetrics) {
-                        if (horizonAlign === "0") {
+                        if (horizonAlign === '0') {
                             // Center aligned
                             const trace_forward = this.cellOverflow_trace(
                                 r,
                                 c,
                                 c - 1,
-                                "forward",
+                                'forward',
                                 horizonAlign,
-                                textMetrics
+                                textMetrics,
                             );
                             const trace_backward = this.cellOverflow_trace(
                                 r,
                                 c,
                                 c + 1,
-                                "backward",
+                                'backward',
                                 horizonAlign,
-                                textMetrics
+                                textMetrics,
                             );
 
                             if (trace_forward.success) {
@@ -1186,16 +1030,9 @@ export class Canvas {
                             } else {
                                 edc = trace_backward.c - 1;
                             }
-                        } else if (horizonAlign === "1") {
+                        } else if (horizonAlign === '1') {
                             // Left aligned
-                            const trace = this.cellOverflow_trace(
-                                r,
-                                c,
-                                c + 1,
-                                "backward",
-                                horizonAlign,
-                                textMetrics
-                            );
+                            const trace = this.cellOverflow_trace(r, c, c + 1, 'backward', horizonAlign, textMetrics);
                             stc = c;
 
                             if (trace.success) {
@@ -1203,16 +1040,9 @@ export class Canvas {
                             } else {
                                 edc = trace.c - 1;
                             }
-                        } else if (horizonAlign === "2") {
+                        } else if (horizonAlign === '2') {
                             // Right aligned
-                            const trace = this.cellOverflow_trace(
-                                r,
-                                c,
-                                c - 1,
-                                "forward",
-                                horizonAlign,
-                                textMetrics
-                            );
+                            const trace = this.cellOverflow_trace(r, c, c - 1, 'forward', horizonAlign, textMetrics);
                             edc = c;
 
                             if (trace.success) {
@@ -1273,21 +1103,21 @@ export class Canvas {
         bodrder05: any,
         flowdata: any,
         drawGridLines = false,
-        isMerge = false
+        isMerge = false,
     ) {
         const checksCF = checkCF(r, c, cfCompute);
 
         const borderfix = BORDER_FIX;
 
         // Background color
-        let fillStyle = normalizedAttr(flowdata, r, c, "bg");
+        let fillStyle = normalizedAttr(flowdata, r, c, 'bg');
 
         if (checksCF?.cellColor != null) {
             fillStyle = checksCF.cellColor;
         }
 
         if (!fillStyle) {
-            renderCtx.fillStyle = "#FFFFFF";
+            renderCtx.fillStyle = '#FFFFFF';
         } else {
             renderCtx.fillStyle = fillStyle;
         }
@@ -1311,7 +1141,7 @@ export class Canvas {
                     endX: cellsize[2] + cellsize[0],
                     endY: cellsize[3] + cellsize[1],
                 },
-                renderCtx
+                renderCtx,
             ) === false
         ) {
             return;
@@ -1322,7 +1152,7 @@ export class Canvas {
         if (`${r}_${c}` in dynamicArrayCompute) {
             const value = dynamicArrayCompute[`${r}_${c}`].v;
 
-            renderCtx.fillStyle = "#000000";
+            renderCtx.fillStyle = '#000000';
             // Text width and height
             const fontset = defaultFont(this.sheetCtx.defaultFontSize);
             renderCtx.font = fontset;
@@ -1332,13 +1162,9 @@ export class Canvas {
 
             // Vertical align (default: bottom)
             const verticalAlignPos = endY + offsetTop - 2;
-            renderCtx.textBaseline = "bottom";
+            renderCtx.textBaseline = 'bottom';
 
-            renderCtx.fillText(
-                value == null ? "" : value,
-                horizonAlignPos,
-                verticalAlignPos
-            );
+            renderCtx.fillText(value == null ? '' : value, horizonAlignPos, verticalAlignPos);
         }
 
         // Comment indicator triangle
@@ -1348,19 +1174,13 @@ export class Canvas {
             renderCtx.moveTo(endX + offsetLeft - 12, startY + offsetTop);
             renderCtx.lineTo(endX + offsetLeft - 1, startY + offsetTop);
             renderCtx.lineTo(endX + offsetLeft - 1, startY + offsetTop + 11);
-            renderCtx.fillStyle = commentInfo?.indicatorColor ?? commentInfo?.color ?? "#FC6666";
+            renderCtx.fillStyle = commentInfo?.indicatorColor ?? commentInfo?.color ?? '#FC6666';
             renderCtx.fill();
             renderCtx.closePath();
         }
 
         // Check overflow cell relationship
-        const cellOverflow_colInObj = this.cellOverflow_colIn(
-            cellOverflowMap,
-            r,
-            c,
-            colStart,
-            colEnd
-        );
+        const cellOverflow_colInObj = this.cellOverflow_colIn(cellOverflowMap, r, c, colStart, colEnd);
 
         // Last column of overflow range: render overflow cell content
         if (
@@ -1381,7 +1201,7 @@ export class Canvas {
                 offsetLeft,
                 offsetTop,
                 cfCompute,
-                flowdata
+                flowdata,
             );
         }
 
@@ -1402,10 +1222,7 @@ export class Canvas {
         // Bottom border
         if (drawGridLines) {
             renderCtx.beginPath();
-            renderCtx.moveTo(
-                startX + offsetLeft - 1,
-                endY + offsetTop - 2 + bodrder05
-            );
+            renderCtx.moveTo(startX + offsetLeft - 1, endY + offsetTop - 2 + bodrder05);
             renderCtx.lineTo(endX + offsetLeft - 1, endY + offsetTop - 2 + bodrder05);
             renderCtx.lineWidth = 1;
             renderCtx.strokeStyle = defaultStyle.strokeStyle;
@@ -1424,7 +1241,7 @@ export class Canvas {
                 endY: cellsize[3] + cellsize[1],
                 endX: cellsize[2] + cellsize[0],
             },
-            renderCtx
+            renderCtx,
         );
     }
 
@@ -1449,7 +1266,7 @@ export class Canvas {
         bodrder05: number,
         flowdata: any,
         drawGridLines = false,
-        isMerge = false
+        isMerge = false,
     ) {
         const cell = flowdata[r][c];
         const cellWidth = endX - startX - 2;
@@ -1457,18 +1274,18 @@ export class Canvas {
         const space_width = 2;
         const space_height = 2;
 
-        const horizonAlign = Number(normalizedAttr(flowdata, r, c, "ht"));
-        const verticalAlign = Number(normalizedAttr(flowdata, r, c, "vt"));
+        const horizonAlign = Number(normalizedAttr(flowdata, r, c, 'ht'));
+        const verticalAlign = Number(normalizedAttr(flowdata, r, c, 'vt'));
 
         const checksCF = checkCF(r, c, cfCompute);
 
         // Background color
-        let fillStyle = normalizedAttr(flowdata, r, c, "bg");
+        let fillStyle = normalizedAttr(flowdata, r, c, 'bg');
         if (checksCF?.cellColor != null) {
             fillStyle = checksCF.cellColor;
         }
         if (!fillStyle) {
-            renderCtx.fillStyle = "#FFFFFF";
+            renderCtx.fillStyle = '#FFFFFF';
         } else {
             renderCtx.fillStyle = fillStyle;
         }
@@ -1494,7 +1311,7 @@ export class Canvas {
                     endY: cellsize[3] + cellsize[1],
                     endX: cellsize[2] + cellsize[0],
                 },
-                renderCtx
+                renderCtx,
             ) === false
         ) {
             return;
@@ -1504,23 +1321,17 @@ export class Canvas {
 
         // const { dataVerification } = dataVerificationCtrl;
 
-        const index = getSheetIndex(
-            this.sheetCtx,
-            this.sheetCtx.currentSheetId
-        ) as number;
+        const index = getSheetIndex(this.sheetCtx, this.sheetCtx.currentSheetId) as number;
 
-        const {dataVerification} = this.sheetCtx.luckysheetfile[index];
+        const { dataVerification } = this.sheetCtx.luckysheetfile[index];
 
-        if (
-            dataVerification?.[`${r}_${c}`] &&
-            !validateCellData(this.sheetCtx, dataVerification[`${r}_${c}`], value)
-        ) {
+        if (dataVerification?.[`${r}_${c}`] && !validateCellData(this.sheetCtx, dataVerification[`${r}_${c}`], value)) {
             // Data validation error indicator (red triangle top-left)
             renderCtx.beginPath();
             renderCtx.moveTo(startX + offsetLeft, startY + offsetTop);
             renderCtx.lineTo(startX + offsetLeft + 5, startY + offsetTop);
             renderCtx.lineTo(startX + offsetLeft, startY + offsetTop + 5);
-            renderCtx.fillStyle = "#FC6666";
+            renderCtx.fillStyle = '#FC6666';
             renderCtx.fill();
             renderCtx.closePath();
         }
@@ -1532,7 +1343,7 @@ export class Canvas {
             renderCtx.moveTo(endX + offsetLeft - 12, startY + offsetTop);
             renderCtx.lineTo(endX + offsetLeft - 1, startY + offsetTop);
             renderCtx.lineTo(endX + offsetLeft - 1, startY + offsetTop + 11);
-            renderCtx.fillStyle = commentInfo?.indicatorColor ?? commentInfo?.color ?? "#FC6666";
+            renderCtx.fillStyle = commentInfo?.indicatorColor ?? commentInfo?.color ?? '#FC6666';
             renderCtx.fill();
             renderCtx.closePath();
         }
@@ -1543,22 +1354,16 @@ export class Canvas {
             renderCtx.moveTo(startX + offsetLeft + 5, startY + offsetTop);
             renderCtx.lineTo(startX + offsetLeft - 1, startY + offsetTop);
             renderCtx.lineTo(startX + offsetLeft - 1, startY + offsetTop + 6);
-            renderCtx.fillStyle = "#487f1e";
+            renderCtx.fillStyle = '#487f1e';
             renderCtx.fill();
             renderCtx.closePath();
         }
 
         // Overflow cell handling
         let cellOverflow_bd_r_render = true;
-        const cellOverflow_colInObj = this.cellOverflow_colIn(
-            cellOverflowMap,
-            r,
-            c,
-            colStart,
-            colEnd
-        );
+        const cellOverflow_colInObj = this.cellOverflow_colIn(cellOverflowMap, r, c, colStart, colEnd);
 
-        if (cell?.tb === "1" && cellOverflow_colInObj.colIn) {
+        if (cell?.tb === '1' && cellOverflow_colInObj.colIn) {
             // Last column of overflow range: render overflow cell content
             if (
                 cellOverflow_colInObj.colLast &&
@@ -1578,14 +1383,14 @@ export class Canvas {
                     offsetLeft,
                     offsetTop,
                     cfCompute,
-                    flowdata
+                    flowdata,
                 );
             } else {
                 cellOverflow_bd_r_render = false;
             }
         }
         // Data validation checkbox
-        else if (dataVerification?.[`${r}_${c}`]?.type === "checkbox") {
+        else if (dataVerification?.[`${r}_${c}`]?.type === 'checkbox') {
             const pos_x = startX + offsetLeft;
             const pos_y = startY + offsetTop + 1;
 
@@ -1596,9 +1401,7 @@ export class Canvas {
 
             const measureText = getMeasureText(value, renderCtx);
             const textMetrics = measureText.width + 14;
-            const oneLineTextHeight =
-                measureText.actualBoundingBoxDescent +
-                measureText.actualBoundingBoxAscent;
+            const oneLineTextHeight = measureText.actualBoundingBoxDescent + measureText.actualBoundingBoxAscent;
 
             let horizonAlignPos = pos_x + space_width;
             if (horizonAlign === 0) {
@@ -1607,26 +1410,25 @@ export class Canvas {
                 horizonAlignPos = pos_x + cellWidth - space_width - textMetrics;
             }
 
-            const verticalCellHeight =
-                cellHeight > oneLineTextHeight ? cellHeight : oneLineTextHeight;
+            const verticalCellHeight = cellHeight > oneLineTextHeight ? cellHeight : oneLineTextHeight;
 
             let verticalAlignPos_text = pos_y + verticalCellHeight - space_height;
-            renderCtx.textBaseline = "bottom";
+            renderCtx.textBaseline = 'bottom';
             let verticalAlignPos_checkbox = verticalAlignPos_text - 13;
 
             if (verticalAlign === 0) {
                 verticalAlignPos_text = pos_y + verticalCellHeight / 2;
-                renderCtx.textBaseline = "middle";
+                renderCtx.textBaseline = 'middle';
                 verticalAlignPos_checkbox = verticalAlignPos_text - 6;
             } else if (verticalAlign === 1) {
                 verticalAlignPos_text = pos_y + space_height;
-                renderCtx.textBaseline = "top";
+                renderCtx.textBaseline = 'top';
                 verticalAlignPos_checkbox = verticalAlignPos_text + 1;
             }
 
             // Checkbox
             renderCtx.lineWidth = 1;
-            renderCtx.strokeStyle = "#000";
+            renderCtx.strokeStyle = '#000';
             renderCtx.strokeRect(horizonAlignPos, verticalAlignPos_checkbox, 10, 10);
 
             if (dataVerification[`${r}_${c}`].checked) {
@@ -1639,32 +1441,25 @@ export class Canvas {
             }
 
             // Text
-            renderCtx.fillStyle = normalizedAttr(flowdata, r, c, "fc");
-            renderCtx.fillText(
-                value == null ? "" : value,
-                horizonAlignPos + 14,
-                verticalAlignPos_text
-            );
+            renderCtx.fillStyle = normalizedAttr(flowdata, r, c, 'fc');
+            renderCtx.fillText(value == null ? '' : value, horizonAlignPos + 14, verticalAlignPos_text);
 
             renderCtx.restore();
         } else {
             // Conditional formatting data bar
-            if (
-                checksCF?.dataBar?.valueLen &&
-                checksCF?.dataBar?.valueLen?.toString() !== "NaN"
-            ) {
+            if (checksCF?.dataBar?.valueLen && checksCF?.dataBar?.valueLen?.toString() !== 'NaN') {
                 const x = startX + offsetLeft + space_width;
                 const y = startY + offsetTop + space_height;
                 const w = cellWidth - space_width * 2;
                 const h = cellHeight - space_height * 2;
 
-                const {valueType} = checksCF.dataBar;
-                const {valueLen} = checksCF.dataBar;
-                const {format} = checksCF.dataBar;
+                const { valueType } = checksCF.dataBar;
+                const { valueLen } = checksCF.dataBar;
+                const { format } = checksCF.dataBar;
 
-                if (valueType === "minus") {
+                if (valueType === 'minus') {
                     // Negative value
-                    const {minusLen} = checksCF.dataBar;
+                    const { minusLen } = checksCF.dataBar;
 
                     if (format.length > 1) {
                         // Gradient
@@ -1672,23 +1467,18 @@ export class Canvas {
                             x + w * minusLen * (1 - valueLen),
                             y,
                             x + w * minusLen,
-                            y
+                            y,
                         );
-                        my_gradient.addColorStop(0, "#ffffff");
-                        my_gradient.addColorStop(1, "#ff0000");
+                        my_gradient.addColorStop(0, '#ffffff');
+                        my_gradient.addColorStop(1, '#ff0000');
 
                         renderCtx.fillStyle = my_gradient;
                     } else {
                         // Solid
-                        renderCtx.fillStyle = "#ff0000";
+                        renderCtx.fillStyle = '#ff0000';
                     }
 
-                    renderCtx.fillRect(
-                        x + w * minusLen * (1 - valueLen),
-                        y,
-                        w * minusLen * valueLen,
-                        h
-                    );
+                    renderCtx.fillRect(x + w * minusLen * (1 - valueLen), y, w * minusLen * valueLen, h);
 
                     renderCtx.beginPath();
                     renderCtx.moveTo(x + w * minusLen * (1 - valueLen), y);
@@ -1697,22 +1487,17 @@ export class Canvas {
                     renderCtx.lineTo(x + w * minusLen, y);
                     renderCtx.lineTo(x + w * minusLen * (1 - valueLen), y);
                     renderCtx.lineWidth = 1;
-                    renderCtx.strokeStyle = "#ff0000";
+                    renderCtx.strokeStyle = '#ff0000';
                     renderCtx.stroke();
                     renderCtx.closePath();
-                } else if (valueType === "plus") {
+                } else if (valueType === 'plus') {
                     // Positive value
-                    const {plusLen} = checksCF.dataBar;
+                    const { plusLen } = checksCF.dataBar;
 
                     if (plusLen === 1) {
                         if (format.length > 1) {
                             // Gradient
-                            const my_gradient = renderCtx.createLinearGradient(
-                                x,
-                                y,
-                                x + w * valueLen,
-                                y
-                            );
+                            const my_gradient = renderCtx.createLinearGradient(x, y, x + w * valueLen, y);
                             my_gradient.addColorStop(0, format[0]);
                             my_gradient.addColorStop(1, format[1]);
 
@@ -1735,7 +1520,7 @@ export class Canvas {
                         renderCtx.stroke();
                         renderCtx.closePath();
                     } else {
-                        const {minusLen} = checksCF.dataBar;
+                        const { minusLen } = checksCF.dataBar;
 
                         if (format.length > 1) {
                             // Gradient
@@ -1743,7 +1528,7 @@ export class Canvas {
                                 x + w * minusLen,
                                 y,
                                 x + w * minusLen + w * plusLen * valueLen,
-                                y
+                                y,
                             );
                             my_gradient.addColorStop(0, format[0]);
                             my_gradient.addColorStop(1, format[1]);
@@ -1780,29 +1565,25 @@ export class Canvas {
 
             const textInfo = cell
                 ? getCellTextInfo(cell, renderCtx, this.sheetCtx, {
-                    cellWidth,
-                    cellHeight,
-                    space_width,
-                    space_height,
-                    r,
-                    c,
-                })
+                      cellWidth,
+                      cellHeight,
+                      space_width,
+                      space_height,
+                      r,
+                      c,
+                  })
                 : undefined;
 
             // Cell text color
-            renderCtx.fillStyle = normalizedAttr(flowdata, r, c, "fc");
+            renderCtx.fillStyle = normalizedAttr(flowdata, r, c, 'fc');
 
             if (checksCF?.textColor) {
                 renderCtx.fillStyle = checksCF.textColor;
             }
 
             // Custom number format [Red]: set text color to red
-            if (
-                (cell?.ct?.fa?.indexOf("[Red]") ?? -1) > -1 &&
-                cell?.ct?.t === "n" &&
-                (cell?.v as number) < 0
-            ) {
-                renderCtx.fillStyle = "#ff0000";
+            if ((cell?.ct?.fa?.indexOf('[Red]') ?? -1) > -1 && cell?.ct?.t === 'n' && (cell?.v as number) < 0) {
+                renderCtx.fillStyle = '#ff0000';
             }
 
             this.cellTextRender(textInfo, renderCtx, {
@@ -1827,10 +1608,7 @@ export class Canvas {
         // Bottom border
         if (drawGridLines) {
             renderCtx.beginPath();
-            renderCtx.moveTo(
-                startX + offsetLeft - 1,
-                endY + offsetTop - 2 + bodrder05
-            );
+            renderCtx.moveTo(startX + offsetLeft - 1, endY + offsetTop - 2 + bodrder05);
             renderCtx.lineTo(endX + offsetLeft - 1, endY + offsetTop - 2 + bodrder05);
             renderCtx.lineWidth = 1;
             renderCtx.strokeStyle = defaultStyle.strokeStyle;
@@ -1849,7 +1627,7 @@ export class Canvas {
                 endX: cellsize[2] + cellsize[0],
                 endY: cellsize[3] + cellsize[1],
             },
-            renderCtx
+            renderCtx,
         );
     }
 
@@ -1865,7 +1643,7 @@ export class Canvas {
         offsetLeft: number,
         offsetTop: number,
         cfCompute: any,
-        flowdata: any
+        flowdata: any,
     ) {
         // Overflow cell start/end row/column coordinates
         let startY;
@@ -1895,11 +1673,7 @@ export class Canvas {
         const pos_x = startX + offsetLeft;
         const pos_y = startY + offsetTop + 1;
 
-        const fontset = getFontSet(
-            cell,
-            this.sheetCtx.defaultFontSize,
-            this.sheetCtx
-        );
+        const fontset = getFontSet(cell, this.sheetCtx.defaultFontSize, this.sheetCtx);
         renderCtx.font = fontset;
 
         renderCtx.save();
@@ -1909,19 +1683,19 @@ export class Canvas {
 
         const textInfo = cell
             ? getCellTextInfo(cell, renderCtx, this.sheetCtx, {
-                cellWidth,
-                cellHeight,
-                space_width,
-                space_height,
-                r,
-                c,
-            })
+                  cellWidth,
+                  cellHeight,
+                  space_width,
+                  space_height,
+                  r,
+                  c,
+              })
             : undefined;
 
         const checksCF = checkCF(r, c, cfCompute);
 
         // Cell text color
-        renderCtx.fillStyle = normalizedAttr(flowdata, r, c, "fc");
+        renderCtx.fillStyle = normalizedAttr(flowdata, r, c, 'fc');
 
         if (checksCF?.textColor) {
             renderCtx.fillStyle = checksCF.textColor;
@@ -1941,14 +1715,14 @@ export class Canvas {
         traceC: number,
         traceDir: string,
         horizonAlign: string,
-        textMetrics: number
+        textMetrics: number,
     ): any {
         const flowdata = getFlowdata(this.sheetCtx);
         if (!flowdata) return {};
         const data = flowdata;
 
         // Trace terminates if column index is out of array bounds
-        if (traceDir === "forward" && traceC < 0) {
+        if (traceDir === 'forward' && traceC < 0) {
             return {
                 success: false,
                 r,
@@ -1956,7 +1730,7 @@ export class Canvas {
             };
         }
 
-        if (traceDir === "backward" && traceC > data[r].length - 1) {
+        if (traceDir === 'backward' && traceC > data[r].length - 1) {
             return {
                 success: false,
                 r,
@@ -1974,38 +1748,29 @@ export class Canvas {
             };
         }
 
-        let start_curC =
-            curC - 1 < 0 ? 0 : this.sheetCtx.visibledatacolumn[curC - 1];
+        let start_curC = curC - 1 < 0 ? 0 : this.sheetCtx.visibledatacolumn[curC - 1];
         let end_curC = this.sheetCtx.visibledatacolumn[curC];
 
         const w = textMetrics - (end_curC - start_curC);
 
-        if (horizonAlign === "0") {
+        if (horizonAlign === '0') {
             // Center align
             start_curC -= w / 2;
             end_curC += w / 2;
-        } else if (horizonAlign === "1") {
+        } else if (horizonAlign === '1') {
             // Left align
             end_curC += w;
-        } else if (horizonAlign === "2") {
+        } else if (horizonAlign === '2') {
             // Right align
             start_curC -= w;
         }
 
-        const start_traceC =
-            traceC - 1 < 0 ? 0 : this.sheetCtx.visibledatacolumn[traceC - 1];
+        const start_traceC = traceC - 1 < 0 ? 0 : this.sheetCtx.visibledatacolumn[traceC - 1];
         const end_traceC = this.sheetCtx.visibledatacolumn[traceC];
 
-        if (traceDir === "forward") {
+        if (traceDir === 'forward') {
             if (start_curC < start_traceC) {
-                return this.cellOverflow_trace(
-                    r,
-                    curC,
-                    traceC - 1,
-                    traceDir,
-                    horizonAlign,
-                    textMetrics
-                );
+                return this.cellOverflow_trace(r, curC, traceC - 1, traceDir, horizonAlign, textMetrics);
             }
             if (start_curC < end_traceC) {
                 return {
@@ -2021,16 +1786,9 @@ export class Canvas {
             };
         }
 
-        if (traceDir === "backward") {
+        if (traceDir === 'backward') {
             if (end_curC > end_traceC) {
-                return this.cellOverflow_trace(
-                    r,
-                    curC,
-                    traceC + 1,
-                    traceDir,
-                    horizonAlign,
-                    textMetrics
-                );
+                return this.cellOverflow_trace(r, curC, traceC + 1, traceDir, horizonAlign, textMetrics);
             }
             if (end_curC > start_traceC) {
                 return {
@@ -2048,13 +1806,7 @@ export class Canvas {
         return null;
     }
 
-    private cellOverflow_colIn(
-        map: any,
-        r: number,
-        c: number,
-        col_st: number,
-        col_ed: number
-    ) {
+    private cellOverflow_colIn(map: any, r: number, c: number, col_st: number, col_ed: number) {
         let colIn = false; // Whether this cell is within an overflow cell's render range
         let colLast = false; // Whether this cell is the last column in an overflow cell's render range
         let rowIndex: number | undefined; // Overflow cell row index
@@ -2100,17 +1852,17 @@ export class Canvas {
     private cellTextRender(
         textInfo: CellTextInfo | null | undefined,
         ctx: CanvasRenderingContext2D,
-        option: {pos_x: number; pos_y: number}
+        option: { pos_x: number; pos_y: number },
     ) {
         if (!textInfo) {
             return;
         }
-        const {values, rotate, type, textLeftAll, textTopAll} = textInfo;
-        const {pos_x, pos_y} = option;
+        const { values, rotate, type, textLeftAll, textTopAll } = textInfo;
+        const { pos_x, pos_y } = option;
         const rotated =
             rotate !== undefined &&
             rotate !== 0 &&
-            type !== "verticalWrap" &&
+            type !== 'verticalWrap' &&
             textLeftAll !== undefined &&
             textTopAll !== undefined;
         if (rotated) {
@@ -2126,26 +1878,20 @@ export class Canvas {
             if (word.inline === true && isInlineStyle(style)) {
                 ctx.font = style.fontset;
                 ctx.fillStyle = style.fc;
-            } else if (typeof style === "string") {
+            } else if (typeof style === 'string') {
                 ctx.font = style;
             }
 
             const txt = isPlainObject(word.content)
-                ? String((word.content as {m?: unknown}).m ?? "")
+                ? String((word.content as { m?: unknown }).m ?? '')
                 : String(word.content);
             ctx.fillText(txt, pos_x + word.left, pos_y + word.top);
 
             if (word.cancelLine) {
                 const c = word.cancelLine;
                 ctx.beginPath();
-                ctx.moveTo(
-                    Math.floor(pos_x + c.startX) + 0.5,
-                    Math.floor(pos_y + c.startY) + 0.5
-                );
-                ctx.lineTo(
-                    Math.floor(pos_x + c.endX) + 0.5,
-                    Math.floor(pos_y + c.endY) + 0.5
-                );
+                ctx.moveTo(Math.floor(pos_x + c.startX) + 0.5, Math.floor(pos_y + c.startY) + 0.5);
+                ctx.lineTo(Math.floor(pos_x + c.endX) + 0.5, Math.floor(pos_y + c.endY) + 0.5);
                 ctx.lineWidth = Math.floor(c.fs / 9);
                 ctx.strokeStyle = ctx.fillStyle;
                 ctx.stroke();
@@ -2157,14 +1903,8 @@ export class Canvas {
                 for (let a = 0; a < underLines.length; a += 1) {
                     const item = underLines[a];
                     ctx.beginPath();
-                    ctx.moveTo(
-                        Math.floor(pos_x + item.startX) + 0.5,
-                        Math.floor(pos_y + item.startY)
-                    );
-                    ctx.lineTo(
-                        Math.floor(pos_x + item.endX) + 0.5,
-                        Math.floor(pos_y + item.endY) + 0.5
-                    );
+                    ctx.moveTo(Math.floor(pos_x + item.startX) + 0.5, Math.floor(pos_y + item.startY));
+                    ctx.lineTo(Math.floor(pos_x + item.endX) + 0.5, Math.floor(pos_y + item.endY) + 0.5);
                     ctx.lineWidth = Math.floor(item.fs / 9);
                     ctx.strokeStyle = ctx.fillStyle;
                     ctx.stroke();
@@ -2178,6 +1918,6 @@ export class Canvas {
     }
 }
 
-function isInlineStyle(value: unknown): value is {fontset: string; fc: string} {
-    return typeof value === "object" && value !== null && "fontset" in value && "fc" in value;
+function isInlineStyle(value: unknown): value is { fontset: string; fc: string } {
+    return typeof value === 'object' && value !== null && 'fontset' in value && 'fc' in value;
 }

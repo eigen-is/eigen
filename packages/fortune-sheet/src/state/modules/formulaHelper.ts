@@ -1,62 +1,36 @@
-import {isNil} from "es-toolkit/compat";
-import type {CellMatrix, FormulaCellInfo, FormulaCellInfoMap, FormulaDependency} from "../../engine/types";
+import { isNil } from 'es-toolkit/compat';
+import { getCalculationOrder, matchDependencies } from '../../engine/dependency-graph';
+import type { CellMatrix, FormulaCellInfo, FormulaCellInfoMap, FormulaDependency } from '../../engine/types';
 import {
-    Context,
+    type Context,
     execfunction,
-    FormulaCell,
+    type FormulaCell,
     getcellFormula,
     getcellrange,
     iscelldata,
     isFunctionRange,
-} from "..";
-import { getCalculationOrder, matchDependencies } from "../../engine/dependency-graph";
+} from '..';
 
 // Make sure setFormulaObject() is executed *after* the cell modifications
-export function setFormulaCellInfo(
-    ctx: Context,
-    formulaCell: FormulaCell,
-    data?: CellMatrix
-) {
+export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?: CellMatrix) {
     const key = `r${formulaCell.r}c${formulaCell.c}i${formulaCell.id}`;
-    const calc_funcStr: string | undefined = getcellFormula(
-        ctx,
-        formulaCell.r,
-        formulaCell.c,
-        formulaCell.id,
-        data
-    );
+    const calc_funcStr: string | undefined = getcellFormula(ctx, formulaCell.r, formulaCell.c, formulaCell.id, data);
     if (isNil(calc_funcStr)) {
         delete ctx.formulaCache.formulaCellInfoMap?.[key];
         return;
     }
     const txt1 = calc_funcStr.toUpperCase();
-    const isOffsetFunc =
-        txt1.indexOf("INDIRECT(") > -1 ||
-        txt1.indexOf("OFFSET(") > -1 ||
-        txt1.indexOf("INDEX(") > -1;
+    const isOffsetFunc = txt1.indexOf('INDIRECT(') > -1 || txt1.indexOf('OFFSET(') > -1 || txt1.indexOf('INDEX(') > -1;
 
     const formulaDependency: FormulaDependency[] = [];
     if (isOffsetFunc) {
-        isFunctionRange(
-            ctx,
-            calc_funcStr,
-            null,
-            null,
-            formulaCell.id,
-            null,
-            (str_nb: string) => {
-                const range = getcellrange(ctx, str_nb.trim(), formulaCell.id, data);
-                if (!isNil(range)) {
-                    formulaDependency.push(range);
-                }
+        isFunctionRange(ctx, calc_funcStr, null, null, formulaCell.id, null, (str_nb: string) => {
+            const range = getcellrange(ctx, str_nb.trim(), formulaCell.id, data);
+            if (!isNil(range)) {
+                formulaDependency.push(range);
             }
-        );
-    } else if (
-        !(
-            calc_funcStr.substring(0, 2) === '="' &&
-            calc_funcStr.substring(calc_funcStr.length - 1, 1) === '"'
-        )
-    ) {
+        });
+    } else if (!(calc_funcStr.substring(0, 2) === '="' && calc_funcStr.substring(calc_funcStr.length - 1, 1) === '"')) {
         // let formulaTextArray = calc_funcStr.split(/==|!=|<>|<=|>=|[,()=+-\/*%&^><]/g); // Cannot correctly split cases where ==, !=, - etc. appear between single or double quotes. This caused a bug where the formula value was not updated when the cell content of sheet name '1-2' in ='1-2'!A1 changed.
         // Fix: ='1-2'!A1+5 being split by calc_funcStr.split(/==|!=|<>|<=|>=|[,()=+-\/*%&^><]/g) into ["","'1","2'!A1",5] incorrectly
         let point = 0; // pointer
@@ -72,9 +46,7 @@ export function setFormulaCellInfo(
                 if (squote === -1) {
                     if (point !== j) {
                         formulaTextArray.push(
-                            ...calc_funcStr
-                                .substring(point, j)
-                                .split(/==|!=|<>|<=|>=|[,()=+-/*%&^><]/)
+                            ...calc_funcStr.substring(point, j).split(/==|!=|<>|<=|>=|[,()=+-/*%&^><]/),
                         );
                     }
                     squote = j;
@@ -82,10 +54,7 @@ export function setFormulaCellInfo(
                 } // end single quote
                 else {
                     // If '' it represents an output of '
-                    if (
-                        j < calc_funcStr_length - 1 &&
-                        calc_funcStr.charAt(j + 1) === "'"
-                    ) {
+                    if (j < calc_funcStr_length - 1 && calc_funcStr.charAt(j + 1) === "'") {
                         j += 1;
                     } else {
                         // If the next character is not ', it means the end of a single quote
@@ -100,19 +69,14 @@ export function setFormulaCellInfo(
                 if (dquote === -1) {
                     if (point !== j) {
                         formulaTextArray.push(
-                            ...calc_funcStr
-                                .substring(point, j)
-                                .split(/==|!=|<>|<=|>=|[,()=+-/*%&^><]/)
+                            ...calc_funcStr.substring(point, j).split(/==|!=|<>|<=|>=|[,()=+-/*%&^><]/),
                         );
                     }
                     dquote = j;
                     point = j;
                 } else {
                     // If "" represents output"
-                    if (
-                        j < calc_funcStr_length - 1 &&
-                        calc_funcStr.charAt(j + 1) === '"'
-                    ) {
+                    if (j < calc_funcStr_length - 1 && calc_funcStr.charAt(j + 1) === '"') {
                         j += 1;
                     } else {
                         // end with double quotes
@@ -125,16 +89,13 @@ export function setFormulaCellInfo(
         }
         if (point !== calc_funcStr_length) {
             formulaTextArray.push(
-                ...calc_funcStr
-                    .substring(point, calc_funcStr_length)
-                    .split(/==|!=|<>|<=|>=|[,()=+-/*%&^><]/)
+                ...calc_funcStr.substring(point, calc_funcStr_length).split(/==|!=|<>|<=|>=|[,()=+-/*%&^><]/),
             );
         }
         // Concatenate each paired single-quoted segment with the following cell reference, e.g. ["'1-2'","!A1"] becomes ["'1-2'!A1"]
         for (let j = sq_end_array.length - 1; j >= 0; j -= 1) {
             if (sq_end_array[j] !== formulaTextArray.length - 1) {
-                formulaTextArray[sq_end_array[j]] +=
-                    formulaTextArray[sq_end_array[j] + 1];
+                formulaTextArray[sq_end_array[j]] += formulaTextArray[sq_end_array[j] + 1];
                 formulaTextArray.splice(sq_end_array[j] + 1, 1);
             }
         }
@@ -146,10 +107,7 @@ export function setFormulaCellInfo(
                 continue;
             }
 
-            if (
-                (t.substring(0, 1) === '"' && t.substring(t.length - 1, 1) === '"') ||
-                !iscelldata(t)
-            ) {
+            if ((t.substring(0, 1) === '"' && t.substring(t.length - 1, 1) === '"') || !iscelldata(t)) {
                 continue;
             }
 
@@ -172,19 +130,14 @@ export function setFormulaCellInfo(
         id: formulaCell.id,
         parents: {},
         chidren: {},
-        color: "w",
+        color: 'w',
     };
 
-    if (!ctx.formulaCache.formulaCellInfoMap)
-        ctx.formulaCache.formulaCellInfoMap = {};
+    if (!ctx.formulaCache.formulaCellInfoMap) ctx.formulaCache.formulaCellInfoMap = {};
     ctx.formulaCache.formulaCellInfoMap[key] = item;
 }
 
-export function executeAffectedFormulas(
-    ctx: Context,
-    formulaRunList: FormulaCellInfo[],
-    calcChains: FormulaCell[]
-) {
+export function executeAffectedFormulas(ctx: Context, formulaRunList: FormulaCellInfo[], calcChains: FormulaCell[]) {
     const calcChainSet = new Set<string>();
     calcChains.forEach((item) => {
         calcChainSet.add(`${item.r}_${item.c}_${item.id}`);
@@ -192,16 +145,9 @@ export function executeAffectedFormulas(
 
     for (let i = 0; i < formulaRunList.length; i += 1) {
         const formulaCell = formulaRunList[i];
-        const {calc_funcStr} = formulaCell;
+        const { calc_funcStr } = formulaCell;
 
-        const v = execfunction(
-            ctx,
-            calc_funcStr,
-            formulaCell.r,
-            formulaCell.c,
-            formulaCell.id,
-            calcChainSet
-        );
+        const v = execfunction(ctx, calc_funcStr, formulaCell.r, formulaCell.c, formulaCell.id, calcChainSet);
 
         ctx.groupValuesRefreshData.push({
             r: formulaCell.r,
@@ -211,19 +157,14 @@ export function executeAffectedFormulas(
             id: formulaCell.id,
         });
 
-        ctx.formulaCache.execFunctionGlobalData[
-            `${formulaCell.r}_${formulaCell.c}_${formulaCell.id}`
-            ] = {
+        ctx.formulaCache.execFunctionGlobalData[`${formulaCell.r}_${formulaCell.c}_${formulaCell.id}`] = {
             v: v[1],
             f: v[2],
         };
     }
 }
 
-export function getFormulaRunList(
-    updateValueArray: FormulaCellInfo[],
-    formulaCellInfoMap: FormulaCellInfoMap
-) {
+export function getFormulaRunList(updateValueArray: FormulaCellInfo[], formulaCellInfoMap: FormulaCellInfoMap) {
     return getCalculationOrder(updateValueArray, formulaCellInfoMap);
 }
 
@@ -232,7 +173,7 @@ export const arrayMatch = (
     formulaDependency: FormulaDependency[],
     _formulaCellInfoMap: FormulaCellInfoMap | null,
     _updateValueObjects: Record<string, unknown> | null,
-    func: (key: string, r: number, c: number, sheetId: string) => void
+    func: (key: string, r: number, c: number, sheetId: string) => void,
 ) => {
     matchDependencies(arrayMatchCache, formulaDependency, _formulaCellInfoMap, _updateValueObjects, func);
 };

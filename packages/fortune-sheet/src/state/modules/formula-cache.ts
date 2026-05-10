@@ -1,11 +1,18 @@
-import {isNil} from "es-toolkit/compat";
-import type {History, Selection} from "../types";
-import type {Context} from "../context";
-import {getFlowdata} from "../context";
-import {getSheetIdByName} from "../utils";
-import type {CalculationChainEntry, Cell, CellMatrix, CellResolver, FormulaCellInfoMap, FormulaDependency} from "../../engine/types";
-import {FormulaEngine, isFormula} from "../../engine/formula-engine";
-import {setFormulaCellInfo} from "./formulaHelper";
+import { isNil } from 'es-toolkit/compat';
+import { FormulaEngine, isFormula } from '../../engine/formula-engine';
+import type {
+    CalculationChainEntry,
+    Cell,
+    CellMatrix,
+    CellResolver,
+    FormulaCellInfoMap,
+    FormulaDependency,
+} from '../../engine/types';
+import type { Context } from '../context';
+import { getFlowdata } from '../context';
+import type { History, Selection } from '../types';
+import { getSheetIdByName } from '../utils';
+import { setFormulaCellInfo } from './formulaHelper';
 
 // Shared mutable state accessed by formula-editor.ts and formula-range.ts.
 // Wrapped in an object so mutations are visible across module boundaries.
@@ -56,8 +63,8 @@ export function createContextResolver(ctx: Context): CellResolver {
             return getFlowdata(ctx, sheetId) ?? null;
         },
         getSheets() {
-            return ctx.luckysheetfile.map(f => ({
-                id: f.id ?? "",
+            return ctx.luckysheetfile.map((f) => ({
+                id: f.id ?? '',
                 name: f.name,
                 calculationChain: f.calcChain ?? [],
                 dynamicArrayCompute: f.dynamicArray_compute ?? [],
@@ -138,12 +145,7 @@ export class FormulaCache {
         this.engine = new FormulaEngine();
     }
 
-    updateFormulaCache(
-        ctx: Context,
-        history: History,
-        type: "undo" | "redo",
-        data?: CellMatrix
-    ) {
+    updateFormulaCache(ctx: Context, history: History, type: 'undo' | 'redo', data?: CellMatrix) {
         function requestUpdate(value: any) {
             if (value instanceof Object) {
                 if (!isNil(value.r) && !isNil(value.c)) {
@@ -154,21 +156,16 @@ export class FormulaCache {
                             c: value.c,
                             id: value.id || history.options?.id || ctx.currentSheetId,
                         },
-                        data
+                        data,
                     );
                 }
             }
         }
 
-        const changesHistory =
-            type === "undo" ? history.inversePatches : history.patches;
+        const changesHistory = type === 'undo' ? history.inversePatches : history.patches;
         changesHistory.forEach((patch) => {
-            if (
-                isFormula(patch.value?.f) ||
-                patch.value === null ||
-                patch.path[5] === "f"
-            ) {
-                requestUpdate({r: patch.path[3], c: patch.path[4]});
+            if (isFormula(patch.value?.f) || patch.value === null || patch.path[5] === 'f') {
+                requestUpdate({ r: patch.path[3], c: patch.path[4] });
             } else if (Array.isArray(patch.value)) {
                 patch.value.forEach((value) => {
                     requestUpdate(value);

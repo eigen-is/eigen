@@ -1,5 +1,5 @@
-import {cloneDeep, isNil} from "es-toolkit/compat";
-import {Context} from "../context";
+import { cloneDeep, isNil } from 'es-toolkit/compat';
+import type { Context } from '../context';
 import {
     cancelPaintModel,
     onCellsMove,
@@ -10,32 +10,27 @@ import {
     onImageResize,
     onImageResizeEnd,
     rangeDrag,
-} from "../modules";
-import {getFrozenHandleLeft, getFrozenHandleTop, scrollToFrozenRowCol} from "../modules/freeze";
-import {mergeMoveMain} from "../modules/cell";
-import {colLocation, rowLocation} from "../modules/location";
-import {checkProtectionSelectLockedOrUnLockedCells} from "../modules/protection";
-import {pasteHandlerOfPaintModel} from "../modules/selection";
-import {Settings} from "../settings";
-import {GlobalCache} from "../types";
-import {getSheetIndex} from "../utils";
-import {onDropCellSelect, onDropCellSelectEnd} from "../modules/dropCell";
-import {handleFormulaInput, rangeDragColumn, rangeDragRow} from "../modules/formula-ui";
-import {onRangeSelectionModalMove, onRangeSelectionModalMoveEnd} from "../modules/hyperlink";
-import {onSearchDialogMove, onSearchDialogMoveEnd} from "../modules/searchReplace";
-import {fixPositionOnFrozenCells} from "./mouse-resize";
+} from '../modules';
+import { mergeMoveMain } from '../modules/cell';
+import { onDropCellSelect, onDropCellSelectEnd } from '../modules/dropCell';
+import { handleFormulaInput, rangeDragColumn, rangeDragRow } from '../modules/formula-ui';
+import { getFrozenHandleLeft, getFrozenHandleTop, scrollToFrozenRowCol } from '../modules/freeze';
+import { onRangeSelectionModalMove, onRangeSelectionModalMoveEnd } from '../modules/hyperlink';
+import { colLocation, rowLocation } from '../modules/location';
+import { checkProtectionSelectLockedOrUnLockedCells } from '../modules/protection';
+import { onSearchDialogMove, onSearchDialogMoveEnd } from '../modules/searchReplace';
+import { pasteHandlerOfPaintModel } from '../modules/selection';
+import type { Settings } from '../settings';
+import type { GlobalCache } from '../types';
+import { getSheetIndex } from '../utils';
+import { fixPositionOnFrozenCells } from './mouse-resize';
 
 // ---------------------------------------------------------------------------
 // mouseRender sub-functions (private)
 // ---------------------------------------------------------------------------
 
 /** Handle cell selection drag while mouse is held down. */
-function renderCellSelection(
-    ctx: Context,
-    globalCache: GlobalCache,
-    e: MouseEvent,
-    container: HTMLDivElement
-) {
+function renderCellSelection(ctx: Context, globalCache: GlobalCache, e: MouseEvent, container: HTMLDivElement) {
     const rect = container.getBoundingClientRect();
     const mouseX = e.pageX - rect.left - window.scrollX;
     const mouseY = e.pageY - rect.top - window.scrollY;
@@ -43,12 +38,12 @@ function renderCellSelection(
     const _y = mouseY - ctx.columnHeaderHeight + ctx.scrollTop;
 
     const freeze = globalCache.freezen?.[ctx.currentSheetId];
-    const {x, y} = fixPositionOnFrozenCells(
+    const { x, y } = fixPositionOnFrozenCells(
         freeze,
         _x,
         _y,
         mouseX - ctx.rowHeaderWidth,
-        mouseY - ctx.columnHeaderHeight
+        mouseY - ctx.columnHeaderHeight,
     );
 
     const row_location = rowLocation(y, ctx.visibledatarow);
@@ -60,21 +55,12 @@ function renderCellSelection(
     const col_pre = col_location[0];
     const col_index = col_location[2];
 
-    if (
-        !checkProtectionSelectLockedOrUnLockedCells(
-            ctx,
-            row_index,
-            col_index,
-            ctx.currentSheetId
-        )
-    ) {
+    if (!checkProtectionSelectLockedOrUnLockedCells(ctx, row_index, col_index, ctx.currentSheetId)) {
         ctx.luckysheet_select_status = false;
         return;
     }
 
-    const last = cloneDeep(
-        ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1]
-    );
+    const last = cloneDeep(ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1]);
 
     if (
         !last ||
@@ -142,16 +128,7 @@ function renderCellSelection(
         columnseleted = [last.column[0], col_index];
     }
 
-    const changeparam = mergeMoveMain(
-        ctx,
-        columnseleted,
-        rowseleted,
-        last,
-        top,
-        height,
-        left,
-        width
-    );
+    const changeparam = mergeMoveMain(ctx, columnseleted, rowseleted, last, top, height, left, width);
     if (changeparam != null) {
         [columnseleted, rowseleted, top, height, left, width] = changeparam;
     }
@@ -165,9 +142,7 @@ function renderCellSelection(
     last.height_move = height;
 
     // Check if selecting entire row
-    const isMaxColumn =
-        ctx.luckysheet_select_save![ctx.luckysheet_select_save!.length - 1]
-            .column;
+    const isMaxColumn = ctx.luckysheet_select_save![ctx.luckysheet_select_save!.length - 1].column;
     const colMax = ctx.visibledatacolumn.length - 1;
     if (isMaxColumn![0] === 0 && isMaxColumn![1] === colMax) {
         last.column[1] = colMax;
@@ -175,8 +150,7 @@ function renderCellSelection(
     }
 
     // Check if selecting entire column
-    const isMaxRow =
-        ctx.luckysheet_select_save![ctx.luckysheet_select_save!.length - 1].row;
+    const isMaxRow = ctx.luckysheet_select_save![ctx.luckysheet_select_save!.length - 1].row;
     const rowMax = ctx.visibledatarow.length - 1;
     if (isMaxRow![0] === 0 && isMaxRow![1] === rowMax) {
         last.row[1] = rowMax;
@@ -189,29 +163,15 @@ function renderCellSelection(
 }
 
 /** Column width resize drag. */
-function renderColResize(
-    ctx: Context,
-    e: MouseEvent,
-    scrollX: HTMLDivElement,
-    container: HTMLDivElement
-) {
+function renderColResize(ctx: Context, e: MouseEvent, scrollX: HTMLDivElement, container: HTMLDivElement) {
     const rect = container.getBoundingClientRect();
-    const x =
-        e.pageX -
-        rect.left -
-        ctx.rowHeaderWidth +
-        scrollX.scrollLeft -
-        window.scrollX;
+    const x = e.pageX - rect.left - ctx.rowHeaderWidth + scrollX.scrollLeft - window.scrollX;
     if (x < rect.width + ctx.scrollLeft - 100) {
-        const changeSizeLine = container.querySelector(
-            ".fortune-change-size-line"
-        );
+        const changeSizeLine = container.querySelector('.fortune-change-size-line');
         if (changeSizeLine) {
             (changeSizeLine as HTMLDivElement).style.left = `${x}px`;
         }
-        const changeSizeCol = container.querySelector(
-            ".fortune-cols-change-size"
-        );
+        const changeSizeCol = container.querySelector('.fortune-cols-change-size');
         if (changeSizeCol) {
             (changeSizeCol as HTMLDivElement).style.left = `${x - 2}px`;
         }
@@ -219,29 +179,15 @@ function renderColResize(
 }
 
 /** Row height resize drag. */
-function renderRowResize(
-    ctx: Context,
-    e: MouseEvent,
-    scrollY: HTMLDivElement,
-    container: HTMLDivElement
-) {
+function renderRowResize(ctx: Context, e: MouseEvent, scrollY: HTMLDivElement, container: HTMLDivElement) {
     const rect = container.getBoundingClientRect();
-    const y =
-        e.pageY -
-        rect.top -
-        ctx.columnHeaderHeight +
-        scrollY.scrollTop -
-        window.scrollY;
+    const y = e.pageY - rect.top - ctx.columnHeaderHeight + scrollY.scrollTop - window.scrollY;
     if (y < rect.height + ctx.scrollTop - 20) {
-        const changeSizeLine = container.querySelector(
-            ".fortune-change-size-line"
-        );
+        const changeSizeLine = container.querySelector('.fortune-change-size-line');
         if (changeSizeLine) {
             (changeSizeLine as HTMLDivElement).style.top = `${y}px`;
         }
-        const changeSizeRow = container.querySelector(
-            ".fortune-rows-change-size"
-        );
+        const changeSizeRow = container.querySelector('.fortune-rows-change-size');
         if (changeSizeRow) {
             (changeSizeRow as HTMLDivElement).style.top = `${y}px`;
         }
@@ -249,37 +195,24 @@ function renderRowResize(
 }
 
 /** Column freeze drag. */
-function renderColFreezeDrag(
-    ctx: Context,
-    e: MouseEvent,
-    container: HTMLDivElement
-) {
+function renderColFreezeDrag(ctx: Context, e: MouseEvent, container: HTMLDivElement) {
     const rect = container.getBoundingClientRect();
-    const x =
-        e.pageX -
-        rect.left -
-        ctx.rowHeaderWidth +
-        ctx.scrollLeft -
-        window.scrollX;
+    const x = e.pageX - rect.left - ctx.rowHeaderWidth + ctx.scrollLeft - window.scrollX;
     const [col_pre, col_curr] = colLocation(x, ctx.visibledatacolumn);
 
     const col = x > (col_pre + col_curr) / 2 ? col_curr : col_pre;
 
     if (x < rect.width + ctx.scrollLeft - 100) {
-        const freezeLine = container.querySelector(".fortune-freeze-drag-line");
+        const freezeLine = container.querySelector('.fortune-freeze-drag-line');
         if (freezeLine) {
             (freezeLine as HTMLDivElement).style.left = `${Math.max(0, col - 2)}px`;
         }
-        const freezeHandle = container.querySelector(
-            ".fortune-cols-freeze-handle"
-        );
+        const freezeHandle = container.querySelector('.fortune-cols-freeze-handle');
         if (freezeHandle) {
             (freezeHandle as HTMLDivElement).style.left = `${x}px`;
         }
         // reuse change-size-line
-        const changeSizeLine = container.querySelector(
-            ".fortune-change-size-line"
-        );
+        const changeSizeLine = container.querySelector('.fortune-change-size-line');
         if (changeSizeLine) {
             (changeSizeLine as HTMLDivElement).style.left = `${x}px`;
         }
@@ -287,37 +220,24 @@ function renderColFreezeDrag(
 }
 
 /** Row freeze drag. */
-function renderRowFreezeDrag(
-    ctx: Context,
-    e: MouseEvent,
-    container: HTMLDivElement
-) {
+function renderRowFreezeDrag(ctx: Context, e: MouseEvent, container: HTMLDivElement) {
     const rect = container.getBoundingClientRect();
-    const y =
-        e.pageY -
-        rect.top -
-        ctx.columnHeaderHeight +
-        ctx.scrollTop -
-        window.scrollY;
+    const y = e.pageY - rect.top - ctx.columnHeaderHeight + ctx.scrollTop - window.scrollY;
     const [row_pre, row_curr] = rowLocation(y, ctx.visibledatarow);
 
     const row = y > (row_curr + row_pre) / 2 ? row_curr : row_pre;
 
     if (y < rect.height + ctx.scrollTop - 20) {
-        const freezeLine = container.querySelector(".fortune-freeze-drag-line");
+        const freezeLine = container.querySelector('.fortune-freeze-drag-line');
         if (freezeLine) {
             (freezeLine as HTMLDivElement).style.top = `${Math.max(0, row - 2)}px`;
         }
-        const freezeHandle = container.querySelector(
-            ".fortune-rows-freeze-handle"
-        );
+        const freezeHandle = container.querySelector('.fortune-rows-freeze-handle');
         if (freezeHandle) {
             (freezeHandle as HTMLDivElement).style.top = `${y}px`;
         }
         // reuse change-size-line
-        const changeSizeLine = container.querySelector(
-            ".fortune-change-size-line"
-        );
+        const changeSizeLine = container.querySelector('.fortune-change-size-line');
         if (changeSizeLine) {
             (changeSizeLine as HTMLDivElement).style.top = `${y}px`;
         }
@@ -336,16 +256,12 @@ function mouseRender(
     scrollX: HTMLDivElement,
     scrollY: HTMLDivElement,
     container: HTMLDivElement,
-    fxInput?: HTMLDivElement | null
+    fxInput?: HTMLDivElement | null,
 ) {
     const rect = container.getBoundingClientRect();
 
     // Auto-scroll when dragging near edges
-    if (
-        ctx.luckysheet_scroll_status &&
-        !ctx.luckysheet_cols_change_size &&
-        !ctx.luckysheet_rows_change_size
-    ) {
+    if (ctx.luckysheet_scroll_status && !ctx.luckysheet_cols_change_size && !ctx.luckysheet_rows_change_size) {
         const left = ctx.scrollLeft;
         const top = ctx.scrollTop;
         const x = e.pageX - rect.left - window.scrollX;
@@ -384,35 +300,11 @@ function mouseRender(
     if (ctx.luckysheet_select_status) {
         renderCellSelection(ctx, globalCache, e, container);
     } else if (ctx.formulaCache.rangestart) {
-        rangeDrag(
-            ctx,
-            e,
-            cellInput,
-            scrollX.scrollLeft,
-            scrollY.scrollTop,
-            container,
-            fxInput
-        );
+        rangeDrag(ctx, e, cellInput, scrollX.scrollLeft, scrollY.scrollTop, container, fxInput);
     } else if (ctx.formulaCache.rangedrag_row_start) {
-        rangeDragRow(
-            ctx,
-            e,
-            cellInput,
-            scrollX.scrollLeft,
-            scrollY.scrollTop,
-            container,
-            fxInput
-        );
+        rangeDragRow(ctx, e, cellInput, scrollX.scrollLeft, scrollY.scrollTop, container, fxInput);
     } else if (ctx.formulaCache.rangedrag_column_start) {
-        rangeDragColumn(
-            ctx,
-            e,
-            cellInput,
-            scrollX.scrollLeft,
-            scrollY.scrollTop,
-            container,
-            fxInput
-        );
+        rangeDragColumn(ctx, e, cellInput, scrollX.scrollLeft, scrollY.scrollTop, container, fxInput);
     } else if (ctx.luckysheet_rows_selected_status) {
         // Row selection drag — not yet implemented
     } else if (ctx.luckysheet_cols_selected_status) {
@@ -448,7 +340,7 @@ export function handleOverlayMouseMove(
     scrollX: HTMLDivElement,
     scrollY: HTMLDivElement,
     container: HTMLDivElement,
-    fxInput?: HTMLDivElement | null
+    fxInput?: HTMLDivElement | null,
 ) {
     if (onImageMove(ctx, globalCache, e)) return;
     if (onImageResize(ctx, globalCache, e)) return;
@@ -466,29 +358,20 @@ export function handleOverlayMouseMove(
         !!ctx.luckysheet_cols_change_size ||
         !!ctx.luckysheet_rows_change_size
     ) {
-        mouseRender(
-            ctx,
-            globalCache,
-            e,
-            cellInput,
-            scrollX,
-            scrollY,
-            container,
-            fxInput
-        );
+        mouseRender(ctx, globalCache, e, cellInput, scrollX, scrollY, container, fxInput);
     }
 }
 
 export function handleOverlayMouseUp(
     ctx: Context,
     globalCache: GlobalCache,
-    settings: Settings,
+    _settings: Settings,
     e: MouseEvent,
     scrollbarX: HTMLDivElement,
     scrollbarY: HTMLDivElement,
     container: HTMLDivElement,
     cellInput: HTMLDivElement | null,
-    fxInput: HTMLDivElement | null
+    fxInput: HTMLDivElement | null,
 ) {
     const rect = container.getBoundingClientRect();
     onImageMoveEnd(ctx, globalCache);
@@ -502,7 +385,7 @@ export function handleOverlayMouseUp(
         ctx.formulaCache.rangedrag_column_start ||
         ctx.formulaCache.rangedrag_row_start
     ) {
-        if (document.activeElement?.id === "luckysheet-functionbox-cell") {
+        if (document.activeElement?.id === 'luckysheet-functionbox-cell') {
             handleFormulaInput(ctx, cellInput!, fxInput!, 0, undefined, false);
         } else {
             handleFormulaInput(ctx, fxInput, cellInput!, 0, undefined, false);
@@ -536,9 +419,8 @@ export function handleOverlayMouseUp(
     if (ctx.luckysheet_rows_change_size) {
         ctx.luckysheet_rows_change_size = false;
 
-        const {scrollTop} = ctx;
-        const y =
-            e.pageY - rect.top - ctx.columnHeaderHeight + scrollTop - window.scrollY;
+        const { scrollTop } = ctx;
+        const y = e.pageY - rect.top - ctx.columnHeaderHeight + scrollTop - window.scrollY;
         const winH = rect.height;
 
         let delta = y + 3 - ctx.luckysheet_rows_change_size_start[0];
@@ -578,10 +460,7 @@ export function handleOverlayMouseUp(
             ctx.luckysheet_select_save
                 ?.filter((select) => select.row_select)
                 ?.some((select) => {
-                    if (
-                        changeRowIndex >= select.row[0] &&
-                        changeRowIndex <= select.row[1]
-                    ) {
+                    if (changeRowIndex >= select.row[0] && changeRowIndex <= select.row[1]) {
                         changeRowSelected = true;
                     }
                     return changeRowSelected;
@@ -611,16 +490,14 @@ export function handleOverlayMouseUp(
     if (ctx.luckysheet_cols_change_size) {
         ctx.luckysheet_cols_change_size = false;
 
-        const {scrollLeft} = ctx;
-        const x =
-            e.pageX - rect.left - ctx.rowHeaderWidth + scrollLeft - window.scrollX;
+        const { scrollLeft } = ctx;
+        const x = e.pageX - rect.left - ctx.rowHeaderWidth + scrollLeft - window.scrollX;
         const winW = rect.width;
 
         let delta = x + 3 - ctx.luckysheet_cols_change_size_start[0];
 
         if (x >= winW - 100 + scrollLeft) {
-            delta =
-                winW - 100 - ctx.luckysheet_cols_change_size_start[0] + scrollLeft;
+            delta = winW - 100 - ctx.luckysheet_cols_change_size_start[0] + scrollLeft;
         }
 
         const cfg = ctx.config;
@@ -633,17 +510,11 @@ export function handleOverlayMouseUp(
         }
 
         let firstcolumnlen = ctx.defaultcollen;
-        if (
-            ctx.config.columnlen != null &&
-            ctx.config.columnlen[ctx.luckysheet_cols_change_size_start[1]] != null
-        ) {
-            firstcolumnlen =
-                ctx.config.columnlen[ctx.luckysheet_cols_change_size_start[1]];
+        if (ctx.config.columnlen != null && ctx.config.columnlen[ctx.luckysheet_cols_change_size_start[1]] != null) {
+            firstcolumnlen = ctx.config.columnlen[ctx.luckysheet_cols_change_size_start[1]];
         }
 
-        let size =
-            (cfg.columnlen[ctx.luckysheet_cols_change_size_start[1]] ||
-                ctx.defaultcollen) + delta;
+        let size = (cfg.columnlen[ctx.luckysheet_cols_change_size_start[1]] || ctx.defaultcollen) + delta;
 
         if (Math.abs(size - firstcolumnlen) < 3) {
             return;
@@ -660,10 +531,7 @@ export function handleOverlayMouseUp(
             ctx.luckysheet_select_save
                 ?.filter((select) => select.column_select)
                 ?.some((select) => {
-                    if (
-                        changeColumnIndex >= select.column[0] &&
-                        changeColumnIndex <= select.column[1]
-                    ) {
+                    if (changeColumnIndex >= select.column[0] && changeColumnIndex <= select.column[1]) {
                         changeColumnSelected = true;
                     }
                     return changeColumnSelected;
@@ -693,51 +561,42 @@ export function handleOverlayMouseUp(
     if (ctx.luckysheet_cols_freeze_drag) {
         ctx.luckysheet_cols_freeze_drag = false;
 
-        const {scrollLeft} = ctx;
-        const x =
-            e.pageX - rect.left - ctx.rowHeaderWidth + scrollLeft - window.scrollX;
-        const [col_pre, col_curr, col_index_curr] = colLocation(
-            x,
-            ctx.visibledatacolumn
-        );
-        const col_index =
-            x > (col_curr + col_pre) / 2 ? col_index_curr : col_index_curr - 1;
+        const { scrollLeft } = ctx;
+        const x = e.pageX - rect.left - ctx.rowHeaderWidth + scrollLeft - window.scrollX;
+        const [col_pre, col_curr, col_index_curr] = colLocation(x, ctx.visibledatacolumn);
+        const col_index = x > (col_curr + col_pre) / 2 ? col_index_curr : col_index_curr - 1;
         const idx = getSheetIndex(ctx, ctx.currentSheetId);
         if (idx == null) return;
         if (col_index < 0) {
-            const {frozen} = ctx.luckysheetfile[idx];
+            const { frozen } = ctx.luckysheetfile[idx];
             if (frozen) {
-                if (frozen.type === "rangeBoth" || frozen.type === "both") {
-                    frozen.type = "rangeRow";
-                } else if (frozen.type === "column" || frozen.type === "rangeColumn") {
+                if (frozen.type === 'rangeBoth' || frozen.type === 'both') {
+                    frozen.type = 'rangeRow';
+                } else if (frozen.type === 'column' || frozen.type === 'rangeColumn') {
                     delete ctx.luckysheetfile[idx].frozen;
                 }
             }
-            const freezeHandle = container.querySelector(
-                ".fortune-cols-freeze-handle"
-            ) as HTMLDivElement;
+            const freezeHandle = container.querySelector('.fortune-cols-freeze-handle') as HTMLDivElement;
             if (freezeHandle) {
                 freezeHandle.style.left = `${ctx.scrollLeft}px`;
             }
         } else if (!ctx.luckysheetfile[idx].frozen) {
             ctx.luckysheetfile[idx].frozen = {
-                type: "rangeColumn",
-                range: {column_focus: col_index, row_focus: 0},
+                type: 'rangeColumn',
+                range: { column_focus: col_index, row_focus: 0 },
             };
         } else {
             const frozen = ctx.luckysheetfile[idx].frozen!;
             if (!frozen.range) {
-                frozen.range = {column_focus: col_index, row_focus: 0};
+                frozen.range = { column_focus: col_index, row_focus: 0 };
             } else {
                 frozen.range.column_focus = col_index;
             }
-            if (frozen?.type === "rangeRow" || frozen?.type === "row") {
-                frozen.type = "rangeBoth";
+            if (frozen?.type === 'rangeRow' || frozen?.type === 'row') {
+                frozen.type = 'rangeBoth';
             }
         }
-        const freezeHandle = container.querySelector(
-            ".fortune-cols-freeze-handle"
-        ) as HTMLDivElement;
+        const freezeHandle = container.querySelector('.fortune-cols-freeze-handle') as HTMLDivElement;
         if (freezeHandle) {
             freezeHandle.style.left = `${getFrozenHandleLeft(ctx)}px`;
         }
@@ -747,45 +606,38 @@ export function handleOverlayMouseUp(
     if (ctx.luckysheet_rows_freeze_drag) {
         ctx.luckysheet_rows_freeze_drag = false;
 
-        const {scrollTop} = ctx;
-        const y =
-            e.pageY - rect.top - ctx.columnHeaderHeight + scrollTop - window.scrollY;
-        const [row_pre, row_curr, row_index_curr] = rowLocation(
-            y,
-            ctx.visibledatarow
-        );
-        const row_index =
-            y > (row_curr + row_pre) / 2 ? row_index_curr : row_index_curr - 1;
+        const { scrollTop } = ctx;
+        const y = e.pageY - rect.top - ctx.columnHeaderHeight + scrollTop - window.scrollY;
+        const [row_pre, row_curr, row_index_curr] = rowLocation(y, ctx.visibledatarow);
+        const row_index = y > (row_curr + row_pre) / 2 ? row_index_curr : row_index_curr - 1;
         const idx = getSheetIndex(ctx, ctx.currentSheetId);
         if (idx == null) return;
         if (row_index < 0) {
-            const {frozen} = ctx.luckysheetfile[idx];
+            const { frozen } = ctx.luckysheetfile[idx];
             if (frozen) {
-                if (frozen.type === "rangeBoth" || frozen.type === "both") {
-                    frozen.type = "rangeColumn";
-                } else if (frozen.type === "row" || frozen.type === "rangeRow") {
+                if (frozen.type === 'rangeBoth' || frozen.type === 'both') {
+                    frozen.type = 'rangeColumn';
+                } else if (frozen.type === 'row' || frozen.type === 'rangeRow') {
                     delete ctx.luckysheetfile[idx].frozen;
                 }
             }
         } else if (!ctx.luckysheetfile[idx].frozen) {
             ctx.luckysheetfile[idx].frozen = {
-                type: "rangeRow",
-                range: {column_focus: 0, row_focus: row_index},
+                type: 'rangeRow',
+                range: { column_focus: 0, row_focus: row_index },
             };
         } else {
             const frozen = ctx.luckysheetfile[idx].frozen!;
             if (!frozen.range) {
-                frozen.range = {column_focus: 0, row_focus: row_index};
+                frozen.range = { column_focus: 0, row_focus: row_index };
             } else {
                 frozen.range.row_focus = row_index;
             }
-            if (frozen?.type === "rangeColumn" || frozen?.type === "column") {
-                frozen.type = "rangeBoth";
+            if (frozen?.type === 'rangeColumn' || frozen?.type === 'column') {
+                frozen.type = 'rangeBoth';
             }
         }
-        const freezeHandle = container.querySelector(
-            ".fortune-rows-freeze-handle"
-        ) as HTMLDivElement;
+        const freezeHandle = container.querySelector('.fortune-rows-freeze-handle') as HTMLDivElement;
         if (freezeHandle) {
             freezeHandle.style.top = `${getFrozenHandleTop(ctx)}px`;
         }

@@ -1,7 +1,7 @@
-import {isEmpty, isNil, isPlainObject} from "es-toolkit/compat";
-import {Context, getFlowdata} from "../context";
-import type {CellMatrix} from "../../engine/types";
-import {getSheetIndex} from "../utils";
+import { isEmpty, isNil, isPlainObject } from 'es-toolkit/compat';
+import type { CellMatrix } from '../../engine/types';
+import { type Context, getFlowdata } from '../context';
+import { getSheetIndex } from '../utils';
 
 // Get computed border data for the table
 export function getBorderInfoComputeRange(
@@ -10,7 +10,7 @@ export function getBorderInfoComputeRange(
     dataset_row_ed: number,
     dataset_col_st: number,
     dataset_col_ed: number,
-    sheetId?: string
+    sheetId?: string,
 ) {
     const borderInfoCompute: Record<string, any> = {};
     const flowdata = getFlowdata(ctx);
@@ -31,15 +31,15 @@ export function getBorderInfoComputeRange(
     }
     if (!data || !cfg) return borderInfoCompute;
 
-    const {borderInfo} = cfg;
+    const { borderInfo } = cfg;
 
     if (!borderInfo || isEmpty(borderInfo)) return borderInfoCompute;
 
     for (let i = 0; i < borderInfo.length; i += 1) {
-        const {rangeType} = borderInfo[i];
+        const { rangeType } = borderInfo[i];
 
-        if (rangeType === "range") {
-            const {borderType} = borderInfo[i];
+        if (rangeType === 'range') {
+            const { borderType } = borderInfo[i];
             const borderColor = borderInfo[i].color;
             const borderStyle = borderInfo[i].style;
 
@@ -67,7 +67,7 @@ export function getBorderInfoComputeRange(
                     bd_c2 = dataset_col_ed;
                 }
 
-                if (borderType === "border-slash") {
+                if (borderType === 'border-slash') {
                     const bd_r = borderRange[0].row_focus;
                     const bd_c = borderRange[0].column_focus;
                     if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[bd_r])) {
@@ -83,7 +83,7 @@ export function getBorderInfoComputeRange(
                         style: borderStyle,
                     };
                 }
-                if (borderType === "border-left") {
+                if (borderType === 'border-left') {
                     for (let bd_r = bd_r1; bd_r <= bd_r2; bd_r += 1) {
                         if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[bd_r])) {
                             continue;
@@ -104,8 +104,7 @@ export function getBorderInfoComputeRange(
                             if (!isNil(data[bd_r]?.[bd_c_left]?.mc)) {
                                 const cell_left = data[bd_r][bd_c_left];
 
-                                const mc =
-                                    cfg.merge?.[`${cell_left?.mc?.r}_${cell_left?.mc?.c}`];
+                                const mc = cfg.merge?.[`${cell_left?.mc?.r}_${cell_left?.mc?.c}`];
 
                                 if (mc && mc.c + mc.cs - 1 === bd_c_left) {
                                     borderInfoCompute[`${bd_r}_${bd_c_left}`].r = {
@@ -123,18 +122,13 @@ export function getBorderInfoComputeRange(
 
                         const mc = cfg.merge || {};
                         Object.keys(mc).forEach((key) => {
-                            const {c, r, cs, rs} = mc[key];
-                            if (
-                                bd_c1 <= c + cs - 1 &&
-                                bd_c1 > c &&
-                                bd_r >= r &&
-                                bd_r <= r + rs - 1
-                            ) {
+                            const { c, r, cs, rs } = mc[key];
+                            if (bd_c1 <= c + cs - 1 && bd_c1 > c && bd_r >= r && bd_r <= r + rs - 1) {
                                 borderInfoCompute[`${bd_r}_${bd_c1}`].l = null;
                             }
                         });
                     }
-                } else if (borderType === "border-right") {
+                } else if (borderType === 'border-right') {
                     for (let bd_r = bd_r1; bd_r <= bd_r2; bd_r += 1) {
                         if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[bd_r])) {
                             continue;
@@ -151,15 +145,11 @@ export function getBorderInfoComputeRange(
 
                         const bd_c_right = bd_c2 + 1;
 
-                        if (
-                            bd_c_right < data[0].length &&
-                            borderInfoCompute[`${bd_r}_${bd_c_right}`]
-                        ) {
+                        if (bd_c_right < data[0].length && borderInfoCompute[`${bd_r}_${bd_c_right}`]) {
                             if (!isNil(data[bd_r]?.[bd_c_right]?.mc)) {
                                 const cell_right = data[bd_r][bd_c_right];
 
-                                const mc =
-                                    cfg.merge?.[`${cell_right?.mc?.r}_${cell_right?.mc?.c}`];
+                                const mc = cfg.merge?.[`${cell_right?.mc?.r}_${cell_right?.mc?.c}`];
 
                                 if (mc && mc.c === bd_c_right) {
                                     borderInfoCompute[`${bd_r}_${bd_c_right}`].l = {
@@ -176,18 +166,13 @@ export function getBorderInfoComputeRange(
                         }
                         const mc = cfg.merge || {};
                         Object.keys(mc).forEach((key) => {
-                            const {c, r, cs, rs} = mc[key];
-                            if (
-                                bd_c2 < c + cs - 1 &&
-                                bd_c2 >= c &&
-                                bd_r >= r &&
-                                bd_r <= r + rs - 1
-                            ) {
+                            const { c, r, cs, rs } = mc[key];
+                            if (bd_c2 < c + cs - 1 && bd_c2 >= c && bd_r >= r && bd_r <= r + rs - 1) {
                                 borderInfoCompute[`${bd_r}_${bd_c2}`].r = null;
                             }
                         });
                     }
-                } else if (borderType === "border-top") {
+                } else if (borderType === 'border-top') {
                     if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[bd_r1])) {
                         continue;
                     }
@@ -226,18 +211,13 @@ export function getBorderInfoComputeRange(
 
                         const mc = cfg.merge || {};
                         Object.keys(mc).forEach((key) => {
-                            const {c, r, cs, rs} = mc[key];
-                            if (
-                                bd_r1 <= r + rs - 1 &&
-                                bd_r1 > r &&
-                                bd_c >= c &&
-                                bd_c <= c + cs - 1
-                            ) {
+                            const { c, r, cs, rs } = mc[key];
+                            if (bd_r1 <= r + rs - 1 && bd_r1 > r && bd_c >= c && bd_c <= c + cs - 1) {
                                 borderInfoCompute[`${bd_r1}_${bd_c}`].t = null;
                             }
                         });
                     }
-                } else if (borderType === "border-bottom") {
+                } else if (borderType === 'border-bottom') {
                     if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[bd_r2])) {
                         continue;
                     }
@@ -254,15 +234,11 @@ export function getBorderInfoComputeRange(
 
                         const bd_r_bottom = bd_r2 + 1;
 
-                        if (
-                            bd_r_bottom < data.length &&
-                            borderInfoCompute[`${bd_r_bottom}_${bd_c}`]
-                        ) {
+                        if (bd_r_bottom < data.length && borderInfoCompute[`${bd_r_bottom}_${bd_c}`]) {
                             if (!isNil(data[bd_r_bottom]?.[bd_c]?.mc)) {
                                 const cell_bottom = data[bd_r_bottom][bd_c];
 
-                                const mc =
-                                    cfg.merge?.[`${cell_bottom?.mc?.r}_${cell_bottom?.mc?.c}`];
+                                const mc = cfg.merge?.[`${cell_bottom?.mc?.r}_${cell_bottom?.mc?.c}`];
 
                                 if (mc?.r === bd_r_bottom) {
                                     borderInfoCompute[`${bd_r_bottom}_${bd_c}`].t = {
@@ -280,18 +256,13 @@ export function getBorderInfoComputeRange(
 
                         const mc = cfg.merge || {};
                         Object.keys(mc).forEach((key) => {
-                            const {c, r, cs, rs} = mc[key];
-                            if (
-                                bd_r2 < r + rs - 1 &&
-                                bd_r2 >= r &&
-                                bd_c >= c &&
-                                bd_c <= c + cs - 1
-                            ) {
+                            const { c, r, cs, rs } = mc[key];
+                            if (bd_r2 < r + rs - 1 && bd_r2 >= r && bd_c >= c && bd_c <= c + cs - 1) {
                                 borderInfoCompute[`${bd_r2}_${bd_c}`].b = null;
                             }
                         });
                     }
-                } else if (borderType === "border-all") {
+                } else if (borderType === 'border-all') {
                     for (let bd_r = bd_r1; bd_r <= bd_r2; bd_r += 1) {
                         if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[bd_r])) {
                             continue;
@@ -376,8 +347,7 @@ export function getBorderInfoComputeRange(
                                     if (!isNil(data[bd_r_top]?.[bd_c]?.mc)) {
                                         const cell_top = data[bd_r_top][bd_c];
 
-                                        const mc =
-                                            cfg.merge?.[`${cell_top?.mc?.r}_${cell_top?.mc?.c}`];
+                                        const mc = cfg.merge?.[`${cell_top?.mc?.r}_${cell_top?.mc?.c}`];
 
                                         if (mc && mc.r + mc.rs - 1 === bd_r_top) {
                                             borderInfoCompute[`${bd_r_top}_${bd_c}`].b = {
@@ -397,17 +367,11 @@ export function getBorderInfoComputeRange(
                             if (bd_r === bd_r2) {
                                 const bd_r_bottom = bd_r2 + 1;
 
-                                if (
-                                    bd_r_bottom < data.length &&
-                                    borderInfoCompute[`${bd_r_bottom}_${bd_c}`]
-                                ) {
+                                if (bd_r_bottom < data.length && borderInfoCompute[`${bd_r_bottom}_${bd_c}`]) {
                                     if (!isNil(data[bd_r_bottom]?.[bd_c]?.mc)) {
                                         const cell_bottom = data[bd_r_bottom][bd_c];
 
-                                        const mc =
-                                            cfg.merge?.[
-                                                `${cell_bottom?.mc?.r}_${cell_bottom?.mc?.c}`
-                                                ];
+                                        const mc = cfg.merge?.[`${cell_bottom?.mc?.r}_${cell_bottom?.mc?.c}`];
 
                                         if (mc?.r === bd_r_bottom) {
                                             borderInfoCompute[`${bd_r_bottom}_${bd_c}`].t = {
@@ -427,15 +391,11 @@ export function getBorderInfoComputeRange(
                             if (bd_c === bd_c1) {
                                 const bd_c_left = bd_c1 - 1;
 
-                                if (
-                                    bd_c_left >= 0 &&
-                                    borderInfoCompute[`${bd_r}_${bd_c_left}`]
-                                ) {
+                                if (bd_c_left >= 0 && borderInfoCompute[`${bd_r}_${bd_c_left}`]) {
                                     if (!isNil(data[bd_r]?.[bd_c_left]?.mc)) {
                                         const cell_left = data[bd_r][bd_c_left];
 
-                                        const mc =
-                                            cfg.merge?.[`${cell_left?.mc?.r}_${cell_left?.mc?.c}`];
+                                        const mc = cfg.merge?.[`${cell_left?.mc?.r}_${cell_left?.mc?.c}`];
 
                                         if (mc && mc.c + mc.cs - 1 === bd_c_left) {
                                             borderInfoCompute[`${bd_r}_${bd_c_left}`].r = {
@@ -455,15 +415,11 @@ export function getBorderInfoComputeRange(
                             if (bd_c === bd_c2) {
                                 const bd_c_right = bd_c2 + 1;
 
-                                if (
-                                    bd_c_right < data[0].length &&
-                                    borderInfoCompute[`${bd_r}_${bd_c_right}`]
-                                ) {
+                                if (bd_c_right < data[0].length && borderInfoCompute[`${bd_r}_${bd_c_right}`]) {
                                     if (!isNil(data[bd_r]?.[bd_c_right]?.mc)) {
                                         const cell_right = data[bd_r][bd_c_right];
 
-                                        const mc =
-                                            cfg.merge?.[`${cell_right?.mc?.r}_${cell_right?.mc?.c}`];
+                                        const mc = cfg.merge?.[`${cell_right?.mc?.r}_${cell_right?.mc?.c}`];
 
                                         if (mc?.c === bd_c_right) {
                                             borderInfoCompute[`${bd_r}_${bd_c_right}`].l = {
@@ -481,21 +437,14 @@ export function getBorderInfoComputeRange(
                             }
                         }
                     }
-                } else if (borderType === "border-outside") {
+                } else if (borderType === 'border-outside') {
                     for (let bd_r = bd_r1; bd_r <= bd_r2; bd_r += 1) {
                         if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[bd_r])) {
                             continue;
                         }
 
                         for (let bd_c = bd_c1; bd_c <= bd_c2; bd_c += 1) {
-                            if (
-                                !(
-                                    bd_r === bd_r1 ||
-                                    bd_r === bd_r2 ||
-                                    bd_c === bd_c1 ||
-                                    bd_c === bd_c2
-                                )
-                            ) {
+                            if (!(bd_r === bd_r1 || bd_r === bd_r2 || bd_c === bd_c1 || bd_c === bd_c2)) {
                                 continue;
                             }
 
@@ -515,8 +464,7 @@ export function getBorderInfoComputeRange(
                                     if (!isNil(data[bd_r_top]?.[bd_c]?.mc)) {
                                         const cell_top = data[bd_r_top][bd_c];
 
-                                        const mc =
-                                            cfg.merge?.[`${cell_top?.mc?.r}_${cell_top?.mc?.c}`];
+                                        const mc = cfg.merge?.[`${cell_top?.mc?.r}_${cell_top?.mc?.c}`];
 
                                         if (mc && mc.r + mc.rs - 1 === bd_r_top) {
                                             borderInfoCompute[`${bd_r_top}_${bd_c}`].b = {
@@ -545,17 +493,11 @@ export function getBorderInfoComputeRange(
 
                                 const bd_r_bottom = bd_r2 + 1;
 
-                                if (
-                                    bd_r_bottom < data.length &&
-                                    borderInfoCompute[`${bd_r_bottom}_${bd_c}`]
-                                ) {
+                                if (bd_r_bottom < data.length && borderInfoCompute[`${bd_r_bottom}_${bd_c}`]) {
                                     if (!isNil(data[bd_r_bottom]?.[bd_c]?.mc)) {
                                         const cell_bottom = data[bd_r_bottom][bd_c];
 
-                                        const mc =
-                                            cfg.merge?.[
-                                                `${cell_bottom?.mc?.r}_${cell_bottom?.mc?.c}`
-                                                ];
+                                        const mc = cfg.merge?.[`${cell_bottom?.mc?.r}_${cell_bottom?.mc?.c}`];
 
                                         if (mc?.r === bd_r_bottom) {
                                             borderInfoCompute[`${bd_r_bottom}_${bd_c}`].t = {
@@ -584,15 +526,11 @@ export function getBorderInfoComputeRange(
 
                                 const bd_c_left = bd_c1 - 1;
 
-                                if (
-                                    bd_c_left >= 0 &&
-                                    borderInfoCompute[`${bd_r}_${bd_c_left}`]
-                                ) {
+                                if (bd_c_left >= 0 && borderInfoCompute[`${bd_r}_${bd_c_left}`]) {
                                     if (!isNil(data[bd_r]?.[bd_c_left]?.mc)) {
                                         const cell_left = data[bd_r][bd_c_left];
 
-                                        const mc =
-                                            cfg.merge?.[`${cell_left?.mc?.r}_${cell_left?.mc?.c}`];
+                                        const mc = cfg.merge?.[`${cell_left?.mc?.r}_${cell_left?.mc?.c}`];
 
                                         if (mc && mc.c + mc.cs - 1 === bd_c_left) {
                                             borderInfoCompute[`${bd_r}_${bd_c_left}`].r = {
@@ -621,15 +559,11 @@ export function getBorderInfoComputeRange(
 
                                 const bd_c_right = bd_c2 + 1;
 
-                                if (
-                                    bd_c_right < data[0].length &&
-                                    borderInfoCompute[`${bd_r}_${bd_c_right}`]
-                                ) {
+                                if (bd_c_right < data[0].length && borderInfoCompute[`${bd_r}_${bd_c_right}`]) {
                                     if (!isNil(data[bd_r]?.[bd_c_right]?.mc)) {
                                         const cell_right = data[bd_r][bd_c_right];
 
-                                        const mc =
-                                            cfg.merge?.[`${cell_right?.mc?.r}_${cell_right?.mc?.c}`];
+                                        const mc = cfg.merge?.[`${cell_right?.mc?.r}_${cell_right?.mc?.c}`];
 
                                         if (mc?.c === bd_c_right) {
                                             borderInfoCompute[`${bd_r}_${bd_c_right}`].l = {
@@ -647,7 +581,7 @@ export function getBorderInfoComputeRange(
                             }
                         }
                     }
-                } else if (borderType === "border-inside") {
+                } else if (borderType === 'border-inside') {
                     for (let bd_r = bd_r1; bd_r <= bd_r2; bd_r += 1) {
                         if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[bd_r])) {
                             continue;
@@ -995,7 +929,7 @@ export function getBorderInfoComputeRange(
                             }
                         }
                     }
-                } else if (borderType === "border-horizontal") {
+                } else if (borderType === 'border-horizontal') {
                     for (let bd_r = bd_r1; bd_r <= bd_r2; bd_r += 1) {
                         if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[bd_r])) {
                             continue;
@@ -1068,7 +1002,7 @@ export function getBorderInfoComputeRange(
                             }
                         }
                     }
-                } else if (borderType === "border-vertical") {
+                } else if (borderType === 'border-vertical') {
                     for (let bd_r = bd_r1; bd_r <= bd_r2; bd_r += 1) {
                         if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[bd_r])) {
                             continue;
@@ -1141,7 +1075,7 @@ export function getBorderInfoComputeRange(
                             }
                         }
                     }
-                } else if (borderType === "border-none") {
+                } else if (borderType === 'border-none') {
                     for (let bd_r = bd_r1; bd_r <= bd_r2; bd_r += 1) {
                         if (!isNil(cfg.rowhidden) && !isNil(cfg.rowhidden[bd_r])) {
                             continue;
@@ -1163,10 +1097,7 @@ export function getBorderInfoComputeRange(
                             if (bd_r === bd_r2) {
                                 const bd_r_bottom = bd_r2 + 1;
 
-                                if (
-                                    bd_r_bottom < data.length &&
-                                    borderInfoCompute[`${bd_r_bottom}_${bd_c}`]
-                                ) {
+                                if (bd_r_bottom < data.length && borderInfoCompute[`${bd_r_bottom}_${bd_c}`]) {
                                     delete borderInfoCompute[`${bd_r_bottom}_${bd_c}`].t;
                                 }
                             }
@@ -1174,10 +1105,7 @@ export function getBorderInfoComputeRange(
                             if (bd_c === bd_c1) {
                                 const bd_c_left = bd_c1 - 1;
 
-                                if (
-                                    bd_c_left >= 0 &&
-                                    borderInfoCompute[`${bd_r}_${bd_c_left}`]
-                                ) {
+                                if (bd_c_left >= 0 && borderInfoCompute[`${bd_r}_${bd_c_left}`]) {
                                     delete borderInfoCompute[`${bd_r}_${bd_c_left}`].r;
                                 }
                             }
@@ -1185,10 +1113,7 @@ export function getBorderInfoComputeRange(
                             if (bd_c === bd_c2) {
                                 const bd_c_right = bd_c2 + 1;
 
-                                if (
-                                    bd_c_right < data[0].length &&
-                                    borderInfoCompute[`${bd_r}_${bd_c_right}`]
-                                ) {
+                                if (bd_c_right < data[0].length && borderInfoCompute[`${bd_r}_${bd_c_right}`]) {
                                     delete borderInfoCompute[`${bd_r}_${bd_c_right}`].l;
                                 }
                             }
@@ -1196,18 +1121,13 @@ export function getBorderInfoComputeRange(
                     }
                 }
             }
-        } else if (rangeType === "cell") {
-            const {value} = borderInfo[i] as any;
+        } else if (rangeType === 'cell') {
+            const { value } = borderInfo[i] as any;
 
             const bd_r = value.row_index;
             const bd_c = value.col_index;
 
-            if (
-                bd_r < dataset_row_st ||
-                bd_r > dataset_row_ed ||
-                bd_c < dataset_col_st ||
-                bd_c > dataset_col_ed
-            ) {
+            if (bd_r < dataset_row_st || bd_r > dataset_row_ed || bd_c < dataset_col_st || bd_c > dataset_col_ed) {
                 continue;
             }
 
@@ -1215,12 +1135,7 @@ export function getBorderInfoComputeRange(
                 continue;
             }
 
-            if (
-                !isNil(value.l) ||
-                !isNil(value.r) ||
-                !isNil(value.t) ||
-                !isNil(value.b)
-            ) {
+            if (!isNil(value.l) || !isNil(value.r) || !isNil(value.t) || !isNil(value.b)) {
                 if (borderInfoCompute[`${bd_r}_${bd_c}`] === undefined) {
                     borderInfoCompute[`${bd_r}_${bd_c}`] = {};
                 }
@@ -1242,8 +1157,7 @@ export function getBorderInfoComputeRange(
                             if (!isNil(data[bd_r]?.[bd_c_left]?.mc)) {
                                 const cell_left = data[bd_r][bd_c_left];
 
-                                const mc_l =
-                                    cfg.merge?.[`${cell_left?.mc?.r}_${cell_left?.mc?.c}`];
+                                const mc_l = cfg.merge?.[`${cell_left?.mc?.r}_${cell_left?.mc?.c}`];
 
                                 if (mc_l && mc_l.c + mc_l.cs - 1 === bd_c_left) {
                                     borderInfoCompute[`${bd_r}_${bd_c_left}`].r = {
@@ -1271,15 +1185,11 @@ export function getBorderInfoComputeRange(
 
                         const bd_c_right = bd_c + 1;
 
-                        if (
-                            bd_c_right < data[0].length &&
-                            borderInfoCompute[`${bd_r}_${bd_c_right}`]
-                        ) {
+                        if (bd_c_right < data[0].length && borderInfoCompute[`${bd_r}_${bd_c_right}`]) {
                             if (!isNil(data[bd_r]?.[bd_c_right]?.mc)) {
                                 const cell_right = data[bd_r][bd_c_right];
 
-                                const mc_r =
-                                    cfg.merge?.[`${cell_right?.mc?.r}_${cell_right?.mc?.c}`];
+                                const mc_r = cfg.merge?.[`${cell_right?.mc?.r}_${cell_right?.mc?.c}`];
 
                                 if (mc_r?.c === bd_c_right) {
                                     borderInfoCompute[`${bd_r}_${bd_c_right}`].l = {
@@ -1311,8 +1221,7 @@ export function getBorderInfoComputeRange(
                             if (!isNil(data[bd_r_top]?.[bd_c]?.mc)) {
                                 const cell_top = data[bd_r_top][bd_c];
 
-                                const mc_t =
-                                    cfg.merge?.[`${cell_top?.mc?.r}_${cell_top?.mc?.c}`];
+                                const mc_t = cfg.merge?.[`${cell_top?.mc?.r}_${cell_top?.mc?.c}`];
 
                                 if (mc_t && mc_t.r + mc_t.rs - 1 === bd_r_top) {
                                     borderInfoCompute[`${bd_r_top}_${bd_c}`].b = {
@@ -1340,15 +1249,11 @@ export function getBorderInfoComputeRange(
 
                         const bd_r_bottom = bd_r + 1;
 
-                        if (
-                            bd_r_bottom < data.length &&
-                            borderInfoCompute[`${bd_r_bottom}_${bd_c}`]
-                        ) {
+                        if (bd_r_bottom < data.length && borderInfoCompute[`${bd_r_bottom}_${bd_c}`]) {
                             if (!isNil(data[bd_r_bottom]?.[bd_c]?.mc)) {
                                 const cell_bottom = data[bd_r_bottom][bd_c];
 
-                                const mc_b =
-                                    cfg.merge?.[`${cell_bottom?.mc?.r}_${cell_bottom?.mc?.c}`];
+                                const mc_b = cfg.merge?.[`${cell_bottom?.mc?.r}_${cell_bottom?.mc?.c}`];
 
                                 if (mc_b?.r === bd_r_bottom) {
                                     borderInfoCompute[`${bd_r_bottom}_${bd_c}`].t = {
@@ -1380,8 +1285,7 @@ export function getBorderInfoComputeRange(
                             if (!isNil(data[bd_r]?.[bd_c_left]?.mc)) {
                                 const cell_left = data[bd_r][bd_c_left];
 
-                                const mc_l =
-                                    cfg.merge?.[`${cell_left?.mc?.r}_${cell_left?.mc?.c}`];
+                                const mc_l = cfg.merge?.[`${cell_left?.mc?.r}_${cell_left?.mc?.c}`];
 
                                 if (mc_l && mc_l.c + mc_l.cs - 1 === bd_c_left) {
                                     borderInfoCompute[`${bd_r}_${bd_c_left}`].r = {
@@ -1409,10 +1313,7 @@ export function getBorderInfoComputeRange(
 
                         const bd_c_right = bd_c + 1;
 
-                        if (
-                            bd_c_right < data[0].length &&
-                            borderInfoCompute[`${bd_r}_${bd_c_right}`]
-                        ) {
+                        if (bd_c_right < data[0].length && borderInfoCompute[`${bd_r}_${bd_c_right}`]) {
                             if (
                                 !isNil(data[bd_r]) &&
                                 isPlainObject(data[bd_r][bd_c_right]) &&
@@ -1420,8 +1321,7 @@ export function getBorderInfoComputeRange(
                             ) {
                                 const cell_right = data[bd_r][bd_c_right];
 
-                                const mc_r =
-                                    cfg.merge?.[`${cell_right?.mc?.r}_${cell_right?.mc?.c}`];
+                                const mc_r = cfg.merge?.[`${cell_right?.mc?.r}_${cell_right?.mc?.c}`];
 
                                 if (mc_r?.c === bd_c_right) {
                                     borderInfoCompute[`${bd_r}_${bd_c_right}`].l = {
@@ -1453,8 +1353,7 @@ export function getBorderInfoComputeRange(
                             if (!isNil(data[bd_r_top]?.[bd_c]?.mc)) {
                                 const cell_top = data[bd_r_top][bd_c];
 
-                                const mc_t =
-                                    cfg.merge?.[`${cell_top?.mc?.r}_${cell_top?.mc?.c}`];
+                                const mc_t = cfg.merge?.[`${cell_top?.mc?.r}_${cell_top?.mc?.c}`];
 
                                 if (mc_t && mc_t.r + mc_t.rs - 1 === bd_r_top) {
                                     borderInfoCompute[`${bd_r_top}_${bd_c}`].b = {
@@ -1482,15 +1381,11 @@ export function getBorderInfoComputeRange(
 
                         const bd_r_bottom = bd_r + 1;
 
-                        if (
-                            bd_r_bottom < data.length &&
-                            borderInfoCompute[`${bd_r_bottom}_${bd_c}`]
-                        ) {
+                        if (bd_r_bottom < data.length && borderInfoCompute[`${bd_r_bottom}_${bd_c}`]) {
                             if (!isNil(data[bd_r_bottom]?.[bd_c]?.mc)) {
                                 const cell_bottom = data[bd_r_bottom][bd_c];
 
-                                const mc_b =
-                                    cfg.merge?.[`${cell_bottom?.mc?.r}_${cell_bottom?.mc?.c}`];
+                                const mc_b = cfg.merge?.[`${cell_bottom?.mc?.r}_${cell_bottom?.mc?.c}`];
 
                                 if (mc_b?.r === bd_r_bottom) {
                                     borderInfoCompute[`${bd_r_bottom}_${bd_c}`].t = {
@@ -1534,14 +1429,7 @@ export function getBorderInfoCompute(ctx: Context, sheetId?: string) {
         }
     }
 
-    borderInfoCompute = getBorderInfoComputeRange(
-        ctx,
-        0,
-        data.length,
-        0,
-        data[0].length,
-        sheetId
-    );
+    borderInfoCompute = getBorderInfoComputeRange(ctx, 0, data.length, 0, data[0].length, sheetId);
 
     return borderInfoCompute;
 }

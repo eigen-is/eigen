@@ -1,10 +1,11 @@
-import dayjs from "dayjs";
-import {forEach} from "es-toolkit/compat";
-import {Context} from "../context";
-import {hasChinaword} from "./text";
+import dayjs from 'dayjs';
+import { forEach } from 'es-toolkit/compat';
+import type { Context } from '../context';
+import { hasChinaword } from './text';
 
-export { error, valueIsError, isRealNull, isRealNum, isdatetime } from "../../engine/validation";
-import { isdatetime } from "../../engine/validation";
+export { error, isdatetime, isRealNull, isRealNum, valueIsError } from '../../engine/validation';
+
+import { isdatetime } from '../../engine/validation';
 
 export function diff(now: any, then: any) {
     return dayjs(now).diff(dayjs(then));
@@ -25,26 +26,19 @@ export function isdatatypemulti(s: any) {
 }
 
 export function isdatatype(s: any) {
-    let type = "string";
+    let type = 'string';
 
     if (isdatetime(s)) {
-        type = "date";
+        type = 'date';
     } else if (!Number.isNaN(parseFloat(s)) && !hasChinaword(s)) {
-        type = "num";
+        type = 'num';
     }
 
     return type;
 }
 
 // Whether the range contains only part of a merged cell
-export function hasPartMC(
-    ctx: Context,
-    cfg: any,
-    r1: number,
-    r2: number,
-    c1: number,
-    c2: number
-) {
+export function hasPartMC(ctx: Context, cfg: any, r1: number, r2: number, c1: number, c2: number) {
     let ret = false;
 
     forEach(ctx.config.merge, (mc) => {

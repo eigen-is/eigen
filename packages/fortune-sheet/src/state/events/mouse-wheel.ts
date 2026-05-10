@@ -1,6 +1,6 @@
-import {sortedIndex, uniq} from "es-toolkit/compat";
-import { Context } from "../context";
-import { GlobalCache } from "../types";
+import { sortedIndex, uniq } from 'es-toolkit/compat';
+import type { Context } from '../context';
+import type { GlobalCache } from '../types';
 
 let mouseWheelUniqueTimeout: ReturnType<typeof setTimeout>;
 let scrollLockTimeout: ReturnType<typeof setTimeout>;
@@ -10,13 +10,12 @@ export function handleGlobalWheel(
     e: WheelEvent,
     cache: GlobalCache,
     scrollbarX: HTMLDivElement,
-    scrollbarY: HTMLDivElement
+    scrollbarY: HTMLDivElement,
 ) {
-    if (cache.searchDialog?.mouseEnter && ctx.showSearch && ctx.showReplace)
-        return;
+    if (cache.searchDialog?.mouseEnter && ctx.showSearch && ctx.showReplace) return;
     if (ctx.filterContextMenu != null) return;
-    let {scrollLeft} = scrollbarX;
-    const {scrollTop} = scrollbarY;
+    const { scrollLeft } = scrollbarX;
+    const { scrollTop } = scrollbarY;
     let visibledatacolumn_c = ctx.visibledatacolumn;
     let visibledatarow_c = ctx.visibledatarow;
 

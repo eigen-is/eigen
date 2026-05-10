@@ -1,36 +1,32 @@
-import {cloneDeep, forEach, includes, isNil, isPlainObject, pick, round, set} from "es-toolkit/compat";
-import {mergeCells} from "./merge";
-import {Context, getFlowdata} from "../context";
+import { cloneDeep, forEach, includes, isNil, isPlainObject, pick, round, set } from 'es-toolkit/compat';
+import { cfSplitRange } from '../../engine';
+import { genarate, is_date, update } from '../../engine/format';
 // import { locale } from "../locale";
-import type {Cell, CellMatrix} from "../../engine/types";
-import {GlobalCache} from "../types";
-import {getSheetIndex, isAllowEdit} from "../utils";
-import {getRangetxt, isAllSelectedCellsInStatus, normalizedAttr, setCellValue,} from "./cell";
-import {colors} from "./color";
-import {genarate, is_date, update} from "../../engine/format";
+import type { Cell, CellMatrix } from '../../engine/types';
+import { type Context, getFlowdata } from '../context';
+import type { GlobalCache } from '../types';
+import { getSheetIndex, isAllowEdit } from '../utils';
+import { getRangetxt, isAllSelectedCellsInStatus, normalizedAttr, setCellValue } from './cell';
+import { colors } from './color';
 import {
     createFormulaRangeSelect,
-    execfunction,
     execFunctionGroup,
+    execfunction,
     israngeseleciton,
     rangeSetValue,
     setCaretPosition,
-} from "./formula-ui";
-import {inlineStyleAffectAttribute, updateInlineStringFormat, updateInlineStringFormatOutside,} from "./inline-string";
-import {colLocationByIndex, rowLocationByIndex} from "./location";
-import {normalizeSelection, selectionCopyShow, selectIsOverlap,} from "./selection";
-import {sortSelection} from "./sort";
-import {hasPartMC, isdatatypemulti, isRealNull, isRealNum,} from "./validation";
-import {showLinkCard} from "./hyperlink";
-import {cfSplitRange} from "../../engine";
-import {getCellTextInfo} from "./text";
-import {setFormulaCellInfo} from "./formulaHelper";
+} from './formula-ui';
+import { setFormulaCellInfo } from './formulaHelper';
+import { showLinkCard } from './hyperlink';
+import { inlineStyleAffectAttribute, updateInlineStringFormat, updateInlineStringFormatOutside } from './inline-string';
+import { colLocationByIndex, rowLocationByIndex } from './location';
+import { mergeCells } from './merge';
+import { normalizeSelection, selectIsOverlap, selectionCopyShow } from './selection';
+import { sortSelection } from './sort';
+import { getCellTextInfo } from './text';
+import { hasPartMC, isdatatypemulti, isRealNull, isRealNum } from './validation';
 
-type ToolbarItemClickHandler = (
-    ctx: Context,
-    cellInput: HTMLDivElement,
-    cache?: GlobalCache
-) => void;
+type ToolbarItemClickHandler = (ctx: Context, cellInput: HTMLDivElement, cache?: GlobalCache) => void;
 
 type ToolbarItemSelectedFunc = (cell: Cell | null | undefined) => boolean;
 
@@ -43,12 +39,12 @@ export function updateFormatCell(
     row_ed: number,
     col_st: number,
     col_ed: number,
-    canvas?: CanvasRenderingContext2D
+    canvas?: CanvasRenderingContext2D,
 ) {
     if (isNil(d) || isNil(attr)) {
         return;
     }
-    if (attr === "ct") {
+    if (attr === 'ct') {
         for (let r = row_st; r <= row_ed; r += 1) {
             if (!isNil(ctx.config.rowhidden) && !isNil(ctx.config.rowhidden[r])) {
                 continue;
@@ -58,18 +54,18 @@ export function updateFormatCell(
                 const cell = d[r][c];
                 let value: string | number | boolean | null | undefined;
 
-                if (cell != null && typeof cell === "object") {
+                if (cell != null && typeof cell === 'object') {
                     value = cell.v;
                 } else {
                     value = cell as string | number | boolean | null | undefined;
                 }
 
-                if (foucsStatus !== "@" && isRealNum(value)) {
+                if (foucsStatus !== '@' && isRealNum(value)) {
                     value = Number(value!);
                 }
 
                 const mask = update(foucsStatus, value);
-                let type = "n";
+                let type = 'n';
 
                 if (
                     is_date(foucsStatus) ||
@@ -86,12 +82,12 @@ export function updateFormatCell(
                     foucsStatus === 46 ||
                     foucsStatus === 47
                 ) {
-                    type = "d";
-                } else if (foucsStatus === "@" || foucsStatus === 49) {
-                    type = "s";
-                } else if (foucsStatus === "General" || foucsStatus === 0) {
+                    type = 'd';
+                } else if (foucsStatus === '@' || foucsStatus === 49) {
+                    type = 's';
+                } else if (foucsStatus === 'General' || foucsStatus === 0) {
                     // type = "g";
-                    type = isRealNum(value) ? "n" : "g";
+                    type = isRealNum(value) ? 'n' : 'g';
                 }
 
                 if (cell && isPlainObject(cell)) {
@@ -103,7 +99,7 @@ export function updateFormatCell(
                     cell.ct.t = type;
                 } else {
                     d[r][c] = {
-                        ct: {fa: foucsStatus, t: type},
+                        ct: { fa: foucsStatus, t: type },
                         v: value as string,
                         m: mask,
                     };
@@ -111,29 +107,29 @@ export function updateFormatCell(
             }
         }
     } else {
-        if (attr === "ht") {
-            if (foucsStatus === "left") {
-                foucsStatus = "1";
-            } else if (foucsStatus === "center") {
-                foucsStatus = "0";
-            } else if (foucsStatus === "right") {
-                foucsStatus = "2";
+        if (attr === 'ht') {
+            if (foucsStatus === 'left') {
+                foucsStatus = '1';
+            } else if (foucsStatus === 'center') {
+                foucsStatus = '0';
+            } else if (foucsStatus === 'right') {
+                foucsStatus = '2';
             }
-        } else if (attr === "vt") {
-            if (foucsStatus === "top") {
-                foucsStatus = "1";
-            } else if (foucsStatus === "middle") {
-                foucsStatus = "0";
-            } else if (foucsStatus === "bottom") {
-                foucsStatus = "2";
+        } else if (attr === 'vt') {
+            if (foucsStatus === 'top') {
+                foucsStatus = '1';
+            } else if (foucsStatus === 'middle') {
+                foucsStatus = '0';
+            } else if (foucsStatus === 'bottom') {
+                foucsStatus = '2';
             }
-        } else if (attr === "tb") {
-            if (foucsStatus === "overflow") {
-                foucsStatus = "1";
-            } else if (foucsStatus === "clip") {
-                foucsStatus = "0";
-            } else if (foucsStatus === "wrap") {
-                foucsStatus = "2";
+        } else if (attr === 'tb') {
+            if (foucsStatus === 'overflow') {
+                foucsStatus = '1';
+            } else if (foucsStatus === 'clip') {
+                foucsStatus = '0';
+            } else if (foucsStatus === 'wrap') {
+                foucsStatus = '2';
             }
         }
 
@@ -154,15 +150,12 @@ export function updateFormatCell(
                     updateInlineStringFormatOutside(value!, attr, foucsStatus);
                     // }
                     // else{
-                    // @ts-ignore
                     value[attr] = foucsStatus;
                     // }
                     ctx.luckysheetfile[sheetIndex].config ||= {};
                     const cfg = ctx.luckysheetfile[sheetIndex].config!;
-                    const cellWidth =
-                        cfg.columnlen?.[c] ||
-                        ctx.luckysheetfile[sheetIndex].defaultColWidth;
-                    if (attr === "fs" && canvas) {
+                    const cellWidth = cfg.columnlen?.[c] || ctx.luckysheetfile[sheetIndex].defaultColWidth;
+                    if (attr === 'fs' && canvas) {
                         const textInfo = getCellTextInfo(d[r][c]!, canvas, ctx, {
                             r,
                             c,
@@ -171,21 +164,16 @@ export function updateFormatCell(
                         if (textInfo?.textHeightAll == null) continue;
                         const rowHeight = round(textInfo.textHeightAll);
                         const currentRowHeight =
-                            cfg.rowlen?.[r] ||
-                            ctx.luckysheetfile[sheetIndex].defaultRowHeight ||
-                            19;
-                        if (
-                            rowHeight > currentRowHeight &&
-                            (!cfg.customHeight || cfg.customHeight[r] !== 1)
-                        ) {
+                            cfg.rowlen?.[r] || ctx.luckysheetfile[sheetIndex].defaultRowHeight || 19;
+                        if (rowHeight > currentRowHeight && (!cfg.customHeight || cfg.customHeight[r] !== 1)) {
                             if (cfg.rowlen === undefined) cfg.rowlen = {};
                             set(cfg, `rowlen.${r}`, rowHeight);
                         }
                     }
                 } else {
-                    // @ts-ignore
-                    d[r][c] = {v: value};
-                    // @ts-ignore
+                    // @ts-expect-error
+                    d[r][c] = { v: value };
+                    // @ts-expect-error
                     d[r][c][attr] = foucsStatus;
                 }
             }
@@ -199,7 +187,7 @@ export function updateFormat(
     d: CellMatrix,
     attr: keyof Cell,
     foucsStatus: any,
-    canvas?: CanvasRenderingContext2D
+    canvas?: CanvasRenderingContext2D,
 ) {
     //   if (!checkProtectionFormatCells(ctx.currentSheetId)) {
     //     return;
@@ -211,9 +199,8 @@ export function updateFormat(
     if (attr in inlineStyleAffectAttribute) {
         if (ctx.luckysheetCellUpdate.length > 0) {
             const value = $input.innerText;
-            if (value.substring(0, 1) !== "=") {
-                const cell =
-                    d[ctx.luckysheetCellUpdate[0]][ctx.luckysheetCellUpdate[1]];
+            if (value.substring(0, 1) !== '=') {
+                const cell = d[ctx.luckysheetCellUpdate[0]][ctx.luckysheetCellUpdate[1]];
                 if (cell) {
                     updateInlineStringFormat(ctx, cell, attr, foucsStatus, $input);
                 }
@@ -231,17 +218,7 @@ export function updateFormat(
         const [row_st, row_ed] = selection.row;
         const [col_st, col_ed] = selection.column;
 
-        updateFormatCell(
-            ctx,
-            d,
-            attr,
-            foucsStatus,
-            row_st,
-            row_ed,
-            col_st,
-            col_ed,
-            canvas
-        );
+        updateFormatCell(ctx, d, attr, foucsStatus, row_st, row_ed, col_st, col_ed, canvas);
     });
 }
 
@@ -260,7 +237,7 @@ function setAttr(
     cellInput: HTMLDivElement,
     attr: keyof Cell,
     value: any,
-    canvas?: CanvasRenderingContext2D
+    canvas?: CanvasRenderingContext2D,
 ) {
     const flowdata = getFlowdata(ctx);
     if (!flowdata) return;
@@ -277,10 +254,7 @@ function checkNoNullValue(cell: Cell | null) {
     if (
         !isRealNull(v) &&
         isdatatypemulti(v).num &&
-        (cell?.ct == null ||
-            cell.ct.t == null ||
-            cell.ct.t === "n" ||
-            cell.ct.t === "g")
+        (cell?.ct == null || cell.ct.t == null || cell.ct.t === 'n' || cell.ct.t === 'g')
     ) {
         return true;
     }
@@ -309,7 +283,7 @@ function getNoNullValue(d: CellMatrix, st_x: number, ed: number, type: string) {
 
     for (let r = ed - 1; r >= 0; r -= 1) {
         let cell;
-        if (type === "c") {
+        if (type === 'c') {
             cell = d[st_x][r];
         } else {
             cell = d[r][st_x];
@@ -318,7 +292,7 @@ function getNoNullValue(d: CellMatrix, st_x: number, ed: number, type: string) {
         if (checkNoNullValue(cell)) {
             // hasValueSum += 1;
             hasValueStart = r;
-        } else if (cell == null || cell.v == null || cell.v === "") {
+        } else if (cell == null || cell.v == null || cell.v === '') {
             nullNum += 1;
 
             if (nullNum >= 40) {
@@ -346,7 +320,7 @@ function activeFormulaInput(
     columnh: any,
     formula: string,
     cache: GlobalCache,
-    isnull?: boolean
+    isnull?: boolean,
 ) {
     if (isnull == null) {
         isnull = false;
@@ -359,7 +333,7 @@ function activeFormulaInput(
 
         cellInput.innerHTML = formulaTxt;
 
-        const spanList = cellInput.querySelectorAll("span");
+        const spanList = cellInput.querySelectorAll('span');
         setCaretPosition(ctx, spanList[spanList.length - 2], 0, 1);
 
         return;
@@ -375,8 +349,8 @@ function activeFormulaInput(
     };">${getRangetxt(
         ctx,
         ctx.currentSheetId,
-        {row: rowh, column: columnh},
-        ctx.currentSheetId
+        { row: rowh, column: columnh },
+        ctx.currentSheetId,
     )}</span><span dir="auto" class="luckysheet-formula-text-color">)</span>`;
     cellInput.innerHTML = formulaTxt;
 
@@ -385,7 +359,7 @@ function activeFormulaInput(
     ctx.formulaCache.rangedrag_column_start = false;
     ctx.formulaCache.rangedrag_row_start = false;
     ctx.formulaCache.rangechangeindex = 0;
-    rangeSetValue(ctx, cellInput, {row: rowh, column: columnh}, fxInput);
+    rangeSetValue(ctx, cellInput, { row: rowh, column: columnh }, fxInput);
     ctx.formulaCache.func_selectedrange = {
         left: col_pre,
         width: col - col_pre - 1,
@@ -418,23 +392,15 @@ function activeFormulaInput(
     // $("#luckysheet-formula-help-c").hide();
 }
 
-function backFormulaInput(
-    d: CellMatrix,
-    r: number,
-    c: number,
-    rowh: any,
-    columnh: any,
-    formula: string,
-    ctx: Context
-) {
+function backFormulaInput(d: CellMatrix, r: number, c: number, rowh: any, columnh: any, formula: string, ctx: Context) {
     const f = `=${formula.toUpperCase()}(${getRangetxt(
         ctx,
         ctx.currentSheetId,
-        {row: rowh, column: columnh},
-        ctx.currentSheetId
+        { row: rowh, column: columnh },
+        ctx.currentSheetId,
     )})`;
     const v = execfunction(ctx, f, r, c);
-    const value = {v: v[1], f: v[2]};
+    const value = { v: v[1], f: v[2] };
     setCellValue(ctx, r, c, d, value);
     ctx.formulaCache.execFunctionExist ||= [];
     ctx.formulaCache.execFunctionExist.push({
@@ -462,10 +428,10 @@ function singleFormulaInput(
     type: string,
     cache: GlobalCache,
     noNum?: boolean,
-    noNull?: boolean
+    noNull?: boolean,
 ) {
     if (type == null) {
-        type = "r";
+        type = 'r';
     }
 
     if (noNum == null) {
@@ -482,7 +448,7 @@ function singleFormulaInput(
     for (let c = st_m; c <= ed_m; c += 1) {
         let cell = null;
 
-        if (type === "c") {
+        if (type === 'c') {
             cell = d[c][fix];
         } else {
             cell = d[fix][c];
@@ -500,32 +466,10 @@ function singleFormulaInput(
         let st_r_r = getNoNullValue(d, _index, fix, type);
 
         if (st_r_r == null) {
-            if (type === "c") {
-                activeFormulaInput(
-                    cellInput,
-                    fxInput,
-                    ctx,
-                    _index,
-                    fix,
-                    null,
-                    null,
-                    formula,
-                    cache,
-                    true
-                );
+            if (type === 'c') {
+                activeFormulaInput(cellInput, fxInput, ctx, _index, fix, null, null, formula, cache, true);
             } else {
-                activeFormulaInput(
-                    cellInput,
-                    fxInput,
-                    ctx,
-                    fix,
-                    _index,
-                    null,
-                    null,
-                    formula,
-                    cache,
-                    true
-                );
+                activeFormulaInput(cellInput, fxInput, ctx, fix, _index, null, null, formula, cache, true);
             }
         } else {
             if (_index === st_m) {
@@ -536,26 +480,10 @@ function singleFormulaInput(
                         break;
                     }
 
-                    if (type === "c") {
-                        backFormulaInput(
-                            d,
-                            c,
-                            fix,
-                            [c, c],
-                            [st_r_r, fix - 1],
-                            formula,
-                            ctx
-                        );
+                    if (type === 'c') {
+                        backFormulaInput(d, c, fix, [c, c], [st_r_r, fix - 1], formula, ctx);
                     } else {
-                        backFormulaInput(
-                            d,
-                            fix,
-                            c,
-                            [st_r_r, fix - 1],
-                            [c, c],
-                            formula,
-                            ctx
-                        );
+                        backFormulaInput(d, fix, c, [st_r_r, fix - 1], [c, c], formula, ctx);
                     }
                 }
             } else {
@@ -566,26 +494,10 @@ function singleFormulaInput(
                         break;
                     }
 
-                    if (type === "c") {
-                        backFormulaInput(
-                            d,
-                            c,
-                            fix,
-                            [c, c],
-                            [st_r_r, fix - 1],
-                            formula,
-                            ctx
-                        );
+                    if (type === 'c') {
+                        backFormulaInput(d, c, fix, [c, c], [st_r_r, fix - 1], formula, ctx);
                     } else {
-                        backFormulaInput(
-                            d,
-                            fix,
-                            c,
-                            [st_r_r, fix - 1],
-                            [c, c],
-                            formula,
-                            ctx
-                        );
+                        backFormulaInput(d, fix, c, [st_r_r, fix - 1], [c, c], formula, ctx);
                     }
                 }
             }
@@ -595,7 +507,7 @@ function singleFormulaInput(
     if (isNum && noNum) {
         let cell = null;
 
-        if (type === "c") {
+        if (type === 'c') {
             cell = d[ed_m + 1][fix];
         } else {
             cell = d[fix][ed_m + 1];
@@ -605,7 +517,7 @@ function singleFormulaInput(
         if (cell != null && cell.v != null && cell.v.toString().length > 0) {
             let c = ed_m + 1;
 
-            if (type === "c") {
+            if (type === 'c') {
                 cell = d[ed_m + 1][fix];
             } else {
                 cell = d[fix][ed_m + 1];
@@ -615,7 +527,7 @@ function singleFormulaInput(
                 c += 1;
                 let len = null;
 
-                if (type === "c") {
+                if (type === 'c') {
                     len = d.length;
                 } else {
                     len = d[0].length;
@@ -625,39 +537,23 @@ function singleFormulaInput(
                     return false;
                 }
 
-                if (type === "c") {
+                if (type === 'c') {
                     cell = d[c][fix];
                 } else {
                     cell = d[fix][c];
                 }
             }
 
-            if (type === "c") {
+            if (type === 'c') {
                 backFormulaInput(d, c, fix, [st_m, ed_m], [fix, fix], formula, ctx);
             } else {
                 backFormulaInput(d, fix, c, [fix, fix], [st_m, ed_m], formula, ctx);
             }
         } else {
-            if (type === "c") {
-                backFormulaInput(
-                    d,
-                    ed_m + 1,
-                    fix,
-                    [st_m, ed_m],
-                    [fix, fix],
-                    formula,
-                    ctx
-                );
+            if (type === 'c') {
+                backFormulaInput(d, ed_m + 1, fix, [st_m, ed_m], [fix, fix], formula, ctx);
             } else {
-                backFormulaInput(
-                    d,
-                    fix,
-                    ed_m + 1,
-                    [fix, fix],
-                    [st_m, ed_m],
-                    formula,
-                    ctx
-                );
+                backFormulaInput(d, fix, ed_m + 1, [fix, fix], [st_m, ed_m], formula, ctx);
             }
         }
         return false;
@@ -670,7 +566,7 @@ export function autoSelectionFormula(
     cellInput: HTMLDivElement,
     fxInput: HTMLDivElement | null | undefined,
     formula: string,
-    cache: GlobalCache
+    cache: GlobalCache,
 ) {
     const allowEdit = isAllowEdit(ctx);
     if (!allowEdit) return;
@@ -686,62 +582,24 @@ export function autoSelectionFormula(
         ed_r: number,
         st_c: number,
         ed_c: number,
-        _formula: string
+        _formula: string,
     ) {
-        const st_c_c = getNoNullValue(d, st_r, ed_c, "c");
+        const st_c_c = getNoNullValue(d, st_r, ed_c, 'c');
 
         if (st_c_c == null) {
-            activeFormulaInput(
-                cellInput,
-                fxInput,
-                ctx,
-                st_r,
-                st_c,
-                null,
-                null,
-                _formula,
-                cache,
-                true
-            );
+            activeFormulaInput(cellInput, fxInput, ctx, st_r, st_c, null, null, _formula, cache, true);
         } else {
-            activeFormulaInput(
-                cellInput,
-                fxInput,
-                ctx,
-                st_r,
-                st_c,
-                [st_r, ed_r],
-                [st_c_c, ed_c - 1],
-                _formula,
-                cache
-            );
+            activeFormulaInput(cellInput, fxInput, ctx, st_r, st_c, [st_r, ed_r], [st_c_c, ed_c - 1], _formula, cache);
         }
     }
 
-    function execFormulaInput(
-        d: CellMatrix,
-        st_r: number,
-        ed_r: number,
-        st_c: number,
-        ed_c: number,
-        _formula: string
-    ) {
-        const st_r_c = getNoNullValue(d, st_c, ed_r, "r");
+    function execFormulaInput(d: CellMatrix, st_r: number, ed_r: number, st_c: number, ed_c: number, _formula: string) {
+        const st_r_c = getNoNullValue(d, st_c, ed_r, 'r');
 
         if (st_r_c == null) {
             execFormulaInput_c(d, st_r, ed_r, st_c, ed_c, _formula);
         } else {
-            activeFormulaInput(
-                cellInput,
-                fxInput,
-                ctx,
-                st_r,
-                st_c,
-                [st_r_c, ed_r - 1],
-                [st_c, ed_c],
-                _formula,
-                cache
-            );
+            activeFormulaInput(cellInput, fxInput, ctx, st_r, st_c, [st_r_c, ed_r - 1], [st_c, ed_c], _formula, cache);
         }
     }
 
@@ -755,18 +613,7 @@ export function autoSelectionFormula(
 
         if (st_r === ed_r && st_c === ed_c) {
             if (ed_r - 1 < 0 && ed_c - 1 < 0) {
-                activeFormulaInput(
-                    cellInput,
-                    fxInput,
-                    ctx,
-                    st_r,
-                    st_c,
-                    null,
-                    null,
-                    formula,
-                    cache,
-                    true
-                );
+                activeFormulaInput(cellInput, fxInput, ctx, st_r, st_c, null, null, formula, cache, true);
                 return;
             }
 
@@ -788,8 +635,8 @@ export function autoSelectionFormula(
                 st_c,
                 ed_c,
                 formula,
-                "r",
-                cache
+                'r',
+                cache,
             );
         } else if (st_c === ed_c) {
             isfalse = singleFormulaInput(
@@ -802,8 +649,8 @@ export function autoSelectionFormula(
                 st_r,
                 ed_r,
                 formula,
-                "c",
-                cache
+                'c',
+                cache,
             );
         } else {
             let r_false = true;
@@ -819,10 +666,10 @@ export function autoSelectionFormula(
                         st_c,
                         ed_c,
                         formula,
-                        "r",
+                        'r',
                         cache,
                         true,
-                        false
+                        false,
                     ) && r_false;
             }
 
@@ -839,10 +686,10 @@ export function autoSelectionFormula(
                         st_r,
                         ed_r,
                         formula,
-                        "c",
+                        'c',
                         cache,
                         true,
-                        false
+                        false,
                     ) && c_false;
             }
 
@@ -855,11 +702,7 @@ export function autoSelectionFormula(
     if (!isfalse) {
         ctx.formulaCache.execFunctionExist.reverse();
         ctx.formulaCache.execFunctionExist.forEach((formulaCell) => {
-            setFormulaCellInfo(
-                ctx,
-                {r: formulaCell.r, c: formulaCell.c, id: ctx.currentSheetId},
-                flowdata
-            );
+            setFormulaCellInfo(ctx, { r: formulaCell.r, c: formulaCell.c, id: ctx.currentSheetId }, flowdata);
         });
 
         execFunctionGroup(ctx, null, null, null, null, flowdata);
@@ -882,8 +725,8 @@ export function cancelPaintModel(ctx: Context) {
     }
 
     ctx.luckysheet_copy_save = {
-        dataSheetId: "",
-        copyRange: [{row: [0], column: [0]}],
+        dataSheetId: '',
+        copyRange: [{ row: [0], column: [0] }],
         RowlChange: false,
         HasMC: false,
     };
@@ -897,19 +740,16 @@ export function handleCurrencyFormat(ctx: Context, cellInput: HTMLDivElement) {
     const flowdata = getFlowdata(ctx);
     if (!flowdata) return;
 
-    const currency = ctx.currency || "€";
+    const currency = ctx.currency || '€';
 
-    updateFormat(ctx, cellInput, flowdata, "ct", `${currency} #.00`);
+    updateFormat(ctx, cellInput, flowdata, 'ct', `${currency} #.00`);
 }
 
-export function handlePercentageFormat(
-    ctx: Context,
-    cellInput: HTMLDivElement
-) {
+export function handlePercentageFormat(ctx: Context, cellInput: HTMLDivElement) {
     const flowdata = getFlowdata(ctx);
     if (!flowdata) return;
 
-    updateFormat(ctx, cellInput, flowdata, "ct", "0.00%");
+    updateFormat(ctx, cellInput, flowdata, 'ct', '0.00%');
 }
 
 export function handleNumberDecrease(ctx: Context, cellInput: HTMLDivElement) {
@@ -920,14 +760,14 @@ export function handleNumberDecrease(ctx: Context, cellInput: HTMLDivElement) {
     const col_index = ctx.luckysheet_select_save[0].column_focus;
     if (row_index === undefined || col_index === undefined) return;
 
-    let foucsStatus = normalizedAttr(flowdata, row_index, col_index, "ct");
+    let foucsStatus = normalizedAttr(flowdata, row_index, col_index, 'ct');
     const cell = flowdata[row_index][col_index];
 
-    if (foucsStatus == null || foucsStatus.t !== "n") {
+    if (foucsStatus == null || foucsStatus.t !== 'n') {
         return;
     }
 
-    if (foucsStatus.fa === "General") {
+    if (foucsStatus.fa === 'General') {
         if (!cell || !cell.v) return;
 
         [, foucsStatus] = genarate(cell.v);
@@ -936,68 +776,56 @@ export function handleNumberDecrease(ctx: Context, cellInput: HTMLDivElement) {
     // Wan/Yi (10,000/100,000,000) number format
     const reg = /^(w|W)((0?)|(0\.0+))$/;
     if (reg.test(foucsStatus.fa)) {
-        if (foucsStatus.fa.includes(".")) {
-            if (foucsStatus.fa.substr(-2) === ".0") {
-                updateFormat(
-                    ctx,
-                    cellInput,
-                    flowdata,
-                    "ct",
-                    foucsStatus.fa.split(".")[0]
-                );
+        if (foucsStatus.fa.includes('.')) {
+            if (foucsStatus.fa.substr(-2) === '.0') {
+                updateFormat(ctx, cellInput, flowdata, 'ct', foucsStatus.fa.split('.')[0]);
             } else {
-                updateFormat(
-                    ctx,
-                    cellInput,
-                    flowdata,
-                    "ct",
-                    foucsStatus.fa.substr(0, foucsStatus.fa.length - 1)
-                );
+                updateFormat(ctx, cellInput, flowdata, 'ct', foucsStatus.fa.substr(0, foucsStatus.fa.length - 1));
             }
         } else {
-            updateFormat(ctx, cellInput, flowdata, "ct", foucsStatus.fa);
+            updateFormat(ctx, cellInput, flowdata, 'ct', foucsStatus.fa);
         }
 
         return;
     }
-    let prefix = "";
-    let main = "";
+    let prefix = '';
+    let main = '';
     let fa = [];
-    if (foucsStatus.fa.includes(".")) {
-        fa = foucsStatus.fa.split(".");
+    if (foucsStatus.fa.includes('.')) {
+        fa = foucsStatus.fa.split('.');
         [prefix, main] = fa;
     } else {
         return;
     }
 
-    fa = main.split("");
-    let tail = "";
+    fa = main.split('');
+    let tail = '';
     for (let i = fa.length - 1; i >= 0; i -= 1) {
         const c = fa[i];
-        if (c !== "#" && c !== "0" && c !== "," && Number.isNaN(parseInt(c, 10))) {
+        if (c !== '#' && c !== '0' && c !== ',' && Number.isNaN(parseInt(c, 10))) {
             tail = c + tail;
         } else {
             break;
         }
     }
 
-    let fmt = "";
-    if (foucsStatus.fa.includes(".")) {
+    let fmt = '';
+    if (foucsStatus.fa.includes('.')) {
         let suffix = main;
         if (tail.length > 0) {
-            suffix = main.replace(tail, "");
+            suffix = main.replace(tail, '');
         }
 
-        let pos = suffix.replace(/#/g, "0");
+        let pos = suffix.replace(/#/g, '0');
         pos = pos.substr(0, pos.length - 1);
-        if (pos === "") {
+        if (pos === '') {
             fmt = prefix + tail;
         } else {
             fmt = `${prefix}.${pos}${tail}`;
         }
     }
 
-    updateFormat(ctx, cellInput, flowdata, "ct", fmt);
+    updateFormat(ctx, cellInput, flowdata, 'ct', fmt);
 }
 
 export function handleNumberIncrease(ctx: Context, cellInput: HTMLDivElement) {
@@ -1007,112 +835,104 @@ export function handleNumberIncrease(ctx: Context, cellInput: HTMLDivElement) {
     const row_index = ctx.luckysheet_select_save[0].row_focus;
     const col_index = ctx.luckysheet_select_save[0].column_focus;
     if (row_index === undefined || col_index === undefined) return;
-    let foucsStatus = normalizedAttr(flowdata, row_index, col_index, "ct");
+    let foucsStatus = normalizedAttr(flowdata, row_index, col_index, 'ct');
     const cell = flowdata[row_index][col_index];
 
-    if (foucsStatus == null || foucsStatus.t !== "n") {
+    if (foucsStatus == null || foucsStatus.t !== 'n') {
         return;
     }
 
-    if (foucsStatus.fa === "General") {
+    if (foucsStatus.fa === 'General') {
         if (!cell || !cell.v) return;
         [, foucsStatus] = genarate(cell.v);
     }
 
-    if (foucsStatus.fa === "General") {
-        updateFormat(ctx, cellInput, flowdata, "ct", "#.0");
+    if (foucsStatus.fa === 'General') {
+        updateFormat(ctx, cellInput, flowdata, 'ct', '#.0');
         return;
     }
 
     // Wan/Yi (10,000/100,000,000) number format
     const reg = /^(w|W)((0?)|(0\.0+))$/;
     if (reg.test(foucsStatus.fa)) {
-        if (foucsStatus.fa.includes(".")) {
-            updateFormat(ctx, cellInput, flowdata, "ct", `${foucsStatus.fa}0`);
+        if (foucsStatus.fa.includes('.')) {
+            updateFormat(ctx, cellInput, flowdata, 'ct', `${foucsStatus.fa}0`);
         } else {
-            if (foucsStatus.fa.substr(-1) === "0") {
-                updateFormat(ctx, cellInput, flowdata, "ct", `${foucsStatus.fa}.0`);
+            if (foucsStatus.fa.substr(-1) === '0') {
+                updateFormat(ctx, cellInput, flowdata, 'ct', `${foucsStatus.fa}.0`);
             } else {
-                updateFormat(ctx, cellInput, flowdata, "ct", `${foucsStatus.fa}0.0`);
+                updateFormat(ctx, cellInput, flowdata, 'ct', `${foucsStatus.fa}0.0`);
             }
         }
 
         return;
     }
 
-    let prefix = "";
-    let main = "";
+    let prefix = '';
+    let main = '';
     let fa = [];
 
-    if (foucsStatus.fa.includes(".")) {
-        fa = foucsStatus.fa.split(".");
+    if (foucsStatus.fa.includes('.')) {
+        fa = foucsStatus.fa.split('.');
         [prefix, main] = fa;
     } else {
         main = foucsStatus.fa;
     }
 
-    fa = main.split("");
-    let tail = "";
+    fa = main.split('');
+    let tail = '';
     for (let i = fa.length - 1; i >= 0; i -= 1) {
         const c = fa[i];
-        if (c !== "#" && c !== "0" && c !== "," && Number.isNaN(parseInt(c, 10))) {
+        if (c !== '#' && c !== '0' && c !== ',' && Number.isNaN(parseInt(c, 10))) {
             tail = c + tail;
         } else {
             break;
         }
     }
 
-    let fmt = "";
-    if (foucsStatus.fa.includes(".")) {
+    let fmt = '';
+    if (foucsStatus.fa.includes('.')) {
         let suffix = main;
         if (tail.length > 0) {
-            suffix = main.replace(tail, "");
+            suffix = main.replace(tail, '');
         }
 
-        let pos = suffix.replace(/#/g, "0");
-        pos += "0";
+        let pos = suffix.replace(/#/g, '0');
+        pos += '0';
         fmt = `${prefix}.${pos}${tail}`;
     } else {
         if (tail.length > 0) {
-            fmt = `${main.replace(tail, "")}.0${tail}`;
+            fmt = `${main.replace(tail, '')}.0${tail}`;
         } else {
             fmt = `${main}.0${tail}`;
         }
     }
 
-    updateFormat(ctx, cellInput, flowdata, "ct", fmt);
+    updateFormat(ctx, cellInput, flowdata, 'ct', fmt);
 }
 
 export function handleBold(ctx: Context, cellInput: HTMLDivElement) {
-    toggleAttr(ctx, cellInput, "bl");
+    toggleAttr(ctx, cellInput, 'bl');
 }
 
 export function handleItalic(ctx: Context, cellInput: HTMLDivElement) {
-    toggleAttr(ctx, cellInput, "it");
+    toggleAttr(ctx, cellInput, 'it');
 }
 
 export function handleStrikeThrough(ctx: Context, cellInput: HTMLDivElement) {
-    toggleAttr(ctx, cellInput, "cl");
+    toggleAttr(ctx, cellInput, 'cl');
 }
 
 export function handleUnderline(ctx: Context, cellInput: HTMLDivElement) {
-    toggleAttr(ctx, cellInput, "un");
+    toggleAttr(ctx, cellInput, 'un');
 }
 
-export function handleHorizontalAlign(
-    ctx: Context,
-    cellInput: HTMLDivElement,
-    value: string
-) {
-    setAttr(ctx, cellInput, "ht", value);
+export function handleHorizontalAlign(ctx: Context, cellInput: HTMLDivElement, value: string) {
+    setAttr(ctx, cellInput, 'ht', value);
 }
 
-export function handleVerticalAlign(
-    ctx: Context,
-    cellInput: HTMLDivElement,
-    value: string
-) {
-    setAttr(ctx, cellInput, "vt", value);
+export function handleVerticalAlign(ctx: Context, cellInput: HTMLDivElement, value: string) {
+    setAttr(ctx, cellInput, 'vt', value);
 }
 
 export function handleFormatPainter(ctx: Context) {
@@ -1127,10 +947,7 @@ export function handleFormatPainter(ctx: Context) {
     // let locale_paint = _locale.paint;
     const allowEdit = isAllowEdit(ctx);
     if (!allowEdit) return;
-    if (
-        ctx.luckysheet_select_save == null ||
-        ctx.luckysheet_select_save.length === 0
-    ) {
+    if (ctx.luckysheet_select_save == null || ctx.luckysheet_select_save.length === 0) {
         // if(isEditMode()){
         //     alert(locale_paint.tipSelectRange);
         // }
@@ -1185,11 +1002,7 @@ export function handleFormatPainter(ctx: Context) {
     let RowlChange = false;
     let HasMC = false;
 
-    for (
-        let r = ctx.luckysheet_select_save[0].row[0];
-        r <= ctx.luckysheet_select_save[0].row[1];
-        r += 1
-    ) {
+    for (let r = ctx.luckysheet_select_save[0].row[0]; r <= ctx.luckysheet_select_save[0].row[1]; r += 1) {
         if (ctx.config.rowhidden != null && ctx.config.rowhidden[r] != null) {
             continue;
         }
@@ -1198,11 +1011,7 @@ export function handleFormatPainter(ctx: Context) {
             RowlChange = true;
         }
 
-        for (
-            let c = ctx.luckysheet_select_save[0].column[0];
-            c <= ctx.luckysheet_select_save[0].column[1];
-            c += 1
-        ) {
+        for (let c = ctx.luckysheet_select_save[0].column[0]; c <= ctx.luckysheet_select_save[0].column[1]; c += 1) {
             const flowdata = getFlowdata(ctx);
             if (!flowdata) return;
             const cell = flowdata[r][c];
@@ -1242,7 +1051,7 @@ export function handleClearFormat(ctx: Context) {
             for (let c = colSt; c <= colEd; c += 1) {
                 const cell = flowdata[r][c];
                 if (!cell) continue;
-                flowdata[r][c] = pick(cell, "v", "m", "mc", "f", "ct");
+                flowdata[r][c] = pick(cell, 'v', 'm', 'mc', 'f', 'ct');
             }
         }
         // When clearing table styles, also clear border styles
@@ -1257,10 +1066,7 @@ export function handleClearFormat(ctx: Context) {
             for (let i = 0; i < cfg.borderInfo.length; i += 1) {
                 const bd_rangeType = cfg.borderInfo[i].rangeType;
 
-                if (
-                    bd_rangeType === "range" &&
-                    cfg.borderInfo[i].borderType !== "border-slash"
-                ) {
+                if (bd_rangeType === 'range' && cfg.borderInfo[i].borderType !== 'border-slash') {
                     const bd_range = cfg.borderInfo[i].range;
                     let bd_emptyRange: any = [];
 
@@ -1268,28 +1074,26 @@ export function handleClearFormat(ctx: Context) {
                         bd_emptyRange = bd_emptyRange.concat(
                             cfSplitRange(
                                 bd_range[j],
-                                {row: [rowSt, rowEd], column: [colSt, colEd]},
-                                {row: [rowSt, rowEd], column: [colSt, colEd]},
-                                "restPart"
-                            )
+                                { row: [rowSt, rowEd], column: [colSt, colEd] },
+                                { row: [rowSt, rowEd], column: [colSt, colEd] },
+                                'restPart',
+                            ),
                         );
                     }
 
                     cfg.borderInfo[i].range = bd_emptyRange;
 
                     source_borderInfo.push(cfg.borderInfo[i]);
-                } else if (bd_rangeType === "cell") {
+                } else if (bd_rangeType === 'cell') {
                     const bd_r = cfg.borderInfo[i].value.row_index;
                     const bd_c = cfg.borderInfo[i].value.col_index;
 
-                    if (
-                        !(bd_r >= rowSt && bd_r <= rowEd && bd_c >= colSt && bd_c <= colEd)
-                    ) {
+                    if (!(bd_r >= rowSt && bd_r <= rowEd && bd_c >= colSt && bd_c <= colEd)) {
                         source_borderInfo.push(cfg.borderInfo[i]);
                     }
                 } else if (
-                    bd_rangeType === "range" &&
-                    cfg.borderInfo[i].borderType === "border-slash" &&
+                    bd_rangeType === 'range' &&
+                    cfg.borderInfo[i].borderType === 'border-slash' &&
                     !(
                         cfg.borderInfo[i].range[0].row[0] >= rowSt &&
                         cfg.borderInfo[i].range[0].row[0] <= rowEd &&
@@ -1307,28 +1111,15 @@ export function handleClearFormat(ctx: Context) {
     });
 }
 
-export function handleTextColor(
-    ctx: Context,
-    cellInput: HTMLDivElement,
-    color: string
-) {
-    setAttr(ctx, cellInput, "fc", color);
+export function handleTextColor(ctx: Context, cellInput: HTMLDivElement, color: string) {
+    setAttr(ctx, cellInput, 'fc', color);
 }
 
-export function handleTextBackground(
-    ctx: Context,
-    cellInput: HTMLDivElement,
-    color: string
-) {
-    setAttr(ctx, cellInput, "bg", color);
+export function handleTextBackground(ctx: Context, cellInput: HTMLDivElement, color: string) {
+    setAttr(ctx, cellInput, 'bg', color);
 }
 
-export function handleBorder(
-    ctx: Context,
-    type: string,
-    borderColor?: string,
-    borderStyle?: string
-) {
+export function handleBorder(ctx: Context, type: string, borderColor?: string, borderStyle?: string) {
     // *If frontend editing is disabled, abort the next operation
     // if (!checkIsAllowEdit()) {
     //   tooltip.info("", locale().pivotTable.errorNotAllowEdit);
@@ -1344,7 +1135,7 @@ export function handleBorder(
     const allowEdit = isAllowEdit(ctx);
     if (!allowEdit) return;
     if (type == null) {
-        type = "border-all";
+        type = 'border-all';
     }
 
     // const subcolormenuid = "luckysheet-icon-borderColor-menuButton";
@@ -1355,12 +1146,12 @@ export function handleBorder(
     let color = borderColor;
     let style = borderStyle;
 
-    if (color == null || color === "") {
-        color = "#000";
+    if (color == null || color === '') {
+        color = '#000';
     }
 
-    if (style == null || style === "") {
-        style = "1";
+    if (style == null || style === '') {
+        style = '1';
     }
 
     const cfg = ctx.config;
@@ -1368,9 +1159,9 @@ export function handleBorder(
         cfg.borderInfo = [];
     }
 
-    if (type !== "border-slash") {
+    if (type !== 'border-slash') {
         const borderInfo = {
-            rangeType: "range",
+            rangeType: 'range',
             borderType: type,
             color,
             style,
@@ -1385,11 +1176,11 @@ export function handleBorder(
                     const range = `${r}_${c}`;
                     if (includes(rangeList, range)) continue;
                     const borderInfo = {
-                        rangeType: "range",
+                        rangeType: 'range',
                         borderType: type,
                         color,
                         style,
-                        range: normalizeSelection(ctx, [{row: [r, r], column: [c, c]}]),
+                        range: normalizeSelection(ctx, [{ row: [r, r], column: [c, c] }]),
                     };
                     cfg.borderInfo!.push(borderInfo);
                     rangeList.push(range);
@@ -1473,7 +1264,7 @@ export function handleFreeze(ctx: Context, type: string) {
     const file = ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId)!];
     if (!file) return;
 
-    if (type === "freeze-cancel") {
+    if (type === 'freeze-cancel') {
         delete file.frozen;
         return;
     }
@@ -1481,7 +1272,7 @@ export function handleFreeze(ctx: Context, type: string) {
     const firstSelection = ctx.luckysheet_select_save?.[0];
     if (!firstSelection) return;
 
-    let {row_focus, column_focus} = firstSelection;
+    let { row_focus, column_focus } = firstSelection;
     if (row_focus == null || column_focus == null) return;
 
     const m = ctx.config.merge?.[`${row_focus}_${column_focus}`];
@@ -1490,11 +1281,11 @@ export function handleFreeze(ctx: Context, type: string) {
         column_focus = m.c + m.cs - 1;
     }
 
-    file.frozen = {type: "both", range: {row_focus, column_focus}};
-    if (type === "freeze-row") {
-        file.frozen.type = "rangeRow";
-    } else if (type === "freeze-col") {
-        file.frozen.type = "rangeColumn";
+    file.frozen = { type: 'both', range: { row_focus, column_focus } };
+    if (type === 'freeze-row') {
+        file.frozen.type = 'rangeRow';
+    } else if (type === 'freeze-col') {
+        file.frozen.type = 'rangeColumn';
     }
 }
 
@@ -1502,18 +1293,18 @@ export function handleTextSize(
     ctx: Context,
     cellInput: HTMLDivElement,
     size: number,
-    canvas?: CanvasRenderingContext2D
+    canvas?: CanvasRenderingContext2D,
 ) {
-    setAttr(ctx, cellInput, "fs", size, canvas);
+    setAttr(ctx, cellInput, 'fs', size, canvas);
 }
 
 export function handleSum(
     ctx: Context,
     cellInput: HTMLDivElement,
     fxInput: HTMLDivElement | null | undefined,
-    cache?: GlobalCache
+    cache?: GlobalCache,
 ) {
-    autoSelectionFormula(ctx, cellInput, fxInput, "SUM", cache!);
+    autoSelectionFormula(ctx, cellInput, fxInput, 'SUM', cache!);
 }
 
 export function handleLink(ctx: Context) {
@@ -1527,19 +1318,19 @@ export function handleLink(ctx: Context) {
 }
 
 const handlerMap: Record<string, ToolbarItemClickHandler> = {
-    "currency-format": handleCurrencyFormat,
-    "percentage-format": handlePercentageFormat,
-    "number-decrease": handleNumberDecrease,
-    "number-increase": handleNumberIncrease,
-    "sort-cell": (ctx: Context) => handleSort(ctx, true),
-    "merge-all": (ctx: Context) => handleMerge(ctx, "mergeAll"),
-    "border-all": (ctx: Context) => handleBorder(ctx, "border-all"),
+    'currency-format': handleCurrencyFormat,
+    'percentage-format': handlePercentageFormat,
+    'number-decrease': handleNumberDecrease,
+    'number-increase': handleNumberIncrease,
+    'sort-cell': (ctx: Context) => handleSort(ctx, true),
+    'merge-all': (ctx: Context) => handleMerge(ctx, 'mergeAll'),
+    'border-all': (ctx: Context) => handleBorder(ctx, 'border-all'),
     bold: handleBold,
     italic: handleItalic,
-    "strike-through": handleStrikeThrough,
+    'strike-through': handleStrikeThrough,
     underline: handleUnderline,
-    "clear-format": handleClearFormat,
-    "format-painter": handleFormatPainter,
+    'clear-format': handleClearFormat,
+    'format-painter': handleFormatPainter,
     search: (ctx: Context) => {
         ctx.showSearch = true;
     },
@@ -1549,7 +1340,7 @@ const handlerMap: Record<string, ToolbarItemClickHandler> = {
 const selectedMap: Record<string, ToolbarItemSelectedFunc> = {
     bold: (cell) => cell?.bl === 1,
     italic: (cell) => cell?.it === 1,
-    "strike-through": (cell) => cell?.cl === 1,
+    'strike-through': (cell) => cell?.cl === 1,
     underline: (cell) => cell?.un === 1,
 };
 

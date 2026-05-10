@@ -1,18 +1,17 @@
-import {cloneDeep, pick} from "es-toolkit/compat";
-import dayjs from "dayjs";
-
-import {Context, getFlowdata} from "../context";
-import type {Cell, CellMatrix} from "../../engine/types";
-import {Rect} from "../types";
-import {colLocation, rowLocation} from "./location";
-import {getSheetIndex, isAllowEdit} from "../utils";
-import {getBorderInfoCompute} from "./border";
-import {genarate, update} from "../../engine/format";
-import * as formula from "./formula-ui";
-import {isRealNum} from "./validation";
-import {cfSplitRange} from "../../engine";
-import {normalizeSelection} from "./selection";
-import {jfrefreshgrid} from "./refresh";
+import dayjs from 'dayjs';
+import { cloneDeep, pick } from 'es-toolkit/compat';
+import { cfSplitRange } from '../../engine';
+import { genarate, update } from '../../engine/format';
+import type { Cell, CellMatrix } from '../../engine/types';
+import { type Context, getFlowdata } from '../context';
+import type { Rect } from '../types';
+import { getSheetIndex, isAllowEdit } from '../utils';
+import { getBorderInfoCompute } from './border';
+import * as formula from './formula-ui';
+import { colLocation, rowLocation } from './location';
+import { jfrefreshgrid } from './refresh';
+import { normalizeSelection } from './selection';
+import { isRealNum } from './validation';
 
 function toPx(v: number) {
     return `${v}px`;
@@ -36,15 +35,15 @@ export const dropCellCache: Record<string, any> = {
         九: 9,
     },
     chnNameValue: {
-        十: {value: 10, secUnit: false},
-        百: {value: 100, secUnit: false},
-        千: {value: 1000, secUnit: false},
-        万: {value: 10000, secUnit: true},
-        亿: {value: 100000000, secUnit: true},
+        十: { value: 10, secUnit: false },
+        百: { value: 100, secUnit: false },
+        千: { value: 1000, secUnit: false },
+        万: { value: 10000, secUnit: true },
+        亿: { value: 100000000, secUnit: true },
     },
-    chnNumChar2: ["零", "一", "二", "三", "四", "五", "六", "七", "八", "九"],
-    chnUnitSection: ["", "万", "亿", "万亿", "亿亿"],
-    chnUnitChar: ["", "十", "百", "千"],
+    chnNumChar2: ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'],
+    chnUnitSection: ['', '万', '亿', '万亿', '亿亿'],
+    chnUnitChar: ['', '十', '百', '千'],
 };
 
 function chineseToNumber(chnStr: string) {
@@ -52,12 +51,12 @@ function chineseToNumber(chnStr: string) {
     let section = 0;
     let number = 0;
     let secUnit = false;
-    const str = chnStr.split("");
+    const str = chnStr.split('');
 
     for (let i = 0; i < str.length; i += 1) {
         const num = dropCellCache.chnNumChar[str[i]];
 
-        if (typeof num !== "undefined") {
+        if (typeof num !== 'undefined') {
             number = num;
 
             if (i === str.length - 1) {
@@ -83,8 +82,8 @@ function chineseToNumber(chnStr: string) {
 }
 
 function sectionToChinese(section: number) {
-    let strIns = "";
-    let chnStr = "";
+    let strIns = '';
+    let chnStr = '';
     let unitPos = 0;
     let zero = true;
 
@@ -111,8 +110,8 @@ function sectionToChinese(section: number) {
 }
 
 function numberToChinese(num: number) {
-    let strIns = "";
-    let chnStr = "";
+    let strIns = '';
+    let chnStr = '';
     let unitPos = 0;
     let needZero = false;
 
@@ -127,10 +126,7 @@ function numberToChinese(num: number) {
         }
 
         strIns = sectionToChinese(section);
-        strIns +=
-            section !== 0
-                ? dropCellCache.chnUnitSection[unitPos]
-                : dropCellCache.chnUnitSection[0];
+        strIns += section !== 0 ? dropCellCache.chnUnitSection[unitPos] : dropCellCache.chnUnitSection[0];
         chnStr = strIns + chnStr;
         needZero = section < 1000 && section > 0;
         num = Math.floor(num / 10000);
@@ -141,7 +137,7 @@ function numberToChinese(num: number) {
 }
 
 function isChnNumber(txt: string | number | undefined) {
-    if (typeof txt === "number") {
+    if (typeof txt === 'number') {
         txt = `${txt}`;
     }
     let result = true;
@@ -149,20 +145,15 @@ function isChnNumber(txt: string | number | undefined) {
     if (txt == null) {
         result = false;
     } else if (txt.length === 1) {
-        if (txt === "日" || txt in dropCellCache.chnNumChar) {
+        if (txt === '日' || txt in dropCellCache.chnNumChar) {
             result = true;
         } else {
             result = false;
         }
     } else {
-        const str = txt.split("");
+        const str = txt.split('');
         for (let i = 0; i < str.length; i += 1) {
-            if (
-                !(
-                    str[i] in dropCellCache.chnNumChar ||
-                    str[i] in dropCellCache.chnNameValue
-                )
-            ) {
+            if (!(str[i] in dropCellCache.chnNumChar || str[i] in dropCellCache.chnNameValue)) {
                 result = false;
                 break;
             }
@@ -174,7 +165,7 @@ function isChnNumber(txt: string | number | undefined) {
 
 function isExtendNumber(txt: string | number | undefined) {
     if (txt == null) return [false];
-    if (typeof txt === "number") {
+    if (typeof txt === 'number') {
         txt = `${txt}`;
     }
     const reg = /0|([1-9]+[0-9]*)/g;
@@ -197,18 +188,18 @@ function isExtendNumber(txt: string | number | undefined) {
 
 function isChnWeek2(txt: string | number | undefined) {
     let result = false;
-    if (typeof txt === "number") {
+    if (typeof txt === 'number') {
         txt = `${txt}`;
     }
     if (txt !== undefined && txt.length === 2) {
         if (
-            txt === "周一" ||
-            txt === "周二" ||
-            txt === "周三" ||
-            txt === "周四" ||
-            txt === "周五" ||
-            txt === "周六" ||
-            txt === "周日"
+            txt === '周一' ||
+            txt === '周二' ||
+            txt === '周三' ||
+            txt === '周四' ||
+            txt === '周五' ||
+            txt === '周六' ||
+            txt === '周日'
         ) {
             result = true;
         }
@@ -218,19 +209,19 @@ function isChnWeek2(txt: string | number | undefined) {
 }
 
 function isChnWeek3(txt: string | number | undefined) {
-    if (typeof txt === "number") {
+    if (typeof txt === 'number') {
         txt = `${txt}`;
     }
     let result = false;
     if (txt !== undefined && txt.length === 3) {
         if (
-            txt === "星期一" ||
-            txt === "星期二" ||
-            txt === "星期三" ||
-            txt === "星期四" ||
-            txt === "星期五" ||
-            txt === "星期六" ||
-            txt === "星期日"
+            txt === '星期一' ||
+            txt === '星期二' ||
+            txt === '星期三' ||
+            txt === '星期四' ||
+            txt === '星期五' ||
+            txt === '星期六' ||
+            txt === '星期日'
         ) {
             result = true;
         }
@@ -317,13 +308,12 @@ function judgeDate(data: (Cell | null | undefined)[]) {
     let isEqualDiffDays = true;
     let isEqualDiffMonths = true;
     let isEqualDiffYears = true;
-    if (data[0] == null || data[1] == null)
-        return [false, false, false, false, false];
+    if (data[0] == null || data[1] == null) return [false, false, false, false, false];
     const sameDay = dayjs(data[0].m).date();
     const sameMonth = dayjs(data[0].m).month();
-    const equalDiffDays = dayjs(data[1].m).diff(dayjs(data[0].m), "days");
-    const equalDiffMonths = dayjs(data[1].m).diff(dayjs(data[0].m), "months");
-    const equalDiffYears = dayjs(data[1].m).diff(dayjs(data[0].m), "years");
+    const equalDiffDays = dayjs(data[1].m).diff(dayjs(data[0].m), 'days');
+    const equalDiffMonths = dayjs(data[1].m).diff(dayjs(data[0].m), 'months');
+    const equalDiffYears = dayjs(data[1].m).diff(dayjs(data[0].m), 'years');
 
     for (let i = 1; i < data.length; i += 1) {
         // check if the day is the same
@@ -335,22 +325,15 @@ function judgeDate(data: (Cell | null | undefined)[]) {
             isSameMonth = false;
         }
         // check if the day difference is an arithmetic sequence
-        if (
-            dayjs(data[i]?.m).diff(dayjs(data[i - 1]?.m), "days") !== equalDiffDays
-        ) {
+        if (dayjs(data[i]?.m).diff(dayjs(data[i - 1]?.m), 'days') !== equalDiffDays) {
             isEqualDiffDays = false;
         }
         // check if the month difference is an arithmetic sequence
-        if (
-            dayjs(data[i]?.m).diff(dayjs(data[i - 1]?.m), "months") !==
-            equalDiffMonths
-        ) {
+        if (dayjs(data[i]?.m).diff(dayjs(data[i - 1]?.m), 'months') !== equalDiffMonths) {
             isEqualDiffMonths = false;
         }
         // check if the year difference is an arithmetic sequence
-        if (
-            dayjs(data[i]?.m).diff(dayjs(data[i - 1]?.m), "years") !== equalDiffYears
-        ) {
+        if (dayjs(data[i]?.m).diff(dayjs(data[i - 1]?.m), 'years') !== equalDiffYears) {
             isEqualDiffYears = false;
         }
     }
@@ -365,49 +348,32 @@ function judgeDate(data: (Cell | null | undefined)[]) {
         isEqualDiffYears = false;
     }
 
-    return [
-        isSameDay,
-        isSameMonth,
-        isEqualDiffDays,
-        isEqualDiffMonths,
-        isEqualDiffYears,
-    ];
+    return [isSameDay, isSameMonth, isEqualDiffDays, isEqualDiffMonths, isEqualDiffYears];
 }
 
-export function showDropCellSelection(
-    {width, height, top, left}: Rect,
-    container: HTMLDivElement
-) {
-    const selectedExtend = container.querySelector(
-        ".fortune-cell-selected-extend"
-    ) as HTMLDivElement;
+export function showDropCellSelection({ width, height, top, left }: Rect, container: HTMLDivElement) {
+    const selectedExtend = container.querySelector('.fortune-cell-selected-extend') as HTMLDivElement;
     if (selectedExtend) {
         selectedExtend.style.left = toPx(left);
         selectedExtend.style.width = toPx(width);
         selectedExtend.style.top = toPx(top);
         selectedExtend.style.height = toPx(height);
-        selectedExtend.style.display = "block";
+        selectedExtend.style.display = 'block';
     }
 }
 
 export function hideDropCellSelection(container: HTMLDivElement) {
-    const selectedExtend = container.querySelector(
-        ".fortune-cell-selected-extend"
-    ) as HTMLDivElement;
+    const selectedExtend = container.querySelector('.fortune-cell-selected-extend') as HTMLDivElement;
     if (selectedExtend) {
-        selectedExtend.style.display = "none";
+        selectedExtend.style.display = 'none';
     }
 }
 
-export function createDropCellRange(
-    ctx: Context,
-    e: MouseEvent,
-    container: HTMLDivElement
-) {
+export function createDropCellRange(ctx: Context, e: MouseEvent, container: HTMLDivElement) {
     ctx.luckysheet_cell_selected_extend = true;
     ctx.luckysheet_scroll_status = true;
 
-    const {scrollLeft, scrollTop} = ctx;
+    const { scrollLeft, scrollTop } = ctx;
     const rect = container.getBoundingClientRect();
     const x = e.pageX - rect.left - ctx.rowHeaderWidth + scrollLeft;
     const y = e.pageY - rect.top - ctx.columnHeaderHeight + scrollTop;
@@ -430,7 +396,7 @@ export function createDropCellRange(
             top: row_pre,
             height: row - row_pre - 1,
         },
-        container
+        container,
     );
 }
 
@@ -439,10 +405,10 @@ export function onDropCellSelect(
     e: MouseEvent,
     scrollX: HTMLDivElement,
     scrollY: HTMLDivElement,
-    container: HTMLDivElement
+    container: HTMLDivElement,
 ) {
-    const {scrollLeft} = scrollX;
-    const {scrollTop} = scrollY;
+    const { scrollLeft } = scrollX;
+    const { scrollTop } = scrollY;
     const rect = container.getBoundingClientRect();
     const x = e.pageX - rect.left - ctx.rowHeaderWidth + scrollLeft;
     const y = e.pageY - rect.top - ctx.columnHeaderHeight + scrollTop;
@@ -471,10 +437,7 @@ export function onDropCellSelect(
     let width = ctx.luckysheet_select_save[0].width_move;
 
     if (top == null || height == null || left == null || width == null) return;
-    if (
-        Math.abs(row_index_original - row_index) >
-        Math.abs(col_index_original - col_index)
-    ) {
+    if (Math.abs(row_index_original - row_index) > Math.abs(col_index_original - col_index)) {
         if (!(row_index >= row_s && row_index <= row_e)) {
             if (top >= row_pre) {
                 height += top - row_pre;
@@ -502,7 +465,7 @@ export function onDropCellSelect(
         [col_e] = ctx.luckysheet_select_save[0].column;
     }
 
-    showDropCellSelection({left, width, top, height}, container);
+    showDropCellSelection({ left, width, top, height }, container);
 }
 
 function fillCopy(data: (Cell | null | undefined)[], len: number) {
@@ -519,11 +482,7 @@ function fillCopy(data: (Cell | null | undefined)[], len: number) {
     return applyData;
 }
 
-function fillSeries(
-    data: (Cell | null | undefined)[],
-    len: number,
-    direction: string
-) {
+function fillSeries(data: (Cell | null | undefined)[], len: number, direction: string) {
     const applyData: Cell[] = [];
 
     const dataNumArr = [];
@@ -534,12 +493,7 @@ function fillSeries(
         }
     }
 
-    if (
-        data.length > 2 &&
-        isEqualRatio(dataNumArr) &&
-        data[0] != null &&
-        data[1] != null
-    ) {
+    if (data.length > 2 && isEqualRatio(dataNumArr) && data[0] != null && data[1] != null) {
         // geometric sequence
         for (let i = 1; i <= len; i += 1) {
             const index = (i - 1) % data.length;
@@ -547,14 +501,11 @@ function fillSeries(
 
             if (d != null) {
                 let num;
-                if (direction === "down" || direction === "right") {
-                    num =
-                        Number(data[data.length - 1]!.v) *
-                        (Number(data[1].v) / Number(data[0].v)) ** i;
+                if (direction === 'down' || direction === 'right') {
+                    num = Number(data[data.length - 1]!.v) * (Number(data[1].v) / Number(data[0].v)) ** i;
                 } else {
                     //  direction == "up" || direction == "left"
-                    num =
-                        Number(data[0].v) / (Number(data[1].v) / Number(data[0].v)) ** i;
+                    num = Number(data[0].v) / (Number(data[1].v) / Number(data[0].v)) ** i;
                 }
 
                 d.v = num;
@@ -572,9 +523,9 @@ function fillSeries(
             const d = cloneDeep(data[index]);
             if (d != null) {
                 let y;
-                if (direction === "down" || direction === "right") {
+                if (direction === 'down' || direction === 'right') {
                     y = forecast(data.length + i, dataNumArr, xArr);
-                } else if (direction === "up" || direction === "left") {
+                } else if (direction === 'up' || direction === 'left') {
                     y = forecast(1 - i, dataNumArr, xArr);
                 }
 
@@ -590,11 +541,7 @@ function fillSeries(
     return applyData;
 }
 
-function fillExtendNumber(
-    data: (Cell | null | undefined)[],
-    len: number,
-    step: number
-) {
+function fillExtendNumber(data: (Cell | null | undefined)[], len: number, step: number) {
     const applyData = [];
     const reg = /0|([1-9]+[0-9]*)/g;
 
@@ -604,15 +551,12 @@ function fillExtendNumber(
         let last = data[data.length - 1]?.m;
         if (d != null && last != null) {
             last = `${last}`;
-            const match = last.match(reg) || "";
+            const match = last.match(reg) || '';
             const lastTxt = match[match.length - 1];
 
             const num = Math.abs(Number(lastTxt) + step * i);
             const lastIndex = last.lastIndexOf(lastTxt);
-            const valueTxt =
-                last.slice(0, lastIndex) +
-                num.toString() +
-                last.slice(lastIndex + lastTxt.length);
+            const valueTxt = last.slice(0, lastIndex) + num.toString() + last.slice(lastIndex + lastTxt.length);
 
             d.v = valueTxt;
             d.m = valueTxt;
@@ -624,20 +568,16 @@ function fillExtendNumber(
     return applyData;
 }
 
-function fillDays(
-    data: (Cell | null | undefined)[],
-    len: number,
-    step: number
-) {
+function fillDays(data: (Cell | null | undefined)[], len: number, step: number) {
     const applyData = [];
 
     for (let i = 1; i <= len; i += 1) {
         const d = cloneDeep(data[data.length - 1]);
         if (d != null) {
-            let date = update("yyyy-MM-dd", d.v);
+            let date = update('yyyy-MM-dd', d.v);
             date = dayjs(date)
-                .add(step * i, "days")
-                .format("YYYY-MM-DD");
+                .add(step * i, 'days')
+                .format('YYYY-MM-DD');
 
             // TODO: is this genarate() call handled correctly?
             d.v = genarate(date)[2];
@@ -652,20 +592,16 @@ function fillDays(
     return applyData;
 }
 
-function fillMonths(
-    data: (Cell | null | undefined)[],
-    len: number,
-    step: number
-) {
+function fillMonths(data: (Cell | null | undefined)[], len: number, step: number) {
     const applyData = [];
 
     for (let i = 1; i <= len; i += 1) {
         const d = cloneDeep(data[data.length - 1]);
         if (d != null) {
-            let date = update("yyyy-MM-dd", d.v);
+            let date = update('yyyy-MM-dd', d.v);
             date = dayjs(date)
-                .add(step * i, "months")
-                .format("YYYY-MM-DD");
+                .add(step * i, 'months')
+                .format('YYYY-MM-DD');
 
             d.v = genarate(date)[2];
             if (d.ct != null && d.ct.fa != null) {
@@ -679,20 +615,16 @@ function fillMonths(
     return applyData;
 }
 
-function fillYears(
-    data: (Cell | null | undefined)[],
-    len: number,
-    step: number
-) {
+function fillYears(data: (Cell | null | undefined)[], len: number, step: number) {
     const applyData = [];
 
     for (let i = 1; i <= len; i += 1) {
         const d = cloneDeep(data[data.length - 1]);
         if (d != null) {
-            let date = update("yyyy-MM-dd", d.v);
+            let date = update('yyyy-MM-dd', d.v);
             date = dayjs(date)
-                .add(step * i, "years")
-                .format("YYYY-MM-DD");
+                .add(step * i, 'years')
+                .format('YYYY-MM-DD');
 
             d.v = genarate(date)[2];
             if (d.ct != null && d.ct.fa != null) {
@@ -706,11 +638,7 @@ function fillYears(
     return applyData;
 }
 
-function fillChnWeek(
-    data: (Cell | null | undefined)[],
-    len: number,
-    step: number
-) {
+function fillChnWeek(data: (Cell | null | undefined)[], len: number, step: number) {
     const applyData = [];
 
     for (let i = 1; i <= len; i += 1) {
@@ -720,7 +648,7 @@ function fillChnWeek(
         let num;
         const m = data[data.length - 1]?.m;
         if (m != null && d != null) {
-            if (m === "日") {
+            if (m === '日') {
                 num = 7 + step * i;
             } else {
                 num = chineseToNumber(`${m}`) + step * i;
@@ -732,26 +660,26 @@ function fillChnWeek(
 
             const rsd = num % 7;
             if (rsd === 0) {
-                d.m = "日";
-                d.v = "日";
+                d.m = '日';
+                d.v = '日';
             } else if (rsd === 1) {
-                d.m = "一";
-                d.v = "一";
+                d.m = '一';
+                d.v = '一';
             } else if (rsd === 2) {
-                d.m = "二";
-                d.v = "二";
+                d.m = '二';
+                d.v = '二';
             } else if (rsd === 3) {
-                d.m = "三";
-                d.v = "三";
+                d.m = '三';
+                d.v = '三';
             } else if (rsd === 4) {
-                d.m = "四";
-                d.v = "四";
+                d.m = '四';
+                d.v = '四';
             } else if (rsd === 5) {
-                d.m = "五";
-                d.v = "五";
+                d.m = '五';
+                d.v = '五';
             } else if (rsd === 6) {
-                d.m = "六";
-                d.v = "六";
+                d.m = '六';
+                d.v = '六';
             }
 
             applyData.push(d);
@@ -761,11 +689,7 @@ function fillChnWeek(
     return applyData;
 }
 
-function fillChnWeek2(
-    data: (Cell | null | undefined)[],
-    len: number,
-    step: number
-) {
+function fillChnWeek2(data: (Cell | null | undefined)[], len: number, step: number) {
     const applyData = [];
 
     for (let i = 1; i <= len; i += 1) {
@@ -775,7 +699,7 @@ function fillChnWeek2(
         let num;
         const m = data[data.length - 1]?.m;
         if (m != null && d != null) {
-            if (m === "周日") {
+            if (m === '周日') {
                 num = 7 + step * i;
             } else {
                 const last = `${m}`;
@@ -789,26 +713,26 @@ function fillChnWeek2(
 
             const rsd = num % 7;
             if (rsd === 0) {
-                d.m = "周日";
-                d.v = "周日";
+                d.m = '周日';
+                d.v = '周日';
             } else if (rsd === 1) {
-                d.m = "周一";
-                d.v = "周一";
+                d.m = '周一';
+                d.v = '周一';
             } else if (rsd === 2) {
-                d.m = "周二";
-                d.v = "周二";
+                d.m = '周二';
+                d.v = '周二';
             } else if (rsd === 3) {
-                d.m = "周三";
-                d.v = "周三";
+                d.m = '周三';
+                d.v = '周三';
             } else if (rsd === 4) {
-                d.m = "周四";
-                d.v = "周四";
+                d.m = '周四';
+                d.v = '周四';
             } else if (rsd === 5) {
-                d.m = "周五";
-                d.v = "周五";
+                d.m = '周五';
+                d.v = '周五';
             } else if (rsd === 6) {
-                d.m = "周六";
-                d.v = "周六";
+                d.m = '周六';
+                d.v = '周六';
             }
         }
 
@@ -818,11 +742,7 @@ function fillChnWeek2(
     return applyData;
 }
 
-function fillChnWeek3(
-    data: (Cell | null | undefined)[],
-    len: number,
-    step: number
-) {
+function fillChnWeek3(data: (Cell | null | undefined)[], len: number, step: number) {
     const applyData = [];
 
     for (let i = 1; i <= len; i += 1) {
@@ -832,7 +752,7 @@ function fillChnWeek3(
         let num;
         const m = data[data.length - 1]?.m;
         if (m != null && d != null) {
-            if (m === "星期日") {
+            if (m === '星期日') {
                 num = 7 + step * i;
             } else {
                 const last = `${m}`;
@@ -846,26 +766,26 @@ function fillChnWeek3(
 
             const rsd = num % 7;
             if (rsd === 0) {
-                d.m = "星期日";
-                d.v = "星期日";
+                d.m = '星期日';
+                d.v = '星期日';
             } else if (rsd === 1) {
-                d.m = "星期一";
-                d.v = "星期一";
+                d.m = '星期一';
+                d.v = '星期一';
             } else if (rsd === 2) {
-                d.m = "星期二";
-                d.v = "星期二";
+                d.m = '星期二';
+                d.v = '星期二';
             } else if (rsd === 3) {
-                d.m = "星期三";
-                d.v = "星期三";
+                d.m = '星期三';
+                d.v = '星期三';
             } else if (rsd === 4) {
-                d.m = "星期四";
-                d.v = "星期四";
+                d.m = '星期四';
+                d.v = '星期四';
             } else if (rsd === 5) {
-                d.m = "星期五";
-                d.v = "星期五";
+                d.m = '星期五';
+                d.v = '星期五';
             } else if (rsd === 6) {
-                d.m = "星期六";
-                d.v = "星期六";
+                d.m = '星期六';
+                d.v = '星期六';
             }
         }
 
@@ -875,11 +795,7 @@ function fillChnWeek3(
     return applyData;
 }
 
-function fillChnNumber(
-    data: (Cell | null | undefined)[],
-    len: number,
-    step: number
-) {
+function fillChnNumber(data: (Cell | null | undefined)[], len: number, step: number) {
     const applyData = [];
 
     for (let i = 1; i <= len; i += 1) {
@@ -891,7 +807,7 @@ function fillChnNumber(
             const num = chineseToNumber(`${m}`) + step * i;
             let txt;
             if (num <= 0) {
-                txt = "零";
+                txt = '零';
             } else {
                 txt = numberToChinese(num);
             }
@@ -906,7 +822,7 @@ function fillChnNumber(
 }
 
 export function getTypeItemHide(ctx: Context) {
-    const {copyRange} = dropCellCache;
+    const { copyRange } = dropCellCache;
     const str_r = copyRange.row[0];
     const end_r = copyRange.row[1];
     const str_c = copyRange.column[0];
@@ -929,15 +845,15 @@ export function getTypeItemHide(ctx: Context) {
                 const cell = flowdata[r][c];
 
                 if (cell !== null && cell.v != null && cell.f == null) {
-                    if (cell.ct != null && cell.ct.t === "n") {
+                    if (cell.ct != null && cell.ct.t === 'n') {
                         hasNumber = true;
-                    } else if (cell.ct != null && cell.ct.t === "d") {
+                    } else if (cell.ct != null && cell.ct.t === 'd') {
                         hasDate = true;
                     } else if (isExtendNumber(cell.m)[0]) {
                         hasExtendNumber = true;
-                    } else if (isChnNumber(cell.m) && cell.m !== "日") {
+                    } else if (isChnNumber(cell.m) && cell.m !== '日') {
                         hasChn = true;
-                    } else if (cell.m != null && cell.m === "日") {
+                    } else if (cell.m != null && cell.m === '日') {
                         hasChnWeek1 = true;
                     } else if (isChnWeek2(cell.m)) {
                         hasChnWeek2 = true;
@@ -949,15 +865,7 @@ export function getTypeItemHide(ctx: Context) {
         }
     }
 
-    return [
-        hasNumber,
-        hasExtendNumber,
-        hasDate,
-        hasChn,
-        hasChnWeek1,
-        hasChnWeek2,
-        hasChnWeek3,
-    ];
+    return [hasNumber, hasExtendNumber, hasDate, hasChn, hasChnWeek1, hasChnWeek2, hasChnWeek3];
 }
 
 function getLenS(indexArr: number[], rsd: number) {
@@ -1015,24 +923,24 @@ function getDataByType(
     len: number,
     direction: string,
     type: string,
-    dataType?: string
+    dataType?: string,
 ) {
     data = cloneDeep(data);
     let applyData: (Cell | null | undefined)[] = [];
 
-    if (type === "0" || data.length === 1) {
+    if (type === '0' || data.length === 1) {
         // copy cells
-        if (direction === "up" || direction === "left") {
+        if (direction === 'up' || direction === 'left') {
             data.reverse();
         }
 
         applyData = fillCopy(data, len);
-    } else if (type === "1") {
+    } else if (type === '1') {
         // fill series
-        if (dataType === "number") {
+        if (dataType === 'number') {
             // data type: number
             applyData = fillSeries(data, len, direction);
-        } else if (dataType === "extendNumber") {
+        } else if (dataType === 'extendNumber') {
             // extended number
             const dataNumArr = [];
 
@@ -1044,7 +952,7 @@ function getDataByType(
                 }
             }
 
-            if (direction === "up" || direction === "left") {
+            if (direction === 'up' || direction === 'left') {
                 data.reverse();
                 dataNumArr.reverse();
             }
@@ -1057,31 +965,31 @@ function getDataByType(
                 // not an arithmetic sequence — copy data
                 applyData = fillCopy(data, len);
             }
-        } else if (dataType === "date") {
+        } else if (dataType === 'date') {
             // data type: date
-            if (direction === "up" || direction === "left") {
+            if (direction === 'up' || direction === 'left') {
                 data.reverse();
             }
 
             const _judgeDate = judgeDate(data);
             if (_judgeDate[0] && _judgeDate[3]) {
                 // same day, month difference is an arithmetic sequence — use month diff as step
-                const step = dayjs(data[1]?.m).diff(dayjs(data[0]?.m), "months");
+                const step = dayjs(data[1]?.m).diff(dayjs(data[0]?.m), 'months');
                 applyData = fillMonths(data, len, step);
             } else if (!_judgeDate[0] && _judgeDate[2]) {
                 // different day, day difference is an arithmetic sequence — use day diff as step
-                const step = dayjs(data[1]?.m).diff(dayjs(data[0]?.m), "days");
+                const step = dayjs(data[1]?.m).diff(dayjs(data[0]?.m), 'days');
                 applyData = fillDays(data, len, step);
             } else {
                 // other — copy data
                 applyData = fillCopy(data, len);
             }
-        } else if (dataType === "chnNumber" && data[0]?.m != null) {
+        } else if (dataType === 'chnNumber' && data[0]?.m != null) {
             // data type: Chinese lowercase numbers
 
             let hasweek = false;
             for (let i = 0; i < data.length; i += 1) {
-                if (data[i]?.m === "日") {
+                if (data[i]?.m === '日') {
                     hasweek = true;
                     break;
                 }
@@ -1093,18 +1001,14 @@ function getDataByType(
                 let m = data[i]?.m;
                 if (m != null) {
                     m = `${m}`;
-                    if (m === "日") {
+                    if (m === '日') {
                         if (i === 0) {
                             dataNumArr.push(0);
                         } else {
                             weekIndex += 1;
                             dataNumArr.push(weekIndex * 7);
                         }
-                    } else if (
-                        hasweek &&
-                        chineseToNumber(m) > 0 &&
-                        chineseToNumber(m) < 7
-                    ) {
+                    } else if (hasweek && chineseToNumber(m) > 0 && chineseToNumber(m) < 7) {
                         dataNumArr.push(chineseToNumber(m) + weekIndex * 7);
                     } else {
                         dataNumArr.push(chineseToNumber(m));
@@ -1112,7 +1016,7 @@ function getDataByType(
                 }
             }
 
-            if (direction === "up" || direction === "left") {
+            if (direction === 'up' || direction === 'left') {
                 data.reverse();
                 dataNumArr.reverse();
             }
@@ -1135,7 +1039,7 @@ function getDataByType(
                 // not an arithmetic sequence — copy data
                 applyData = fillCopy(data, len);
             }
-        } else if (dataType === "chnWeek2") {
+        } else if (dataType === 'chnWeek2') {
             // Mon (周一) ~ Sun (周日)
             const dataNumArr = [];
             let weekIndex = 0;
@@ -1145,7 +1049,7 @@ function getDataByType(
                 if (m != null) {
                     m = `${m}`;
                     const lastTxt = m.slice(m.length - 1, 1);
-                    if (m === "周日") {
+                    if (m === '周日') {
                         if (i === 0) {
                             dataNumArr.push(0);
                         } else {
@@ -1158,7 +1062,7 @@ function getDataByType(
                 }
             }
 
-            if (direction === "up" || direction === "left") {
+            if (direction === 'up' || direction === 'left') {
                 data.reverse();
                 dataNumArr.reverse();
             }
@@ -1171,7 +1075,7 @@ function getDataByType(
                 // not an arithmetic sequence — copy data
                 applyData = fillCopy(data, len);
             }
-        } else if (dataType === "chnWeek3") {
+        } else if (dataType === 'chnWeek3') {
             // Monday (星期一) ~ Sunday (星期日)
             const dataNumArr = [];
             let weekIndex = 0;
@@ -1181,7 +1085,7 @@ function getDataByType(
                 if (m != null) {
                     m = `${m}`;
                     const lastTxt = m.slice(m.length - 1, 1);
-                    if (m === "星期日") {
+                    if (m === '星期日') {
                         if (i === 0) {
                             dataNumArr.push(0);
                         } else {
@@ -1194,7 +1098,7 @@ function getDataByType(
                 }
             }
 
-            if (direction === "up" || direction === "left") {
+            if (direction === 'up' || direction === 'left') {
                 data.reverse();
                 dataNumArr.reverse();
             }
@@ -1209,54 +1113,54 @@ function getDataByType(
             }
         } else {
             // data type: other
-            if (direction === "up" || direction === "left") {
+            if (direction === 'up' || direction === 'left') {
                 data.reverse();
             }
 
             applyData = fillCopy(data, len);
         }
-    } else if (type === "4") {
+    } else if (type === '4') {
         // fill by days
         if (data.length === 2) {
             // use the day difference as step
-            if (direction === "up" || direction === "left") {
+            if (direction === 'up' || direction === 'left') {
                 data.reverse();
             }
 
-            const step = dayjs(data[1]?.m).diff(dayjs(data[0]?.m), "days");
+            const step = dayjs(data[1]?.m).diff(dayjs(data[0]?.m), 'days');
             applyData = fillDays(data, len, step);
         } else {
-            if (direction === "up" || direction === "left") {
+            if (direction === 'up' || direction === 'left') {
                 data.reverse();
             }
 
             const _judgeDate = judgeDate(data);
             if (_judgeDate[0] && _judgeDate[3]) {
                 // same day, month difference is an arithmetic sequence — use month diff as step
-                const step = dayjs(data[1]?.m).diff(dayjs(data[0]?.m), "months");
+                const step = dayjs(data[1]?.m).diff(dayjs(data[0]?.m), 'months');
                 applyData = fillMonths(data, len, step);
             } else if (!_judgeDate[0] && _judgeDate[2]) {
                 // different day, day difference is an arithmetic sequence — use day diff as step
-                const step = dayjs(data[1]?.m).diff(dayjs(data[0]?.m), "days");
+                const step = dayjs(data[1]?.m).diff(dayjs(data[0]?.m), 'days');
                 applyData = fillDays(data, len, step);
             } else {
                 // day difference is not an arithmetic sequence — copy data
                 applyData = fillCopy(data, len);
             }
         }
-    } else if (type === "5") {
+    } else if (type === '5') {
         // fill by weekdays
         if (data.length === 2) {
             if (
                 dayjs(data[1]?.m).date() === dayjs(data[0]?.m).date() &&
-                dayjs(data[1]?.m).diff(dayjs(data[0]?.m), "months") !== 0
+                dayjs(data[1]?.m).diff(dayjs(data[0]?.m), 'months') !== 0
             ) {
                 // same day, month diff > 1 month — use month diff as step (if that day is a weekend, roll back to nearest weekday)
-                if (direction === "up" || direction === "left") {
+                if (direction === 'up' || direction === 'left') {
                     data.reverse();
                 }
 
-                const step = dayjs(data[1]?.m).diff(dayjs(data[0]?.m), "months");
+                const step = dayjs(data[1]?.m).diff(dayjs(data[0]?.m), 'months');
 
                 for (let i = 1; i <= len; i += 1) {
                     const index = (i - 1) % data.length;
@@ -1264,23 +1168,23 @@ function getDataByType(
                     const last = data[data.length - 1]?.m;
                     if (d != null && last != null) {
                         const day = dayjs(last)
-                            .add(step * i, "months")
+                            .add(step * i, 'months')
                             .day();
                         let date;
                         if (day === 0) {
                             date = dayjs(last)
-                                .add(step * i, "months")
-                                .subtract(2, "days")
-                                .format("YYYY-MM-DD");
+                                .add(step * i, 'months')
+                                .subtract(2, 'days')
+                                .format('YYYY-MM-DD');
                         } else if (day === 6) {
                             date = dayjs(last)
-                                .add(step * i, "months")
-                                .subtract(1, "days")
-                                .format("YYYY-MM-DD");
+                                .add(step * i, 'months')
+                                .subtract(1, 'days')
+                                .format('YYYY-MM-DD');
                         } else {
                             date = dayjs(last)
-                                .add(step * i, "months")
-                                .format("YYYY-MM-DD");
+                                .add(step * i, 'months')
+                                .format('YYYY-MM-DD');
                         }
 
                         d.m = date;
@@ -1293,7 +1197,7 @@ function getDataByType(
                 if (Math.abs(dayjs(data[1]?.m).diff(dayjs(data[0]?.m))) > 7) {
                     // day diff > 7 days — use 1 month as step (if that day is a weekend, roll back to nearest weekday)
                     let step_month;
-                    if (direction === "down" || direction === "right") {
+                    if (direction === 'down' || direction === 'right') {
                         step_month = 1;
                     } else {
                         step_month = -1;
@@ -1308,24 +1212,18 @@ function getDataByType(
                             const num = Math.ceil(i / data.length);
                             if (index === 0) {
                                 step = dayjs(d.m)
-                                    .add(step_month * num, "months")
-                                    .diff(dayjs(d.m), "days");
+                                    .add(step_month * num, 'months')
+                                    .diff(dayjs(d.m), 'days');
                             }
 
-                            const day = dayjs(d.m).add(step!, "days").day();
+                            const day = dayjs(d.m).add(step!, 'days').day();
                             let date;
                             if (day === 0) {
-                                date = dayjs(d.m)
-                                    .add(step!, "days")
-                                    .subtract(2, "days")
-                                    .format("YYYY-MM-DD");
+                                date = dayjs(d.m).add(step!, 'days').subtract(2, 'days').format('YYYY-MM-DD');
                             } else if (day === 6) {
-                                date = dayjs(d.m)
-                                    .add(step!, "days")
-                                    .subtract(1, "days")
-                                    .format("YYYY-MM-DD");
+                                date = dayjs(d.m).add(step!, 'days').subtract(1, 'days').format('YYYY-MM-DD');
                             } else {
-                                date = dayjs(d.m).add(step!, "days").format("YYYY-MM-DD");
+                                date = dayjs(d.m).add(step!, 'days').format('YYYY-MM-DD');
                             }
 
                             d.m = date;
@@ -1336,7 +1234,7 @@ function getDataByType(
                 } else {
                     // day diff <= 7 days — use 7 days as step (if that day is a weekend, roll back to nearest weekday)
                     let step_day;
-                    if (direction === "down" || direction === "right") {
+                    if (direction === 'down' || direction === 'right') {
                         step_day = 7;
                     } else {
                         step_day = -7;
@@ -1351,24 +1249,18 @@ function getDataByType(
                             const num = Math.ceil(i / data.length);
                             if (index === 0) {
                                 step = dayjs(d.m)
-                                    .add(step_day * num, "days")
-                                    .diff(dayjs(d.m), "days");
+                                    .add(step_day * num, 'days')
+                                    .diff(dayjs(d.m), 'days');
                             }
 
-                            const day = dayjs(d.m).add(step!, "days").day();
+                            const day = dayjs(d.m).add(step!, 'days').day();
                             let date;
                             if (day === 0) {
-                                date = dayjs(d.m)
-                                    .add(step!, "days")
-                                    .subtract(2, "days")
-                                    .format("YYYY-MM-DD");
+                                date = dayjs(d.m).add(step!, 'days').subtract(2, 'days').format('YYYY-MM-DD');
                             } else if (day === 6) {
-                                date = dayjs(d.m)
-                                    .add(step!, "days")
-                                    .subtract(1, "days")
-                                    .format("YYYY-MM-DD");
+                                date = dayjs(d.m).add(step!, 'days').subtract(1, 'days').format('YYYY-MM-DD');
                             } else {
-                                date = dayjs(d.m).add(step!, "days").format("YYYY-MM-DD");
+                                date = dayjs(d.m).add(step!, 'days').format('YYYY-MM-DD');
                             }
 
                             d.m = date;
@@ -1382,11 +1274,11 @@ function getDataByType(
             const _judgeDate = judgeDate(data);
             if (_judgeDate[0] && _judgeDate[3]) {
                 // same day, month diff is an arithmetic sequence — use month diff as step (if that day is a weekend, roll back to nearest weekday)
-                if (direction === "up" || direction === "left") {
+                if (direction === 'up' || direction === 'left') {
                     data.reverse();
                 }
 
-                const step = dayjs(data[1]?.m).diff(dayjs(data[0]?.m), "months");
+                const step = dayjs(data[1]?.m).diff(dayjs(data[0]?.m), 'months');
 
                 for (let i = 1; i <= len; i += 1) {
                     const index = (i - 1) % data.length;
@@ -1394,23 +1286,23 @@ function getDataByType(
                     const last = data[data.length - 1]?.m;
                     if (d != null) {
                         const day = dayjs(last)
-                            .add(step * i, "months")
+                            .add(step * i, 'months')
                             .day();
                         let date;
                         if (day === 0) {
                             date = dayjs(last)
-                                .add(step * i, "months")
-                                .subtract(2, "days")
-                                .format("YYYY-MM-DD");
+                                .add(step * i, 'months')
+                                .subtract(2, 'days')
+                                .format('YYYY-MM-DD');
                         } else if (day === 6) {
                             date = dayjs(last)
-                                .add(step * i, "months")
-                                .subtract(1, "days")
-                                .format("YYYY-MM-DD");
+                                .add(step * i, 'months')
+                                .subtract(1, 'days')
+                                .format('YYYY-MM-DD');
                         } else {
                             date = dayjs(last)
-                                .add(step * i, "months")
-                                .format("YYYY-MM-DD");
+                                .add(step * i, 'months')
+                                .format('YYYY-MM-DD');
                         }
 
                         d.m = date;
@@ -1423,7 +1315,7 @@ function getDataByType(
                 if (Math.abs(dayjs(data[1]?.m).diff(dayjs(data[0]?.m))) > 7) {
                     // day diff > 7 days — use 1 month as step (if that day is a weekend, roll back to nearest weekday)
                     let step_month;
-                    if (direction === "down" || direction === "right") {
+                    if (direction === 'down' || direction === 'right') {
                         step_month = 1;
                     } else {
                         step_month = -1;
@@ -1438,24 +1330,18 @@ function getDataByType(
                             const num = Math.ceil(i / data.length);
                             if (index === 0) {
                                 step = dayjs(d.m)
-                                    .add(step_month * num, "months")
-                                    .diff(dayjs(d.m), "days");
+                                    .add(step_month * num, 'months')
+                                    .diff(dayjs(d.m), 'days');
                             }
 
-                            const day = dayjs(d.m).add(step!, "days").day();
+                            const day = dayjs(d.m).add(step!, 'days').day();
                             let date;
                             if (day === 0) {
-                                date = dayjs(d.m)
-                                    .add(step!, "days")
-                                    .subtract(2, "days")
-                                    .format("YYYY-MM-DD");
+                                date = dayjs(d.m).add(step!, 'days').subtract(2, 'days').format('YYYY-MM-DD');
                             } else if (day === 6) {
-                                date = dayjs(d.m)
-                                    .add(step!, "days")
-                                    .subtract(1, "days")
-                                    .format("YYYY-MM-DD");
+                                date = dayjs(d.m).add(step!, 'days').subtract(1, 'days').format('YYYY-MM-DD');
                             } else {
-                                date = dayjs(d.m).add(step!, "days").format("YYYY-MM-DD");
+                                date = dayjs(d.m).add(step!, 'days').format('YYYY-MM-DD');
                             }
 
                             d.m = date;
@@ -1466,7 +1352,7 @@ function getDataByType(
                 } else {
                     // day diff <= 7 days — use 7 days as step (if that day is a weekend, roll back to nearest weekday)
                     let step_day;
-                    if (direction === "down" || direction === "right") {
+                    if (direction === 'down' || direction === 'right') {
                         step_day = 7;
                     } else {
                         step_day = -7;
@@ -1481,24 +1367,18 @@ function getDataByType(
                             const num = Math.ceil(i / data.length);
                             if (index === 0) {
                                 step = dayjs(d.m)
-                                    .add(step_day * num, "days")
-                                    .diff(dayjs(d.m), "days");
+                                    .add(step_day * num, 'days')
+                                    .diff(dayjs(d.m), 'days');
                             }
 
-                            const day = dayjs(d.m).add(step!, "days").day();
+                            const day = dayjs(d.m).add(step!, 'days').day();
                             let date;
                             if (day === 0) {
-                                date = dayjs(d.m)
-                                    .add(step!, "days")
-                                    .subtract(2, "days")
-                                    .format("YYYY-MM-DD");
+                                date = dayjs(d.m).add(step!, 'days').subtract(2, 'days').format('YYYY-MM-DD');
                             } else if (day === 6) {
-                                date = dayjs(d.m)
-                                    .add(step!, "days")
-                                    .subtract(1, "days")
-                                    .format("YYYY-MM-DD");
+                                date = dayjs(d.m).add(step!, 'days').subtract(1, 'days').format('YYYY-MM-DD');
                             } else {
-                                date = dayjs(d.m).add(step!, "days").format("YYYY-MM-DD");
+                                date = dayjs(d.m).add(step!, 'days').format('YYYY-MM-DD');
                             }
 
                             d.m = date;
@@ -1509,31 +1389,31 @@ function getDataByType(
                 }
             } else {
                 // day difference is not an arithmetic sequence — copy data
-                if (direction === "up" || direction === "left") {
+                if (direction === 'up' || direction === 'left') {
                     data.reverse();
                 }
 
                 applyData = fillCopy(data, len);
             }
         }
-    } else if (type === "6") {
+    } else if (type === '6') {
         // fill by months
         if (data.length === 2) {
             if (
                 dayjs(data[1]?.m).date() === dayjs(data[0]?.m).date() &&
-                dayjs(data[1]?.m).diff(dayjs(data[0]?.m), "months") !== 0
+                dayjs(data[1]?.m).diff(dayjs(data[0]?.m), 'months') !== 0
             ) {
                 // same day, month diff > 1 month — use month diff as step
-                if (direction === "up" || direction === "left") {
+                if (direction === 'up' || direction === 'left') {
                     data.reverse();
                 }
 
-                const step = dayjs(data[1]?.m).diff(dayjs(data[0]?.m), "months");
+                const step = dayjs(data[1]?.m).diff(dayjs(data[0]?.m), 'months');
                 applyData = fillMonths(data, len, step);
             } else {
                 // use 1 month as step
                 let step_month;
-                if (direction === "down" || direction === "right") {
+                if (direction === 'down' || direction === 'right') {
                     step_month = 1;
                 } else {
                     step_month = -1;
@@ -1548,11 +1428,11 @@ function getDataByType(
                         const num = Math.ceil(i / data.length);
                         if (index === 0) {
                             step = dayjs(d.m)
-                                .add(step_month * num, "months")
-                                .diff(dayjs(d.m), "days");
+                                .add(step_month * num, 'months')
+                                .diff(dayjs(d.m), 'days');
                         }
 
-                        const date = dayjs(d.m).add(step!, "days").format("YYYY-MM-DD");
+                        const date = dayjs(d.m).add(step!, 'days').format('YYYY-MM-DD');
                         d.m = date;
                         d.v = genarate(date)[2];
                         applyData.push(d);
@@ -1563,16 +1443,16 @@ function getDataByType(
             const _judgeDate = judgeDate(data);
             if (_judgeDate[0] && _judgeDate[3]) {
                 // same day, month difference is an arithmetic sequence — use month diff as step
-                if (direction === "up" || direction === "left") {
+                if (direction === 'up' || direction === 'left') {
                     data.reverse();
                 }
 
-                const step = dayjs(data[1]?.m).diff(dayjs(data[0]?.m), "months");
+                const step = dayjs(data[1]?.m).diff(dayjs(data[0]?.m), 'months');
                 applyData = fillMonths(data, len, step);
             } else if (!_judgeDate[0] && _judgeDate[2]) {
                 // different day, day difference is an arithmetic sequence — use 1 month as step
                 let step_month;
-                if (direction === "down" || direction === "right") {
+                if (direction === 'down' || direction === 'right') {
                     step_month = 1;
                 } else {
                     step_month = -1;
@@ -1587,11 +1467,11 @@ function getDataByType(
                         const num = Math.ceil(i / data.length);
                         if (index === 0) {
                             step = dayjs(d.m)
-                                .add(step_month * num, "months")
-                                .diff(dayjs(d.m), "days");
+                                .add(step_month * num, 'months')
+                                .diff(dayjs(d.m), 'days');
                         }
 
-                        const date = dayjs(d.m).add(step!, "days").format("YYYY-MM-DD");
+                        const date = dayjs(d.m).add(step!, 'days').format('YYYY-MM-DD');
                         d.m = date;
                         d.v = genarate(date)[2];
                         applyData.push(d);
@@ -1599,32 +1479,32 @@ function getDataByType(
                 }
             } else {
                 // day difference is not an arithmetic sequence — copy data
-                if (direction === "up" || direction === "left") {
+                if (direction === 'up' || direction === 'left') {
                     data.reverse();
                 }
 
                 applyData = fillCopy(data, len);
             }
         }
-    } else if (type === "7") {
+    } else if (type === '7') {
         // fill by years
         if (data.length === 2) {
             if (
                 dayjs(data[1]?.m).date() === dayjs(data[0]?.m).date() &&
                 dayjs(data[1]?.m).month() === dayjs(data[0]?.m).month() &&
-                dayjs(data[1]?.m).diff(dayjs(data[0]?.m), "years") !== 0
+                dayjs(data[1]?.m).diff(dayjs(data[0]?.m), 'years') !== 0
             ) {
                 // same day and month, year diff > 1 year — use year diff as step
-                if (direction === "up" || direction === "left") {
+                if (direction === 'up' || direction === 'left') {
                     data.reverse();
                 }
 
-                const step = dayjs(data[1]?.m).diff(dayjs(data[0]?.m), "years");
+                const step = dayjs(data[1]?.m).diff(dayjs(data[0]?.m), 'years');
                 applyData = fillYears(data, len, step);
             } else {
                 // use 1 year as step
                 let step_year;
-                if (direction === "down" || direction === "right") {
+                if (direction === 'down' || direction === 'right') {
                     step_year = 1;
                 } else {
                     step_year = -1;
@@ -1639,11 +1519,11 @@ function getDataByType(
                         const num = Math.ceil(i / data.length);
                         if (index === 0) {
                             step = dayjs(d.m)
-                                .add(step_year * num, "years")
-                                .diff(dayjs(d.m), "days");
+                                .add(step_year * num, 'years')
+                                .diff(dayjs(d.m), 'days');
                         }
 
-                        const date = dayjs(d.m).add(step!, "days").format("YYYY-MM-DD");
+                        const date = dayjs(d.m).add(step!, 'days').format('YYYY-MM-DD');
                         d.m = date;
                         d.v = genarate(date)[2];
                         applyData.push(d);
@@ -1654,16 +1534,16 @@ function getDataByType(
             const _judgeDate = judgeDate(data);
             if (_judgeDate[0] && _judgeDate[1] && _judgeDate[4]) {
                 // same day and month, year difference is an arithmetic sequence — use year diff as step
-                if (direction === "up" || direction === "left") {
+                if (direction === 'up' || direction === 'left') {
                     data.reverse();
                 }
 
-                const step = dayjs(data[1]?.m).diff(dayjs(data[0]?.m), "years");
+                const step = dayjs(data[1]?.m).diff(dayjs(data[0]?.m), 'years');
                 applyData = fillYears(data, len, step);
             } else if ((_judgeDate[0] && _judgeDate[3]) || _judgeDate[2]) {
                 // same day with arithmetic month diff, or arithmetic day diff — use 1 year as step
                 let step_year;
-                if (direction === "down" || direction === "right") {
+                if (direction === 'down' || direction === 'right') {
                     step_year = 1;
                 } else {
                     step_year = -1;
@@ -1678,11 +1558,11 @@ function getDataByType(
                     if (d != null) {
                         if (index === 0) {
                             step = dayjs(d.m)
-                                .add(step_year * num, "years")
-                                .diff(dayjs(d.m), "days");
+                                .add(step_year * num, 'years')
+                                .diff(dayjs(d.m), 'days');
                         }
 
-                        const date = dayjs(d.m).add(step!, "days").format("YYYY-MM-DD");
+                        const date = dayjs(d.m).add(step!, 'days').format('YYYY-MM-DD');
                         d.m = date;
                         d.v = genarate(date)[2];
                         applyData.push(d);
@@ -1690,14 +1570,14 @@ function getDataByType(
                 }
             } else {
                 // day difference is not an arithmetic sequence — copy data
-                if (direction === "up" || direction === "left") {
+                if (direction === 'up' || direction === 'left') {
                     data.reverse();
                 }
 
                 applyData = fillCopy(data, len);
             }
         }
-    } else if (type === "8") {
+    } else if (type === '8') {
         // fill with Chinese lowercase number sequence
         const dataNumArr = [];
         for (let i = 0; i < data.length; i += 1) {
@@ -1708,7 +1588,7 @@ function getDataByType(
             }
         }
 
-        if (direction === "up" || direction === "left") {
+        if (direction === 'up' || direction === 'left') {
             data.reverse();
             dataNumArr.reverse();
         }
@@ -1725,21 +1605,14 @@ function getDataByType(
     return applyData;
 }
 
-function getCopyData(
-    d: CellMatrix,
-    r1: number,
-    r2: number,
-    c1: number,
-    c2: number,
-    direction: string
-) {
+function getCopyData(d: CellMatrix, r1: number, r2: number, c1: number, c2: number, direction: string) {
     const copyData = [];
 
     let a1;
     let a2;
     let b1;
     let b2;
-    if (direction === "down" || direction === "up") {
+    if (direction === 'down' || direction === 'up') {
         a1 = c1;
         a2 = c2;
         b1 = r1;
@@ -1752,14 +1625,11 @@ function getCopyData(
     }
 
     for (let a = a1; a <= a2; a += 1) {
-        const obj: Record<
-            string,
-            { data: (Cell | null | undefined)[]; index: number[] }[]
-        > = {};
+        const obj: Record<string, { data: (Cell | null | undefined)[]; index: number[] }[]> = {};
 
         let arrData = [];
         let arrIndex = [];
-        let text = "";
+        let text = '';
         let extendNumberBeforeStr = null;
         let extendNumberAfterStr = null;
         let isSameStr = true;
@@ -1767,25 +1637,25 @@ function getCopyData(
         for (let b: number = b1; b <= b2; b += 1) {
             // cell
             let data;
-            if (direction === "down" || direction === "up") {
+            if (direction === 'down' || direction === 'up') {
                 data = d[b][a];
-            } else if (direction === "right" || direction === "left") {
+            } else if (direction === 'right' || direction === 'left') {
                 data = d[a][b];
             }
 
             // cell value type
             let str;
             if (data?.v != null && data.f == null) {
-                if (!!data.ct && data.ct.t === "n") {
-                    str = "number";
+                if (!!data.ct && data.ct.t === 'n') {
+                    str = 'number';
                     extendNumberBeforeStr = null;
                     extendNumberAfterStr = null;
-                } else if (!!data.ct && data.ct.t === "d") {
-                    str = "date";
+                } else if (!!data.ct && data.ct.t === 'd') {
+                    str = 'date';
                     extendNumberBeforeStr = null;
                     extendNumberAfterStr = null;
                 } else if (isExtendNumber(data.m)[0]) {
-                    str = "extendNumber";
+                    str = 'extendNumber';
 
                     const _isExtendNumber = isExtendNumber(data.m);
 
@@ -1798,36 +1668,35 @@ function getCopyData(
                             _isExtendNumber[3] !== extendNumberAfterStr
                         ) {
                             isSameStr = false;
-                            [, , extendNumberBeforeStr, extendNumberAfterStr] =
-                                _isExtendNumber;
+                            [, , extendNumberBeforeStr, extendNumberAfterStr] = _isExtendNumber;
                         } else {
                             isSameStr = true;
                         }
                     }
                 } else if (isChnNumber(data.m)) {
-                    str = "chnNumber";
+                    str = 'chnNumber';
                     extendNumberBeforeStr = null;
                     extendNumberAfterStr = null;
                 } else if (isChnWeek2(data.m)) {
-                    str = "chnWeek2";
+                    str = 'chnWeek2';
                     extendNumberBeforeStr = null;
                     extendNumberAfterStr = null;
                 } else if (isChnWeek3(data.m)) {
-                    str = "chnWeek3";
+                    str = 'chnWeek3';
                     extendNumberBeforeStr = null;
                     extendNumberAfterStr = null;
                 } else {
-                    str = "other";
+                    str = 'other';
                     extendNumberBeforeStr = null;
                     extendNumberAfterStr = null;
                 }
             } else {
-                str = "other";
+                str = 'other';
                 extendNumberBeforeStr = null;
                 extendNumberAfterStr = null;
             }
 
-            if (str === "extendNumber") {
+            if (str === 'extendNumber') {
                 if (b === b1) {
                     if (b1 === b2) {
                         text = str;
@@ -1835,7 +1704,7 @@ function getCopyData(
                         arrIndex.push(b - b1 + 1);
 
                         obj[text] = [];
-                        obj[text].push({data: arrData, index: arrIndex});
+                        obj[text].push({ data: arrData, index: arrIndex });
                     } else {
                         text = str;
                         arrData.push(data);
@@ -1847,17 +1716,17 @@ function getCopyData(
                         arrIndex.push(b - b1 + 1);
 
                         if (text in obj) {
-                            obj[text].push({data: arrData, index: arrIndex});
+                            obj[text].push({ data: arrData, index: arrIndex });
                         } else {
                             obj[text] = [];
-                            obj[text].push({data: arrData, index: arrIndex});
+                            obj[text].push({ data: arrData, index: arrIndex });
                         }
                     } else {
                         if (text in obj) {
-                            obj[text].push({data: arrData, index: arrIndex});
+                            obj[text].push({ data: arrData, index: arrIndex });
                         } else {
                             obj[text] = [];
-                            obj[text].push({data: arrData, index: arrIndex});
+                            obj[text].push({ data: arrData, index: arrIndex });
                         }
 
                         text = str;
@@ -1867,10 +1736,10 @@ function getCopyData(
                         arrIndex.push(b - b1 + 1);
 
                         if (text in obj) {
-                            obj[text].push({data: arrData, index: arrIndex});
+                            obj[text].push({ data: arrData, index: arrIndex });
                         } else {
                             obj[text] = [];
-                            obj[text].push({data: arrData, index: arrIndex});
+                            obj[text].push({ data: arrData, index: arrIndex });
                         }
                     }
                 } else {
@@ -1879,10 +1748,10 @@ function getCopyData(
                         arrIndex.push(b - b1 + 1);
                     } else {
                         if (text in obj) {
-                            obj[text].push({data: arrData, index: arrIndex});
+                            obj[text].push({ data: arrData, index: arrIndex });
                         } else {
                             obj[text] = [];
-                            obj[text].push({data: arrData, index: arrIndex});
+                            obj[text].push({ data: arrData, index: arrIndex });
                         }
 
                         text = str;
@@ -1900,7 +1769,7 @@ function getCopyData(
                         arrIndex.push(b - b1 + 1);
 
                         obj[text] = [];
-                        obj[text].push({data: arrData, index: arrIndex});
+                        obj[text].push({ data: arrData, index: arrIndex });
                     } else {
                         text = str;
                         arrData.push(data);
@@ -1912,17 +1781,17 @@ function getCopyData(
                         arrIndex.push(b - b1 + 1);
 
                         if (text in obj) {
-                            obj[text].push({data: arrData, index: arrIndex});
+                            obj[text].push({ data: arrData, index: arrIndex });
                         } else {
                             obj[text] = [];
-                            obj[text].push({data: arrData, index: arrIndex});
+                            obj[text].push({ data: arrData, index: arrIndex });
                         }
                     } else {
                         if (text in obj) {
-                            obj[text].push({data: arrData, index: arrIndex});
+                            obj[text].push({ data: arrData, index: arrIndex });
                         } else {
                             obj[text] = [];
-                            obj[text].push({data: arrData, index: arrIndex});
+                            obj[text].push({ data: arrData, index: arrIndex });
                         }
 
                         text = str;
@@ -1932,10 +1801,10 @@ function getCopyData(
                         arrIndex.push(b - b1 + 1);
 
                         if (text in obj) {
-                            obj[text].push({data: arrData, index: arrIndex});
+                            obj[text].push({ data: arrData, index: arrIndex });
                         } else {
                             obj[text] = [];
-                            obj[text].push({data: arrData, index: arrIndex});
+                            obj[text].push({ data: arrData, index: arrIndex });
                         }
                     }
                 } else {
@@ -1944,10 +1813,10 @@ function getCopyData(
                         arrIndex.push(b - b1 + 1);
                     } else {
                         if (text in obj) {
-                            obj[text].push({data: arrData, index: arrIndex});
+                            obj[text].push({ data: arrData, index: arrIndex });
                         } else {
                             obj[text] = [];
-                            obj[text].push({data: arrData, index: arrIndex});
+                            obj[text].push({ data: arrData, index: arrIndex });
                         }
 
                         text = str;
@@ -1975,11 +1844,11 @@ function getApplyData(
         }[]
     >,
     csLen: number,
-    asLen: number
+    asLen: number,
 ) {
     const applyData = [];
 
-    const {direction} = dropCellCache;
+    const { direction } = dropCellCache;
     const type = dropCellCache.applyType;
 
     const num = Math.floor(asLen / csLen);
@@ -1994,22 +1863,16 @@ function getApplyData(
             const len = copyD_number[i].index.length * num + s;
 
             let arrData;
-            if (type === "1" || type === "3") {
-                arrData = getDataByType(
-                    copyD_number[i].data,
-                    len,
-                    direction,
-                    type,
-                    "number"
-                );
-            } else if (type === "2") {
+            if (type === '1' || type === '3') {
+                arrData = getDataByType(copyD_number[i].data, len, direction, type, 'number');
+            } else if (type === '2') {
                 arrData = getDataByType(copyD_number[i].data, len, direction, type);
             } else {
-                arrData = getDataByType(copyD_number[i].data, len, direction, "0");
+                arrData = getDataByType(copyD_number[i].data, len, direction, '0');
             }
 
             const arrIndex = getDataIndex(csLen, asLen, copyD_number[i].index);
-            applyD_number.push({data: arrData, index: arrIndex});
+            applyD_number.push({ data: arrData, index: arrIndex });
         }
     }
 
@@ -2022,32 +1885,16 @@ function getApplyData(
             const len = copyD_extendNumber[i].index.length * num + s;
 
             let arrData;
-            if (type === "1" || type === "3") {
-                arrData = getDataByType(
-                    copyD_extendNumber[i].data,
-                    len,
-                    direction,
-                    type,
-                    "extendNumber"
-                );
-            } else if (type === "2") {
-                arrData = getDataByType(
-                    copyD_extendNumber[i].data,
-                    len,
-                    direction,
-                    type
-                );
+            if (type === '1' || type === '3') {
+                arrData = getDataByType(copyD_extendNumber[i].data, len, direction, type, 'extendNumber');
+            } else if (type === '2') {
+                arrData = getDataByType(copyD_extendNumber[i].data, len, direction, type);
             } else {
-                arrData = getDataByType(
-                    copyD_extendNumber[i].data,
-                    len,
-                    direction,
-                    "0"
-                );
+                arrData = getDataByType(copyD_extendNumber[i].data, len, direction, '0');
             }
 
             const arrIndex = getDataIndex(csLen, asLen, copyD_extendNumber[i].index);
-            applyD_extendNumber.push({data: arrData, index: arrIndex});
+            applyD_extendNumber.push({ data: arrData, index: arrIndex });
         }
     }
 
@@ -2060,22 +1907,16 @@ function getApplyData(
             const len = copyD_date[i].index.length * num + s;
 
             let arrData;
-            if (type === "1" || type === "3") {
-                arrData = getDataByType(
-                    copyD_date[i].data,
-                    len,
-                    direction,
-                    type,
-                    "date"
-                );
-            } else if (type === "8") {
-                arrData = getDataByType(copyD_date[i].data, len, direction, "0");
+            if (type === '1' || type === '3') {
+                arrData = getDataByType(copyD_date[i].data, len, direction, type, 'date');
+            } else if (type === '8') {
+                arrData = getDataByType(copyD_date[i].data, len, direction, '0');
             } else {
                 arrData = getDataByType(copyD_date[i].data, len, direction, type);
             }
 
             const arrIndex = getDataIndex(csLen, asLen, copyD_date[i].index);
-            applyD_date.push({data: arrData, index: arrIndex});
+            applyD_date.push({ data: arrData, index: arrIndex });
         }
     }
 
@@ -2087,22 +1928,16 @@ function getApplyData(
             const len = copyD_chnNumber[i].index.length * num + s;
 
             let arrData;
-            if (type === "1" || type === "3") {
-                arrData = getDataByType(
-                    copyD_chnNumber[i].data,
-                    len,
-                    direction,
-                    type,
-                    "chnNumber"
-                );
-            } else if (type === "2" || type === "8") {
+            if (type === '1' || type === '3') {
+                arrData = getDataByType(copyD_chnNumber[i].data, len, direction, type, 'chnNumber');
+            } else if (type === '2' || type === '8') {
                 arrData = getDataByType(copyD_chnNumber[i].data, len, direction, type);
             } else {
-                arrData = getDataByType(copyD_chnNumber[i].data, len, direction, "0");
+                arrData = getDataByType(copyD_chnNumber[i].data, len, direction, '0');
             }
 
             const arrIndex = getDataIndex(csLen, asLen, copyD_chnNumber[i].index);
-            applyD_chnNumber.push({data: arrData, index: arrIndex});
+            applyD_chnNumber.push({ data: arrData, index: arrIndex });
         }
     }
 
@@ -2115,22 +1950,16 @@ function getApplyData(
             const len = copyD_chnWeek2[i].index.length * num + s;
 
             let arrData;
-            if (type === "1" || type === "3") {
-                arrData = getDataByType(
-                    copyD_chnWeek2[i].data,
-                    len,
-                    direction,
-                    type,
-                    "chnWeek2"
-                );
-            } else if (type === "2") {
+            if (type === '1' || type === '3') {
+                arrData = getDataByType(copyD_chnWeek2[i].data, len, direction, type, 'chnWeek2');
+            } else if (type === '2') {
                 arrData = getDataByType(copyD_chnWeek2[i].data, len, direction, type);
             } else {
-                arrData = getDataByType(copyD_chnWeek2[i].data, len, direction, "0");
+                arrData = getDataByType(copyD_chnWeek2[i].data, len, direction, '0');
             }
 
             const arrIndex = getDataIndex(csLen, asLen, copyD_chnWeek2[i].index);
-            applyD_chnWeek2.push({data: arrData, index: arrIndex});
+            applyD_chnWeek2.push({ data: arrData, index: arrIndex });
         }
     }
 
@@ -2143,22 +1972,16 @@ function getApplyData(
             const len = copyD_chnWeek3[i].index.length * num + s;
 
             let arrData;
-            if (type === "1" || type === "3") {
-                arrData = getDataByType(
-                    copyD_chnWeek3[i].data,
-                    len,
-                    direction,
-                    type,
-                    "chnWeek3"
-                );
-            } else if (type === "2") {
+            if (type === '1' || type === '3') {
+                arrData = getDataByType(copyD_chnWeek3[i].data, len, direction, type, 'chnWeek3');
+            } else if (type === '2') {
                 arrData = getDataByType(copyD_chnWeek3[i].data, len, direction, type);
             } else {
-                arrData = getDataByType(copyD_chnWeek3[i].data, len, direction, "0");
+                arrData = getDataByType(copyD_chnWeek3[i].data, len, direction, '0');
             }
 
             const arrIndex = getDataIndex(csLen, asLen, copyD_chnWeek3[i].index);
-            applyD_chnWeek3.push({data: arrData, index: arrIndex});
+            applyD_chnWeek3.push({ data: arrData, index: arrIndex });
         }
     }
 
@@ -2171,14 +1994,14 @@ function getApplyData(
             const len = copyD_other[i].index.length * num + s;
 
             let arrData;
-            if (type === "2" || type === "3") {
+            if (type === '2' || type === '3') {
                 arrData = getDataByType(copyD_other[i].data, len, direction, type);
             } else {
-                arrData = getDataByType(copyD_other[i].data, len, direction, "0");
+                arrData = getDataByType(copyD_other[i].data, len, direction, '0');
             }
 
             const arrIndex = getDataIndex(csLen, asLen, copyD_other[i].index);
-            applyD_other.push({data: arrData, index: arrIndex});
+            applyD_other.push({ data: arrData, index: arrIndex });
         }
     }
 
@@ -2194,9 +2017,7 @@ function getApplyData(
         if (applyD_extendNumber.length > 0) {
             for (let y = 0; y < applyD_extendNumber.length; y += 1) {
                 if (x in applyD_extendNumber[y].index) {
-                    applyData.push(
-                        applyD_extendNumber[y].data[applyD_extendNumber[y].index[x]]
-                    );
+                    applyData.push(applyD_extendNumber[y].data[applyD_extendNumber[y].index[x]]);
                 }
             }
         }
@@ -2212,9 +2033,7 @@ function getApplyData(
         if (applyD_chnNumber.length > 0) {
             for (let y = 0; y < applyD_chnNumber.length; y += 1) {
                 if (x in applyD_chnNumber[y].index) {
-                    applyData.push(
-                        applyD_chnNumber[y].data[applyD_chnNumber[y].index[x]]
-                    );
+                    applyData.push(applyD_chnNumber[y].data[applyD_chnNumber[y].index[x]]);
                 }
             }
         }
@@ -2273,26 +2092,19 @@ export function updateDropCell(ctx: Context) {
     const borderInfoCompute = getBorderInfoCompute(ctx, ctx.currentSheetId);
     const dataVerification = cloneDeep(file.dataVerification);
 
-    const {direction} = dropCellCache;
+    const { direction } = dropCellCache;
     // const type = dropCellCache.applyType;
 
     // copy range
-    const {copyRange} = dropCellCache;
+    const { copyRange } = dropCellCache;
     const copy_str_r = copyRange.row[0];
     const copy_end_r = copyRange.row[1];
     const copy_str_c = copyRange.column[0];
     const copy_end_c = copyRange.column[1];
-    const copyData = getCopyData(
-        d,
-        copy_str_r,
-        copy_end_r,
-        copy_str_c,
-        copy_end_c,
-        direction
-    );
+    const copyData = getCopyData(d, copy_str_r, copy_end_r, copy_str_c, copy_end_c, direction);
 
     let csLen;
-    if (direction === "down" || direction === "up") {
+    if (direction === 'down' || direction === 'up') {
         csLen = copy_end_r - copy_str_r + 1;
     } else {
         // direction === "right" || direction === "left"
@@ -2300,13 +2112,13 @@ export function updateDropCell(ctx: Context) {
     }
 
     // apply range
-    const {applyRange} = dropCellCache;
+    const { applyRange } = dropCellCache;
     const apply_str_r = applyRange.row[0];
     const apply_end_r = applyRange.row[1];
     const apply_str_c = applyRange.column[0];
     const apply_end_c = applyRange.column[1];
 
-    if (direction === "down" || direction === "up") {
+    if (direction === 'down' || direction === 'up') {
         const asLen = apply_end_r - apply_str_r + 1;
 
         for (let i = apply_str_c; i <= apply_end_c; i += 1) {
@@ -2315,17 +2127,13 @@ export function updateDropCell(ctx: Context) {
 
             const applyData = getApplyData(copyD, csLen, asLen);
 
-            if (direction === "down") {
+            if (direction === 'down') {
                 for (let j = apply_str_r; j <= apply_end_r; j += 1) {
                     if (hiddenRows.has(`${j}`)) continue;
                     const cell = applyData[j - apply_str_r];
 
                     if (cell?.f != null) {
-                        const f = `=${formula.functionCopy(
-                            cell.f,
-                            "down",
-                            j - apply_str_r + 1
-                        )}`;
+                        const f = `=${formula.functionCopy(cell.f, 'down', j - apply_str_r + 1)}`;
                         const v = formula.execfunction(ctx, f, j, i);
 
                         formula.execFunctionGroup(ctx, j, i, v[1], undefined, d);
@@ -2336,17 +2144,14 @@ export function updateDropCell(ctx: Context) {
                             if (
                                 isRealNum(cell.v) &&
                                 !/^\d{6}(18|19|20)?\d{2}(0[1-9]|1[12])(0[1-9]|[12]\d|3[01])\d{3}(\d|X)$/i.test(
-                                    `${cell.v}`
+                                    `${cell.v}`,
                                 )
                             ) {
                                 if (cell.v === Infinity || cell.v === -Infinity) {
                                     cell.m = cell.v.toString();
                                 } else {
-                                    if (cell.v.toString().indexOf("e") > -1) {
-                                        let len = cell.v
-                                            .toString()
-                                            .split(".")[1]
-                                            .split("e")[0].length;
+                                    if (cell.v.toString().indexOf('e') > -1) {
+                                        let len = cell.v.toString().split('.')[1].split('e')[0].length;
                                         if (len > 5) {
                                             len = 5;
                                         }
@@ -2354,24 +2159,19 @@ export function updateDropCell(ctx: Context) {
                                         cell.m = (cell.v as number).toExponential(len).toString();
                                     } else {
                                         let mask;
-                                        if (cell.ct?.fa === "##0.00") {
+                                        if (cell.ct?.fa === '##0.00') {
                                             mask = genarate(
-                                                `${
-                                                    Math.round((cell.v as number) * 1000000000) /
-                                                    1000000000
-                                                }.00`
+                                                `${Math.round((cell.v as number) * 1000000000) / 1000000000}.00`,
                                             );
                                             cell.m = mask![0].toString();
                                         } else {
-                                            mask = genarate(
-                                                Math.round((cell.v as number) * 1000000000) / 1000000000
-                                            );
+                                            mask = genarate(Math.round((cell.v as number) * 1000000000) / 1000000000);
                                             cell.m = mask![0].toString();
                                         }
                                     }
                                 }
 
-                                cell.ct = cell.ct || {fa: "General", t: "n"};
+                                cell.ct = cell.ct || { fa: 'General', t: 'n' };
                             } else {
                                 const mask = genarate(cell.v);
                                 cell.m = mask![0].toString();
@@ -2388,7 +2188,7 @@ export function updateDropCell(ctx: Context) {
 
                     if (borderInfoCompute[`${bd_r}_${bd_c}`]) {
                         const bd_obj = {
-                            rangeType: "cell",
+                            rangeType: 'cell',
                             value: {
                                 row_index: j,
                                 col_index: i,
@@ -2402,7 +2202,7 @@ export function updateDropCell(ctx: Context) {
                         cfg.borderInfo.push(bd_obj);
                     } else if (borderInfoCompute[`${j}_${i}`]) {
                         const bd_obj = {
-                            rangeType: "cell",
+                            rangeType: 'cell',
                             value: {
                                 row_index: j,
                                 col_index: i,
@@ -2423,17 +2223,13 @@ export function updateDropCell(ctx: Context) {
                     }
                 }
             }
-            if (direction === "up") {
+            if (direction === 'up') {
                 for (let j = apply_end_r; j >= apply_str_r; j -= 1) {
                     if (hiddenRows.has(`${j}`)) continue;
                     const cell = applyData[apply_end_r - j];
 
                     if (cell?.f != null) {
-                        const f = `=${formula.functionCopy(
-                            cell.f,
-                            "up",
-                            apply_end_r - j + 1
-                        )}`;
+                        const f = `=${formula.functionCopy(cell.f, 'up', apply_end_r - j + 1)}`;
                         const v = formula.execfunction(ctx, f, j, i);
 
                         formula.execFunctionGroup(ctx, j, i, v[1], undefined, d);
@@ -2444,31 +2240,26 @@ export function updateDropCell(ctx: Context) {
                             if (
                                 isRealNum(cell.v) &&
                                 !/^\d{6}(18|19|20)?\d{2}(0[1-9]|1[12])(0[1-9]|[12]\d|3[01])\d{3}(\d|X)$/i.test(
-                                    `${cell.v}`
+                                    `${cell.v}`,
                                 )
                             ) {
                                 if (cell.v === Infinity || cell.v === -Infinity) {
                                     cell.m = cell.v.toString();
                                 } else {
-                                    if (cell.v.toString().indexOf("e") > -1) {
-                                        let len = cell.v
-                                            .toString()
-                                            .split(".")[1]
-                                            .split("e")[0].length;
+                                    if (cell.v.toString().indexOf('e') > -1) {
+                                        let len = cell.v.toString().split('.')[1].split('e')[0].length;
                                         if (len > 5) {
                                             len = 5;
                                         }
 
                                         cell.m = (cell.v as number).toExponential(len).toString();
                                     } else {
-                                        const mask = genarate(
-                                            Math.round((cell.v as number) * 1000000000) / 1000000000
-                                        );
+                                        const mask = genarate(Math.round((cell.v as number) * 1000000000) / 1000000000);
                                         cell.m = mask![0].toString();
                                     }
                                 }
 
-                                cell.ct = {fa: "General", t: "n"};
+                                cell.ct = { fa: 'General', t: 'n' };
                             } else {
                                 const mask = genarate(cell.v);
                                 cell.m = mask![0].toString();
@@ -2485,7 +2276,7 @@ export function updateDropCell(ctx: Context) {
 
                     if (borderInfoCompute[`${bd_r}_${bd_c}`]) {
                         const bd_obj = {
-                            rangeType: "cell",
+                            rangeType: 'cell',
                             value: {
                                 row_index: j,
                                 col_index: i,
@@ -2499,7 +2290,7 @@ export function updateDropCell(ctx: Context) {
                         cfg.borderInfo.push(bd_obj);
                     } else if (borderInfoCompute[`${j}_${i}`]) {
                         const bd_obj = {
-                            rangeType: "cell",
+                            rangeType: 'cell',
                             value: {
                                 row_index: j,
                                 col_index: i,
@@ -2520,7 +2311,7 @@ export function updateDropCell(ctx: Context) {
                 }
             }
         }
-    } else if (direction === "right" || direction === "left") {
+    } else if (direction === 'right' || direction === 'left') {
         const asLen = apply_end_c - apply_str_c + 1;
 
         for (let i = apply_str_r; i <= apply_end_r; i += 1) {
@@ -2529,17 +2320,13 @@ export function updateDropCell(ctx: Context) {
 
             const applyData = getApplyData(copyD, csLen, asLen);
 
-            if (direction === "right") {
+            if (direction === 'right') {
                 for (let j = apply_str_c; j <= apply_end_c; j += 1) {
                     if (hiddenCols.has(`${j}`)) continue;
                     const cell = applyData[j - apply_str_c];
 
                     if (cell?.f != null) {
-                        const f = `=${formula.functionCopy(
-                            cell.f,
-                            "right",
-                            j - apply_str_c + 1
-                        )}`;
+                        const f = `=${formula.functionCopy(cell.f, 'right', j - apply_str_c + 1)}`;
                         const v = formula.execfunction(ctx, f, i, j);
 
                         formula.execFunctionGroup(ctx, i, j, v[1], undefined, d);
@@ -2550,31 +2337,26 @@ export function updateDropCell(ctx: Context) {
                             if (
                                 isRealNum(cell.v) &&
                                 !/^\d{6}(18|19|20)?\d{2}(0[1-9]|1[12])(0[1-9]|[12]\d|3[01])\d{3}(\d|X)$/i.test(
-                                    `${cell.v}`
+                                    `${cell.v}`,
                                 )
                             ) {
                                 if (cell.v === Infinity || cell.v === -Infinity) {
                                     cell.m = cell.v.toString();
                                 } else {
-                                    if (cell.v.toString().indexOf("e") > -1) {
-                                        let len = cell.v
-                                            .toString()
-                                            .split(".")[1]
-                                            .split("e")[0].length;
+                                    if (cell.v.toString().indexOf('e') > -1) {
+                                        let len = cell.v.toString().split('.')[1].split('e')[0].length;
                                         if (len > 5) {
                                             len = 5;
                                         }
 
                                         cell.m = (cell.v as number).toExponential(len).toString();
                                     } else {
-                                        const mask = genarate(
-                                            Math.round((cell.v as number) * 1000000000) / 1000000000
-                                        );
+                                        const mask = genarate(Math.round((cell.v as number) * 1000000000) / 1000000000);
                                         cell.m = mask![0].toString();
                                     }
                                 }
 
-                                cell.ct = {fa: "General", t: "n"};
+                                cell.ct = { fa: 'General', t: 'n' };
                             } else {
                                 const mask = genarate(cell.v);
                                 cell.m = mask![0].toString();
@@ -2591,7 +2373,7 @@ export function updateDropCell(ctx: Context) {
 
                     if (borderInfoCompute[`${bd_r}_${bd_c}`]) {
                         const bd_obj = {
-                            rangeType: "cell",
+                            rangeType: 'cell',
                             value: {
                                 row_index: i,
                                 col_index: j,
@@ -2605,7 +2387,7 @@ export function updateDropCell(ctx: Context) {
                         cfg.borderInfo.push(bd_obj);
                     } else if (borderInfoCompute[`${i}_${j}`]) {
                         const bd_obj = {
-                            rangeType: "cell",
+                            rangeType: 'cell',
                             value: {
                                 row_index: i,
                                 col_index: j,
@@ -2625,17 +2407,13 @@ export function updateDropCell(ctx: Context) {
                     }
                 }
             }
-            if (direction === "left") {
+            if (direction === 'left') {
                 for (let j = apply_end_c; j >= apply_str_c; j -= 1) {
                     if (hiddenCols.has(`${j}`)) continue;
                     const cell = applyData[apply_end_c - j];
 
                     if (cell?.f != null) {
-                        const f = `=${formula.functionCopy(
-                            cell.f,
-                            "left",
-                            apply_end_c - j + 1
-                        )}`;
+                        const f = `=${formula.functionCopy(cell.f, 'left', apply_end_c - j + 1)}`;
                         const v = formula.execfunction(ctx, f, i, j);
 
                         formula.execFunctionGroup(ctx, i, j, v[1], undefined, d);
@@ -2646,31 +2424,26 @@ export function updateDropCell(ctx: Context) {
                             if (
                                 isRealNum(cell.v) &&
                                 !/^\d{6}(18|19|20)?\d{2}(0[1-9]|1[12])(0[1-9]|[12]\d|3[01])\d{3}(\d|X)$/i.test(
-                                    `${cell.v}`
+                                    `${cell.v}`,
                                 )
                             ) {
                                 if (cell.v === Infinity || cell.v === -Infinity) {
                                     cell.m = cell.v.toString();
                                 } else {
-                                    if (cell.v.toString().indexOf("e") > -1) {
-                                        let len = cell.v
-                                            .toString()
-                                            .split(".")[1]
-                                            .split("e")[0].length;
+                                    if (cell.v.toString().indexOf('e') > -1) {
+                                        let len = cell.v.toString().split('.')[1].split('e')[0].length;
                                         if (len > 5) {
                                             len = 5;
                                         }
 
                                         cell.m = (cell.v as number).toExponential(len).toString();
                                     } else {
-                                        const mask = genarate(
-                                            Math.round((cell.v as number) * 1000000000) / 1000000000
-                                        );
+                                        const mask = genarate(Math.round((cell.v as number) * 1000000000) / 1000000000);
                                         cell.m = mask![0].toString();
                                     }
                                 }
 
-                                cell.ct = {fa: "General", t: "n"};
+                                cell.ct = { fa: 'General', t: 'n' };
                             } else {
                                 const mask = genarate(cell.v);
                                 cell.m = mask![0].toString();
@@ -2687,7 +2460,7 @@ export function updateDropCell(ctx: Context) {
 
                     if (borderInfoCompute[`${bd_r}_${bd_c}`]) {
                         const bd_obj = {
-                            rangeType: "cell",
+                            rangeType: 'cell',
                             value: {
                                 row_index: i,
                                 col_index: j,
@@ -2701,7 +2474,7 @@ export function updateDropCell(ctx: Context) {
                         cfg.borderInfo.push(bd_obj);
                     } else if (borderInfoCompute[`${i}_${j}`]) {
                         const bd_obj = {
-                            rangeType: "cell",
+                            rangeType: 'cell',
                             value: {
                                 row_index: i,
                                 col_index: j,
@@ -2735,9 +2508,9 @@ export function updateDropCell(ctx: Context) {
             for (let j = 0; j < cdformat_cellrange.length; j += 1) {
                 const range = cfSplitRange(
                     cdformat_cellrange[j],
-                    {row: copyRange.row, column: copyRange.column},
-                    {row: applyRange.row, column: applyRange.column},
-                    "operatePart"
+                    { row: copyRange.row, column: copyRange.column },
+                    { row: applyRange.row, column: applyRange.column },
+                    'operatePart',
                 );
                 if (range.length > 0) {
                     emptyRange = emptyRange.concat(range);
@@ -2761,11 +2534,7 @@ export function updateDropCell(ctx: Context) {
     // selectHightlightShow();
 }
 
-export function onDropCellSelectEnd(
-    ctx: Context,
-    e: MouseEvent,
-    container: HTMLDivElement
-) {
+export function onDropCellSelectEnd(ctx: Context, e: MouseEvent, container: HTMLDivElement) {
     ctx.luckysheet_cell_selected_extend = false;
     hideDropCellSelection(container);
 
@@ -2778,7 +2547,7 @@ export function onDropCellSelectEnd(
     //   return;
     // }
 
-    const {scrollLeft, scrollTop} = ctx;
+    const { scrollLeft, scrollTop } = ctx;
     const rect = container.getBoundingClientRect();
     const x = e.pageX - rect.left - ctx.rowHeaderWidth + scrollLeft;
     const y = e.pageY - rect.top - ctx.columnHeaderHeight + scrollTop;
@@ -2795,8 +2564,7 @@ export function onDropCellSelectEnd(
     const row_index_original = ctx.luckysheet_cell_selected_extend_index[0];
     const col_index_original = ctx.luckysheet_cell_selected_extend_index[1];
 
-    const last =
-        ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1];
+    const last = ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1];
     if (
         last &&
         last.top != null &&
@@ -2812,7 +2580,7 @@ export function onDropCellSelectEnd(
         let col_e = last.column[1];
 
         // copy range
-        dropCellCache.copyRange = cloneDeep(pick(last, ["row", "column"]));
+        dropCellCache.copyRange = cloneDeep(pick(last, ['row', 'column']));
         // applyType
         const typeItemHide = getTypeItemHide(ctx);
 
@@ -2825,17 +2593,14 @@ export function onDropCellSelectEnd(
             !typeItemHide[5] &&
             !typeItemHide[6]
         ) {
-            dropCellCache.applyType = "0";
+            dropCellCache.applyType = '0';
         } else {
-            dropCellCache.applyType = "1";
+            dropCellCache.applyType = '1';
         }
 
         if (ctx.luckysheet_select_save == null) return;
-        const {top_move, left_move} = ctx.luckysheet_select_save[0];
-        if (
-            Math.abs(row_index_original - row_index) >
-            Math.abs(col_index_original - col_index)
-        ) {
+        const { top_move, left_move } = ctx.luckysheet_select_save[0];
+        if (Math.abs(row_index_original - row_index) > Math.abs(col_index_original - col_index)) {
             if (!(row_index >= row_s && row_index <= row_e)) {
                 if (top_move != null && top_move >= row_pre) {
                     // dragging upward
@@ -2843,7 +2608,7 @@ export function onDropCellSelectEnd(
                         row: [row_index, last.row[0] - 1],
                         column: last.column,
                     };
-                    dropCellCache.direction = "up";
+                    dropCellCache.direction = 'up';
 
                     row_s -= last.row[0] - row_index;
 
@@ -2858,7 +2623,7 @@ export function onDropCellSelectEnd(
                         row: [last.row[1] + 1, row_index],
                         column: last.column,
                     };
-                    dropCellCache.direction = "down";
+                    dropCellCache.direction = 'down';
 
                     row_e += row_index - last.row[1];
 
@@ -2879,7 +2644,7 @@ export function onDropCellSelectEnd(
                         row: last.row,
                         column: [col_index, last.column[0] - 1],
                     };
-                    dropCellCache.direction = "left";
+                    dropCellCache.direction = 'left';
 
                     col_s -= last.column[0] - col_index;
 
@@ -2894,7 +2659,7 @@ export function onDropCellSelectEnd(
                         row: last.row,
                         column: [last.column[1] + 1, col_index],
                     };
-                    dropCellCache.direction = "right";
+                    dropCellCache.direction = 'right';
 
                     col_e += col_index - last.column[1];
 
@@ -2981,11 +2746,9 @@ export function onDropCellSelectEnd(
         updateDropCell(ctx);
         // createIcon();
 
-        const selectedMoveEle = container.querySelector(
-            ".fortune-cell-selected-move"
-        );
+        const selectedMoveEle = container.querySelector('.fortune-cell-selected-move');
         if (selectedMoveEle) {
-            (selectedMoveEle as HTMLDivElement).style.display = "none";
+            (selectedMoveEle as HTMLDivElement).style.display = 'none';
         }
 
         // clearTimeout(ctx.countfuncTimeout);

@@ -1,13 +1,12 @@
-import {cloneDeep, set, size} from "es-toolkit/compat";
-
-import {Context, getFlowdata} from "../context";
-import {locale} from "../locale";
-import type {CellMatrix} from "../../engine/types";
-import {GlobalCache, SearchResult, Selection} from "../types";
-import {chatatABC, getRegExpStr, getSheetIndex, isAllowEdit, replaceHtml,} from "../utils";
-import {setCellValue} from "./cell";
-import {valueShowEs} from "../../engine/format";
-import {normalizeSelection, scrollToHighlightCell} from "./selection";
+import { cloneDeep, set, size } from 'es-toolkit/compat';
+import { valueShowEs } from '../../engine/format';
+import type { CellMatrix } from '../../engine/types';
+import { type Context, getFlowdata } from '../context';
+import { locale } from '../locale';
+import type { GlobalCache, SearchResult, Selection } from '../types';
+import { chatatABC, getRegExpStr, getSheetIndex, isAllowEdit, replaceHtml } from '../utils';
+import { setCellValue } from './cell';
+import { normalizeSelection, scrollToHighlightCell } from './selection';
 
 export function getSearchIndexArr(
     searchText: string,
@@ -16,11 +15,11 @@ export function getSearchIndexArr(
         column: number[];
     }[],
     flowdata: CellMatrix,
-    {regCheck, wordCheck, caseCheck} = {
+    { regCheck, wordCheck, caseCheck } = {
         regCheck: false,
         wordCheck: false,
         caseCheck: false,
-    }
+    },
 ) {
     const arr = [];
     const obj = {};
@@ -42,7 +41,7 @@ export function getSearchIndexArr(
                         value = value.toString();
                     }
 
-                    if (value != null && value !== "") {
+                    if (value != null && value !== '') {
                         value = value.toString();
 
                         // 1. Whole-word checked: direct match
@@ -55,7 +54,7 @@ export function getSearchIndexArr(
                                 if (searchText === value) {
                                     if (!(`${r}_${c}` in obj)) {
                                         set(obj, `${r}_${c}`, 0);
-                                        arr.push({r, c});
+                                        arr.push({ r, c });
                                     }
                                 }
                             } else {
@@ -63,7 +62,7 @@ export function getSearchIndexArr(
                                 if (txt === value.toLowerCase()) {
                                     if (!(`${r}_${c}` in obj)) {
                                         set(obj, `${r}_${c}`, 0);
-                                        arr.push({r, c});
+                                        arr.push({ r, c });
                                     }
                                 }
                             }
@@ -72,15 +71,15 @@ export function getSearchIndexArr(
                             let reg;
                             // Whether to be case sensitive
                             if (caseCheck) {
-                                reg = new RegExp(getRegExpStr(searchText), "g");
+                                reg = new RegExp(getRegExpStr(searchText), 'g');
                             } else {
-                                reg = new RegExp(getRegExpStr(searchText), "ig");
+                                reg = new RegExp(getRegExpStr(searchText), 'ig');
                             }
 
                             if (reg.test(value)) {
                                 if (!(`${r}_${c}` in obj)) {
                                     set(obj, `${r}_${c}`, 0);
-                                    arr.push({r, c});
+                                    arr.push({ r, c });
                                 }
                             }
                         } else {
@@ -88,14 +87,14 @@ export function getSearchIndexArr(
                                 if (~value.indexOf(searchText)) {
                                     if (!(`${r}_${c}` in obj)) {
                                         set(obj, `${r}_${c}`, 0);
-                                        arr.push({r, c});
+                                        arr.push({ r, c });
                                     }
                                 }
                             } else {
                                 if (~value.toLowerCase().indexOf(searchText.toLowerCase())) {
                                     if (!(`${r}_${c}` in obj)) {
                                         set(obj, `${r}_${c}`, 0);
-                                        arr.push({r, c});
+                                        arr.push({ r, c });
                                     }
                                 }
                             }
@@ -116,21 +115,19 @@ export function searchNext(
         regCheck: boolean;
         wordCheck: boolean;
         caseCheck: boolean;
-    }
+    },
 ) {
-    const {findAndReplace} = locale(ctx);
+    const { findAndReplace } = locale(ctx);
     const flowdata = getFlowdata(ctx);
-    if (searchText === "" || searchText == null || flowdata == null) {
+    if (searchText === '' || searchText == null || flowdata == null) {
         return findAndReplace.searchInputTip;
     }
     let range: Selection[];
     if (
         size(ctx.luckysheet_select_save) === 0 ||
         (ctx.luckysheet_select_save?.length === 1 &&
-            ctx.luckysheet_select_save[0].row[0] ===
-            ctx.luckysheet_select_save[0].row[1] &&
-            ctx.luckysheet_select_save[0].column[0] ===
-            ctx.luckysheet_select_save[0].column[1])
+            ctx.luckysheet_select_save[0].row[0] === ctx.luckysheet_select_save[0].row[1] &&
+            ctx.luckysheet_select_save[0].column[0] === ctx.luckysheet_select_save[0].column[1])
     ) {
         range = [
             {
@@ -144,12 +141,7 @@ export function searchNext(
         range = cloneDeep(ctx.luckysheet_select_save) ?? [];
     }
 
-    const searchIndexArr = getSearchIndexArr(
-        searchText,
-        range,
-        flowdata,
-        checkModes
-    );
+    const searchIndexArr = getSearchIndexArr(searchText, range, flowdata, checkModes);
 
     if (searchIndexArr.length === 0) {
         return findAndReplace.noFindTip;
@@ -160,10 +152,8 @@ export function searchNext(
     if (
         size(ctx.luckysheet_select_save) === 0 ||
         (ctx.luckysheet_select_save?.length === 1 &&
-            ctx.luckysheet_select_save[0].row[0] ===
-            ctx.luckysheet_select_save[0].row[1] &&
-            ctx.luckysheet_select_save[0].column[0] ===
-            ctx.luckysheet_select_save[0].column[1])
+            ctx.luckysheet_select_save[0].row[0] === ctx.luckysheet_select_save[0].row[1] &&
+            ctx.luckysheet_select_save[0].column[0] === ctx.luckysheet_select_save[0].column[1])
     ) {
         if (size(ctx.luckysheet_select_save) === 0) {
             count = 0;
@@ -245,11 +235,11 @@ export function searchAll(
         regCheck: boolean;
         wordCheck: boolean;
         caseCheck: boolean;
-    }
+    },
 ): SearchResult[] {
     const flowdata = getFlowdata(ctx);
     const searchResult: SearchResult[] = [];
-    if (searchText === "" || searchText == null || flowdata == null) {
+    if (searchText === '' || searchText == null || flowdata == null) {
         return searchResult;
     }
 
@@ -257,10 +247,8 @@ export function searchAll(
     if (
         size(ctx.luckysheet_select_save) === 0 ||
         (ctx.luckysheet_select_save?.length === 1 &&
-            ctx.luckysheet_select_save[0].row[0] ===
-            ctx.luckysheet_select_save[0].row[1] &&
-            ctx.luckysheet_select_save[0].column[0] ===
-            ctx.luckysheet_select_save[0].column[1])
+            ctx.luckysheet_select_save[0].row[0] === ctx.luckysheet_select_save[0].row[1] &&
+            ctx.luckysheet_select_save[0].column[0] === ctx.luckysheet_select_save[0].column[1])
     ) {
         range = [
             {
@@ -272,12 +260,7 @@ export function searchAll(
         range = cloneDeep(ctx.luckysheet_select_save) ?? [];
     }
 
-    const searchIndexArr = getSearchIndexArr(
-        searchText,
-        range,
-        flowdata,
-        checkModes
-    );
+    const searchIndexArr = getSearchIndexArr(searchText, range, flowdata, checkModes);
 
     if (searchIndexArr.length === 0) {
         // if (isEditMode()) {
@@ -291,18 +274,15 @@ export function searchAll(
 
     for (let i = 0; i < searchIndexArr.length; i += 1) {
         const shown = valueShowEs(searchIndexArr[i].r, searchIndexArr[i].c, flowdata);
-        const value_ShowEs = shown == null ? "" : String(shown);
+        const value_ShowEs = shown == null ? '' : String(shown);
 
         // if (value_ShowEs.indexOf("</") > -1 && value_ShowEs.indexOf(">") > -1) {
         searchResult.push({
             r: searchIndexArr[i].r,
             c: searchIndexArr[i].c,
-            sheetName:
-            ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId) || 0]?.name,
+            sheetName: ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId) || 0]?.name,
             sheetId: ctx.currentSheetId,
-            cellPosition: `${chatatABC(searchIndexArr[i].c)}${
-                searchIndexArr[i].r + 1
-            }`,
+            cellPosition: `${chatatABC(searchIndexArr[i].c)}${searchIndexArr[i].r + 1}`,
             value: value_ShowEs,
         });
         // } else {
@@ -331,20 +311,16 @@ export function searchAll(
     // selectHightlightShow();
 }
 
-export function onSearchDialogMoveStart(
-    globalCache: GlobalCache,
-    e: MouseEvent,
-    container: HTMLDivElement
-) {
-    const box = document.getElementById("fortune-search-replace");
+export function onSearchDialogMoveStart(globalCache: GlobalCache, e: MouseEvent, container: HTMLDivElement) {
+    const box = document.getElementById('fortune-search-replace');
     if (!box) return;
     // eslint-disable-next-line prefer-const
-    let {top, left, width, height} = box.getBoundingClientRect();
+    let { top, left, width, height } = box.getBoundingClientRect();
     const rect = container.getBoundingClientRect();
     left -= rect.left;
     top -= rect.top;
-    const initialPosition = {left, top, width, height};
-    set(globalCache, "searchDialog.moveProps", {
+    const initialPosition = { left, top, width, height };
+    set(globalCache, 'searchDialog.moveProps', {
         cursorMoveStartPosition: {
             x: e.pageX,
             y: e.pageY,
@@ -357,9 +333,9 @@ export function onSearchDialogMove(globalCache: GlobalCache, e: MouseEvent) {
     const searchDialog = globalCache?.searchDialog;
     const moveProps = searchDialog?.moveProps;
     if (moveProps == null) return;
-    const dialog = document.getElementById("fortune-search-replace");
-    const {x: startX, y: startY} = moveProps.cursorMoveStartPosition!;
-    let {top, left} = moveProps.initialPosition!;
+    const dialog = document.getElementById('fortune-search-replace');
+    const { x: startX, y: startY } = moveProps.cursorMoveStartPosition!;
+    let { top, left } = moveProps.initialPosition!;
     left += e.pageX - startX;
     top += e.pageY - startY;
     if (top < 0) top = 0;
@@ -368,7 +344,7 @@ export function onSearchDialogMove(globalCache: GlobalCache, e: MouseEvent) {
 }
 
 export function onSearchDialogMoveEnd(globalCache: GlobalCache) {
-    set(globalCache, "searchDialog.moveProps", undefined);
+    set(globalCache, 'searchDialog.moveProps', undefined);
 }
 
 export function replace(
@@ -379,16 +355,16 @@ export function replace(
         regCheck: boolean;
         wordCheck: boolean;
         caseCheck: boolean;
-    }
+    },
 ) {
-    const {findAndReplace} = locale(ctx);
+    const { findAndReplace } = locale(ctx);
     const allowEdit = isAllowEdit(ctx);
     if (!allowEdit) {
         return findAndReplace.modeTip;
     }
 
     const flowdata = getFlowdata(ctx);
-    if (searchText === "" || searchText == null || flowdata == null) {
+    if (searchText === '' || searchText == null || flowdata == null) {
         return findAndReplace.searchInputTip;
     }
 
@@ -396,10 +372,8 @@ export function replace(
     if (
         size(ctx.luckysheet_select_save) === 0 ||
         (ctx.luckysheet_select_save?.length === 1 &&
-            ctx.luckysheet_select_save[0].row[0] ===
-            ctx.luckysheet_select_save[0].row[1] &&
-            ctx.luckysheet_select_save[0].column[0] ===
-            ctx.luckysheet_select_save[0].column[1])
+            ctx.luckysheet_select_save[0].row[0] === ctx.luckysheet_select_save[0].row[1] &&
+            ctx.luckysheet_select_save[0].column[0] === ctx.luckysheet_select_save[0].column[1])
     ) {
         range = [
             {
@@ -411,12 +385,7 @@ export function replace(
         range = cloneDeep(ctx.luckysheet_select_save) ?? [];
     }
 
-    const searchIndexArr = getSearchIndexArr(
-        searchText,
-        range,
-        flowdata,
-        checkModes
-    );
+    const searchIndexArr = getSearchIndexArr(searchText, range, flowdata, checkModes);
 
     if (searchIndexArr.length === 0) {
         return findAndReplace.noReplceTip;
@@ -424,8 +393,7 @@ export function replace(
 
     let count = null;
 
-    const last =
-        ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1];
+    const last = ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1];
     const rf = last?.row_focus;
     const cf = last?.column_focus;
 
@@ -462,9 +430,9 @@ export function replace(
     } else {
         let reg;
         if (checkModes.caseCheck) {
-            reg = new RegExp(getRegExpStr(searchText), "g");
+            reg = new RegExp(getRegExpStr(searchText), 'g');
         } else {
-            reg = new RegExp(getRegExpStr(searchText), "ig");
+            reg = new RegExp(getRegExpStr(searchText), 'ig');
         }
 
         r = searchIndexArr[count].r;
@@ -475,14 +443,12 @@ export function replace(
         // }
 
         const shown = valueShowEs(r, c, d);
-        const v = (shown == null ? "" : String(shown)).replace(reg, replaceText);
+        const v = (shown == null ? '' : String(shown)).replace(reg, replaceText);
 
         setCellValue(ctx, r, c, d, v);
     }
 
-    ctx.luckysheet_select_save = normalizeSelection(ctx, [
-        {row: [r, r], column: [c, c]},
-    ]);
+    ctx.luckysheet_select_save = normalizeSelection(ctx, [{ row: [r, r], column: [c, c] }]);
 
     // jfrefreshgrid(d, ctx.luckysheet_select_save);
     // selectHightlightShow();
@@ -499,16 +465,16 @@ export function replaceAll(
         regCheck: boolean;
         wordCheck: boolean;
         caseCheck: boolean;
-    }
+    },
 ) {
-    const {findAndReplace} = locale(ctx);
+    const { findAndReplace } = locale(ctx);
     const allowEdit = isAllowEdit(ctx);
     if (!allowEdit) {
         return findAndReplace.modeTip;
     }
 
     const flowdata = getFlowdata(ctx);
-    if (searchText === "" || searchText == null || flowdata == null) {
+    if (searchText === '' || searchText == null || flowdata == null) {
         return findAndReplace.searchInputTip;
     }
 
@@ -516,10 +482,8 @@ export function replaceAll(
     if (
         size(ctx.luckysheet_select_save) === 0 ||
         (ctx.luckysheet_select_save?.length === 1 &&
-            ctx.luckysheet_select_save[0].row[0] ===
-            ctx.luckysheet_select_save[0].row[1] &&
-            ctx.luckysheet_select_save[0].column[0] ===
-            ctx.luckysheet_select_save[0].column[1])
+            ctx.luckysheet_select_save[0].row[0] === ctx.luckysheet_select_save[0].row[1] &&
+            ctx.luckysheet_select_save[0].column[0] === ctx.luckysheet_select_save[0].column[1])
     ) {
         range = [
             {
@@ -531,12 +495,7 @@ export function replaceAll(
         range = cloneDeep(ctx.luckysheet_select_save) ?? [];
     }
 
-    const searchIndexArr = getSearchIndexArr(
-        searchText,
-        range,
-        flowdata,
-        checkModes
-    );
+    const searchIndexArr = getSearchIndexArr(searchText, range, flowdata, checkModes);
 
     if (searchIndexArr.length === 0) {
         return findAndReplace.noReplceTip;
@@ -546,8 +505,8 @@ export function replaceAll(
     let replaceCount = 0;
     if (checkModes.wordCheck) {
         for (let i = 0; i < searchIndexArr.length; i += 1) {
-            const {r} = searchIndexArr[i];
-            const {c} = searchIndexArr[i];
+            const { r } = searchIndexArr[i];
+            const { c } = searchIndexArr[i];
 
             // if (!checkProtectionLocked(r, c, ctx.currentSheetIndex, false)) {
             //   continue;
@@ -557,31 +516,31 @@ export function replaceAll(
 
             setCellValue(ctx, r, c, d, v);
 
-            range.push({row: [r, r], column: [c, c]});
+            range.push({ row: [r, r], column: [c, c] });
             replaceCount += 1;
         }
     } else {
         let reg;
         if (checkModes.caseCheck) {
-            reg = new RegExp(getRegExpStr(searchText), "g");
+            reg = new RegExp(getRegExpStr(searchText), 'g');
         } else {
-            reg = new RegExp(getRegExpStr(searchText), "ig");
+            reg = new RegExp(getRegExpStr(searchText), 'ig');
         }
 
         for (let i = 0; i < searchIndexArr.length; i += 1) {
-            const {r} = searchIndexArr[i];
-            const {c} = searchIndexArr[i];
+            const { r } = searchIndexArr[i];
+            const { c } = searchIndexArr[i];
 
             // if (!checkProtectionLocked(r, c, ctx.currentSheetIndex, false)) {
             //   continue;
             // }
 
             const shown = valueShowEs(r, c, d);
-            const v = (shown == null ? "" : String(shown)).replace(reg, replaceText);
+            const v = (shown == null ? '' : String(shown)).replace(reg, replaceText);
 
             setCellValue(ctx, r, c, d, v);
 
-            range.push({row: [r, r], column: [c, c]});
+            range.push({ row: [r, r], column: [c, c] });
             replaceCount += 1;
         }
     }

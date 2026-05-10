@@ -1,14 +1,13 @@
-import {updateCell} from "../../index";
-import {handleCellAreaMouseDown} from "../../events/mouse";
-import {describe, expect, test} from "bun:test";
+import { describe, expect, test } from 'bun:test';
+import { handleCellAreaMouseDown } from '../../events/mouse';
+import { updateCell } from '../../index';
 
 // Mock DOM for tests
 (globalThis as any).document = {
     createElement: (tag: string) => ({
-        innerHTML: "",
+        innerHTML: '',
         style: {},
-        setAttribute: () => {
-        },
+        setAttribute: () => {},
         getAttribute: () => null,
         getBoundingClientRect: () => ({
             width: 1000,
@@ -32,18 +31,17 @@ import {describe, expect, test} from "bun:test";
         Object.assign(this, options);
     }
 
-    preventDefault: () => void = () => {
-    };
+    preventDefault: () => void = () => {};
 };
 
-describe("fortune-sheet/core/hooks/cell", () => {
-    test("updateCell", async () => {
+describe('fortune-sheet/core/hooks/cell', () => {
+    test('updateCell', async () => {
         // Basic test - just ensure the function exists and can be called
-        expect(typeof updateCell).toBe("function");
+        expect(typeof updateCell).toBe('function');
     });
 
-    test("handleCellAreaMouseDown", async () => {
+    test('handleCellAreaMouseDown', async () => {
         // Basic test - just ensure the function exists
-        expect(typeof handleCellAreaMouseDown).toBe("function");
+        expect(typeof handleCellAreaMouseDown).toBe('function');
     });
 });

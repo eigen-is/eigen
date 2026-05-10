@@ -1,10 +1,10 @@
-import {isNil, sortBy} from "es-toolkit/compat";
-import {SheetConfig} from ".";
-import {FormulaCache} from "./modules";
-import {normalizeSelection} from "./modules/selection";
-import {Hooks} from "./settings";
-import type {Cell} from "../engine/types";
-import {
+import { isNil, sortBy } from 'es-toolkit/compat';
+import type { Cell } from '../engine/types';
+import type { SheetConfig } from '.';
+import { FormulaCache } from './modules';
+import { normalizeSelection } from './modules/selection';
+import type { Hooks } from './settings';
+import type {
     ConditionRulesProps,
     DataRegulationProps,
     FilterOptions,
@@ -16,8 +16,8 @@ import {
     Rect,
     Selection,
     Sheet,
-} from "./types";
-import {getSheetIndex} from "./utils";
+} from './types';
+import { getSheetIndex } from './utils';
 
 interface MutableRefObject<T> {
     current: T;
@@ -114,8 +114,8 @@ export type Context = {
     sheetScrollRecord: Record<string, any>;
 
     luckysheet_select_status: boolean;
-    luckysheet_select_save: Sheet["luckysheet_select_save"];
-    luckysheet_selection_range: Sheet["luckysheet_selection_range"];
+    luckysheet_select_save: Sheet['luckysheet_select_save'];
+    luckysheet_selection_range: Sheet['luckysheet_selection_range'];
     formulaRangeHighlight: ({
         rangeIndex: number;
         backgroundColor: string;
@@ -200,14 +200,14 @@ export type Context = {
     groupValuesRefreshData: {
         r: number;
         c: number;
-        v: Cell["v"];
+        v: Cell['v'];
         f: string;
         id: string;
     }[];
     formulaCache: FormulaCache;
     hooks: Hooks;
     // in read-only mode, force-highlight cells referenced by formulas
-    forceFormulaRef?: Boolean;
+    forceFormulaRef?: boolean;
 
     sheetFocused: boolean; // property to track sheet focus for keyboard navigation
 
@@ -221,21 +221,20 @@ export function defaultContext(refs: RefValues): Context {
         defaultrowNum: 84,
         addDefaultRows: 50,
         fullscreenmode: true,
-        devicePixelRatio: (typeof globalThis !== "undefined" ? globalThis : window)
-            .devicePixelRatio,
+        devicePixelRatio: (typeof globalThis !== 'undefined' ? globalThis : window).devicePixelRatio,
 
         contextMenu: {},
 
-        currentSheetId: "",
-        calculateSheetId: "",
+        currentSheetId: '',
+        calculateSheetId: '',
         config: {},
         // warning dialog
         warnDialog: undefined,
-        currency: "€",
+        currency: '€',
         rangeDialog: {
             show: false,
-            rangeTxt: "",
-            type: "",
+            rangeTxt: '',
+            type: '',
             singleSelect: false,
         },
 
@@ -243,51 +242,51 @@ export function defaultContext(refs: RefValues): Context {
             selectStatus: false,
             selectRange: [],
             optionLabel: {
-                number: "numeric",
-                number_integer: "integer",
-                number_decimal: "decimal",
-                between: "between",
-                notBetween: "not between",
-                equal: "equal to",
-                notEqualTo: "not equal to",
-                moreThanThe: "greater",
-                lessThan: "less than",
-                greaterOrEqualTo: "greater or equal to",
-                lessThanOrEqualTo: "less than or equal to",
-                include: "include",
-                exclude: "not include",
-                earlierThan: "earlier than",
-                noEarlierThan: "not earlier than",
-                laterThan: "later than",
-                noLaterThan: "not later than",
-                identificationNumber: "identification number",
-                phoneNumber: "phone number",
+                number: 'numeric',
+                number_integer: 'integer',
+                number_decimal: 'decimal',
+                between: 'between',
+                notBetween: 'not between',
+                equal: 'equal to',
+                notEqualTo: 'not equal to',
+                moreThanThe: 'greater',
+                lessThan: 'less than',
+                greaterOrEqualTo: 'greater or equal to',
+                lessThanOrEqualTo: 'less than or equal to',
+                include: 'include',
+                exclude: 'not include',
+                earlierThan: 'earlier than',
+                noEarlierThan: 'not earlier than',
+                laterThan: 'later than',
+                noLaterThan: 'not later than',
+                identificationNumber: 'identification number',
+                phoneNumber: 'phone number',
             },
             dataRegulation: {
-                type: "",
-                type2: "",
-                rangeTxt: "",
-                value1: "",
-                value2: "",
-                validity: "",
+                type: '',
+                type2: '',
+                rangeTxt: '',
+                value1: '',
+                value2: '',
+                validity: '',
                 remote: false,
                 prohibitInput: false,
                 hintShow: false,
-                hintValue: "",
+                hintValue: '',
             },
         },
 
         dataVerificationDropDownList: false,
 
         conditionRules: {
-            rulesType: "",
-            rulesValue: "",
-            textColor: {check: true, color: "#000000"},
-            cellColor: {check: true, color: "#000000"},
-            betweenValue: {value1: "", value2: ""},
-            dateValue: "",
-            repeatValue: "0",
-            projectValue: "10",
+            rulesType: '',
+            rulesValue: '',
+            textColor: { check: true, color: '#000000' },
+            cellColor: { check: true, color: '#000000' },
+            betweenValue: { value1: '', value2: '' },
+            dateValue: '',
+            repeatValue: '0',
+            projectValue: '10',
         },
 
         visibledatarow: [],
@@ -380,15 +379,15 @@ export function defaultContext(refs: RefValues): Context {
         // default cell
         defaultCell: {
             bl: 0,
-            ct: {fa: "General", t: "n"},
-            fc: "rgb(51, 51, 51)",
+            ct: { fa: 'General', t: 'n' },
+            fc: 'rgb(51, 51, 51)',
             ff: 0,
             fs: 11,
             ht: 1,
             it: 0,
             vt: 1,
-            m: "",
-            v: "",
+            m: '',
+            v: '',
         },
 
         groupValuesRefreshData: [],
@@ -507,15 +506,11 @@ export function ensureSheetIndex(data: Sheet[], generateSheetId: () => string) {
 export function initSheetIndex(ctx: Context) {
     // get current sheet
     const shownSheets = ctx.luckysheetfile.filter(
-        (singleSheet) => singleSheet.hide === undefined || singleSheet.hide !== 1
+        (singleSheet) => singleSheet.hide === undefined || singleSheet.hide !== 1,
     );
-    ctx.currentSheetId = sortBy(shownSheets, (sheet) => sheet.order)[0]
-        .id as string;
+    ctx.currentSheetId = sortBy(shownSheets, (sheet) => sheet.order)[0].id as string;
     for (let i = 0; i < ctx.luckysheetfile.length; i += 1) {
-        if (
-            ctx.luckysheetfile[i].status === 1 &&
-            ctx.luckysheetfile[i].hide !== 1
-        ) {
+        if (ctx.luckysheetfile[i].status === 1 && ctx.luckysheetfile[i].hide !== 1) {
             ctx.currentSheetId = ctx.luckysheetfile[i].id!;
             break;
         }
@@ -530,25 +525,14 @@ export function updateContextWithSheetData(ctx: Context, data: any[][]) {
     normalizeSelection(ctx, ctx.luckysheet_select_save);
 }
 
-export function updateContextWithCanvas(
-    ctx: Context,
-    canvas: HTMLCanvasElement,
-    placeholder: HTMLDivElement
-) {
-    ctx.luckysheetTableContentHW = [
-        placeholder.clientWidth,
-        placeholder.clientHeight,
-    ];
+export function updateContextWithCanvas(ctx: Context, canvas: HTMLCanvasElement, placeholder: HTMLDivElement) {
+    ctx.luckysheetTableContentHW = [placeholder.clientWidth, placeholder.clientHeight];
     ctx.cellmainHeight = placeholder.clientHeight - ctx.columnHeaderHeight;
     ctx.cellmainWidth = placeholder.clientWidth - ctx.rowHeaderWidth;
 
     canvas.style.width = `${ctx.luckysheetTableContentHW[0]}px`;
     canvas.style.height = `${ctx.luckysheetTableContentHW[1]}px`;
 
-    canvas.width = Math.ceil(
-        ctx.luckysheetTableContentHW[0] * ctx.devicePixelRatio
-    );
-    canvas.height = Math.ceil(
-        ctx.luckysheetTableContentHW[1] * ctx.devicePixelRatio
-    );
+    canvas.width = Math.ceil(ctx.luckysheetTableContentHW[0] * ctx.devicePixelRatio);
+    canvas.height = Math.ceil(ctx.luckysheetTableContentHW[1] * ctx.devicePixelRatio);
 }

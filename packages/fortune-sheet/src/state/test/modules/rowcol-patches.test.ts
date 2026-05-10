@@ -32,11 +32,7 @@ function patchesFor(recipe: (ctx: Context) => void): Patch[] {
 describe('row/col reducers emit per-sheet patches, not wholesale luckysheetfile replace', () => {
     test('insertRowCol does not emit a wholesale ["luckysheetfile"] replace', () => {
         const patches = patchesFor((ctx) => {
-            insertRowCol(
-                ctx,
-                { type: 'row', index: 0, count: 1, direction: 'lefttop', id: 'id_1' },
-                false,
-            );
+            insertRowCol(ctx, { type: 'row', index: 0, count: 1, direction: 'lefttop', id: 'id_1' }, false);
         });
         const wholesale = patches.filter(isWholesaleLuckysheetfilePatch);
         expect(wholesale).toEqual([]);
@@ -53,11 +49,7 @@ describe('row/col reducers emit per-sheet patches, not wholesale luckysheetfile 
     test('insertRowCol patches target only the affected sheet', () => {
         // The factory has two sheets; inserting on id_1 should leave id_2 untouched.
         const patches = patchesFor((ctx) => {
-            insertRowCol(
-                ctx,
-                { type: 'row', index: 0, count: 1, direction: 'lefttop', id: 'id_1' },
-                false,
-            );
+            insertRowCol(ctx, { type: 'row', index: 0, count: 1, direction: 'lefttop', id: 'id_1' }, false);
         });
         const sheetIndices = new Set<number>();
         for (const p of patches) {

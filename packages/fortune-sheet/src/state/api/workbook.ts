@@ -1,13 +1,13 @@
-import {isNumber, sortBy} from "es-toolkit/compat";
-import {Context, Sheet} from "..";
+import { isNumber, sortBy } from 'es-toolkit/compat';
+import type { Context, Sheet } from '..';
 import {
     addSheet as addSheetInternal,
     deleteSheet as deleteSheetInternal,
     updateSheet as updateSheetInternal,
-} from "../modules";
-import {Settings} from "../settings";
-import {CommonOptions, getSheet} from "./common";
-import {invalidParams} from "./errors";
+} from '../modules';
+import type { Settings } from '../settings';
+import { type CommonOptions, getSheet } from './common';
+import { invalidParams } from './errors';
 
 export function addSheet(
     ctx: Context,
@@ -15,16 +15,9 @@ export function addSheet(
     newSheetID?: string,
     isPivotTable: boolean = false,
     sheetname: string | undefined = undefined,
-    sheetData: Sheet | undefined = undefined
+    sheetData: Sheet | undefined = undefined,
 ) {
-    addSheetInternal(
-        ctx,
-        settings,
-        newSheetID,
-        isPivotTable,
-        sheetname,
-        sheetData
-    );
+    addSheetInternal(ctx, settings, newSheetID, isPivotTable, sheetname, sheetData);
 }
 
 export function deleteSheet(ctx: Context, options: CommonOptions = {}) {
@@ -41,11 +34,7 @@ export function activateSheet(ctx: Context, options: CommonOptions = {}) {
     ctx.currentSheetId = sheet.id!;
 }
 
-export function setSheetName(
-    ctx: Context,
-    name: string,
-    options: CommonOptions = {}
-) {
+export function setSheetName(ctx: Context, name: string, options: CommonOptions = {}) {
     const sheet = getSheet(ctx, options);
     sheet.name = name;
 }
@@ -57,7 +46,7 @@ export function setSheetOrder(ctx: Context, orderList: Record<string, number>) {
         }
     });
     // re-order starting from 0
-    sortBy(ctx.luckysheetfile, ["order"]).forEach((sheet, i) => {
+    sortBy(ctx.luckysheetfile, ['order']).forEach((sheet, i) => {
         sheet.order = i;
     });
 }
@@ -71,7 +60,7 @@ export function scroll(
         scrollTop?: number;
         targetRow?: number;
         targetColumn?: number;
-    }
+    },
 ) {
     if (options.scrollLeft != null) {
         if (!isNumber(options.scrollLeft)) {
@@ -84,10 +73,7 @@ export function scroll(
         if (!isNumber(options.targetColumn)) {
             throw invalidParams();
         }
-        const col_pre =
-            options.targetColumn <= 0
-                ? 0
-                : ctx.visibledatacolumn[options.targetColumn - 1];
+        const col_pre = options.targetColumn <= 0 ? 0 : ctx.visibledatacolumn[options.targetColumn - 1];
         if (scrollbarX) {
             scrollbarX.scrollLeft = col_pre;
         }
@@ -104,8 +90,7 @@ export function scroll(
         if (!isNumber(options.targetRow)) {
             throw invalidParams();
         }
-        const row_pre =
-            options.targetRow <= 0 ? 0 : ctx.visibledatarow[options.targetRow - 1];
+        const row_pre = options.targetRow <= 0 ? 0 : ctx.visibledatarow[options.targetRow - 1];
 
         if (scrollbarY) {
             scrollbarY.scrollTop = row_pre;

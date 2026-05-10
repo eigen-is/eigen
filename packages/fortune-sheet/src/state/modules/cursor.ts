@@ -1,5 +1,5 @@
 export function moveToEnd(obj: HTMLDivElement) {
-    if (obj.innerHTML !== obj.innerText || obj.innerHTML === "") {
+    if (obj.innerHTML !== obj.innerText || obj.innerHTML === '') {
         obj.focus(); // Fix Firefox not being able to position cursor without focus
         const range = window.getSelection(); // Create range
         range?.selectAllChildren(obj); // Select all child content of obj within the range

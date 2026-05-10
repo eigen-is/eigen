@@ -1,21 +1,16 @@
-import {Context, getFlowdata} from "../context";
-import type {CellMatrix} from "../../engine/types";
-import {Selection} from "../types";
-import {execFunctionGroup} from "./formula-ui";
-import {setFormulaCellInfo} from "./formulaHelper";
+import type { CellMatrix } from '../../engine/types';
+import { type Context, getFlowdata } from '../context';
+import type { Selection } from '../types';
+import { execFunctionGroup } from './formula-ui';
+import { setFormulaCellInfo } from './formulaHelper';
 
-function runExecFunction(
-    ctx: Context,
-    range: Selection[],
-    index: string,
-    data: any
-) {
+function runExecFunction(ctx: Context, range: Selection[], index: string, data: any) {
     ctx.formulaCache.execFunctionExist = [];
     for (let s = 0; s < range.length; s += 1) {
         for (let r = range[s].row[0]; r <= range[s].row[1]; r += 1) {
             for (let c = range[s].column[0]; c <= range[s].column[1]; c += 1) {
-                setFormulaCellInfo(ctx, {r, c, id: index}, data);
-                ctx.formulaCache.execFunctionExist.push({r, c, id: index});
+                setFormulaCellInfo(ctx, { r, c, id: index }, data);
+                ctx.formulaCache.execFunctionExist.push({ r, c, id: index });
             }
         }
     }
@@ -28,7 +23,7 @@ export function jfrefreshgrid(
     ctx: Context,
     data: CellMatrix | null,
     range: Selection[] | undefined,
-    isRunExecFunction = true
+    isRunExecFunction = true,
 ) {
     if (data == null) {
         data = getFlowdata(ctx)!;

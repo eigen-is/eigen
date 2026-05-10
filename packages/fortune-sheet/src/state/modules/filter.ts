@@ -1,14 +1,14 @@
-import {cloneDeep, find, flatten, omit, reduce, size, union} from "es-toolkit/compat";
-import {locale} from "../locale";
-import {Context, getFlowdata} from "../context";
-import type {Cell, CellMatrix} from "../../engine/types";
-import {getSheetIndex, isAllowEdit, rgbToHex} from "../utils";
-import {update} from "../../engine/format";
-import {normalizeSelection} from "./selection";
-import {isRealNull} from "./validation";
-import {normalizedAttr} from "./cell";
-import {sortDataRange} from "./sort";
-import {checkCF, getComputeMap} from "./conditionFormat";
+import { cloneDeep, find, flatten, omit, reduce, size, union } from 'es-toolkit/compat';
+import { update } from '../../engine/format';
+import type { Cell, CellMatrix } from '../../engine/types';
+import { type Context, getFlowdata } from '../context';
+import { locale } from '../locale';
+import { getSheetIndex, isAllowEdit, rgbToHex } from '../utils';
+import { normalizedAttr } from './cell';
+import { checkCF, getComputeMap } from './conditionFormat';
+import { normalizeSelection } from './selection';
+import { sortDataRange } from './sort';
+import { isRealNull } from './validation';
 
 // Filter configuration state
 export function labelFilterOptionState(
@@ -21,7 +21,7 @@ export function labelFilterOptionState(
     cindex: number,
     stc: number,
     edc: number,
-    saveData: boolean
+    saveData: boolean,
 ) {
     const param = {
         caljs,
@@ -72,7 +72,7 @@ export function orderbydatafiler(
     edr: number,
     edc: number,
     curr: number,
-    asc: boolean
+    asc: boolean,
 ) {
     const d = getFlowdata(ctx);
     if (d == null) {
@@ -99,7 +99,7 @@ export function orderbydatafiler(
     }
 
     if (hasMc) {
-        const {filter} = locale(ctx);
+        const { filter } = locale(ctx);
 
         // if (isEditMode()) {
         //   alert(locale_filter.mergeError);
@@ -118,13 +118,13 @@ export function createFilterOptions(
     ctx: Context,
     luckysheet_filter_save:
         | {
-        row: number[];
-        column: number[];
-    }
+              row: number[];
+              column: number[];
+          }
         | undefined,
     sheetId: string | undefined,
     filterObj?: any,
-    saveData?: boolean
+    saveData?: boolean,
 ) {
     // $(`#luckysheet-filter-selected-sheet${ctx.currentSheetIndex}`).remove();
     // $(`#luckysheet-filter-options-sheet${ctx.currentSheetIndex}`).remove();
@@ -145,9 +145,9 @@ export function createFilterOptions(
     const c2 = luckysheet_filter_save.column[1];
 
     const row = ctx.visibledatarow[r2] ?? 0;
-    const row_pre = r1 - 1 === -1 ? 0 : ctx.visibledatarow[r1 - 1] ?? 0;
+    const row_pre = r1 - 1 === -1 ? 0 : (ctx.visibledatarow[r1 - 1] ?? 0);
     const col = ctx.visibledatacolumn[c2] ?? 0;
-    const col_pre = c1 - 1 === -1 ? 0 : ctx.visibledatacolumn[c1 - 1] ?? 0;
+    const col_pre = c1 - 1 === -1 ? 0 : (ctx.visibledatacolumn[c1 - 1] ?? 0);
     const options = {
         startRow: r1,
         endRow: r2,
@@ -187,11 +187,7 @@ export function clearFilter(ctx: Context) {
     const allowEdit = isAllowEdit(ctx);
     if (!allowEdit) return;
     const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
-    const hiddenRows = reduce(
-        ctx.filter,
-        (pre, curr) => Object.assign(pre, curr?.rowhidden || {}),
-        {}
-    );
+    const hiddenRows = reduce(ctx.filter, (pre, curr) => Object.assign(pre, curr?.rowhidden || {}), {});
     ctx.config.rowhidden = omit(ctx.config.rowhidden, Object.keys(hiddenRows));
     ctx.luckysheet_filter_save = undefined;
     ctx.filterOptions = undefined;
@@ -261,7 +257,7 @@ export function createFilter(ctx: Context) {
         }
 
         filterSave = normalizeSelection(ctx, [
-            {row: [curR, curR], column: [st_c || 0, ed_c]}, // st_c default 0 ?
+            { row: [curR, curR], column: [st_c || 0, ed_c] }, // st_c default 0 ?
         ]);
         ctx.luckysheet_select_save = filterSave;
 
@@ -272,9 +268,7 @@ export function createFilter(ctx: Context) {
         // luckysheetMoveEndCell("down", "range");
     }
 
-    ctx.luckysheet_filter_save = cloneDeep(
-        filterSave?.[0] || ctx.luckysheet_select_save?.[0]
-    );
+    ctx.luckysheet_filter_save = cloneDeep(filterSave?.[0] || ctx.luckysheet_select_save?.[0]);
 
     createFilterOptions(ctx, ctx.luckysheet_filter_save, undefined, {}, true);
 
@@ -314,26 +308,15 @@ export type FilterValue = {
 function getFilterHiddenRows(ctx: Context, col: number, startCol: number) {
     const otherHiddenRows = reduce(
         ctx.filter,
-        (pre, curr) =>
-            Object.assign(pre, (curr?.cindex !== col && curr?.rowhidden) || {}),
-        {}
+        (pre, curr) => Object.assign(pre, (curr?.cindex !== col && curr?.rowhidden) || {}),
+        {},
     );
     const hiddenRows = ctx.filter[col - startCol]?.rowhidden || {};
-    return {otherHiddenRows, hiddenRows};
+    return { otherHiddenRows, hiddenRows };
 }
 
-export function getFilterColumnValues(
-    ctx: Context,
-    col: number,
-    startRow: number,
-    endRow: number,
-    startCol: number
-) {
-    const {otherHiddenRows, hiddenRows} = getFilterHiddenRows(
-        ctx,
-        col,
-        startCol
-    );
+export function getFilterColumnValues(ctx: Context, col: number, startRow: number, endRow: number, startCol: number) {
+    const { otherHiddenRows, hiddenRows } = getFilterHiddenRows(ctx, col, startCol);
     const visibleRows: number[] = [];
     const flattenValues: string[] = [];
     // Date values
@@ -360,7 +343,7 @@ export function getFilterColumnValues(
         };
 
     let cell: Cell | null;
-    const {filter} = locale(ctx);
+    const { filter } = locale(ctx);
     for (let r = startRow + 1; r <= endRow; r += 1) {
         if (r in otherHiddenRows) {
             continue;
@@ -369,24 +352,19 @@ export function getFilterColumnValues(
 
         cell = flowdata[r][col];
 
-        if (
-            cell != null &&
-            !isRealNull(cell.v) &&
-            cell.ct != null &&
-            cell.ct.t === "d"
-        ) {
+        if (cell != null && !isRealNull(cell.v) && cell.ct != null && cell.ct.t === 'd') {
             // Cell is a date
-            const dateStr: string = update("YYYY-MM-DD", cell.v);
+            const dateStr: string = update('YYYY-MM-DD', cell.v);
 
-            const y = dateStr.split("-")[0];
-            const m = dateStr.split("-")[1];
-            const d = dateStr.split("-")[2];
+            const y = dateStr.split('-')[0];
+            const m = dateStr.split('-')[1];
+            const d = dateStr.split('-')[2];
 
             let yearValue = find(dates, (v) => v.value === y);
             if (yearValue == null) {
                 yearValue = {
                     key: y,
-                    type: "year",
+                    type: 'year',
                     value: y,
                     text: y + filter.filiterYearText,
                     children: [],
@@ -401,7 +379,7 @@ export function getFilterColumnValues(
             if (monthValue == null) {
                 monthValue = {
                     key: `${y}-${m}`,
-                    type: "month",
+                    type: 'month',
                     value: m,
                     text: m + filter.filiterMonthText,
                     children: [],
@@ -415,7 +393,7 @@ export function getFilterColumnValues(
             if (dayValue == null) {
                 dayValue = {
                     key: dateStr,
-                    type: "day",
+                    type: 'day',
                     value: d,
                     text: d,
                     children: [],
@@ -465,7 +443,7 @@ export function getFilterColumnValues(
                 }
                 maskValue.rows.push(r);
             } else {
-                valuesMap.set(`${v}`, [{key, value: v, text, mask: m, rows: [r]}]);
+                valuesMap.set(`${v}`, [{ key, value: v, text, mask: m, rows: [r] }]);
                 flattenValues.push(text);
             }
 
@@ -493,12 +471,7 @@ export type FilterColor = {
     rows: number[];
 };
 
-export function getFilterColumnColors(
-    ctx: Context,
-    col: number,
-    startRow: number,
-    endRow: number
-) {
+export function getFilterColumnColors(ctx: Context, col: number, startRow: number, endRow: number) {
     // Iterate over filter column colors
     const bgMap: Map<string, FilterColor> = new Map(); // Cell background color
     const fcMap: Map<string, FilterColor> = new Map(); // Font color
@@ -506,16 +479,16 @@ export function getFilterColumnColors(
     // const af_compute = alternateformat.getComputeMap();
     const cf_compute: any = getComputeMap(ctx);
     const flowdata = getFlowdata(ctx);
-    if (flowdata == null) return {bgColors: [], fcColors: []};
+    if (flowdata == null) return { bgColors: [], fcColors: [] };
 
     for (let r = startRow + 1; r <= endRow; r += 1) {
         const cell = flowdata[r][col];
 
         // Cell background color
-        let bg = normalizedAttr(flowdata, r, col, "bg");
+        let bg = normalizedAttr(flowdata, r, col, 'bg');
 
         if (bg == null) {
-            bg = "#ffffff";
+            bg = '#ffffff';
         }
 
         // const checksAF = alternateformat.checksAF(r, col, af_compute);
@@ -531,20 +504,16 @@ export function getFilterColumnColors(
             bg = checksCF.cellColor;
         }
 
-        if (bg.indexOf("rgb") > -1) {
+        if (bg.indexOf('rgb') > -1) {
             bg = rgbToHex(bg);
         }
 
         if (bg.length === 4) {
-            bg =
-                bg.substr(0, 1) +
-                bg.substr(1, 1).repeat(2) +
-                bg.substr(2, 1).repeat(2) +
-                bg.substr(3, 1).repeat(2);
+            bg = bg.substr(0, 1) + bg.substr(1, 1).repeat(2) + bg.substr(2, 1).repeat(2) + bg.substr(3, 1).repeat(2);
         }
 
         // Font color
-        let fc = normalizedAttr(flowdata, r, col, "fc");
+        let fc = normalizedAttr(flowdata, r, col, 'fc');
 
         if (checksAF.length > 0) {
             // If the cell has alternating colors
@@ -557,16 +526,13 @@ export function getFilterColumnColors(
         }
 
         if (fc != null) {
-            if (fc.indexOf("rgb") > -1) {
+            if (fc.indexOf('rgb') > -1) {
                 fc = rgbToHex(fc);
             }
 
             if (fc.length === 4) {
                 fc =
-                    fc.substr(0, 1) +
-                    fc.substr(1, 1).repeat(2) +
-                    fc.substr(2, 1).repeat(2) +
-                    fc.substr(3, 1).repeat(2);
+                    fc.substr(0, 1) + fc.substr(1, 1).repeat(2) + fc.substr(2, 1).repeat(2) + fc.substr(3, 1).repeat(2);
             }
         }
 
@@ -576,7 +542,7 @@ export function getFilterColumnColors(
             bgData.rows.push(r);
             if (isRowHidden) bgData.checked = false;
         } else {
-            bgMap.set(bg, {color: bg, checked: !isRowHidden, rows: [r]});
+            bgMap.set(bg, { color: bg, checked: !isRowHidden, rows: [r] });
         }
         if (fc != null) {
             const fcData = fcMap.get(fc);
@@ -584,7 +550,7 @@ export function getFilterColumnColors(
                 fcData.rows.push(r);
                 if (isRowHidden) fcData.checked = false;
             } else if (cell != null && !isRealNull(cell.v)) {
-                fcMap.set(fc, {color: fc, checked: !isRowHidden, rows: [r]});
+                fcMap.set(fc, { color: fc, checked: !isRowHidden, rows: [r] });
             }
         }
     }
@@ -605,23 +571,12 @@ export function saveFilter(
     ed_r: number,
     cindex: number,
     st_c: number,
-    ed_c: number
+    ed_c: number,
 ) {
-    const {otherHiddenRows} = getFilterHiddenRows(ctx, cindex, st_c);
+    const { otherHiddenRows } = getFilterHiddenRows(ctx, cindex, st_c);
     const rowHiddenAll = Object.assign(otherHiddenRows, hiddenRows);
 
-    labelFilterOptionState(
-        ctx,
-        optionState,
-        hiddenRows,
-        caljs,
-        st_r,
-        ed_r,
-        cindex,
-        st_c,
-        ed_c,
-        true
-    );
+    labelFilterOptionState(ctx, optionState, hiddenRows, caljs, st_r, ed_r, cindex, st_c, ed_c, true);
 
     const cfg = cloneDeep(ctx.config);
     cfg.rowhidden = rowHiddenAll;

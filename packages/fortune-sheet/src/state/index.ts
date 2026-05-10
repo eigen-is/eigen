@@ -1,12 +1,11 @@
-import * as api from "./api";
+import * as api from './api';
 
-export {api};
-
-export * from "./canvas";
-export * from "./context";
-export * from "./settings";
-export * from "./events";
-export * from "./locale";
-export * from "./modules";
-export * from "./utils";
-export * from "./types";
+export * from './canvas';
+export * from './context';
+export * from './events';
+export * from './locale';
+export * from './modules';
+export * from './settings';
+export * from './types';
+export * from './utils';
+export { api };

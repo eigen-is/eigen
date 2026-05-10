@@ -1,21 +1,15 @@
-import {isNil} from "es-toolkit/compat";
-import type {CellFormatStyle, ComputeMap} from "../../engine";
-import {evaluateConditionalFormat} from "../../engine";
-import type {CellMatrix} from "../../engine/types";
-import {Context, getFlowdata} from "../context";
-import {getSheetIndex} from "../utils";
-import {getCellValue, getRangeByTxt} from "./cell";
-import {execfunction, functionCopy} from "./formula-ui";
-import {checkProtectionFormatCells} from "./protection";
+import { isNil } from 'es-toolkit/compat';
+import type { CellFormatStyle, ComputeMap } from '../../engine';
+import { evaluateConditionalFormat } from '../../engine';
+import type { CellMatrix } from '../../engine/types';
+import { type Context, getFlowdata } from '../context';
+import { getSheetIndex } from '../utils';
+import { getCellValue, getRangeByTxt } from './cell';
+import { execfunction, functionCopy } from './formula-ui';
+import { checkProtectionFormatCells } from './protection';
 
 // Set condition rules
-export function setConditionRules(
-    ctx: Context,
-    protection: any,
-    generalDialog: any,
-    conditionformat: any,
-    rules: any
-) {
+export function setConditionRules(ctx: Context, protection: any, generalDialog: any, conditionformat: any, rules: any) {
     if (!checkProtectionFormatCells(ctx)) {
         return;
     }
@@ -30,10 +24,10 @@ export function setConditionRules(
     const conditionValue = [];
 
     if (
-        conditionName === "greaterThan" ||
-        conditionName === "lessThan" ||
-        conditionName === "equal" ||
-        conditionName === "textContains"
+        conditionName === 'greaterThan' ||
+        conditionName === 'lessThan' ||
+        conditionName === 'equal' ||
+        conditionName === 'textContains'
     ) {
         let v = rules.rulesValue;
         const rangeArr = getRangeByTxt(ctx, v);
@@ -56,13 +50,13 @@ export function setConditionRules(
                 ctx.warnDialog = conditionformat.onlySingleCell;
             }
         } else if (rangeArr.length === 0) {
-            if (Number.isNaN(v) || v === "") {
+            if (Number.isNaN(v) || v === '') {
                 ctx.warnDialog = conditionformat.conditionValueCanOnly;
                 return;
             }
             conditionValue.push(v);
         }
-    } else if (conditionName === "between") {
+    } else if (conditionName === 'between') {
         let v1 = rules.betweenValue.value1;
         let v2 = rules.betweenValue.value2;
 
@@ -91,7 +85,7 @@ export function setConditionRules(
                 return;
             }
         } else if (rangeArr1.length === 0) {
-            if (Number.isNaN(v1) || v1 === "") {
+            if (Number.isNaN(v1) || v1 === '') {
                 ctx.warnDialog = conditionformat.conditionValueCanOnly;
                 return;
             }
@@ -120,33 +114,29 @@ export function setConditionRules(
                 return;
             }
         } else if (rangeArr2.length === 0) {
-            if (Number.isNaN(v2) || v2 === "") {
+            if (Number.isNaN(v2) || v2 === '') {
                 ctx.warnDialog = conditionformat.conditionValueCanOnly;
             } else {
                 conditionValue.push(v2);
             }
         }
-    } else if (conditionName === "occurrenceDate") {
+    } else if (conditionName === 'occurrenceDate') {
         const v = rules.dateValue;
         if (!v) {
             ctx.warnDialog = conditionformat.pleaseSelectADate;
             return;
         }
         conditionValue.push(v);
-    } else if (conditionName === "duplicateValue") {
+    } else if (conditionName === 'duplicateValue') {
         conditionValue.push(rules.repeatValue);
     } else if (
-        conditionName === "top10" ||
-        conditionName === "top10_percent" ||
-        conditionName === "last10" ||
-        conditionName === "last10_percent"
+        conditionName === 'top10' ||
+        conditionName === 'top10_percent' ||
+        conditionName === 'last10' ||
+        conditionName === 'last10_percent'
     ) {
         const v = rules.projectValue;
-        if (
-            parseInt(v, 10).toString() !== v ||
-            parseInt(v, 10) < 1 ||
-            parseInt(v, 10) > 1000
-        ) {
+        if (parseInt(v, 10).toString() !== v || parseInt(v, 10) < 1 || parseInt(v, 10) > 1000) {
             ctx.warnDialog = conditionformat.pleaseEnterInteger;
             return;
         }
@@ -168,7 +158,7 @@ export function setConditionRules(
 
     // construct the current rule
     const rule = {
-        type: "default",
+        type: 'default',
         cellrange: ctx.luckysheet_select_save ?? [],
         format: {
             textColor,
@@ -179,8 +169,7 @@ export function setConditionRules(
         conditionValue,
     };
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
-    const ruleArr =
-        ctx.luckysheetfile[index].luckysheet_conditionformat_save ?? [];
+    const ruleArr = ctx.luckysheetfile[index].luckysheet_conditionformat_save ?? [];
     ruleArr.push(rule);
 
     ctx.luckysheetfile[index].luckysheet_conditionformat_save = ruleArr;
@@ -202,16 +191,11 @@ export function invalidateCFCache() {
 export function getComputeMap(ctx: Context): ComputeMap | null {
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
     const ruleArr = ctx.luckysheetfile[index].luckysheet_conditionformat_save;
-    const {data} = ctx.luckysheetfile[index];
+    const { data } = ctx.luckysheetfile[index];
     if (isNil(data)) return null;
 
     // Return cached result if inputs haven't changed (reference equality)
-    if (
-        _cfCache &&
-        _cfCache.sheetId === ctx.currentSheetId &&
-        _cfCache.rules === ruleArr &&
-        _cfCache.data === data
-    ) {
+    if (_cfCache && _cfCache.sheetId === ctx.currentSheetId && _cfCache.rules === ruleArr && _cfCache.data === data) {
         return _cfCache.result;
     }
 
@@ -221,10 +205,10 @@ export function getComputeMap(ctx: Context): ComputeMap | null {
             const offsetCol = targetCol - anchorCol;
             let shifted = formula;
             if (offsetRow > 0) {
-                shifted = `=${functionCopy(shifted, "down", offsetRow)}`;
+                shifted = `=${functionCopy(shifted, 'down', offsetRow)}`;
             }
             if (offsetCol > 0) {
-                shifted = `=${functionCopy(shifted, "right", offsetCol)}`;
+                shifted = `=${functionCopy(shifted, 'right', offsetCol)}`;
             }
             return execfunction(ctx, shifted, targetRow, targetCol)[1];
         },
@@ -238,11 +222,7 @@ export function getComputeMap(ctx: Context): ComputeMap | null {
     return computeMap;
 }
 
-export function checkCF(
-    r: number,
-    c: number,
-    computeMap: ComputeMap | null
-): CellFormatStyle | null {
+export function checkCF(r: number, c: number, computeMap: ComputeMap | null): CellFormatStyle | null {
     if (!isNil(computeMap) && `${r}_${c}` in computeMap) {
         return computeMap[`${r}_${c}`];
     }
@@ -254,26 +234,26 @@ export function checkCF(
 // in state/locale/en.ts.
 export const CF_PRESETS: Record<string, string[]> = {
     // 3-color gradients (max → mid → min)
-    colorGradation_1: ["#f8696b", "#ffeb84", "#63be7b"],
-    colorGradation_2: ["#63be7b", "#ffeb84", "#f8696b"],
-    colorGradation_3: ["#f8696b", "#ffffff", "#63be7b"],
-    colorGradation_4: ["#63be7b", "#ffffff", "#f8696b"],
-    colorGradation_5: ["#f8696b", "#ffffff", "#5a8ac6"],
-    colorGradation_6: ["#5a8ac6", "#ffffff", "#f8696b"],
+    colorGradation_1: ['#f8696b', '#ffeb84', '#63be7b'],
+    colorGradation_2: ['#63be7b', '#ffeb84', '#f8696b'],
+    colorGradation_3: ['#f8696b', '#ffffff', '#63be7b'],
+    colorGradation_4: ['#63be7b', '#ffffff', '#f8696b'],
+    colorGradation_5: ['#f8696b', '#ffffff', '#5a8ac6'],
+    colorGradation_6: ['#5a8ac6', '#ffffff', '#f8696b'],
     // 2-color gradients (max → min)
-    colorGradation_7: ["#f8696b", "#ffffff"],
-    colorGradation_8: ["#ffffff", "#f8696b"],
-    colorGradation_9: ["#ffffff", "#63be7b"],
-    colorGradation_10: ["#63be7b", "#ffffff"],
-    colorGradation_11: ["#ffeb84", "#63be7b"],
-    colorGradation_12: ["#63be7b", "#ffeb84"],
+    colorGradation_7: ['#f8696b', '#ffffff'],
+    colorGradation_8: ['#ffffff', '#f8696b'],
+    colorGradation_9: ['#ffffff', '#63be7b'],
+    colorGradation_10: ['#63be7b', '#ffffff'],
+    colorGradation_11: ['#ffeb84', '#63be7b'],
+    colorGradation_12: ['#63be7b', '#ffeb84'],
     // Solid data-bar colors (single bar color; negative bars hardcode red)
-    solidColorDataBar_1: ["#638ec6"],
-    solidColorDataBar_2: ["#63be7b"],
-    solidColorDataBar_3: ["#f8696b"],
-    solidColorDataBar_4: ["#ffb628"],
-    solidColorDataBar_5: ["#a3c8ff"],
-    solidColorDataBar_6: ["#a085ff"],
+    solidColorDataBar_1: ['#638ec6'],
+    solidColorDataBar_2: ['#63be7b'],
+    solidColorDataBar_3: ['#f8696b'],
+    solidColorDataBar_4: ['#ffb628'],
+    solidColorDataBar_5: ['#a3c8ff'],
+    solidColorDataBar_6: ['#a085ff'],
 };
 
 export function clearSheetRules(ctx: Context) {
@@ -286,17 +266,17 @@ export function applyColorScalePreset(ctx: Context, presetKey: string) {
     if (!checkProtectionFormatCells(ctx)) return;
     const format = CF_PRESETS[presetKey];
     if (!format) return;
-    appendRule(ctx, "colorGradation", format);
+    appendRule(ctx, 'colorGradation', format);
 }
 
 export function applyDataBarPreset(ctx: Context, presetKey: string) {
     if (!checkProtectionFormatCells(ctx)) return;
     const format = CF_PRESETS[presetKey];
     if (!format) return;
-    appendRule(ctx, "dataBar", format);
+    appendRule(ctx, 'dataBar', format);
 }
 
-function appendRule(ctx: Context, type: "colorGradation" | "dataBar", format: string[]) {
+function appendRule(ctx: Context, type: 'colorGradation' | 'dataBar', format: string[]) {
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
     const rule = {
         type,

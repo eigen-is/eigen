@@ -1,16 +1,16 @@
-import {cloneDeep, set} from "es-toolkit/compat";
-import {getdatabyselection} from "./cell";
+import { cloneDeep, set } from 'es-toolkit/compat';
+import { cfSplitRange } from '../../engine';
 
-import {Context, getFlowdata} from "../context";
-import {colLocation, colLocationByIndex, mousePosition, rowLocation, rowLocationByIndex,} from "./location";
-import {hasPartMC} from "./validation";
-import {locale} from "../locale";
-import {getBorderInfoCompute} from "./border";
-import {normalizeSelection} from "./selection";
-import {getSheetIndex, isAllowEdit} from "../utils";
-import {cfSplitRange} from "../../engine";
-import {GlobalCache} from "../types";
-import {jfrefreshgrid} from "./refresh";
+import { type Context, getFlowdata } from '../context';
+import { locale } from '../locale';
+import type { GlobalCache } from '../types';
+import { getSheetIndex, isAllowEdit } from '../utils';
+import { getBorderInfoCompute } from './border';
+import { getdatabyselection } from './cell';
+import { colLocation, colLocationByIndex, mousePosition, rowLocation, rowLocationByIndex } from './location';
+import { jfrefreshgrid } from './refresh';
+import { normalizeSelection } from './selection';
+import { hasPartMC } from './validation';
 
 const dragCellThreshold = 8;
 
@@ -19,7 +19,7 @@ function getCellLocationByMouse(
     e: MouseEvent,
     scrollbarX: HTMLDivElement,
     scrollbarY: HTMLDivElement,
-    container: HTMLDivElement
+    container: HTMLDivElement,
 ) {
     const rect = container.getBoundingClientRect();
     const x = e.pageX - rect.left - ctx.rowHeaderWidth + scrollbarX.scrollLeft;
@@ -37,7 +37,7 @@ export function onCellsMoveStart(
     e: MouseEvent,
     scrollbarX: HTMLDivElement,
     scrollbarY: HTMLDivElement,
-    container: HTMLDivElement
+    container: HTMLDivElement,
 ) {
     // if (isEditMode() || ctx.allowEdit === false) {
     const allowEdit = isAllowEdit(ctx);
@@ -46,7 +46,7 @@ export function onCellsMoveStart(
         return;
     }
 
-    globalCache.dragCellStartPos = {x: e.pageX, y: e.pageY};
+    globalCache.dragCellStartPos = { x: e.pageX, y: e.pageY };
     ctx.luckysheet_cell_selected_move = true;
     ctx.luckysheet_scroll_status = true;
 
@@ -69,13 +69,13 @@ export function onCellsMoveStart(
 
     ctx.luckysheet_cell_selected_move_index = [row_index, col_index];
 
-    const ele = document.getElementById("fortune-cell-selected-move");
+    const ele = document.getElementById('fortune-cell-selected-move');
     if (ele == null) return;
     ele.style.left = `${col_pre}px`;
     ele.style.top = `${row_pre}px`;
     ele.style.width = `${col - col_pre - 1}px`;
     ele.style.height = `${row - row_pre - 1}px`;
-    ele.style.display = "block";
+    ele.style.display = 'block';
 
     e.stopPropagation();
 }
@@ -86,7 +86,7 @@ export function onCellsMove(
     e: MouseEvent,
     scrollbarX: HTMLDivElement,
     scrollbarY: HTMLDivElement,
-    container: HTMLDivElement
+    container: HTMLDivElement,
 ) {
     if (!ctx.luckysheet_cell_selected_move) return;
     if (globalCache.dragCellStartPos != null) {
@@ -103,13 +103,7 @@ export function onCellsMove(
     const winH = rect.height - 20;
     const winW = rect.width - 60;
 
-    const {row: rowL, column} = getCellLocationByMouse(
-        ctx,
-        e,
-        scrollbarX,
-        scrollbarY,
-        container
-    );
+    const { row: rowL, column } = getCellLocationByMouse(ctx, e, scrollbarX, scrollbarY, container);
     let [row_pre, row] = rowL;
     let [col_pre, col] = column;
     const row_index = rowL[2];
@@ -118,36 +112,25 @@ export function onCellsMove(
     const row_index_original = ctx.luckysheet_cell_selected_move_index[0];
     const col_index_original = ctx.luckysheet_cell_selected_move_index[1];
     if (ctx.luckysheet_select_save == null) return;
-    let row_s =
-        ctx.luckysheet_select_save[0].row[0] - row_index_original + row_index;
-    let row_e =
-        ctx.luckysheet_select_save[0].row[1] - row_index_original + row_index;
+    let row_s = ctx.luckysheet_select_save[0].row[0] - row_index_original + row_index;
+    let row_e = ctx.luckysheet_select_save[0].row[1] - row_index_original + row_index;
 
-    let col_s =
-        ctx.luckysheet_select_save[0].column[0] - col_index_original + col_index;
-    let col_e =
-        ctx.luckysheet_select_save[0].column[1] - col_index_original + col_index;
+    let col_s = ctx.luckysheet_select_save[0].column[0] - col_index_original + col_index;
+    let col_e = ctx.luckysheet_select_save[0].column[1] - col_index_original + col_index;
 
     if (row_s < 0 || y < 0) {
         row_s = 0;
-        row_e =
-            ctx.luckysheet_select_save[0].row[1] -
-            ctx.luckysheet_select_save[0].row[0];
+        row_e = ctx.luckysheet_select_save[0].row[1] - ctx.luckysheet_select_save[0].row[0];
     }
 
     if (col_s < 0 || x < 0) {
         col_s = 0;
-        col_e =
-            ctx.luckysheet_select_save[0].column[1] -
-            ctx.luckysheet_select_save[0].column[0];
+        col_e = ctx.luckysheet_select_save[0].column[1] - ctx.luckysheet_select_save[0].column[0];
     }
 
     if (row_e >= ctx.visibledatarow.length - 1 || y > winH) {
         row_s =
-            ctx.visibledatarow.length -
-            1 -
-            ctx.luckysheet_select_save[0].row[1] +
-            ctx.luckysheet_select_save[0].row[0];
+            ctx.visibledatarow.length - 1 - ctx.luckysheet_select_save[0].row[1] + ctx.luckysheet_select_save[0].row[0];
         row_e = ctx.visibledatarow.length - 1;
     }
 
@@ -165,13 +148,13 @@ export function onCellsMove(
     row_pre = row_s - 1 === -1 ? 0 : ctx.visibledatarow[row_s - 1];
     row = ctx.visibledatarow[row_e];
 
-    const ele = document.getElementById("fortune-cell-selected-move");
+    const ele = document.getElementById('fortune-cell-selected-move');
     if (ele == null) return;
     ele.style.left = `${col_pre}px`;
     ele.style.top = `${row_pre}px`;
     ele.style.width = `${col - col_pre - 2}px`;
     ele.style.height = `${row - row_pre - 2}px`;
-    ele.style.display = "block";
+    ele.style.display = 'block';
 }
 
 export function onCellsMoveEnd(
@@ -180,13 +163,13 @@ export function onCellsMoveEnd(
     e: MouseEvent,
     scrollbarX: HTMLDivElement,
     scrollbarY: HTMLDivElement,
-    container: HTMLDivElement
+    container: HTMLDivElement,
 ) {
     // Change selection box position and replace target cells
     if (!ctx.luckysheet_cell_selected_move) return;
     ctx.luckysheet_cell_selected_move = false;
-    const ele = document.getElementById("fortune-cell-selected-move");
-    if (ele != null) ele.style.display = "none";
+    const ele = document.getElementById('fortune-cell-selected-move');
+    if (ele != null) ele.style.display = 'none';
     if (globalCache.dragCellStartPos != null) {
         globalCache.dragCellStartPos = undefined;
         return;
@@ -220,8 +203,7 @@ export function onCellsMoveEnd(
 
     const d = getFlowdata(ctx);
     if (d == null || ctx.luckysheet_select_save == null) return;
-    const last =
-        ctx.luckysheet_select_save[ctx.luckysheet_select_save.length - 1];
+    const last = ctx.luckysheet_select_save[ctx.luckysheet_select_save.length - 1];
 
     const data = cloneDeep(getdatabyselection(ctx, last, ctx.currentSheetId));
 
@@ -232,19 +214,10 @@ export function onCellsMoveEnd(
     if (cfg.rowlen == null) {
         cfg.rowlen = {};
     }
-    const {drag: locale_drag} = locale(ctx);
+    const { drag: locale_drag } = locale(ctx);
 
     // Selection contains partial cells
-    if (
-        hasPartMC(
-            ctx,
-            cfg,
-            last.row[0],
-            last.row[1],
-            last.column[0],
-            last.column[1]
-        )
-    ) {
+    if (hasPartMC(ctx, cfg, last.row[0], last.row[1], last.column[0], last.column[1])) {
         // if (isEditMode()) {
         //   alert(locale_drag.noMerge);
         // } else {
@@ -332,11 +305,8 @@ export function onCellsMoveEnd(
 
             d[r][c] = null;
             if (ctx.luckysheetfile[index].hyperlink?.[`${r}_${c}`]) {
-                hyperLinkList[`${r}_${c}`] =
-                    ctx.luckysheetfile[index].hyperlink?.[`${r}_${c}`]!;
-                delete ctx.luckysheetfile[
-                    getSheetIndex(ctx, ctx.currentSheetId) as number
-                    ].hyperlink?.[`${r}_${c}`];
+                hyperLinkList[`${r}_${c}`] = ctx.luckysheetfile[index].hyperlink?.[`${r}_${c}`]!;
+                delete ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId) as number].hyperlink?.[`${r}_${c}`];
             }
         }
     }
@@ -347,42 +317,32 @@ export function onCellsMoveEnd(
         for (let i = 0; i < cfg.borderInfo.length; i += 1) {
             const bd_rangeType = cfg.borderInfo[i].rangeType;
 
-            if (
-                bd_rangeType === "range" &&
-                cfg.borderInfo[i].borderType !== "border-slash"
-            ) {
+            if (bd_rangeType === 'range' && cfg.borderInfo[i].borderType !== 'border-slash') {
                 const bd_range = cfg.borderInfo[i].range;
                 let bd_emptyRange: any[] = [];
                 for (let j = 0; j < bd_range.length; j += 1) {
                     bd_emptyRange = bd_emptyRange.concat(
                         cfSplitRange(
                             bd_range[j],
-                            {row: last.row, column: last.column},
-                            {row: [row_s, row_e], column: [col_s, col_e]},
-                            "restPart"
-                        )
+                            { row: last.row, column: last.column },
+                            { row: [row_s, row_e], column: [col_s, col_e] },
+                            'restPart',
+                        ),
                     );
                 }
 
                 cfg.borderInfo[i].range = bd_emptyRange;
                 borderInfo.push(cfg.borderInfo[i]);
-            } else if (bd_rangeType === "cell") {
+            } else if (bd_rangeType === 'cell') {
                 const bd_r = cfg.borderInfo[i].value.row_index;
                 const bd_c = cfg.borderInfo[i].value.col_index;
 
-                if (
-                    !(
-                        bd_r >= last.row[0] &&
-                        bd_r <= last.row[1] &&
-                        bd_c >= last.column[0] &&
-                        bd_c <= last.column[1]
-                    )
-                ) {
+                if (!(bd_r >= last.row[0] && bd_r <= last.row[1] && bd_c >= last.column[0] && bd_c <= last.column[1])) {
                     borderInfo.push(cfg.borderInfo[i]);
                 }
             } else if (
-                bd_rangeType === "range" &&
-                cfg.borderInfo[i].borderType === "border-slash" &&
+                bd_rangeType === 'range' &&
+                cfg.borderInfo[i].borderType === 'border-slash' &&
                 !(
                     cfg.borderInfo[i].range[0].row[0] >= last.row[0] &&
                     cfg.borderInfo[i].range[0].row[0] <= last.row[1] &&
@@ -405,7 +365,7 @@ export function onCellsMoveEnd(
                 !borderInfoCompute[`${r + last.row[0]}_${c + last.column[0]}`].s
             ) {
                 const bd_obj = {
-                    rangeType: "cell",
+                    rangeType: 'cell',
                     value: {
                         row_index: r + row_s,
                         col_index: c + col_s,
@@ -421,21 +381,13 @@ export function onCellsMoveEnd(
                 }
 
                 cfg.borderInfo.push(bd_obj);
-            } else if (
-                borderInfoCompute[`${r + last.row[0]}_${c + last.column[0]}`]
-            ) {
+            } else if (borderInfoCompute[`${r + last.row[0]}_${c + last.column[0]}`]) {
                 const bd_obj = {
-                    rangeType: "range",
-                    borderType: "border-slash",
-                    color:
-                        borderInfoCompute[`${r + last.row[0]}_${c + last.column[0]}`].s
-                            .color!,
-                    style:
-                        borderInfoCompute[`${r + last.row[0]}_${c + last.column[0]}`].s
-                            .style!,
-                    range: normalizeSelection(ctx, [
-                        {row: [r + row_s, r + row_s], column: [c + col_s, c + col_s]},
-                    ]),
+                    rangeType: 'range',
+                    borderType: 'border-slash',
+                    color: borderInfoCompute[`${r + last.row[0]}_${c + last.column[0]}`].s.color!,
+                    style: borderInfoCompute[`${r + last.row[0]}_${c + last.column[0]}`].s.style!,
+                    range: normalizeSelection(ctx, [{ row: [r + row_s, r + row_s], column: [c + col_s, c + col_s] }]),
                 };
 
                 if (cfg.borderInfo == null) {
@@ -452,7 +404,7 @@ export function onCellsMoveEnd(
 
             if (value?.mc != null) {
                 const mc = Object.assign({}, value.mc);
-                if ("rs" in value.mc) {
+                if ('rs' in value.mc) {
                     set(offsetMC, `${mc.r}_${mc.c}`, [r + row_s, c + col_s]);
 
                     value.mc.r = r + row_s;
@@ -460,25 +412,25 @@ export function onCellsMoveEnd(
 
                     set(cfg.merge, `${r + row_s}_${c + col_s}`, value.mc);
                 } else {
-                    set(value.mc, "r", offsetMC[`${mc.r}_${mc.c}`][0]);
-                    set(value.mc, "c", offsetMC[`${mc.r}_${mc.c}`][1]);
+                    set(value.mc, 'r', offsetMC[`${mc.r}_${mc.c}`][0]);
+                    set(value.mc, 'c', offsetMC[`${mc.r}_${mc.c}`][1]);
                 }
             }
             d[r + row_s][c + col_s] = value;
             if (hyperLinkList?.[`${r + last.row[0]}_${c + last.column[0]}`]) {
-                ctx.luckysheetfile[index].hyperlink![`${r + row_s}_${c + col_s}`] =
-                    hyperLinkList?.[`${r + last.row[0]}_${c + last.column[0]}`] as {
-                        linkType: string;
-                        linkAddress: string;
-                    };
+                ctx.luckysheetfile[index].hyperlink![`${r + row_s}_${c + col_s}`] = hyperLinkList?.[
+                    `${r + last.row[0]}_${c + last.column[0]}`
+                ] as {
+                    linkType: string;
+                    linkAddress: string;
+                };
             }
         }
     }
 
     // Conditional format
     const cdformat =
-        ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId) as number]
-            .luckysheet_conditionformat_save ?? [];
+        ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId) as number].luckysheet_conditionformat_save ?? [];
     if (cdformat != null && cdformat.length > 0) {
         for (let i = 0; i < cdformat.length; i += 1) {
             const cdformat_cellrange = cdformat[i].cellrange;
@@ -486,9 +438,9 @@ export function onCellsMoveEnd(
             for (let j = 0; j < cdformat_cellrange.length; j += 1) {
                 const range = cfSplitRange(
                     cdformat_cellrange[j],
-                    {row: last.row, column: last.column},
-                    {row: [row_s, row_e], column: [col_s, col_e]},
-                    "allPart"
+                    { row: last.row, column: last.column },
+                    { row: [row_s, row_e], column: [col_s, col_e] },
+                    'allPart',
                 );
                 emptyRange = emptyRange.concat(range);
             }
@@ -497,28 +449,22 @@ export function onCellsMoveEnd(
     }
 
     let rf;
-    if (
-        ctx.luckysheet_select_save[0].row_focus ===
-        ctx.luckysheet_select_save[0].row[0]
-    ) {
+    if (ctx.luckysheet_select_save[0].row_focus === ctx.luckysheet_select_save[0].row[0]) {
         rf = row_s;
     } else {
         rf = row_e;
     }
 
     let cf;
-    if (
-        ctx.luckysheet_select_save[0].column_focus ===
-        ctx.luckysheet_select_save[0].column[0]
-    ) {
+    if (ctx.luckysheet_select_save[0].column_focus === ctx.luckysheet_select_save[0].column[0]) {
         cf = col_s;
     } else {
         cf = col_e;
     }
 
     const range = [];
-    range.push({row: last.row, column: last.column});
-    range.push({row: [row_s, row_e], column: [col_s, col_e]});
+    range.push({ row: last.row, column: last.column });
+    range.push({ row: [row_s, row_e], column: [col_s, col_e] });
 
     last.row = [row_s, row_e];
     last.column = [col_s, col_e];

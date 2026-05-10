@@ -1,8 +1,8 @@
-import {find, set} from "es-toolkit/compat";
-import {GlobalCache} from "../types";
-import {mergeBorder} from ".";
-import {Context, getFlowdata} from "../context";
-import {getSheetIndex} from "../utils";
+import { find, set } from 'es-toolkit/compat';
+import { type Context, getFlowdata } from '../context';
+import type { GlobalCache } from '../types';
+import { getSheetIndex } from '../utils';
+import { mergeBorder } from '.';
 
 let counter = 0;
 function generateImageId() {
@@ -18,16 +18,13 @@ export function saveImage(ctx: Context) {
 }
 
 export function removeActiveImage(ctx: Context) {
-    ctx.insertedImgs = ctx.insertedImgs?.filter(
-        (image) => image.id !== ctx.activeImg
-    );
+    ctx.insertedImgs = ctx.insertedImgs?.filter((image) => image.id !== ctx.activeImg);
     ctx.activeImg = undefined;
     saveImage(ctx);
 }
 
 export function insertImage(ctx: Context, mediaName: string, width: number, height: number) {
-    const last =
-        ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1];
+    const last = ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1];
     let rowIndex = last?.row_focus;
     let colIndex = last?.column_focus;
     if (!last) {
@@ -64,12 +61,12 @@ export function insertImage(ctx: Context, mediaName: string, width: number, heig
 }
 
 function getImagePosition() {
-    const box = document.getElementById("luckysheet-modal-dialog-activeImage");
+    const box = document.getElementById('luckysheet-modal-dialog-activeImage');
     if (!box) return undefined;
-    const {width, height} = box.getBoundingClientRect();
+    const { width, height } = box.getBoundingClientRect();
     const left = box.offsetLeft;
     const top = box.offsetTop;
-    return {left, top, width, height};
+    return { left, top, width, height };
 }
 
 export function cancelActiveImgItem(ctx: Context, globalCache: GlobalCache) {
@@ -77,32 +74,24 @@ export function cancelActiveImgItem(ctx: Context, globalCache: GlobalCache) {
     globalCache.image = undefined;
 }
 
-export function onImageMoveStart(
-    ctx: Context,
-    globalCache: GlobalCache,
-    e: MouseEvent,
-) {
+export function onImageMoveStart(ctx: Context, globalCache: GlobalCache, e: MouseEvent) {
     const position = getImagePosition();
     if (position) {
-        const {top, left} = position;
-        set(globalCache, "image", {
-            cursorMoveStartPosition: {x: e.pageX, y: e.pageY},
-            imgInitialPosition: {left, top},
+        const { top, left } = position;
+        set(globalCache, 'image', {
+            cursorMoveStartPosition: { x: e.pageX, y: e.pageY },
+            imgInitialPosition: { left, top },
         });
     }
 }
 
-export function onImageMove(
-    ctx: Context,
-    globalCache: GlobalCache,
-    e: MouseEvent
-) {
+export function onImageMove(ctx: Context, globalCache: GlobalCache, e: MouseEvent) {
     if (ctx.allowEdit === false) return false;
     const image = globalCache?.image;
-    const img = document.getElementById("luckysheet-modal-dialog-activeImage");
+    const img = document.getElementById('luckysheet-modal-dialog-activeImage');
     if (img && image && !image.resizingSide) {
-        const {x: startX, y: startY} = image.cursorMoveStartPosition!;
-        let {top, left} = image.imgInitialPosition!;
+        const { x: startX, y: startY } = image.cursorMoveStartPosition!;
+        let { top, left } = image.imgInitialPosition!;
         left += e.pageX - startX;
         top += e.pageY - startY;
         if (top < 0) top = 0;
@@ -129,41 +118,31 @@ export function onImageMoveEnd(ctx: Context, globalCache: GlobalCache) {
     }
 }
 
-export function onImageResizeStart(
-    globalCache: GlobalCache,
-    e: MouseEvent,
-    resizingSide: string
-) {
+export function onImageResizeStart(globalCache: GlobalCache, e: MouseEvent, resizingSide: string) {
     const position = getImagePosition();
     if (position) {
-        set(globalCache, "image", {
-            cursorMoveStartPosition: {x: e.pageX, y: e.pageY},
+        set(globalCache, 'image', {
+            cursorMoveStartPosition: { x: e.pageX, y: e.pageY },
             resizingSide,
             imgInitialPosition: position,
         });
     }
 }
 
-export function onImageResize(
-    ctx: Context,
-    globalCache: GlobalCache,
-    e: MouseEvent
-) {
+export function onImageResize(ctx: Context, globalCache: GlobalCache, e: MouseEvent) {
     if (ctx.allowEdit === false) return false;
     const image = globalCache?.image;
     if (image?.resizingSide) {
-        const imgContainer = document.getElementById(
-            "luckysheet-modal-dialog-activeImage"
-        );
-        const img = imgContainer?.querySelector(".luckysheet-modal-dialog-content");
+        const imgContainer = document.getElementById('luckysheet-modal-dialog-activeImage');
+        const img = imgContainer?.querySelector('.luckysheet-modal-dialog-content');
         if (img == null) return false;
-        const {x: startX, y: startY} = image.cursorMoveStartPosition!;
-        let {top, left, width, height} = image.imgInitialPosition!;
+        const { x: startX, y: startY } = image.cursorMoveStartPosition!;
+        let { top, left, width, height } = image.imgInitialPosition!;
         const dx = e.pageX - startX;
         const dy = e.pageY - startY;
         const minHeight = 60;
         const minWidth = 1.5 * 60;
-        if (["lm", "lt", "lb"].includes(image.resizingSide)) {
+        if (['lm', 'lt', 'lb'].includes(image.resizingSide)) {
             if (width - dx < minWidth) {
                 left += width - minWidth;
                 width = minWidth;
@@ -175,10 +154,10 @@ export function onImageResize(
             (img as HTMLDivElement).style.left = `${left}px`;
             (imgContainer as HTMLDivElement).style.left = `${left}px`;
         }
-        if (["rm", "rt", "rb"].includes(image.resizingSide)) {
+        if (['rm', 'rt', 'rb'].includes(image.resizingSide)) {
             width = width + dx < minWidth ? minWidth : width + dx;
         }
-        if (["mt", "lt", "rt"].includes(image.resizingSide)) {
+        if (['mt', 'lt', 'rt'].includes(image.resizingSide)) {
             if (height - dy < minHeight) {
                 top += height - minHeight;
                 height = minHeight;
@@ -190,7 +169,7 @@ export function onImageResize(
             (img as HTMLDivElement).style.top = `${top}px`;
             (imgContainer as HTMLDivElement).style.top = `${top}px`;
         }
-        if (["mb", "lb", "rb"].includes(image.resizingSide)) {
+        if (['mb', 'lb', 'rb'].includes(image.resizingSide)) {
             height = height + dy < minHeight ? minHeight : height + dy;
         }
         (img as HTMLDivElement).style.width = `${width}px`;
