@@ -1,15 +1,15 @@
-import type {Patch as ImmerPatch} from "immer";
-import type {Cell, CellMatrix, CellWithRowAndCol, Range, SingleRange} from "../engine/types";
-import type {PatchOptions} from "./utils";
+import type { Patch as ImmerPatch } from 'immer';
+import type { Cell, CellMatrix, CellWithRowAndCol, Range, SingleRange } from '../engine/types';
+import type { PatchOptions } from './utils';
 
+export type { Op } from '@workspace/lib/sheets';
 // Shared sheet data shapes (Cell, CellMatrix, CellWithRowAndCol, SingleRange,
 // Range, …) live in @workspace/lib/sheets and are re-exported through
 // ../engine/types — surfaced here so state-side consumers don't have to know
 // the canonical home. `Op` lives in lib too (the BE document reader replays
 // ops without the engine), but it isn't engine-conceptual — re-exported
 // directly from lib here.
-export type {Cell, CellMatrix, CellWithRowAndCol, Range, SingleRange};
-export type {Op} from "@workspace/lib/sheets";
+export type { Cell, CellMatrix, CellWithRowAndCol, Range, SingleRange };
 
 export type Rect = {
     top: number;
@@ -115,7 +115,7 @@ export type Sheet = {
     dynamicArray_compute?: any;
     dynamicArray?: any[];
     frozen?: {
-        type: "row" | "column" | "both" | "rangeRow" | "rangeColumn" | "rangeBoth";
+        type: 'row' | 'column' | 'both' | 'rangeRow' | 'rangeColumn' | 'rangeBoth';
         range?: { row_focus: number; column_focus: number };
     };
 };
