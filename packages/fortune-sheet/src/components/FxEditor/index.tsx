@@ -88,7 +88,7 @@ export function FxEditor() {
                 const row_index = last.row_focus;
                 const col_index = last.column_focus;
 
-                draftCtx.luckysheetCellUpdate = [row_index, col_index];
+                draftCtx.luckysheetCellUpdate = [row_index!, col_index!];
                 refs.globalCache.doNotFocus = true;
                 // formula.rangeResizeTo = $("#luckysheet-functionbox-cell");
             });

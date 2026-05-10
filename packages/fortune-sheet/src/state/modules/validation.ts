@@ -1,44 +1,50 @@
 import dayjs from 'dayjs';
 import { forEach } from 'es-toolkit/compat';
 import type { Context } from '../context';
+import type { SheetConfig } from '../types';
 import { hasChinaword } from './text';
 
 export { error, isdatetime, isRealNull, isRealNum, valueIsError } from '../../engine/validation';
 
 import { isdatetime } from '../../engine/validation';
 
-export function diff(now: any, then: any) {
+export function diff(now: dayjs.ConfigType, then: dayjs.ConfigType) {
     return dayjs(now).diff(dayjs(then));
 }
 
-export function isdatatypemulti(s: any) {
-    const type: any = {};
+export function isdatatypemulti(s: unknown) {
+    const type: { date?: boolean; num?: boolean } = {};
 
     if (isdatetime(s)) {
         type.date = true;
     }
 
-    if (!Number.isNaN(parseFloat(s)) && !hasChinaword(s)) {
+    const str = String(s);
+    if (!Number.isNaN(parseFloat(str)) && !hasChinaword(str)) {
         type.num = true;
     }
 
     return type;
 }
 
-export function isdatatype(s: any) {
+export function isdatatype(s: unknown) {
     let type = 'string';
 
     if (isdatetime(s)) {
         type = 'date';
-    } else if (!Number.isNaN(parseFloat(s)) && !hasChinaword(s)) {
-        type = 'num';
+    } else {
+        const str = String(s);
+        if (!Number.isNaN(parseFloat(str)) && !hasChinaword(str)) {
+            type = 'num';
+        }
     }
 
     return type;
 }
 
-// Whether the range contains only part of a merged cell
-export function hasPartMC(ctx: Context, cfg: any, r1: number, r2: number, c1: number, c2: number) {
+// Whether the range contains only part of a merged cell.
+// `cfg` is unused — historic API kept for callers; merge data is read from ctx.config.merge.
+export function hasPartMC(ctx: Context, _cfg: SheetConfig, r1: number, r2: number, c1: number, c2: number) {
     let ret = false;
 
     forEach(ctx.config.merge, (mc) => {

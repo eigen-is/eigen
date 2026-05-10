@@ -68,7 +68,7 @@ export function getSearchIndexArr(
                             }
                         } else if (regCheck) {
                             // Regular expression
-                            let reg;
+                            let reg: RegExp;
                             // Whether to be case sensitive
                             if (caseCheck) {
                                 reg = new RegExp(getRegExpStr(searchText), 'g');
@@ -243,7 +243,7 @@ export function searchAll(
         return searchResult;
     }
 
-    let range;
+    let range: Selection[];
     if (
         size(ctx.luckysheet_select_save) === 0 ||
         (ctx.luckysheet_select_save?.length === 1 &&
@@ -368,7 +368,7 @@ export function replace(
         return findAndReplace.searchInputTip;
     }
 
-    let range;
+    let range: Selection[];
     if (
         size(ctx.luckysheet_select_save) === 0 ||
         (ctx.luckysheet_select_save?.length === 1 &&
@@ -414,8 +414,8 @@ export function replace(
 
     const d = flowdata;
 
-    let r;
-    let c;
+    let r: number;
+    let c: number;
     if (checkModes.wordCheck) {
         r = searchIndexArr[count].r;
         c = searchIndexArr[count].c;
@@ -428,7 +428,7 @@ export function replace(
 
         setCellValue(ctx, r, c, d, v);
     } else {
-        let reg;
+        let reg: RegExp;
         if (checkModes.caseCheck) {
             reg = new RegExp(getRegExpStr(searchText), 'g');
         } else {
@@ -478,7 +478,7 @@ export function replaceAll(
         return findAndReplace.searchInputTip;
     }
 
-    let range;
+    let range: Selection[];
     if (
         size(ctx.luckysheet_select_save) === 0 ||
         (ctx.luckysheet_select_save?.length === 1 &&
@@ -520,7 +520,7 @@ export function replaceAll(
             replaceCount += 1;
         }
     } else {
-        let reg;
+        let reg: RegExp;
         if (checkModes.caseCheck) {
             reg = new RegExp(getRegExpStr(searchText), 'g');
         } else {

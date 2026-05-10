@@ -52,7 +52,7 @@ export function getCellValue(
         throw sheetNotFound();
     }
     const cellData = targetSheetData[row][column];
-    let ret;
+    let ret: Cell[keyof Cell] | string | null = null;
 
     if (cellData && isPlainObject(cellData)) {
         if (type === 'f') {
@@ -77,7 +77,7 @@ export function setCellValue(
     ctx: Context,
     row: number,
     column: number,
-    value: any,
+    value: Cell | string | number | boolean | null | undefined,
     cellInput: HTMLDivElement | null,
     options: CommonOptions = {},
 ) {
@@ -124,10 +124,11 @@ export function setCellValue(
         }
         forEach(value, (v, attr) => {
             if (FORMAT_KEYS.has(attr)) {
-                updateFormatCell(ctx, data!, attr as keyof CellStyle, v, row, row, column, column); // change range format
+                updateFormatCell(ctx, data!, attr as keyof CellStyle, v as string | number, row, row, column, column); // change range format
             } else {
-                // @ts-expect-error
-                cell[attr] = v;
+                // forEach hands us `attr: string` (Cell key as plain key); the union of
+                // value-shapes can't be statically aligned with the union of key-shapes.
+                (cell as Record<string, unknown>)[attr] = v;
             }
         });
         data![row][column] = cell;
@@ -166,7 +167,7 @@ export function setCellFormat(
     row: number,
     column: number,
     attr: keyof Cell,
-    value: any,
+    value: unknown,
     options: CommonOptions = {},
 ) {
     if (!isNumber(row) || !isNumber(column)) {
@@ -186,16 +187,19 @@ export function setCellFormat(
 
     const cellData = targetSheetData?.[row]?.[column] || {};
     const cfg = sheet.config || {};
+    const ctValue = value as { fa?: string; t?: string } | null | undefined;
 
     // special format
-    if (attr === 'ct' && (!value || value.fa == null || value.t == null)) {
+    if (attr === 'ct' && (!ctValue || ctValue.fa == null || ctValue.t == null)) {
         throw new Error("'fa' and 't' should be present in value when attr is 'ct'");
     } else if (attr === 'ct' && !isNil(cellData.v)) {
-        cellData.m = format(value.fa, cellData.v); // auto generate mask
+        cellData.m = format(ctValue!.fa!, cellData.v); // auto generate mask
     }
 
-    // @ts-expect-error
-    if (attr === 'bd') {
+    // 'bd' is a pseudo-attr — not a real `keyof Cell`, but the upstream API surfaces
+    // border writes through this code path. Compare via string to keep callers' typed
+    // `keyof Cell` parameter intact.
+    if ((attr as string) === 'bd') {
         if (cfg.borderInfo == null) {
             cfg.borderInfo = [];
         }
@@ -211,12 +215,12 @@ export function setCellFormat(
                     row: [row, row],
                 },
             ],
-            ...value,
+            ...(value as object),
         };
 
         cfg.borderInfo.push(borderInfo);
     } else {
-        cellData[attr] = value;
+        (cellData as Record<string, unknown>)[attr] = value;
     }
 
     targetSheetData[row][column] = cellData;

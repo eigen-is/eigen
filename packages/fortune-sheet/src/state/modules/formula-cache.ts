@@ -103,20 +103,21 @@ export class FormulaCache {
 
     selectingRangeIndex: number;
 
-    rangeResizeObj?: any;
+    rangeResizeObj?: unknown;
 
-    rangeResize?: any;
+    rangeResize?: unknown;
 
     rangeResizeIndex?: number;
 
-    rangeResizexy?: any;
+    rangeResizexy?: unknown;
 
-    rangeResizeWinH?: any;
+    rangeResizeWinH?: unknown;
 
-    rangeResizeWinW?: any;
+    rangeResizeWinW?: unknown;
 
-    rangeResizeTo?: any;
+    rangeResizeTo?: HTMLDivElement[];
 
+    // biome-ignore lint/suspicious/noExplicitAny: assigned to Node, HTMLSpanElement, and NodeList in formula-editor.ts; reads use Node API — no shared base type
     rangeSetValueTo?: any;
 
     rangeIndex?: number;
@@ -131,7 +132,7 @@ export class FormulaCache {
 
     functionRangeIndex?: number[];
 
-    functionlistMap: any;
+    functionlistMap: Record<string, unknown>;
 
     execFunctionExist?: CalculationChainEntry[];
 
@@ -146,15 +147,16 @@ export class FormulaCache {
     }
 
     updateFormulaCache(ctx: Context, history: History, type: 'undo' | 'redo', data?: CellMatrix) {
-        function requestUpdate(value: any) {
+        function requestUpdate(value: unknown) {
             if (value instanceof Object) {
-                if (!isNil(value.r) && !isNil(value.c)) {
+                const v = value as { r?: number; c?: number; id?: string };
+                if (!isNil(v.r) && !isNil(v.c)) {
                     setFormulaCellInfo(
                         ctx,
                         {
-                            r: value.r,
-                            c: value.c,
-                            id: value.id || history.options?.id || ctx.currentSheetId,
+                            r: v.r,
+                            c: v.c,
+                            id: v.id || history.options?.id || ctx.currentSheetId,
                         },
                         data,
                     );

@@ -1,5 +1,5 @@
 import { isNil, sortBy } from 'es-toolkit/compat';
-import type { Cell } from '../engine/types';
+import type { Cell, CellMatrix } from '../engine/types';
 import type { SheetConfig } from '.';
 import { FormulaCache } from './modules';
 import { normalizeSelection } from './modules/selection';
@@ -111,7 +111,16 @@ export type Context = {
     scrollLeft: number;
     scrollTop: number;
 
-    sheetScrollRecord: Record<string, any>;
+    sheetScrollRecord: Record<
+        string,
+        {
+            scrollLeft: number;
+            scrollTop: number;
+            luckysheet_select_status: boolean;
+            luckysheet_select_save: Sheet['luckysheet_select_save'];
+            luckysheet_selection_range: Sheet['luckysheet_selection_range'];
+        }
+    >;
 
     luckysheet_select_status: boolean;
     luckysheet_select_save: Sheet['luckysheet_select_save'];
@@ -138,7 +147,7 @@ export type Context = {
     filter: Record<
         string,
         {
-            caljs: any;
+            caljs: unknown;
             rowhidden: Record<string, number>;
             optionstate: boolean;
             str: number;
@@ -150,7 +159,7 @@ export type Context = {
     >;
 
     luckysheet_sheet_move_status: boolean;
-    luckysheet_sheet_move_data: any[];
+    luckysheet_sheet_move_data: unknown[];
     luckysheet_scroll_status: boolean;
 
     luckysheetcurrentisPivotTable: boolean;
@@ -158,13 +167,13 @@ export type Context = {
     luckysheet_rows_selected_status: boolean; // row/column header related parameters
     luckysheet_cols_selected_status: boolean;
     luckysheet_rows_change_size: boolean;
-    luckysheet_rows_change_size_start: any[];
+    luckysheet_rows_change_size_start: number[];
     luckysheet_cols_change_size: boolean;
-    luckysheet_cols_change_size_start: any[];
+    luckysheet_cols_change_size_start: number[];
     luckysheet_cols_freeze_drag: boolean;
     luckysheet_rows_freeze_drag: boolean;
 
-    luckysheetCellUpdate: any[];
+    luckysheetCellUpdate: number[];
 
     luckysheet_shiftkeydown: boolean;
     luckysheet_shiftpositon: Selection | undefined;
@@ -175,20 +184,20 @@ export type Context = {
 
     luckysheet_model_move_state: boolean; // modal drag
     luckysheet_model_xy: number[];
-    luckysheet_model_move_obj: any;
+    luckysheet_model_move_obj: unknown;
 
     luckysheet_cell_selected_move: boolean; // selection drag-replace
-    luckysheet_cell_selected_move_index: any[];
+    luckysheet_cell_selected_move_index: number[];
 
     luckysheet_cell_selected_extend: boolean; // selection fill-down
-    luckysheet_cell_selected_extend_index: any[];
+    luckysheet_cell_selected_extend_index: number[];
 
-    chart_selection: any;
+    chart_selection: unknown;
 
     showGridLines: boolean;
     allowEdit: boolean;
 
-    fontList: any[];
+    fontList: unknown[];
     defaultFontSize: number;
 
     luckysheetPaintModelOn: boolean;
@@ -517,7 +526,7 @@ export function initSheetIndex(ctx: Context) {
     }
 }
 
-export function updateContextWithSheetData(ctx: Context, data: any[][]) {
+export function updateContextWithSheetData(ctx: Context, data: CellMatrix) {
     const rowCount = data.length;
     const colCount = rowCount === 0 ? 0 : data[0].length;
 

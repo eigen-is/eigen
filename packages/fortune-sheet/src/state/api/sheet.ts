@@ -91,7 +91,7 @@ function generateCopySheetName(ctx: Context, sheetId: string) {
         }
     }
 
-    let sheetCopyName;
+    let sheetCopyName: string;
 
     do {
         const postfix = `${copyWord + (index || '')})`;
@@ -140,10 +140,11 @@ function calculateSheetFromula(ctx: Context, id: string, range?: SingleRange) {
             const r = range.row[0] + _r;
             const c = range.column[0] + _c;
 
-            if (!ctx.luckysheetfile[index].data![r][c]?.f) {
+            const formula = ctx.luckysheetfile[index].data![r][c]?.f;
+            if (!formula) {
                 continue;
             }
-            const result = execfunction(ctx, ctx.luckysheetfile[index].data![r][c]?.f!, r, c, id);
+            const result = execfunction(ctx, formula, r, c, id);
             api.setCellValue(ctx, r, c, result[1], null, { id });
             insertUpdateFunctionGroup(ctx, r, c, id);
         }

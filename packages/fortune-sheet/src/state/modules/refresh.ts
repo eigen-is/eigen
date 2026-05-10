@@ -4,7 +4,7 @@ import type { Selection } from '../types';
 import { execFunctionGroup } from './formula-ui';
 import { setFormulaCellInfo } from './formulaHelper';
 
-function runExecFunction(ctx: Context, range: Selection[], index: string, data: any) {
+function runExecFunction(ctx: Context, range: Selection[], index: string, data: CellMatrix) {
     ctx.formulaCache.execFunctionExist = [];
     for (let s = 0; s < range.length; s += 1) {
         for (let r = range[s].row[0]; r <= range[s].row[1]; r += 1) {

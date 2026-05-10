@@ -1,15 +1,22 @@
 import { isNil } from 'es-toolkit/compat';
 import type { CellFormatStyle, ComputeMap } from '../../engine';
 import { evaluateConditionalFormat } from '../../engine';
-import type { CellMatrix } from '../../engine/types';
+import type { CellMatrix, ConditionalFormatRule } from '../../engine/types';
 import { type Context, getFlowdata } from '../context';
+import type { ConditionRulesProps } from '../types';
 import { getSheetIndex } from '../utils';
 import { getCellValue, getRangeByTxt } from './cell';
 import { execfunction, functionCopy } from './formula-ui';
 import { checkProtectionFormatCells } from './protection';
 
 // Set condition rules
-export function setConditionRules(ctx: Context, protection: any, generalDialog: any, conditionformat: any, rules: any) {
+export function setConditionRules(
+    ctx: Context,
+    _protection: unknown,
+    _generalDialog: unknown,
+    conditionformat: Record<string, string>,
+    rules: ConditionRulesProps,
+) {
     if (!checkProtectionFormatCells(ctx)) {
         return;
     }
@@ -179,7 +186,7 @@ export function setConditionRules(ctx: Context, protection: any, generalDialog: 
 // canvas paint / getStyleByCell call. Invalidates when sheet, rules or data change.
 let _cfCache: {
     sheetId: string | undefined;
-    rules: any[] | undefined;
+    rules: ConditionalFormatRule[] | undefined;
     data: CellMatrix;
     result: ComputeMap;
 } | null = null;

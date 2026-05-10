@@ -1,5 +1,6 @@
 import { cloneDeep, set } from 'es-toolkit/compat';
 import { cfSplitRange } from '../../engine';
+import type { SingleRange } from '../../engine/types';
 
 import { type Context, getFlowdata } from '../context';
 import { locale } from '../locale';
@@ -304,8 +305,9 @@ export function onCellsMoveEnd(
             }
 
             d[r][c] = null;
-            if (ctx.luckysheetfile[index].hyperlink?.[`${r}_${c}`]) {
-                hyperLinkList[`${r}_${c}`] = ctx.luckysheetfile[index].hyperlink?.[`${r}_${c}`]!;
+            const link = ctx.luckysheetfile[index].hyperlink?.[`${r}_${c}`];
+            if (link) {
+                hyperLinkList[`${r}_${c}`] = link;
                 delete ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId) as number].hyperlink?.[`${r}_${c}`];
             }
         }
@@ -319,7 +321,7 @@ export function onCellsMoveEnd(
 
             if (bd_rangeType === 'range' && cfg.borderInfo[i].borderType !== 'border-slash') {
                 const bd_range = cfg.borderInfo[i].range;
-                let bd_emptyRange: any[] = [];
+                let bd_emptyRange: SingleRange[] = [];
                 for (let j = 0; j < bd_range.length; j += 1) {
                     bd_emptyRange = bd_emptyRange.concat(
                         cfSplitRange(
@@ -357,7 +359,7 @@ export function onCellsMoveEnd(
         cfg.borderInfo = borderInfo;
     }
     // Replacement position data update
-    const offsetMC: Record<string, any> = {};
+    const offsetMC: Record<string, [number, number]> = {};
     for (let r = 0; r < data.length; r += 1) {
         for (let c = 0; c < data[0].length; c += 1) {
             if (
@@ -434,7 +436,7 @@ export function onCellsMoveEnd(
     if (cdformat != null && cdformat.length > 0) {
         for (let i = 0; i < cdformat.length; i += 1) {
             const cdformat_cellrange = cdformat[i].cellrange;
-            let emptyRange: any = [];
+            let emptyRange: SingleRange[] = [];
             for (let j = 0; j < cdformat_cellrange.length; j += 1) {
                 const range = cfSplitRange(
                     cdformat_cellrange[j],
@@ -448,14 +450,14 @@ export function onCellsMoveEnd(
         }
     }
 
-    let rf;
+    let rf: number;
     if (ctx.luckysheet_select_save[0].row_focus === ctx.luckysheet_select_save[0].row[0]) {
         rf = row_s;
     } else {
         rf = row_e;
     }
 
-    let cf;
+    let cf: number;
     if (ctx.luckysheet_select_save[0].column_focus === ctx.luckysheet_select_save[0].column[0]) {
         cf = col_s;
     } else {

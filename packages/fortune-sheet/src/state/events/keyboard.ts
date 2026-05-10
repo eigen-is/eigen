@@ -41,7 +41,7 @@ export function handleGlobalEnter(
         e.preventDefault();
     } else if ((ctx.luckysheet_select_save?.length ?? 0) > 0) {
         const last = ctx.luckysheet_select_save![ctx.luckysheet_select_save!.length - 1];
-        ctx.luckysheetCellUpdate = [last.row_focus, last.column_focus];
+        ctx.luckysheetCellUpdate = [last.row_focus!, last.column_focus!];
         e.preventDefault();
     }
 }
@@ -455,7 +455,7 @@ export function handleGlobalKeyDown(
         const last = ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1];
         if (!last) return;
 
-        ctx.luckysheetCellUpdate = [last.row_focus, last.column_focus];
+        ctx.luckysheetCellUpdate = [last.row_focus!, last.column_focus!];
         e.preventDefault();
     } else if (kstr === 'F4' && ctx.luckysheetCellUpdate.length > 0) {
         // TODO: toggle absolute/relative refs in the formula editor (formula.setfreezonFuc)
@@ -511,7 +511,7 @@ export function handleGlobalKeyDown(
         if (!isEmpty(ctx.luckysheet_select_save) && kstr !== 'CapsLock' && kcode !== 18) {
             // Activate the input box and forward the keypress to it.
             const last = ctx.luckysheet_select_save![ctx.luckysheet_select_save!.length - 1];
-            ctx.luckysheetCellUpdate = [last.row_focus, last.column_focus];
+            ctx.luckysheetCellUpdate = [last.row_focus!, last.column_focus!];
             cache.overwriteCell = true;
 
             handleFormulaInput(ctx, fxInput, cellInput, kcode);

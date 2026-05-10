@@ -9,15 +9,9 @@ export function orderbydata(isAsc: boolean, index: number, data: (Cell | null)[]
     if (isAsc == null) {
         isAsc = true;
     }
-    const a = (x: any, y: any) => {
-        let x1 = x[index];
-        let y1 = y[index];
-        if (x[index] != null) {
-            x1 = x[index].v;
-        }
-        if (y[index] != null) {
-            y1 = y[index].v;
-        }
+    const a = (x: (Cell | null)[], y: (Cell | null)[]) => {
+        const x1: Cell['v'] = x[index] != null ? x[index]?.v : undefined;
+        const y1: Cell['v'] = y[index] != null ? y[index]?.v : undefined;
         if (isRealNull(x1)) {
             return isAsc ? 1 : -1;
         }
@@ -26,16 +20,16 @@ export function orderbydata(isAsc: boolean, index: number, data: (Cell | null)[]
             return isAsc ? -1 : 1;
         }
         if (isdatetime(x1) && isdatetime(y1)) {
-            return diff(x1, y1);
+            return diff(String(x1), String(y1));
         }
         if (isRealNum(x1) && isRealNum(y1)) {
             const y1Value = numeral(y1).value();
             const x1Value = numeral(x1).value();
-            if (y1Value == null || x1Value == null) return null;
+            if (y1Value == null || x1Value == null) return 0;
             return x1Value - y1Value;
         }
         if (!isRealNum(x1) && !isRealNum(y1)) {
-            return x1.localeCompare(y1, 'zh');
+            return String(x1).localeCompare(String(y1), 'zh');
         }
         if (!isRealNum(x1)) {
             return 1;
@@ -45,7 +39,7 @@ export function orderbydata(isAsc: boolean, index: number, data: (Cell | null)[]
         }
         return 0;
     };
-    const d = (x: any, y: any) => a(y, x);
+    const d = (x: (Cell | null)[], y: (Cell | null)[]) => a(y, x);
     const sortedData = clone(data);
     sortedData.sort(isAsc ? a : d);
 
@@ -76,7 +70,7 @@ export function sortDataRange(
             const cell = sortedData[r - str][c - stc];
             if (cell?.f) {
                 const moveOffset = rowOffsets[r - str];
-                let func = cell?.f!;
+                let func = cell.f;
                 if (moveOffset > 0) {
                     func = `=${functionCopy(func, 'down', moveOffset)}`;
                 } else if (moveOffset < 0) {
@@ -126,7 +120,7 @@ export function sortSelection(ctx: Context, isAsc: boolean, colIndex: number = 0
     const c2 = ctx.luckysheet_select_save[0].column[1];
 
     let str: number | null = null;
-    let edr;
+    let edr: number | undefined;
 
     for (let r = r1; r <= r2; r += 1) {
         if (d[r] != null && d[r][c1] != null) {

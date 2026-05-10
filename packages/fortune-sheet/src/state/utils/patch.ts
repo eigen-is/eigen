@@ -37,10 +37,11 @@ export type PatchOptions = {
 };
 
 const addtionalMergeOps = (ops: Op[], id: string) => {
-    let merge_new = {} as Record<string, any>;
+    type MergeEntry = { r: number; c: number; rs: number; cs: number };
+    let merge_new: Record<string, MergeEntry> = {};
     ops.some((op) => {
         if (op.op === 'replace' && op.path[0] === 'config' && op.path[1] === 'merge') {
-            merge_new = op.value;
+            merge_new = op.value as Record<string, MergeEntry>;
             return true;
         }
         return false;
@@ -48,12 +49,7 @@ const addtionalMergeOps = (ops: Op[], id: string) => {
 
     const new_ops: Op[] = [];
     Object.entries(merge_new).forEach(([, v]) => {
-        const { r, c, rs, cs } = v as {
-            r: number;
-            c: number;
-            rs: number;
-            cs: number;
-        };
+        const { r, c, rs, cs } = v;
         const headerOp = {
             op: 'replace',
             path: ['data', r, c, 'mc'],

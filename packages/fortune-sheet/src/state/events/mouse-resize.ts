@@ -1,3 +1,4 @@
+import type { InlineStringSegment } from '../../engine/types';
 import type { Freezen } from '..';
 import { type Context, getFlowdata } from '../context';
 import { cancelActiveImgItem, israngeseleciton } from '../modules';
@@ -234,7 +235,7 @@ export function autoFitColumnWidth(ctx: Context, colIndex: number, canvas: HTMLC
 
         let text: string;
         if (isInlineStringCell(cell)) {
-            text = cell.ct!.s.map((seg: any) => seg.v ?? '').join('');
+            text = cell.ct!.s.map((seg: InlineStringSegment) => seg.v ?? '').join('');
         } else {
             const display = cell.m ?? cell.v;
             if (display == null) continue;

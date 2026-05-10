@@ -270,7 +270,7 @@ function mouseRender(
         const winW = rect.width - 60;
 
         if (y < 0 || y > winH) {
-            let stop;
+            let stop: number;
             if (y < 0) {
                 stop = top + y / 2;
             } else {
@@ -280,7 +280,7 @@ function mouseRender(
         }
 
         if (x < 0 || x > winW) {
-            let sleft;
+            let sleft: number;
             if (x < 0) {
                 sleft = left + x / 2;
             } else {

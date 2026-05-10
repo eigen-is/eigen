@@ -91,8 +91,8 @@ export function getcellrange(
 
     let sheettxt = '';
     let rangetxt = '';
-    let sheetId;
-    let sheetdata = null;
+    let sheetId: string | undefined;
+    let sheetdata: CellMatrix | null | undefined = null;
 
     const { luckysheetfile } = ctx;
 

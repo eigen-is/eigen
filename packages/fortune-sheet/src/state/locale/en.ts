@@ -8911,6 +8911,7 @@ export const en = {
         add: 'Add',
         addLast: 'more rows at bottom',
         backTop: 'Back to the top',
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
         pageInfo: 'Total ${total}，${totalPage} page，current ${currentPage}',
         nextPage: 'Next',
 

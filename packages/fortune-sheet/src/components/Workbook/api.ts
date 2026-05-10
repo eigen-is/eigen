@@ -99,7 +99,17 @@ export function generateAPIs(
             column: number,
             value: unknown,
             options: api.CommonOptions & { type?: keyof Cell } = {},
-        ) => setContext((draftCtx) => api.setCellValue(draftCtx, row, column, value, cellInput, options)),
+        ) =>
+            setContext((draftCtx) =>
+                api.setCellValue(
+                    draftCtx,
+                    row,
+                    column,
+                    value as Cell | string | number | boolean | null | undefined,
+                    cellInput,
+                    options,
+                ),
+            ),
 
         clearCell: (row: number, column: number, options: api.CommonOptions = {}) =>
             setContext((draftCtx) => api.clearCell(draftCtx, row, column, options)),

@@ -755,15 +755,13 @@ export function handleFormulaInput(
             if (editorlen > 0)
                 ctx.formulaCache.functionRangeIndex = [
                     editorlen - 1,
-                    $editor.querySelectorAll('span').item(editorlen - 1).textContent?.length!,
+                    $editor.querySelectorAll('span').item(editorlen - 1).textContent?.length ?? 0,
                 ];
         } else {
+            const childNodes = currSelection.anchorNode?.parentNode?.parentNode?.childNodes;
+            const parentNode = currSelection.anchorNode?.parentNode;
             ctx.formulaCache.functionRangeIndex = [
-                indexOf(
-                    currSelection.anchorNode?.parentNode?.parentNode?.childNodes,
-                    // @ts-expect-error
-                    currSelection.anchorNode?.parentNode,
-                ),
+                childNodes && parentNode ? Array.prototype.indexOf.call(childNodes, parentNode) : -1,
                 currSelection.anchorOffset,
             ];
         }
