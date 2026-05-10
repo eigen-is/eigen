@@ -2,7 +2,7 @@ import dayjs from 'dayjs';
 import { cloneDeep, pick } from 'es-toolkit/compat';
 import { cfSplitRange } from '../../engine';
 import { genarate, update } from '../../engine/format';
-import type { Cell, CellMatrix } from '../../engine/types';
+import type { Cell, CellMatrix, SingleRange } from '../../engine/types';
 import { type Context, getFlowdata } from '../context';
 import type { Rect } from '../types';
 import { getSheetIndex, isAllowEdit } from '../utils';
@@ -17,11 +17,39 @@ function toPx(v: number) {
     return `${v}px`;
 }
 
-export const dropCellCache: Record<string, any> = {
-    copyRange: {}, // copy range
-    applyRange: {}, // apply range
-    applyType: null, // 0=copy cells, 1=fill series, 2=fill format only, 3=fill without format, 4=fill by days, 5=fill by weekdays, 6=fill by months, 7=fill by years, 8=fill by Chinese lowercase number sequence
-    direction: null, // down=drag down, right=drag right, up=drag up, left=drag left
+// Drag-fill direction. The four cardinal values match how the user dragged the
+// fill handle; null is the initial state before any drag.
+type DropDirection = 'down' | 'up' | 'left' | 'right';
+
+// applyType values used as discriminators throughout the autofill heuristics:
+//   '0' = copy cells, '1' = fill series, '2' = fill format only,
+//   '3' = fill without format, '4' = fill by days, '5' = fill by weekdays,
+//   '6' = fill by months, '7' = fill by years, '8' = Chinese lowercase numbers.
+type DropApplyType = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8';
+
+// Module-scope cache of the in-progress drag-fill operation. Constants
+// (chnNumChar/chnNameValue/…) live alongside the mutable copyRange/applyRange/
+// applyType/direction state so callers in api/cell.ts can prime everything in
+// one place. Producers fill copyRange/applyRange/direction before
+// `updateDropCell` reads them; first run leaves them as the empty-object
+// initial values, hence the partial `SingleRange` on the cache.
+type DropCellCache = {
+    copyRange: SingleRange;
+    applyRange: SingleRange;
+    applyType: DropApplyType | null;
+    direction: DropDirection | null;
+    chnNumChar: Record<string, number>;
+    chnNameValue: Record<string, { value: number; secUnit: boolean }>;
+    chnNumChar2: string[];
+    chnUnitSection: string[];
+    chnUnitChar: string[];
+};
+
+export const dropCellCache: DropCellCache = {
+    copyRange: { row: [], column: [] },
+    applyRange: { row: [], column: [] },
+    applyType: null,
+    direction: null,
     chnNumChar: {
         零: 0,
         一: 1,
@@ -290,12 +318,7 @@ function forecast(x: number, yArr: number[], xArr: number[]) {
         sum_n += (xArr[j] - ax) * (xArr[j] - ax);
     }
 
-    let b;
-    if (sum_n === 0) {
-        b = 1;
-    } else {
-        b = sum_d / sum_n;
-    }
+    const b = sum_n === 0 ? 1 : sum_d / sum_n;
 
     const a = ay - b * ax;
 
@@ -500,7 +523,7 @@ function fillSeries(data: (Cell | null | undefined)[], len: number, direction: s
             const d = cloneDeep(data[index]);
 
             if (d != null) {
-                let num;
+                let num: number;
                 if (direction === 'down' || direction === 'right') {
                     num = Number(data[data.length - 1]!.v) * (Number(data[1].v) / Number(data[0].v)) ** i;
                 } else {
@@ -522,7 +545,7 @@ function fillSeries(data: (Cell | null | undefined)[], len: number, direction: s
             const index = (i - 1) % data.length;
             const d = cloneDeep(data[index]);
             if (d != null) {
-                let y;
+                let y: number | undefined;
                 if (direction === 'down' || direction === 'right') {
                     y = forecast(data.length + i, dataNumArr, xArr);
                 } else if (direction === 'up' || direction === 'left') {
@@ -645,7 +668,7 @@ function fillChnWeek(data: (Cell | null | undefined)[], len: number, step: numbe
         const index = (i - 1) % data.length;
         const d = cloneDeep(data[index]);
 
-        let num;
+        let num: number;
         const m = data[data.length - 1]?.m;
         if (m != null && d != null) {
             if (m === '日') {
@@ -696,7 +719,7 @@ function fillChnWeek2(data: (Cell | null | undefined)[], len: number, step: numb
         const index = (i - 1) % data.length;
         const d = cloneDeep(data[index]);
 
-        let num;
+        let num: number;
         const m = data[data.length - 1]?.m;
         if (m != null && d != null) {
             if (m === '周日') {
@@ -749,7 +772,7 @@ function fillChnWeek3(data: (Cell | null | undefined)[], len: number, step: numb
         const index = (i - 1) % data.length;
         const d = cloneDeep(data[index]);
 
-        let num;
+        let num: number;
         const m = data[data.length - 1]?.m;
         if (m != null && d != null) {
             if (m === '星期日') {
@@ -805,12 +828,7 @@ function fillChnNumber(data: (Cell | null | undefined)[], len: number, step: num
         const m = data[data.length - 1]?.m;
         if (m != null && d != null) {
             const num = chineseToNumber(`${m}`) + step * i;
-            let txt;
-            if (num <= 0) {
-                txt = '零';
-            } else {
-                txt = numberToChinese(num);
-            }
+            const txt = num <= 0 ? '零' : numberToChinese(num);
 
             d.v = txt;
             d.m = txt.toString();
@@ -1170,7 +1188,7 @@ function getDataByType(
                         const day = dayjs(last)
                             .add(step * i, 'months')
                             .day();
-                        let date;
+                        let date: string;
                         if (day === 0) {
                             date = dayjs(last)
                                 .add(step * i, 'months')
@@ -1196,7 +1214,7 @@ function getDataByType(
                 // different day
                 if (Math.abs(dayjs(data[1]?.m).diff(dayjs(data[0]?.m))) > 7) {
                     // day diff > 7 days — use 1 month as step (if that day is a weekend, roll back to nearest weekday)
-                    let step_month;
+                    let step_month: number;
                     if (direction === 'down' || direction === 'right') {
                         step_month = 1;
                     } else {
@@ -1217,7 +1235,7 @@ function getDataByType(
                             }
 
                             const day = dayjs(d.m).add(step!, 'days').day();
-                            let date;
+                            let date: string;
                             if (day === 0) {
                                 date = dayjs(d.m).add(step!, 'days').subtract(2, 'days').format('YYYY-MM-DD');
                             } else if (day === 6) {
@@ -1233,7 +1251,7 @@ function getDataByType(
                     }
                 } else {
                     // day diff <= 7 days — use 7 days as step (if that day is a weekend, roll back to nearest weekday)
-                    let step_day;
+                    let step_day: number;
                     if (direction === 'down' || direction === 'right') {
                         step_day = 7;
                     } else {
@@ -1254,7 +1272,7 @@ function getDataByType(
                             }
 
                             const day = dayjs(d.m).add(step!, 'days').day();
-                            let date;
+                            let date: string;
                             if (day === 0) {
                                 date = dayjs(d.m).add(step!, 'days').subtract(2, 'days').format('YYYY-MM-DD');
                             } else if (day === 6) {
@@ -1288,7 +1306,7 @@ function getDataByType(
                         const day = dayjs(last)
                             .add(step * i, 'months')
                             .day();
-                        let date;
+                        let date: string;
                         if (day === 0) {
                             date = dayjs(last)
                                 .add(step * i, 'months')
@@ -1314,7 +1332,7 @@ function getDataByType(
                 // different day, day difference is an arithmetic sequence
                 if (Math.abs(dayjs(data[1]?.m).diff(dayjs(data[0]?.m))) > 7) {
                     // day diff > 7 days — use 1 month as step (if that day is a weekend, roll back to nearest weekday)
-                    let step_month;
+                    let step_month: number;
                     if (direction === 'down' || direction === 'right') {
                         step_month = 1;
                     } else {
@@ -1335,7 +1353,7 @@ function getDataByType(
                             }
 
                             const day = dayjs(d.m).add(step!, 'days').day();
-                            let date;
+                            let date: string;
                             if (day === 0) {
                                 date = dayjs(d.m).add(step!, 'days').subtract(2, 'days').format('YYYY-MM-DD');
                             } else if (day === 6) {
@@ -1351,7 +1369,7 @@ function getDataByType(
                     }
                 } else {
                     // day diff <= 7 days — use 7 days as step (if that day is a weekend, roll back to nearest weekday)
-                    let step_day;
+                    let step_day: number;
                     if (direction === 'down' || direction === 'right') {
                         step_day = 7;
                     } else {
@@ -1372,7 +1390,7 @@ function getDataByType(
                             }
 
                             const day = dayjs(d.m).add(step!, 'days').day();
-                            let date;
+                            let date: string;
                             if (day === 0) {
                                 date = dayjs(d.m).add(step!, 'days').subtract(2, 'days').format('YYYY-MM-DD');
                             } else if (day === 6) {
@@ -1412,7 +1430,7 @@ function getDataByType(
                 applyData = fillMonths(data, len, step);
             } else {
                 // use 1 month as step
-                let step_month;
+                let step_month: number;
                 if (direction === 'down' || direction === 'right') {
                     step_month = 1;
                 } else {
@@ -1451,7 +1469,7 @@ function getDataByType(
                 applyData = fillMonths(data, len, step);
             } else if (!_judgeDate[0] && _judgeDate[2]) {
                 // different day, day difference is an arithmetic sequence — use 1 month as step
-                let step_month;
+                let step_month: number;
                 if (direction === 'down' || direction === 'right') {
                     step_month = 1;
                 } else {
@@ -1503,7 +1521,7 @@ function getDataByType(
                 applyData = fillYears(data, len, step);
             } else {
                 // use 1 year as step
-                let step_year;
+                let step_year: number;
                 if (direction === 'down' || direction === 'right') {
                     step_year = 1;
                 } else {
@@ -1542,7 +1560,7 @@ function getDataByType(
                 applyData = fillYears(data, len, step);
             } else if ((_judgeDate[0] && _judgeDate[3]) || _judgeDate[2]) {
                 // same day with arithmetic month diff, or arithmetic day diff — use 1 year as step
-                let step_year;
+                let step_year: number;
                 if (direction === 'down' || direction === 'right') {
                     step_year = 1;
                 } else {
@@ -1608,10 +1626,10 @@ function getDataByType(
 function getCopyData(d: CellMatrix, r1: number, r2: number, c1: number, c2: number, direction: string) {
     const copyData = [];
 
-    let a1;
-    let a2;
-    let b1;
-    let b2;
+    let a1: number;
+    let a2: number;
+    let b1: number;
+    let b2: number;
     if (direction === 'down' || direction === 'up') {
         a1 = c1;
         a2 = c2;
@@ -1636,7 +1654,7 @@ function getCopyData(d: CellMatrix, r1: number, r2: number, c1: number, c2: numb
 
         for (let b: number = b1; b <= b2; b += 1) {
             // cell
-            let data;
+            let data: Cell | null | undefined;
             if (direction === 'down' || direction === 'up') {
                 data = d[b][a];
             } else if (direction === 'right' || direction === 'left') {
@@ -1644,7 +1662,7 @@ function getCopyData(d: CellMatrix, r1: number, r2: number, c1: number, c2: numb
             }
 
             // cell value type
-            let str;
+            let str: string;
             if (data?.v != null && data.f == null) {
                 if (!!data.ct && data.ct.t === 'n') {
                     str = 'number';
@@ -1848,8 +1866,11 @@ function getApplyData(
 ) {
     const applyData = [];
 
-    const { direction } = dropCellCache;
-    const type = dropCellCache.applyType;
+    // direction + applyType are seeded by onDropCellSelectEnd / autoFillCell
+    // before updateDropCell calls into this function. Cache nulls are only
+    // possible at module init, never on a real fill.
+    const direction = dropCellCache.direction ?? 'down';
+    const type = dropCellCache.applyType ?? '0';
 
     const num = Math.floor(asLen / csLen);
     const rsd = asLen % csLen;
@@ -1862,7 +1883,7 @@ function getApplyData(
             const s = getLenS(copyD_number[i].index, rsd);
             const len = copyD_number[i].index.length * num + s;
 
-            let arrData;
+            let arrData: (Cell | null | undefined)[];
             if (type === '1' || type === '3') {
                 arrData = getDataByType(copyD_number[i].data, len, direction, type, 'number');
             } else if (type === '2') {
@@ -1884,7 +1905,7 @@ function getApplyData(
             const s = getLenS(copyD_extendNumber[i].index, rsd);
             const len = copyD_extendNumber[i].index.length * num + s;
 
-            let arrData;
+            let arrData: (Cell | null | undefined)[];
             if (type === '1' || type === '3') {
                 arrData = getDataByType(copyD_extendNumber[i].data, len, direction, type, 'extendNumber');
             } else if (type === '2') {
@@ -1906,7 +1927,7 @@ function getApplyData(
             const s = getLenS(copyD_date[i].index, rsd);
             const len = copyD_date[i].index.length * num + s;
 
-            let arrData;
+            let arrData: (Cell | null | undefined)[];
             if (type === '1' || type === '3') {
                 arrData = getDataByType(copyD_date[i].data, len, direction, type, 'date');
             } else if (type === '8') {
@@ -1927,7 +1948,7 @@ function getApplyData(
             const s = getLenS(copyD_chnNumber[i].index, rsd);
             const len = copyD_chnNumber[i].index.length * num + s;
 
-            let arrData;
+            let arrData: (Cell | null | undefined)[];
             if (type === '1' || type === '3') {
                 arrData = getDataByType(copyD_chnNumber[i].data, len, direction, type, 'chnNumber');
             } else if (type === '2' || type === '8') {
@@ -1949,7 +1970,7 @@ function getApplyData(
             const s = getLenS(copyD_chnWeek2[i].index, rsd);
             const len = copyD_chnWeek2[i].index.length * num + s;
 
-            let arrData;
+            let arrData: (Cell | null | undefined)[];
             if (type === '1' || type === '3') {
                 arrData = getDataByType(copyD_chnWeek2[i].data, len, direction, type, 'chnWeek2');
             } else if (type === '2') {
@@ -1971,7 +1992,7 @@ function getApplyData(
             const s = getLenS(copyD_chnWeek3[i].index, rsd);
             const len = copyD_chnWeek3[i].index.length * num + s;
 
-            let arrData;
+            let arrData: (Cell | null | undefined)[];
             if (type === '1' || type === '3') {
                 arrData = getDataByType(copyD_chnWeek3[i].data, len, direction, type, 'chnWeek3');
             } else if (type === '2') {
@@ -1993,7 +2014,7 @@ function getApplyData(
             const s = getLenS(copyD_other[i].index, rsd);
             const len = copyD_other[i].index.length * num + s;
 
-            let arrData;
+            let arrData: (Cell | null | undefined)[];
             if (type === '2' || type === '3') {
                 arrData = getDataByType(copyD_other[i].data, len, direction, type);
             } else {
@@ -2092,8 +2113,9 @@ export function updateDropCell(ctx: Context) {
     const borderInfoCompute = getBorderInfoCompute(ctx, ctx.currentSheetId);
     const dataVerification = cloneDeep(file.dataVerification);
 
-    const { direction } = dropCellCache;
-    // const type = dropCellCache.applyType;
+    // direction is seeded by onDropCellSelectEnd / autoFillCell before they call
+    // updateDropCell; the null fallback only matters for module-init safety.
+    const direction = dropCellCache.direction ?? 'down';
 
     // copy range
     const { copyRange } = dropCellCache;
@@ -2103,13 +2125,8 @@ export function updateDropCell(ctx: Context) {
     const copy_end_c = copyRange.column[1];
     const copyData = getCopyData(d, copy_str_r, copy_end_r, copy_str_c, copy_end_c, direction);
 
-    let csLen;
-    if (direction === 'down' || direction === 'up') {
-        csLen = copy_end_r - copy_str_r + 1;
-    } else {
-        // direction === "right" || direction === "left"
-        csLen = copy_end_c - copy_str_c + 1;
-    }
+    const csLen =
+        direction === 'down' || direction === 'up' ? copy_end_r - copy_str_r + 1 : copy_end_c - copy_str_c + 1;
 
     // apply range
     const { applyRange } = dropCellCache;
@@ -2158,16 +2175,13 @@ export function updateDropCell(ctx: Context) {
 
                                         cell.m = (cell.v as number).toExponential(len).toString();
                                     } else {
-                                        let mask;
-                                        if (cell.ct?.fa === '##0.00') {
-                                            mask = genarate(
-                                                `${Math.round((cell.v as number) * 1000000000) / 1000000000}.00`,
-                                            );
-                                            cell.m = mask![0].toString();
-                                        } else {
-                                            mask = genarate(Math.round((cell.v as number) * 1000000000) / 1000000000);
-                                            cell.m = mask![0].toString();
-                                        }
+                                        const mask =
+                                            cell.ct?.fa === '##0.00'
+                                                ? genarate(
+                                                      `${Math.round((cell.v as number) * 1000000000) / 1000000000}.00`,
+                                                  )
+                                                : genarate(Math.round((cell.v as number) * 1000000000) / 1000000000);
+                                        cell.m = mask[0].toString();
                                     }
                                 }
 
@@ -2218,7 +2232,7 @@ export function updateDropCell(ctx: Context) {
 
                     // data validation
                     // Bug
-                    if (dataVerification != null && dataVerification[`${bd_r}_${bd_c}`]) {
+                    if (dataVerification?.[`${bd_r}_${bd_c}`]) {
                         dataVerification[`${j}_${i}`] = dataVerification[`${bd_r}_${bd_c}`];
                     }
                 }
@@ -2305,7 +2319,7 @@ export function updateDropCell(ctx: Context) {
                     }
 
                     // data validation
-                    if (dataVerification != null && dataVerification[`${bd_r}_${bd_c}`]) {
+                    if (dataVerification?.[`${bd_r}_${bd_c}`]) {
                         dataVerification[`${j}_${i}`] = dataVerification[`${bd_r}_${bd_c}`];
                     }
                 }
@@ -2402,7 +2416,7 @@ export function updateDropCell(ctx: Context) {
                     }
 
                     // data validation
-                    if (dataVerification != null && dataVerification[`${bd_r}_${bd_c}`]) {
+                    if (dataVerification?.[`${bd_r}_${bd_c}`]) {
                         dataVerification[`${i}_${j}`] = dataVerification[`${bd_r}_${bd_c}`];
                     }
                 }
@@ -2489,7 +2503,7 @@ export function updateDropCell(ctx: Context) {
                     }
 
                     // data validation
-                    if (dataVerification != null && dataVerification[`${bd_r}_${bd_c}`]) {
+                    if (dataVerification?.[`${bd_r}_${bd_c}`]) {
                         dataVerification[`${i}_${j}`] = dataVerification[`${bd_r}_${bd_c}`];
                     }
                 }
@@ -2503,7 +2517,7 @@ export function updateDropCell(ctx: Context) {
         for (let i = 0; i < cdformat.length; i += 1) {
             const cdformat_cellrange = cdformat[i].cellrange;
 
-            let emptyRange: any = [];
+            let emptyRange: SingleRange[] = [];
 
             for (let j = 0; j < cdformat_cellrange.length; j += 1) {
                 const range = cfSplitRange(
