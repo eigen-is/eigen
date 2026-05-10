@@ -1,10 +1,10 @@
-import type { DataVerificationRule } from '@workspace/lib/sheets';
-import { cloneDeep, isEmpty, isNil, isNumber, isPlainObject, kebabCase, map } from 'es-toolkit/compat';
+import type { ConditionalFormatRule, DataVerificationRule } from '@workspace/lib/sheets';
+import { cloneDeep, isEmpty, isNil, isNumber, kebabCase, map } from 'es-toolkit/compat';
 import { format } from 'numfmt';
 import { cfSplitRange } from '../../engine';
 import { update } from '../../engine/format';
 import { type Context, getFlowdata } from '../context';
-import type { Freezen, Range, Sheet as SheetType } from '../types';
+import type { Cell, Freezen, Range, Sheet as SheetType, SingleRange } from '../types';
 import { escapeHTMLTag, getSheetIndex, isAllowEdit, replaceHtml } from '../utils';
 import { getBorderInfoCompute } from './border';
 import {
@@ -22,6 +22,13 @@ import { hasPartMC } from './validation';
 export const selectionCache = {
     isPasteAction: false,
 };
+
+// HTML copy-export builds a histogram of border colors and line styles along
+// each side of a merged cell so it can pick the dominant value (>= half the
+// edge length) for the rendered `<td>` border. Keys come from
+// `borderInfoCompute[r_c].{l,r,t,b}.{color,style}` — color is always a string,
+// style is `number | string` but coerces to string when used as a key.
+type BorderEdgeHistogram = { color: Record<string, number>; style: Record<string, number> };
 
 export function scrollToHighlightCell(ctx: Context, r: number, c: number) {
     const { scrollLeft, scrollTop } = ctx;
@@ -94,8 +101,8 @@ export function normalizeSelection(ctx: Context, selection: SheetType['luckyshee
         const c1 = selection[i].column[0];
         const c2 = selection[i].column[1];
 
-        let rf;
-        let cf;
+        let rf: number | undefined;
+        let cf: number | undefined;
         if (isNil(selection[i].row_focus)) {
             rf = r1;
         } else {
@@ -136,17 +143,13 @@ export function normalizeSelection(ctx: Context, selection: SheetType['luckyshee
         selection[i].column_focus = cf;
 
         selection[i].left = col_pre_f;
-        // selection[i].width = col_f - col_pre_f - 1;
         selection[i].width = col_f - col_pre_f <= 0 ? 0 : col_f - col_pre_f - 1;
         selection[i].top = row_pre_f;
-        // selection[i].height = row_f - row_pre_f - 1;
         selection[i].height = row_f - row_pre_f <= 0 ? 0 : row_f - row_pre_f - 1;
 
         selection[i].left_move = col_pre;
-        // selection[i].width_move = col - col_pre - 1;
         selection[i].width_move = col - col_pre <= 0 ? 0 : col - col_pre - 1;
         selection[i].top_move = row_pre;
-        // selection[i].height_move = row - row_pre - 1;
         selection[i].height_move = row - row_pre <= 0 ? 0 : row - row_pre - 1;
     }
     return selection;
@@ -300,17 +303,19 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['lucky
                 maxcellCahe = maxc + 1;
             }
 
-            const offsetMC: any = {};
+            // Track newly emitted merge anchors keyed by the source `${r}_${c}` so a
+            // copied non-anchor cell ({ mc: { r, c } } without rs/cs) can rewrite its
+            // anchor reference to the cloned anchor's coordinates in the apply range.
+            const offsetMC: Record<string, [number, number]> = {};
             for (let h = mth; h < maxrowCache; h += 1) {
                 if (h == null) return;
                 if (flowdata[h] == null) return;
-                let x: any[] = [];
-                x = flowdata[h];
+                const x: (Cell | null)[] = flowdata[h];
 
                 for (let c = mtc; c < maxcellCahe; c += 1) {
                     if (borderInfoCompute[`${c_r1 + h - mth}_${c_c1 + c - mtc}`]) {
                         const bd_obj = {
-                            rangeType: 'cell',
+                            rangeType: 'cell' as const,
                             value: {
                                 row_index: h,
                                 col_index: c,
@@ -328,7 +333,7 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['lucky
                         cfg.borderInfo.push(bd_obj);
                     } else if (borderInfoCompute[`${h}_${c}`]) {
                         const bd_obj = {
-                            rangeType: 'cell',
+                            rangeType: 'cell' as const,
                             value: {
                                 row_index: h,
                                 col_index: c,
@@ -358,29 +363,44 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['lucky
                         dataVerification[`${h}_${c}`] = c_dataVerification[`${c_r1 + h - mth}_${c_c1 + c - mtc}`];
                     }
 
-                    if (isPlainObject(x[c]) && x[c].mc) {
-                        if (x[c].mc.rs) {
-                            delete cfg.merge[`${x[c].mc.r}_${x[c].mc.c}`];
+                    let cell = x[c];
+                    if (cell?.mc) {
+                        if (cell.mc.rs) {
+                            delete cfg.merge[`${cell.mc.r}_${cell.mc.c}`];
                         }
-                        delete x[c].mc;
+                        delete cell.mc;
                     }
 
-                    let value: any = null;
-                    if (copyData[h - mth] != null && copyData[h - mth][c - mtc] != null) {
-                        value = copyData[h - mth][c - mtc];
-                    }
+                    const value: Cell | null = copyData[h - mth]?.[c - mtc] ?? null;
 
-                    if (isPlainObject(x[c])) {
-                        if (x[c].ct && x[c].ct.t === 'inlineStr' && value) {
+                    if (cell != null) {
+                        if (cell.ct?.t === 'inlineStr' && value) {
                             delete value.ct;
                         } else {
-                            const format = ['bg', 'fc', 'ct', 'ht', 'vt', 'bl', 'it', 'cl', 'un', 'fs', 'ff', 'tb'];
-                            format.forEach((item) => {
-                                Reflect.deleteProperty(x[c], item);
-                            });
+                            const format = [
+                                'bg',
+                                'fc',
+                                'ct',
+                                'ht',
+                                'vt',
+                                'bl',
+                                'it',
+                                'cl',
+                                'un',
+                                'fs',
+                                'ff',
+                                'tb',
+                            ] as const;
+                            for (const item of format) {
+                                Reflect.deleteProperty(cell, item);
+                            }
                         }
                     } else {
-                        x[c] = { v: x[c] };
+                        // Legacy: when flowdata had a raw scalar at [h][c], the original
+                        // code wrapped it as `{v: scalar}`. Under the canonical CellMatrix
+                        // type the cell is `null` here, so a fresh empty cell suffices.
+                        cell = {};
+                        x[c] = cell;
                     }
 
                     if (value != null) {
@@ -388,46 +408,52 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['lucky
                         delete value.m;
                         delete value.f;
 
-                        if (value.ct && value.ct.t === 'inlineStr') {
+                        if (value.ct?.t === 'inlineStr') {
                             delete value.ct;
                         }
 
-                        x[c] = Object.assign(x[c], cloneDeep(value));
-                        if (x[c].ct && x[c].ct.t === 'inlineStr') {
-                            x[c].ct.s.forEach((item: any) => Object.assign(item, value));
+                        Object.assign(cell, cloneDeep(value));
+                        if (cell.ct?.t === 'inlineStr' && cell.ct.s) {
+                            for (const item of cell.ct.s) {
+                                Object.assign(item, value);
+                            }
                         }
 
-                        if (copyHasMC && x[c].mc) {
-                            if (x[c].mc.rs != null) {
-                                x[c].mc.r = h;
-                                if (x[c].mc.rs + h >= maxrowCache) {
-                                    x[c].mc.rs = maxrowCache - h;
+                        if (copyHasMC && cell.mc) {
+                            const mc = cell.mc;
+                            if (mc.rs != null) {
+                                // Anchor cell of a merge — rewrite to new row/col and
+                                // clamp rs/cs against the paste-area bounds.
+                                mc.r = h;
+                                if (mc.rs + h >= maxrowCache) {
+                                    mc.rs = maxrowCache - h;
                                 }
 
-                                x[c].mc.c = c;
-                                if (x[c].mc.cs + c >= maxcellCahe) {
-                                    x[c].mc.cs = maxcellCahe - c;
+                                mc.c = c;
+                                if (mc.cs != null && mc.cs + c >= maxcellCahe) {
+                                    mc.cs = maxcellCahe - c;
                                 }
 
-                                cfg.merge[`${x[c]!.mc!.r}_${x[c]!.mc!.c}`] = x[c].mc;
-
-                                offsetMC[`${value.mc!.r}_${value.mc!.c}`] = [x[c]!.mc!.r, x[c]!.mc!.c];
-                            } else {
-                                x[c] = {
-                                    mc: {
-                                        r: offsetMC[`${value.mc!.r}_${value.mc!.c}`][0],
-                                        c: offsetMC[`${value.mc!.r}_${value.mc!.c}`][1],
-                                    },
+                                cfg.merge[`${mc.r}_${mc.c}`] = {
+                                    r: mc.r,
+                                    c: mc.c,
+                                    rs: mc.rs,
+                                    cs: mc.cs ?? 1,
                                 };
+
+                                if (value.mc) {
+                                    offsetMC[`${value.mc.r}_${value.mc.c}`] = [mc.r, mc.c];
+                                }
+                            } else if (value.mc) {
+                                const anchor = offsetMC[`${value.mc.r}_${value.mc.c}`];
+                                cell = { mc: { r: anchor[0], c: anchor[1] } };
+                                x[c] = cell;
                             }
                         }
 
-                        if (x[c].v != null) {
-                            if (value.ct != null && value.ct.fa != null) {
-                                // Update the value modified by the format painter
-                                const mask = update(value.ct.fa, x[c].v);
-                                x[c].m = mask;
-                            }
+                        if (cell.v != null && value.ct?.fa != null) {
+                            // Update the value modified by the format painter
+                            cell.m = update(value.ct.fa, cell.v);
                         }
                     }
                 }
@@ -440,19 +466,24 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['lucky
     currFile.config = cfg;
     currFile.dataVerification = dataVerification;
 
-    // Whether the copy range has conditional formatting
-    let cdformat: any = null;
+    // Latent pre-existing bug: the cloned CF rule list (cdformat) is built up
+    // and pushed to but never written back to ctx.luckysheetfile, so the format
+    // painter doesn't actually propagate CF rules. Kept as-is to scope this
+    // pass to type tightening; see TODO-FORTUNE-SHEETS.md follow-up.
+    let cdformat: ConditionalFormatRule[] | null = null;
     const copyIndex = getSheetIndex(ctx, copySheetIndex);
     if (!copyIndex) return;
-    const ruleArr = cloneDeep(ctx.luckysheetfile[copyIndex].luckysheet_conditionformat_save);
+    const ruleArr: ConditionalFormatRule[] | undefined = cloneDeep(
+        ctx.luckysheetfile[copyIndex].luckysheet_conditionformat_save,
+    );
 
     if (!isNil(ruleArr) && ruleArr.length > 0) {
         const currentIndex = getSheetIndex(ctx, ctx.currentSheetId) as number;
-        cdformat = cloneDeep(ctx.luckysheetfile[currentIndex].luckysheet_conditionformat_save);
+        cdformat = cloneDeep(ctx.luckysheetfile[currentIndex].luckysheet_conditionformat_save) ?? [];
 
         for (let i = 0; i < ruleArr.length; i += 1) {
             const cdformat_cellrange = ruleArr[i].cellrange;
-            let emptyRange: any[] = [];
+            let emptyRange: SingleRange[] = [];
 
             for (let j = 0; j < cdformat_cellrange.length; j += 1) {
                 const range = cfSplitRange(
@@ -473,36 +504,6 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['lucky
             }
         }
     }
-}
-
-export function selectionCopyShow(range: any, ctx: Context) {
-    // $("#fortune-selection-copy").empty();
-
-    if (range == null) {
-        range = ctx.luckysheet_selection_range;
-    }
-    range = JSON.parse(JSON.stringify(range));
-
-    // if (range.length > 0) {
-    //     for (let s = 0; s < range.length; s++) {
-    //         let r1 = range[s].row[0], r2 = range[s].row[1];
-    //         let c1 = range[s].column[0], c2 = range[s].column[1];
-
-    //         let row = ctx.visibledatarow[r2],
-    //             row_pre = r1 - 1 == -1 ? 0 : ctx.visibledatarow[r1 - 1];
-    //         let col = ctx.visibledatacolumn[c2],
-    //             col_pre = c1 - 1 == -1 ? 0 : ctx.visibledatacolumn[c1 - 1];
-
-    //         let copyDomHtml = '<div class="fortune-selection-copy" style="display: block; left: ' + col_pre + 'px; width: ' + (col - col_pre - 1) + 'px; top: ' + row_pre + 'px; height: ' + (row - row_pre - 1) + 'px;">' +
-    //             '<div class="fortune-selection-copy-top fortune-copy"></div>' +
-    //             '<div class="fortune-selection-copy-right fortune-copy"></div>' +
-    //             '<div class="fortune-selection-copy-bottom fortune-copy"></div>' +
-    //             '<div class="fortune-selection-copy-left fortune-copy"></div>' +
-    //             '<div class="fortune-selection-copy-hc"></div>' +
-    //             '</div>';
-    //         $("#fortune-selection-copy").append(copyDomHtml);
-    //     }
-    // }
 }
 
 // shift + arrow key / ctrl + shift + arrow key functionality
@@ -650,14 +651,16 @@ export function moveHighlightCell(
     const datarowlen = flowdata.length;
     const datacolumnlen = flowdata[0].length;
 
-    let row;
-    let row_pre;
-    let row_index;
-    let row_index_ed;
-    let col;
-    let col_pre;
-    let col_index;
-    let col_index_ed;
+    // [pre, end, index, index_ed] all in pixel/index coordinates; populated either
+    // from a mergeBorder() tuple or from visibledata{row,column} lookups.
+    let row: number | undefined;
+    let row_pre: number | undefined;
+    let row_index: number | undefined;
+    let row_index_ed: number | undefined;
+    let col: number | undefined;
+    let col_pre: number | undefined;
+    let col_index: number | undefined;
+    let col_index_ed: number | undefined;
 
     if (type === 'rangeOfSelect') {
         const last = ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1];
@@ -666,14 +669,14 @@ export function moveHighlightCell(
             return;
         }
 
-        let curR;
+        let curR: number;
         if (isNil(last.row_focus)) {
             [curR] = last.row;
         } else {
             curR = last.row_focus;
         }
 
-        let curC;
+        let curC: number;
         if (isNil(last.column_focus)) {
             [curC] = last.column;
         } else {
@@ -747,13 +750,8 @@ export function moveHighlightCell(
         } else {
             row = ctx.visibledatarow[moveX];
             row_pre = moveX - 1 === -1 ? 0 : ctx.visibledatarow[moveX - 1];
-            // row_index = moveX;
-            // row_index_ed = moveX;
-
             col = ctx.visibledatacolumn[moveY];
             col_pre = moveY - 1 === -1 ? 0 : ctx.visibledatacolumn[moveY - 1];
-            // col_index = moveY;
-            // col_index_ed = moveY;
 
             row_index = curR;
             row_index_ed = curR;
@@ -780,14 +778,14 @@ export function moveHighlightCell(
         const last = ctx.formulaCache.func_selectedrange;
         if (!last) return;
 
-        let curR;
+        let curR: number;
         if (isNil(last.row_focus)) {
             [curR] = last.row;
         } else {
             curR = last.row_focus;
         }
 
-        let curC;
+        let curC: number;
         if (isNil(last.column_focus)) {
             [curC] = last.column;
         } else {
@@ -962,10 +960,12 @@ export function moveHighlightRange(
     index: number,
     type: 'rangeOfSelect' | 'rangeOfFormula',
 ) {
-    let row;
-    let row_pre;
-    let col;
-    let col_pre;
+    // Pixel-coordinate edges of the resulting selection rectangle, assigned
+    // inside the branch that matches `type` and then read once for display.
+    let row: number;
+    let row_pre: number;
+    let col: number;
+    let col_pre: number;
     const flowData = getFlowdata(ctx);
     if (isNil(flowData)) return;
     if (isNil(ctx.luckysheet_select_save)) return;
@@ -1115,8 +1115,8 @@ export function moveHighlightRange(
                 curC = 0;
             }
         }
-        let rowseleted: any = [curR, endR];
-        let columnseleted: any = [curC, endC];
+        let rowseleted: number[] = [curR, endR];
+        let columnseleted: number[] = [curC, endC];
         row = ctx.visibledatarow[endR];
         row_pre = curR - 1 === -1 ? 0 : ctx.visibledatarow[curR - 1];
         col = ctx.visibledatacolumn[endC];
@@ -1327,9 +1327,9 @@ export function moveHighlightRange(
     }
 }
 
-function getHtmlBorderStyle(type: string, color: string) {
+function getHtmlBorderStyle(type: string | number, color: string) {
     let style = '';
-    const borderType: any = {
+    const borderType: Record<string, string> = {
         '0': 'none',
         '1': 'Thin',
         '2': 'Hair',
@@ -1401,9 +1401,8 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
         }
     }
 
-    let borderInfoCompute;
+    let borderInfoCompute: ReturnType<typeof getBorderInfoCompute> | undefined;
     if (sheet.config?.borderInfo && sheet.config.borderInfo.length > 0) {
-        // Border
         borderInfoCompute = getBorderInfoCompute(ctx, sheetId);
     }
 
@@ -1427,7 +1426,10 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
         for (let j = 0; j < colIndexArr.length; j += 1) {
             const c = colIndexArr[j];
 
-            // eslint-disable-next-line no-template-curly-in-string
+            // Placeholder string consumed by replaceHtml() below; `${span}` /
+            // `${style}` are intentionally substituted at runtime, not by the
+            // template-literal evaluator.
+            // biome-ignore lint/suspicious/noTemplateCurlyInString: replaceHtml template
             let column = '<td ${span} style="${style}">';
 
             const cell = d[r]?.[c];
@@ -1456,7 +1458,10 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
                 }
 
                 const reg = /^(w|W)((0?)|(0\.0+))$/;
-                let c_value;
+                // getCellValue returns `cell.v` (string | number | boolean) when the
+                // format ID matches the `w` width pattern, otherwise the rendered
+                // `cell.m` mask string. Either way the HTML output coerces to string.
+                let c_value: string | number | boolean | null | undefined;
                 if (!isNil(cell.ct) && !isNil(cell.ct.fa) && cell.ct.fa.match(reg)) {
                     c_value = getCellValue(r, c, d);
                 } else {
@@ -1474,10 +1479,14 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
 
                         // Border
                         if (borderInfoCompute?.[`${r}_${c}`]) {
-                            const bl_obj: any = { color: {}, style: {} };
-                            const br_obj: any = { color: {}, style: {} };
-                            const bt_obj: any = { color: {}, style: {} };
-                            const bb_obj: any = { color: {}, style: {} };
+                            // Per-side histograms: count how many cells along the merged
+                            // edge share each border color / line-style. The winning side
+                            // (>= half the edge length) drives the merged cell's HTML
+                            // border below.
+                            const bl_obj: BorderEdgeHistogram = { color: {}, style: {} };
+                            const br_obj: BorderEdgeHistogram = { color: {}, style: {} };
+                            const bt_obj: BorderEdgeHistogram = { color: {}, style: {} };
+                            const bb_obj: BorderEdgeHistogram = { color: {}, style: {} };
 
                             for (let bd_r = r; bd_r < r + cell.mc.rs!; bd_r += 1) {
                                 for (let bd_c = c; bd_c < c + cell.mc.cs!; bd_c += 1) {
@@ -1718,7 +1727,7 @@ export function rangeValueToHtml(ctx: Context, sheetId: string, ranges?: Range) 
                     c_value = '';
                 }
 
-                column += escapeHTMLTag(c_value);
+                column += escapeHTMLTag(String(c_value));
             } else {
                 let style = '';
 
@@ -1835,8 +1844,6 @@ export function copy(ctx: Context) {
         copyRange.push({ row: range.row, column: range.column });
     }
 
-    // selectionCopyShow();
-
     // Save copy data within luckysheet
     ctx.luckysheet_copy_save = {
         dataSheetId: ctx.currentSheetId,
@@ -1918,30 +1925,28 @@ export function deleteSelectedCellText(ctx: Context): string {
     return 'success';
 }
 
-// Whether selections overlap
-export function selectIsOverlap(ctx: Context, range?: any) {
-    if (range == null) {
-        range = ctx.luckysheet_select_save;
-    }
-    range = cloneDeep(range);
+// Whether selections overlap. Accepts the editor `Selection[]` (default) or a
+// `Range` (SingleRange[]); both share the `{row, column}` rectangle the test
+// needs.
+export function selectIsOverlap(ctx: Context, range?: Range | SheetType['luckysheet_select_save']) {
+    const ranges = cloneDeep(range ?? ctx.luckysheet_select_save) ?? [];
 
     let overlap = false;
-    const map: any = {};
+    const seen: Record<string, true> = {};
 
-    for (let s = 0; s < range.length; s += 1) {
-        const str_r = range[s].row[0];
-        const end_r = range[s].row[1];
-        const str_c = range[s].column[0];
-        const end_c = range[s].column[1];
+    for (let s = 0; s < ranges.length; s += 1) {
+        const str_r = ranges[s].row[0];
+        const end_r = ranges[s].row[1];
+        const str_c = ranges[s].column[0];
+        const end_c = ranges[s].column[1];
 
         for (let r = str_r; r <= end_r; r += 1) {
             for (let c = str_c; c <= end_c; c += 1) {
-                if (`${r}_${c}` in map) {
+                if (`${r}_${c}` in seen) {
                     overlap = true;
                     break;
-                } else {
-                    map[`${r}_${c}`] = 0;
                 }
+                seen[`${r}_${c}`] = true;
             }
         }
     }

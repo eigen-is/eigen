@@ -21,7 +21,7 @@ import { showLinkCard } from './hyperlink';
 import { inlineStyleAffectAttribute, updateInlineStringFormat, updateInlineStringFormatOutside } from './inline-string';
 import { colLocationByIndex, rowLocationByIndex } from './location';
 import { mergeCells } from './merge';
-import { normalizeSelection, selectIsOverlap, selectionCopyShow } from './selection';
+import { normalizeSelection, selectIsOverlap } from './selection';
 import { sortSelection } from './sort';
 import { getCellTextInfo } from './text';
 import { hasPartMC, isdatatypemulti, isRealNull, isRealNum } from './validation';
@@ -724,7 +724,6 @@ export function cancelPaintModel(ctx: Context) {
     if (ctx.luckysheet_copy_save === null) return;
     if (ctx.luckysheet_copy_save?.dataSheetId === ctx.currentSheetId) {
         ctx.luckysheet_selection_range = [];
-        selectionCopyShow(ctx.luckysheet_selection_range, ctx);
     } else {
         if (!ctx.luckysheet_copy_save) return;
         const index = getSheetIndex(ctx, ctx.luckysheet_copy_save.dataSheetId);
@@ -1007,7 +1006,6 @@ export function handleFormatPainter(ctx: Context) {
         },
     ];
 
-    selectionCopyShow(ctx.luckysheet_selection_range, ctx);
     let RowlChange = false;
     let HasMC = false;
 
