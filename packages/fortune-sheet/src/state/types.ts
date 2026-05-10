@@ -1,4 +1,4 @@
-import type { BorderInfo, MergeCell, Op } from '@workspace/lib/sheets';
+import type { BorderInfo, DataVerificationRule, MergeCell, Op } from '@workspace/lib/sheets';
 import type { Patch as ImmerPatch } from 'immer';
 import type { Cell, CellMatrix, CellWithRowAndCol, Range, SingleRange } from '../engine/types';
 import type { PatchOptions } from './utils';
@@ -6,10 +6,22 @@ import type { PatchOptions } from './utils';
 // Shared sheet data shapes (Cell, CellMatrix, CellWithRowAndCol, SingleRange,
 // Range, …) live in @workspace/lib/sheets and are re-exported through
 // ../engine/types — surfaced here so state-side consumers don't have to know
-// the canonical home. `Op` and `BorderInfo` live in lib too (the BE document
-// reader replays ops without the engine, and the HTML export reads borderInfo);
-// neither is engine-conceptual so they're re-exported directly from lib here.
-export type { BorderInfo, Cell, CellMatrix, CellWithRowAndCol, MergeCell, Op, Range, SingleRange };
+// the canonical home. `Op`, `BorderInfo`, and `DataVerificationRule` live in
+// lib too (the BE document reader replays ops without the engine, the HTML
+// export reads borderInfo, and data-validation rules are touched by the
+// editor + canvas painter); none is engine-conceptual so they're re-exported
+// directly from lib here.
+export type {
+    BorderInfo,
+    Cell,
+    CellMatrix,
+    CellWithRowAndCol,
+    DataVerificationRule,
+    MergeCell,
+    Op,
+    Range,
+    SingleRange,
+};
 
 export type Rect = {
     top: number;
@@ -112,7 +124,7 @@ export type Sheet = {
     filter_select?: { row: number[]; column: number[] };
     luckysheet_conditionformat_save?: any[];
     luckysheet_alternateformat_save?: any[];
-    dataVerification?: any;
+    dataVerification?: Record<string, DataVerificationRule>;
     hyperlink?: Record<string, { linkType: string; linkAddress: string }>;
     dynamicArray_compute?: any;
     dynamicArray?: any[];
@@ -151,6 +163,11 @@ export type RangeDialogProps = {
     singleSelect: boolean;
 };
 
+// Editor-form draft of a single data-validation rule. Producers (the default
+// initializer in context.ts and the dialog `confirm` handler) set every field
+// with a sentinel default (`''` / `false`), then spread the draft into the
+// stored `DataVerificationRule`. `rangeTxt` is dialog-only — carries the
+// user-typed target range expression.
 export type DataRegulationProps = {
     type: string;
     type2: string;

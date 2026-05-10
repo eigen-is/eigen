@@ -1,3 +1,4 @@
+import type { DataVerificationRule } from '@workspace/lib/sheets';
 import { cloneDeep, isEmpty, isNil, isNumber, isPlainObject, kebabCase, map } from 'es-toolkit/compat';
 import { format } from 'numfmt';
 import { cfSplitRange } from '../../engine';
@@ -278,7 +279,7 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['lucky
     const borderInfoCompute = getBorderInfoCompute(ctx, copySheetIndex);
     const c_dataVerification =
         cloneDeep(ctx.luckysheetfile[getSheetIndex(ctx, copySheetIndex)!].dataVerification) || {};
-    let dataVerification = null;
+    let dataVerification: Record<string, DataVerificationRule> | undefined;
 
     let mth = 0;
     let mtc = 0;
@@ -348,9 +349,10 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['lucky
                     // Data validation copy
                     if (c_dataVerification[`${c_r1 + h - mth}_${c_c1 + c - mtc}`]) {
                         if (dataVerification == null) {
-                            dataVerification = cloneDeep(
-                                ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId)!].dataVerification,
-                            );
+                            dataVerification =
+                                cloneDeep(
+                                    ctx.luckysheetfile[getSheetIndex(ctx, ctx.currentSheetId)!].dataVerification,
+                                ) ?? {};
                         }
 
                         dataVerification[`${h}_${c}`] = c_dataVerification[`${c_r1 + h - mth}_${c_c1 + c - mtc}`];
