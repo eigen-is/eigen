@@ -64,10 +64,11 @@ export function getRegStr(selected: ReadonlySet<string>, otherValue: string) {
 
 // Get split data
 export function getDataArr(regStr: string, ctx: Context) {
-    let arr = [];
-    const r1 = ctx.luckysheet_select_save![0].row[0];
-    const r2 = ctx.luckysheet_select_save![0].row[1];
-    const c = ctx.luckysheet_select_save![0].column[0];
+    let arr: string[][] = [];
+    if (!ctx.luckysheet_select_save?.length) return arr;
+    const r1 = ctx.luckysheet_select_save[0].row[0];
+    const r2 = ctx.luckysheet_select_save[0].row[1];
+    const c = ctx.luckysheet_select_save[0].column[0];
     const data = getFlowdata(ctx);
     if (regStr !== null && regStr !== '') {
         const reg = new RegExp(regStr, 'g');

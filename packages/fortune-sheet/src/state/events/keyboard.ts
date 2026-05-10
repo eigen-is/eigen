@@ -41,7 +41,8 @@ export function handleGlobalEnter(
         e.preventDefault();
     } else if ((ctx.luckysheet_select_save?.length ?? 0) > 0) {
         const last = ctx.luckysheet_select_save![ctx.luckysheet_select_save!.length - 1];
-        ctx.luckysheetCellUpdate = [last.row_focus!, last.column_focus!];
+        if (last.row_focus == null || last.column_focus == null) return;
+        ctx.luckysheetCellUpdate = [last.row_focus, last.column_focus];
         e.preventDefault();
     }
 }
@@ -177,10 +178,10 @@ export function handleWithCtrlOrMetaKey(
             handleControlPlusArrowKey(ctx, e, true);
         } else if ([';', '"', ':', "'"].includes(e.key)) {
             const last = ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1];
-            if (!last) return;
+            if (!last || last.row_focus == null || last.column_focus == null) return;
 
-            const row_index = last.row_focus!;
-            const col_index = last.column_focus!;
+            const row_index = last.row_focus;
+            const col_index = last.column_focus;
             updateCell(ctx, row_index, col_index, cellInput);
             ctx.luckysheetCellUpdate = [row_index, col_index];
 
@@ -453,9 +454,9 @@ export function handleGlobalKeyDown(
         }
 
         const last = ctx.luckysheet_select_save?.[ctx.luckysheet_select_save.length - 1];
-        if (!last) return;
+        if (!last || last.row_focus == null || last.column_focus == null) return;
 
-        ctx.luckysheetCellUpdate = [last.row_focus!, last.column_focus!];
+        ctx.luckysheetCellUpdate = [last.row_focus, last.column_focus];
         e.preventDefault();
     } else if (kstr === 'F4' && ctx.luckysheetCellUpdate.length > 0) {
         // TODO: toggle absolute/relative refs in the formula editor (formula.setfreezonFuc)
@@ -511,7 +512,8 @@ export function handleGlobalKeyDown(
         if (!isEmpty(ctx.luckysheet_select_save) && kstr !== 'CapsLock' && kcode !== 18) {
             // Activate the input box and forward the keypress to it.
             const last = ctx.luckysheet_select_save![ctx.luckysheet_select_save!.length - 1];
-            ctx.luckysheetCellUpdate = [last.row_focus!, last.column_focus!];
+            if (last.row_focus == null || last.column_focus == null) return;
+            ctx.luckysheetCellUpdate = [last.row_focus, last.column_focus];
             cache.overwriteCell = true;
 
             handleFormulaInput(ctx, fxInput, cellInput, kcode);

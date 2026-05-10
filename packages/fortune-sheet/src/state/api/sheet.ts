@@ -48,7 +48,8 @@ export function initSheetData(draftCtx: Context, index: number, newData: Sheet):
 }
 
 export function hideSheet(ctx: Context, sheetId: string) {
-    const index = getSheetIndex(ctx, sheetId) as number;
+    const index = getSheetIndex(ctx, sheetId);
+    if (index == null) return;
     ctx.luckysheetfile[index].hide = 1;
     ctx.luckysheetfile[index].status = 0;
     const shownSheets = ctx.luckysheetfile.filter((sheet) => isUndefined(sheet.hide) || sheet?.hide !== 1);
@@ -56,14 +57,16 @@ export function hideSheet(ctx: Context, sheetId: string) {
 }
 
 export function showSheet(ctx: Context, sheetId: string) {
-    const index = getSheetIndex(ctx, sheetId) as number;
+    const index = getSheetIndex(ctx, sheetId);
+    if (index == null) return;
     ctx.luckysheetfile[index].hide = undefined;
 }
 
 function generateCopySheetName(ctx: Context, sheetId: string) {
     const { info } = locale(ctx);
     const copyWord = `(${info.copy}`;
-    const SheetIndex = getSheetIndex(ctx, sheetId) as number;
+    const SheetIndex = getSheetIndex(ctx, sheetId);
+    if (SheetIndex == null) return sheetId;
     let sheetName = ctx.luckysheetfile[SheetIndex].name;
     const copy_i = sheetName.indexOf(copyWord);
     let index: number = 0;
@@ -108,7 +111,8 @@ function generateCopySheetName(ctx: Context, sheetId: string) {
 }
 
 export function copySheet(ctx: Context, sheetId: string) {
-    const index = getSheetIndex(ctx, sheetId) as number;
+    const index = getSheetIndex(ctx, sheetId);
+    if (index == null) return;
     const order = ctx.luckysheetfile[index].order! + 1;
     const sheetName = generateCopySheetName(ctx, sheetId);
     const sheetData = cloneDeep(ctx.luckysheetfile[index]);
@@ -123,7 +127,8 @@ export function copySheet(ctx: Context, sheetId: string) {
 }
 
 function calculateSheetFromula(ctx: Context, id: string, range?: SingleRange) {
-    const index = getSheetIndex(ctx, id) as number;
+    const index = getSheetIndex(ctx, id);
+    if (index == null) return;
     if (!ctx.luckysheetfile[index].data) return;
 
     if (!range) {
@@ -157,6 +162,7 @@ export function calculateFormula(ctx: Context, id?: string, range?: SingleRange)
         return;
     }
     ctx.luckysheetfile.forEach((sheet_obj) => {
-        calculateSheetFromula(ctx, sheet_obj.id as string, range);
+        if (!sheet_obj.id) return;
+        calculateSheetFromula(ctx, sheet_obj.id, range);
     });
 }

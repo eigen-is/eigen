@@ -8920,6 +8920,7 @@ export const en = {
 
         tipRowHeightLimit: 'Row height must be between 0 ~ 545',
         tipColumnWidthLimit: 'The column width must be between 0 ~ 2038',
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
         pageInfoFull: 'Total ${total}，${totalPage} page，All data displayed',
 
         sheetIsFocused: 'Sheet focus lock enabled.',
@@ -9498,6 +9499,7 @@ export const en = {
         noReplceTip: 'There is nothing to replace',
         noMatchTip: 'No match found',
 
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
         successTip: '${xlength} items found',
 
         locationConstant: 'Constant',
@@ -9735,6 +9737,7 @@ export const en = {
         tooltipInfo1: 'Please enter a valid link',
         invalidCellRangeTip: 'Please enter the correct ell range, such as Sheet1!A1:C8',
         openLink: 'Open link',
+        // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
         goTo: 'Go to ${linkAddress}',
     },
     linkTypeList: [

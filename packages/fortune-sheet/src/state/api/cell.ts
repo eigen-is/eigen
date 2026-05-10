@@ -51,7 +51,7 @@ export function getCellValue(
     if (!targetSheetData) {
         throw sheetNotFound();
     }
-    const cellData = targetSheetData[row][column];
+    const cellData = targetSheetData[row]?.[column];
     let ret: Cell[keyof Cell] | string | null = null;
 
     if (cellData && isPlainObject(cellData)) {
@@ -93,11 +93,12 @@ export function setCellValue(
         delFunctionGroup(ctx, row, column, sheet.id);
         setCellValueInternal(ctx, row, column, data, value);
     } else if (value instanceof Object) {
+        if (!data) throw sheetNotFound();
         const curv: Cell = {};
-        if (data?.[row]?.[column] == null) {
-            data![row][column] = {};
+        if (data[row]?.[column] == null) {
+            data[row][column] = {};
         }
-        const cell = data![row][column]!;
+        const cell = data[row][column]!;
         if (value.f != null && value.v == null) {
             curv.f = value.f;
             if (value.ct != null) {

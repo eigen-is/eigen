@@ -85,10 +85,8 @@ export function FxEditor() {
             setContext((draftCtx) => {
                 const last = draftCtx.luckysheet_select_save![draftCtx.luckysheet_select_save!.length - 1];
 
-                const row_index = last.row_focus;
-                const col_index = last.column_focus;
-
-                draftCtx.luckysheetCellUpdate = [row_index!, col_index!];
+                if (last.row_focus == null || last.column_focus == null) return;
+                draftCtx.luckysheetCellUpdate = [last.row_focus, last.column_focus];
                 refs.globalCache.doNotFocus = true;
                 // formula.rangeResizeTo = $("#luckysheet-functionbox-cell");
             });

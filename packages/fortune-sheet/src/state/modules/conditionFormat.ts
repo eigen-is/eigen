@@ -175,7 +175,8 @@ export function setConditionRules(
         conditionRange,
         conditionValue,
     };
-    const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
+    const index = getSheetIndex(ctx, ctx.currentSheetId);
+    if (index == null) return;
     const ruleArr = ctx.luckysheetfile[index].luckysheet_conditionformat_save ?? [];
     ruleArr.push(rule);
 
@@ -196,7 +197,8 @@ export function invalidateCFCache() {
 }
 
 export function getComputeMap(ctx: Context): ComputeMap | null {
-    const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
+    const index = getSheetIndex(ctx, ctx.currentSheetId);
+    if (index == null) return null;
     const ruleArr = ctx.luckysheetfile[index].luckysheet_conditionformat_save;
     const { data } = ctx.luckysheetfile[index];
     if (isNil(data)) return null;

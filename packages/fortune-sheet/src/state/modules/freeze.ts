@@ -18,7 +18,9 @@ function cutVolumn(arr: number[], cutindex: number) {
 
 function frozenTofreezen(ctx: Context, cache: GlobalCache, sheetId: string) {
     // get frozen type
-    const file = ctx.luckysheetfile[getSheetIndex(ctx, sheetId)!];
+    const idx = getSheetIndex(ctx, sheetId);
+    if (idx == null) return;
+    const file = ctx.luckysheetfile[idx];
     const { frozen } = file;
 
     if (frozen == null) {
