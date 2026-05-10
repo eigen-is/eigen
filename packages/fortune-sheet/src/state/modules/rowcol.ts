@@ -1,13 +1,20 @@
 import { assign, clone, cloneDeep, forEach, isEmpty, size } from 'es-toolkit/compat';
 import { applySheetsDeleteRowCol, applySheetsInsertRowCol } from '../../engine/rowcol';
 import type { Context } from '../context';
-import type { Sheet, SheetConfig } from '../types';
+import type { FormulaCell, Sheet, SheetConfig } from '../types';
 import { getSheetIndex } from '../utils';
 
 type MergeCell = { r: number; c: number; rs: number; cs: number };
-type CalcChainEntry = { r: number; c: number; id: string };
 type FilterSelect = { row: number[]; column: number[] };
-type FilterEntry = { rowhidden?: Record<number, number>; [key: string]: unknown };
+type FilterEntry = {
+    rowhidden?: Record<number, number>;
+    cindex?: number;
+    str?: number;
+    edr?: number;
+    stc?: number;
+    edc?: number;
+    [key: string]: unknown;
+};
 type FilterObj = { filter_select: FilterSelect | null; filter: Record<string, FilterEntry> | null };
 
 const refreshLocalMergeData = (merge_new: Record<string, MergeCell>, file: Sheet) => {
@@ -46,10 +53,10 @@ function shiftStateOnlyFieldsForInsert(
     if (!file) return;
 
     // calcChain entries are sheet-local; cross-sheet formula text is rewritten by the engine.
-    const newCalcChain: CalcChainEntry[] = [];
+    const newCalcChain: FormulaCell[] = [];
     if (file.calcChain != null) {
         for (const entry of file.calcChain) {
-            const calc: CalcChainEntry = cloneDeep(entry);
+            const calc: FormulaCell = cloneDeep(entry);
             if (type === 'row') {
                 if (direction === 'lefttop' && calc.r >= index) calc.r += count;
                 else if (direction === 'rightbottom' && calc.r > index) calc.r += count;
@@ -306,10 +313,10 @@ function shiftStateOnlyFieldsForDelete(
     const slen = end - start + 1;
 
     // calcChain entries are sheet-local; entries inside the deleted range drop out.
-    const newCalcChain: CalcChainEntry[] = [];
+    const newCalcChain: FormulaCell[] = [];
     if (file.calcChain != null) {
         for (const entry of file.calcChain) {
-            const calc: CalcChainEntry = cloneDeep(entry);
+            const calc: FormulaCell = cloneDeep(entry);
             if (type === 'row') {
                 if (calc.r < start) newCalcChain.push(calc);
                 else if (calc.r > end) {

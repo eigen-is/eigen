@@ -36,7 +36,9 @@ export function changeSheet(
         return;
     }
 
-    const file = ctx.luckysheetfile[getSheetIndex(ctx, id)!];
+    const idx = getSheetIndex(ctx, id);
+    if (idx == null) return;
+    const file = ctx.luckysheetfile[idx];
 
     if (ctx.hooks.beforeActivateSheet?.(id) === false) {
         return;
